@@ -38,28 +38,32 @@
 - **Flexible Analysis Modes:** Choose to analyze each document individually or combine them for a holistic analysis.
 - **Interactive Chat:** Continue the conversation with the LLM to explore the documents further.
 - **Docker Support:** Easily deploy the application using Docker or Docker Compose.
+- **Multimodal Support:** Preview images from PDFs, embed multimodal data.
+- **Advanced RAG:** Hybrid search with Qdrant, late chunking, multi-vector embeddings with Jina v4, SOTA reranking with Jina v2.
 
 ## 📖 Table of Contents
 
-1. [Features of DocMind AI](#-features-of-docmind-ai)
-2. [Getting Started with DocMind AI: Local LLM Analysis](#-getting-started-with-docmind-ai-local-llm-analysis)
-   - [Prerequisites](#-prerequisites)
-   - [Installation](#️-installation)
-   - [Running the App](#️-running-the-app)
-3. [Usage](#-usage)
-   - [Selecting a Model](#️-selecting-a-model)
-   - [Uploading Documents](#-uploading-documents)
-   - [Choosing Prompts](#️-choosing-prompts)
-   - [Selecting Tone](#-selecting-tone)
-   - [Selecting Instructions](#-selecting-instructions)
-   - [Setting Length/Detail](#-setting-lengthdetail)
-   - [Choosing Analysis Mode](#️-choosing-analysis-mode)
-   - [Analyzing Documents](#-analyzing-documents)
-   - [Interacting with the LLM](#-interacting-with-the-llm)
-4. [Architecture](#️-architecture)
-5. [How to Cite](#-how-to-cite)
-6. [Contributing](#-contributing)
-7. [License](#-license)
+- [🧠 DocMind AI: Local LLM for AI-Powered Document Analysis](#-docmind-ai-local-llm-for-ai-powered-document-analysis)
+  - [✨ Features of DocMind AI](#-features-of-docmind-ai)
+  - [📖 Table of Contents](#-table-of-contents)
+  - [🚀 Getting Started with DocMind AI: Local LLM Analysis](#-getting-started-with-docmind-ai-local-llm-analysis)
+    - [📋 Prerequisites](#-prerequisites)
+    - [⚙️ Installation](#️-installation)
+    - [▶️ Running the App](#️-running-the-app)
+  - [💻 Usage](#-usage)
+    - [🎛️ Selecting a Model](#️-selecting-a-model)
+    - [📁 Uploading Documents](#-uploading-documents)
+    - [✍️ Choosing Prompts](#️-choosing-prompts)
+    - [😃 Selecting Tone](#-selecting-tone)
+    - [🧮 Selecting Instructions](#-selecting-instructions)
+    - [📏 Setting Length/Detail](#-setting-lengthdetail)
+    - [🗂️ Choosing Analysis Mode](#️-choosing-analysis-mode)
+    - [🧠 Analyzing Documents](#-analyzing-documents)
+    - [💬 Interacting with the LLM](#-interacting-with-the-llm)
+  - [🏗️ Architecture](#️-architecture)
+  - [📖 How to Cite](#-how-to-cite)
+  - [🙌 Contributing](#-contributing)
+  - [📃 License](#-license)
 
 ## 🚀 Getting Started with DocMind AI: Local LLM Analysis
 
@@ -109,7 +113,7 @@ The app will be accessible at `http://localhost:8501`.
 
 ### 📁 Uploading Documents
 
-Click the **"Browse files"** button to upload one or more documents. Supported file types are listed above in the [Features](#-features) section.
+Click the **"Browse files"** button to upload one or more documents. Supported file types are listed above in the [Features](#-features-of-docmind-ai) section.
 
 ### ✍️ Choosing Prompts
 
@@ -186,25 +190,22 @@ Here's a Mermaid diagram illustrating the application's architecture:
 ```mermaid
 graph TD
     A[User] -->|Uploads Documents| B(Streamlit App - app.py);
-    B -->|Selects Model, Prompt, Tone, Instructions, Length, Mode| C{Ollama API};
+    B -->|Selects Model, Prompt, Tone, Instructions, Length, Mode| C{Local LLM Backends};
     C -->|Processes Documents| D[LangChain];
-    D -->|Loads Documents| E{Document Loaders};
-    E -->|PDF| F[PyPDFLoader];
-    E -->|DOCX| G[Docx2Loader];
-    E -->|TXT, Code| H[TextLoader];
-    E -->|...| I;
-    D -->|Splits Text| J[RecursiveCharacterTextSplitter];
-    D -->|Generates Analysis| K[LLM - Ollama Model];
-    K -->|Structured Output| L[PydanticOutputParser];
-    B -->|Displays Results| A;
-    A -->|Asks Follow-up Questions| B;
-    B -->|Interacts with LLM| C;
-
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#ccf,stroke:#333,stroke-width:2px
-    style C fill:#cfc,stroke:#333,stroke-width:2px
-    style D fill:#fcc,stroke:#333,stroke-width:2px
-    style K fill:#ccf,stroke:#333,stroke-width:2px
+    D -->|Loads Documents| E{Lightweight Loaders};
+    E -->|PDF/EPUB| F[PyMuPDF];
+    E -->|DOCX/etc| G[python-docx];
+    E -->|Data Files| H[Polars];
+    E -->|MSG| I[extract-msg];
+    E -->|TXT/Code| J[TextLoader];
+    D -->|Splits Text| K[RecursiveCharacterTextSplitter];
+    D -->|Generates Analysis| L[LLM Chain];
+    L -->|Structured Output| M[PydanticParser];
+    D -->|RAG/Chat| N[Qdrant Vectorstore];
+    N -->|Embeddings| O[Jina v4 with Multi-Vector/Late Chunking];
+    N -->|Rerank| P[Jina Reranker v2];
+    B -->|Displays Results/Chat| A;
+    B -->|Persistence| Q[Session State/Pickle];
 ```
 
 ## 📖 How to Cite
