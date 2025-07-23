@@ -33,6 +33,7 @@ import pickle
 
 import ollama
 import streamlit as st
+import torch
 from langchain_community.llms import LlamaCpp, Ollama
 from langchain_openai import OpenAI
 
@@ -101,10 +102,21 @@ elif theme == "Light":
     )
 
 # Hardware Detection and Model Suggestion
-hardware_info = detect_hardware()
-st.sidebar.info(f"Detected Hardware: {hardware_info}")
-suggested_model = "Qwen/Qwen3-8B" if "CPU" in hardware_info else "Qwen/Qwen3-72B"
+hardware_info, vram = detect_hardware()
+st.sidebar.info(
+    f"Detected Hardware: {hardware_info}, VRAM: {vram}GB"
+    if vram
+    else f"Detected Hardware: {hardware_info}"
+)
+if vram and vram >= 16:
+    suggested_model = "Qwen/Qwen3-72B"
+elif "GPU" in hardware_info:
+    suggested_model = "Qwen/Qwen3-32B"
+else:
+    suggested_model = "Qwen/Qwen3-8B"
 st.sidebar.info(f"Suggested Model: {suggested_model}")
+
+use_gpu = st.sidebar.checkbox("Use GPU if available", value=torch.cuda.is_available())
 
 # Model and Backend Selection
 st.sidebar.header("Model and Backend Selection")
@@ -152,7 +164,10 @@ try:
     if backend == "ollama":
         llm = Ollama(base_url=ollama_url, model=model_name, num_ctx=context_size)
     elif backend == "llamacpp":
-        llm = LlamaCpp(model_path=llamacpp_path, n_ctx=context_size)
+        n_gpu_layers = -1 if use_gpu and "GPU" in hardware_info else 0
+        llm = LlamaCpp(
+            model_path=llamacpp_path, n_ctx=context_size, n_gpu_layers=n_gpu_layers
+        )
     elif backend == "lmstudio":
         llm = OpenAI(base_url=lmstudio_url, api_key="not-needed", model=model_name)
     llm.invoke("Test prompt")
