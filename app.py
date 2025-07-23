@@ -121,7 +121,7 @@ if backend == "ollama":
     )
     try:
         available_models = [m["name"] for m in ollama.list()["models"]]
-        model_options = available_models if available_models else ["No models found"]
+        model_options = available_models or ["No models found"]
     except Exception as e:
         st.sidebar.error(f"Error fetching models: {str(e)}")
         model_options = ["Error fetching models"]
