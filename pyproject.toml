@@ -1,0 +1,62 @@
+[project]
+name = "docmind-ai"
+version = "0.1.0"
+description = "Local LLM for AI-Powered Document Analysis"
+authors = [{ name = "Bjorn Melin" }]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "streamlit>=1.47.0",
+    "langchain>=0.3.26",
+    "langchain-community>=0.3.0",
+    "langchain-openai>=0.3.28",
+    "ollama>=0.5.0",
+    "llama-cpp-python>=0.3.14",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "pymupdf>=1.26.0",
+    "python-docx>=1.2.0",
+    "polars>=1.31.0",
+    "extract-msg>=0.54.0",
+    "python-dotenv>=1.1.1",
+    "ruff>=0.12.4",
+    "qdrant-client>=1.11.0",
+    "langchain-qdrant>=0.2.0",
+    "sentence-transformers>=3.0.0",
+    "tiktoken==0.9.0",
+    "transformers>=4.52.0",
+    "torch>=2.6.0",
+    "peft>=0.15.2",
+    "torchvision",
+    "pillow",
+    "nltk>=3.8.1",
+    "spacy>=3.7.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest==8.3.1"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
+ignore = [
+    # Docstring formatting conflicts (Google style)
+    "D203",  # 1 blank line required before class docstring (conflicts with D211)
+    "D213",  # Multi-line docstring summary should start at the second line (conflicts with Google style)
+    
+    # Security - reasonable exceptions for local development tools
+    "S301",  # pickle usage (acceptable for local session persistence)
+    "S603",  # subprocess call (acceptable for hardware detection)
+    "S607",  # partial executable path (acceptable for well-known system commands)
+    "S108",  # hardcoded temp file path (will be replaced with tempfile)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["docmind_ai"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
