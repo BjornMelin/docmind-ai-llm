@@ -93,7 +93,7 @@ def detect_hardware():
             stderr=subprocess.DEVNULL,
         )
         return "GPU detected"
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+    except (subprocess.CalledProcessError, OSError):
         return "CPU only"
 
 
