@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
+      - BACKEND=ollama
+      - CONTEXT_SIZE=4096
+      - QDRANT_URL=http://qdrant:6333
+      - DEFAULT_EMBEDDING_MODEL=jinaai/jina-embeddings-v4
+      - DEFAULT_RERANKER_MODEL=jinaai/jina-reranker-v2-base-multilingual
+    volumes:
+      - .:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:
