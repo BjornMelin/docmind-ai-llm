@@ -40,8 +40,23 @@ test = ["pytest==8.3.1"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-lint.select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
-lint.ignore = []
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
+ignore = [
+    # Docstring formatting conflicts (Google style)
+    "D203",  # 1 blank line required before class docstring (conflicts with D211)
+    "D213",  # Multi-line docstring summary should start at the second line (conflicts with Google style)
+    
+    # Security - reasonable exceptions for local development tools
+    "S301",  # pickle usage (acceptable for local session persistence)
+    "S603",  # subprocess call (acceptable for hardware detection)
+    "S607",  # partial executable path (acceptable for well-known system commands)
+    "S108",  # hardcoded temp file path (will be replaced with tempfile)
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["docmind_ai"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
