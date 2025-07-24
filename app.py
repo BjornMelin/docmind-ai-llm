@@ -34,7 +34,8 @@ import ollama
 import phoenix as px
 import streamlit as st
 import torch
-from langchain_community.llms import LlamaCpp, Ollama
+from langchain_community.llms.llamacpp import LlamaCpp
+from langchain_community.llms.ollama import Ollama
 from langchain_openai import OpenAI
 from llama_index.core import set_global_handler
 from llama_index.core.agent import ReActAgent

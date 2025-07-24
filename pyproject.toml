@@ -5,39 +5,45 @@ description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.13"
 dependencies = [
-    "streamlit>=1.47.0",
-    "langchain>=0.3.26",
+    "streamlit==1.47.0",
+    "langchain==0.3.26",
     "langchain-community==0.3.27",
-    "langchain-openai>=0.3.28",
-    "ollama>=0.5.0",
-    "llama-cpp-python>=0.3.14",
+    "langchain-openai==0.3.28",
+    "ollama==0.5.1",
+    "llama-cpp-python==0.3.14",
     "pydantic==2.11.7",
-    "pydantic-settings>=2.10.1",
-    "pymupdf>=1.26.0",
-    "python-docx>=1.2.0",
-    "polars>=1.31.0",
-    "extract-msg>=0.54.0",
-    "python-dotenv>=1.1.1",
-    "ruff>=0.12.4",
+    "pydantic-settings==2.10.1",
+    "pymupdf==1.26.3",
+    "python-docx==1.2.0",
+    "polars==1.31.0",
+    "python-dotenv==1.1.1",
+    "ruff==0.12.4",
     "qdrant-client==1.15.0",
-    "langchain-qdrant>=0.2.0",
-    "sentence-transformers==5.0.0",
+    "langchain-qdrant==0.2.0",
     "tiktoken==0.9.0",
     "transformers==4.53.3",
     "torch==2.7.1",
-    "peft==0.16.0",
-    "torchvision==0.19.0",
+    "torchvision==0.22.1",
     "pillow==11.3.0",
-    "nltk==3.9.1",
     "spacy==3.8.7",
-    "fastembed==0.7.1",
+    "llama-index==0.12.52",
+    "llama-index-vector-stores-qdrant==0.6.1",
+    "langgraph==0.5.4",
+    "moviepy==2.2.1",
+    "openai-whisper==20250625",
+    "ragatouille==0.0.9.post2",
+    "openinference-instrumentation-llama-index==4.3.2",
+    "arize-phoenix==11.10.1",
+    "llama-index-llms-ollama>=0.6.2",
+    "llama-index-llms-llama-cpp>=0.4.0",
+    "llama-index-embeddings-huggingface>=0.5.5",
 ]
 
 [project.optional-dependencies]
 test = ["pytest==8.3.1"]
-gpu = ["fastembed-gpu==0.7.1"]
+gpu = ["fastembed-gpu==0.7.1", "llama-cpp-python[cuda]"]
 
 [tool.ruff]
 line-length = 88
@@ -46,11 +52,8 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
 ignore = [
-    # Docstring formatting conflicts (Google style)
     "D203",  # 1 blank line required before class docstring (conflicts with D211)
     "D213",  # Multi-line docstring summary should start at the second line (conflicts with Google style)
-    
-    # Security - reasonable exceptions for local development tools
     "S301",  # pickle usage (acceptable for local session persistence)
     "S603",  # subprocess call (acceptable for hardware detection)
     "S607",  # partial executable path (acceptable for well-known system commands)
