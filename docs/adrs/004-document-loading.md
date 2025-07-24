@@ -1,5 +1,9 @@
 # ADR 004: Document Loading Strategy
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted

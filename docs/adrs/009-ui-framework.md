@@ -1,5 +1,9 @@
 # ADR 009: UI Framework Selection
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted

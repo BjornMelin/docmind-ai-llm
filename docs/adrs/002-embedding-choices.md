@@ -1,5 +1,9 @@
 # ADR 002: Embedding Models and Hybrid Search
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted

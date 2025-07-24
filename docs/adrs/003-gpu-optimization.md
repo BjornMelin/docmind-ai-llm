@@ -1,5 +1,9 @@
 # ADR 003: GPU Optimization and Hardware Detection
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted

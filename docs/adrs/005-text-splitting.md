@@ -1,5 +1,9 @@
 # ADR 005: Text Splitting and Chunking
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted

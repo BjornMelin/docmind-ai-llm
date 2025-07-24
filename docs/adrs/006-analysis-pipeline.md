@@ -1,5 +1,9 @@
 # ADR 006: Document Analysis Pipeline
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted

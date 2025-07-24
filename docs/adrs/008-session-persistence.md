@@ -1,5 +1,9 @@
 # ADR 008: Session Persistence
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted

@@ -1,5 +1,9 @@
 # ADR 007: Reranking Strategy for RAG
 
+## Version/Date
+
+v1.0 / July 22, 2025
+
 ## Status
 
 Accepted
