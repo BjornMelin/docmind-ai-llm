@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     context_size: int = 4096
     qdrant_url: str = "http://localhost:6333"
     default_embedding_model: str = "jinaai/jina-embeddings-v4"
+    sparse_embedding_model: str = "prithivida/Splade_PP_en_v1"
     default_reranker_model: str = "jinaai/jina-reranker-v2-base-multilingual"
 
     model_config = SettingsConfigDict(
