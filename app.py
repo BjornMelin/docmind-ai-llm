@@ -34,18 +34,18 @@ import ollama
 import phoenix as px
 import streamlit as st
 import torch
-from langchain_community.llms.llamacpp import LlamaCpp
-from langchain_community.llms.ollama import Ollama
-from langchain_openai import OpenAI
 from llama_index.core import set_global_handler
-from llama_index.core.agent import ReActAgent
 from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.llms.llama_cpp import LlamaCPP
+from llama_index.llms.ollama import Ollama
+from llama_index.llms.openai import OpenAI
 
 from models import Settings
 from prompts import PREDEFINED_PROMPTS
 from utils import (
     analyze_documents_agentic,
     chat_with_agent,
+    create_agent_with_tools,
     create_index,
     detect_hardware,
     load_documents_llama,
@@ -146,17 +146,20 @@ if backend == "ollama" and model_name not in model_options:
 llm: Any | None = None
 try:
     if backend == "ollama":
-        llm = Ollama(base_url=ollama_url, model=model_name, num_ctx=context_size)
+        llm = Ollama(base_url=ollama_url, model=model_name, request_timeout=60.0)
     elif backend == "llamacpp":
         n_gpu_layers = -1 if use_gpu else 0
-        llm = LlamaCpp(
+        llm = LlamaCPP(
             model_path=settings.llamacpp_model_path,
-            n_ctx=context_size,
+            context_window=context_size,
             n_gpu_layers=n_gpu_layers,
         )
     elif backend == "lmstudio":
         llm = OpenAI(
-            base_url=settings.lmstudio_base_url, api_key="not-needed", model=model_name
+            base_url=settings.lmstudio_base_url,
+            api_key="not-needed",
+            model=model_name,
+            max_tokens=context_size,
         )
 except Exception as e:
     st.error(f"Model initialization error: {str(e)}")
@@ -184,6 +187,9 @@ async def upload_section() -> None:
                 st.session_state.index = await asyncio.to_thread(
                     create_index, docs, use_gpu, use_colbert
                 )
+                # Reset agent when new documents are uploaded
+                # so it can be re-initialized with new index
+                st.session_state.agent = None
                 st.success("Documents indexed!")
             except Exception as e:
                 st.error(f"Document processing failed: {str(e)}")
@@ -201,9 +207,15 @@ async def run_analysis() -> None:
     if st.session_state.index:
         with st.spinner("Agentic Analysis..."):
             try:
+                # Initialize agent if not already created
+                if not st.session_state.agent:
+                    st.session_state.agent = create_agent_with_tools(
+                        st.session_state.index, llm
+                    )
+
                 results: Any = await asyncio.to_thread(
                     analyze_documents_agentic,
-                    st.session_state.agent or ReActAgent.from_tools([]),  # Init if None
+                    st.session_state.agent,
                     st.session_state.index,
                     prompt_type,  # Params
                 )
@@ -229,15 +241,24 @@ if user_input:
         st.markdown(user_input)
     with st.chat_message("assistant"):
         try:
+            # Initialize agent if not already created and index exists
+            if not st.session_state.agent and st.session_state.index:
+                st.session_state.agent = create_agent_with_tools(
+                    st.session_state.index, llm
+                )
 
-            async def stream_response() -> AsyncGenerator[str, None]:
-                """Stream response from chat agent."""
-                async for chunk in chat_with_agent(
-                    st.session_state.agent, user_input, st.session_state.memory
-                ):
-                    yield chunk
+            if st.session_state.agent:
 
-            st.write_stream(asyncio.run(stream_response()))
+                async def stream_response() -> AsyncGenerator[str, None]:
+                    """Stream response from chat agent."""
+                    async for chunk in chat_with_agent(
+                        st.session_state.agent, user_input, st.session_state.memory
+                    ):
+                        yield chunk
+
+                st.write_stream(asyncio.run(stream_response()))
+            else:
+                st.error("Please upload and process documents first before chatting.")
         except Exception as e:
             st.error(f"Chat response failed: {str(e)}")
             logging.error(f"Chat error: {str(e)}")

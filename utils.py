@@ -39,6 +39,57 @@ from models import Settings
 settings: Settings = Settings()
 
 
+def create_agent_with_tools(index: dict[str, Any], llm: Any) -> ReActAgent:
+    """Create a ReActAgent with proper tools for vector and KG queries.
+
+    Args:
+        index: Dict containing vector and kg indexes.
+        llm: The language model instance to use for the agent.
+
+    Returns:
+        ReActAgent configured with query tools.
+    """
+    vector_query_engine = index["vector"].as_query_engine()
+    kg_query_engine = index["kg"].as_query_engine()
+
+    tools = [
+        QueryEngineTool(
+            query_engine=vector_query_engine,
+            metadata=ToolMetadata(
+                name="vector_query",
+                description="Query documents using vector similarity search "
+                "for general content retrieval and semantic matching",
+            ),
+        ),
+        QueryEngineTool(
+            query_engine=kg_query_engine,
+            metadata=ToolMetadata(
+                name="knowledge_graph_query",
+                description="Query documents using knowledge graph for entity "
+                "and relationship-based queries, connecting concepts "
+                "and extracting structured information",
+            ),
+        ),
+    ]
+
+    agent = ReActAgent.from_tools(
+        tools,
+        llm=llm,
+        verbose=True,
+    )
+
+    return agent
+
+
+def setup_logging(log_level: str = "INFO") -> None:
+    """Setup logging configuration."""
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(), logging.FileHandler("docmind.log")],
+    )
+
+
 def detect_hardware() -> tuple[str, int | None]:
     """Detect available hardware and VRAM for model suggestion.
 
@@ -69,7 +120,7 @@ def load_documents_llama(
     Returns:
         List of loaded Document objects.
     """
-    from llama_index.core import LlamaParse
+    from llama_parse import LlamaParse
 
     parser = LlamaParse(result_type="markdown")  # Latest for tables/images
     docs: list[Document] = []
@@ -140,7 +191,7 @@ def create_index(
     docs: list[Document], use_gpu: bool, use_colbert: bool = False
 ) -> dict[str, Any]:
     """Create hybrid index with Qdrant, knowledge graph, torch.compile for embeddings.
-    
+
     And optional ColBERT late-interaction.
 
     Args:
@@ -202,17 +253,33 @@ def analyze_documents_agentic(
     Returns:
         Analysis response string.
     """
-    query_engine = index["vector"].as_query_engine()
+    vector_query_engine = index["vector"].as_query_engine()
+    kg_query_engine = index["kg"].as_query_engine()
+
     tools = [
         QueryEngineTool(
-            query_engine=query_engine,
-            metadata=ToolMetadata(name="doc_query", description="Query documents"),
+            query_engine=vector_query_engine,
+            metadata=ToolMetadata(
+                name="vector_query",
+                description="Query documents using vector similarity search "
+                "for general content retrieval",
+            ),
+        ),
+        QueryEngineTool(
+            query_engine=kg_query_engine,
+            metadata=ToolMetadata(
+                name="knowledge_graph_query",
+                description="Query documents using knowledge graph "
+                "for entity and relationship-based queries",
+            ),
         ),
     ]
     if not agent:
+        # Agent will be properly initialized in app.py with user-selected LLM
+        # This is a fallback that should not be reached in normal operation
         agent = ReActAgent.from_tools(
             tools,
-            llm=Ollama(model="llama2:7b"),
+            llm=Ollama(model=settings.default_model),
             verbose=True,
         )
     response = agent.chat(f"Analyze with prompt: {prompt_type}")
