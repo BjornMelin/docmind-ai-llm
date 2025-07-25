@@ -51,14 +51,17 @@
   - Ensure prithvida/Splade_PP_en_v1 is properly configured
   - Test hybrid search with both dense and sparse vectors
 
-- [ ] **Add RRF (Reciprocal Rank Fusion)**
+- [x] **Add RRF (Reciprocal Rank Fusion)** ✅ COMPLETED
   - Simple RRF implementation for combining dense/sparse results
-  - Use research-backed weights (dense: 0.7, sparse: 0.3)
+  - Use research-backed weights (dense: 0.7, sparse: 0.3)  
   - Implement prefetch mechanism for performance
+  - **Implementation**: Native Qdrant RRF fusion with optimized prefetch
+  - **Configuration**: Research-backed weights in models.py (0.7/0.3)
+  - **Integration**: Seamless LlamaIndex hybrid_alpha calculation
 
 ### 2.2 ColBERT Reranking Implementation (Research-Backed)
 
-- [ ] **Integrate ColBERT Late Interaction Model**
+- [x] **Integrate ColBERT Late Interaction Model** - COMPLETED
   - Deploy colbert-ir/colbertv2.0 via FastEmbed
   - Implement as postprocessor in query pipeline
   - Configure optimal top-k reranking (retrieve 20, rerank to 5)
