@@ -36,6 +36,9 @@ dependencies = [
     "llama-index-llms-llama-cpp>=0.4.0",
     "llama-index-embeddings-huggingface>=0.5.5",
     "llama-index-embeddings-jinaai>=0.4.0",
+    "llama-index-embeddings-fastembed>=0.3.5",
+    "llama-index-postprocessor-colbert-rerank>=0.3.0",
+    "fastembed==0.7.1",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +58,11 @@ ignore = [
     "S603",  # subprocess call (acceptable for hardware detection)
     "S607",  # partial executable path (acceptable for well-known system commands)
     "S108",  # hardcoded temp file path (will be replaced with tempfile)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",  # assert usage (standard practice in pytest tests)
 ]
 
 [tool.ruff.lint.isort]
