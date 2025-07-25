@@ -8,9 +8,6 @@ readme = "README.md"
 requires-python = ">=3.9,<3.13"
 dependencies = [
     "streamlit==1.47.0",
-    "langchain==0.3.26",
-    "langchain-community==0.3.27",
-    "langchain-openai==0.3.28",
     "ollama==0.5.1",
     "llama-cpp-python==0.3.14",
     "pydantic==2.11.7",
@@ -19,9 +16,8 @@ dependencies = [
     "python-docx==1.2.0",
     "polars==1.31.0",
     "python-dotenv==1.1.1",
-    "ruff==0.12.4",
+    "ruff==0.12.5",
     "qdrant-client==1.15.0",
-    "langchain-qdrant==0.2.0",
     "tiktoken==0.9.0",
     "transformers==4.53.3",
     "torch==2.7.1",
@@ -39,6 +35,7 @@ dependencies = [
     "llama-index-llms-ollama>=0.6.2",
     "llama-index-llms-llama-cpp>=0.4.0",
     "llama-index-embeddings-huggingface>=0.5.5",
+    "llama-index-embeddings-jinaai>=0.4.0",
 ]
 
 [project.optional-dependencies]
@@ -65,3 +62,8 @@ known-first-party = ["docmind_ai"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.1",
+]
