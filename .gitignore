@@ -172,4 +172,11 @@ cython_debug/
 
 # Project specific
 logs/
+docmind_ai.log
 repomix-output.md
+crawled/
+
+# Model caches and embeddings
+embeddings_cache/
+.fastembed_cache/
+models/
