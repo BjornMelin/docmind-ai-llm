@@ -7,7 +7,7 @@ license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.9,<3.13"
 dependencies = [
-    "streamlit==1.47.0",
+    "streamlit==1.47.1",
     "ollama==0.5.1",
     "llama-cpp-python==0.3.14",
     "pydantic==2.11.7",
@@ -39,6 +39,7 @@ dependencies = [
     "llama-index-embeddings-fastembed>=0.3.5",
     "llama-index-postprocessor-colbert-rerank>=0.3.0",
     "fastembed==0.7.1",
+    "unstructured[all-docs]>=0.18.3",
 ]
 
 [project.optional-dependencies]
@@ -74,4 +75,6 @@ convention = "google"
 [dependency-groups]
 dev = [
     "pytest>=8.3.1",
+    "pytest-asyncio>=0.23.0",
+    "pytest-benchmark>=4.0.0",
 ]
