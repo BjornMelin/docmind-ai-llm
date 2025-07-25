@@ -27,6 +27,7 @@ Attributes:
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 import ollama
@@ -39,7 +40,6 @@ from llama_index.llms.ollama import Ollama
 from llama_index.llms.openai import OpenAI
 
 from agent_factory import (
-    LANGGRAPH_AVAILABLE,
     get_agent_system,
     process_query_with_agent_system,
 )
@@ -128,14 +128,11 @@ enable_multi_agent: bool = st.sidebar.checkbox(
     "Enable Multi-Agent Mode",
     value=False,
     help="Use LangGraph supervisor system for complex queries with specialized agents",
-    disabled=not LANGGRAPH_AVAILABLE,
 )
-if enable_multi_agent and LANGGRAPH_AVAILABLE:
+if enable_multi_agent:
     st.sidebar.info(
         "🤖 Multi-agent mode: Document, Knowledge Graph, and Multimodal specialists"
     )
-elif not LANGGRAPH_AVAILABLE:
-    st.sidebar.warning("LangGraph not available - install with: pip install langgraph")
 
 use_phoenix: bool = st.sidebar.checkbox("Enable Phoenix Observability", value=False)
 if use_phoenix:
@@ -211,18 +208,18 @@ async def upload_section() -> None:
         with st.status("Processing documents..."):
             try:
                 # Start timing for performance monitoring
-                start_time = time.time()
+                start_time = time.perf_counter()
 
                 docs: list[Any] = await asyncio.to_thread(
                     load_documents_llama, uploaded_files, parse_media, enable_multimodal
                 )
-                doc_load_time = time.time() - start_time
+                doc_load_time = time.perf_counter() - start_time
 
                 # Use async indexing for 50-80% performance improvement
-                index_start_time = time.time()
+                index_start_time = time.perf_counter()
                 st.session_state.index = await create_index_async(docs, use_gpu)
-                index_time = time.time() - index_start_time
-                total_time = time.time() - start_time
+                index_time = time.perf_counter() - index_start_time
+                total_time = time.perf_counter() - start_time
 
                 # Reset agent system when new documents are uploaded
                 st.session_state.agent_system = None
@@ -238,7 +235,8 @@ async def upload_section() -> None:
                 - Documents processed: {len(docs)}
                 """)
                 logging.info(
-                    f"Async processing completed in {total_time:.2f}s for {len(docs)} documents"
+                    f"Async processing completed in {total_time:.2f}s for "
+                    f"{len(docs)} documents"
                 )
 
             except Exception as e:
@@ -345,8 +343,6 @@ if user_input:
                             else:
                                 yield " " + word
                             # Add slight delay for streaming effect
-                            import time
-
                             time.sleep(0.02)
                     except Exception as e:
                         yield f"Error processing query: {str(e)}"
