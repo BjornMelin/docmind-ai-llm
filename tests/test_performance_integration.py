@@ -193,13 +193,11 @@ class TestConcurrentOperations:
 
             # Should complete quickly with mocked components
             assert async_time < 5.0, (
-                f"Async index creation took {async_time:.3f}s, "
-                "should be < 5.0s"
+                f"Async index creation took {async_time:.3f}s, should be < 5.0s"
             )
 
             logging.info(
-                f"Async index creation: {async_time:.3f}s for {len(docs)} "
-                "documents"
+                f"Async index creation: {async_time:.3f}s for {len(docs)} documents"
             )
 
 

@@ -43,7 +43,7 @@ from agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
-from models import Settings
+from models import AppSettings
 from prompts import PREDEFINED_PROMPTS
 from utils import (
     create_index_async,
@@ -55,7 +55,7 @@ from utils import (
 
 setup_logging()
 
-settings: Settings = Settings()
+settings: AppSettings = AppSettings()
 
 st.set_page_config(page_title="DocMind AI", page_icon="🧠")
 
