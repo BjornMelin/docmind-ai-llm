@@ -1,69 +1,65 @@
-# ADR 011: Integration of LangGraph for Multi-Agent Support
+# ADR-011: LangGraph Multi-Agent
+
+## Title
+
+Multi-Agent Coordination with LangGraph Supervisor
 
 ## Version/Date
 
-v1.3 / July 25, 2025 (Updated with validation results and production optimizations)
+3.0 / July 25, 2025
 
 ## Status
 
-Accepted - Validated
+Accepted
 
 ## Context
 
-DocMind AI's current Agentic RAG uses LlamaIndex's ReActAgent for single-agent reasoning over documents. While adequate for basic retrieval and analysis, complex tasks (e.g., parallel retrieval/analysis/synthesis, stateful multi-turn interactions across agents) could benefit from multi-agent orchestration. LangGraph (v0.5.4 as of July 2025) excels in building stateful, multi-actor graphs with cycles/branching, integrating well with LlamaIndex for RAG tools. Research shows hybrid use: LlamaIndex for indexing/retrieval, LangGraph for agent workflows (e.g., blogs on ZenML, Medium articles on multi-agent RAG with Gemini/LangGraph).
-
-LlamaIndex covers simple Agentic RAG well (ReAct for tool-calling/reasoning), but lacks native multi-agent parallelism/state persistence. LangGraph adds this without replacing LlamaIndex, enabling advanced features like agent teams for document analysis (e.g., RetrievalAgent + AnalysisAgent + SynthesisAgent). ReAct is lighter/faster for basic tasks—keep as default, LangGraph optional.
+Agentic RAG requires a central supervisor for intelligent routing based on query complexity and type (via analyze_query_complexity), persistence for state/memory across sessions, human-in-loop for approvals, and seamless handoffs between specialty agents—all fully offline with local Ollama LLM. Use langgraph-supervisor-py for prebuilt supervisor to minimize custom code while allowing custom agents (e.g., doc/kg/multimodal specialists).
 
 ## Related Requirements
 
-- Enhanced chat/analysis for multi-document reasoning with parallelism.
+- Phase 4: Supervisor with custom specialty agents (doc for retrieval, kg for relations, multimodal for images/tables).
+- Offline/local (Ollama LLM in agents, no external services).
+- Persistence (checkpointer for agent state/memory).
+- Human-in-loop (interrupts for approvals).
+- Handoffs (via LangGraph Handoff primitive for context transfer).
 
-- Improved scalability for complex queries without overcomplicating v1.
+## Alternatives
 
-## Alternatives Considered
-
-- Stick with LlamaIndex ReAct: Simpler, sufficient for v1 (cons: no native multi-agent parallelism; pros: less complexity, KISS-compliant).
-
-- Full multi-agent via custom code: High maintenance, violates library-first/DRY.
-
-- Haystack agents: Less flexible for graphs, weaker LangChain ecosystem integration.
+- Custom StateGraph without supervisor-py: More boilerplate, harder to maintain prebuilt patterns.
+- CrewAI: Less integrated with LlamaIndex tools, no native handoff primitive.
+- Basic LangGraph without handoffs: Lacks seamless delegation (e.g., no context-preserving transfers).
 
 ## Decision
 
-Integrate LangGraph (v0.5.4) as an optional, toggleable feature for multi-agent workflows (config flag: multi_agent=True in Settings, default=False using ReAct). Use for advanced Agentic RAG: graph with nodes (RetrievalAgent using LlamaIndex index, AnalysisAgent for insights, SynthesisAgent for responses). UI checkbox below text input in app.py (like ChatGPT/Grok/Claude for custom options/tools); conditional init in utils.py for agent (ReAct if false, LangGraph if true). Justification: Adds real value for complex tasks (20-30% faster parallel processing per benchmarks), library-first (leverages LangGraph's graphs/nodes/edges), but optional/default ReAct to maintain KISS for basic use and avoid YAGNI in v1 core.
+Use langgraph-supervisor-py (from <https://github.com/langchain-ai/langgraph-supervisor-py>) for prebuilt multi-agent system: Central supervisor agent coordinates custom specialty agents (built with create_react_agent using local Ollama LLM and LlamaIndex tools). Supervisor controls all communication flow and task delegation, deciding invocation based on current context/task requirements. Integrate handoffs via LangGraph's Handoff primitive[](https://langchain-ai.github.io/langgraph/agents/multi-agent/) for transferring control/state between agents. Add MemorySaver checkpointer for persistence, interrupts for human-in-loop.
 
 ## Related Decisions
 
-- ADR 010: LangChain Integration (extended with LangGraph for orchestration).
-
-- ADR 001: Architecture (adds multi-agent layer without core changes).
+- ADR-001 (Agents in overall architecture, integrated with LlamaIndex pipelines).
+- ADR-008 (Persistence with checkpointer for agent state).
 
 ## Design
 
-- LangGraph graph: RouterNode → [RetrievalAgent (LlamaIndex retriever/tool), AnalysisAgent (LLM for insights)] → SynthesisAgent (combines outputs).
-
-- State: Shared memory for multi-turn (integrate with LlamaIndex ChatMemoryBuffer).
-
-- Toggle: Config flag in Settings.multi_agent (bool, default False); UI checkbox below text input in app.py for easy access; conditional in utils.py agent init (if multi_agent: LangGraph graph else ReAct).
-
-- Validation Results (July 2025): 92.9% query routing accuracy, production-ready with targeted improvements.
-
-```mermaid
-graph TD
-    A[Query] --> B[Router Node]
-    B --> C[Retrieval Agent (LlamaIndex)]
-    B --> D[Analysis Agent (LLM)]
-    C --> E[Synthesis Agent]
-    D --> E
-    E --> F[Response]
-```
+- **Setup with Supervisor-Py**: Install langgraph-supervisor-py (add to pyproject.toml: "langgraph-supervisor-py==latest"). In agent_factory.py: from langgraph_supervisor import Supervisor; supervisor = Supervisor(agents=[doc_agent, kg_agent, multimodal_agent], llm=Ollama(AppSettings.default_model), tools=from utils.py create_tools_from_index).
+- **Custom Specialty Agents**: Use create_react_agent for each: doc_agent = create_react_agent(llm=Ollama(AppSettings.default_model), tools=retriever_tools, state_modifier="Specialize in document retrieval and summarization"). Similar for kg (relations) and multimodal (images/tables).
+- **Supervisor Control**: Supervisor decides routing (e.g., if context has "image": invoke multimodal_agent). Controls flow: Receives inputs, delegates tasks, aggregates outputs.
+- **Handoffs**: Use Handoff primitive: supervisor.handoff(to="kg_agent", state={"context": current_state}) for seamless transfer (preserves messages/memory).
+- **Persistence/Human-in-Loop**: Add checkpointer=MemorySaver(); supervisor.compile(checkpointer=checkpointer). Interrupts: interrupt_before=["tool_call"] (pause for human input via UI toggle in app.py).
+- **Integration**: In app.py: agent_system = get_agent_system(tools, llm, enable_multi_agent); response = process_query_with_agent_system(agent_system, query, mode) — invokes supervisor for delegation/handoffs. Persist via checkpointer (thread_id for sessions).
+- **Implementation Notes**: Local LLM: Ollama in all agents/workers. Tools from utils.py (e.g., QueryEngineTool for retrievers). Error handling: Retry on handoff failures (max 3, log errors). UI toggle for multi-agent/human-in-loop.
+- **Testing**: tests/test_agents.py: def test_supervisor_delegation_handoff(): supervisor = Supervisor(...); state = supervisor.invoke({"query": "complex image query"}); assert "multimodal_agent" in state["invoked"]; assert handoff transferred context; def test_persistence_interrupt(): state1 = supervisor.invoke(input, config={"thread_id": "1"}); resumed = supervisor.invoke({"human_input": "approve"}, config={"thread_id": "1"}); assert resumed["persisted"] and "approved" in resumed.
 
 ## Consequences
 
-- Positive: Enables parallel multi-agent (e.g., 20-30% faster for complex queries), stateful workflows, future-proof for expansions. Validated with 92.9% routing accuracy and full async compatibility.
+- Efficient agentic system (prebuilt supervisor reduces code, handoffs for seamless flow, persistence for offline sessions, interrupts for control).
+- Modular/scalable (custom agents easy to add, Send API for data handoffs).
+- Offline (local Ollama LLM/tools).
 
-- Negative: Adds dependency/complexity (mitigated by toggle/config; low-maintenance via library).
+- Deps: langgraph-supervisor-py (add to pyproject.toml).
+- Complexity (manage state/handoffs—mitigated by prebuilt library and tests).
 
-- Risks: Overhead in simple cases (mitigate with default ReAct); integration bugs (test with pytest).
+**Changelog:**  
 
-- Mitigations: Make optional; document toggle; fallback to ReAct. Production validation complete with identified enhancement areas.
+- 3.0 (July 25, 2025): Integrated langgraph-supervisor-py for prebuilt; Added custom specialty agents/central control/delegation; Incorporated Handoff primitive; Enhanced persistence/interrupts/offline integrations/testing for streamlined dev.
+- 2.0: Previous evolutions with create_react_agent/checkpointer.
