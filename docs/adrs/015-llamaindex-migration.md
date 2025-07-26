@@ -1,8 +1,12 @@
-# ADR 015: Migration from LangChain to LlamaIndex
+# ADR-015: LlamaIndex Migration
+
+## Title
+
+Migration from LangChain to LlamaIndex
 
 ## Version/Date
 
-v1.0 / July 25, 2025
+2.0 / July 25, 2025
 
 ## Status
 
@@ -10,87 +14,49 @@ Accepted
 
 ## Context
 
-The project initially used LangChain as the primary orchestration framework based on its ecosystem maturity and extensive tooling. However, during development phase, several factors led to reconsidering this architectural choice:
-
-1. **Agent Capabilities**: LlamaIndex's ReActAgent provided superior out-of-the-box functionality for document-centric workflows
-2. **Integration Simplicity**: Native integration with Qdrant vector store and embedding models reduced complexity
-3. **Performance**: Lower overhead and better memory management for document processing pipelines
-4. **Documentation**: More comprehensive examples and patterns for RAG-specific use cases
-5. **Hybrid Search**: Built-in support for dense/sparse vector combinations without custom implementations
+LangChain initial but LlamaIndex superior for offline RAG (built-in pipelines/multimodal/hybrid/chunking/stores—e.g., QueryPipeline async, MultiModalIndex local VLM, ReActAgent document workflows, native Qdrant integration).
 
 ## Related Requirements
 
-- Simplified development and maintenance overhead
+- Offline integrations (local parsing/pipelines)
 
-- Better performance for document indexing and retrieval
+- Advanced RAG (hybrid/multimodal/KG)
 
-- Native hybrid search capabilities
+- Performance optimization for document processing
 
-- Streamlined agent orchestration for RAG workflows
+## Alternatives
 
-## Alternatives Considered
+- Stay LangChain: Less offline features (e.g., no native Unstructured)
 
-- **Stay with LangChain**: Familiar ecosystem but higher complexity for document-focused use cases; rejected for performance overhead.
-
-- **Dual Framework Approach**: Use both LangChain and LlamaIndex for different components; rejected for maintenance complexity.
-
-- **Custom Framework**: Build lightweight orchestration layer; rejected for development time and maintenance burden.
-
-- **Haystack Migration**: Alternative document AI framework; rejected for smaller ecosystem and learning curve.
+- Partial Migration: Inefficient and increases maintenance complexity
 
 ## Decision
 
-Migrate the entire orchestration layer from LangChain to LlamaIndex as the primary framework for:
-
-- **Document Processing**: LlamaIndex SimpleDirectoryReader and LlamaParse integration
-
-- **Agent Orchestration**: ReActAgent with native tool integration
-
-- **Vector Store Management**: Native QdrantVectorStore with hybrid search support
-
-- **Query Processing**: Unified query engines with built-in retrieval strategies
-
-- **Memory Management**: ChatMemoryBuffer for conversational context
-
-Retain LangGraph as optional dependency for future multi-agent implementations while using LlamaIndex as the core framework.
+Full migration to LlamaIndex (indexing/retrieval/pipelines/multimodal/KG/chunking/stores). Keep LangGraph for agents (integrates via tools).
 
 ## Related Decisions
 
-- ADR 010: LangChain Integration (superseded by this decision)
+- ADR-001 (Uses LlamaIndex core)
 
-- ADR 011: LangGraph Multi-Agent (updated to use LlamaIndex as primary with optional LangGraph)
-
-- ADR 013: RRF Hybrid Search (benefits from LlamaIndex native hybrid support)
+- ADR-010 (Deprecates LangChain)
 
 ## Design
 
-- Single framework architecture with LlamaIndex as core orchestrator
+- **Migration Steps**: Replace chains with QueryPipeline, loaders with UnstructuredReader, agents with LangGraph (tools from LlamaIndex retrievers)
 
-- ReActAgent with QueryEngineTool for document interactions
+- **Integration**: utils.py/app.py/agent_factory.py LlamaIndex-centric (e.g., VectorStoreIndex, QueryPipeline in tools). LangGraph workers use LlamaIndex tools
 
-- Native hybrid search using dense + sparse embeddings
+- **Implementation Notes**: Ensure offline (local Ollama in LlamaIndex LLM). No LangChain imports
 
-- Simplified dependency tree removing LangChain orchestration components
-
-```mermaid
-graph TD
-    A[LlamaIndex Core] --> B[ReActAgent]
-    A --> C[Document Processing]
-    A --> D[Vector Store Integration]
-    B --> E[QueryEngineTool]
-    C --> F[LlamaParse]
-    C --> G[SimpleDirectoryReader]
-    D --> H[QdrantVectorStore]
-    H --> I[Hybrid Search]
-    E --> I
-```
+- **Testing**: tests/test_real_validation.py: def test_migration_offline(): from llama_index import *; assert no LangChain; test_pipeline(); test_offline_query()
 
 ## Consequences
 
-- Positive: Simplified codebase with single framework, better performance for document processing, native hybrid search support, improved agent capabilities, reduced dependency complexity.
+- Offline-optimized RAG (pipelines/multimodal)
+- Simpler/maintainable (unified library)
 
-- Negative: Need to rewrite existing LangChain code, learning curve for team members familiar with LangChain, some LangChain-specific features unavailable.
+- Initial refactor (but complete now)
 
-- Risks: Framework lock-in with LlamaIndex (mitigated by strong ecosystem); potential integration issues (mitigated by comprehensive testing).
+**Changelog:**  
 
-- Mitigations: Maintain LangGraph compatibility for multi-agent features; use LangChain tools via adapters if needed; comprehensive migration testing.
+- 2.0 (July 25, 2025): Detailed offline reasons/integrations/tests; Kept LangGraph hybrid.
