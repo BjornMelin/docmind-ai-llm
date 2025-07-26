@@ -26,7 +26,7 @@ Example:
 
 Classes:
     AnalysisOutput: Structured schema for document analysis results.
-    Settings: Application configuration loaded from environment variables.
+    AppSettings: Application configuration loaded from environment variables.
 
 """
 
@@ -117,13 +117,32 @@ class AppSettings(BaseSettings):
     """
 
     # Core Backend Configuration
-    backend: str = "ollama"
-    ollama_base_url: str = "http://localhost:11434"
-    lmstudio_base_url: str = "http://localhost:1234/v1"
-    llamacpp_model_path: str = "/path/to/model.gguf"
-    default_model: str = "Qwen/Qwen3-8B"
-    context_size: int = 4096
-    qdrant_url: str = "http://localhost:7000"
+    backend: str = Field(
+        default="ollama", description="Default backend type for LLM inference"
+    )
+    ollama_base_url: str = Field(
+        default="http://localhost:11434", description="Base URL for Ollama server API"
+    )
+    lmstudio_base_url: str = Field(
+        default="http://localhost:1234/v1",
+        description="Base URL for LM Studio server API",
+    )
+    llamacpp_model_path: str = Field(
+        default="/path/to/model.gguf",
+        description="File path to the Llama.cpp model file",
+    )
+    default_model: str = Field(
+        default="Qwen/Qwen3-8B", description="Default model name/identifier to use"
+    )
+    context_size: int = Field(
+        default=4096,
+        ge=1,
+        description="Maximum context window size for language models",
+    )
+    qdrant_url: str = Field(
+        default="http://localhost:7000",
+        description="URL for the Qdrant vector database server",
+    )
 
     # Dense Embedding Configuration (Research-backed BGE-Large)
     dense_embedding_model: str = Field(
@@ -131,12 +150,12 @@ class AppSettings(BaseSettings):
         description="Research-backed BGE-Large model for optimal dense embeddings",
     )
     dense_embedding_dimension: int = Field(
-        default=1024, description="Vector dimension for BGE-Large embeddings"
+        default=1024, ge=1, description="Vector dimension for BGE-Large embeddings"
     )
 
     # Sparse Embedding Configuration (Research-backed SPLADE++)
     sparse_embedding_model: str = Field(
-        default="prithivida/Splade_PP_en_v1",
+        default="prithvida/Splade_PP_en_v1",
         description="Research-backed SPLADE++ model for sparse embeddings",
     )
     enable_sparse_embeddings: bool = Field(
@@ -209,11 +228,16 @@ class AppSettings(BaseSettings):
     )
 
     # Legacy Support (backward compatibility)
-    default_embedding_model: str = Field(
+    default_embedding_model: str | None = Field(
         default="jinaai/jina-embeddings-v4",
         description="Legacy embedding model (deprecated, use dense_embedding_model)",
+        alias="DEFAULT_EMBEDDING_MODEL",  # For env var compatibility
     )
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_ignore_empty=True, case_sensitive=False
+        env_file=".env",
+        env_ignore_empty=True,
+        case_sensitive=False,
+        env_prefix="",  # No prefix for env vars
+        extra="ignore",  # Ignore extra env vars not in model
     )
