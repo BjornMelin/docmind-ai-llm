@@ -63,7 +63,7 @@ class TestQdrantIntegration:
                 vectors_config={"size": vector_size, "distance": "Cosine"},
             )
 
-            # Verify collection was created with correct parameters
+            # Verify collection creation was called with correct parameters
             client.create_collection.assert_called_once()
             call_args = client.create_collection.call_args
             assert call_args[1]["collection_name"] == collection_name

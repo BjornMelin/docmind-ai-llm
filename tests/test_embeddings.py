@@ -240,7 +240,10 @@ class TestEmbeddingIntegration:
 
     @pytest.mark.integration
     def test_embedding_pipeline_integration(
-        self, sample_documents, mock_embedding_model, mock_sparse_embedding_model
+        self,
+        sample_documents,
+        mock_embedding_model,
+        mock_sparse_embedding_model,
     ):
         """Test complete embedding pipeline with both sparse and dense."""
         texts = [doc.text for doc in sample_documents]
