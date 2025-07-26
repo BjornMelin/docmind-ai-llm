@@ -1,11 +1,12 @@
 # DocMind AI - Local Implementation TODO
 
-**Source**: Based on `MASTER_REVIEW_DOCUMENT.md` critical findings and `crawled/` research, focused on **local deployment with advanced features**.
+**Source**: Based on full review, final decisions (ADRs), architecture (e.g., LlamaIndex pipelines/retrievers, LangGraph supervisor with planning/Send, Unstructured parsing, SQLite/diskcache caching), and current codebase state (e.g., partial hybrid/SPLADE++, custom multimodal to evolve, KG commented—enable, no pipeline/chunking/caching yet). Also based on `MASTER_REVIEW_DOCUMENT.md` critical findings and `crawled/` research.
 
-**KISS Principle**: Simple solutions that work locally, avoiding enterprise deployment complexity, fast shipping.
+**KISS Principle**: Simple, library-first solutions (e.g., LlamaIndex QueryPipeline over custom, UnstructuredReader for parsing) that work locally/offline, avoiding complexity (no distributed/Redis—MVP local multi-process with SQLite WAL/diskcache locks). Fast shipping: 1-week MVP on Groups 1-2.
 
 > **System Requirements Note:**
-> The system must fully support **multimodal search and retrieval** (text + image) for hybrid and RAG pipelines, including PDF/image document processing and multimodal reranking, using Jina v4 Multimodal Embeddings.
+> The system must be fully offline/local (no API keys required; e.g., use Ollama for LLM/VLM, HuggingFace for Jina). All configuration (e.g., chunk_size=1024, chunk_overlap=200, gpu_acceleration) must be managed via AppSettings (models.py). Library versions are pinned in pyproject.toml (e.g., llama-index==0.12.52, langgraph==0.5.4, unstructured[all-docs]==0.15.13, diskcache==5.6.3—add if missing).
+> The system must also fully support **multimodal search and retrieval** (text + image) for hybrid and RAG pipelines, including PDF/image document processing and multimodal reranking, using Jina v4 Multimodal Embeddings.
 
 ---
 
@@ -47,7 +48,7 @@
   - Replaced Jina v4 with BAAI/bge-large-en-v1.5 (1024D)
   - Updated vector dimensions in Qdrant setup
 
-- [ ] **Complete SPLADE++ sparse embeddings**
+- [x] **Complete SPLADE++ sparse embeddings**
   - Ensure prithvida/Splade_PP_en_v1 is properly configured
   - Test hybrid search with both dense and sparse vectors
 

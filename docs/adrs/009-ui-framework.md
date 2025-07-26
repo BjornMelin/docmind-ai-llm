@@ -43,7 +43,7 @@ Streamlit (pinned 1.47.1) for UI, with fragments for reactivity, st.status/progr
 
 ## Consequences
 
-+ Quick/responsive (fragments/async).
+- Quick/responsive (fragments/async).
 - User-friendly (toggles for configs).
 
 - Limited advanced UI (but sufficient for local RAG app).
