@@ -1,8 +1,12 @@
-# ADR 012: AsyncQdrantClient Performance Optimization
+# ADR-012: Async Performance Optimization
+
+## Title
+
+Async and Parallel Processing Strategy
 
 ## Version/Date
 
-v1.0 / July 25, 2025
+2.0 / July 25, 2025
 
 ## Status
 
@@ -10,74 +14,42 @@ Accepted
 
 ## Context
 
-Performance analysis identified bottlenecks in document indexing pipeline. Synchronous QdrantClient creates blocking operations that significantly impact user experience during document upload/processing. Research shows async/await patterns provide 50-80% performance improvements for I/O bound operations without breaking existing functionality.
+Async for non-blocking UI (uploads/indexing/querying), parallel for speed (e.g., multi-stage pipeline).
 
 ## Related Requirements
 
-- Responsive UI during document processing
+- Async in indexing/loading/querying.
+- Parallel in QueryPipeline/GPU streams.
 
-- Faster document indexing and search operations
+## Alternatives
 
-- Backward compatibility with existing synchronous code
-
-## Alternatives Considered
-
-- Keep sync only: Limited performance; rejected for poor user experience.
-
-- Full async migration: Breaking changes; rejected to maintain compatibility.
-
-- Threading approach: Complex management and debugging; rejected for maintenance overhead.
-
-- Connection pooling: Helps but doesn't address blocking I/O; insufficient improvement.
+- Sync: UI blocking.
+- Threading: GIL limits for Python.
 
 ## Decision
 
-Implement AsyncQdrantClient alongside existing synchronous client with:
-
-- **Async Enhancement**: AsyncQdrantClient with 50-80% performance improvements via non-blocking operations.
-
-- **Query Optimization**: Research-backed parameters (similarity_top_k=5, sparse_top_k=10, hybrid_top_k=8).
-
-- **Monitoring**: Real-time performance metrics in UI.
-
-- **Compatibility**: All existing sync functions preserved.
+Use asyncio for ops (create_index_async, QueryPipeline async_mode=True, parallel=True). CUDA streams for GPU parallel in async functions.
 
 ## Related Decisions
 
-- ADR 003: GPU Optimization (enhanced with async support)
-
-- ADR 002: Embedding Choices (benefits from async processing)
-
-- ADR 011: LangGraph Multi-Agent (validated with async compatibility)
+- ADR-003 (GPU streams in async).
+- ADR-006 (Async in pipeline).
 
 ## Design
 
-- Dual client approach: sync and async variants coexist
-
-- Performance monitoring dashboard with real-time metrics
-
-- Gradual migration path for existing code
-
-- Async query engine with optimized parameters
-
-```mermaid
-graph TD
-    A[Document Upload] --> B{Use Async?}
-    B -->|Yes| C[AsyncQdrantClient]
-    B -->|No| D[SyncQdrantClient]
-    C --> E[Non-blocking Processing]
-    D --> F[Blocking Processing]
-    E --> G[Performance Metrics]
-    F --> G
-    G --> H[UI Updates]
-```
+- **Async Setup**: In app.py: import asyncio; async def upload_section(): await create_index_async(...); asyncio.run(upload_section()).
+- **Integration**: QueryPipeline(async_mode=True, parallel=True) for querying. In create_index_async: with torch.cuda.Stream(): await ...
+- **Implementation Notes**: Use asyncio.to_thread for sync parts (e.g., non-async libs). Error: await with try/except.
+- **Testing**: tests/test_performance_integration.py: @pytest.mark.asyncio def test_async_parallel(): await qp.run("query"); assert latency < sync; def test_streams(): if gpu: assert stream used in index.
 
 ## Consequences
 
-- Positive: 50-80% faster indexing, responsive UI, better resource utilization, future-proof architecture.
+- Responsive UI (non-blocking).
+- Scalable (parallel for multi-core/GPU).
 
-- Negative: Dual maintenance burden, async learning curve for developers.
+- Async debugging (use tests for coroutines).
+- Deps: asyncio (built-in).
 
-- Risks: Code complexity increase (mitigated by clear separation); async debugging challenges (mitigated by comprehensive logging).
+**Changelog:**  
 
-- Mitigations: Maintain backward compatibility; comprehensive testing; developer documentation.
+- 2.0 (July 25, 2025): Added QueryPipeline async/parallel; Integrated with GPU streams; Enhanced testing for dev.

@@ -1,8 +1,12 @@
-# ADR 013: Reciprocal Rank Fusion (RRF) for Hybrid Search
+# ADR-013: RRF Hybrid Search
+
+## Title
+
+Reciprocal Rank Fusion for Hybrid Search
 
 ## Version/Date
 
-v1.0 / July 25, 2025
+2.0 / July 25, 2025
 
 ## Status
 
@@ -10,76 +14,42 @@ Accepted
 
 ## Context
 
-Document retrieval quality requires combining semantic understanding (dense embeddings) with exact keyword matching (sparse embeddings). Simple score addition or weighted averages don't properly normalize different embedding spaces. RRF provides a research-backed approach to fuse dense and sparse retrieval results while maintaining ranking quality.
+Fuse dense/sparse results (weights 0.7/0.3, alpha=60) for balanced hybrid retrieval (dense semantic, sparse keyword).
 
 ## Related Requirements
 
-- Improved search relevance combining semantic and keyword matching
+- Phase 2.1: RRF with prefetch (limit*2).
+- Configurable alpha via AppSettings.
 
-- Research-backed fusion weights for optimal performance
+## Alternatives
 
-- Performance optimization for hybrid search operations
-
-- Seamless integration with existing Qdrant and LlamaIndex infrastructure
-
-## Alternatives Considered
-
-- Simple score addition: Poor normalization across embedding spaces; rejected for quality issues.
-
-- Weighted averages: Better than addition but inferior to RRF research; rejected for suboptimal ranking.
-
-- Custom Python fusion: High maintenance and slower performance; rejected for complexity.
-
-- LlamaIndex default hybrid: Uses simple weighting; insufficient for production quality.
+- Simple average: Less effective.
+- Custom fusion: Error-prone.
 
 ## Decision
 
-Implement RRF (Reciprocal Rank Fusion) using Qdrant's native implementation with:
-
-- **Native Fusion**: Qdrant's optimized C++ RRF via `query={"fusion": "rrf"}`
-
-- **Research-backed Weights**: Dense 0.7, Sparse 0.3 (optimal semantic/keyword balance)
-
-- **Prefetch Optimization**: Retrieve `limit * 2` results for better fusion quality
-
-- **Performance Parameters**: RRF alpha=60 based on Qdrant research
+Use HybridFusionRetriever (fusion_type="rrf", alpha=AppSettings.rrf_fusion_alpha or 0.7) in LlamaIndex, with prefetch.
 
 ## Related Decisions
 
-- ADR 002: Embedding Choices (provides dense/sparse embeddings for RRF)
-
-- ADR 007: Reranking Strategy (works with RRF output for final ranking)
-
-- ADR 012: AsyncQdrantClient Performance Optimization (enhances RRF performance)
+- ADR-002 (Dense/sparse embeds).
+- ADR-006 (In pipeline chain).
 
 ## Design
 
-- Core RRF implementation in `utils.py:create_qdrant_hybrid_query()`
-
-- Automatic conversion from RRF weights to LlamaIndex `hybrid_alpha`
-
-- Configuration validation via `verify_rrf_configuration()`
-
-- Intelligent prefetch mechanism for fusion quality
-
-```mermaid
-graph TD
-    A[Query] --> B[Dense Embedding]
-    A --> C[Sparse Tokens]
-    B --> D[Dense Search]
-    C --> E[Sparse Search]
-    D --> F[RRF Fusion Engine]
-    E --> F
-    F --> G[Unified Rankings]
-    G --> H[Top Results]
-```
+- **Fusion**: In utils.py: from llama_index.core.retrievers import HybridFusionRetriever; retriever = HybridFusionRetriever(dense_retriever, sparse_retriever, fusion_type="rrf", alpha=AppSettings.rrf_fusion_alpha, prefetch_k=AppSettings.prefetch_factor or 2).
+- **Integration**: Use in QueryPipeline chain=[retriever, ...]. Verify with verify_rrf_configuration(settings).
+- **Implementation Notes**: Alpha=0.7 favors dense (semantic). Error if alpha not 0-1.
+- **Testing**: tests/test_hybrid_search.py: def test_rrf_fusion(): results = retriever.retrieve("query"); assert len(results) > 0; assert fusion_scores descending; def test_alpha_toggle(): AppSettings.rrf_fusion_alpha = 0.5; assert retriever.alpha == 0.5.
 
 ## Consequences
 
-- Positive: Improved search relevance, native performance optimization, research-backed configuration, seamless LlamaIndex integration.
+- Balanced hybrid (better recall/precision).
+- Configurable (tune alpha via AppSettings).
 
-- Negative: Slightly higher latency vs single-vector search; additional configuration complexity.
+- Minor compute (fusion step).
+- Deps: llama-index==0.12.52.
 
-- Risks: Dependency on Qdrant RRF implementation (mitigated by proven stability); configuration tuning needed (mitigated by research defaults).
+**Changelog:**  
 
-- Mitigations: Native implementation for performance; research-backed defaults; comprehensive testing and validation.
+- 2.0 (July 25, 2025): Switched to HybridFusionRetriever; Added alpha/prefetch toggle/integration with pipeline; Enhanced testing for dev.
