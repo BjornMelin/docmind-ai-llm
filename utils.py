@@ -17,7 +17,11 @@ from typing import Any, ClassVar
 
 import torch
 import whisper
-from fastembed import LateInteractionTextEmbedding, SparseTextEmbedding
+from fastembed import (
+    LateInteractionMultimodalEmbedding,
+    LateInteractionTextEmbedding,
+    SparseTextEmbedding,
+)
 from llama_index.core import (
     Document,
     SimpleDirectoryReader,
@@ -131,8 +135,6 @@ class FastEmbedModelManager:
         model_key = f"multimodal_{model_name}"
 
         if model_key not in self._models:
-            from fastembed import LateInteractionMultimodalEmbedding
-
             self._models[model_key] = LateInteractionMultimodalEmbedding(
                 model_name=model_name
             )

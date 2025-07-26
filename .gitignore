@@ -174,7 +174,11 @@ cython_debug/
 logs/
 docmind_ai.log
 repomix-output.md
+tests-output.md
+core-files-output.md
 crawled/
+TODO.md.bak
+PYTEST_OPTIMIZATION_REPORT.md
 
 # Model caches and embeddings
 embeddings_cache/

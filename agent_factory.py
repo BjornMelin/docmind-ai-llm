@@ -203,7 +203,7 @@ def create_multimodal_specialist_agent(tools: list[QueryEngineTool], llm: Any) -
 
 
 def supervisor_routing_logic(state: AgentState) -> str:
-    """LIBRARY-FIRST: LangGraph supervisor routing logic.
+    """LangGraph supervisor routing logic.
 
     Args:
         state: Current agent state.
@@ -243,7 +243,7 @@ def supervisor_routing_logic(state: AgentState) -> str:
 def create_langgraph_supervisor_system(
     tools: list[QueryEngineTool], llm: Any
 ) -> StateGraph | None:
-    """LIBRARY-FIRST: Create LangGraph supervisor multi-agent system.
+    """Create LangGraph supervisor multi-agent system.
 
     Args:
         tools: Available query engine tools.
