@@ -14,15 +14,15 @@ Accepted
 
 ## Context
 
-DocMind AI is a local, offline RAG application for document analysis, emphasizing high-performance retrieval, multimodal support, agentic workflows, and efficiency without API keys or internet. The architecture uses LlamaIndex for RAG pipelines, Unstructured for parsing, LangGraph for agents. Local multi-process supported via SQLite WAL/diskcache locks (no distributed scaling for MVP—reassess later if needed).
+DocMind AI is a local, offline RAG application for document analysis, emphasizing high-performance retrieval, multimodal support, agentic workflows, and efficiency without API keys or internet. The architecture uses LlamaIndex for RAG pipelines, Unstructured for parsing, LangGraph for agents. Local multi-process supported via SQLite WAL/diskcache locks (no distributed scaling for MVP—reassess later if needed). Key needs: hybrid search (dense/sparse), KG for relations, multimodal (text/images/tables), multi-agent coordination, and caching/persistence for sessions.
 
 ## Related Requirements
 
-- Offline/local (no cloud APIs).
+- Offline/local operation (no cloud APIs like LlamaParse).
 - Hybrid retrieval with SPLADE++/BGE-Large/Jina v4.
-- Multimodal parsing (Unstructured hi_res).
-- Agentic RAG with LangGraph supervisor.
-- Efficient chunking (1024/200 via SentenceSplitter).
+- Multimodal parsing (PDFs with images/tables via Unstructured).
+- Agentic RAG with LangGraph supervisor (handoffs, human-in-loop).
+- Efficient chunking (1024/200 overlap via SentenceSplitter).
 - Multi-stage querying (QueryPipeline).
 - Persistence/caching (SQLite/diskcache).
 - Local multi-process (SQLite WAL for concurrent).
