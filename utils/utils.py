@@ -14,8 +14,8 @@ from typing import Any
 
 import torch
 
-from model_manager import ModelManager
 from models import AppSettings
+from utils.model_manager import ModelManager
 
 settings = AppSettings()
 

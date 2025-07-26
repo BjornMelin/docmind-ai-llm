@@ -43,17 +43,15 @@ from agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
+from agents.agent_utils import create_tools_from_index
 from models import AppSettings
 from prompts import PREDEFINED_PROMPTS
-from utils import (
-    create_index_async,
-    create_tools_from_index,
-    detect_hardware,
-    load_documents_llama,
-    setup_logging,
-)
+from utils import detect_hardware, setup_logging
+from utils.document_loader import load_documents_llama
+from utils.index_builder import create_index_async
 
 setup_logging()
+
 
 settings: AppSettings = AppSettings()
 

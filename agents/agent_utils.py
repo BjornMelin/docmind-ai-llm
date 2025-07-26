@@ -21,7 +21,7 @@ from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.llms.ollama import Ollama
 from llama_index.postprocessor.colbert_rerank import ColbertRerank
 
-from models import AppSettings  # Absolute import
+from models import AppSettings
 
 settings = AppSettings()
 

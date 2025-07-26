@@ -1,11 +1,11 @@
 [project]
-name = "docmind-ai"
+name = "docmind-ai-llm"
 version = "0.1.0"
 description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
-license = { file = "LICENSE" }
+license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "streamlit==1.47.1",
     "ollama==0.5.1",
@@ -19,7 +19,7 @@ dependencies = [
     "ruff==0.12.5",
     "qdrant-client==1.15.0",
     "tiktoken==0.9.0",
-    "transformers==4.53.3",
+    "transformers==4.54.0",
     "torch==2.7.1",
     "torchvision==0.22.1",
     "pillow==11.3.0",
@@ -29,9 +29,10 @@ dependencies = [
     "langgraph==0.5.4",
     "moviepy==2.2.1",
     "openai-whisper==20250625",
+    "numba==0.61.2",
     "ragatouille==0.0.9.post2",
     "openinference-instrumentation-llama-index==4.3.2",
-    "arize-phoenix==11.10.1",
+    "arize-phoenix==11.13.2",
     "llama-index-llms-ollama>=0.6.2",
     "llama-index-llms-llama-cpp>=0.4.0",
     "llama-index-embeddings-huggingface>=0.5.5",
@@ -39,7 +40,7 @@ dependencies = [
     "llama-index-embeddings-fastembed>=0.3.5",
     "llama-index-postprocessor-colbert-rerank>=0.3.0",
     "fastembed==0.7.1",
-    "unstructured[all-docs]>=0.18.3",
+    "unstructured[all-docs]>=0.18.11",
 ]
 
 [project.optional-dependencies]
