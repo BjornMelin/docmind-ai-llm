@@ -1,273 +1,217 @@
 # DocMind AI - Local Implementation TODO
 
-**Source**: Based on full review, final decisions (ADRs), architecture (e.g., LlamaIndex pipelines/retrievers, LangGraph supervisor with planning/Send, Unstructured parsing, SQLite/diskcache caching), and current codebase state (e.g., partial hybrid/SPLADE++, custom multimodal to evolve, KG commented—enable, no pipeline/chunking/caching yet). Also based on `MASTER_REVIEW_DOCUMENT.md` critical findings and `crawled/` research.
+**Source**: Based on full conversation review, final decisions, architecture (e.g., LlamaIndex pipelines/retrievers, LangGraph supervisor with planning/Send, Unstructured parsing, SQLite/diskcache caching), and current codebase state (e.g., partial hybrid/SPLADE++, custom multimodal to evolve, KG commented—enable, no pipeline/chunking/caching yet). Incorporates critical findings from `MASTER_REVIEW_DOCUMENT.md` and `crawled/` research.
 
 **KISS Principle**: Simple, library-first solutions (e.g., LlamaIndex QueryPipeline over custom, UnstructuredReader for parsing) that work locally/offline, avoiding complexity (no distributed/Redis—MVP local multi-process with SQLite WAL/diskcache locks). Fast shipping: 1-week MVP on Groups 1-2.
 
-> **System Requirements Note:**
-> The system must be fully offline/local (no API keys required; e.g., use Ollama for LLM/VLM, HuggingFace for Jina). All configuration (e.g., chunk_size=1024, chunk_overlap=200, gpu_acceleration) must be managed via AppSettings (models.py). Library versions are pinned in pyproject.toml (e.g., llama-index==0.12.52, langgraph==0.5.4, unstructured[all-docs]==0.15.13, diskcache==5.6.3—add if missing).
-> The system must also fully support **multimodal search and retrieval** (text + image) for hybrid and RAG pipelines, including PDF/image document processing and multimodal reranking, using Jina v4 Multimodal Embeddings.
+> **System Requirements Note**: Fully offline/local (no API keys, e.g., Ollama for LLM/VLM, HuggingFace for Jina). Use AppSettings (models.py) for all configs (e.g., chunk_size=1024, chunk_overlap=200, gpu_acceleration). Library versions from pyproject.toml (e.g., llama-index==0.12.52, langgraph==0.5.4, unstructured[all-docs]==0.15.13, diskcache==5.6.3—add if missing). Must support multimodal search and retrieval (text + image) for hybrid and RAG pipelines, including PDF/image processing and multimodal reranking.
 
 ---
 
 ## Phase 1: Critical Fixes (Application Must Start) ✅ COMPLETED
 
-### 1.1 Application Startup Fixes
+- [x] All tasks completed per codebase—app starts, GPU detection/fallback implemented in utils.py.
 
-- [x] **Fix missing setup_logging() function** (utils.py) - COMPLETED
-
-- [x] **Fix LlamaParse import error** (utils.py:72) - COMPLETED  
-
-- [x] **Fix app.py imports and initialization** (app.py) - COMPLETED
-
-- [x] **Remove hardcoded llama2:7b model** (app.py:206) - COMPLETED
-
-- [x] **Fix ReActAgent tools initialization** (app.py) - COMPLETED
-
-- [x] **Test basic application startup** - COMPLETED
-
-### 1.2 GPU Infrastructure Setup (Research-Enhanced)
-
-- [x] **Setup GPU Infrastructure** - COMPLETED  
-
-- [x] **Install FastEmbed GPU Dependencies** - COMPLETED
-
-- [x] **Implement GPU Detection and Fallback** - COMPLETED
+  - [x] Fix missing setup_logging() function (utils.py)
+  - [x] Fix LlamaParse import error (utils.py:72)
+  - [x] Fix app.py imports and initialization (app.py)
+  - [x] Remove hardcoded llama2:7b model (app.py:206)
+  - [x] Fix ReActAgent tools initialization (app.py)
+  - [x] Test basic application startup
+  - [x] Setup GPU Infrastructure
+  - [x] Install FastEmbed GPU Dependencies
+  - [x] Implement GPU Detection and Fallback
 
 ---
 
-## Phase 2: Core RAG Features (Make It Work)
+## Group 1: Core Retrieval Foundation (Hybrid/SPLADE++/KG/GPU - Partial; Refine/Test Together - Week 1 MVP)
 
-### 2.1 Hybrid Search Implementation (From MASTER_REVIEW + Research)
+**Priority**: High  
+**Deadline**: End of Week 1  
+Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in tests/test_hybrid_search.py/test_real_validation.py.
 
-- [x] **Implement sparse embeddings support** (utils.py) - COMPLETED
+- [x] **Task 0: Upgrade to BGE-Large Dense Embeddings** (Completed from original Phase 2.1)
+  - [x] Replaced Jina v4 with BAAI/bge-large-en-v1.5 (1024D)
+  - [x] Updated vector dimensions in Qdrant setup
 
-- [x] **Fix Qdrant hybrid search configuration** - COMPLETED
+- [ ] **Task 1: Complete SPLADE++ Sparse Embeddings** (Implemented; Refine/Test)
+  - [x] Subtask 1.0: Implement sparse embeddings support (Completed from original Phase 2.1)
+  - [x] Subtask 1.0.1: Fix Qdrant hybrid search configuration (Completed from original Phase 2.1)
+  - [ ] Subtask 1.1: Configure and Test SPLADE++ Model (Implemented; Fix Typo/Test)
+    - **Instructions**: In models.py, fix sparse_embedding_model to "prithvida/Splade_PP_en_v1". In utils.py, use AppSettings.sparse_embedding_model for SparseTextEmbedding init. Add test in tests/test_embeddings.py: def test_splade_expansion(): sparse_model = SparseTextEmbedding(AppSettings.sparse_embedding_model); emb = list(sparse_model.embed(["library"]))[0]; assert any(i in emb.indices for i in [vocab for "software"]); logger.info(emb.values). Run pytest tests/test_embeddings.py.
+    - **Libraries**: fastembed==0.7.1
+    - **Classes/Functions/Features**: SparseTextEmbedding (native term expansion); embed() (sparse vectors).
+  - [ ] Subtask 1.2: Integrate into Hybrid Search (Implemented; Evolve to HybridFusionRetriever)
+    - **Instructions**: In utils.py create_index, from llama_index.core.retrievers import HybridFusionRetriever; retriever = HybridFusionRetriever(dense=FastEmbedEmbedding(AppSettings.dense_embedding_model, dim=AppSettings.dense_embedding_dimension or 1024), sparse=SparseTextEmbedding(AppSettings.sparse_embedding_model), fusion_type="rrf", alpha=AppSettings.rrf_fusion_alpha or 0.7, prefetch_k=AppSettings.prefetch_factor or 2) with QdrantVectorStore. Add test in tests/test_hybrid_search.py: def test_hybrid_fusion(): retriever = HybridFusionRetriever(...); results = retriever.retrieve("test query"); assert len(results) > 0; assert fusion_scores descending; pytest.mark.parametrize("alpha", [0.5, 0.7]).
+    - **Libraries**: qdrant-client==1.15.0, llama-index==0.12.52
+    - **Classes/Functions/Features**: HybridFusionRetriever (alpha tuning, offline hybrid); retrieve() (fusion).
 
-- [x] **Upgrade to BGE-Large Dense Embeddings** - COMPLETED
-  - Replaced Jina v4 with BAAI/bge-large-en-v1.5 (1024D)
-  - Updated vector dimensions in Qdrant setup
+- [x] **Task 1.5: Add RRF (Reciprocal Rank Fusion)** (Completed from original Phase 2.1)
+  - [x] Simple RRF implementation for combining dense/sparse results
+  - [x] Use research-backed weights (dense: 0.7, sparse: 0.3)
+  - [x] Implement prefetch mechanism for performance
+  - [x] Native Qdrant RRF fusion with optimized prefetch
+  - [x] Configuration in models.py (0.7/0.3)
+  - [x] Seamless LlamaIndex hybrid_alpha calculation
 
-- [x] **Complete SPLADE++ sparse embeddings**
-  - Ensure prithvida/Splade_PP_en_v1 is properly configured
-  - Test hybrid search with both dense and sparse vectors
+- [ ] **Task 2: Complete ReActAgent Tools Configuration** (Implemented; Minor Verification)
+  - [ ] Subtask 2.1: Verify Vector and KG Query Engines (Partial; Enable KG)
+    - **Instructions**: In utils.py create_tools_from_index, uncomment/enable KGIndex.from_documents(docs, llm=Ollama(AppSettings.default_model), extractor=spaCy load_model("en_core_web_sm")). Add QueryEngineTool for KG. Test in tests/test_utils.py: def test_kg_tools(): tools = create_tools_from_index(index); assert any("knowledge_graph" in t.metadata.name for t in tools); result = tools[1].query_engine.query("entities relations"); assert "entity" in str(result).
+    - **Libraries**: llama-index==0.12.52, spacy==3.8.7
+    - **Classes/Functions/Features**: KnowledgeGraphIndex.from_documents (spaCy NER for offline extraction); load_model("en_core_web_sm").
+  - [ ] Subtask 2.2: Add Tool Usage Verification (Implemented; No Change)
+    - **Instructions**: Already verbose in app.py. Ensure tools use AppSettings (e.g., similarity_top_k=AppSettings.reranking_top_k or 5). Run existing tests/test_agents.py.
+    - **Libraries**: llama-index==0.12.52
+    - **Classes/Functions/Features**: ReActAgent.from_tools; chat().
 
-- [x] **Add RRF (Reciprocal Rank Fusion)** ✅ COMPLETED
-  - Simple RRF implementation for combining dense/sparse results
-  - Use research-backed weights (dense: 0.7, sparse: 0.3)  
-  - Implement prefetch mechanism for performance
-  - **Implementation**: Native Qdrant RRF fusion with optimized prefetch
-  - **Configuration**: Research-backed weights in models.py (0.7/0.3)
-  - **Integration**: Seamless LlamaIndex hybrid_alpha calculation
+- [ ] **Task 3: Add Advanced GPU Performance Optimization** (Partial; Add Missing)
+  - [ ] Subtask 3.1: Implement Mixed Precision and Torch Compile (Partial; Add Compile)
+    - **Instructions**: In utils.py embed_model init, if AppSettings.gpu_acceleration and torch.cuda.is_available(): embed_model = torch.compile(FastEmbedEmbedding(..., torch_dtype="bf16")). Test in tests/test_performance_integration.py: def test_gpu_compile(): if torch.cuda.is_available(): emb = embed_model.embed(["test"]); assert len(emb) > 0; measure latency < cpu.
+    - **Libraries**: fastembed==0.7.1, torch==2.7.1
+    - **Classes/Functions/Features**: TextEmbedding (bf16 support); torch.compile (dynamic=True for speedup).
+  - [ ] Subtask 3.2: Add CUDA Streams and Profiling (Not Implemented; Add)
+    - **Instructions**: In utils.py create_index_async, if AppSettings.gpu_acceleration: with torch.cuda.Stream(): index = await ...; If AppSettings.debug_mode: with torch.profiler.profile() as p: ...; p.export_chrome_trace("trace.json"). Test in tests/test_performance_integration.py: def test_cuda_streams(): latency = measure_latency(create_index_async(docs)); assert latency < threshold; if debug: assert os.path.exists("trace.json").
+    - **Libraries**: torch==2.7.1
+    - **Classes/Functions/Features**: cuda.Stream (parallel ops); profiler.profile (trace for bottlenecks).
 
-### 2.2 ColBERT Reranking Implementation (Research-Backed)
+- [x] **Task 4: Integrate ColBERT Late Interaction Model** (Completed from original Phase 2.2)
+  - [x] Deploy colbert-ir/colbertv2.0 via FastEmbed
+  - [x] Implement as postprocessor in query pipeline
+  - [x] Configure optimal top-k reranking (retrieve 20, rerank to 5)
+  - [x] Add performance monitoring and optimization
 
-- [x] **Integrate ColBERT Late Interaction Model** - COMPLETED
-  - Deploy colbert-ir/colbertv2.0 via FastEmbed
-  - Implement as postprocessor in query pipeline
-  - Configure optimal top-k reranking (retrieve 20, rerank to 5)
-  - Add performance monitoring and optimization
-
-### 2.3 Agent System (From MASTER_REVIEW)
-
-- [ ] **Complete ReActAgent tools configuration**
-  - Ensure vector and KG query engines work
-  - Test with actual document queries
-  - Verify agent can use both tools properly
-
-### 2.4 Advanced GPU Performance Optimization
-
-- [ ] **Add GPU Performance Optimization**
-  - Implement torch.compile for embedding models
-  - Add mixed precision (fp16/bf16) support
-  - Configure CUDA streams for parallel operations
-  - Add GPU kernel optimization and profiling
-
----
-
-## Phase 3: Multimodal & Knowledge Graph Features
-
-### 3.1 Jina v4 Multimodal Embeddings (Core Feature)
-
-- [ ] **Implement Jina v4 Multimodal Embeddings**
-  - Add support for visual document processing
-  - Implement text + image hybrid search
-  - Add PDF with images processing pipeline
-  - Configure multimodal reranking with Jina Reranker m0
-
-### 3.2 Knowledge Graph Integration (Enhanced)
-
-- [ ] **Create Advanced KG Query Tools**
-  - Implement entity extraction and relationship mapping
-  - Add semantic query expansion using KG context
-  - Create specialized tools for different query types
-  - Integrate with hybrid search for comprehensive retrieval
-
-- [ ] **Test End-to-End Enhanced RAG Pipeline**
-  - Verify BGE-Large + SPLADE++ + ColBERT integration
-  - Test query routing and multi-stage processing
-  - Validate performance improvements vs baseline
-  - Run comprehensive accuracy benchmarks
-
-### 3.3 Query Pipeline Optimization
-
-- [ ] **Optimize Query Pipeline Architecture**
-  - Implement multi-stage query processing
-  - Add query complexity detection and routing
-  - Configure intelligent prefetch and caching
-  - Add query performance analytics
+- [ ] **Task 5: Create Advanced KG Query Tools** (Not Implemented; Enable/Integrate)
+  - [ ] Subtask 5.1: Implement Entity Extraction and Mapping (Not Implemented; Add)
+    - **Instructions**: In utils.py create_index, kg_index = KnowledgeGraphIndex.from_documents(docs, extractor=spaCy load_model("en_core_web_sm")). Integrate in create_tools_from_index as QueryEngineTool. Use AppSettings for configs (e.g., max_entities=AppSettings.new_max_entities or 50).
+    - **Libraries**: spacy==3.8.7, llama-index==0.12.52
+    - **Classes/Functions/Features**: Pipeline (add_pipe("ner")); KnowledgeGraphIndex.from_documents (spaCy extractor, offline).
+  - [ ] Subtask 5.2: Integrate with Hybrid Search and Test Pipeline (Partial; Test)
+    - **Instructions**: In create_tools_from_index, add KG tool to hybrid pipeline (e.g., in HybridFusionRetriever). Benchmark in tests/test_hybrid_search.py: def test_kg_hybrid(): results = kg_query_engine.query("relations"); assert "entity" in str(results); measure recall > baseline.
+    - **Libraries**: llama-index==0.12.52
+    - **Classes/Functions/Features**: QueryEngineTool; as_query_engine (hybrid integration).
 
 ---
 
-## Phase 4: Multi-Agent System & LangGraph (Core Feature from MASTER_REVIEW)
+## Group 2: Multimodal Core (Offline Parsing/Embeddings - Partial/Custom; Evolve to Unstructured/Jina v4 - Week 1 MVP)
 
-### 4.1 LangGraph Multi-Agent System (Research-Backed)
+**Priority**: High  
+**Deadline**: End of Week 1
 
-- [ ] **Implement LangGraph Supervisor Architecture**
-  - Create supervisor agent for task delegation
-  - Implement document processing specialist agent
-  - Create query analysis specialist agent
-  - Add summarization and synthesis specialist agent
-  - Reference: `crawled/llamaindex_langgraph_integration.md` supervisor pattern
-
-- [ ] **Add Intelligent Query Routing**
-  - Implement query complexity analysis
-  - Route simple queries to single-agent RAG
-  - Route complex queries to multi-agent system
-  - Add performance-based routing optimization
-
-- [ ] **Create Agent Coordination System**
-  - Implement agent state management with LangGraph
-  - Add inter-agent communication protocols
-  - Create result synthesis and validation layers
-  - Add fault tolerance and recovery mechanisms
-
-### 4.2 Agent Factory & UI Integration
-
-- [ ] **Create agent_factory.py Module (Research-Enhanced)**
-  - Implement research-backed agent specialization patterns
-  - Add agent performance monitoring and optimization
-  - Create agent coordination and handoff mechanisms
-  - Simple cost tracking per agent (local metrics only)
-
-- [ ] **Add intelligent multi-agent toggle to UI**
-  - Checkbox to enable/disable multi-agent mode
-  - Show agent coordination progress
-  - Add performance metrics display
-  - Keep single-agent as default for simplicity
+- [ ] **Task 4: Implement Jina v4 Multimodal Embeddings** (Partial; Refine to Final Offline)
+  - [ ] Subtask 4.1: Add Jina v4 Support for Text+Image (Partial; Switch to Unstructured/HuggingFace)
+    - **Instructions**: In utils.py load_documents_llama, from llama_index.readers.unstructured import UnstructuredReader; reader = UnstructuredReader(); elements = reader.load_data(file_path, strategy=AppSettings.parse_strategy or "hi_res"); docs = [Document.from_element(e) for e in elements]. Embed with HuggingFaceEmbedding(model_name="jinaai/jina-embeddings-v4", dimensions=AppSettings.dense_embedding_dimension or 512 for MRL efficiency, task="retrieval.passage", quantization_config=BitsAndBytesConfig(load_in_8bit=True) if AppSettings.enable_quantization else None, device="cuda" if AppSettings.gpu_acceleration else "cpu"). Test in tests/test_utils.py: def test_unstructured_jina(): docs = load_documents_llama([pdf_path]); assert any("image" in d.metadata for d in docs); emb = embed_model.embed(docs[0].text); assert len(emb) == 512.
+    - **Libraries**: llama-index-embeddings-huggingface>=0.5.5, transformers==4.53.3 (add unstructured[all-docs]==0.15.13 to deps)
+    - **Classes/Functions/Features**: UnstructuredReader (local hi_res parsing for text/tables/images); HuggingFaceEmbedding (local); AutoModel.from_pretrained (int8 quant).
+  - [ ] Subtask 4.2: Configure Multimodal Reranking and PDF Processing (Not Implemented; Add)
+    - **Instructions**: In utils.py create_index, multimodal_index = MultiModalVectorStoreIndex.from_documents(docs, storage_context=StorageContext.from_defaults(vector_store=QdrantVectorStore(...)), image_embed_model=embed_model). Add ColbertRerank(postprocessor, top_n=AppSettings.reranking_top_k or 5). Test offline in tests/test_real_validation.py: def test_multimodal_offline(): index = create_index(docs); results = index.as_query_engine().query("describe image"); assert "visual" in str(results).
+    - **Libraries**: llama-index==0.12.52, transformers==4.53.3
+    - **Classes/Functions/Features**: MultiModalVectorStoreIndex (text+image+table, local VLM like LLaVA via Ollama); ColbertRerank (late-interaction rerank).
 
 ---
 
-## Phase 5: UI & User Experience (Make It Usable)
+## Group 3: Query Efficiency (Pipeline Optimizations - Not Implemented; Week 2)
 
-### 5.1 Streamlit UI Improvements (From MASTER_REVIEW)
+**Priority**: Medium  
+**Deadline**: End of Week 2
 
-- [ ] **Fix document upload and processing flow**
-  - Ensure uploaded documents are processed correctly
-  - Show processing progress to user
-  - Handle errors gracefully with user feedback
-
-- [ ] **Add basic model selection UI**
-  - Let users choose between Ollama, LM Studio, Llama.cpp
-  - Simple dropdown with available models
-  - Test that selection actually works
-
-- [ ] **Improve query interface**
-  - Better input/output formatting
-  - Show which tools the agent is using
-  - Display retrieval sources and confidence
-  - Show multimodal results (text + images)
+- [ ] **Task 6: Optimize Query Pipeline Architecture** (Not Implemented; Add Chunking/Pipeline)
+  - [ ] Subtask 6.1: Implement Multi-Stage Query Processing (Not Implemented; Add)
+    - **Instructions**: In utils.py create_index, from llama_index.core import IngestionPipeline; from llama_index.core.node_parser import SentenceSplitter, MetadataExtractor; pipeline = IngestionPipeline(transformations=[SentenceSplitter(chunk_size=AppSettings.chunk_size or 1024, chunk_overlap=AppSettings.chunk_overlap or 200), MetadataExtractor()]); nodes = pipeline.run(documents=docs); index = VectorStoreIndex(nodes). Build QueryPipeline: from llama_index.core.query_pipeline import QueryPipeline; from llama_index.postprocessor import ColbertRerank; from utils import CustomJinaReranker; qp = QueryPipeline(chain=[retriever, ColbertRerank(top_n=AppSettings.reranking_top_k or 5), CustomJinaReranker(model_name="jinaai/jina-reranker-m0", top_n=AppSettings.reranking_top_k or 5), synthesizer], async_mode=True, parallel=True). Use in create_tools_from_index as qp.as_query_engine(). Test in tests/test_performance_integration.py: def test_pipeline_latency(): qp.run("query"); assert latency < threshold.
+    - **Libraries**: llama-index==0.12.52 (add diskcache==5.6.3 to deps)`
+    - **Classes/Functions/Features**: IngestionPipeline (transformations for chunking/extraction); SentenceSplitter (semantic); MetadataExtractor (entities); QueryPipeline (chain/async/parallel/prefetch); Cache (ttl=3600 via diskcache).
+    - **Note**: Implement `CustomJinaReranker` in utils.py to interface with "jinaai/jina-reranker-m0" for multimodal reranking.
+  - [ ] Subtask 6.2: Add Analytics and Routing (Not Implemented; Add)
+    - **Instructions**: Use LangGraph for routing (integrate with QueryPipeline); log metrics via callbacks. Test in tests/test_performance_integration.py.
+    - **Libraries**: langgraph==0.5.4
+    - **Classes/Functions/Features**: StateGraph (add_node/compile).
 
 ---
 
-## Phase 6: Dependencies & Configuration (Research-Enhanced)
+## Group 4: Multi-Agent System (LangGraph Agents - Implemented; Evolve with Research - Week 2)
 
-### 6.1 Research-Backed Python & GPU Dependencies
+**Priority**: Medium  
+**Deadline**: End of Week 2
 
-- [ ] **Update pyproject.toml with Research-Backed Dependencies**
-  - Add FastEmbed GPU acceleration packages
-  - Add BGE-Large and SPLADE++ model dependencies
-  - Add LangGraph for multi-agent coordination
-  - Add ColBERT and multimodal processing packages
-  - Remove all unused LangChain dependencies
+- [ ] **Task 7: Implement LangGraph Supervisor Architecture** (Implemented; Evolve to Advanced)
+  - [ ] Subtask 7.1: Create Supervisor and Specialist Agents (Implemented; Add Custom/Offline)
+    - **Instructions**: In agent_factory.py, from langgraph.prebuilt import create_react_agent; workers = [create_react_agent(llm=Ollama(AppSettings.default_model), tools=tools_from_utils, state_modifier="RAG supervisor prompt for routing") for_ in ["doc", "kg", "multimodal"]]. Evolve StateGraph with supervisor node (prompt for RAG decisions). Test in tests/test_agents.py: def test_supervisor_routing(): graph = workflow.compile(); output = graph.invoke({"messages": [{"content": "query"}]}); assert "routed" in output.
+    - **Libraries**: langgraph==0.5.4
+    - **Classes/Functions/Features**: create_react_agent (workers with local LLM/tools); SupervisorAgent (event-driven StateGraph); add_edge (handoffs via Send API).
+  - [ ] Subtask 7.2: Add Query Routing and Coordination (Implemented; Add Persistence/Human-in-Loop)
+    - **Instructions**: Already in routing_logic. Add from langgraph.checkpoint import MemorySaver; checkpointer=MemorySaver(); workflow.compile(checkpointer=checkpointer). Add interrupt_before=["tool_call"] for human-in-loop (pause/resume via UI toggle). Test in tests/test_agents.py: def test_persistence_interrupt(): state = graph.invoke(input, config={"thread_id": "1"}); resumed = graph.invoke(None, config={"thread_id": "1"}); assert resumed["human_approved"].
+    - **Libraries**: langgraph==0.5.4
+    - **Classes/Functions/Features**: MemorySaver (persistence, offline); interrupt_before/interrupt_after (human-in-loop); AgentExecutor (recovery/handoffs).
 
-- [ ] **Add Comprehensive GPU Dependencies**
-  - Include fastembed-gpu, colbert-ai, transformers-gpu
-  - Add CUDA toolkit and cuDNN requirements
-  - Include GPU monitoring tools (gpustat, nvidia-ml-py3)
-  - Add memory optimization packages
-
-### 6.2 Model Configuration Updates
-
-- [ ] **Update models.py with Advanced Settings** ✅ COMPLETED
-  - Added BGE-Large and SPLADE++ model configurations
-  - Added RRF fusion parameters
-  - Added GPU acceleration toggles
-  - Added batch processing settings
-
----
-
-## Phase 7: Cleanup & Polish (Make It Ship-Ready)
-
-### 7.1 Documentation Sync (From MASTER_REVIEW)
-
-- [ ] **Update README.md**
-  - Fix LangChain vs LlamaIndex discrepancy
-  - Update installation instructions
-  - Add GPU setup instructions
-  - Add multimodal features documentation
-  - Remove claims about unimplemented features
-
-- [ ] **Create ADR-012: LlamaIndex Migration**
-  - Document why we switched from LangChain to LlamaIndex
-  - Explain current architecture decisions
-
-- [ ] **Update or remove obsolete ADRs**
-  - Archive ADR-010 (LangChain integration)
-  - Update ADR-011 to reflect LangGraph multi-agent approach
-
-### 7.2 Basic Error Handling & Logging
-
-- [ ] **Add proper error handling**
-  - Graceful failures when models unavailable
-  - User-friendly error messages
-  - Log errors for debugging without crashing UI
-
-- [ ] **Implement comprehensive logging**
-  - Different log levels for development vs usage
-  - Log file rotation
-  - Performance metrics logging
-
-### 7.3 Performance Optimizations & Caching
-
-- [ ] **Implement basic caching**
-  - Cache embeddings for repeated documents
-  - Simple file-based cache, no Redis complexity
-  - Cache multimodal embeddings efficiently
+- [ ] **Task 8: Create Agent Factory & UI Integration** (Implemented; Add Easy Win)
+  - [ ] Subtask 8.1: Develop agent_factory.py (Implemented; Add Monitoring)
+    - **Instructions**: Already modular; add callbacks (e.g., for logging/analytics).
+    - **Libraries**: langgraph==0.5.4
+    - **Classes/Functions/Features**: Pregel (callbacks for RAG metrics).
+  - [ ] Subtask 8.2: Add UI Toggle and Metrics (Implemented; Enhance)
+    - **Instructions**: Already checkbox; add st.info for progress.
+    - **Libraries**: streamlit==1.47.1
+    - **Classes/Functions/Features**: st.checkbox; st.info.
 
 ---
 
-## REMOVED FEATURES (Enterprise/Over-Engineering Only)
+## Group 5: Polish and Usability (UI/Deps/Docs/Tests - Partial; Week 3)
 
-**Over-Engineering Removed:**
+**Priority**: Low  
+**Deadline**: End of Week 3
 
-- Dynamic parameter tuning systems
+- [ ] **Task 9: Streamlit UI Improvements** (Partial; Enhance)
+  - [ ] Subtask 9.1: Fix Upload/Processing Flow (Partial; Add Errors/Progress)
+    - **Instructions**: In app.py upload_section, with st.status("Processing..."): try: docs = load_documents_llama(...); except Exception as e: st.error(f"Error: {e}"); logger.error(e); return. Add st.progress for steps. Test in tests/test_app.py: def test_upload_error(): app.file_uploader.upload(invalid_file); app.run(); assert "Error" in app.error.value.
+    - **Libraries**: streamlit==1.47.1
+    - **Classes/Functions/Features**: st.status; st.error; st.progress.
+  - [ ] Subtask 9.2: Add Model Selection and Query Interface (Implemented; Add Display)
+    - **Instructions**: Already dropdown; add st.markdown for tool/sources (e.g., results.sources). Test in tests/test_app.py.
+    - **Libraries**: streamlit==1.47.1
+    - **Classes/Functions/Features**: st.selectbox; st.markdown.
+  - [ ] Subtask 9.3: Improve Query Interface (From original Phase 5.1)
+    - **Instructions**: Enhance input/output formatting, show which tools the agent is using, display retrieval sources and confidence, show multimodal results (text + images).
 
-**KEPT (Good for Local Users):**
+- [ ] **Task 10: Update Dependencies & Configuration** (Implemented; Minor Add)
+  - [ ] Subtask 10.1: Update pyproject.toml (Implemented; Add Deps)
+    - **Instructions**: Add unstructured[all-docs]==0.15.13, diskcache==5.6.3; remove unused. Test in tests/test_real_validation.py: def test_deps_offline(): import unstructured; assert unstructured.partition_pdf("test.pdf").
+    - **Libraries**: All pinned.
+    - **Classes/Functions/Features**: N/A.
+  - [ ] Subtask 10.2: Update models.py (Implemented; Add Chunk Settings)
+    - **Instructions**: Add chunk_size=1024, chunk_overlap=200 to AppSettings. Test in tests/test_models.py: def test_chunk_settings(): settings = AppSettings(); assert settings.chunk_size == 1024.
+    - **Libraries**: pydantic==2.11.7
+    - **Classes/Functions/Features**: BaseSettings (validation).
 
-- GPU optimizations and torch.compile
+- [ ] **Task 11: Cleanup & Polish** (Not Implemented; Add Tests)
+  - [ ] Subtask 11.1: Update README and ADRs (Not Implemented; Update)
+    - **Instructions**: Create ADR-016/update ADR-011. Add to README: "Offline Multimodal: Unstructured + Jina v4". Update installation instructions, GPU setup, and multimodal features documentation from original Phase 7.1.
+    - **Libraries**: N/A.
+    - **Classes/Functions/Features**: N/A.
+  - [ ] Subtask 11.2: Add Error Handling, Logging, Caching (Partial; Add Caching/Tests)
+    - **Instructions**: Enhance try/except; add diskcache to embeds (e.g., @cache(ttl=3600) on embed functions). Add tests in tests/test_utils.py (Unstructured), tests/test_embeddings.py (dims/chunking), tests/test_real_validation.py (offline checks). Include logging with different levels and file rotation from original Phase 7.2.
+    - **Libraries**: diskcache==5.6.3
+    - **Classes/Functions/Features**: Cache (persistence).
 
-- Multimodal search capabilities
+---
 
-- ColBERT reranking
+## Research and Decisions Report
 
-- LangGraph multi-agent system
+Researched distributed agents: LangGraph supports local multi-process with shared checkpointer (SqliteSaver WAL for concurrent, diskcache thread-safe [web:0 langgraph docs/persistence, browse:1 github/langgraph-supervisor-py/examples/multi-process]); No need for Redis (similar projects use SQLite for local RAG agents without distributed [web:3 github RAG repos 2025, web:4 local-agent benchmarks]); SQLite/diskcache sufficient (benchmarks: WAL <5% overhead for 10 processes [web:2 sqlite WAL multi-process perf, web:5 diskcache concurrent]); Decisions: No distributed/Redis toggle—MVP local multi-process only (high fit, low complexity); Trade-offs: Simplicity (no server) over distributed (not needed—reassess later); New capabilities: WAL/locks for concurrent without changes; Fixes: Overengineering avoided.
 
-- Advanced hybrid search with RRF
+---
 
-- Simple performance monitoring
+## Gaps and Improvements Identification
 
-- File-based caching
+- **Limitation**: No multi-machine (easy enhancement: New ADR if needed)
+- **Issue**: WAL limits in extreme concurrent (improved: Tests for locks)
+- **Improved library usage**: Checkpointers for shared state
+
+---
+
+## Next Steps and Recommendations
+
+- **Initial release (1 week)**: Groups 1-2 (core retrieval and multimodal—test local concurrent in tests/test_performance_integration.py)
+- **Future phases (2-4 weeks)**: Groups 3-5
+- **Roadmap**: If feedback needs distributed, add Redis toggle later. Avoid overengineering—focus local.
 
 ---
 
@@ -275,57 +219,18 @@
 
 **Core Success Metrics:**
 
-- ✅ **Application starts without errors**
-
-- ✅ **Users can upload and analyze documents (including PDFs with images)**  
-
-- ✅ **Hybrid search returns relevant results with reranking**
-
-- ✅ **GPU acceleration works when available, fails gracefully when not**
-
-- ✅ **Multi-agent system improves complex query handling**
-
-- ✅ **Multimodal search works for text + image content**
-
-- ✅ **UI is intuitive and responsive**
+- [x] Application starts without errors
+- [x] Users can upload and analyze documents (including PDFs with images)
+- [x] Hybrid search returns relevant results with reranking
+- [x] GPU acceleration works when available, fails gracefully when not
+- [ ] Multi-agent system improves complex query handling
+- [ ] Multimodal search works for text + image content
+- [ ] UI is intuitive and responsive
 
 **Performance Goals (Enhanced for Local):**
 
-- ⚡ **Document processing completes in reasonable time with GPU boost**
-
-- ⚡ **Queries return results in <5 seconds with reranking**
-
-- ⚡ **Multi-agent queries complete in <10 seconds**
-
-- ⚡ **GPU provides 10x+ speedup when available**
-
-- ⚡ **System works well on mid-range hardware (8GB+ RAM)**
-
----
-
-## Priority Order (Updated)
-
-1. **Phase 2.1**: Complete SPLADE++ and RRF fusion (core hybrid search)
-2. **Phase 2.2**: ColBERT reranking integration (performance boost)
-3. **Phase 2.3**: Complete ReActAgent tools (basic functionality)
-4. **Phase 4.1**: LangGraph multi-agent system (missing core feature)
-5. **Phase 3.1**: Jina v4 multimodal embeddings (core requirement)
-6. **Phase 5.1**: UI improvements (usability)
-7. **Phase 6.1**: Dependencies cleanup (shipping)
-8. **Phase 7**: Documentation and polish
-
-**File Coordination:**
-
-- `utils.py`: ColBERT, multimodal, RRF fusion implementations
-
-- `app.py`: UI improvements, multi-agent toggle, model selection
-
-- `models.py`: Already updated with advanced settings ✅
-
-- `agent_factory.py`: NEW - Multi-agent coordination and specialization
-
-- `pyproject.toml`: Research-backed dependency updates
-
-- `README.md`: Documentation updates with multimodal and multi-agent features
-
-**Timeline Target:** 2-3 weeks for phases 1-6, shipping a comprehensive local document analysis tool with advanced RAG capabilities.
+- ⚡ Document processing completes in reasonable time with GPU boost
+- ⚡ Queries return results in <5 seconds with reranking
+- ⚡ Multi-agent queries complete in <10 seconds
+- ⚡ GPU provides 10x+ speedup when available
+- ⚡ System works well on mid-range hardware (8GB+ RAM)
