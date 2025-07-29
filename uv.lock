@@ -1067,7 +1067,7 @@ requires-dist = [
     { name = "tiktoken", specifier = "==0.9.0" },
     { name = "torch", specifier = "==2.7.1" },
     { name = "torchvision", specifier = "==0.22.1" },
-    { name = "transformers", specifier = "==4.54.0" },
+    { name = "transformers", specifier = "==4.54.1" },
     { name = "unstructured", extras = ["all-docs"], specifier = ">=0.18.11" },
 ]
 provides-extras = ["test", "gpu"]
@@ -1135,7 +1135,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -5659,7 +5659,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "4.54.0"
+version = "4.54.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -5673,9 +5673,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/4b/3341d2fade52634d877476f4ed5fa8f7bf3f1e867bfba76f0fb341e2885f/transformers-4.54.0.tar.gz", hash = "sha256:843da4d66a573cef3d1b2e7a1d767e77da054621e69d9f3faff761e55a1f8203", size = 9510412, upload-time = "2025-07-25T18:58:20.826Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/6c/4caeb57926f91d943f309b062e22ad1eb24a9f530421c5a65c1d89378a7a/transformers-4.54.1.tar.gz", hash = "sha256:b2551bb97903f13bd90c9467d0a144d41ca4d142defc044a99502bb77c5c1052", size = 9514288, upload-time = "2025-07-29T15:57:22.826Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cc/34/4d82dc596764de9d14285f8ed53b50896bf05fbbcd71a82c6d174b3ab8c7/transformers-4.54.0-py3-none-any.whl", hash = "sha256:c96e607f848625965b76c677b2c2576f2c7b7097c1c5292b281919d90675a25e", size = 11176597, upload-time = "2025-07-25T18:58:17.677Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/18/eb7578f84ef5a080d4e5ca9bc4f7c68e7aa9c1e464f1b3d3001e4c642fce/transformers-4.54.1-py3-none-any.whl", hash = "sha256:c89965a4f62a0d07009d45927a9c6372848a02ab9ead9c318c3d082708bab529", size = 11176397, upload-time = "2025-07-29T15:57:19.692Z" },
 ]
 
 [[package]]
