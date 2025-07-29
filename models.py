@@ -132,7 +132,8 @@ class AppSettings(BaseSettings):
         description="File path to the Llama.cpp model file",
     )
     default_model: str = Field(
-        default="Qwen/Qwen3-8B", description="Default model name/identifier to use"
+        default="google/gemma-3n-E4B-it",
+        description="Default base model with hardware-adaptive variants",
     )
     context_size: int = Field(
         default=4096,
@@ -140,7 +141,7 @@ class AppSettings(BaseSettings):
         description="Maximum context window size for language models",
     )
     qdrant_url: str = Field(
-        default="http://localhost:7000",
+        default="http://localhost:6333",
         description="URL for the Qdrant vector database server",
     )
 
