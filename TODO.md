@@ -8,35 +8,13 @@
 
 ---
 
-## Phase 1: Critical Fixes (Application Must Start) ✅ COMPLETED
-
-- [x] All tasks completed per codebase—app starts, GPU detection/fallback implemented in utils.py.
-
-  - [x] Fix missing setup_logging() function (utils.py)
-  - [x] Fix LlamaParse import error (utils.py:72)
-  - [x] Fix app.py imports and initialization (app.py)
-  - [x] Remove hardcoded llama2:7b model (app.py:206)
-  - [x] Fix ReActAgent tools initialization (app.py)
-  - [x] Test basic application startup
-  - [x] Setup GPU Infrastructure
-  - [x] Install FastEmbed GPU Dependencies
-  - [x] Implement GPU Detection and Fallback
-
----
-
 ## Group 1: Core Retrieval Foundation (Hybrid/SPLADE++/KG/GPU - Partial; Refine/Test Together - Week 1 MVP)
 
 **Priority**: High  
 **Deadline**: End of Week 1  
 Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in tests/test_hybrid_search.py/test_real_validation.py.
 
-- [x] **Task 0: Upgrade to BGE-Large Dense Embeddings** (Completed from original Phase 2.1)
-  - [x] Replaced Jina v4 with BAAI/bge-large-en-v1.5 (1024D)
-  - [x] Updated vector dimensions in Qdrant setup
-
 - [ ] **Task 1: Complete SPLADE++ Sparse Embeddings** (Implemented; Refine/Test)
-  - [x] Subtask 1.0: Implement sparse embeddings support (Completed from original Phase 2.1)
-  - [x] Subtask 1.0.1: Fix Qdrant hybrid search configuration (Completed from original Phase 2.1)
   - [ ] Subtask 1.1: Configure and Test SPLADE++ Model (Implemented; Fix Typo/Test)
     - **Instructions**: In models.py, fix sparse_embedding_model to "prithvida/Splade_PP_en_v1". In utils.py, use AppSettings.sparse_embedding_model for SparseTextEmbedding init. Add test in tests/test_embeddings.py: def test_splade_expansion(): sparse_model = SparseTextEmbedding(AppSettings.sparse_embedding_model); emb = list(sparse_model.embed(["library"]))[0]; assert any(i in emb.indices for i in [vocab for "software"]); logger.info(emb.values). Run pytest tests/test_embeddings.py.
     - **Libraries**: fastembed==0.7.1
@@ -45,14 +23,6 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
     - **Instructions**: In utils.py create_index, from llama_index.core.retrievers import HybridFusionRetriever; retriever = HybridFusionRetriever(dense=FastEmbedEmbedding(AppSettings.dense_embedding_model, dim=AppSettings.dense_embedding_dimension or 1024), sparse=SparseTextEmbedding(AppSettings.sparse_embedding_model), fusion_type="rrf", alpha=AppSettings.rrf_fusion_alpha or 0.7, prefetch_k=AppSettings.prefetch_factor or 2) with QdrantVectorStore. Add test in tests/test_hybrid_search.py: def test_hybrid_fusion(): retriever = HybridFusionRetriever(...); results = retriever.retrieve("test query"); assert len(results) > 0; assert fusion_scores descending; pytest.mark.parametrize("alpha", [0.5, 0.7]).
     - **Libraries**: qdrant-client==1.15.0, llama-index==0.12.52
     - **Classes/Functions/Features**: HybridFusionRetriever (alpha tuning, offline hybrid); retrieve() (fusion).
-
-- [x] **Task 1.5: Add RRF (Reciprocal Rank Fusion)** (Completed from original Phase 2.1)
-  - [x] Simple RRF implementation for combining dense/sparse results
-  - [x] Use research-backed weights (dense: 0.7, sparse: 0.3)
-  - [x] Implement prefetch mechanism for performance
-  - [x] Native Qdrant RRF fusion with optimized prefetch
-  - [x] Configuration in models.py (0.7/0.3)
-  - [x] Seamless LlamaIndex hybrid_alpha calculation
 
 - [ ] **Task 2: Complete ReActAgent Tools Configuration** (Implemented; Minor Verification)
   - [ ] Subtask 2.1: Verify Vector and KG Query Engines (Partial; Enable KG)
@@ -73,12 +43,6 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
     - **Instructions**: In utils.py create_index_async, if AppSettings.gpu_acceleration: with torch.cuda.Stream(): index = await ...; If AppSettings.debug_mode: with torch.profiler.profile() as p: ...; p.export_chrome_trace("trace.json"). Test in tests/test_performance_integration.py: def test_cuda_streams(): latency = measure_latency(create_index_async(docs)); assert latency < threshold; if debug: assert os.path.exists("trace.json").
     - **Libraries**: torch==2.7.1
     - **Classes/Functions/Features**: cuda.Stream (parallel ops); profiler.profile (trace for bottlenecks).
-
-- [x] **Task 4: Integrate ColBERT Late Interaction Model** (Completed from original Phase 2.2)
-  - [x] Deploy colbert-ir/colbertv2.0 via FastEmbed
-  - [x] Implement as postprocessor in query pipeline
-  - [x] Configure optimal top-k reranking (retrieve 20, rerank to 5)
-  - [x] Add performance monitoring and optimization
 
 - [ ] **Task 5: Create Advanced KG Query Tools** (Not Implemented; Enable/Integrate)
   - [ ] Subtask 5.1: Implement Entity Extraction and Mapping (Not Implemented; Add)
@@ -117,7 +81,7 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
 - [ ] **Task 6: Optimize Query Pipeline Architecture** (Not Implemented; Add Chunking/Pipeline)
   - [ ] Subtask 6.1: Implement Multi-Stage Query Processing (Not Implemented; Add)
     - **Instructions**: In utils.py create_index, from llama_index.core import IngestionPipeline; from llama_index.core.node_parser import SentenceSplitter, MetadataExtractor; pipeline = IngestionPipeline(transformations=[SentenceSplitter(chunk_size=AppSettings.chunk_size or 1024, chunk_overlap=AppSettings.chunk_overlap or 200), MetadataExtractor()]); nodes = pipeline.run(documents=docs); index = VectorStoreIndex(nodes). Build QueryPipeline: from llama_index.core.query_pipeline import QueryPipeline; from llama_index.postprocessor import ColbertRerank; from utils import CustomJinaReranker; qp = QueryPipeline(chain=[retriever, ColbertRerank(top_n=AppSettings.reranking_top_k or 5), CustomJinaReranker(model_name="jinaai/jina-reranker-m0", top_n=AppSettings.reranking_top_k or 5), synthesizer], async_mode=True, parallel=True). Use in create_tools_from_index as qp.as_query_engine(). Test in tests/test_performance_integration.py: def test_pipeline_latency(): qp.run("query"); assert latency < threshold.
-    - **Libraries**: llama-index==0.12.52 (add diskcache==5.6.3 to deps)`
+    - **Libraries**: llama-index==0.12.52 (add diskcache==5.6.3 to deps)
     - **Classes/Functions/Features**: IngestionPipeline (transformations for chunking/extraction); SentenceSplitter (semantic); MetadataExtractor (entities); QueryPipeline (chain/async/parallel/prefetch); Cache (ttl=3600 via diskcache).
     - **Note**: Implement `CustomJinaReranker` in utils.py to interface with "jinaai/jina-reranker-m0" for multimodal reranking.
   - [ ] Subtask 6.2: Add Analytics and Routing (Not Implemented; Add)
@@ -209,8 +173,8 @@ Researched distributed agents: LangGraph supports local multi-process with share
 
 ## Next Steps and Recommendations
 
-- **Initial release (1 week)**: Groups 1-2 (core retrieval and multimodal—test local concurrent in tests/test_performance_integration.py)
-- **Future phases (2-4 weeks)**: Groups 3-5
+- **Initial release (Day 1)**: Groups 1-2 (core retrieval and multimodal—test local concurrent in tests/test_performance_integration.py)
+- **Future phases (Day 2-3)**: Groups 3-5
 - **Roadmap**: If feedback needs distributed, add Redis toggle later. Avoid overengineering—focus local.
 
 ---
@@ -219,10 +183,10 @@ Researched distributed agents: LangGraph supports local multi-process with share
 
 **Core Success Metrics:**
 
-- [x] Application starts without errors
-- [x] Users can upload and analyze documents (including PDFs with images)
-- [x] Hybrid search returns relevant results with reranking
-- [x] GPU acceleration works when available, fails gracefully when not
+- [ ] Application starts without errors
+- [ ] Users can upload and analyze documents (including PDFs with images)
+- [ ] Hybrid search returns relevant results with reranking
+- [ ] GPU acceleration works when available, fails gracefully when not
 - [ ] Multi-agent system improves complex query handling
 - [ ] Multimodal search works for text + image content
 - [ ] UI is intuitive and responsive

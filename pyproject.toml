@@ -1,11 +1,21 @@
 [project]
-name = "docmind-ai-llm"
+name = "docmind_ai_llm"
 version = "0.1.0"
 description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
+keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "streamlit==1.47.1",
     "ollama==0.5.1",
@@ -47,6 +57,9 @@ dependencies = [
 test = ["pytest==8.3.1"]
 gpu = ["fastembed-gpu==0.7.1", "llama-cpp-python[cuda]"]
 
+[project.urls]
+Repository = "https://github.com/BjornMelin/docmind-ai"
+
 [tool.ruff]
 line-length = 88
 target-version = "py312"
@@ -78,4 +91,8 @@ dev = [
     "pytest>=8.3.1",
     "pytest-asyncio>=0.23.0",
     "pytest-benchmark>=4.0.0",
+]
+gpu = [
+    "fastembed-gpu==0.7.1",
+    "llama-cpp-python[cuda]==0.3.14",
 ]
