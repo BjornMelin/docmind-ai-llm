@@ -2,7 +2,8 @@
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
-![LangChain](https://img.shields.io/badge/🦜_LangChain-2C2C2C?style=for-the-badge)
+![LlamaIndex](https://img.shields.io/badge/🦙_LlamaIndex-000000?style=for-the-badge)
+![LangGraph](https://img.shields.io/badge/🔗_LangGraph-4A90E2?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Ollama](https://img.shields.io/badge/🦙_Ollama-000000?style=for-the-badge)
 
@@ -10,11 +11,14 @@
 [![GitHub](https://img.shields.io/badge/GitHub-BjornMelin-181717?logo=github)](https://github.com/BjornMelin)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Bjorn%20Melin-0077B5?logo=linkedin)](https://www.linkedin.com/in/bjorn-melin/)
 
-**DocMind AI** is a powerful, open-source Streamlit application that leverages local Large Language Models (LLMs) through [Ollama](https://ollama.com/) for advanced document analysis. Analyze a wide range of document types, extract key insights, generate summaries, identify action items, and surface open questions—all processed locally to ensure data privacy. The system integrates state-of-the-art embedding models (Jina v4, FastEmbed SPLADE++) and hybrid search for superior retrieval performance, with GPU optimizations for high throughput.
+**DocMind AI** transforms how you analyze documents locally with zero cloud dependency. This system combines cutting-edge hybrid search (dense + sparse embeddings), knowledge graph extraction, and multi-agent AI coordination to unlock insights from your PDFs, Office docs, and multimedia content. Built on LlamaIndex pipelines with LangGraph agent orchestration, it delivers enterprise-grade document intelligence that runs entirely on your hardware—with GPU acceleration for blazing performance.
+
+**Why DocMind AI?** Traditional document analysis tools either send your data to the cloud (privacy risk) or provide basic keyword search (limited intelligence). DocMind AI gives you the best of both worlds: advanced AI reasoning with complete data privacy. Process complex queries that require multiple reasoning strategies, extract entities and relationships, and get contextual answers—all while your sensitive documents never leave your machine.
 
 ## ✨ Features of DocMind AI
 
 - **Privacy-Focused:** Local processing ensures data security without cloud dependency.
+
 - **Versatile Document Handling:** Supports multiple file formats:
   - 📄 PDF
   - 📑 DOCX
@@ -30,17 +34,25 @@
   - 📘 ODT (OpenDocument Text)
   - 📚 EPUB (E-book)
   - 💻 Code files (PY, JS, JAVA, TS, TSX, C, CPP, H, and more)
-- **Advanced AI Analysis:** Powered by LangChain v0.3.27 for robust document processing.
-- **Structured Output:** Results formatted using Pydantic v2.11.7 for clarity.
-- **Customizable Prompts:** Predefined or custom prompts for tailored analysis.
-- **Tone and Instruction Control:** Adjust tone (e.g., professional, academic) and instructions (e.g., researcher, software engineer).
-- **Length/Detail Selection:** Control output verbosity (concise, detailed, comprehensive, bullet points).
-- **Flexible Analysis Modes:** Analyze documents individually or combined.
-- **Interactive Chat:** Context-aware follow-up questions with hybrid search.
-- **Multimodal Support:** Extract and preview images from PDFs for richer analysis.
-- **Hybrid Search:** Combines Jina v4 dense embeddings (multimodal/multilingual) and FastEmbed v0.7.1 SPLADE++ sparse embeddings for up to 15-20% better recall in Retrieval-Augmented Generation (RAG).
-- **Submodular Optimization:** Diversity-aware passage reranking reduces redundancy, improving context quality by 20-30%.
-- **GPU Optimization:** Leverages NVIDIA GPUs (e.g., RTX 4090) with full offload for 2-3x faster embeddings and inference (70+ TPS for 8B models).
+
+- **Multi-Agent Coordination:** LangGraph supervisor with specialized agents for document, knowledge graph, multimodal, and planning tasks.
+
+- **LlamaIndex RAG Pipeline:** QueryPipeline with async/parallel processing, ingestion pipelines, and caching.
+
+- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-Large dense and SPLADE++ sparse embeddings for 15-20% better recall.
+
+- **Knowledge Graph Integration:** spaCy entity extraction with relationship mapping for complex queries.
+
+- **Multimodal Processing:** Unstructured hi-res parsing for PDFs with text, tables, and images using Jina v4 embeddings.
+
+- **ColBERT Reranking:** Late-interaction reranking improves context quality by 20-30%.
+
+- **Offline-First Design:** 100% local processing with no external API dependencies.
+
+- **GPU Acceleration:** CUDA support with mixed precision and quantization for 2-3x performance boost.
+
+- **Session Persistence:** SQLite WAL with local multi-process support for concurrent access.
+
 - **Docker Support:** Easy deployment with Docker and Docker Compose.
 
 ## 📖 Table of Contents
@@ -64,6 +76,10 @@
     - [💬 Interacting with the LLM](#-interacting-with-the-llm)
   - [🏗️ Architecture](#️-architecture)
   - [🛠️ Implementation Details](#️-implementation-details)
+    - [Document Processing Pipeline](#document-processing-pipeline)
+    - [Hybrid Retrieval Architecture](#hybrid-retrieval-architecture)
+    - [Multi-Agent Coordination](#multi-agent-coordination)
+    - [Performance Optimizations](#performance-optimizations)
   - [📖 How to Cite](#-how-to-cite)
   - [🙌 Contributing](#-contributing)
   - [📃 License](#-license)
@@ -73,8 +89,11 @@
 ### 📋 Prerequisites
 
 - [Ollama](https://ollama.com/) installed and running locally.
+
 - Python 3.9 or higher.
+
 - (Optional) Docker and Docker Compose for containerized deployment.
+
 - (Optional) NVIDIA GPU (e.g., RTX 4090) with at least 16GB VRAM for larger models and accelerated performance.
 
 ### ⚙️ Installation
@@ -132,8 +151,11 @@ Upload one or more documents via the **"Browse files"** button. Supported format
 Select a pre-defined prompt or create a custom one:
 
 - **Comprehensive Document Analysis:** Summary, key insights, action items, and open questions.
+
 - **Extract Key Insights and Action Items:** Focus on insights and actionable outcomes.
+
 - **Summarize and Identify Open Questions:** Generate summaries and highlight unresolved questions.
+
 - **Custom Prompt:** Define your own analysis prompt.
 
 ### 😃 Selecting Tone
@@ -141,14 +163,23 @@ Select a pre-defined prompt or create a custom one:
 Choose the desired tone for LLM responses:
 
 - **Professional:** Formal and objective.
+
 - **Academic:** Scholarly and research-focused.
+
 - **Informal:** Casual and conversational.
+
 - **Creative:** Imaginative and expressive.
+
 - **Neutral:** Balanced and unbiased.
+
 - **Direct:** Concise and straightforward.
+
 - **Empathetic:** Compassionate and understanding.
+
 - **Humorous:** Lighthearted and witty.
+
 - **Authoritative:** Confident and expert-like.
+
 - **Inquisitive:** Curious and exploratory.
 
 ### 🧮 Selecting Instructions
@@ -156,15 +187,25 @@ Choose the desired tone for LLM responses:
 Select the LLM's role or provide custom instructions:
 
 - **General Assistant:** Helpful and versatile.
+
 - **Researcher:** Deep, analytical insights.
+
 - **Software Engineer:** Technical and code-focused.
+
 - **Product Manager:** Strategic and user-centric.
+
 - **Data Scientist:** Data-driven analysis.
+
 - **Business Analyst:** Business and strategic focus.
+
 - **Technical Writer:** Clear and concise documentation.
+
 - **Marketing Specialist:** Branding and engagement-oriented.
+
 - **HR Manager:** Human resources perspective.
+
 - **Legal Advisor:** Legal and compliance-focused.
+
 - **Custom Instructions:** Specify your own role or instructions.
 
 ### 📏 Setting Length/Detail
@@ -172,8 +213,11 @@ Select the LLM's role or provide custom instructions:
 Select the desired output length and detail:
 
 - **Concise:** Brief and to-the-point.
+
 - **Detailed:** Thorough and in-depth.
+
 - **Comprehensive:** Extensive and exhaustive.
+
 - **Bullet Points:** Structured list format.
 
 ### 🗂️ Choosing Analysis Mode
@@ -181,6 +225,7 @@ Select the desired output length and detail:
 Choose how documents are analyzed:
 
 - **Analyze each document separately:** Individual analysis for each file.
+
 - **Combine analysis for all documents:** Holistic analysis across all uploaded files.
 
 ### 🧠 Analyzing Documents
@@ -200,40 +245,72 @@ Use the chat interface to ask follow-up questions. The LLM leverages hybrid sear
 
 ```mermaid
 graph TD
-    A[User] -->|Uploads Documents| B(Streamlit App - app.py);
-    B -->|Selects Model, Prompt, Tone, Instructions, Length, Mode, GPU Toggle| C{Local LLM Backends with GPU Config};
-    C -->|Processes Documents| D[LangChain v0.3.27];
-    D -->|Loads Documents| E{Lightweight Loaders};
-    E -->|PDF/EPUB| F[PyMuPDF];
-    E -->|DOCX/etc| G[python-docx];
-    E -->|Data Files| H[Polars];
-    E -->|MSG| I[extract-msg];
-    E -->|TXT/Code| J[TextLoader];
-    D -->|Splits Text| K[RecursiveCharacterTextSplitter with Late Chunking];
-    D -->|Generates Analysis| L[LLM Chain with PEFT];
-    L -->|Structured Output| M[Pydantic 2.11.7];
-    D -->|RAG/Chat| N[QdrantVectorStore v1.15.0 with FastEmbed Hybrid];
-    N -->|Dense Embeddings| O[Jina v4 via HuggingFace on GPU];
-    N -->|Sparse Embeddings| P[FastEmbed SPLADE++ on GPU];
-    N -->|Rerank| Q[Jina Reranker v2 with Submodular Opt on GPU];
-    B -->|Displays Results/Chat| A;
-    B -->|Persistence| Q[Session State/Pickle];
-    B -->|GPU/VRAM Detection| R[Hardware Check + Auto-Config with torch.cuda];
+    A[Document Upload] --> B[Unstructured Parser<br/>hi-res strategy]
+    B --> C[Text + Images + Tables]
+    C --> D[LlamaIndex Ingestion Pipeline]
+    D --> E[SentenceSplitter<br/>1024/200 chunks]
+    D --> F[spaCy Metadata<br/>Entity Extraction]
+    E --> G[Hybrid Embeddings]
+    F --> H[Knowledge Graph<br/>Entity Relations]
+    G --> I[BGE-Large Dense 1024D<br/>SPLADE++ Sparse]
+    I --> J[Qdrant Vector Store<br/>RRF Fusion α=0.7]
+    H --> K[KG Index<br/>Relationship Queries]
+    J --> L[Query Pipeline<br/>Async/Parallel]
+    K --> L
+    L --> M[LangGraph Multi-Agent<br/>Supervisor + Specialists]
+    M --> N[Doc Agent<br/>KG Agent<br/>Multimodal Agent<br/>Planning Agent]
+    N --> O[ColBERT Reranking<br/>Late Interaction top-5]
+    O --> P[Local Ollama LLM<br/>Response Synthesis]
+    P --> Q[Streamlit UI<br/>Results + Chat]
+    
+    R[SQLite WAL<br/>Session Persistence] <--> L
+    R <--> M
+    S[GPU Acceleration<br/>CUDA + Mixed Precision] <--> I
+    S <--> O
+    T[Human-in-Loop<br/>Interrupts] <--> M
 ```
 
 ## 🛠️ Implementation Details
 
-- **Document Loaders:** Lightweight loaders (PyMuPDF, python-docx, Polars, extract-msg, TextLoader) handle diverse formats, with multimodal support for PDF image extraction.
-- **Text Splitting:** RecursiveCharacterTextSplitter with late chunking (NLTK sentence tokenization + mean-pooled embeddings) ensures accurate segmentation for large documents.
-- **Embedding Pipeline:**
-  - **Dense Embeddings:** Jina v4 via HuggingFaceEmbeddings (transformers v4.53.3) supports multimodal/multilingual retrieval, with device_map="auto" for GPU acceleration (2-3x faster on RTX 4090).
-  - **Sparse Embeddings:** FastEmbed v0.7.1 with SPLADE++ (prithivida/Splade_PP_en_v1) for neural lexical search, using CUDAExecutionProvider for GPU support.
-  - **Hybrid Search:** Qdrant v1.15.0 integrates dense and sparse embeddings for 15-20% better recall in RAG, with server-side score boosting.
-- **Reranking:** Jina Reranker v2 (sentence-transformers v5.0.0) with submodular optimization (greedy facility location) reduces passage redundancy, improving context quality by 20-30%.
-- **Analysis Pipeline:** LangChain v0.3.27 LLMChain with PEFT v0.16.0 for efficient model loading, Pydantic v2.11.7 for structured output (summaries, insights, action items, questions).
-- **GPU Optimization:** Auto-detects VRAM via nvidia-smi, suggests models (e.g., Qwen2-72B for 16GB+ VRAM), and enables full offload (n_gpu_layers=-1) for LlamaCpp, achieving 70+ TPS for 8B models.
-- **Performance:** Hybrid search and GPU acceleration reduce embedding latency (up to 2x TPS), while submodular reranking optimizes context for LLM inference.
-- **Code Quality:** Adheres to KISS/DRY principles, passes ruff linting (line length 88, Google docstrings, type hints), and avoids deprecated code.
+### Document Processing Pipeline
+
+- **Parsing:** Unstructured hi-res strategy extracts text, tables, and images from PDFs/Office docs with OCR support
+
+- **Chunking:** LlamaIndex SentenceSplitter with 1024-token chunks and 200-token overlap for optimal context
+
+- **Metadata:** spaCy en_core_web_sm for entity extraction and relationship mapping
+
+### Hybrid Retrieval Architecture
+
+- **Dense Embeddings:** BGE-Large 1024D (BAAI/bge-large-en-v1.5) for semantic similarity
+
+- **Sparse Embeddings:** SPLADE++ with FastEmbed for neural lexical matching and term expansion
+
+- **Multimodal:** Jina v4 512D embeddings for images and mixed content with int8 quantization
+
+- **Fusion:** RRF (Reciprocal Rank Fusion) with α=0.7 weighting for optimal dense/sparse balance
+
+- **Storage:** Qdrant vector database with metadata filtering and concurrent access
+
+### Multi-Agent Coordination
+
+- **Supervisor:** LangGraph coordinator analyzes query complexity and delegates to specialists
+
+- **Specialists:** Document retrieval, knowledge graph queries, multimodal analysis, and planning agents
+
+- **Tools:** LlamaIndex QueryEngineTool integration for seamless agent-to-pipeline communication
+
+- **Persistence:** SQLite WAL checkpointer for session state and human-in-loop workflows
+
+### Performance Optimizations
+
+- **GPU Acceleration:** CUDA support with mixed precision (bf16) and torch.compile optimization
+
+- **Async Processing:** QueryPipeline with parallel execution and caching via diskcache
+
+- **Reranking:** ColBERT late-interaction model improves top-5 results from top-20 prefetch
+
+- **Memory Management:** Quantization and model size auto-selection based on available VRAM
 
 ## 📖 How to Cite
 
