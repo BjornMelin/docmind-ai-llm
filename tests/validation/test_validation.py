@@ -263,12 +263,12 @@ class TestSystemIntegration:
 
             with patch("agent_factory.settings", mock_settings):
                 # Test simple query
-                simple_result = analyze_query_complexity("What is AI?")
+                simple_analyze_query_complexity("What is AI?")
                 assert isinstance(simple_result, dict)
                 assert "complexity" in simple_result
 
                 # Test complex query
-                complex_result = analyze_query_complexity(
+                complex_analyze_query_complexity(
                     "Analyze the performance implications of hybrid retrieval systems "
                     "using dense and sparse embeddings with RRF fusion."
                 )
@@ -303,7 +303,7 @@ class TestSystemIntegration:
                 mock_instance.get_nodes_from_documents.return_value = docs
                 mock_splitter.return_value = mock_instance
 
-                result = chunk_documents_structured(docs)
+                chunk_documents_structured(docs)
 
                 assert isinstance(result, list)
                 assert len(result) >= len(docs)
@@ -470,7 +470,7 @@ class TestMemoryAndResources:
         from utils.utils import setup_logging
 
         settings = AppSettings()
-        setup_logging("INFO")
+        setup_logging(settings.logging_level)
 
         # Check memory after operations
         final_memory = process.memory_info().rss / 1024 / 1024  # MB

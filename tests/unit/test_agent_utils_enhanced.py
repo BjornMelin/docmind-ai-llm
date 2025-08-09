@@ -45,7 +45,7 @@ class TestCreateToolsFromIndex:
             mock_create.return_value = mock_tools
 
             with patch("agents.agent_utils.log_performance") as mock_log_perf:
-                result = create_tools_from_index(index_data)
+                create_tools_from_index(index_data)
 
                 assert result == mock_tools
                 assert len(result) == 3
@@ -84,7 +84,7 @@ class TestCreateToolsFromIndex:
             mock_tools = [MagicMock()]
             mock_create.return_value = mock_tools
 
-            result = create_tools_from_index(index_data)
+            create_tools_from_index(index_data)
 
             assert result == mock_tools
             mock_create.assert_called_once_with(index_data)
@@ -144,7 +144,7 @@ class TestCreateToolsFromIndex:
             side_effect=Exception("Critical failure"),
         ):
             # The @with_fallback decorator should return empty list
-            result = create_tools_from_index(index_data)
+            create_tools_from_index(index_data)
 
             assert result == []
 
@@ -186,7 +186,7 @@ class TestCreateAgentWithTools:
                 mock_agent_class.return_value = mock_agent
 
                 with patch("agents.agent_utils.log_performance") as mock_log_perf:
-                    result = create_agent_with_tools(index_data, mock_llm)
+                    create_agent_with_tools(index_data, mock_llm)
 
                     assert result == mock_agent
 
@@ -220,7 +220,7 @@ class TestCreateAgentWithTools:
                 mock_agent_class.return_value = mock_agent
 
                 with patch("agents.agent_utils.logger") as mock_logger:
-                    result = create_agent_with_tools(index_data, mock_llm)
+                    create_agent_with_tools(index_data, mock_llm)
 
                     assert result == mock_agent
 
@@ -247,7 +247,7 @@ class TestCreateAgentWithTools:
                 ]
 
                 with patch("agents.agent_utils.logger") as mock_logger:
-                    result = create_agent_with_tools(index_data, mock_llm)
+                    create_agent_with_tools(index_data, mock_llm)
 
                     assert result == mock_basic_agent
 
@@ -323,7 +323,7 @@ class TestCreateAgentWithTools:
                 side_effect=Exception("Critical failure"),
             ):
                 # Fallback decorator should create basic agent
-                result = create_agent_with_tools(index_data, mock_llm)
+                create_agent_with_tools(index_data, mock_llm)
 
                 # Should be a ReActAgent (from fallback decorator)
                 assert isinstance(result, ReActAgent)
@@ -353,7 +353,7 @@ class TestAnalyzeDocumentsAgentic:
             mock_tool_factory.create_query_tool.return_value = MagicMock()
 
             with patch("agents.agent_utils.log_performance") as mock_log_perf:
-                result = analyze_documents_agentic(mock_agent, index_data, "summary")
+                analyze_documents_agentic(mock_agent, index_data, "summary")
 
                 assert (
                     result
@@ -401,7 +401,7 @@ class TestAnalyzeDocumentsAgentic:
             patch("agents.agent_utils.ToolFactory") as mock_tool_factory,
             patch("agents.agent_utils.logger") as mock_logger
         ):
-                result = analyze_documents_agentic(mock_agent, index_data, "summary")
+                analyze_documents_agentic(mock_agent, index_data, "summary")
 
                 assert result == "Analysis with limited tools"
 
@@ -431,7 +431,7 @@ class TestAnalyzeDocumentsAgentic:
                 ):
                         mock_settings.default_model = "llama2"
 
-                        result = analyze_documents_agentic(None, index_data, "summary")
+                        analyze_documents_agentic(None, index_data, "summary")
 
                         assert result == "Fallback analysis"
 
@@ -452,7 +452,7 @@ class TestAnalyzeDocumentsAgentic:
             mock_tool_factory.create_query_tool.return_value = MagicMock()
 
             with patch("agents.agent_utils.logger") as mock_logger:
-                result = analyze_documents_agentic(mock_agent, index_data, "summary")
+                analyze_documents_agentic(mock_agent, index_data, "summary")
 
                 # Should provide fallback message
                 assert "Analysis partially completed" in result
@@ -504,7 +504,7 @@ class TestAnalyzeDocumentsAgentic:
             mock_tool_factory.create_query_tool.return_value = MagicMock()
 
             with patch("agents.agent_utils.logger") as mock_logger:
-                result = analyze_documents_agentic(mock_agent, index_data, "summary")
+                analyze_documents_agentic(mock_agent, index_data, "summary")
 
                 assert result == "Analysis with vector only"
 
@@ -526,7 +526,7 @@ class TestAnalyzeDocumentsAgentic:
             side_effect=ImportError("ToolFactory failed"),
         ):
             # Fallback decorator should return default message
-            result = analyze_documents_agentic(
+            analyze_documents_agentic(
                 mock_agent, {"vector": MagicMock()}, "summary"
             )
 
@@ -804,7 +804,7 @@ class TestAgentUtilsIntegration:
                 with patch("agents.agent_utils.ToolFactory") as mock_tool_factory:
                     mock_tool_factory.create_query_tool.return_value = MagicMock()
 
-                    result = analyze_documents_agentic(
+                    analyze_documents_agentic(
                         agent, index_data, "comprehensive"
                     )
 
@@ -926,7 +926,7 @@ class TestAgentUtilsErrorRecovery:
             mock_tools = [MagicMock()]  # Only vector tool created
             mock_create.return_value = mock_tools
 
-            result = create_tools_from_index(index_data)
+            create_tools_from_index(index_data)
 
             assert result == mock_tools
             mock_create.assert_called_once_with(index_data)
@@ -953,7 +953,7 @@ class TestAgentUtilsErrorRecovery:
                         MagicMock(),  # Basic config succeeds
                     ]
 
-                    result = create_agent_with_tools(index_data, mock_llm)
+                    create_agent_with_tools(index_data, mock_llm)
 
                     # Should fall back to basic configuration without memory
                     assert mock_agent_class.call_count == 2
@@ -976,7 +976,7 @@ class TestAgentUtilsErrorRecovery:
 
             # Even with tool creation failure, query engine creation should complete
             with patch("agents.agent_utils.logger"):
-                result = analyze_documents_agentic(mock_agent, index_data, "test")
+                analyze_documents_agentic(mock_agent, index_data, "test")
 
                 # Should still attempt to create query engine
                 index_data["vector"].as_query_engine.assert_called_once()
@@ -1025,6 +1025,6 @@ class TestAgentUtilsErrorRecovery:
                     "agents.agent_utils.ReActAgent.from_tools", return_value=MagicMock()
                 ):
                     # Should handle settings access gracefully
-                    result = create_agent_with_tools(index_data, mock_llm)
+                    create_agent_with_tools(index_data, mock_llm)
 
                     assert result is not None

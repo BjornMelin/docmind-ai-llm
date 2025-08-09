@@ -22,6 +22,8 @@ import pytest
 from llama_index.core import Document
 from llama_index.core.schema import NodeWithScore, TextNode
 
+from utils.index_builder import create_index, create_multimodal_index
+
 
 class TestPipelineIntegration:
     """Integration tests for complete DocMind AI pipeline."""
@@ -47,7 +49,8 @@ class TestPipelineIntegration:
                 },
             ),
             Document(
-                text="Neural networks are computational models inspired by biological systems.",
+                text="Neural networks are computational "
+                "models inspired by biological systems.",
                 metadata={
                     "file_path": "/docs/neural_nets.pdf",
                     "file_type": "pdf",
@@ -142,7 +145,6 @@ class TestPipelineIntegration:
                             )
                             from agents.tool_factory import ToolFactory
                             from utils.document_loader import load_documents_llama
-                            from utils.index_builder import create_index_async
 
                             # Step 1: Load documents
                             documents = load_documents_llama(
@@ -158,7 +160,7 @@ class TestPipelineIntegration:
                             assert "machine learning" in documents[0].text.lower()
 
                             # Step 2: Create indexes
-                            indexes = await create_index_async(
+                            indexes = create_index(
                                 documents=documents,
                                 embedding_model=mock_embedding_model,
                                 vector_store_path=str(temporary_storage_dir / "vector"),
@@ -187,7 +189,10 @@ class TestPipelineIntegration:
                             assert mode == "single"
 
                             # Step 5: Process query
-                            query = "What are the main types of machine learning algorithms?"
+                            query = (
+                                "What are the main types of "
+                                "machine learning algorithms?"
+                            )
                             response = process_query_with_agent_system(
                                 agent_system, query, mode
                             )
@@ -257,14 +262,13 @@ class TestPipelineIntegration:
                                 from utils.document_loader import (
                                     extract_images_from_pdf,
                                 )
-                                from utils.index_builder import create_index_async
 
                                 # Extract images
                                 images = extract_images_from_pdf("/docs/diagram.pdf")
                                 assert len(images) == 1
 
                                 # Create multimodal index
-                                indexes = await create_index_async(
+                                multimodal_index = create_multimodal_index(
                                     documents=documents,
                                     embedding_model=mock_embedding_model,
                                     enable_multimodal=True,
@@ -328,7 +332,10 @@ class TestPipelineIntegration:
                                     get_agent_system,
                                     process_query_with_agent_system,
                                 )
-                                from utils.index_builder import create_index_async
+                                from utils.index_builder import (
+                                    create_index,
+                                    create_index_async,
+                                )
 
                                 # First attempt should fail
                                 with pytest.raises(
@@ -337,9 +344,7 @@ class TestPipelineIntegration:
                                     await create_index_async(documents=sample_documents)
 
                                 # Fallback attempt should succeed
-                                indexes = await create_index_async(
-                                    documents=sample_documents
-                                )
+                                indexes = create_index(documents=sample_documents)
                                 assert "vector_index" in indexes
 
                                 # Agent system should handle gracefully
@@ -367,93 +372,92 @@ class TestPipelineIntegration:
         """Test pipeline performance monitoring and logging."""
         with (
             patch("utils.logging_config.log_performance") as mock_log_perf,
-            patch("time.time") as mock_time
+            patch("time.time") as mock_time,
         ):
-                # Mock timing
-                mock_time.side_effect = [
-                    0,
-                    1.5,
-                    3.0,
-                    4.2,
-                    5.8,
-                ]  # Progressive timestamps
+            # Mock timing
+            mock_time.side_effect = [
+                0,
+                1.5,
+                3.0,
+                4.2,
+                5.8,
+            ]  # Progressive timestamps
 
-                with patch("utils.document_loader.load_documents_llama") as mock_load:
-                    mock_load.return_value = sample_documents
+            with patch("utils.document_loader.load_documents_llama") as mock_load:
+                mock_load.return_value = sample_documents
 
-                    with patch(
-                        "utils.index_builder.create_index_async"
-                    ) as mock_create_index:
-                        mock_create_index.return_value = {
-                            "vector_index": MagicMock(),
-                            "kg_index": None,
-                            "multimodal_index": None,
-                        }
+                with patch(
+                    "utils.index_builder.create_index_async"
+                ) as mock_create_index:
+                    mock_create_index.return_value = {
+                        "vector_index": MagicMock(),
+                        "kg_index": None,
+                        "multimodal_index": None,
+                    }
 
-                        with patch("agent_factory.get_agent_system") as mock_get_agent:
-                            mock_agent = MagicMock()
-                            mock_get_agent.return_value = (mock_agent, "single")
+                    with patch("agent_factory.get_agent_system") as mock_get_agent:
+                        mock_agent = MagicMock()
+                        mock_get_agent.return_value = (mock_agent, "single")
 
-                            with patch(
-                                "agent_factory.process_query_with_agent_system"
-                            ) as mock_process:
-                                mock_process.return_value = "Performance test response"
+                        with patch(
+                            "agent_factory.process_query_with_agent_system"
+                        ) as mock_process:
+                            mock_process.return_value = "Performance test response"
 
-                                # Test performance logging throughout pipeline
-                                from agent_factory import (
-                                    get_agent_system,
-                                    process_query_with_agent_system,
-                                )
-                                from utils.document_loader import load_documents_llama
-                                from utils.index_builder import create_index_async
-                                from utils.logging_config import log_performance
+                            # Test performance logging throughout pipeline
+                            from agent_factory import (
+                                get_agent_system,
+                                process_query_with_agent_system,
+                            )
+                            from utils.document_loader import load_documents_llama
+                            from utils.logging_config import log_performance
 
-                                # Document loading
-                                start_time = mock_time()
-                                documents = load_documents_llama(["/docs/test.pdf"])
-                                end_time = mock_time()
-                                log_performance(
-                                    "document_loading",
-                                    end_time - start_time,
-                                    doc_count=len(documents),
-                                )
+                            # Document loading
+                            start_time = mock_time()
+                            documents = load_documents_llama(["/docs/test.pdf"])
+                            end_time = mock_time()
+                            log_performance(
+                                "document_loading",
+                                end_time - start_time,
+                                doc_count=len(documents),
+                            )
 
-                                # Index creation
-                                start_time = mock_time()
-                                indexes = await create_index_async(documents=documents)
-                                end_time = mock_time()
-                                log_performance(
-                                    "index_creation",
-                                    end_time - start_time,
-                                    doc_count=len(documents),
-                                )
+                            # Index creation
+                            start_time = mock_time()
+                            indexes = create_index(documents=documents)
+                            end_time = mock_time()
+                            log_performance(
+                                "index_creation",
+                                end_time - start_time,
+                                doc_count=len(documents),
+                            )
 
-                                # Agent query
-                                start_time = mock_time()
-                                agent_system, mode = get_agent_system([], mock_llm)
-                                response = process_query_with_agent_system(
-                                    agent_system, "test", mode
-                                )
-                                end_time = mock_time()
-                                log_performance(
-                                    "agent_query",
-                                    end_time - start_time,
-                                    response_length=len(response),
-                                )
+                            # Agent query
+                            start_time = mock_time()
+                            agent_system, mode = get_agent_system([], mock_llm)
+                            response = process_query_with_agent_system(
+                                agent_system, "test", mode
+                            )
+                            end_time = mock_time()
+                            log_performance(
+                                "agent_query",
+                                end_time - start_time,
+                                response_length=len(response),
+                            )
 
-                                # Verify performance logging calls
-                                assert mock_log_perf.call_count == 3
+                            # Verify performance logging calls
+                            assert mock_log_perf.call_count == 3
 
-                                # Check log call details
-                                calls = mock_log_perf.call_args_list
-                                assert calls[0][0][0] == "document_loading"
-                                assert calls[1][0][0] == "index_creation"
-                                assert calls[2][0][0] == "agent_query"
+                            # Check log call details
+                            calls = mock_log_perf.call_args_list
+                            assert calls[0][0][0] == "document_loading"
+                            assert calls[1][0][0] == "index_creation"
+                            assert calls[2][0][0] == "agent_query"
 
-                                # All operations should have recorded timing
-                                for call in calls:
-                                    duration = call[0][1]
-                                    assert duration >= 0
+                            # All operations should have recorded timing
+                            for call in calls:
+                                duration = call[0][1]
+                                assert duration >= 0
 
     @pytest.mark.asyncio
     async def test_pipeline_with_knowledge_graph_integration(
@@ -497,10 +501,9 @@ class TestPipelineIntegration:
                             process_query_with_agent_system,
                         )
                         from agents.tool_factory import ToolFactory
-                        from utils.index_builder import create_index_async
 
                         # Create indexes with KG enabled
-                        indexes = await create_index_async(
+                        indexes = create_index(
                             documents=sample_documents,
                             embedding_model=mock_embedding_model,
                             enable_kg=True,
@@ -568,7 +571,7 @@ class TestPipelineIntegration:
                         return f"Async response for: {query}"
 
                     async def mock_achat_side_effect(query):
-                        result = await mock_query_async(query)
+                        await mock_query_async(query)
                         return MagicMock(response=result)
 
                     mock_agent.achat = AsyncMock(side_effect=mock_achat_side_effect)
@@ -576,7 +579,6 @@ class TestPipelineIntegration:
                     # Test concurrent processing
                     from agent_factory import get_agent_system
                     from utils.document_loader import stream_document_processing
-                    from utils.index_builder import create_index_async
 
                     # Stream document processing
                     processed_docs = []
@@ -589,7 +591,7 @@ class TestPipelineIntegration:
                     assert len(processed_docs) == 3
 
                     # Create index from streamed docs
-                    indexes = await create_index_async(documents=processed_docs)
+                    indexes = create_index(documents=processed_docs)
                     assert "vector_index" in indexes
 
                     # Process multiple queries concurrently
@@ -648,9 +650,8 @@ class TestPipelineEdgeCases:
                     get_agent_system,
                     process_query_with_agent_system,
                 )
-                from utils.index_builder import create_index_async
 
-                indexes = await create_index_async(documents=empty_documents)
+                indexes = create_index(documents=empty_documents)
                 assert "vector_index" in indexes
 
                 agent_system, mode = get_agent_system([], mock_llm)
@@ -698,7 +699,6 @@ class TestPipelineEdgeCases:
                         process_query_with_agent_system,
                     )
                     from utils.document_loader import batch_embed_documents
-                    from utils.index_builder import create_index_async
 
                     # Batch embedding
                     embeddings = batch_embed_documents(
@@ -707,7 +707,7 @@ class TestPipelineEdgeCases:
                     assert len(embeddings) == 100
 
                     # Index creation should handle large batches
-                    indexes = await create_index_async(
+                    indexes = create_index(
                         documents=large_batch,
                         embedding_model=mock_embedding_model,
                     )
@@ -763,10 +763,9 @@ class TestPipelineEdgeCases:
                     get_agent_system,
                     process_query_with_agent_system,
                 )
-                from utils.index_builder import create_index_async
 
                 # Should handle all formats
-                indexes = await create_index_async(
+                indexes = create_index(
                     documents=mixed_documents,
                     embedding_model=mock_embedding_model,
                     enable_kg=True,

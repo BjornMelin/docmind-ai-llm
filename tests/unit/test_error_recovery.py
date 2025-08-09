@@ -89,7 +89,7 @@ class TestWithRetry:
             call_count += 1
             return "success"
 
-        result = successful_function()
+        successful_function()
 
         assert result == "success"
         assert call_count == 1
@@ -106,7 +106,7 @@ class TestWithRetry:
                 raise ConnectionError("Temporary failure")
             return "success"
 
-        result = eventually_successful_function()
+        eventually_successful_function()
 
         assert result == "success"
         assert call_count == 3
@@ -163,7 +163,7 @@ class TestWithRetry:
                 raise RuntimeError("Fail once")
             return "success"
 
-        result = function_with_no_jitter()
+        function_with_no_jitter()
         assert result == "success"
         assert call_count == 2
 
@@ -191,7 +191,7 @@ class TestWithRetry:
                 raise RuntimeError("Fail once")
             return "success"
 
-        result = function_exponential_base()
+        function_exponential_base()
         assert result == "success"
 
     def test_with_retry_reraise_disabled(self):
@@ -202,7 +202,7 @@ class TestWithRetry:
             raise ValueError("Always fails")
 
         # Should not raise when reraise=False
-        result = always_failing()
+        always_failing()
         assert result is None  # Default behavior when reraise is False
 
 
@@ -222,7 +222,7 @@ class TestWithFallback:
         def primary_function():
             return "primary"
 
-        result = primary_function()
+        primary_function()
 
         assert result == "primary"
         assert not fallback_called
@@ -238,7 +238,7 @@ class TestWithFallback:
         def failing_primary():
             raise ConnectionError("Primary failed")
 
-        result = failing_primary()
+        failing_primary()
 
         assert result == "fallback_success"
         mock_logger.warning.assert_called_once()
@@ -271,7 +271,7 @@ class TestWithFallback:
         def failing_primary(*args, **kwargs):
             raise ValueError("Primary failed")
 
-        result = failing_primary("arg1", "arg2", kwarg1="value1")
+        failing_primary("arg1", "arg2", kwarg1="value1")
 
         assert result == "fallback_args_2_kwargs_1"
 
@@ -286,7 +286,7 @@ class TestSpecializedRetryDecorators:
         def embedding_operation():
             return "embedding_result"
 
-        result = embedding_operation()
+        embedding_operation()
         assert result == "embedding_result"
 
     def test_embedding_retry_with_embedding_error(self):
@@ -301,7 +301,7 @@ class TestSpecializedRetryDecorators:
                 raise EmbeddingError("Temporary embedding error")
             return "success"
 
-        result = failing_embedding()
+        failing_embedding()
         assert result == "success"
         assert call_count == 2
 
@@ -317,7 +317,7 @@ class TestSpecializedRetryDecorators:
                 raise IndexCreationError("Temporary index error")
             return "index_created"
 
-        result = failing_index_creation()
+        failing_index_creation()
         assert result == "index_created"
         assert call_count == 2
 
@@ -333,7 +333,7 @@ class TestSpecializedRetryDecorators:
                 raise DocumentLoadingError("Temporary document error")
             return "document_loaded"
 
-        result = failing_document_load()
+        failing_document_load()
         assert result == "document_loaded"
         assert call_count == 2
 
@@ -349,7 +349,7 @@ class TestSpecializedRetryDecorators:
                 raise ConnectionError("Network timeout")
             return "network_success"
 
-        result = failing_network_call()
+        failing_network_call()
         assert result == "network_success"
         assert call_count == 3
 
@@ -376,7 +376,7 @@ class TestAsyncWithTimeout:
             await asyncio.sleep(0.1)
             return "completed"
 
-        result = await quick_async_function()
+        await quick_async_function()
         assert result == "completed"
 
     @pytest.mark.asyncio
@@ -414,7 +414,7 @@ class TestAsyncWithTimeout:
             await asyncio.sleep(0.5)
             return "completed"
 
-        result = await medium_async_function()
+        await medium_async_function()
         assert result == "completed"
 
 
@@ -426,7 +426,7 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=3)
 
         with breaker:
-            result = "operation_success"
+            pass
 
         assert breaker.state == "CLOSED"
         assert breaker.failure_count == 0
@@ -436,18 +436,12 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=2)
 
         # First failure
-        with (
-            pytest.raises(ValueError),
-            breaker
-        ):
-                raise ValueError("First failure")
+        with pytest.raises(ValueError), breaker:
+            raise ValueError("First failure")
 
         # Second failure - should open circuit
-        with (
-            pytest.raises(ValueError),
-            breaker
-        ):
-                raise ValueError("Second failure")
+        with pytest.raises(ValueError), breaker:
+            raise ValueError("Second failure")
 
         assert breaker.state == "OPEN"
         assert breaker.failure_count == 2
@@ -457,18 +451,12 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=1.0)
 
         # Cause failure to open circuit
-        with (
-            pytest.raises(ValueError),
-            breaker
-        ):
-                raise ValueError("Failure")
+        with pytest.raises(ValueError), breaker:
+            raise ValueError("Failure")
 
         # Next call should be rejected immediately
-        with (
-            pytest.raises(ResourceError, match="Circuit breaker is OPEN"),
-            breaker
-        ):
-                pass
+        with pytest.raises(ResourceError, match="Circuit breaker is OPEN"), breaker:
+            pass
 
     @patch("time.time")
     def test_circuit_breaker_half_open_after_timeout(self, mock_time):
@@ -478,15 +466,12 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=1.0)
 
         # Cause failure
-        with (
-            pytest.raises(ValueError),
-            breaker
-        ):
-                raise ValueError("Failure")
+        with pytest.raises(ValueError), breaker:
+            raise ValueError("Failure")
 
         # Should enter half-open after timeout
         with breaker:
-            result = "recovery_test"
+            pass
 
         assert breaker.state == "CLOSED"  # Should reset to closed on success
 
@@ -498,11 +483,8 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=1.0)
 
         # Cause failure
-        with (
-            pytest.raises(RuntimeError),
-            breaker
-        ):
-                raise RuntimeError("Initial failure")
+        with pytest.raises(RuntimeError), breaker:
+            raise RuntimeError("Initial failure")
 
         # Successful recovery
         with breaker:
@@ -518,21 +500,15 @@ class TestCircuitBreaker:
         )
 
         # ValueError should not count as failure
-        with (
-            pytest.raises(ValueError),
-            breaker
-        ):
-                raise ValueError("Not counted")
+        with pytest.raises(ValueError), breaker:
+            raise ValueError("Not counted")
 
         assert breaker.failure_count == 0
         assert breaker.state == "CLOSED"
 
         # ConnectionError should count
-        with (
-            pytest.raises(ConnectionError),
-            breaker
-        ):
-                raise ConnectionError("Counted failure")
+        with pytest.raises(ConnectionError), breaker:
+            raise ConnectionError("Counted failure")
 
         assert breaker.failure_count == 1
 
@@ -542,11 +518,8 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1)
 
         # Cause failure to open circuit
-        with (
-            pytest.raises(RuntimeError),
-            breaker
-        ):
-                raise RuntimeError("Test failure")
+        with pytest.raises(RuntimeError), breaker:
+            raise RuntimeError("Test failure")
 
         mock_logger.warning.assert_called_once()
 
@@ -564,7 +537,7 @@ class TestManagedResource:
 
         with managed_resource(factory) as managed:
             assert managed is resource
-            result = "operation_success"
+            pass
 
         factory.assert_called_once()
         resource.close.assert_called_once()
@@ -574,11 +547,8 @@ class TestManagedResource:
         resource = MagicMock()
         factory = Mock(return_value=resource)
 
-        with (
-            pytest.raises(ValueError),
-            managed_resource(factory) as managed
-        ):
-                raise ValueError("Test exception")
+        with pytest.raises(ValueError), managed_resource(factory) as _:
+            raise ValueError("Test exception")
 
         resource.close.assert_called_once()
 
@@ -622,9 +592,9 @@ class TestManagedResource:
 
         with (
             pytest.raises(RuntimeError, match="Factory failed"),
-            managed_resource(factory)
+            managed_resource(factory),
         ):
-                pass
+            pass
 
     def test_managed_resource_exit_method(self):
         """Test managed resource with object that has __exit__ method."""
@@ -724,7 +694,7 @@ class TestRetryWithContext:
         def successful_operation():
             return "success"
 
-        result = successful_operation()
+        successful_operation()
         assert result == "success"
 
     @patch("utils.error_recovery.logger")
@@ -740,7 +710,7 @@ class TestRetryWithContext:
                 raise ConnectionError("Temporary failure")
             return "success"
 
-        result = eventually_successful()
+        eventually_successful()
         assert result == "success"
         assert call_count == 3
 
@@ -786,7 +756,7 @@ class TestSafeExecute:
         def successful_function():
             return "success"
 
-        result = safe_execute(successful_function)
+        safe_execute(successful_function)
         assert result == "success"
 
     @patch("utils.error_recovery.logger")
@@ -796,7 +766,7 @@ class TestSafeExecute:
         def failing_function():
             raise ValueError("Function failed")
 
-        result = safe_execute(failing_function, default_value="default")
+        safe_execute(failing_function, default_value="default")
 
         assert result == "default"
         mock_logger.warning.assert_called_once()
@@ -807,9 +777,7 @@ class TestSafeExecute:
         def failing_function():
             raise RuntimeError("Function failed")
 
-        result = safe_execute(
-            failing_function, log_errors=False, default_value="quiet_default"
-        )
+        safe_execute(failing_function, log_errors=False, default_value="quiet_default")
 
         assert result == "quiet_default"
 
@@ -820,7 +788,7 @@ class TestSafeExecute:
         def failing_function():
             raise OSError("System error")
 
-        result = safe_execute(
+        safe_execute(
             failing_function, operation_name="custom_operation", default_value="handled"
         )
 
@@ -831,10 +799,10 @@ class TestSafeExecute:
 
     def test_safe_execute_lambda(self):
         """Test safe_execute with lambda function."""
-        result = safe_execute(lambda: "lambda_result")
+        safe_execute(lambda: "lambda_result")
         assert result == "lambda_result"
 
-        result = safe_execute(lambda: 1 / 0, default_value="division_error_handled")
+        safe_execute(lambda: 1 / 0, default_value="division_error_handled")
         assert result == "division_error_handled"
 
 
@@ -848,7 +816,7 @@ class TestSafeExecuteAsync:
         async def successful_async():
             return "async_success"
 
-        result = await safe_execute_async(successful_async)
+        await safe_execute_async(successful_async)
         assert result == "async_success"
 
     @pytest.mark.asyncio
@@ -859,7 +827,7 @@ class TestSafeExecuteAsync:
         async def failing_async():
             raise ConnectionError("Async function failed")
 
-        result = await safe_execute_async(failing_async, default_value="async_default")
+        await safe_execute_async(failing_async, default_value="async_default")
 
         assert result == "async_default"
         mock_logger.warning.assert_called_once()
@@ -872,7 +840,7 @@ class TestSafeExecuteAsync:
             await asyncio.sleep(1.0)
             return "slow_result"
 
-        result = await safe_execute_async(
+        await safe_execute_async(
             slow_async, timeout_seconds=0.1, default_value="timeout_handled"
         )
 
@@ -885,7 +853,7 @@ class TestSafeExecuteAsync:
         def sync_function():
             return "sync_in_async"
 
-        result = await safe_execute_async(sync_function)
+        await safe_execute_async(sync_function)
         assert result == "sync_in_async"
 
     @pytest.mark.asyncio
@@ -896,7 +864,7 @@ class TestSafeExecuteAsync:
         async def failing_async():
             raise TimeoutError("Async timeout")
 
-        result = await safe_execute_async(
+        await safe_execute_async(
             failing_async, operation_name="async_custom_op", default_value="handled"
         )
 
@@ -921,7 +889,7 @@ class TestRetryPatternIntegration:
                 raise ConnectionError("Always fails")
             return "success"
 
-        result = combined_function()
+        combined_function()
         assert result == "fallback_result"
         assert call_count == 2  # Retried once, then fallback
 
@@ -940,7 +908,7 @@ class TestRetryPatternIntegration:
                 return "success"
 
         # Should eventually succeed before circuit opens
-        result = function_with_circuit_breaker()
+        function_with_circuit_breaker()
         assert result == "success"
 
     @pytest.mark.asyncio
@@ -960,7 +928,7 @@ class TestRetryPatternIntegration:
         # Manually apply retry logic
         for attempt in range(3):
             try:
-                result = await async_retry_function()
+                await async_retry_function()
                 break
             except ConnectionError:
                 if attempt == 2:  # Last attempt
@@ -982,7 +950,7 @@ class TestErrorRecoveryEdgeCases:
             return "should_not_execute"
 
         # Should handle gracefully
-        result = zero_attempt_function()
+        zero_attempt_function()
 
     def test_circuit_breaker_negative_threshold(self):
         """Test circuit breaker with negative failure threshold."""
@@ -1005,16 +973,13 @@ class TestErrorRecoveryEdgeCases:
 
     def test_safe_execute_with_none_function(self):
         """Test safe_execute with None function."""
-        result = safe_execute(None, default_value="none_handled")
+        safe_execute(None, default_value="none_handled")
         assert result == "none_handled"
 
     def test_managed_resource_none_factory(self):
         """Test managed resource with None factory."""
-        with (
-            pytest.raises(TypeError),
-            managed_resource(None)
-        ):
-                pass
+        with pytest.raises(TypeError), managed_resource(None):
+            pass
 
     def test_fallback_with_none_fallback(self):
         """Test fallback decorator with None fallback function."""

@@ -28,8 +28,11 @@ Attributes:
     settings (AppSettings): Global application settings for client configuration.
 """
 
+import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager, contextmanager
+from typing import Any
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
 
@@ -205,13 +208,6 @@ class QdrantClientFactory:
             raise
 
 
-# Enhanced Connection Pooling for Phase 3 Async Optimizations
-
-import asyncio
-import time
-from typing import Any
-
-
 class QdrantConnectionPool:
     """Connection pool for Qdrant clients."""
 
@@ -354,10 +350,8 @@ class QdrantBatchOperations:
 
         elapsed = time.perf_counter() - start_time
         logging.info(
-            
-                f"Upserted {len(vectors)} vectors in {len(batches)} "
-                f"batches ({elapsed:.2f}s)"
-            
+            f"Upserted {len(vectors)} vectors in {len(batches)} "
+            f"batches ({elapsed:.2f}s)"
         )
 
     @staticmethod

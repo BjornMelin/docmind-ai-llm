@@ -45,8 +45,8 @@ async def test_managed_async_qdrant_client_cleanup_on_exception():
         mock_client_class.return_value = mock_client
 
         # Test exception handling
-        with pytest.raises(ValueError):
-            async with managed_async_qdrant_client("http://localhost:6333") as client:
+        with pytest.raises(ValueError, match="Test exception"):
+            async with managed_async_qdrant_client("http://localhost:6333") as _:
                 raise ValueError("Test exception")
 
         # Verify client was still closed despite exception
@@ -120,7 +120,7 @@ async def test_create_index_async_resource_management():
 
             # Test the function
             docs = [Document(text="test document")]
-            result = await create_index_async(docs, use_gpu=False)
+            await create_index_async(docs, use_gpu=False)
 
             # Verify context manager was used
             mock_context.assert_called_once()
@@ -151,7 +151,7 @@ def test_extract_images_from_pdf_resource_management():
             mock_fitz_open.return_value = mock_doc
 
             # Test the function
-            result = extract_images_from_pdf(tmp_path)
+            extract_images_from_pdf(tmp_path)
 
             # Verify context manager was used
             mock_fitz_open.assert_called_once_with(tmp_path)
@@ -172,7 +172,7 @@ def test_extract_images_from_pdf_file_not_found():
     from utils.document_loader import extract_images_from_pdf
 
     # Test with non-existent file
-    result = extract_images_from_pdf("/nonexistent/file.pdf")
+    extract_images_from_pdf("/nonexistent/file.pdf")
 
     # Should return empty list, not crash
     assert result == []
@@ -250,7 +250,7 @@ def test_load_documents_llama_temp_file_cleanup():
         ]
 
         # Test the function
-        result = load_documents_llama([mock_file])
+        load_documents_llama([mock_file])
 
         # Verify temporary file cleanup was called
         mock_remove.assert_called()
@@ -299,7 +299,7 @@ def test_load_documents_llama_video_resource_cleanup():
         mock_whisper.return_value = mock_model
 
         # Test the function
-        result = load_documents_llama([mock_file], parse_media=True)
+        load_documents_llama([mock_file], parse_media=True)
 
         # Verify video clip was closed
         mock_clip.close.assert_called_once()

@@ -107,71 +107,71 @@ class TestHybridRetriever:
         with (
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.VectorIndexRetriever") as mock_retriever,
-            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion
+            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion,
         ):
-                    mock_dense_retriever = MagicMock()
-                    mock_sparse_retriever = MagicMock()
-                    mock_fusion_retriever = MagicMock()
+            mock_dense_retriever = MagicMock()
+            mock_sparse_retriever = MagicMock()
+            mock_fusion_retriever = MagicMock()
 
-                    mock_retriever.side_effect = [
-                        mock_dense_retriever,
-                        mock_sparse_retriever,
-                    ]
-                    mock_fusion.return_value = mock_fusion_retriever
+            mock_retriever.side_effect = [
+                mock_dense_retriever,
+                mock_sparse_retriever,
+            ]
+            mock_fusion.return_value = mock_fusion_retriever
 
-                    result = create_hybrid_retriever(mock_vector_index)
+            create_hybrid_retriever(mock_vector_index)
 
-                    # Verify dense retriever creation
-                    dense_call = mock_retriever.call_args_list[0]
-                    assert dense_call[1]["index"] == mock_vector_index
-                    assert (
-                        dense_call[1]["similarity_top_k"] == 10
-                    )  # prefetch_factor * similarity_top_k
-                    assert dense_call[1]["vector_store_query_mode"] == "default"
+            # Verify dense retriever creation
+            dense_call = mock_retriever.call_args_list[0]
+            assert dense_call[1]["index"] == mock_vector_index
+            assert (
+                dense_call[1]["similarity_top_k"] == 10
+            )  # prefetch_factor * similarity_top_k
+            assert dense_call[1]["vector_store_query_mode"] == "default"
 
-                    # Verify sparse retriever creation
-                    sparse_call = mock_retriever.call_args_list[1]
-                    assert sparse_call[1]["index"] == mock_vector_index
-                    assert sparse_call[1]["similarity_top_k"] == 10
-                    assert sparse_call[1]["vector_store_query_mode"] == "sparse"
+            # Verify sparse retriever creation
+            sparse_call = mock_retriever.call_args_list[1]
+            assert sparse_call[1]["index"] == mock_vector_index
+            assert sparse_call[1]["similarity_top_k"] == 10
+            assert sparse_call[1]["vector_store_query_mode"] == "sparse"
 
-                    # Verify fusion retriever creation
-                    mock_fusion.assert_called_once()
-                    fusion_args = mock_fusion.call_args[1]
-                    assert len(fusion_args["retrievers"]) == 2
-                    assert fusion_args["similarity_top_k"] == 5
-                    assert fusion_args["mode"] == "reciprocal_rerank"
-                    assert fusion_args["use_async"] is True
+            # Verify fusion retriever creation
+            mock_fusion.assert_called_once()
+            fusion_args = mock_fusion.call_args[1]
+            assert len(fusion_args["retrievers"]) == 2
+            assert fusion_args["similarity_top_k"] == 5
+            assert fusion_args["mode"] == "reciprocal_rerank"
+            assert fusion_args["use_async"] is True
 
-                    assert result == mock_fusion_retriever
+            assert result == mock_fusion_retriever
 
     def test_create_hybrid_retriever_fallback(self, mock_vector_index, mock_settings):
         """Test fallback to dense-only retriever when fusion fails."""
         with (
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.VectorIndexRetriever") as mock_retriever,
-            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion
+            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion,
         ):
-                    # Mock fusion retriever creation failure
-                    mock_fusion.side_effect = Exception("Fusion failed")
+            # Mock fusion retriever creation failure
+            mock_fusion.side_effect = Exception("Fusion failed")
 
-                    mock_fallback_retriever = MagicMock()
-                    mock_retriever.return_value = mock_fallback_retriever
+            mock_fallback_retriever = MagicMock()
+            mock_retriever.return_value = mock_fallback_retriever
 
-                    with patch("utils.index_builder.logging.error") as mock_log_error:
-                        with patch(
-                            "utils.index_builder.logging.warning"
-                        ) as mock_log_warning:
-                            result = create_hybrid_retriever(mock_vector_index)
+            with (
+                patch("utils.index_builder.logging.error") as mock_log_error,
+                patch("utils.index_builder.logging.warning") as mock_log_warning,
+            ):
+                create_hybrid_retriever(mock_vector_index)
 
-                            # Verify error logging
-                            mock_log_error.assert_called_once()
-                            mock_log_warning.assert_called_with(
-                                "Using fallback dense-only retriever"
-                            )
+                # Verify error logging
+                mock_log_error.assert_called_once()
+                mock_log_warning.assert_called_with(
+                    "Using fallback dense-only retriever"
+                )
 
-                            # Verify fallback retriever creation
-                            assert result == mock_fallback_retriever
+                # Verify fallback retriever creation
+                assert result == mock_fallback_retriever
 
 
 class TestIndexCreation:
@@ -233,57 +233,56 @@ class TestIndexCreation:
         with (
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
-            patch(
-                "utils.index_builder.StorageContext.from_defaults"
-            ) as mock_storage,
+            patch("utils.index_builder.StorageContext.from_defaults") as mock_storage,
         ):
-                    mock_stream_instance = MagicMock()
-                    mock_stream.return_value = mock_stream_instance
-                    mock_storage_context = MagicMock()
-                    mock_storage.return_value = mock_storage_context
+            mock_stream_instance = MagicMock()
+            mock_stream.return_value = mock_stream_instance
+            mock_storage_context = MagicMock()
+            mock_storage.return_value = mock_storage_context
 
-                    result = create_index(sample_documents, use_gpu=True)
+            create_index(sample_documents, use_gpu=True)
 
-                    # Verify GPU stream usage
-                    mock_stream.assert_called_once()
-                    mock_stream_instance.synchronize.assert_called_once()
+            # Verify GPU stream usage
+            mock_stream.assert_called_once()
+            mock_stream_instance.synchronize.assert_called_once()
 
-                    # Verify dense embedding model setup
-                    mock_dense_embed.assert_called_once()
-                    dense_args = mock_dense_embed.call_args[1]
-                    assert dense_args["model_name"] == "BAAI/bge-large-en-v1.5"
-                    assert dense_args["providers"] == [
-                        "CUDAExecutionProvider",
-                        "CPUExecutionProvider",
-                    ]
-                    assert dense_args["batch_size"] == 32
+            # Verify dense embedding model setup
+            mock_dense_embed.assert_called_once()
+            dense_args = mock_dense_embed.call_args[1]
+            assert dense_args["model_name"] == "BAAI/bge-large-en-v1.5"
+            assert dense_args["providers"] == [
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ]
+            assert dense_args["batch_size"] == 32
 
-                    # Verify sparse embedding model setup
-                    mock_sparse_embed.assert_called_once()
-                    sparse_args = mock_sparse_embed.call_args[1]
-                    assert sparse_args["model_name"] == "prithivida/Splade_PP_en_v1"
-                    assert sparse_args["providers"] == [
-                        "CUDAExecutionProvider",
-                        "CPUExecutionProvider",
-                    ]
+            # Verify sparse embedding model setup
+            mock_sparse_embed.assert_called_once()
+            sparse_args = mock_sparse_embed.call_args[1]
+            assert sparse_args["model_name"] == "prithivida/Splade_PP_en_v1"
+            assert sparse_args["providers"] == [
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ]
 
-                    # Verify Qdrant setup
-                    mock_setup_qdrant.assert_called_once()
-                    qdrant_args = mock_setup_qdrant.call_args[1]
-                    assert qdrant_args["collection_name"] == "docmind"
-                    assert qdrant_args["dense_embedding_size"] == 1024
+            # Verify Qdrant setup
+            mock_setup_qdrant.assert_called_once()
+            qdrant_args = mock_setup_qdrant.call_args[1]
+            assert qdrant_args["collection_name"] == "docmind"
+            assert qdrant_args["dense_embedding_size"] == 1024
 
-                    # Verify vector index creation
-                    mock_vector_index.assert_called_once()
+            # Verify vector index creation
+            mock_vector_index.assert_called_once()
 
-                    # Verify KG index creation
-                    mock_spacy_model.assert_called_once_with("en_core_web_sm")
-                    mock_kg_index.assert_called_once()
+            # Verify KG index creation
+            mock_spacy_model.assert_called_once_with("en_core_web_sm")
+            mock_kg_index.assert_called_once()
 
-                    # Verify result structure
-                    assert result["vector"] == mock_index
-                    assert result["kg"] == mock_kg
-                    assert result["retriever"] == mock_retriever
+            # Verify result structure
+            result = create_index(sample_documents, use_gpu=False)
+            assert result["vector"] == mock_index
+            assert result["kg"] == mock_kg
+            assert result["retriever"] == mock_retriever
 
     @patch("utils.index_builder.verify_rrf_configuration")
     @patch("utils.index_builder.QdrantClient")
@@ -319,24 +318,24 @@ class TestIndexCreation:
         mock_index = MagicMock()
         mock_vector_index.return_value = mock_index
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch(
-                "utils.index_builder.StorageContext.from_defaults"
-            ) as mock_storage:
-                mock_storage.return_value = MagicMock()
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.StorageContext.from_defaults") as mock_storage,
+        ):
+            mock_storage.return_value = MagicMock()
 
-                result = create_index(sample_documents, use_gpu=False)
+            create_index(sample_documents, use_gpu=False)
 
-                # Verify CPU-only providers
-                dense_args = mock_dense_embed.call_args[1]
-                assert dense_args["providers"] == ["CPUExecutionProvider"]
+            # Verify CPU-only providers
+            dense_args = mock_dense_embed.call_args[1]
+            assert dense_args["providers"] == ["CPUExecutionProvider"]
 
-                sparse_args = mock_sparse_embed.call_args[1]
-                assert sparse_args["providers"] == ["CPUExecutionProvider"]
+            sparse_args = mock_sparse_embed.call_args[1]
+            assert sparse_args["providers"] == ["CPUExecutionProvider"]
 
-                # Verify index creation without CUDA streams
-                mock_vector_index.assert_called_once()
-                assert result["vector"] == mock_index
+            # Verify index creation without CUDA streams
+            mock_vector_index.assert_called_once()
+            assert result["vector"] == mock_index
 
     @patch("utils.index_builder.verify_rrf_configuration")
     @patch("utils.index_builder.QdrantClient")
@@ -354,7 +353,7 @@ class TestIndexCreation:
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.logging.warning") as mock_log_warning,
             patch("utils.index_builder.logging.info") as mock_log_info,
-            patch("utils.index_builder.setup_hybrid_qdrant") as mock_setup,
+            patch("utils.index_builder.setup_hybrid_qdrant"),
             patch("utils.index_builder.FastEmbedEmbedding"),
             patch("utils.index_builder.SparseTextEmbedding"),
             patch("utils.index_builder.VectorStoreIndex.from_documents"),
@@ -434,35 +433,34 @@ class TestAsyncIndexCreation:
         with (
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
-            patch(
-                "utils.index_builder.StorageContext.from_defaults"
-            ) as mock_storage,
+            patch("utils.index_builder.StorageContext.from_defaults") as mock_storage,
         ):
-                    mock_stream_instance = MagicMock()
-                    mock_stream.return_value = mock_stream_instance
-                    mock_storage.return_value = MagicMock()
+            mock_stream_instance = MagicMock()
+            mock_stream.return_value = mock_stream_instance
+            mock_storage.return_value = MagicMock()
 
-                    result = await create_index_async(sample_documents, use_gpu=True)
+            await create_index_async(sample_documents, use_gpu=True)
 
-                    # Verify async client was created and closed
-                    mock_async_client.assert_called_once()
-                    mock_client_instance.close.assert_called_once()
+            # Verify async client was created and closed
+            mock_async_client.assert_called_once()
+            mock_client_instance.close.assert_called_once()
 
-                    # Verify async Qdrant setup
-                    mock_setup_qdrant_async.assert_called_once()
-                    setup_args = mock_setup_qdrant_async.call_args[1]
-                    assert setup_args["client"] == mock_client_instance
-                    assert setup_args["collection_name"] == "docmind"
-                    assert setup_args["dense_embedding_size"] == 1024
+            # Verify async Qdrant setup
+            mock_setup_qdrant_async.assert_called_once()
+            setup_args = mock_setup_qdrant_async.call_args[1]
+            assert setup_args["client"] == mock_client_instance
+            assert setup_args["collection_name"] == "docmind"
+            assert setup_args["dense_embedding_size"] == 1024
 
-                    # Verify GPU stream usage
-                    mock_stream.assert_called_once()
-                    mock_stream_instance.synchronize.assert_called_once()
+            # Verify GPU stream usage
+            mock_stream.assert_called_once()
+            mock_stream_instance.synchronize.assert_called_once()
 
-                    # Verify result structure
-                    assert result["vector"] == mock_index
-                    assert result["kg"] == mock_kg
-                    assert result["retriever"] == mock_retriever
+            # Verify result structure
+            result = create_index(sample_documents, use_gpu=True)
+            assert result["vector"] == mock_index
+            assert result["kg"] == mock_kg
+            assert result["retriever"] == mock_retriever
 
     @pytest.mark.asyncio
     @patch("utils.index_builder.verify_rrf_configuration")
@@ -494,22 +492,24 @@ class TestAsyncIndexCreation:
             patch("utils.index_builder.setup_hybrid_qdrant_async"),
             patch("utils.index_builder.FastEmbedEmbedding"),
             patch("utils.index_builder.SparseTextEmbedding"),
-            patch("utils.index_builder.VectorStoreIndex.from_documents") as mock_vector_index,
+            patch(
+                "utils.index_builder.VectorStoreIndex.from_documents"
+            ) as mock_vector_index,
+            patch("utils.index_builder.logging.warning") as mock_log_warning,
         ):
-            with patch("utils.index_builder.logging.warning") as mock_log_warning:
-                mock_index = MagicMock()
-                mock_vector_index.return_value = mock_index
+            mock_index = MagicMock()
+            mock_vector_index.return_value = mock_index
 
-                result = await create_index_async(sample_documents, use_gpu=False)
+            await create_index_async(sample_documents, use_gpu=False)
 
-                # Verify warning was logged
-                mock_log_warning.assert_called()
-                warning_message = mock_log_warning.call_args[0][0]
-                assert "Failed to create KG index" in warning_message
+            # Verify warning was logged
+            mock_log_warning.assert_called()
+            warning_message = mock_log_warning.call_args[0][0]
+            assert "Failed to create KG index" in warning_message
 
-                # Verify KG index is None
-                assert result["kg"] is None
-                assert result["vector"] == mock_index
+            # Verify KG index is None
+            assert result["kg"] is None
+            assert result["vector"] == mock_index
 
 
 class TestMultimodalIndex:
@@ -550,34 +550,32 @@ class TestMultimodalIndex:
         with (
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
-            patch(
+            patch("utils.index_builder.StorageContext.from_defaults") as mock_storage,
         ):
-                    "utils.index_builder.StorageContext.from_defaults"
-                ) as mock_storage:
-                    mock_stream_instance = MagicMock()
-                    mock_stream.return_value = mock_stream_instance
-                    mock_storage.return_value = MagicMock()
+            mock_stream_instance = MagicMock()
+            mock_stream.return_value = mock_stream_instance
+            mock_storage.return_value = MagicMock()
 
-                    result = create_multimodal_index(all_documents, use_gpu=True)
+            create_multimodal_index(all_documents, use_gpu=True)
 
-                    # Verify Jina v3 embedding model setup
-                    mock_hf_embedding.assert_called_once()
-                    embed_args = mock_hf_embedding.call_args[1]
-                    assert embed_args["model_name"] == "jinaai/jina-embeddings-v3"
-                    assert embed_args["device"] == "cuda"
-                    assert embed_args["trust_remote_code"] is True
+            # Verify Jina v3 embedding model setup
+            mock_hf_embedding.assert_called_once()
+            embed_args = mock_hf_embedding.call_args[1]
+            assert embed_args["model_name"] == "jinaai/jina-embeddings-v3"
+            assert embed_args["device"] == "cuda"
+            assert embed_args["trust_remote_code"] is True
 
-                    # Verify GPU stream usage
-                    mock_stream.assert_called_once()
-                    mock_stream_instance.synchronize.assert_called_once()
+            # Verify GPU stream usage
+            mock_stream.assert_called_once()
+            mock_stream_instance.synchronize.assert_called_once()
 
-                    # Verify multimodal index creation
-                    mock_multimodal_index.assert_called_once()
-                    index_args = mock_multimodal_index.call_args[1]
-                    assert len(index_args["documents"]) == 5  # 3 text + 2 image
-                    assert index_args["embed_model"] == mock_embed_model
+            # Verify multimodal index creation
+            mock_multimodal_index.assert_called_once()
+            index_args = mock_multimodal_index.call_args[1]
+            assert len(index_args["documents"]) == 5  # 3 text + 2 image
+            assert index_args["embed_model"] == mock_embed_model
 
-                    assert result == mock_index
+            assert result == mock_index
 
     @patch("utils.index_builder.torch.cuda.is_available", return_value=False)
     def test_create_multimodal_index_cpu_mode(
@@ -590,21 +588,19 @@ class TestMultimodalIndex:
             patch("utils.index_builder.QdrantClient"),
             patch("utils.index_builder.QdrantVectorStore"),
             patch(
+                "utils.index_builder.MultiModalVectorStoreIndex.from_documents"
+            ) as mock_multimodal_index,
         ):
-                            "utils.index_builder.MultiModalVectorStoreIndex.from_documents"
-                        ) as mock_multimodal_index:
-                            mock_index = MagicMock()
-                            mock_multimodal_index.return_value = mock_index
+            mock_index = MagicMock()
+            mock_multimodal_index.return_value = mock_index
 
-                            result = create_multimodal_index(
-                                sample_documents, use_gpu=False
-                            )
+            create_multimodal_index(sample_documents, use_gpu=False)
 
-                            # Verify CPU device configuration
-                            embed_args = mock_hf_embedding.call_args[1]
-                            assert embed_args["device"] == "cpu"
+            # Verify CPU device configuration
+            embed_args = mock_hf_embedding.call_args[1]
+            assert embed_args["device"] == "cpu"
 
-                            assert result == mock_index
+            assert result == mock_index
 
     @patch("utils.index_builder.HuggingFaceEmbedding")
     def test_create_multimodal_index_fallback(
@@ -618,24 +614,20 @@ class TestMultimodalIndex:
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.create_index") as mock_create_index,
             patch("utils.index_builder.logging.error") as mock_log_error,
-            patch("utils.index_builder.logging.info") as mock_log_info
+            patch("utils.index_builder.logging.info") as mock_log_info,
         ):
-                        mock_fallback_result = {"vector": MagicMock()}
-                        mock_create_index.return_value = mock_fallback_result
+            mock_fallback_result = {"vector": MagicMock()}
+            mock_create_index.return_value = mock_fallback_result
 
-                        result = create_multimodal_index(
-                            sample_documents, use_gpu=False
-                        )
+            create_multimodal_index(sample_documents, use_gpu=False)
 
-                        # Verify error and fallback messages
-                        mock_log_error.assert_called()
-                        mock_log_info.assert_called_with(
-                            "Falling back to text-only vector index"
-                        )
+            # Verify error and fallback messages
+            mock_log_error.assert_called()
+            mock_log_info.assert_called_with("Falling back to text-only vector index")
 
-                        # Verify fallback index creation
-                        mock_create_index.assert_called_once()
-                        assert result == mock_fallback_result["vector"]
+            # Verify fallback index creation
+            mock_create_index.assert_called_once()
+            assert result == mock_fallback_result["vector"]
 
     @pytest.mark.asyncio
     @patch("utils.index_builder.AsyncQdrantClient")
@@ -674,24 +666,22 @@ class TestMultimodalIndex:
         with (
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
-            patch("utils.index_builder.StorageContext.from_defaults")
+            patch("utils.index_builder.StorageContext.from_defaults"),
         ):
-                    mock_stream_instance = MagicMock()
-                    mock_stream.return_value = mock_stream_instance
+            mock_stream_instance = MagicMock()
+            mock_stream.return_value = mock_stream_instance
 
-                    result = await create_multimodal_index_async(
-                        all_documents, use_gpu=True
-                    )
+            await create_multimodal_index_async(all_documents, use_gpu=True)
 
-                    # Verify async client was used and closed
-                    mock_async_client.assert_called_once()
-                    mock_client_instance.close.assert_called_once()
+            # Verify async client was used and closed
+            mock_async_client.assert_called_once()
+            mock_client_instance.close.assert_called_once()
 
-                    # Verify async vector store setup
-                    vector_store_args = mock_vector_store.call_args[1]
-                    assert vector_store_args["aclient"] == mock_client_instance
+            # Verify async vector store setup
+            vector_store_args = mock_vector_store.call_args[1]
+            assert vector_store_args["aclient"] == mock_client_instance
 
-                    assert result == mock_index
+            assert result == mock_index
 
     @pytest.mark.asyncio
     @patch("utils.index_builder.create_multimodal_index")
@@ -707,9 +697,7 @@ class TestMultimodalIndex:
                 mock_fallback_result = MagicMock()
                 mock_create_multimodal.return_value = mock_fallback_result
 
-                result = await create_multimodal_index_async(
-                    sample_documents, use_gpu=False
-                )
+                await create_multimodal_index_async(sample_documents, use_gpu=False)
 
                 # Verify error was logged
                 mock_log_error.assert_called()
@@ -726,26 +714,26 @@ class TestEdgeCases:
         """Test index creation with empty document list."""
         with (
             patch("utils.index_builder.settings", mock_settings),
-            patch("utils.index_builder.verify_rrf_configuration") as mock_verify
+            patch("utils.index_builder.verify_rrf_configuration") as mock_verify,
         ):
-                mock_verify.return_value = {"issues": [], "recommendations": []}
+            mock_verify.return_value = {"issues": [], "recommendations": []}
 
-                with (
-                    patch("utils.index_builder.QdrantClient"),
-                    patch("utils.index_builder.setup_hybrid_qdrant"),
-                    patch("utils.index_builder.FastEmbedEmbedding"),
-                    patch("utils.index_builder.SparseTextEmbedding"),
-                    patch(
-                ):
-                                    "utils.index_builder.VectorStoreIndex.from_documents"
-                                ) as mock_vector_index:
-                                    mock_index = MagicMock()
-                                    mock_vector_index.return_value = mock_index
+            with (
+                patch("utils.index_builder.QdrantClient"),
+                patch("utils.index_builder.setup_hybrid_qdrant"),
+                patch("utils.index_builder.FastEmbedEmbedding"),
+                patch("utils.index_builder.SparseTextEmbedding"),
+                patch(
+                    "utils.index_builder.VectorStoreIndex.from_documents"
+                ) as mock_vector_index,
+            ):
+                mock_index = MagicMock()
+                mock_vector_index.return_value = mock_index
 
-                                    result = create_index([], use_gpu=False)
+                create_index([], use_gpu=False)
 
-                                    # Should still create index with empty documents
-                                    assert result["vector"] == mock_index
+                # Should still create index with empty documents
+                assert result["vector"] == mock_index
 
     @pytest.mark.parametrize("debug_mode", [True, False])
     @patch("utils.index_builder.torch.cuda.is_available", return_value=True)
@@ -757,51 +745,43 @@ class TestEdgeCases:
 
         with (
             patch("utils.index_builder.settings", mock_settings),
-            patch("utils.index_builder.verify_rrf_configuration") as mock_verify
+            patch("utils.index_builder.verify_rrf_configuration") as mock_verify,
         ):
-                mock_verify.return_value = {"issues": [], "recommendations": []}
+            mock_verify.return_value = {"issues": [], "recommendations": []}
 
-                with patch(
-                    "utils.index_builder.torch.profiler.profile"
-                ) as mock_profiler:
-                    with (
-                        patch("utils.index_builder.QdrantClient"),
-                        patch("utils.index_builder.setup_hybrid_qdrant"),
-                        patch("utils.index_builder.FastEmbedEmbedding"),
-                        patch("utils.index_builder.SparseTextEmbedding"),
-                        patch(
-                    ):
-                                        "utils.index_builder.VectorStoreIndex.from_documents"
-                                    ):
-                                        with patch(
-                                            "utils.index_builder.torch.cuda.Stream"
-                                        ) as mock_stream:
-                                            mock_stream_instance = MagicMock()
-                                            mock_stream.return_value = (
-                                                mock_stream_instance
-                                            )
+            with (
+                patch("utils.index_builder.torch.profiler.profile") as mock_profiler,
+                patch("utils.index_builder.QdrantClient"),
+                patch("utils.index_builder.setup_hybrid_qdrant"),
+                patch("utils.index_builder.FastEmbedEmbedding"),
+                patch("utils.index_builder.SparseTextEmbedding"),
+                patch("utils.index_builder.VectorStoreIndex.from_documents"),
+                patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
+            ):
+                mock_stream_instance = MagicMock()
+                mock_stream.return_value = mock_stream_instance
 
-                                            create_index(sample_documents, use_gpu=True)
+                create_index(sample_documents, use_gpu=True)
 
-                                            if debug_mode:
-                                                # Verify profiler was used in debug mode
-                                                mock_profiler.assert_called_once()
-                                            else:
-                                                # Verify profiler was not used in normal mode
-                                                mock_profiler.assert_not_called()
+                if debug_mode:
+                    # Verify profiler was used in debug mode
+                    mock_profiler.assert_called_once()
+                else:
+                    # Verify profiler was not used in normal mode
+                    mock_profiler.assert_not_called()
 
     def test_create_index_configuration_error(self, sample_documents, mock_settings):
         """Test index creation with configuration validation error."""
         with (
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.verify_rrf_configuration"),
-            patch("utils.index_builder.QdrantClient") as mock_client
+            patch("utils.index_builder.QdrantClient") as mock_client,
         ):
-                    # Mock client creation failure
-                    mock_client.side_effect = ValueError("Invalid configuration")
+            # Mock client creation failure
+            mock_client.side_effect = ValueError("Invalid configuration")
 
-                    with pytest.raises(ValueError):
-                        create_index(sample_documents, use_gpu=False)
+            with pytest.raises(ValueError, match="Invalid configuration"):
+                create_index(sample_documents, use_gpu=False)
 
     @patch("utils.index_builder.logging.info")
     def test_hybrid_retriever_logging(
@@ -810,26 +790,24 @@ class TestEdgeCases:
         """Test that hybrid retriever creation logs appropriate information."""
         with (
             patch("utils.index_builder.settings", mock_settings),
-            patch("utils.index_builder.VectorIndexRetriever") as mock_retriever,
-            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion
+            patch("utils.index_builder.VectorIndexRetriever"),
+            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion,
         ):
-                    mock_fusion_retriever = MagicMock()
-                    mock_fusion.return_value = mock_fusion_retriever
+            mock_fusion_retriever = MagicMock()
+            mock_fusion.return_value = mock_fusion_retriever
 
-                    create_hybrid_retriever(mock_vector_index)
+            create_hybrid_retriever(mock_vector_index)
 
-                    # Verify logging information
-                    logged_messages = [
-                        call[0][0] for call in mock_log_info.call_args_list
-                    ]
-                    hybrid_message = next(
-                        (
-                            msg
-                            for msg in logged_messages
-                            if "HybridFusionRetriever created" in msg
-                        ),
-                        None,
-                    )
-                    assert hybrid_message is not None
-                    assert "Dense prefetch: 10" in hybrid_message
-                    assert "Final top_k: 5" in hybrid_message
+            # Verify logging information
+            logged_messages = [call[0][0] for call in mock_log_info.call_args_list]
+            hybrid_message = next(
+                (
+                    msg
+                    for msg in logged_messages
+                    if "HybridFusionRetriever created" in msg
+                ),
+                None,
+            )
+            assert hybrid_message is not None
+            assert "Dense prefetch: 10" in hybrid_message
+            assert "Final top_k: 5" in hybrid_message

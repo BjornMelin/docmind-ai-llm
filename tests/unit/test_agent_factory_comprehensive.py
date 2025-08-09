@@ -74,7 +74,7 @@ class TestAnalyzeQueryComplexity:
     """Test the analyze_query_complexity function comprehensively."""
 
     @pytest.mark.parametrize(
-        "query,expected_complexity,expected_type",
+        ("query", "expected_complexity", "expected_type"),
         [
             # Simple queries
             ("Hello", "simple", "general"),
@@ -171,27 +171,27 @@ class TestCreateSingleAgent:
 
         with (
             patch("llama_index.core.agent.ReActAgent") as mock_react_agent,
-            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory
+            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory,
         ):
-                # Arrange mocks
-                mock_agent = MagicMock()
-                mock_react_agent.from_tools.return_value = mock_agent
+            # Arrange mocks
+            mock_agent = MagicMock()
+            mock_react_agent.from_tools.return_value = mock_agent
 
-                mock_memory_instance = MagicMock()
-                mock_memory.from_defaults.return_value = mock_memory_instance
+            mock_memory_instance = MagicMock()
+            mock_memory.from_defaults.return_value = mock_memory_instance
 
-                # Act
-                result = create_single_agent(mock_tools, mock_llm)
+            # Act
+            create_single_agent(mock_tools, mock_llm)
 
-                # Assert
-                assert result == mock_agent
-                mock_react_agent.from_tools.assert_called_once_with(
-                    tools=mock_tools,
-                    llm=mock_llm,
-                    memory=mock_memory_instance,
-                    verbose=True,
-                    max_iterations=10,
-                )
+            # Assert
+            assert result == mock_agent
+            mock_react_agent.from_tools.assert_called_once_with(
+                tools=mock_tools,
+                llm=mock_llm,
+                memory=mock_memory_instance,
+                verbose=True,
+                max_iterations=10,
+            )
 
     def test_create_single_agent_with_custom_settings(self):
         """Test single agent creation with custom settings."""
@@ -204,15 +204,15 @@ class TestCreateSingleAgent:
             patch("agent_factory.settings", test_settings),
             patch("llama_index.core.agent.ReActAgent") as mock_react_agent,
             patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory,
-            patch("llama_index.core.tools.QueryEngineTool")
+            patch("llama_index.core.tools.QueryEngineTool"),
         ):
-                        # Act
-                        create_single_agent(mock_index, mock_llm)
+            # Act
+            create_single_agent(mock_index, mock_llm)
 
-                        # Assert - verify settings were used
-                        mock_react_agent.from_tools.assert_called_once()
-                        call_kwargs = mock_react_agent.from_tools.call_args[1]
-                        assert "memory" in call_kwargs
+            # Assert - verify settings were used
+            mock_react_agent.from_tools.assert_called_once()
+            call_kwargs = mock_react_agent.from_tools.call_args[1]
+            assert "memory" in call_kwargs
 
     def test_create_single_agent_error_handling(self):
         """Test error handling in single agent creation."""
@@ -225,11 +225,11 @@ class TestCreateSingleAgent:
         ):
             with (
                 patch("llama_index.core.memory.ChatMemoryBuffer"),
-                patch("llama_index.core.tools.QueryEngineTool")
+                patch("llama_index.core.tools.QueryEngineTool"),
             ):
-                    # Should propagate the error
-                    with pytest.raises(RuntimeError, match="Agent creation failed"):
-                        create_single_agent(mock_index, mock_llm)
+                # Should propagate the error
+                with pytest.raises(RuntimeError, match="Agent creation failed"):
+                    create_single_agent(mock_index, mock_llm)
 
 
 class TestCreateMultiAgentGraph:
@@ -246,22 +246,22 @@ class TestCreateMultiAgentGraph:
 
         with (
             patch("langgraph.graph.StateGraph") as mock_state_graph,
-            patch("langgraph.prebuilt.create_react_agent") as mock_create_react
+            patch("langgraph.prebuilt.create_react_agent") as mock_create_react,
         ):
-                # Arrange mocks
-                mock_graph_instance = MagicMock()
-                mock_state_graph.return_value = mock_graph_instance
-                mock_graph_instance.compile.return_value = MagicMock()
+            # Arrange mocks
+            mock_graph_instance = MagicMock()
+            mock_state_graph.return_value = mock_graph_instance
+            mock_graph_instance.compile.return_value = MagicMock()
 
-                mock_create_react.return_value = MagicMock()
+            mock_create_react.return_value = MagicMock()
 
-                # Act
-                result = create_multi_agent_graph(mock_agents)
+            # Act
+            create_multi_agent_graph(mock_agents)
 
-                # Assert
-                assert result is not None
-                mock_state_graph.assert_called_once_with(AgentState)
-                mock_graph_instance.compile.assert_called_once()
+            # Assert
+            assert result is not None
+            mock_state_graph.assert_called_once_with(AgentState)
+            mock_graph_instance.compile.assert_called_once()
 
     def test_create_multi_agent_graph_with_supervisor(self):
         """Test multi-agent graph creation includes supervisor logic."""
@@ -269,21 +269,21 @@ class TestCreateMultiAgentGraph:
 
         with (
             patch("langgraph.graph.StateGraph") as mock_state_graph,
-            patch("langgraph.prebuilt.create_react_agent")
+            patch("langgraph.prebuilt.create_react_agent"),
         ):
-                mock_graph_instance = MagicMock()
-                mock_state_graph.return_value = mock_graph_instance
+            mock_graph_instance = MagicMock()
+            mock_state_graph.return_value = mock_graph_instance
 
-                # Act
-                create_multi_agent_graph(mock_agents)
+            # Act
+            create_multi_agent_graph(mock_agents)
 
-                # Assert - should add nodes and edges for supervisor pattern
-                assert (
-                    mock_graph_instance.add_node.call_count >= len(mock_agents) + 1
-                )  # +1 for supervisor
-                assert (
-                    mock_graph_instance.add_edge.call_count >= 0
-                )  # Should have routing edges
+            # Assert - should add nodes and edges for supervisor pattern
+            assert (
+                mock_graph_instance.add_node.call_count >= len(mock_agents) + 1
+            )  # +1 for supervisor
+            assert (
+                mock_graph_instance.add_edge.call_count >= 0
+            )  # Should have routing edges
 
     def test_create_multi_agent_graph_empty_agents(self):
         """Test multi-agent graph creation with empty agents dict."""
@@ -292,7 +292,7 @@ class TestCreateMultiAgentGraph:
             mock_state_graph.return_value = mock_graph_instance
 
             # Act
-            result = create_multi_agent_graph({})
+            create_multi_agent_graph({})
 
             # Assert - should still create a basic graph structure
             assert result is not None
@@ -308,22 +308,22 @@ class TestCreateMultiAgentGraph:
 
         with (
             patch("langgraph.graph.StateGraph") as mock_state_graph,
-            patch("langgraph.prebuilt.create_react_agent")
+            patch("langgraph.prebuilt.create_react_agent"),
         ):
-                mock_graph_instance = MagicMock()
-                mock_state_graph.return_value = mock_graph_instance
+            mock_graph_instance = MagicMock()
+            mock_state_graph.return_value = mock_graph_instance
 
-                # Act
-                create_multi_agent_graph(mock_agents)
+            # Act
+            create_multi_agent_graph(mock_agents)
 
-                # Assert - verify routing function is added
-                add_conditional_edges_calls = [
-                    call
-                    for call in mock_graph_instance.method_calls
-                    if call[0] == "add_conditional_edges"
-                ]
-                # Should have conditional routing logic
-                assert len(add_conditional_edges_calls) >= 0
+            # Assert - verify routing function is added
+            add_conditional_edges_calls = [
+                call
+                for call in mock_graph_instance.method_calls
+                if call[0] == "add_conditional_edges"
+            ]
+            # Should have conditional routing logic
+            assert len(add_conditional_edges_calls) >= 0
 
 
 class TestAgentFactory:
@@ -360,25 +360,25 @@ class TestAgentFactory:
         with (
             patch.object(factory, "_create_document_agent") as mock_doc_agent,
             patch.object(factory, "_create_kg_agent") as mock_kg_agent,
-            patch.object(factory, "_create_multimodal_agent") as mock_mm_agent
+            patch.object(factory, "_create_multimodal_agent") as mock_mm_agent,
         ):
-                    # Arrange mocks
-                    mock_doc_agent.return_value = MagicMock()
-                    mock_kg_agent.return_value = MagicMock()
-                    mock_mm_agent.return_value = MagicMock()
+            # Arrange mocks
+            mock_doc_agent.return_value = MagicMock()
+            mock_kg_agent.return_value = MagicMock()
+            mock_mm_agent.return_value = MagicMock()
 
-                    # Act
-                    factory.create_agents()
+            # Act
+            factory.create_agents()
 
-                    # Assert
-                    mock_doc_agent.assert_called_once()
-                    mock_kg_agent.assert_called_once()
-                    mock_mm_agent.assert_called_once()
+            # Assert
+            mock_doc_agent.assert_called_once()
+            mock_kg_agent.assert_called_once()
+            mock_mm_agent.assert_called_once()
 
-                    assert len(factory.agents) == 3
-                    assert "document_agent" in factory.agents
-                    assert "kg_agent" in factory.agents
-                    assert "multimodal_agent" in factory.agents
+            assert len(factory.agents) == 3
+            assert "document_agent" in factory.agents
+            assert "kg_agent" in factory.agents
+            assert "multimodal_agent" in factory.agents
 
     def test_agent_factory_get_agent_for_query(self):
         """Test intelligent agent selection for queries."""
@@ -452,7 +452,7 @@ class TestAgentFactory:
         ):
             with patch.object(factory, "get_agent_for_query", return_value=mock_agent):
                 # Act
-                result = factory.process_query("Simple document question")
+                factory.process_query("Simple document question")
 
                 # Assert
                 assert "Single agent response" in result
@@ -478,7 +478,7 @@ class TestAgentFactory:
         ):
             with patch.object(factory, "create_workflow", return_value=mock_workflow):
                 # Act
-                result = factory.process_query("Complex analytical question")
+                factory.process_query("Complex analytical question")
 
                 # Assert
                 assert "Multi-agent response" in result
@@ -511,20 +511,20 @@ class TestPropertyBasedAgentFactory:
 
         with (
             patch("langgraph.graph.StateGraph") as mock_state_graph,
-            patch("langgraph.prebuilt.create_react_agent")
+            patch("langgraph.prebuilt.create_react_agent"),
         ):
-                mock_graph_instance = MagicMock()
-                mock_state_graph.return_value = mock_graph_instance
-                mock_graph_instance.compile.return_value = MagicMock()
+            mock_graph_instance = MagicMock()
+            mock_state_graph.return_value = mock_graph_instance
+            mock_graph_instance.compile.return_value = MagicMock()
 
-                # Act
-                result = create_multi_agent_graph(mock_agents)
+            # Act
+            create_multi_agent_graph(mock_agents)
 
-                # Assert - properties that should always hold
-                assert result is not None
-                mock_state_graph.assert_called_once_with(AgentState)
-                # Should add at least as many nodes as agents
-                assert mock_graph_instance.add_node.call_count >= num_agents
+            # Assert - properties that should always hold
+            assert result is not None
+            mock_state_graph.assert_called_once_with(AgentState)
+            # Should add at least as many nodes as agents
+            assert mock_graph_instance.add_node.call_count >= num_agents
 
     @given(
         complexity=st.sampled_from(["simple", "complex", "specialized"]),
@@ -599,7 +599,7 @@ class TestAgentFactoryErrorHandling:
         ):
             with patch.object(factory, "get_agent_for_query", return_value=mock_agent):
                 # Should handle agent failure gracefully
-                result = factory.process_query("Test query")
+                factory.process_query("Test query")
 
                 # Should return error message or fallback response
                 assert isinstance(result, str)
@@ -665,7 +665,7 @@ class TestAgentFactoryErrorHandling:
         ):
             with patch.object(factory, "get_agent_for_query", return_value=mock_agent):
                 # Should handle all exception types gracefully
-                result = factory.process_query("Test query")
+                factory.process_query("Test query")
 
                 assert isinstance(result, str)
                 # Should contain error information or fallback response

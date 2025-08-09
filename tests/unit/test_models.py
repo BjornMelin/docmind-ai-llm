@@ -454,7 +454,7 @@ def test_analysis_output_field_descriptions():
 
 
 @pytest.mark.parametrize(
-    "parse_strategy,expected",
+    ("parse_strategy", "expected"),
     [
         ("hi_res", "hi_res"),
         ("fast", "fast"),
@@ -472,7 +472,7 @@ def test_parse_strategy_validation(parse_strategy: str, expected: str):
 
 
 @pytest.mark.parametrize(
-    "quantization_type,expected",
+    ("quantization_type", "expected"),
     [
         ("int8", "int8"),
         ("int4", "int4"),
@@ -513,7 +513,7 @@ def test_app_settings_clean_defaults(clean_env):
 
 
 @pytest.mark.parametrize(
-    "env_var,field,value,expected",
+    ("env_var", "field", "value", "expected"),
     [
         ("PARSE_STRATEGY", "parse_strategy", "fast", "fast"),
         ("CHUNK_SIZE", "chunk_size", "512", 512),

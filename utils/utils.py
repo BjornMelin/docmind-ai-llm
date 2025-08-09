@@ -983,31 +983,31 @@ class EnhancedPerformanceMonitor:
     """Enhanced performance monitoring with detailed async operation tracking."""
 
     def __init__(self):
-        """Initialize an Enhanced Performance Monitor for
-                comprehensive async operation tracking.
+        """Initialize an Enhanced Performance Monitor for comprehensive
+        async operation tracking.
 
-                        Provides detailed metrics and performance insights
-                        for async operations, tracking execution duration,
-                        memory usage, error rates, and operation counts.
+        Provides detailed metrics and performance insights for async
+        operations, tracking execution duration, memory usage, error
+        rates, and operation counts.
 
         Attributes:
-                            metrics (dict): Stores performance metrics for each async operation.
-                                Each entry includes:
-                                - duration_seconds: Operation execution time
-                                - memory_delta_mb: Memory usage change
-                                - timestamp: Operation execution time
-                                - success: Whether the operation completed without errors
+            metrics (dict): Stores performance metrics for each async operation.
+                Each entry includes:
+                - duration_seconds: Operation execution time
+                - memory_delta_mb: Memory usage change
+                - timestamp: Operation execution time
+                - success: Whether operation completed without errors
 
-                            operation_counts (dict): Tracks the number of times
-                each operation is called.
+            operation_counts (dict): Tracks the number of times each
+                operation is called.
 
-                            error_counts (dict): Tracks the number of errors
-                encountered for each operation.
+            error_counts (dict): Tracks the number of errors encountered
+                for each operation.
 
         Note:
-                            - Performance tracking is done with minimal overhead
-                            - Supports multiple concurrent operation tracking
-                            - Provides methods for generating performance summaries
+            - Performance tracking is done with minimal overhead
+            - Supports multiple concurrent operation tracking
+            - Provides methods for generating performance summaries
         """
         self.metrics = {}
         self.operation_counts = {}

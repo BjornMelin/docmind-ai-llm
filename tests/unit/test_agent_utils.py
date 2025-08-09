@@ -138,57 +138,55 @@ class TestCreateToolsFromIndex:
 
         with (
             patch("agents.agent_utils.settings", mock_settings),
-            patch("agents.agent_utils.logging.info") as mock_log_info
+            patch("agents.agent_utils.logging.info") as mock_log_info,
         ):
-                tools = create_tools_from_index(mock_index_data_complete)
+            tools = create_tools_from_index(mock_index_data_complete)
 
-                # Verify ColBERT reranker creation
-                mock_colbert_rerank.assert_called_once_with(
-                    model=mock_settings.reranker_model,
-                    top_n=mock_settings.reranking_top_k,
-                    keep_retrieval_score=True,
-                )
+            # Verify ColBERT reranker creation
+            mock_colbert_rerank.assert_called_once_with(
+                model=mock_settings.reranker_model,
+                top_n=mock_settings.reranking_top_k,
+                keep_retrieval_score=True,
+            )
 
-                # Verify hybrid query engine creation
-                mock_retriever_query_engine.assert_called_once_with(
-                    retriever=mock_index_data_complete["retriever"],
-                    node_postprocessors=[mock_reranker],
-                )
+            # Verify hybrid query engine creation
+            mock_retriever_query_engine.assert_called_once_with(
+                retriever=mock_index_data_complete["retriever"],
+                node_postprocessors=[mock_reranker],
+            )
 
-                # Verify KG query engine creation
-                mock_index_data_complete["kg"].as_query_engine.assert_called_once_with(
-                    similarity_top_k=10,
-                    include_text=True,
-                    node_postprocessors=[mock_reranker],
-                )
+            # Verify KG query engine creation
+            mock_index_data_complete["kg"].as_query_engine.assert_called_once_with(
+                similarity_top_k=10,
+                include_text=True,
+                node_postprocessors=[mock_reranker],
+            )
 
-                # Verify tool creation calls
-                assert mock_query_tool.call_count == 2
+            # Verify tool creation calls
+            assert mock_query_tool.call_count == 2
 
-                # Verify hybrid fusion search tool
-                hybrid_call_args = mock_query_tool.call_args_list[0]
-                assert hybrid_call_args[1]["query_engine"] == mock_hybrid_engine
-                hybrid_metadata = hybrid_call_args[1]["metadata"]
-                assert hybrid_metadata.name == "hybrid_fusion_search"
-                assert "QueryFusionRetriever" in hybrid_metadata.description
-                assert "RRF" in hybrid_metadata.description
-                assert "ColBERT" in hybrid_metadata.description
+            # Verify hybrid fusion search tool
+            hybrid_call_args = mock_query_tool.call_args_list[0]
+            assert hybrid_call_args[1]["query_engine"] == mock_hybrid_engine
+            hybrid_metadata = hybrid_call_args[1]["metadata"]
+            assert hybrid_metadata.name == "hybrid_fusion_search"
+            assert "QueryFusionRetriever" in hybrid_metadata.description
+            assert "RRF" in hybrid_metadata.description
+            assert "ColBERT" in hybrid_metadata.description
 
-                # Verify KG query tool
-                kg_call_args = mock_query_tool.call_args_list[1]
-                kg_metadata = kg_call_args[1]["metadata"]
-                assert kg_metadata.name == "knowledge_graph_query"
-                assert "entity and relationship" in kg_metadata.description
+            # Verify KG query tool
+            kg_call_args = mock_query_tool.call_args_list[1]
+            kg_metadata = kg_call_args[1]["metadata"]
+            assert kg_metadata.name == "knowledge_graph_query"
+            assert "entity and relationship" in kg_metadata.description
 
-                # Verify logging
-                assert len(tools) == 2
-                log_messages = [call[0][0] for call in mock_log_info.call_args_list]
-                assert any(
-                    "Hybrid fusion search tool added" in msg for msg in log_messages
-                )
-                assert any(
-                    "Knowledge Graph query tool added" in msg for msg in log_messages
-                )
+            # Verify logging
+            assert len(tools) == 2
+            log_messages = [call[0][0] for call in mock_log_info.call_args_list]
+            assert any("Hybrid fusion search tool added" in msg for msg in log_messages)
+            assert any(
+                "Knowledge Graph query tool added" in msg for msg in log_messages
+            )
 
     @patch("agents.agent_utils.ColbertRerank")
     @patch("agents.agent_utils.QueryEngineTool")
@@ -217,36 +215,34 @@ class TestCreateToolsFromIndex:
         with (
             patch("agents.agent_utils.settings", mock_settings),
             patch("agents.agent_utils.logging.info") as mock_log_info,
-            patch("agents.agent_utils.logging.warning") as mock_log_warning
+            patch("agents.agent_utils.logging.warning") as mock_log_warning,
         ):
-                    tools = create_tools_from_index(mock_index_data_vector_only)
+            tools = create_tools_from_index(mock_index_data_vector_only)
 
-                    # Verify fallback vector query engine creation
-                    mock_index_data_vector_only[
-                        "vector"
-                    ].as_query_engine.assert_called_once_with(
-                        similarity_top_k=mock_settings.reranking_top_k,
-                        hybrid_alpha=mock_settings.rrf_fusion_alpha,
-                        node_postprocessors=[mock_reranker],
-                    )
+            # Verify fallback vector query engine creation
+            mock_index_data_vector_only[
+                "vector"
+            ].as_query_engine.assert_called_once_with(
+                similarity_top_k=mock_settings.reranking_top_k,
+                hybrid_alpha=mock_settings.rrf_fusion_alpha,
+                node_postprocessors=[mock_reranker],
+            )
 
-                    # Verify single tool creation
-                    assert mock_query_tool.call_count == 1
-                    vector_call_args = mock_query_tool.call_args
-                    assert vector_call_args[1]["query_engine"] == mock_vector_engine
-                    vector_metadata = vector_call_args[1]["metadata"]
-                    assert vector_metadata.name == "hybrid_vector_search"
-                    assert "BGE-Large" in vector_metadata.description
-                    assert "SPLADE++" in vector_metadata.description
+            # Verify single tool creation
+            assert mock_query_tool.call_count == 1
+            vector_call_args = mock_query_tool.call_args
+            assert vector_call_args[1]["query_engine"] == mock_vector_engine
+            vector_metadata = vector_call_args[1]["metadata"]
+            assert vector_metadata.name == "hybrid_vector_search"
+            assert "BGE-Large" in vector_metadata.description
+            assert "SPLADE++" in vector_metadata.description
 
-                    # Verify logging
-                    assert len(tools) == 1
-                    mock_log_info.assert_called_with(
-                        "Fallback hybrid vector search tool added"
-                    )
-                    mock_log_warning.assert_called_with(
-                        "Knowledge Graph index not available - only vector search will be used"
-                    )
+            # Verify logging
+            assert len(tools) == 1
+            mock_log_info.assert_called_with("Fallback hybrid vector search tool added")
+            mock_log_warning.assert_called_with(
+                "Knowledge Graph index not available - only vector search will be used"
+            )
 
     @patch("agents.agent_utils.QueryEngineTool")
     def test_create_tools_no_reranker(
@@ -279,9 +275,9 @@ class TestCreateToolsFromIndex:
 
         with (
             patch("agents.agent_utils.settings", mock_settings),
-            pytest.raises(AttributeError)
+            pytest.raises(AttributeError),
         ):
-                create_tools_from_index(empty_index_data)
+            create_tools_from_index(empty_index_data)
 
 
 class TestCreateAgentWithTools:
@@ -316,7 +312,7 @@ class TestCreateAgentWithTools:
         mock_react_agent.return_value = mock_agent
 
         with patch("agents.agent_utils.logging.info") as mock_log_info:
-            result = create_agent_with_tools(mock_index_data_complete, mock_llm)
+            create_agent_with_tools(mock_index_data_complete, mock_llm)
 
             # Verify tools creation
             mock_create_tools.assert_called_once_with(mock_index_data_complete)
@@ -367,28 +363,28 @@ class TestCreateAgentWithTools:
 
         with (
             patch("agents.agent_utils.logging.error") as mock_log_error,
-            patch("agents.agent_utils.logging.warning") as mock_log_warning
+            patch("agents.agent_utils.logging.warning") as mock_log_warning,
         ):
-                result = create_agent_with_tools(mock_index_data_complete, mock_llm)
+            create_agent_with_tools(mock_index_data_complete, mock_llm)
 
-                # Verify error handling
-                mock_log_error.assert_called_once()
-                error_message = mock_log_error.call_args[0][0]
-                assert "ReActAgent creation failed" in error_message
+            # Verify error handling
+            mock_log_error.assert_called_once()
+            error_message = mock_log_error.call_args[0][0]
+            assert "ReActAgent creation failed" in error_message
 
-                # Verify fallback agent creation
-                assert mock_react_agent.call_count == 2
-                fallback_call = mock_react_agent.call_args_list[1]
-                assert fallback_call[0] == (mock_tools, mock_llm)  # Positional args
-                assert fallback_call[1]["verbose"] is True
+            # Verify fallback agent creation
+            assert mock_react_agent.call_count == 2
+            fallback_call = mock_react_agent.call_args_list[1]
+            assert fallback_call[0] == (mock_tools, mock_llm)  # Positional args
+            assert fallback_call[1]["verbose"] is True
 
-                # Verify fallback warning
-                mock_log_warning.assert_called_once()
-                warning_message = mock_log_warning.call_args[0][0]
-                assert "Using fallback ReActAgent configuration" in warning_message
-                assert "test_tool" in warning_message
+            # Verify fallback warning
+            mock_log_warning.assert_called_once()
+            warning_message = mock_log_warning.call_args[0][0]
+            assert "Using fallback ReActAgent configuration" in warning_message
+            assert "test_tool" in warning_message
 
-                assert result == mock_fallback_agent
+            assert result == mock_fallback_agent
 
     @patch("agents.agent_utils.create_tools_from_index")
     @patch("agents.agent_utils.ReActAgent.from_tools")
@@ -407,7 +403,7 @@ class TestCreateAgentWithTools:
         ]
 
         with patch("agents.agent_utils.logging.warning") as mock_log_warning:
-            result = create_agent_with_tools(mock_index_data_complete, mock_llm)
+            create_agent_with_tools(mock_index_data_complete, mock_llm)
 
             # Verify warning about empty tools
             warning_messages = [call[0][0] for call in mock_log_warning.call_args_list]
@@ -435,7 +431,7 @@ class TestAnalyzeDocumentsAgentic:
         mock_response.response = "Comprehensive analysis result"
         mock_agent.chat.return_value = mock_response
 
-        result = analyze_documents_agentic(
+        analyze_documents_agentic(
             mock_agent, mock_index_data_complete, "Comprehensive Document Analysis"
         )
 
@@ -479,7 +475,7 @@ class TestAnalyzeDocumentsAgentic:
         mock_react_agent.return_value = mock_fallback_agent
 
         with patch("agents.agent_utils.settings", mock_settings):
-            result = analyze_documents_agentic(
+            analyze_documents_agentic(
                 None,  # No agent provided
                 mock_index_data_complete,
                 "Basic Analysis",
@@ -563,12 +559,10 @@ class TestChatWithAgent:
 
         with (
             patch("agents.agent_utils.logging.error") as mock_log_error,
-            pytest.raises(Exception, match="Chat generation failed")
+            pytest.raises(Exception, match="Chat generation failed"),
         ):
-                async for chunk in chat_with_agent(
-                    mock_agent, "Test query", mock_memory
-                ):
-                    pass  # Should not reach here
+            async for chunk in chat_with_agent(mock_agent, "Test query", mock_memory):
+                pass  # Should not reach here
 
             # Verify error logging
             mock_log_error.assert_called_once()
@@ -797,9 +791,9 @@ class TestErrorHandling:
 
         with (
             patch("agents.agent_utils.settings", mock_settings),
-            pytest.raises((AttributeError, TypeError))
+            pytest.raises((AttributeError, TypeError)),
         ):
-                create_tools_from_index(invalid_index_data)
+            create_tools_from_index(invalid_index_data)
 
     def test_colbert_rerank_initialization_failure(
         self, mock_index_data_complete, mock_settings
@@ -811,9 +805,9 @@ class TestErrorHandling:
 
             with (
                 patch("agents.agent_utils.settings", mock_settings),
-                pytest.raises(Exception, match="Reranker init failed")
+                pytest.raises(Exception, match="Reranker init failed"),
             ):
-                    create_tools_from_index(mock_index_data_complete)
+                create_tools_from_index(mock_index_data_complete)
 
     @patch("agents.agent_utils.create_tools_from_index")
     def test_agent_creation_with_tool_creation_failure(

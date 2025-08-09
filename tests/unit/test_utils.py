@@ -192,7 +192,7 @@ def test_get_embed_model_with_gpu_optimization(
             mock_settings.dense_embedding_model = "BAAI/bge-large-en-v1.5"
             mock_settings.embedding_batch_size = 32
 
-            embed_model = get_embed_model()
+            get_embed_model()
 
             # Verify FastEmbed model creation with GPU providers
             mock_fastembed.assert_called_once_with(
@@ -306,7 +306,7 @@ def test_ensure_spacy_model_already_loaded(mock_spacy_load):
     mock_spacy_load.return_value = mock_nlp
 
     with patch("utils.utils.logging.info") as mock_log_info:
-        result = ensure_spacy_model("en_core_web_sm")
+        ensure_spacy_model("en_core_web_sm")
 
         assert result == mock_nlp
         mock_spacy_load.assert_called_once_with("en_core_web_sm")
@@ -332,7 +332,7 @@ def test_ensure_spacy_model_needs_download(mock_subprocess, mock_spacy_load):
     mock_subprocess.return_value = MagicMock(returncode=0)
 
     with patch("utils.utils.logging.info") as mock_log_info:
-        result = ensure_spacy_model("en_core_web_sm")
+        ensure_spacy_model("en_core_web_sm")
 
         assert result == mock_nlp
 
@@ -392,7 +392,7 @@ def test_ensure_spacy_model_import_error():
 
 
 @pytest.mark.parametrize(
-    "model_name,expected",
+    ("model_name", "expected"),
     [
         ("en_core_web_sm", "en_core_web_sm"),
         ("en_core_web_md", "en_core_web_md"),
@@ -408,7 +408,7 @@ def test_ensure_spacy_model_different_models(mock_spacy_load, model_name, expect
     mock_nlp = MagicMock()
     mock_spacy_load.return_value = mock_nlp
 
-    result = ensure_spacy_model(model_name)
+    ensure_spacy_model(model_name)
 
     assert result == mock_nlp
     mock_spacy_load.assert_called_once_with(expected)
@@ -445,7 +445,7 @@ def test_get_embed_model_gpu_memory_logging(mock_cuda_available):
         mock_props.return_value.total_memory = 32 * 1024**3  # 32GB
 
         with (
-            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
+            patch("utils.utils.FastEmbedEmbedding"),
             patch("utils.utils.settings") as mock_settings,
         ):
             mock_settings.gpu_acceleration = True

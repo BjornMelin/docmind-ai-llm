@@ -90,7 +90,7 @@ class TestAgentUtilsComprehensive:
 
             # Test error handling with different exception types
             test_error = ValueError("Test error")
-            result = handle_agent_error(test_error, context="test_context")
+            handle_agent_error(test_error, context="test_context")
 
             assert isinstance(result, dict)
             assert "error" in result
@@ -106,7 +106,7 @@ class TestAgentUtilsComprehensive:
                     "handled": True,
                 }
 
-            result = handle_agent_error(RuntimeError("Test"), "mock_context")
+            handle_agent_error(RuntimeError("Test"), "mock_context")
             assert result["error_type"] == "RuntimeError"
             assert result["context"] == "mock_context"
 
@@ -323,7 +323,7 @@ class TestAgentUtilsEdgeCases:
             from agents.agent_utils import format_agent_message
 
             # Should handle None gracefully
-            result = format_agent_message(None, "TestAgent")
+            format_agent_message(None, "TestAgent")
             assert isinstance(result, str)
 
         except ImportError:
@@ -333,7 +333,7 @@ class TestAgentUtilsEdgeCases:
                     message = "<None>"
                 return f"[{agent_name}]: {message}"
 
-            result = format_agent_message(None, "Test")
+            format_agent_message(None, "Test")
             assert "<None>" in result
 
     def test_agent_utils_memory_management(self):
@@ -384,7 +384,7 @@ class TestAgentUtilsEdgeCases:
             results = []
 
             def worker(worker_id):
-                result = thread_safe_agent_operation(f"worker_{worker_id}")
+                thread_safe_agent_operation(f"worker_{worker_id}")
                 results.append(result)
 
             # Start multiple threads
@@ -419,7 +419,7 @@ class TestAgentUtilsEdgeCases:
             results = []
 
             def worker(worker_id):
-                result = thread_safe_agent_operation(f"worker_{worker_id}")
+                thread_safe_agent_operation(f"worker_{worker_id}")
                 results.append(result)
 
             threads = []
@@ -675,12 +675,12 @@ class TestAgentUtilsIntegration:
 
         # Test successful retry scenario
         agent = MockResilientAgent()
-        result = agent.process_with_retry("success_task", should_fail=False)
+        agent.process_with_retry("success_task", should_fail=False)
         assert "completed on attempt 1" in result
 
         # Test retry with eventual success
         agent_retry = MockResilientAgent()
-        result = agent_retry.process_with_retry("retry_task", should_fail=True)
+        agent_retry.process_with_retry("retry_task", should_fail=True)
         assert "completed on attempt 3" in result
         assert len(agent_retry.get_error_history()) == 2  # First 2 attempts failed
 

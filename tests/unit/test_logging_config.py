@@ -116,7 +116,7 @@ class TestLoggingConfig:
         logger.info("Authorization bearer xyz")
 
         # Verify sensitive messages were redacted
-        sensitive_found = any(
+        (
             "[REDACTED - SENSITIVE INFORMATION]" in record.get("message", "")
             for record in captured_records
         )
@@ -320,7 +320,7 @@ class TestLoggingConfig:
         logger.error("Error message")
 
         # Check for log files (they should be created with date stamps)
-        log_files = list(log_dir.glob("*.log"))
+        (log_dir.glob("*.log"))
 
         # Should have at least some log files
         # Note: Exact file creation depends on loguru's internal behavior

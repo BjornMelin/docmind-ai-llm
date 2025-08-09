@@ -36,11 +36,11 @@ class TestGPUOptimization:
                 mock_settings_class.return_value = mock_settings
 
                 with patch("torch.cuda.is_available", return_value=True):
-                    embed_model = get_embed_model()
+                    get_embed_model()
 
                     mock_compile.assert_called_once()
                     assert mock_compile.call_args[1]["mode"] == "reduce-overhead"
-                    assert mock_compile.call_args[1]["dynamic"] == True
+                    assert mock_compile.call_args[1]["dynamic"]
 
     def test_cuda_streams_async(self):
         """Test CUDA streams for parallel operations in async context."""
@@ -58,17 +58,17 @@ class TestGPUOptimization:
                 patch("torch.cuda.is_available", return_value=True),
                 patch("utils.index_builder.AsyncQdrantClient"),
                 patch("utils.index_builder.setup_hybrid_qdrant_async"),
-                patch("llama_index.core.VectorStoreIndex.from_documents")
+                patch("llama_index.core.VectorStoreIndex.from_documents"),
             ):
-                            # Test stream creation in async context
-                            docs = [Document(text="test")]
-                            try:
-                                asyncio.run(create_index_async(docs, use_gpu=True))
-                                mock_stream_class.assert_called()
-                                mock_stream.synchronize.assert_called()
-                            except Exception:
-                                # Expected due to mocking, but stream should be created
-                                mock_stream_class.assert_called()
+                # Test stream creation in async context
+                docs = [Document(text="test")]
+                try:
+                    asyncio.run(create_index_async(docs, use_gpu=True))
+                    mock_stream_class.assert_called()
+                    mock_stream.synchronize.assert_called()
+                except Exception:
+                    # Expected due to mocking, but stream should be created
+                    mock_stream_class.assert_called()
 
     def test_cuda_streams_sync(self):
         """Test CUDA streams for parallel operations in sync context."""
@@ -86,17 +86,17 @@ class TestGPUOptimization:
                 patch("torch.cuda.is_available", return_value=True),
                 patch("qdrant_client.QdrantClient"),
                 patch("utils.index_builder.setup_hybrid_qdrant"),
-                patch("llama_index.core.VectorStoreIndex.from_documents")
+                patch("llama_index.core.VectorStoreIndex.from_documents"),
             ):
-                            # Test stream creation in sync context
-                            docs = [Document(text="test")]
-                            try:
-                                create_index(docs, use_gpu=True)
-                                mock_stream_class.assert_called()
-                                mock_stream.synchronize.assert_called()
-                            except Exception:
-                                # Expected due to mocking, but stream should be created
-                                mock_stream_class.assert_called()
+                # Test stream creation in sync context
+                docs = [Document(text="test")]
+                try:
+                    create_index(docs, use_gpu=True)
+                    mock_stream_class.assert_called()
+                    mock_stream.synchronize.assert_called()
+                except Exception:
+                    # Expected due to mocking, but stream should be created
+                    mock_stream_class.assert_called()
 
     def test_gpu_fallback_cuda_unavailable(self):
         """Test graceful fallback when CUDA unavailable."""
@@ -119,15 +119,15 @@ class TestGPUOptimization:
         """Test graceful fallback when GPU operations fail."""
         with (
             patch("torch.cuda.is_available", return_value=True),
-            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
         ):
-                # Simulate GPU failure
-                mock_fastembed.side_effect = Exception("GPU memory error")
+            # Simulate GPU failure
+            mock_fastembed.side_effect = Exception("GPU memory error")
 
-                from utils.utils import get_embed_model
+            from utils.utils import get_embed_model
 
-                with pytest.raises(Exception, match="GPU memory error"):
-                    get_embed_model()
+            with pytest.raises(Exception, match="GPU memory error"):
+                get_embed_model()
 
 
 class TestMixedPrecisionOptimization:
@@ -139,18 +139,18 @@ class TestMixedPrecisionOptimization:
 
         with (
             patch("torch.cuda.is_available", return_value=True),
-            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
         ):
-                mock_model = MagicMock()
-                mock_fastembed.return_value = mock_model
+            mock_model = MagicMock()
+            mock_fastembed.return_value = mock_model
 
-                embed_model = get_embed_model()
+            get_embed_model()
 
-                # Verify GPU providers are configured
-                call_kwargs = mock_fastembed.call_args[1]
-                assert "providers" in call_kwargs
-                assert "CUDAExecutionProvider" in call_kwargs["providers"]
-                assert "CPUExecutionProvider" in call_kwargs["providers"]
+            # Verify GPU providers are configured
+            call_kwargs = mock_fastembed.call_args[1]
+            assert "providers" in call_kwargs
+            assert "CUDAExecutionProvider" in call_kwargs["providers"]
+            assert "CPUExecutionProvider" in call_kwargs["providers"]
 
     def test_embedding_batch_size_configuration(self):
         """Test embedding batch size configuration for GPU optimization."""
@@ -199,34 +199,32 @@ class TestProfilingAndDebugMode:
 
             with (
                 patch("torch.cuda.is_available", return_value=True),
-                patch("torch.profiler.profile") as mock_profile
+                patch("torch.profiler.profile") as mock_profile,
             ):
-                    mock_profiler = MagicMock()
-                    mock_profile.return_value = mock_profiler
-                    mock_profiler.__enter__ = MagicMock(return_value=mock_profiler)
-                    mock_profiler.__exit__ = MagicMock(return_value=None)
+                mock_profiler = MagicMock()
+                mock_profile.return_value = mock_profiler
+                mock_profiler.__enter__ = MagicMock(return_value=mock_profiler)
+                mock_profiler.__exit__ = MagicMock(return_value=None)
 
-                    with (
-                        patch("utils.index_builder.AsyncQdrantClient"),
-                        patch("utils.index_builder.setup_hybrid_qdrant_async"),
-                        patch(
-                    ):
-                                "llama_index.core.VectorStoreIndex.from_documents"
-                            ):
-                                docs = [Document(text="test")]
+                with (
+                    patch("utils.index_builder.AsyncQdrantClient"),
+                    patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                    patch("llama_index.core.VectorStoreIndex.from_documents"),
+                ):
+                    docs = [Document(text="test")]
 
-                                try:
-                                    await create_index_async(docs, use_gpu=True)
-                                except Exception:
-                                    pass  # Expected due to mocking
+                    try:
+                        await create_index_async(docs, use_gpu=True)
+                    except Exception:
+                        pass  # Expected due to mocking
 
-                                # Verify profiling was attempted
-                                if torch.cuda.is_available():
-                                    mock_profile.assert_called()
-                                    # Verify profiler export was called
-                                    mock_profiler.export_chrome_trace.assert_called_with(
-                                        "gpu_trace.json"
-                                    )
+                    # Verify profiling was attempted
+                    if torch.cuda.is_available():
+                        mock_profile.assert_called()
+                        # Verify profiler export was called
+                        mock_profiler.export_chrome_trace.assert_called_with(
+                            "gpu_trace.json"
+                        )
 
     def test_gpu_profiling_in_debug_mode_sync(self):
         """Test GPU profiling in debug mode for sync operations."""
@@ -249,33 +247,31 @@ class TestProfilingAndDebugMode:
 
             with (
                 patch("torch.cuda.is_available", return_value=True),
-                patch("torch.profiler.profile") as mock_profile
+                patch("torch.profiler.profile") as mock_profile,
             ):
-                    mock_profiler = MagicMock()
-                    mock_profile.return_value = mock_profiler
-                    mock_profiler.__enter__ = MagicMock(return_value=mock_profiler)
-                    mock_profiler.__exit__ = MagicMock(return_value=None)
+                mock_profiler = MagicMock()
+                mock_profile.return_value = mock_profiler
+                mock_profiler.__enter__ = MagicMock(return_value=mock_profiler)
+                mock_profiler.__exit__ = MagicMock(return_value=None)
 
-                    with (
-                        patch("qdrant_client.QdrantClient"),
-                        patch("utils.index_builder.setup_hybrid_qdrant"),
-                        patch(
-                    ):
-                                "llama_index.core.VectorStoreIndex.from_documents"
-                            ):
-                                docs = [Document(text="test")]
+                with (
+                    patch("qdrant_client.QdrantClient"),
+                    patch("utils.index_builder.setup_hybrid_qdrant"),
+                    patch("llama_index.core.VectorStoreIndex.from_documents"),
+                ):
+                    docs = [Document(text="test")]
 
-                                try:
-                                    create_index(docs, use_gpu=True)
-                                except Exception:
-                                    pass  # Expected due to mocking
+                    try:
+                        create_index(docs, use_gpu=True)
+                    except Exception:
+                        pass  # Expected due to mocking
 
-                                # Verify profiling was attempted
-                                if torch.cuda.is_available():
-                                    mock_profile.assert_called()
-                                    mock_profiler.export_chrome_trace.assert_called_with(
-                                        "gpu_trace.json"
-                                    )
+                    # Verify profiling was attempted
+                    if torch.cuda.is_available():
+                        mock_profile.assert_called()
+                        mock_profiler.export_chrome_trace.assert_called_with(
+                            "gpu_trace.json"
+                        )
 
     def test_gpu_info_logging(self):
         """Test GPU information logging."""
@@ -284,27 +280,25 @@ class TestProfilingAndDebugMode:
         with (
             patch("torch.cuda.is_available", return_value=True),
             patch("torch.cuda.get_device_name", return_value="Tesla V100"),
-            patch("torch.cuda.get_device_properties") as mock_props
+            patch("torch.cuda.get_device_properties") as mock_props,
         ):
-                    mock_device_props = MagicMock()
-                    mock_device_props.total_memory = 32 * 1024**3  # 32GB
-                    mock_props.return_value = mock_device_props
+            mock_device_props = MagicMock()
+            mock_device_props.total_memory = 32 * 1024**3  # 32GB
+            mock_props.return_value = mock_device_props
 
-                    with (
-                        patch("utils.utils.FastEmbedEmbedding"),
-                        patch("logging.info") as mock_log
-                    ):
-                            get_embed_model()
+            with (
+                patch("utils.utils.FastEmbedEmbedding"),
+                patch("logging.info") as mock_log,
+            ):
+                get_embed_model()
 
-                            # Should log GPU information
-                            log_calls = [str(call) for call in mock_log.call_args_list]
-                            gpu_logged = any(
-                                "Tesla V100" in log_call and "32.0GB" in log_call
-                                for log_call in log_calls
-                            )
-                            assert gpu_logged or any(
-                                "GPU:" in log_call for log_call in log_calls
-                            )
+                # Should log GPU information
+                log_calls = [str(call) for call in mock_log.call_args_list]
+                gpu_logged = any(
+                    "Tesla V100" in log_call and "32.0GB" in log_call
+                    for log_call in log_calls
+                )
+                assert gpu_logged or any("GPU:" in log_call for log_call in log_calls)
 
 
 @pytest.mark.benchmark
@@ -321,20 +315,18 @@ class TestPerformanceBenchmarks:
 
         with (
             patch("torch.cuda.is_available", return_value=False),
-            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
         ):
-                mock_model = MagicMock()
-                # Mock realistic embedding output
-                mock_model.embed_documents.return_value = [
-                    [0.1] * 1024 for _ in range(100)
-                ]
-                mock_fastembed.return_value = mock_model
+            mock_model = MagicMock()
+            # Mock realistic embedding output
+            mock_model.embed_documents.return_value = [[0.1] * 1024 for _ in range(100)]
+            mock_fastembed.return_value = mock_model
 
-                embed_model = get_embed_model()
-                texts = ["test text"] * 100
+            embed_model = get_embed_model()
+            texts = ["test text"] * 100
 
-                result = benchmark(embed_model.embed_documents, texts)
-                assert len(result) == 100
+            benchmark(embed_model.embed_documents, texts)
+            assert len(result) == 100
 
     @pytest.mark.skipif(
         not torch.cuda.is_available() or not pytest.importorskip("pytest_benchmark"),
@@ -353,7 +345,7 @@ class TestPerformanceBenchmarks:
             embed_model = get_embed_model()
             texts = ["test text"] * 100
 
-            result = benchmark(embed_model.embed_documents, texts)
+            benchmark(embed_model.embed_documents, texts)
             assert len(result) == 100
 
     def test_batch_size_optimization(self):
@@ -380,64 +372,60 @@ class TestHardwareDetection:
         with (
             patch("torch.cuda.is_available", return_value=True),
             patch("torch.cuda.get_device_name", return_value="RTX 4090"),
-            patch("torch.cuda.get_device_properties") as mock_props
+            patch("torch.cuda.get_device_properties") as mock_props,
         ):
-                    mock_device_props = MagicMock()
-                    mock_device_props.total_memory = 24 * 1024**3  # 24GB
-                    mock_props.return_value = mock_device_props
+            mock_device_props = MagicMock()
+            mock_device_props.total_memory = 24 * 1024**3  # 24GB
+            mock_props.return_value = mock_device_props
 
-                    with patch(
-                        "utils.utils.ModelManager.get_text_embedding_model"
-                    ) as mock_model:
-                        mock_embedding_model = MagicMock()
-                        mock_embedding_model.model.model.get_providers.return_value = [
-                            "CUDAExecutionProvider",
-                            "CPUExecutionProvider",
-                        ]
-                        mock_model.return_value = mock_embedding_model
-
-                        hardware = detect_hardware()
-
-                        assert hardware["cuda_available"] is True
-                        assert hardware["gpu_name"] == "RTX 4090"
-                        assert hardware["vram_total_gb"] == 24.0
-                        assert (
-                            "CUDAExecutionProvider" in hardware["fastembed_providers"]
-                        )
-
-    def test_detect_hardware_without_gpu(self):
-        """Test hardware detection when GPU is not available."""
-        from utils.utils import detect_hardware
-
-        with patch("torch.cuda.is_available", return_value=False):
             with patch(
                 "utils.utils.ModelManager.get_text_embedding_model"
             ) as mock_model:
                 mock_embedding_model = MagicMock()
                 mock_embedding_model.model.model.get_providers.return_value = [
-                    "CPUExecutionProvider"
+                    "CUDAExecutionProvider",
+                    "CPUExecutionProvider",
                 ]
                 mock_model.return_value = mock_embedding_model
 
                 hardware = detect_hardware()
 
-                assert hardware["cuda_available"] is False
-                assert hardware["fastembed_providers"] == ["CPUExecutionProvider"]
+                assert hardware["cuda_available"] is True
+                assert hardware["gpu_name"] == "RTX 4090"
+                assert hardware["vram_total_gb"] == 24.0
+                assert "CUDAExecutionProvider" in hardware["fastembed_providers"]
+
+    def test_detect_hardware_without_gpu(self):
+        """Test hardware detection when GPU is not available."""
+        from utils.utils import detect_hardware
+
+        with patch("torch.cuda.is_available", return_value=False), patch(
+            "utils.utils.ModelManager.get_text_embedding_model"
+        ) as mock_model:
+            mock_embedding_model = MagicMock()
+            mock_embedding_model.model.model.get_providers.return_value = [
+                "CPUExecutionProvider"
+            ]
+            mock_model.return_value = mock_embedding_model
+
+            hardware = detect_hardware()
+
+            assert hardware["cuda_available"] is False
+            assert hardware["fastembed_providers"] == ["CPUExecutionProvider"]
 
     def test_detect_hardware_fallback(self):
         """Test hardware detection fallback when FastEmbed detection fails."""
         from utils.utils import detect_hardware
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch(
-                "utils.utils.ModelManager.get_text_embedding_model",
-                side_effect=Exception("Model loading failed"),
-            ):
-                hardware = detect_hardware()
+        with patch("torch.cuda.is_available", return_value=True), patch(
+            "utils.utils.ModelManager.get_text_embedding_model",
+            side_effect=Exception("Model loading failed"),
+        ):
+            hardware = detect_hardware()
 
-                # Should fallback to basic torch detection
-                assert hardware["cuda_available"] is True
-                assert hardware["gpu_name"] == "Unknown"
+            # Should fallback to basic torch detection
+            assert hardware["cuda_available"] is True
+            assert hardware["gpu_name"] == "Unknown"
 
 
 class TestAsyncGPUOperations:
@@ -452,24 +440,24 @@ class TestAsyncGPUOperations:
 
         with (
             patch("torch.cuda.is_available", return_value=True),
-            patch("utils.index_builder.AsyncQdrantClient") as mock_client
+            patch("utils.index_builder.AsyncQdrantClient") as mock_client,
         ):
-                mock_async_client = MagicMock()
-                mock_client.return_value = mock_async_client
+            mock_async_client = MagicMock()
+            mock_client.return_value = mock_async_client
 
-                with (
-                    patch("utils.index_builder.setup_hybrid_qdrant_async"),
-                    patch("llama_index.core.VectorStoreIndex.from_documents")
-                ):
-                        docs = [Document(text="test document")]
+            with (
+                patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                patch("llama_index.core.VectorStoreIndex.from_documents"),
+            ):
+                docs = [Document(text="test document")]
 
-                        try:
-                            result = await create_index_async(docs, use_gpu=True)
-                            # Should clean up async client
-                            mock_async_client.close.assert_called()
-                        except Exception:
-                            # Even on failure, should attempt cleanup
-                            pass
+                try:
+                    await create_index_async(docs, use_gpu=True)
+                    # Should clean up async client
+                    mock_async_client.close.assert_called()
+                except Exception:
+                    # Even on failure, should attempt cleanup
+                    pass
 
     @pytest.mark.asyncio
     async def test_async_concurrent_embedding_operations(self):
@@ -516,31 +504,25 @@ class TestFastEmbedGPUAcceleration:
             patch("utils.index_builder.SparseTextEmbedding") as mock_sparse,
             patch("qdrant_client.QdrantClient"),
             patch("utils.index_builder.setup_hybrid_qdrant"),
-            patch(
+            patch("llama_index.core.VectorStoreIndex.from_documents"),
         ):
-                                "llama_index.core.VectorStoreIndex.from_documents"
-                            ):
-                                docs = [Document(text="test")]
+            docs = [Document(text="test")]
 
-                                try:
-                                    create_index(docs, use_gpu=True)
-                                except Exception:
-                                    pass  # Expected due to mocking
+            try:
+                create_index(docs, use_gpu=True)
+            except Exception:
+                pass  # Expected due to mocking
 
-                                # Verify both dense and sparse models use GPU providers
-                                dense_call_args = mock_fastembed.call_args[1]
-                                sparse_call_args = mock_sparse.call_args[1]
+            # Verify both dense and sparse models use GPU providers
+            dense_call_args = mock_fastembed.call_args[1]
+            sparse_call_args = mock_sparse.call_args[1]
 
-                                expected_providers = [
-                                    "CUDAExecutionProvider",
-                                    "CPUExecutionProvider",
-                                ]
-                                assert (
-                                    dense_call_args["providers"] == expected_providers
-                                )
-                                assert (
-                                    sparse_call_args["providers"] == expected_providers
-                                )
+            expected_providers = [
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ]
+            assert dense_call_args["providers"] == expected_providers
+            assert sparse_call_args["providers"] == expected_providers
 
     def test_fastembed_cache_directory_configuration(self):
         """Test FastEmbed cache directory is properly configured."""
@@ -563,27 +545,21 @@ class TestFastEmbedGPUAcceleration:
             patch("utils.index_builder.SparseTextEmbedding") as mock_sparse,
             patch("qdrant_client.QdrantClient"),
             patch("utils.index_builder.setup_hybrid_qdrant"),
-            patch("llama_index.core.VectorStoreIndex.from_documents")
+            patch("llama_index.core.VectorStoreIndex.from_documents"),
         ):
-                            docs = [Document(text="test")]
+            docs = [Document(text="test")]
 
-                            try:
-                                create_index(docs, use_gpu=True)
-                            except Exception:
-                                pass  # Expected due to mocking
+            try:
+                create_index(docs, use_gpu=True)
+            except Exception:
+                pass  # Expected due to mocking
 
-                            # Verify model names
-                            dense_call_args = mock_fastembed.call_args[1]
-                            sparse_call_args = mock_sparse.call_args[1]
+            # Verify model names
+            dense_call_args = mock_fastembed.call_args[1]
+            sparse_call_args = mock_sparse.call_args[1]
 
-                            assert (
-                                dense_call_args["model_name"]
-                                == "BAAI/bge-large-en-v1.5"
-                            )
-                            assert (
-                                sparse_call_args["model_name"]
-                                == "prithivida/Splade_PP_en_v1"
-                            )
+            assert dense_call_args["model_name"] == "BAAI/bge-large-en-v1.5"
+            assert sparse_call_args["model_name"] == "prithivida/Splade_PP_en_v1"
 
 
 class TestEmbeddingPipelineIntegration:
@@ -630,37 +606,29 @@ class TestEmbeddingPipelineIntegration:
             patch("utils.index_builder.FastEmbedEmbedding") as mock_dense,
             patch("utils.index_builder.SparseTextEmbedding") as mock_sparse,
             patch("qdrant_client.QdrantClient"),
-            patch(
+            patch("utils.index_builder.setup_hybrid_qdrant") as mock_setup,patch(
+            "llama_index.core.VectorStoreIndex.from_documents"
+        ), patch("utils.index_builder.create_hybrid_retriever")
         ):
-                            "utils.index_builder.setup_hybrid_qdrant"
-                        ) as mock_setup:
-                            with patch(
-                                "llama_index.core.VectorStoreIndex.from_documents"
-                            ) as mock_index:
-                                with patch(
-                                    "utils.index_builder.create_hybrid_retriever"
-                                ):
-                                    docs = [Document(text="Integration test document")]
+            docs = [Document(text="Integration test document")]
 
-                                    try:
-                                        result = create_index(docs, use_gpu=True)
-                                    except Exception:
-                                        pass  # Expected due to mocking
+            try:
+                create_index(docs, use_gpu=True)
+            except Exception:
+                pass  # Expected due to mocking
 
-                                    # Verify all components were initialized
-                                    mock_dense.assert_called()
-                                    mock_sparse.assert_called()
-                                    mock_setup.assert_called()
+            # Verify all components were initialized
+            mock_dense.assert_called()
+            mock_sparse.assert_called()
+            mock_setup.assert_called()
 
-                                    # Verify GPU providers were configured
-                                    dense_args = mock_dense.call_args[1]
-                                    sparse_args = mock_sparse.call_args[1]
+            # Verify GPU providers were configured
+            dense_args = mock_dense.call_args[1]
+            sparse_args = mock_sparse.call_args[1]
 
-                                    expected_providers = [
-                                        "CUDAExecutionProvider",
-                                        "CPUExecutionProvider",
-                                    ]
-                                    assert dense_args["providers"] == expected_providers
-                                    assert (
-                                        sparse_args["providers"] == expected_providers
-                                    )
+            expected_providers = [
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ]
+            assert dense_args["providers"] == expected_providers
+            assert sparse_args["providers"] == expected_providers

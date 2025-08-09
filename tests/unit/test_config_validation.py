@@ -216,7 +216,7 @@ class TestStartupConfigurationValidation:
         mock_client.get_collections.return_value = []
 
         settings = AppSettings()
-        result = validate_startup_configuration(settings)
+        validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert len(result["info"]) > 0
@@ -248,7 +248,7 @@ class TestStartupConfigurationValidation:
         mock_cuda_available.return_value = False
 
         settings = AppSettings(gpu_acceleration=True)
-        result = validate_startup_configuration(settings)
+        validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert any(
@@ -286,7 +286,7 @@ class TestStartupConfigurationValidation:
             enable_sparse_embeddings=True,
             rrf_fusion_alpha=5,  # Outside typical range
         )
-        result = validate_startup_configuration(settings)
+        validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert any(
@@ -355,7 +355,7 @@ class TestValidationIntegration:
             chunk_overlap=200,
         )
 
-        result = validate_startup_configuration(settings)
+        validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert len(result["errors"]) == 0

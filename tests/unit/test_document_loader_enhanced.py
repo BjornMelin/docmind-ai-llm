@@ -59,24 +59,24 @@ class TestExtractImagesFromPDF:
                 # Mock PIL Image processing
                 with (
                     patch("io.BytesIO"),
-                    patch("PIL.Image.open") as mock_pil_open
+                    patch("PIL.Image.open") as mock_pil_open,
                 ):
-                        mock_img = MagicMock()
-                        mock_img.size = (640, 480)
-                        mock_img.__enter__ = MagicMock(return_value=mock_img)
-                        mock_img.__exit__ = MagicMock(return_value=None)
-                        mock_pil_open.return_value = mock_img
+                    mock_img = MagicMock()
+                    mock_img.size = (640, 480)
+                    mock_img.__enter__ = MagicMock(return_value=mock_img)
+                    mock_img.__exit__ = MagicMock(return_value=None)
+                    mock_pil_open.return_value = mock_img
 
-                        # Mock image save to base64
-                        with patch("base64.b64encode", return_value=b"base64data"):
-                            result = extract_images_from_pdf(str(pdf_path))
+                    # Mock image save to base64
+                    with patch("base64.b64encode", return_value=b"base64data"):
+                        extract_images_from_pdf(str(pdf_path))
 
-                            assert len(result) == 1
-                            assert result[0]["page_number"] == 1
-                            assert result[0]["image_index"] == 0
-                            assert result[0]["format"] == "PNG"
-                            assert result[0]["size"] == (640, 480)
-                            assert result[0]["image_data"] == "base64data"
+                        assert len(result) == 1
+                        assert result[0]["page_number"] == 1
+                        assert result[0]["image_index"] == 0
+                        assert result[0]["format"] == "PNG"
+                        assert result[0]["size"] == (640, 480)
+                        assert result[0]["image_data"] == "base64data"
 
     def test_extract_images_from_pdf_file_not_found(self, tmp_path):
         """Test handling of non-existent PDF file."""
@@ -92,9 +92,9 @@ class TestExtractImagesFromPDF:
 
         with (
             patch("fitz.open", side_effect=RuntimeError("Corrupted PDF")),
-            pytest.raises(DocumentLoadingError)
+            pytest.raises(DocumentLoadingError),
         ):
-                extract_images_from_pdf(str(pdf_path))
+            extract_images_from_pdf(str(pdf_path))
 
     def test_extract_images_from_pdf_no_images(self, tmp_path):
         """Test PDF with no images."""
@@ -113,7 +113,7 @@ class TestExtractImagesFromPDF:
             # No images in PDF
             mock_page.get_images.return_value = []
 
-            result = extract_images_from_pdf(str(pdf_path))
+            extract_images_from_pdf(str(pdf_path))
 
             assert result == []
 
@@ -142,7 +142,7 @@ class TestExtractImagesFromPDF:
                 mock_pixmap.alpha = 1
                 mock_pixmap_class.return_value = mock_pixmap
 
-                result = extract_images_from_pdf(str(pdf_path))
+                extract_images_from_pdf(str(pdf_path))
 
                 # CMYK images should be skipped
                 assert result == []
@@ -166,7 +166,7 @@ class TestCreateNativeMultimodalEmbeddings:
             mock_model.embed_text.return_value = [mock_text_embedding]
             mock_get_model.return_value = mock_model
 
-            result = create_native_multimodal_embeddings("test text")
+            create_native_multimodal_embeddings("test text")
 
             assert result["provider_used"] == "fastembed_native_multimodal"
             assert result["text_embedding"] == [0.1, 0.2, 0.3]
@@ -205,11 +205,9 @@ class TestCreateNativeMultimodalEmbeddings:
             with (
                 patch("tempfile.gettempdir", return_value="/tmp"),
                 patch("builtins.open", create=True),
-                patch("os.unlink")
+                patch("os.unlink"),
             ):
-                        result = create_native_multimodal_embeddings(
-                            "test text", images
-                        )
+                create_native_multimodal_embeddings("test text", images)
 
             assert result["provider_used"] == "fastembed_native_multimodal"
             assert result["text_embedding"] == [0.1, 0.2, 0.3]
@@ -227,7 +225,7 @@ class TestCreateNativeMultimodalEmbeddings:
                 mock_model.get_text_embedding.return_value = [0.1, 0.2, 0.3]
                 mock_fastembed.return_value = mock_model
 
-                result = create_native_multimodal_embeddings("test text")
+                create_native_multimodal_embeddings("test text")
 
                 assert result["provider_used"] == "fastembed_text_only"
                 assert result["text_embedding"] == [0.1, 0.2, 0.3]
@@ -243,7 +241,7 @@ class TestCreateNativeMultimodalEmbeddings:
                 side_effect=RuntimeError("FastEmbed failed"),
             ):
                 # Should trigger fallback decorator
-                result = create_native_multimodal_embeddings("test text")
+                create_native_multimodal_embeddings("test text")
 
                 # Fallback decorator should return default values
                 assert result["text_embedding"] is None
@@ -269,7 +267,7 @@ class TestCreateNativeMultimodalEmbeddings:
             mock_get_model.return_value = mock_model
 
             # Should handle invalid base64 gracefully
-            result = create_native_multimodal_embeddings("test text", invalid_images)
+            create_native_multimodal_embeddings("test text", invalid_images)
 
             # Text embedding should still work
             assert result["text_embedding"] == [0.1, 0.2, 0.3]
@@ -321,7 +319,7 @@ class TestLoadDocumentsUnstructured:
                     mock_settings.chunk_size = 1024
                     mock_settings.chunk_overlap = 200
 
-                    result = load_documents_unstructured(str(pdf_path))
+                    load_documents_unstructured(str(pdf_path))
 
                     assert len(result) == 3  # Title, text, and image
 
@@ -357,7 +355,7 @@ class TestLoadDocumentsUnstructured:
                     fallback_docs = [Document(text="Fallback content")]
                     mock_llama_load.return_value = fallback_docs
 
-                    result = load_documents_unstructured(str(pdf_path))
+                    load_documents_unstructured(str(pdf_path))
 
                     assert result == fallback_docs
                     mock_llama_load.assert_called_once()
@@ -397,7 +395,7 @@ class TestLoadDocumentsUnstructured:
                     with patch("utils.document_loader.settings") as mock_settings:
                         mock_settings.chunk_size = 500
 
-                        result = load_documents_unstructured(str(pdf_path))
+                        load_documents_unstructured(str(pdf_path))
 
                         # Should call chunking function
                         mock_chunk.assert_called_once()
@@ -436,14 +434,14 @@ class TestLoadDocumentsLlama:
 
                     with (
                         patch("os.path.exists", return_value=True),
-                        patch("os.remove")
+                        patch("os.remove"),
                     ):
-                            result = load_documents_llama([mock_file])
+                        load_documents_llama([mock_file])
 
-                            assert len(result) == 1
-                            assert result[0].text == "Parsed content"
-                            assert result[0].metadata["source"] == "test.pdf"
-                            assert result[0].metadata["type"] == "standard_document"
+                        assert len(result) == 1
+                        assert result[0].text == "Parsed content"
+                        assert result[0].metadata["source"] == "test.pdf"
+                        assert result[0].metadata["type"] == "standard_document"
 
     def test_load_documents_llama_pdf_multimodal(self):
         """Test PDF loading with multimodal processing."""
@@ -483,18 +481,16 @@ class TestLoadDocumentsLlama:
 
                             with (
                                 patch("os.path.exists", return_value=True),
-                                patch("os.remove")
+                                patch("os.remove"),
                             ):
-                                    result = load_documents_llama(
-                                        [mock_file], enable_multimodal=True
-                                    )
+                                load_documents_llama(
+                                    [mock_file], enable_multimodal=True
+                                )
 
-                                    assert len(result) == 1
-                                    assert (
-                                        result[0].metadata["type"] == "pdf_multimodal"
-                                    )
-                                    assert result[0].metadata["has_images"] is True
-                                    assert result[0].metadata["image_count"] == 1
+                                assert len(result) == 1
+                                assert result[0].metadata["type"] == "pdf_multimodal"
+                                assert result[0].metadata["has_images"] is True
+                                assert result[0].metadata["image_count"] == 1
 
     def test_load_documents_llama_video_processing(self):
         """Test video file processing with Whisper transcription."""
@@ -519,30 +515,28 @@ class TestLoadDocumentsLlama:
 
                 with (
                     patch("torch.cuda.is_available", return_value=True),
-                    patch("PIL.Image.fromarray") as mock_pil
+                    patch("PIL.Image.fromarray") as mock_pil,
                 ):
-                        mock_image = Mock()
-                        mock_pil.return_value = mock_image
+                    mock_image = Mock()
+                    mock_pil.return_value = mock_image
 
-                        with patch("tempfile.NamedTemporaryFile") as mock_temp:
-                            mock_temp_file = Mock()
-                            mock_temp_file.name = "/tmp/video.mp4"
-                            mock_temp_file.__enter__ = Mock(return_value=mock_temp_file)
-                            mock_temp_file.__exit__ = Mock(return_value=None)
-                            mock_temp.return_value = mock_temp_file
+                    with patch("tempfile.NamedTemporaryFile") as mock_temp:
+                        mock_temp_file = Mock()
+                        mock_temp_file.name = "/tmp/video.mp4"
+                        mock_temp_file.__enter__ = Mock(return_value=mock_temp_file)
+                        mock_temp_file.__exit__ = Mock(return_value=None)
+                        mock_temp.return_value = mock_temp_file
 
-                            with (
-                                patch("os.path.exists", return_value=True),
-                                patch("os.remove")
-                            ):
-                                    result = load_documents_llama(
-                                        [mock_file], parse_media=True
-                                    )
+                        with (
+                            patch("os.path.exists", return_value=True),
+                            patch("os.remove"),
+                        ):
+                            load_documents_llama([mock_file], parse_media=True)
 
-                                    assert len(result) == 1
-                                    assert result[0].text == "Transcribed audio content"
-                                    assert result[0].metadata["type"] == "video"
-                                    assert "images" in result[0].metadata
+                            assert len(result) == 1
+                            assert result[0].text == "Transcribed audio content"
+                            assert result[0].metadata["type"] == "video"
+                            assert "images" in result[0].metadata
 
     def test_load_documents_llama_audio_processing(self):
         """Test audio file processing with Whisper transcription."""
@@ -558,23 +552,23 @@ class TestLoadDocumentsLlama:
 
             with (
                 patch("torch.cuda.is_available", return_value=False),
-                patch("tempfile.NamedTemporaryFile") as mock_temp
+                patch("tempfile.NamedTemporaryFile") as mock_temp,
             ):
-                    mock_temp_file = Mock()
-                    mock_temp_file.name = "/tmp/audio.mp3"
-                    mock_temp_file.__enter__ = Mock(return_value=mock_temp_file)
-                    mock_temp_file.__exit__ = Mock(return_value=None)
-                    mock_temp.return_value = mock_temp_file
+                mock_temp_file = Mock()
+                mock_temp_file.name = "/tmp/audio.mp3"
+                mock_temp_file.__enter__ = Mock(return_value=mock_temp_file)
+                mock_temp_file.__exit__ = Mock(return_value=None)
+                mock_temp.return_value = mock_temp_file
 
-                    with (
-                        patch("os.path.exists", return_value=True),
-                        patch("os.remove")
-                    ):
-                            result = load_documents_llama([mock_file], parse_media=True)
+                with (
+                    patch("os.path.exists", return_value=True),
+                    patch("os.remove"),
+                ):
+                    load_documents_llama([mock_file], parse_media=True)
 
-                            assert len(result) == 1
-                            assert result[0].text == "Transcribed audio content"
-                            assert result[0].metadata["type"] == "audio"
+                    assert len(result) == 1
+                    assert result[0].text == "Transcribed audio content"
+                    assert result[0].metadata["type"] == "audio"
 
     def test_load_documents_llama_error_handling(self):
         """Test error handling in document loading."""
@@ -585,7 +579,7 @@ class TestLoadDocumentsLlama:
         with patch(
             "tempfile.NamedTemporaryFile", side_effect=OSError("Temp file error")
         ):
-            result = load_documents_llama([mock_file])
+            load_documents_llama([mock_file])
 
             # Should handle error gracefully and return empty list
             assert result == []
@@ -619,7 +613,7 @@ class TestChunkDocumentsStructured:
                 mock_settings.chunk_size = 1024
                 mock_settings.chunk_overlap = 200
 
-                result = chunk_documents_structured(docs)
+                chunk_documents_structured(docs)
 
                 # Should have: short doc (unchanged) + 2 chunks + image (unchanged)
                 assert len(result) >= 3
@@ -630,14 +624,14 @@ class TestChunkDocumentsStructured:
 
     def test_chunk_documents_structured_empty_list(self):
         """Test chunking with empty document list."""
-        result = chunk_documents_structured([])
+        chunk_documents_structured([])
         assert result == []
 
     def test_chunk_documents_structured_only_images(self):
         """Test chunking with only image documents."""
         docs = [ImageDocument(image="base64data1"), ImageDocument(image="base64data2")]
 
-        result = chunk_documents_structured(docs)
+        chunk_documents_structured(docs)
 
         # Image documents should pass through unchanged
         assert len(result) == 2
@@ -713,7 +707,7 @@ class TestAsyncFunctions:
             with patch("asyncio.to_thread") as mock_to_thread:
                 mock_to_thread.return_value = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]
 
-                result = await batch_embed_documents(docs, batch_size=2)
+                await batch_embed_documents(docs, batch_size=2)
 
                 assert len(result) == 3
                 assert result[0] == [0.1, 0.2]
@@ -742,7 +736,7 @@ class TestAsyncFunctions:
                 with patch("utils.document_loader.settings") as mock_settings:
                     mock_settings.dense_embedding_dimension = 2
 
-                    result = await batch_embed_documents(docs, batch_size=1)
+                    await batch_embed_documents(docs, batch_size=1)
 
                     # Should have one successful embedding and one fallback
                     assert len(result) == 2
@@ -872,7 +866,7 @@ class TestErrorRecoveryScenarios:
                     mock_settings.parse_strategy = "hi_res"
                     mock_settings.chunk_size = 0  # Disable chunking
 
-                    result = load_documents_unstructured(str(pdf_path))
+                    load_documents_unstructured(str(pdf_path))
 
                     # After processing, image_base64 should be cleared for memory cleanup
                     assert mock_elements[0].metadata.image_base64 is None
@@ -896,15 +890,15 @@ class TestErrorRecoveryScenarios:
             ):
                 with (
                     patch("os.path.exists", return_value=True),
-                    patch("os.remove") as mock_remove
+                    patch("os.remove") as mock_remove,
                 ):
-                        result = load_documents_llama([mock_file])
+                    load_documents_llama([mock_file])
 
-                        # Should handle error gracefully
-                        assert result == []
+                    # Should handle error gracefully
+                    assert result == []
 
-                        # Temporary file should still be cleaned up
-                        mock_remove.assert_called_with("/tmp/error.pdf")
+                    # Temporary file should still be cleaned up
+                    mock_remove.assert_called_with("/tmp/error.pdf")
 
     @pytest.mark.asyncio
     async def test_batch_embed_documents_model_initialization_failure(self):
@@ -948,13 +942,13 @@ class TestPerformanceAndMonitoring:
         """Test performance logging in embedding creation."""
         with (
             patch("utils.document_loader.ModelManager.get_multimodal_embedding_model"),
-            patch("utils.document_loader.log_performance") as mock_log_perf
+            patch("utils.document_loader.log_performance") as mock_log_perf,
         ):
-                create_native_multimodal_embeddings("test")
+            create_native_multimodal_embeddings("test")
 
-                mock_log_perf.assert_called_once()
-                call_args = mock_log_perf.call_args[0]
-                assert call_args[0] == "multimodal_embedding_creation"
+            mock_log_perf.assert_called_once()
+            call_args = mock_log_perf.call_args[0]
+            assert call_args[0] == "multimodal_embedding_creation"
 
     def test_load_documents_llama_performance_logging(self):
         """Test performance logging in LlamaParse loading."""
@@ -964,26 +958,24 @@ class TestPerformanceAndMonitoring:
 
         with (
             patch("utils.document_loader.LlamaParse"),
-            patch("utils.document_loader.SimpleDirectoryReader") as mock_reader
+            patch("utils.document_loader.SimpleDirectoryReader") as mock_reader,
         ):
-                mock_reader.return_value.load_data.return_value = []
+            mock_reader.return_value.load_data.return_value = []
 
-                with patch("tempfile.NamedTemporaryFile") as mock_temp:
-                    mock_temp_file = Mock()
-                    mock_temp_file.name = "/tmp/test.pdf"
-                    mock_temp_file.__enter__ = Mock(return_value=mock_temp_file)
-                    mock_temp_file.__exit__ = Mock(return_value=None)
-                    mock_temp.return_value = mock_temp_file
+            with patch("tempfile.NamedTemporaryFile") as mock_temp:
+                mock_temp_file = Mock()
+                mock_temp_file.name = "/tmp/test.pdf"
+                mock_temp_file.__enter__ = Mock(return_value=mock_temp_file)
+                mock_temp_file.__exit__ = Mock(return_value=None)
+                mock_temp.return_value = mock_temp_file
 
-                    with (
-                        patch("os.path.exists", return_value=True),
-                        patch("os.remove"),
-                        patch(
-                    ):
-                                "utils.document_loader.log_performance"
-                            ) as mock_log_perf:
-                                load_documents_llama([mock_file])
+                with (
+                    patch("os.path.exists", return_value=True),
+                    patch("os.remove"),
+                    patch("utils.document_loader.log_performance") as mock_log_perf,
+                ):
+                    load_documents_llama([mock_file])
 
-                                mock_log_perf.assert_called_once()
-                                call_args = mock_log_perf.call_args[0]
-                                assert call_args[0] == "llamaparse_document_loading"
+                    mock_log_perf.assert_called_once()
+                    call_args = mock_log_perf.call_args[0]
+                    assert call_args[0] == "llamaparse_document_loading"

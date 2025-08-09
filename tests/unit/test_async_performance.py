@@ -48,7 +48,7 @@ class TestAsyncPerformanceOptimizations:
 
             # Test parallel embedding generation
             start_time = time.perf_counter()
-            result = await generate_dense_embeddings_async(mock_docs, use_gpu=False)
+            await generate_dense_embeddings_async(mock_docs, use_gpu=False)
             end_time = time.perf_counter()
 
             # Verify results
@@ -78,7 +78,7 @@ class TestAsyncPerformanceOptimizations:
             )
 
             # Test sparse embedding generation with failure
-            result = await generate_sparse_embeddings_async(mock_docs, use_gpu=False)
+            await generate_sparse_embeddings_async(mock_docs, use_gpu=False)
 
             # Should return None on failure
             assert result is None
@@ -163,11 +163,11 @@ class TestAsyncPerformanceOptimizations:
             raise ValueError("Test error")
 
         # Test successful operation monitoring
-        result = await monitor.measure_async_operation("test_op", sample_operation)
+        await monitor.measure_async_operation("test_op", sample_operation)
         assert result == "success"
 
         # Test failing operation monitoring
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Test error"):
             await monitor.measure_async_operation("fail_op", failing_operation)
 
         # Verify metrics collection
@@ -189,7 +189,7 @@ class TestAsyncPerformanceOptimizations:
             return "completed"
 
         with patch("utils.utils.logging") as mock_logging:
-            result = await timed_function()
+            await timed_function()
 
             assert result == "completed"
             # Verify logging was called with timing information
@@ -346,7 +346,7 @@ class TestAsyncPerformanceOptimizations:
                                     mock_retriever.return_value = mock_hybrid_retriever
 
                                     # Test optimized index creation
-                                    result = await create_index_async_optimized(
+                                    await create_index_async_optimized(
                                         documents, use_gpu=False
                                     )
 
@@ -381,7 +381,7 @@ class TestAsyncErrorHandling:
             mock_get_embed.return_value = mock_embed_model
 
             # Test with partial failures
-            result = await generate_dense_embeddings_async(mock_docs, use_gpu=False)
+            await generate_dense_embeddings_async(mock_docs, use_gpu=False)
 
             # Should handle partial failures with fallback embeddings
             assert len(result) == 9  # 3 batches * 3 docs each

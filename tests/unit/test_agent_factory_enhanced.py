@@ -158,7 +158,7 @@ class TestSingleAgentCreation:
             mock_agent_class.return_value = mock_agent
 
             with patch("agent_factory.logger") as mock_logger:
-                result = create_single_agent(mock_tools, mock_llm)
+                create_single_agent(mock_tools, mock_llm)
 
                 assert result == mock_agent
 
@@ -189,7 +189,7 @@ class TestSingleAgentCreation:
             mock_agent = MagicMock()
             mock_agent_class.return_value = mock_agent
 
-            result = create_single_agent(mock_tools, mock_llm, custom_memory)
+            create_single_agent(mock_tools, mock_llm, custom_memory)
 
             # Should use provided memory
             call_kwargs = mock_agent_class.call_args[1]
@@ -203,7 +203,7 @@ class TestSingleAgentCreation:
             mock_agent = MagicMock()
             mock_agent_class.return_value = mock_agent
 
-            result = create_single_agent([], mock_llm)
+            create_single_agent([], mock_llm)
 
             assert result == mock_agent
             # Should still work with empty tools
@@ -220,9 +220,9 @@ class TestSingleAgentCreation:
         ):
             with (
                 patch("agent_factory.logger") as mock_logger,
-                pytest.raises(RuntimeError)
+                pytest.raises(RuntimeError),
             ):
-                    create_single_agent(mock_tools, mock_llm)
+                create_single_agent(mock_tools, mock_llm)
 
                 # Should log the error
                 mock_logger.error.assert_called_once()
@@ -244,7 +244,7 @@ class TestSpecialistAgentCreation:
             mock_agent = MagicMock()
             mock_create.return_value = mock_agent
 
-            result = create_document_specialist_agent(mock_tools, mock_llm)
+            create_document_specialist_agent(mock_tools, mock_llm)
 
             assert result == mock_agent
 
@@ -291,7 +291,7 @@ class TestSpecialistAgentCreation:
             mock_agent = MagicMock()
             mock_create.return_value = mock_agent
 
-            result = create_knowledge_specialist_agent(mock_tools, mock_llm)
+            create_knowledge_specialist_agent(mock_tools, mock_llm)
 
             assert result == mock_agent
 
@@ -314,7 +314,7 @@ class TestSpecialistAgentCreation:
             mock_agent = MagicMock()
             mock_create.return_value = mock_agent
 
-            result = create_multimodal_specialist_agent(mock_tools, mock_llm)
+            create_multimodal_specialist_agent(mock_tools, mock_llm)
 
             assert result == mock_agent
 
@@ -348,7 +348,7 @@ class TestSupervisorRoutingLogic:
         state = AgentState()
         state["messages"] = []
 
-        result = supervisor_routing_logic(state)
+        supervisor_routing_logic(state)
 
         # Should default to document specialist
         assert result == "document_specialist"
@@ -358,7 +358,7 @@ class TestSupervisorRoutingLogic:
         state = AgentState()
         state["messages"] = [HumanMessage(content="Show me the image in the document")]
 
-        result = supervisor_routing_logic(state)
+        supervisor_routing_logic(state)
 
         assert result == "multimodal_specialist"
         assert state["query_type"] == "multimodal"
@@ -370,7 +370,7 @@ class TestSupervisorRoutingLogic:
             HumanMessage(content="What entities are connected to this concept?")
         ]
 
-        result = supervisor_routing_logic(state)
+        supervisor_routing_logic(state)
 
         assert result == "knowledge_specialist"
         assert state["query_type"] == "knowledge_graph"
@@ -384,7 +384,7 @@ class TestSupervisorRoutingLogic:
             )
         ]
 
-        result = supervisor_routing_logic(state)
+        supervisor_routing_logic(state)
 
         assert result == "document_specialist"
         assert state["query_complexity"] == "complex"
@@ -394,7 +394,7 @@ class TestSupervisorRoutingLogic:
         state = AgentState()
         state["messages"] = [HumanMessage(content="What is the summary?")]
 
-        result = supervisor_routing_logic(state)
+        supervisor_routing_logic(state)
 
         assert result == "document_specialist"
         assert state["query_complexity"] == "simple"
@@ -404,7 +404,7 @@ class TestSupervisorRoutingLogic:
         state = AgentState()
         state["messages"] = ["Simple string query"]
 
-        result = supervisor_routing_logic(state)
+        supervisor_routing_logic(state)
 
         assert result == "document_specialist"
 
@@ -438,59 +438,51 @@ class TestLangGraphSupervisorSystem:
         with (
             patch("agent_factory.create_document_specialist_agent") as mock_doc,
             patch("agent_factory.create_knowledge_specialist_agent") as mock_kg,
-            patch(
+            patch("agent_factory.create_multimodal_specialist_agent") as mock_mm,
         ):
-                    "agent_factory.create_multimodal_specialist_agent"
-                ) as mock_mm:
-                    with patch("agent_factory.StateGraph") as mock_graph_class:
-                        mock_doc_agent = MagicMock()
-                        mock_kg_agent = MagicMock()
-                        mock_mm_agent = MagicMock()
+            with patch("agent_factory.StateGraph") as mock_graph_class:
+                mock_doc_agent = MagicMock()
+                mock_kg_agent = MagicMock()
+                mock_mm_agent = MagicMock()
 
-                        mock_doc.return_value = mock_doc_agent
-                        mock_kg.return_value = mock_kg_agent
-                        mock_mm.return_value = mock_mm_agent
+                mock_doc.return_value = mock_doc_agent
+                mock_kg.return_value = mock_kg_agent
+                mock_mm.return_value = mock_mm_agent
 
-                        mock_graph = MagicMock()
-                        mock_compiled_graph = MagicMock()
-                        mock_graph.compile.return_value = mock_compiled_graph
-                        mock_graph_class.return_value = mock_graph
+                mock_graph = MagicMock()
+                mock_compiled_graph = MagicMock()
+                mock_graph.compile.return_value = mock_compiled_graph
+                mock_graph_class.return_value = mock_graph
 
-                        with patch("agent_factory.logger") as mock_logger:
-                            result = create_langgraph_supervisor_system(
-                                mock_tools, mock_llm
-                            )
+                with patch("agent_factory.logger") as mock_logger:
+                    create_langgraph_supervisor_system(mock_tools, mock_llm)
 
-                            assert result == mock_compiled_graph
+                    assert result == mock_compiled_graph
 
-                            # Verify graph construction
-                            mock_graph_class.assert_called_once_with(AgentState)
+                    # Verify graph construction
+                    mock_graph_class.assert_called_once_with(AgentState)
 
-                            # Verify agent nodes were added
-                            expected_calls = [
-                                call("document_specialist", mock_doc_agent),
-                                call("knowledge_specialist", mock_kg_agent),
-                                call("multimodal_specialist", mock_mm_agent),
-                            ]
-                            mock_graph.add_node.assert_has_calls(
-                                expected_calls, any_order=True
-                            )
+                    # Verify agent nodes were added
+                    expected_calls = [
+                        call("document_specialist", mock_doc_agent),
+                        call("knowledge_specialist", mock_kg_agent),
+                        call("multimodal_specialist", mock_mm_agent),
+                    ]
+                    mock_graph.add_node.assert_has_calls(expected_calls, any_order=True)
 
-                            # Verify conditional edges were added
-                            mock_graph.add_conditional_edges.assert_called_once()
+                    # Verify conditional edges were added
+                    mock_graph.add_conditional_edges.assert_called_once()
 
-                            # Verify end edges were added
-                            end_edge_calls = [
-                                call("document_specialist", pytest.mock.ANY),
-                                call("knowledge_specialist", pytest.mock.ANY),
-                                call("multimodal_specialist", pytest.mock.ANY),
-                            ]
-                            mock_graph.add_edge.assert_has_calls(
-                                end_edge_calls, any_order=True
-                            )
+                    # Verify end edges were added
+                    end_edge_calls = [
+                        call("document_specialist", pytest.mock.ANY),
+                        call("knowledge_specialist", pytest.mock.ANY),
+                        call("multimodal_specialist", pytest.mock.ANY),
+                    ]
+                    mock_graph.add_edge.assert_has_calls(end_edge_calls, any_order=True)
 
-                            # Verify success logging
-                            mock_logger.info.assert_called_once()
+                    # Verify success logging
+                    mock_logger.info.assert_called_once()
 
     def test_create_langgraph_supervisor_system_failure(self):
         """Test handling of supervisor system creation failure."""
@@ -502,7 +494,7 @@ class TestLangGraphSupervisorSystem:
             side_effect=RuntimeError("Agent creation failed"),
         ):
             with patch("agent_factory.logger") as mock_logger:
-                result = create_langgraph_supervisor_system(mock_tools, mock_llm)
+                create_langgraph_supervisor_system(mock_tools, mock_llm)
 
                 assert result is None
 
@@ -531,7 +523,7 @@ class TestLangGraphSupervisorSystem:
                         mock_graph_class.return_value = mock_graph
 
                         with patch("agent_factory.logger") as mock_logger:
-                            result = create_langgraph_supervisor_system(
+                            create_langgraph_supervisor_system(
                                 mock_tools, mock_llm
                             )
 
@@ -629,10 +621,10 @@ class TestQueryProcessing:
         mock_multi_system = MagicMock()
 
         # Mock LangGraph response
-        mock_result = {"messages": [HumanMessage(content="Multi-agent response")]}
+        mock_{"messages": [HumanMessage(content="Multi-agent response")]}
         mock_multi_system.invoke.return_value = mock_result
 
-        result = process_query_with_agent_system(
+        process_query_with_agent_system(
             mock_multi_system, "test query", "multi"
         )
 
@@ -654,7 +646,7 @@ class TestQueryProcessing:
         mock_response.response = "Single agent response"
         mock_single_agent.chat.return_value = mock_response
 
-        result = process_query_with_agent_system(
+        process_query_with_agent_system(
             mock_single_agent, "test query", "single", mock_memory
         )
 
@@ -666,7 +658,7 @@ class TestQueryProcessing:
         mock_multi_system = MagicMock()
         mock_multi_system.invoke.return_value = {"other_data": "value"}
 
-        result = process_query_with_agent_system(
+        process_query_with_agent_system(
             mock_multi_system, "test query", "multi"
         )
 
@@ -678,7 +670,7 @@ class TestQueryProcessing:
         mock_result = {"messages": ["String response instead of HumanMessage"]}
         mock_multi_system.invoke.return_value = mock_result
 
-        result = process_query_with_agent_system(
+        process_query_with_agent_system(
             mock_multi_system, "test query", "multi"
         )
 
@@ -690,7 +682,7 @@ class TestQueryProcessing:
         # Remove chat method
         del mock_single_agent.chat
 
-        result = process_query_with_agent_system(
+        process_query_with_agent_system(
             mock_single_agent, "test query", "single"
         )
 
@@ -702,7 +694,7 @@ class TestQueryProcessing:
         mock_agent_system.invoke.side_effect = RuntimeError("Processing failed")
 
         with patch("agent_factory.logger") as mock_logger:
-            result = process_query_with_agent_system(
+            process_query_with_agent_system(
                 mock_agent_system, "test query", "multi"
             )
 
@@ -718,7 +710,7 @@ class TestQueryProcessing:
         mock_single_agent.chat.side_effect = RuntimeError("Chat failed")
 
         with patch("agent_factory.logger") as mock_logger:
-            result = process_query_with_agent_system(
+            process_query_with_agent_system(
                 mock_single_agent, "test query", "single"
             )
 
@@ -809,7 +801,7 @@ class TestAgentFactoryIntegration:
             assert mode == "multi"
 
             # Step 2: Process query
-            result = process_query_with_agent_system(
+            process_query_with_agent_system(
                 agent_system, "Analyze the relationship between entities", mode
             )
 
@@ -840,7 +832,7 @@ class TestAgentFactoryIntegration:
                     assert mode == "single"
 
                     # Step 2: Process query
-                    result = process_query_with_agent_system(
+                    process_query_with_agent_system(
                         agent_system, "Simple query", mode
                     )
 

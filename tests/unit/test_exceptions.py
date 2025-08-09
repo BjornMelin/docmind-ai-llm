@@ -94,7 +94,7 @@ class TestDocMindError:
             operation="test_op",
         )
 
-        result = error.to_dict()
+        error.to_dict()
 
         # The message should be "Test error" but __str__ includes operation prefix
         assert "Test error" in str(error)
@@ -176,7 +176,7 @@ class TestHelperFunctions:
         """Test handle_embedding_error helper function."""
         original_error = RuntimeError("CUDA memory error")
 
-        result = handle_embedding_error(
+        handle_embedding_error(
             original_error, operation="model_loading", model="bge-large", gpu_memory=8
         )
 
@@ -191,7 +191,7 @@ class TestHelperFunctions:
         """Test handle_embedding_error with default operation."""
         original_error = ValueError("Invalid input")
 
-        result = handle_embedding_error(original_error)
+        handle_embedding_error(original_error)
 
         assert isinstance(result, EmbeddingError)
         assert result.operation == "embedding_generation"
@@ -200,7 +200,7 @@ class TestHelperFunctions:
         """Test handle_index_error helper function."""
         original_error = ConnectionError("Qdrant connection failed")
 
-        result = handle_index_error(
+        handle_index_error(
             original_error,
             operation="vector_store_creation",
             doc_count=1000,
@@ -217,7 +217,7 @@ class TestHelperFunctions:
         """Test handle_document_error helper function."""
         original_error = FileNotFoundError("Document not found")
 
-        result = handle_document_error(
+        handle_document_error(
             original_error,
             operation="pdf_parsing",
             file_path="/docs/missing.pdf",
@@ -309,7 +309,7 @@ class TestExceptionEdgeCases:
         # Exception creation should handle logging failures gracefully
         # The actual implementation doesn't handle this, so expect the exception
         with pytest.raises(RuntimeError, match="Logging failed"):
-            error = DocMindError("Test error despite logging failure")
+            DocMindError("Test error despite logging failure")
 
         # Reset mock for future tests
         logger_mock.error.side_effect = None

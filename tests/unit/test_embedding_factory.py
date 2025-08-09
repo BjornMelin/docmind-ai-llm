@@ -96,7 +96,7 @@ class TestEmbeddingFactory:
         # Clear cache before test
         EmbeddingFactory.clear_cache()
 
-        result = EmbeddingFactory.create_dense_embedding(use_gpu=False)
+        EmbeddingFactory.create_dense_embedding(use_gpu=False)
 
         assert result == mock_model
         mock_fastembed.assert_called_once_with(
@@ -145,7 +145,7 @@ class TestEmbeddingFactory:
 
         # Mock torch.compile availability
         with patch("hasattr", return_value=True):
-            result = EmbeddingFactory.create_dense_embedding(use_gpu=True)
+            EmbeddingFactory.create_dense_embedding(use_gpu=True)
 
         assert result == mock_compiled_model
         mock_torch_compile.assert_called_once_with(
@@ -184,7 +184,7 @@ class TestEmbeddingFactory:
         EmbeddingFactory.clear_cache()
 
         with patch("hasattr", return_value=True):
-            result = EmbeddingFactory.create_dense_embedding(use_gpu=True)
+            EmbeddingFactory.create_dense_embedding(use_gpu=True)
 
         # Should return original model when compile fails
         assert result == mock_model
@@ -212,7 +212,7 @@ class TestEmbeddingFactory:
         # Clear cache before test
         EmbeddingFactory.clear_cache()
 
-        result = EmbeddingFactory.create_sparse_embedding(use_gpu=False)
+        EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
         assert result == mock_model
         mock_sparse.assert_called_once_with(
@@ -234,7 +234,7 @@ class TestEmbeddingFactory:
         # Clear cache before test
         EmbeddingFactory.clear_cache()
 
-        result = EmbeddingFactory.create_sparse_embedding(use_gpu=False)
+        EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
         assert result is None
         mock_logging.info.assert_called_with("Sparse embeddings disabled in settings")
@@ -258,7 +258,7 @@ class TestEmbeddingFactory:
         # Clear cache before test
         EmbeddingFactory.clear_cache()
 
-        result = EmbeddingFactory.create_sparse_embedding(use_gpu=False)
+        EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
         assert result is None
         mock_logging.error.assert_called_with(
@@ -280,7 +280,7 @@ class TestEmbeddingFactory:
         mock_model = MagicMock()
         mock_hf.return_value = mock_model
 
-        result = EmbeddingFactory.create_multimodal_embedding(use_gpu=False)
+        EmbeddingFactory.create_multimodal_embedding(use_gpu=False)
 
         assert result == mock_model
         mock_hf.assert_called_once_with(
@@ -309,7 +309,7 @@ class TestEmbeddingFactory:
         mock_model = MagicMock()
         mock_hf.return_value = mock_model
 
-        result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
+        EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
 
         assert result == mock_model
         mock_hf.assert_called_once_with(
@@ -343,7 +343,7 @@ class TestEmbeddingFactory:
         with patch(
             "transformers.BitsAndBytesConfig", return_value=mock_quantization_config
         ):
-            result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
+            EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
 
         assert result == mock_model
 
@@ -371,7 +371,7 @@ class TestEmbeddingFactory:
 
         # Mock ImportError for transformers
         with patch("transformers.BitsAndBytesConfig", side_effect=ImportError):
-            result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
+            EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
 
         assert result == mock_model
         mock_logging.warning.assert_called_with(
@@ -572,7 +572,7 @@ class TestEmbeddingFactory:
             # Clear cache before test
             EmbeddingFactory.clear_cache()
 
-            result = EmbeddingFactory.create_dense_embedding()
+            EmbeddingFactory.create_dense_embedding()
 
             # Verify settings were used
             mock_fastembed.assert_called_once_with(

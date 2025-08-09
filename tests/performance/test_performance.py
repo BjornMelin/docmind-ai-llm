@@ -43,7 +43,7 @@ class TestEmbeddingPerformance:
                 model = manager.get_text_embedding_model("BAAI/bge-large-en-v1.5")
                 return model.embed_documents(texts)
 
-            result = benchmark(embed_documents)
+            benchmark(embed_documents)
             assert len(result) == 50
 
     @pytest.mark.performance
@@ -65,7 +65,7 @@ class TestEmbeddingPerformance:
                 model = manager.get_text_embedding_model("prithvida/Splade_PP_en_v1")
                 return model.encode(texts)
 
-            result = benchmark(encode_documents)
+            benchmark(encode_documents)
             assert len(result) == 50
 
     @pytest.mark.performance
@@ -87,7 +87,7 @@ class TestEmbeddingPerformance:
                 model3 = manager.get_multimodal_embedding_model()
                 return model1, model2, model3
 
-            result = benchmark(access_cached_model)
+            benchmark(access_cached_model)
             # Should only load once due to caching
             assert mock_load.call_count == 1
             assert all(model is result[0] for model in result)
@@ -121,7 +121,7 @@ class TestEmbeddingPerformance:
                     results = [future.result() for future in futures]
                 return results
 
-            result = benchmark(concurrent_embedding)
+            benchmark(concurrent_embedding)
             assert len(result) == 20
 
 
@@ -150,7 +150,7 @@ class TestSearchPerformance:
                     collection_name="test", query_vector=query_vector, limit=20
                 )
 
-            result = benchmark(search_operation)
+            benchmark(search_operation)
             assert len(result) == 20
 
     @pytest.mark.performance
@@ -219,7 +219,7 @@ class TestSearchPerformance:
 
                 return dense_results, sparse_results
 
-            result = benchmark(hybrid_search)
+            benchmark(hybrid_search)
             assert len(result[0]) == 10  # Dense results
             assert len(result[1]) == 10  # Sparse results
 
@@ -243,13 +243,13 @@ class TestSearchPerformance:
             def batch_search():
                 results = []
                 for vector in query_vectors:
-                    result = mock_qdrant_client.search(
+                    mock_qdrant_client.search(
                         collection_name="test", query_vector=vector, limit=5
                     )
                     results.extend(result)
                 return results
 
-            result = benchmark(batch_search)
+            benchmark(batch_search)
             assert len(result) == 100  # 20 queries * 5 results each
 
 
@@ -275,7 +275,7 @@ class TestRerankingPerformance:
         def rerank_operation():
             return mock_reranker.rerank(query=query, documents=documents, top_k=20)
 
-        result = benchmark(rerank_operation)
+        benchmark(rerank_operation)
         assert len(result) == 20
 
     @pytest.mark.performance
@@ -297,11 +297,11 @@ class TestRerankingPerformance:
         def batch_rerank():
             results = []
             for query in queries:
-                result = mock_reranker.rerank(query=query, documents=documents, top_k=2)
+                mock_reranker.rerank(query=query, documents=documents, top_k=2)
                 results.extend(result)
             return results
 
-        result = benchmark(batch_rerank)
+        benchmark(batch_rerank)
         assert len(result) == 20  # 10 queries * 2 results each
 
     @pytest.mark.performance
@@ -327,7 +327,7 @@ class TestRerankingPerformance:
                 query=query, documents=large_document_set, top_k=50
             )
 
-        result = benchmark(large_scale_rerank)
+        benchmark(large_scale_rerank)
         assert len(result) == 50
 
 
@@ -357,7 +357,7 @@ class TestAgentPerformance:
             def analyze_operation():
                 return analyze_query_complexity(complex_query)
 
-            result = benchmark(analyze_operation)
+            benchmark(analyze_operation)
             assert result["complexity"] == "complex"
 
     @pytest.mark.performance
@@ -382,7 +382,7 @@ class TestAgentPerformance:
             def sync_wrapper():
                 return asyncio.run(agent_operation())
 
-            result = benchmark(sync_wrapper)
+            benchmark(sync_wrapper)
             assert result == "Fast agent response"
 
     @pytest.mark.performance
@@ -412,11 +412,11 @@ class TestAgentPerformance:
                 agent_system = get_agent_system(settings=test_settings)
                 results = []
                 for tool in agent_system.tools:
-                    result = tool.func("test input")
+                    tool.func("test input")
                     results.append(result)
                 return results
 
-            result = benchmark(tool_invocation)
+            benchmark(tool_invocation)
             assert len(result) == 5
 
 
@@ -552,7 +552,7 @@ class TestConcurrencyPerformance:
                         results.extend(future.result())
                 return results
 
-            result = benchmark(concurrent_search)
+            benchmark(concurrent_search)
             assert len(result) == 60  # 20 queries * 3 results each
 
     @pytest.mark.performance
@@ -584,7 +584,7 @@ class TestConcurrencyPerformance:
                     results.extend(future.result())
                 return results
 
-            result = benchmark(concurrent_rerank)
+            benchmark(concurrent_rerank)
             assert len(result) == 20  # 10 queries * 2 results each
 
 

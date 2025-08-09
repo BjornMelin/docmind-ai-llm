@@ -262,7 +262,7 @@ class TestWorkflowPerformance:
             start_time = time.perf_counter()
 
             # Test async workflow
-            result = await create_index_async(docs, use_gpu=False)
+            await create_index_async(docs, use_gpu=False)
 
             async_time = time.perf_counter() - start_time
 

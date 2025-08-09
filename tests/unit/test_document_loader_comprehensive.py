@@ -62,7 +62,7 @@ class TestDocumentLoaderComprehensive:
 
         with patch("unstructured.partition.auto.partition", return_value=mock_elements):
             # Act
-            result = load_documents_unstructured(str(temp_pdf_file))
+            load_documents_unstructured(str(temp_pdf_file))
 
             # Assert
             assert len(result) == 2
@@ -89,7 +89,7 @@ class TestDocumentLoaderComprehensive:
 
         with patch("fitz.open", return_value=mock_doc):
             # Act
-            result = extract_images_from_pdf(str(temp_pdf_file))
+            extract_images_from_pdf(str(temp_pdf_file))
 
             # Assert
             assert len(result) == 2
@@ -102,7 +102,7 @@ class TestDocumentLoaderComprehensive:
         from utils.document_loader import extract_images_from_pdf
 
         with patch("fitz.open", side_effect=RuntimeError("Corrupted PDF")):
-            result = extract_images_from_pdf("corrupted.pdf")
+            extract_images_from_pdf("corrupted.pdf")
 
             # Should return empty list for corrupted files
             assert result == []
@@ -123,7 +123,7 @@ class TestDocumentLoaderComprehensive:
 
         with patch("fitz.open", return_value=mock_doc):
             # Act
-            result = extract_images_from_pdf(str(temp_pdf_file))
+            extract_images_from_pdf(str(temp_pdf_file))
 
             # Assert
             assert result == []
@@ -132,7 +132,7 @@ class TestDocumentLoaderComprehensive:
         """Test chunking with empty document list."""
         from utils.document_loader import chunk_documents_structured
 
-        result = chunk_documents_structured([])
+        chunk_documents_structured([])
         assert result == []
 
     def test_chunk_documents_structured_success(self, sample_documents):
@@ -151,7 +151,7 @@ class TestDocumentLoaderComprehensive:
             mock_splitter.return_value = mock_instance
 
             # Act
-            result = chunk_documents_structured(sample_documents)
+            chunk_documents_structured(sample_documents)
 
             # Assert
             assert len(result) == 2
@@ -174,7 +174,7 @@ class TestDocumentLoaderComprehensive:
             mock_splitter.return_value = mock_instance
 
             # Act
-            result = chunk_documents_structured([long_doc])
+            chunk_documents_structured([long_doc])
 
             # Assert - should handle large documents
             assert len(result) == 100
@@ -234,7 +234,7 @@ class TestDocumentLoaderComprehensive:
             "unstructured.partition.auto.partition", return_value=mock_elements
         ) as mock_partition:
             # Act
-            result = load_documents_unstructured(str(test_file))
+            load_documents_unstructured(str(test_file))
 
             # Assert - verify processing occurred
             mock_partition.assert_called_once()
@@ -248,7 +248,7 @@ class TestDocumentLoaderComprehensive:
             from utils.document_loader import load_documents_llama
 
             # Mock LlamaParse
-            mock_result = [Document(text="LlamaParse content")]
+            mock_[Document(text="LlamaParse content")]
 
             with patch("llama_parse.LlamaParse") as mock_parser:
                 mock_instance = Mock()
@@ -256,7 +256,7 @@ class TestDocumentLoaderComprehensive:
                 mock_parser.return_value = mock_instance
 
                 # Act
-                result = load_documents_llama(["test.pdf"])
+                load_documents_llama(["test.pdf"])
 
                 # Assert
                 assert len(result) == 1
@@ -288,7 +288,7 @@ class TestDocumentLoaderComprehensive:
 
         with patch("fitz.open", return_value=mock_doc):
             # Act
-            result = extract_images_from_pdf("test.pdf")
+            extract_images_from_pdf("test.pdf")
 
             # Assert
             assert len(result) == 1
@@ -315,7 +315,7 @@ class TestDocumentLoaderComprehensive:
             mock_splitter.return_value = mock_instance
 
             # Act
-            result = chunk_documents_structured(large_docs)
+            chunk_documents_structured(large_docs)
 
             # Assert - should handle large document sets
             assert len(result) == 50
@@ -401,7 +401,7 @@ class TestDocumentLoaderComprehensive:
             mock_splitter.return_value = mock_instance
 
             # Act
-            result = chunk_documents_structured(large_doc_set)
+            chunk_documents_structured(large_doc_set)
 
             # Assert
             assert len(result) == 20
@@ -438,7 +438,7 @@ class TestPropertyBasedDocumentLoader:
                 mock_splitter.return_value = mock_instance
 
                 # Act
-                result = chunk_documents_structured(docs)
+                chunk_documents_structured(docs)
 
                 # Assert - properties that should always hold
                 assert isinstance(result, list)
@@ -467,7 +467,7 @@ class TestPropertyBasedDocumentLoader:
             mock_splitter.return_value = mock_instance
 
             # Act
-            result = chunk_documents_structured(docs)
+            chunk_documents_structured(docs)
 
             # Assert - batch processing properties
             assert isinstance(result, list)
@@ -526,7 +526,7 @@ class TestDocumentLoaderErrorHandling:
 
         with patch("fitz.open", return_value=mock_doc):
             # Act & Assert
-            result = extract_images_from_pdf(str(temp_pdf_file))
+            extract_images_from_pdf(str(temp_pdf_file))
 
             # Should return empty list and clean up resources
             assert result == []
@@ -581,7 +581,7 @@ class TestDocumentLoaderErrorHandling:
             ]
             for future in concurrent.futures.as_completed(futures):
                 try:
-                    result = future.result(timeout=5)
+                    future.result(timeout=5)
                     results.extend(result)
                 except Exception as e:
                     # Should handle concurrent processing errors gracefully

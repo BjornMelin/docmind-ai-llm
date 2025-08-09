@@ -89,7 +89,7 @@ class TestEndToEndPipeline:
                         mock_retriever.return_value = MagicMock()
 
                         # Create index
-                        result = create_index(docs, use_gpu=False)
+                        create_index(docs, use_gpu=False)
 
                         assert "vector" in result
                         assert result["vector"] is not None
@@ -156,7 +156,7 @@ class TestEndToEndPipeline:
                 mock_kg.side_effect = Exception("KG creation failed")
 
                 with patch("utils.utils.ensure_spacy_model"):
-                    result = create_index(docs, use_gpu=False)
+                    create_index(docs, use_gpu=False)
 
                     # Should have vector but no KG
                     assert result["vector"] is not None
@@ -186,7 +186,7 @@ class TestEndToEndPipeline:
                     mock_stream.return_value.synchronize = MagicMock()
 
                     with patch("utils.utils.ensure_spacy_model"):
-                        result = create_index(docs, use_gpu=True)
+                        create_index(docs, use_gpu=True)
 
                         # Should successfully create index with GPU
                         assert result is not None
@@ -214,7 +214,7 @@ class TestEndToEndPipeline:
 
             with patch("utils.utils.ensure_spacy_model"):
                 # Should handle mixed document quality gracefully
-                result = create_index(docs, use_gpu=False)
+                create_index(docs, use_gpu=False)
                 assert result is not None
                 assert result["vector"] is not None
 
@@ -243,7 +243,8 @@ class TestMultiAgentIntegration:
 
         complex_queries = [
             "Compare and analyze the relationships between entities in this document",
-            "How does the dense embedding approach differ from sparse embeddings across multiple documents?",
+            "How does the dense embedding approach differ from "
+            "sparse embeddings across multiple documents?",
             "Summarize all the various techniques mentioned and explain their connections",
         ]
 
@@ -295,7 +296,7 @@ class TestMultiAgentIntegration:
 
                         from agent_factory import process_query_with_agent_system
 
-                        result = process_query_with_agent_system(
+                        process_query_with_agent_system(
                             mock_compiled, "Test query", "multi"
                         )
                         assert "Response from multi-agent system" in result
@@ -364,7 +365,7 @@ class TestPerformanceIntegration:
             results = []
             for future in concurrent.futures.as_completed(futures):
                 try:
-                    result = future.result(timeout=30)  # 30 second timeout
+                    future.result(timeout=30)  # 30 second timeout
                     results.append(result)
                 except Exception as e:
                     pytest.fail(f"Concurrent processing failed: {e}")
@@ -432,9 +433,9 @@ class TestPerformanceIntegration:
                 mock_create.return_value = mock_index
 
                 with patch("utils.utils.ensure_spacy_model"):
-                    index_result = create_index(docs, use_gpu=False)
+                    index_create_index(docs, use_gpu=False)
 
-            tools = create_tools_from_index(index_result)
+            create_tools_from_index(index_result)
 
             with patch("llama_index.llms.ollama.Ollama") as mock_ollama:
                 mock_llm = MagicMock()
@@ -450,7 +451,7 @@ class TestPerformanceIntegration:
                     return agent
 
         # Benchmark the complete pipeline
-        result = benchmark.pedantic(full_pipeline, rounds=3, iterations=1)
+        benchmark.pedantic(full_pipeline, rounds=3, iterations=1)
         assert result is not None
 
 
@@ -474,13 +475,10 @@ class TestErrorRecoveryIntegration:
                 # Even if Qdrant fails, should attempt in-memory fallback
                 mock_create.side_effect = Exception("Vector store creation failed")
 
-                try:
-                    result = create_index(docs, use_gpu=False)
-                    # If we get here, fallback worked
-                    assert result is None or "vector" in result
-                except Exception as e:
-                    # Expected if no fallback implemented
-                    assert "creation failed" in str(e) or "connection failed" in str(e)
+                with pytest.raises(
+                    Exception, match="creation failed|connection failed"
+                ):
+                    create_index(docs, use_gpu=False)
 
     def test_network_timeout_recovery(self):
         """Test recovery from network timeouts."""
@@ -492,11 +490,8 @@ class TestErrorRecoveryIntegration:
         with patch("qdrant_client.QdrantClient") as mock_qdrant:
             mock_qdrant.side_effect = TimeoutError("Connection timeout")
 
-            try:
+            with pytest.raises((TimeoutError, Exception), match="timeout|connection"):
                 create_index(docs, use_gpu=False)
-            except (TimeoutError, Exception) as e:
-                # Should handle timeout gracefully
-                assert "timeout" in str(e).lower() or "connection" in str(e).lower()
 
     def test_resource_exhaustion_handling(self):
         """Test handling of resource exhaustion."""

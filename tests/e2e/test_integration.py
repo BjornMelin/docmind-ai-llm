@@ -259,7 +259,7 @@ class TestCompleteWorkflowIntegration:
             assert agent_system is not None
 
             # 3. Process query
-            result = process_query_with_agent_system(
+            process_query_with_agent_system(
                 query=query, agent_system=agent_system, settings=test_settings
             )
 
@@ -307,7 +307,7 @@ class TestErrorHandlingIntegration:
 
             # Test fallback model success
             fallback = manager.get_multimodal_embedding_model("fallback_model")
-            result = fallback.embed_documents(["test"])
+            fallback.embed_documents(["test"])
             assert len(result) == 1
             assert len(result[0]) == 1024
 
@@ -430,7 +430,7 @@ class TestPerformanceIntegration:
 
                 return reranked
 
-            result = benchmark(end_to_end_workflow)
+            benchmark(end_to_end_workflow)
             assert len(result) == 3
 
     @pytest.mark.performance
@@ -478,7 +478,7 @@ class TestPerformanceIntegration:
                     results = [future.result() for future in futures]
                 return sum(results)
 
-            result = benchmark(concurrent_queries)
+            benchmark(concurrent_queries)
             assert result == 30  # 10 queries * 3 results each
 
     @pytest.mark.performance

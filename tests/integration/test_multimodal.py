@@ -294,9 +294,7 @@ class TestMultimodalIndexCreation:
                 patch("utils.index_builder.logging.error") as mock_log_error,
                 patch("utils.index_builder.logging.info") as mock_log_info,
             ):
-                result = create_multimodal_index(
-                    sample_multimodal_documents, use_gpu=False
-                )
+                create_multimodal_index(sample_multimodal_documents, use_gpu=False)
 
             # Verify error logging
             mock_log_error.assert_called_once()
@@ -351,7 +349,7 @@ class TestAsyncMultimodalIndex:
         mock_multimodal_index.from_documents.return_value = mock_index_instance
 
         with patch("utils.index_builder.settings", mock_multimodal_settings):
-            result = await create_multimodal_index_async(
+            await create_multimodal_index_async(
                 sample_multimodal_documents,
                 use_gpu=True,
                 collection_name="async_multimodal",
@@ -398,7 +396,7 @@ class TestAsyncMultimodalIndex:
             patch("utils.index_builder.settings", mock_multimodal_settings),
             patch("utils.index_builder.logging.error") as mock_log_error,
         ):
-            result = await create_multimodal_index_async(
+            await create_multimodal_index_async(
                 sample_multimodal_documents,
                 use_gpu=True,
                 collection_name="async_fallback",
@@ -446,7 +444,7 @@ class TestHybridFusionRetrieverEnhanced:
         mock_fusion_retriever.return_value = mock_fusion_instance
 
         with patch("utils.index_builder.settings", mock_multimodal_settings):
-            result = create_hybrid_retriever(mock_index)
+            create_hybrid_retriever(mock_index)
 
         # Verify dense retriever creation
         dense_call = mock_vector_retriever.call_args_list[0]
@@ -502,7 +500,7 @@ class TestHybridFusionRetrieverEnhanced:
             patch("utils.index_builder.logging.error") as mock_log_error,
             patch("utils.index_builder.logging.warning") as mock_log_warning,
         ):
-            result = create_hybrid_retriever(mock_index)
+            create_hybrid_retriever(mock_index)
 
         # Verify error and warning logging
         mock_log_error.assert_called_once()
@@ -547,7 +545,7 @@ class TestHybridFusionRetrieverEnhanced:
                     QueryBundle(query_str="test multimodal query")
                 )
 
-            result = benchmark(retrieval_operation)
+            benchmark(retrieval_operation)
             assert len(result) == 5
 
 
@@ -575,20 +573,28 @@ class TestUnstructuredMultimodalParsing:
 
         mock_narrative = MagicMock()
         mock_narrative.category = "NarrativeText"
-        mock_narrative.__str__.return_value = "This paper explores the intersection of artificial intelligence and computer vision technologies."
+        mock_narrative.__str__.return_value = (
+            "This paper explores the intersection of "
+            "artificial intelligence and computer vision technologies."
+        )
         mock_narrative.metadata.page_number = 1
         mock_narrative.metadata.filename = "multimodal_test.pdf"
 
         mock_table = MagicMock()
-        mock_table.category = "Table"
-        mock_table.__str__.return_value = "| Model | Accuracy | Speed |\n| ResNet | 92.1% | 45ms |\n| EfficientNet | 94.3% | 32ms |"
+        mock_table.__str__.return_value = (
+            "| Model | Accuracy | Speed |"
+            "| ResNet | 92.1% | 45ms |"
+            "| EfficientNet | 94.3% | 32ms |"
+        )
         mock_table.metadata.page_number = 2
         mock_table.metadata.filename = "multimodal_test.pdf"
 
         mock_image = MagicMock()
         mock_image.category = "Image"
-        mock_image.metadata.page_number = 2
-        mock_image.metadata.filename = "multimodal_test.pdf"
+        mock_image.text = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9"
+            "jU77zgAAAABJRU5ErkJggg=="
+        )
         mock_image.metadata.image_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI9jU77zgAAAABJRU5ErkJggg=="
 
         mock_figure_caption = MagicMock()
@@ -613,7 +619,7 @@ class TestUnstructuredMultimodalParsing:
             ) as mock_chunk:
                 mock_chunk.side_effect = lambda x: x  # Return unchanged for testing
 
-                result = load_documents_unstructured(str(test_file))
+                load_documents_unstructured(str(test_file))
 
         # Verify partition call with hi_res strategy
         mock_partition.assert_called_once()
@@ -680,7 +686,7 @@ class TestUnstructuredMultimodalParsing:
             ) as mock_chunk:
                 mock_chunk.side_effect = lambda x: x
 
-                result = load_documents_unstructured(str(test_file))
+                load_documents_unstructured(str(test_file))
 
         # Should only create ImageDocument for valid base64
         assert len(result) == 1
@@ -725,7 +731,7 @@ class TestUnstructuredMultimodalParsing:
             ) as mock_chunk:
                 mock_chunk.side_effect = lambda x: x
 
-                result = load_documents_unstructured(str(test_file))
+                load_documents_unstructured(str(test_file))
 
         # Should have 2 text docs + 1 image doc
         assert len(result) == 3
@@ -767,7 +773,7 @@ class TestUnstructuredMultimodalParsing:
             patch("utils.document_loader.logging.error") as mock_log_error,
             patch("utils.document_loader.logging.info") as mock_log_info,
         ):
-            result = load_documents_unstructured(str(test_file))
+            load_documents_unstructured(str(test_file))
 
         # Verify error and fallback logging
         mock_log_error.assert_called_once()
@@ -840,7 +846,7 @@ class TestDocumentStructuredChunking:
             ]
             mock_splitter.return_value = mock_splitter_instance
 
-            result = chunk_documents_structured(documents)
+            chunk_documents_structured(documents)
 
         # Verify splitter configuration
         mock_splitter.assert_called_once()
@@ -916,7 +922,7 @@ class TestPerformanceAndBenchmarks:
             def batch_embedding_operation():
                 results = []
                 for text, images in zip(batch_texts, batch_images, strict=False):
-                    result = create_native_multimodal_embeddings(text, images)
+                    create_native_multimodal_embeddings(text, images)
                     results.append(result)
                 return results
 
@@ -1024,7 +1030,7 @@ class TestErrorHandlingAndEdgeCases:
         from utils.index_builder import create_multimodal_index
 
         with (
-            patch("utils.index_builder.logging.error") as mock_log_error,
+            patch("utils.index_builder.logging.error"),
             pytest.raises(ValueError, match="No documents provided"),
         ):
             create_multimodal_index([], use_gpu=False)
@@ -1040,7 +1046,7 @@ class TestErrorHandlingAndEdgeCases:
             mock_partition.return_value = []  # No elements
 
             with patch("utils.document_loader.settings", mock_multimodal_settings):
-                result = load_documents_unstructured(str(empty_file))
+                load_documents_unstructured(str(empty_file))
 
             assert result == []
 
@@ -1055,7 +1061,7 @@ class TestErrorHandlingAndEdgeCases:
                 patch("utils.index_builder.logging.error") as mock_log_error,
                 patch("utils.index_builder.logging.warning") as mock_log_warning,
             ):
-                result = create_hybrid_retriever(None)
+                create_hybrid_retriever(None)
 
             # Should use final fallback
             mock_log_error.assert_called()
@@ -1078,7 +1084,7 @@ class TestErrorHandlingAndEdgeCases:
 
             # Should handle base64 decode error gracefully
             try:
-                result = load_documents_unstructured("/fake/path.pdf")
+                load_documents_unstructured("/fake/path.pdf")
                 # The function should either skip invalid images or handle the error
                 # depending on implementation details
             except Exception as e:
@@ -1170,7 +1176,7 @@ class TestIntegrationScenarios:
                         "utils.index_builder.settings", mock_multimodal_settings
                     ):
                         # Test async pipeline
-                        result = await create_multimodal_index_async(
+                        await create_multimodal_index_async(
                             sample_multimodal_documents,
                             use_gpu=True,
                             collection_name="async_test",

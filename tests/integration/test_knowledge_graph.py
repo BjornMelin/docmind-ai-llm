@@ -1,4 +1,4 @@
-"""Comprehensive tests for Knowledge Graph creation, spaCy integration, and agent tool generation.
+"""Tests for Knowledge Graph creation, spaCy integration, and agent tools.
 
 This module tests:
 - SpaCy model management (loading and auto-download)
@@ -206,7 +206,7 @@ class TestKnowledgeGraphIndex:
                             mock_vector_instance = MagicMock()
                             mock_vector_index.return_value = mock_vector_instance
 
-                            result = create_index(sample_docs, use_gpu=False)
+                            create_index(sample_docs, use_gpu=False)
 
                             # Verify KG index was created
                             assert "kg" in result
@@ -241,7 +241,7 @@ class TestKnowledgeGraphIndex:
                     mock_vector_instance = MagicMock()
                     mock_vector_index.return_value = mock_vector_instance
 
-                    result = create_index(sample_docs, use_gpu=False)
+                    create_index(sample_docs, use_gpu=False)
 
                     # Should still create vector index
                     assert "vector" in result
@@ -270,7 +270,7 @@ class TestKnowledgeGraphIndex:
                         mock_vector_instance = MagicMock()
                         mock_vector_index.return_value = mock_vector_instance
 
-                        result = create_index(sample_docs, use_gpu=False)
+                        create_index(sample_docs, use_gpu=False)
 
                         # Should still create vector index
                         assert "vector" in result
@@ -330,7 +330,7 @@ class TestKnowledgeGraphIndex:
                                             mock_client_instance
                                         )
 
-                                        result = await create_index_async(
+                                        await create_index_async(
                                             sample_docs, use_gpu=False
                                         )
 
@@ -339,7 +339,7 @@ class TestKnowledgeGraphIndex:
                                         assert result["kg"] == mock_kg_instance
 
                                         # Verify successful async operation
-                                        # Note: Client close is called in finally block, tested separately
+                                        # Note: Client close tested separately
 
     @pytest.mark.asyncio
     async def test_kg_async_creation_failure(self, sample_docs):
@@ -381,7 +381,7 @@ class TestKnowledgeGraphIndex:
                                 mock_client_instance = AsyncMock()
                                 mock_async_client.return_value = mock_client_instance
 
-                                result = await create_index_async(
+                                await create_index_async(
                                     sample_docs, use_gpu=False
                                 )
 
@@ -391,7 +391,7 @@ class TestKnowledgeGraphIndex:
                                 assert result.get("kg") is None
 
                                 # Verify async operation completed
-                                # Note: Cleanup testing would require more complex mocking
+                                # Note: Cleanup testing requires complex mocking
 
 
 class TestAgentTools:
@@ -663,13 +663,22 @@ class TestIntegrationScenarios:
         """Documents with clear entities for integration testing."""
         return [
             Document(
-                text="Apple Inc. was founded by Steve Jobs and Steve Wozniak in Cupertino, California."
+                text=(
+                    "Apple Inc. was founded by Steve Jobs and Steve Wozniak "
+                    "in Cupertino, California."
+                )
             ),
             Document(
-                text="Microsoft Corporation was established by Bill Gates and Paul Allen in Albuquerque, New Mexico."
+                text=(
+                    "Microsoft Corporation was established by Bill Gates "
+                    "and Paul Allen in Albuquerque, New Mexico."
+                )
             ),
             Document(
-                text="Google LLC was created by Larry Page and Sergey Brin at Stanford University."
+                text=(
+                    "Google LLC was created by Larry Page and Sergey Brin "
+                    "at Stanford University."
+                )
             ),
         ]
 
@@ -795,39 +804,29 @@ class TestIntegrationScenarios:
 
         with (
             caplog.at_level(logging.INFO),
-            patch("utils.utils.ensure_spacy_model") as mock_spacy
+            patch("utils.utils.ensure_spacy_model") as mock_spacy,
         ):
-                mock_nlp = MagicMock()
-                mock_spacy.return_value = mock_nlp
+            mock_nlp = MagicMock()
+            mock_spacy.return_value = mock_nlp
 
-                with patch(
-                    "llama_index.core.KnowledgeGraphIndex.from_documents"
-                ) as mock_kg:
-                    mock_kg_instance = MagicMock()
-                    mock_kg.return_value = mock_kg_instance
+            with patch(
+                "llama_index.core.KnowledgeGraphIndex.from_documents"
+            ) as mock_kg:
+                mock_kg_instance = MagicMock()
+                mock_kg.return_value = mock_kg_instance
 
-                    with (
-                        patch("llama_index.llms.ollama.Ollama"),
-                        patch("utils.index_builder.setup_hybrid_qdrant"),
-                        patch(
-                    ):
-                                "llama_index.core.VectorStoreIndex.from_documents"
-                            ):
-                                with patch(
-                                    "utils.index_builder.create_hybrid_retriever"
-                                ):
-                                    create_index(sample_entity_docs, use_gpu=False)
+                with (
+                    patch("llama_index.llms.ollama.Ollama"),
+                    patch("utils.index_builder.setup_hybrid_qdrant"),
+                    patch("llama_index.core.VectorStoreIndex.from_documents"),
+                    patch("utils.index_builder.create_hybrid_retriever"),
+                ):
+                    create_index(sample_entity_docs, use_gpu=False)
 
-                                    # Check for expected log messages
-                                    log_messages = [
-                                        record.message for record in caplog.records
-                                    ]
-                                    kg_logs = [
-                                        msg
-                                        for msg in log_messages
-                                        if "Knowledge Graph" in msg
-                                    ]
-                                    assert len(kg_logs) > 0
+                    # Check for expected log messages
+                    log_messages = [record.message for record in caplog.records]
+                    kg_logs = [msg for msg in log_messages if "Knowledge Graph" in msg]
+                    assert len(kg_logs) > 0
 
 
 class TestPerformanceAndEdgeCases:
@@ -847,7 +846,7 @@ class TestPerformanceAndEdgeCases:
                 mock_vector_instance = MagicMock()
                 mock_vector_index.return_value = mock_vector_instance
 
-                result = create_index([], use_gpu=False)
+                create_index([], use_gpu=False)
 
                 # Should still attempt to create indexes
                 assert "vector" in result
@@ -914,7 +913,7 @@ class TestPerformanceAndEdgeCases:
 
                     # Should complete within reasonable time
                     start_time = asyncio.get_event_loop().time()
-                    result = await create_index_async(sample_docs, use_gpu=False)
+                    await create_index_async(sample_docs, use_gpu=False)
                     end_time = asyncio.get_event_loop().time()
 
                     assert result is not None

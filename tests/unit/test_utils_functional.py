@@ -157,7 +157,7 @@ class TestEmbeddingModelManagement:
             mock_model = MagicMock()
             mock_embedding.return_value = mock_model
 
-            result = get_embed_model()
+            get_embed_model()
 
             assert result is not None
             mock_embedding.assert_called_once()
@@ -196,7 +196,7 @@ class TestEmbeddingModelManagement:
             }
             mock_embedding.return_value = MagicMock()
 
-            result = get_embed_model()
+            get_embed_model()
 
             assert result is not None
             mock_embedding.assert_called_once()
@@ -217,7 +217,7 @@ class TestEmbeddingModelManagement:
             }
             mock_embedding.return_value = MagicMock()
 
-            result = get_embed_model()
+            get_embed_model()
 
             assert result is not None
             mock_embedding.assert_called_once()
@@ -242,7 +242,7 @@ class TestRRFConfigurationValidation:
             rrf_fusion_weight_dense=0.7, rrf_fusion_weight_sparse=0.3
         )
 
-        result = verify_rrf_configuration(valid_settings)
+        verify_rrf_configuration(valid_settings)
 
         assert isinstance(result, dict)
         assert "issues" in result
@@ -258,7 +258,7 @@ class TestRRFConfigurationValidation:
             rrf_fusion_weight_sparse=0.8,  # Sum = 1.6
         )
 
-        result = verify_rrf_configuration(unbalanced_settings)
+        verify_rrf_configuration(unbalanced_settings)
 
         # Should identify weight sum issues
         issues = result.get("issues", [])
@@ -273,7 +273,7 @@ class TestRRFConfigurationValidation:
             rrf_fusion_weight_dense=0.99, rrf_fusion_weight_sparse=0.01
         )
 
-        result = verify_rrf_configuration(extreme_settings)
+        verify_rrf_configuration(extreme_settings)
 
         # Should provide recommendations for extreme values
         recommendations = result.get("recommendations", [])
@@ -287,7 +287,7 @@ class TestRRFConfigurationValidation:
             rrf_fusion_alpha=60,  # Common research-backed value
         )
 
-        result = verify_rrf_configuration(research_backed_settings)
+        verify_rrf_configuration(research_backed_settings)
 
         # Research-backed values should have minimal issues
         issues = result.get("issues", [])
@@ -369,7 +369,7 @@ class TestSpacyModelManagement:
             mock_nlp = MagicMock()
             mock_load.return_value = mock_nlp
 
-            result = ensure_spacy_model("en_core_web_sm")
+            ensure_spacy_model("en_core_web_sm")
 
             assert result == mock_nlp
             mock_load.assert_called_once_with("en_core_web_sm")
@@ -385,7 +385,7 @@ class TestSpacyModelManagement:
             mock_load.side_effect = [OSError("Model not found"), mock_nlp]
             mock_subprocess.return_value = MagicMock(returncode=0)
 
-            result = ensure_spacy_model("en_core_web_sm")
+            ensure_spacy_model("en_core_web_sm")
 
             assert result == mock_nlp
             assert mock_load.call_count == 2
@@ -396,22 +396,22 @@ class TestSpacyModelManagement:
         with (
             patch("spacy.load", side_effect=OSError("Model not found")),
             patch("subprocess.run") as mock_subprocess,
-            pytest.raises(RuntimeError, match="Failed to download"),
         ):
             # Download fails
             mock_subprocess.return_value = MagicMock(returncode=1)
-            ensure_spacy_model("en_core_web_sm")
+            with pytest.raises(RuntimeError, match="Failed to download"):
+                ensure_spacy_model("en_core_web_sm")
 
     def test_ensure_spacy_model_invalid_model_name(self):
         """Invalid spaCy model names should be handled gracefully."""
         with (
             patch("spacy.load", side_effect=OSError("Model not found")),
             patch("subprocess.run") as mock_subprocess,
-            pytest.raises(RuntimeError, match="Model still not available"),
         ):
             # Download succeeds but model still can't load
             mock_subprocess.return_value = MagicMock(returncode=0)
-            ensure_spacy_model("invalid_model")
+            with pytest.raises(RuntimeError, match="Model still not available"):
+                ensure_spacy_model("invalid_model")
 
 
 class TestPerformanceOptimization:
@@ -472,7 +472,7 @@ class TestRealWorldUsageScenarios:
         )
 
         # Validate RRF configuration
-        rrf_result = verify_rrf_configuration(prod_settings)
+        rrf_verify_rrf_configuration(prod_settings)
         assert isinstance(rrf_result, dict)
 
         # Settings should be reasonable for production
@@ -509,9 +509,9 @@ class TestRealWorldUsageScenarios:
             mock_client.side_effect = ConnectionError("Network unreachable")
 
             # Should propagate connection errors for proper handling
-            with pytest.raises(ConnectionError):
-                import asyncio
+            import asyncio
 
+            with pytest.raises(ConnectionError):
                 asyncio.run(
                     managed_async_qdrant_client("http://localhost:6333").__aenter__()
                 )

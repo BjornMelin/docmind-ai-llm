@@ -208,21 +208,21 @@ class TestSingleAgentCreation:
 
         with (
             patch("llama_index.core.agent.ReActAgent") as mock_react_agent,
-            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory
+            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory,
         ):
-                mock_agent = MagicMock()
-                mock_react_agent.from_tools.return_value = mock_agent
-                mock_memory.from_defaults.return_value = MagicMock()
+            mock_agent = MagicMock()
+            mock_react_agent.from_tools.return_value = mock_agent
+            mock_memory.from_defaults.return_value = MagicMock()
 
-                result = create_single_agent(mock_tools, mock_llm)
+            create_single_agent(mock_tools, mock_llm)
 
-                assert result == mock_agent
-                # Verify proper configuration
-                call_args = mock_react_agent.from_tools.call_args
-                assert call_args[1]["tools"] == mock_tools
-                assert call_args[1]["llm"] == mock_llm
-                assert call_args[1]["verbose"] is True
-                assert call_args[1]["max_iterations"] == 10
+            assert result == mock_agent
+            # Verify proper configuration
+            call_args = mock_react_agent.from_tools.call_args
+            assert call_args[1]["tools"] == mock_tools
+            assert call_args[1]["llm"] == mock_llm
+            assert call_args[1]["verbose"] is True
+            assert call_args[1]["max_iterations"] == 10
 
     def test_single_agent_handles_creation_failure(self):
         """Single agent creation should handle and propagate errors properly."""
@@ -235,9 +235,9 @@ class TestSingleAgentCreation:
         ):
             with (
                 patch("llama_index.core.memory.ChatMemoryBuffer"),
-                pytest.raises(RuntimeError, match="Agent creation failed")
+                pytest.raises(RuntimeError, match="Agent creation failed"),
             ):
-                    create_single_agent(mock_tools, mock_llm)
+                create_single_agent(mock_tools, mock_llm)
 
 
 class TestMultiAgentSystemCreation:
@@ -250,23 +250,23 @@ class TestMultiAgentSystemCreation:
 
         with (
             patch("langgraph.graph.StateGraph") as mock_state_graph,
-            patch("langgraph.prebuilt.create_react_agent") as mock_create_react
+            patch("langgraph.prebuilt.create_react_agent") as mock_create_react,
         ):
-                # Setup mocks
-                mock_graph = MagicMock()
-                mock_state_graph.return_value = mock_graph
-                mock_graph.compile.return_value = MagicMock()
+            # Setup mocks
+            mock_graph = MagicMock()
+            mock_state_graph.return_value = mock_graph
+            mock_graph.compile.return_value = MagicMock()
 
-                mock_agent = MagicMock()
-                mock_create_react.return_value = mock_agent
+            mock_agent = MagicMock()
+            mock_create_react.return_value = mock_agent
 
-                result = create_langgraph_supervisor_system(mock_tools, mock_llm)
+            create_langgraph_supervisor_system(mock_tools, mock_llm)
 
-                assert result is not None
-                # Should create three specialist agents
-                assert mock_create_react.call_count == 3
-                # Should compile the graph
-                mock_graph.compile.assert_called_once()
+            assert result is not None
+            # Should create three specialist agents
+            assert mock_create_react.call_count == 3
+            # Should compile the graph
+            mock_graph.compile.assert_called_once()
 
     def test_multi_agent_system_handles_creation_failure(self):
         """Multi-agent system should handle creation failures gracefully."""
@@ -276,7 +276,7 @@ class TestMultiAgentSystemCreation:
         with patch(
             "langgraph.graph.StateGraph", side_effect=Exception("Graph creation failed")
         ):
-            result = create_langgraph_supervisor_system(mock_tools, mock_llm)
+            create_langgraph_supervisor_system(mock_tools, mock_llm)
 
             assert result is None  # Should return None on failure
 
@@ -291,19 +291,19 @@ class TestAgentSystemSelection:
 
         with (
             patch("agent_factory.create_langgraph_supervisor_system") as mock_multi,
-            patch("agent_factory.create_single_agent") as mock_single
+            patch("agent_factory.create_single_agent") as mock_single,
         ):
-                mock_multi_system = MagicMock()
-                mock_multi.return_value = mock_multi_system
+            mock_multi_system = MagicMock()
+            mock_multi.return_value = mock_multi_system
 
-                agent_system, mode = get_agent_system(
-                    mock_tools, mock_llm, enable_multi_agent=True
-                )
+            agent_system, mode = get_agent_system(
+                mock_tools, mock_llm, enable_multi_agent=True
+            )
 
-                assert agent_system == mock_multi_system
-                assert mode == "multi"
-                # Single agent should not be called
-                mock_single.assert_not_called()
+            assert agent_system == mock_multi_system
+            assert mode == "multi"
+            # Single agent should not be called
+            mock_single.assert_not_called()
 
     def test_single_agent_fallback_when_multi_agent_fails(self):
         """Should fall back to single agent when multi-agent creation fails."""
@@ -351,7 +351,7 @@ class TestQueryProcessing:
         mock_response.response = "This is the agent's response"
         mock_agent.chat.return_value = mock_response
 
-        result = process_query_with_agent_system(mock_agent, "What is AI?", "single")
+        process_query_with_agent_system(mock_agent, "What is AI?", "single")
 
         assert result == "This is the agent's response"
         mock_agent.chat.assert_called_once_with("What is AI?")
@@ -365,7 +365,7 @@ class TestQueryProcessing:
             "final_answer": "Multi-agent response",
         }
 
-        result = process_query_with_agent_system(
+        process_query_with_agent_system(
             mock_system, "Analyze this complex document", "multi"
         )
 
@@ -380,7 +380,7 @@ class TestQueryProcessing:
         mock_agent = MagicMock()
         mock_agent.chat.side_effect = Exception("Processing failed")
 
-        result = process_query_with_agent_system(mock_agent, "Test query", "single")
+        process_query_with_agent_system(mock_agent, "Test query", "single")
 
         assert "Error processing query" in result
         assert "Processing failed" in result
@@ -390,7 +390,7 @@ class TestQueryProcessing:
         mock_system = MagicMock()
         mock_system.invoke.return_value = {}  # No messages
 
-        result = process_query_with_agent_system(mock_system, "Test query", "multi")
+        process_query_with_agent_system(mock_system, "Test query", "multi")
 
         assert "Multi-agent processing completed but no response generated" in result
 
@@ -399,7 +399,7 @@ class TestRealWorldScenarios:
     """Test realistic user scenarios that would occur in production."""
 
     @pytest.mark.parametrize(
-        "query,expected_type,expected_agent",
+        ("query", "expected_type", "expected_agent"),
         [
             (
                 "Help me understand this research paper",
@@ -476,7 +476,7 @@ class TestRealWorldScenarios:
                 )
 
                 # Process query with fallback
-                result = process_query_with_agent_system(
+                process_query_with_agent_system(
                     agent_system, "Important business query", mode
                 )
 
