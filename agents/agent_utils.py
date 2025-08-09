@@ -39,37 +39,37 @@ Attributes:
 """
 
 import asyncio
-import logging
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from llama_index.core.agent import ReActAgent
 from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.core.query_engine import RetrieverQueryEngine
-from llama_index.core.tools import QueryEngineTool, ToolMetadata
+from llama_index.core.tools import QueryEngineTool
 from llama_index.llms.ollama import Ollama
-from llama_index.postprocessor.colbert_rerank import ColbertRerank
 
 from models import AppSettings
+from utils.error_recovery import (
+    async_with_timeout,
+    with_fallback,
+)
+from utils.exceptions import (
+    ConfigurationError,
+    handle_agent_error,
+)
+from utils.logging_config import log_error_with_context, log_performance, logger
 
 settings = AppSettings()
 
 
+@with_fallback(lambda index_data: [])
 def create_tools_from_index(index_data: dict[str, Any]) -> list[QueryEngineTool]:
-    """Create enhanced query tools with hybrid search and reranking capabilities.
+    """Create enhanced query tools with structured error handling.
 
-    Constructs QueryEngineTool instances from provided indexes, integrating
-    advanced search features including RRF fusion, ColBERT reranking, and
-    multi-modal query capabilities. Provides intelligent tool selection
-    based on available index components.
-
-    Features:
-    - Hybrid fusion retriever with RRF (when available)
-    - Fallback to hybrid vector search
-    - Knowledge graph queries for entity relationships
-    - ColBERT reranking for improved relevance
-    - GPU acceleration integration
-    - Comprehensive error handling and fallbacks
+    Uses the ToolFactory to create QueryEngineTool instances from provided indexes,
+    ensuring consistent configuration and eliminating code duplication.
+    Provides the same advanced search capabilities with centralized tool creation
+    and comprehensive error handling.
 
     Args:
         index_data: Dictionary containing indexed components:
@@ -78,133 +78,99 @@ def create_tools_from_index(index_data: dict[str, Any]) -> list[QueryEngineTool]
             - 'retriever' (QueryFusionRetriever | None): Hybrid fusion retriever
 
     Returns:
-        List of QueryEngineTool instances configured with:
-        - Hybrid fusion search tool (if retriever available)
-        - Hybrid vector search tool (fallback)
-        - Knowledge graph query tool (if KG index available)
-        - ColBERT reranking postprocessors
+        List of QueryEngineTool instances with consistent configuration.
+        Returns empty list on critical failures.
 
-    Note:
-        Tools are created in order of preference: hybrid fusion > hybrid vector > KG.
-        ColBERT reranker is configured based on settings.reranker_model.
-        Each tool includes detailed metadata for agent decision-making.
+    Raises:
+        AgentError: If tool creation fails critically.
 
     Example:
         >>> index_data = {'vector': vector_idx, 'kg': kg_idx, 'retriever': retriever}
         >>> tools = create_tools_from_index(index_data)
         >>> print(f"Created {len(tools)} query tools")
-        >>> for tool in tools:
-        ...     print(f"Tool: {tool.metadata.name}")
     """
-    tools = []
+    start_time = time.perf_counter()
 
-    # Setup ColBERT reranker if configured
-    postprocessors = []
-    if settings.reranker_model:
-        reranker = ColbertRerank(
-            model=settings.reranker_model,
-            top_n=settings.reranking_top_k,
-            keep_retrieval_score=True,
-        )
-        postprocessors.append(reranker)
+    logger.info(
+        "Creating query tools from index data",
+        extra={
+            "has_vector": "vector" in index_data and index_data["vector"] is not None,
+            "has_kg": "kg" in index_data and index_data["kg"] is not None,
+            "has_retriever": "retriever" in index_data
+            and index_data["retriever"] is not None,
+        },
+    )
 
-    # Check if hybrid retriever is available
-    if "retriever" in index_data and index_data["retriever"] is not None:
-        # Create query engine with hybrid fusion retriever and reranking
-        hybrid_query_engine = RetrieverQueryEngine(
-            retriever=index_data["retriever"],
-            node_postprocessors=postprocessors,
-        )
+    try:
+        from agents.tool_factory import ToolFactory
 
-        tools.append(
-            QueryEngineTool(
-                query_engine=hybrid_query_engine,
-                metadata=ToolMetadata(
-                    name="hybrid_fusion_search",
-                    description=(
-                        "Advanced hybrid search with QueryFusionRetriever using RRF "
-                        "(Reciprocal Rank Fusion) to combine dense (BGE-Large) and "
-                        "sparse (SPLADE++) embeddings with ColBERT reranking. "
-                        "Best for: comprehensive document retrieval, finding relevant "
-                        "content through semantic similarity and keyword matching, "
-                        "complex queries requiring both context understanding and "
-                        "precise term matching. Provides superior relevance through "
-                        "RRF score fusion and ColBERT late-interaction reranking."
-                    ),
-                ),
-            ),
-        )
-        logging.info("Hybrid fusion search tool added with ColBERT reranking")
-    else:
-        # Fallback to standard vector query engine
-        vector_query_engine = index_data["vector"].as_query_engine(
-            similarity_top_k=settings.reranking_top_k,
-            hybrid_alpha=settings.rrf_fusion_alpha,  # RRF fusion parameter
-            node_postprocessors=postprocessors,  # Native ColBERT reranking
+        # Validate index_data contains required components
+        if not index_data:
+            raise ConfigurationError(
+                "Empty index_data provided for tool creation",
+                context={
+                    "index_data_keys": list(index_data.keys()) if index_data else []
+                },
+                operation="tool_creation_validation",
+            )
+
+        tools = ToolFactory.create_basic_tools(index_data)
+
+        duration = time.perf_counter() - start_time
+        log_performance(
+            "tool_creation_from_index",
+            duration,
+            tool_count=len(tools),
+            has_vector=index_data.get("vector") is not None,
+            has_kg=index_data.get("kg") is not None,
         )
 
-        # Add fallback vector search tool if hybrid retriever not available
-        tools.append(
-            QueryEngineTool(
-                query_engine=vector_query_engine,
-                metadata=ToolMetadata(
-                    name="hybrid_vector_search",
-                    description=(
-                        "Advanced hybrid search combining dense (BGE-Large) and sparse "
-                        "(SPLADE++) embeddings with RRF fusion and ColBERT reranking. "
-                        "Best for: semantic search, document retrieval, finding "
-                        "similar content, answering questions about document content, "
-                        "summarization, and general information extraction. Uses GPU "
-                        "acceleration when available for 100x performance improvement."
-                    ),
-                ),
-            ),
-        )
-        logging.info("Fallback hybrid vector search tool added")
-
-    # Add Knowledge Graph tool if available
-    if index_data.get("kg") is not None:
-        kg_query_engine = index_data["kg"].as_query_engine(
-            similarity_top_k=10,  # KG queries may need more results
-            include_text=True,  # Include source text with entities
-            node_postprocessors=postprocessors if len(postprocessors) > 0 else None,
+        logger.success(
+            f"Created {len(tools)} query tools from index data",
+            extra={
+                "tool_count": len(tools),
+                "duration_ms": round(duration * 1000, 2),
+            },
         )
 
-        tools.append(
-            QueryEngineTool(
-                query_engine=kg_query_engine,
-                metadata=ToolMetadata(
-                    name="knowledge_graph_query",
-                    description=(
-                        "Knowledge graph search for entity and relationship-based "
-                        "queries. "
-                        "Best for: finding connections between concepts, identifying "
-                        "entities and their relationships, exploring document "
-                        "structure, "
-                        "understanding document hierarchies, and answering questions "
-                        "about how different concepts relate to each other. "
-                        "Complements vector search by providing structured knowledge "
-                        "representation."
-                    ),
-                ),
-            ),
-        )
-        logging.info("Knowledge Graph query tool added successfully")
-    else:
-        logging.warning(
-            "Knowledge Graph index not available - only vector search will be used"
+        return tools
+
+    except Exception as e:
+        log_error_with_context(
+            e,
+            "tool_creation_from_index",
+            context={
+                "index_data_keys": list(index_data.keys()) if index_data else [],
+                "has_vector": index_data.get("vector") is not None
+                if index_data
+                else False,
+                "has_kg": index_data.get("kg") is not None if index_data else False,
+            },
         )
 
-    return tools
+        # Re-raise to trigger fallback decorator
+        raise handle_agent_error(
+            e,
+            operation="tool_creation_from_index",
+            index_data_keys=list(index_data.keys()) if index_data else [],
+        )
 
 
+@with_fallback(
+    lambda index_data, llm: ReActAgent.from_tools(
+        tools=[],
+        llm=llm,
+        verbose=True,
+        memory=ChatMemoryBuffer.from_defaults(token_limit=4096),
+    )
+)
 def create_agent_with_tools(index_data: dict[str, Any], llm: Any) -> ReActAgent:
-    """Create ReActAgent with advanced hybrid search capabilities.
+    """Create ReActAgent with structured error handling.
 
     Constructs a fully-featured ReActAgent equipped with hybrid search tools,
     knowledge graph queries, and memory management. Integrates all available
     advanced features including RRF fusion, ColBERT reranking, and GPU
-    acceleration for optimal performance.
+    acceleration for optimal performance with comprehensive error handling.
 
     Agent capabilities:
     - Multi-step reasoning with ReAct pattern
@@ -213,6 +179,7 @@ def create_agent_with_tools(index_data: dict[str, Any], llm: Any) -> ReActAgent:
     - Memory-aware conversations with token management
     - Error handling and graceful degradation
     - Verbose logging for debugging and monitoring
+    - Structured error recovery with fallbacks
 
     Args:
         index_data: Dictionary containing indexed components from index creation:
@@ -231,12 +198,13 @@ def create_agent_with_tools(index_data: dict[str, Any], llm: Any) -> ReActAgent:
         - Robust error handling with fallbacks
 
     Raises:
-        Exception: If agent creation fails, falls back to basic configuration.
+        AgentError: If agent creation fails critically after fallbacks.
 
     Note:
         The agent uses ReAct (Reasoning + Acting) pattern for systematic
         problem-solving. Memory buffer prevents context overflow in long
         conversations. Tool selection is automatic based on query analysis.
+        Falls back to basic configuration on errors.
 
     Example:
         >>> from llama_index.llms.ollama import Ollama
@@ -245,47 +213,129 @@ def create_agent_with_tools(index_data: dict[str, Any], llm: Any) -> ReActAgent:
         >>> response = agent.chat("What are the main themes in the documents?")
         >>> print(response.response)
     """
-    # Get tools from index data
-    tools = create_tools_from_index(index_data)
+    start_time = time.perf_counter()
 
-    # Create ReActAgent with enhanced memory and error handling
+    logger.info(
+        "Creating ReActAgent with tools",
+        extra={
+            "llm_type": type(llm).__name__,
+            "has_index_data": bool(index_data),
+            "index_components": list(index_data.keys()) if index_data else [],
+        },
+    )
+
     try:
-        agent = ReActAgent.from_tools(
-            tools=tools,
-            llm=llm,
-            verbose=True,
-            max_iterations=10,
-            memory=ChatMemoryBuffer.from_defaults(token_limit=8192),
-        )
-        tool_names = [tool.metadata.name for tool in tools]
-        logging.info("ReActAgent created with %s enhanced tools", len(tools))
-        logging.info("Tools available: %s", ", ".join(tool_names))
-        return agent
+        # Get tools from index data with error handling
+        tools = create_tools_from_index(index_data)
+
+        if not tools:
+            logger.warning(
+                "No tools created from index data, proceeding with empty tool list",
+                extra={
+                    "index_data_keys": list(index_data.keys()) if index_data else []
+                },
+            )
+
+        # Create ReActAgent with enhanced memory and error handling
+        try:
+            agent = ReActAgent.from_tools(
+                tools=tools,
+                llm=llm,
+                verbose=True,
+                max_iterations=10,
+                memory=ChatMemoryBuffer.from_defaults(token_limit=8192),
+            )
+
+            tool_names = [tool.metadata.name for tool in tools]
+
+            duration = time.perf_counter() - start_time
+            log_performance(
+                "react_agent_creation",
+                duration,
+                tool_count=len(tools),
+                max_iterations=10,
+                memory_token_limit=8192,
+            )
+
+            logger.success(
+                f"ReActAgent created with {len(tools)} enhanced tools",
+                extra={
+                    "tool_count": len(tools),
+                    "tool_names": tool_names,
+                    "llm_type": type(llm).__name__,
+                    "duration_ms": round(duration * 1000, 2),
+                },
+            )
+            return agent
+
+        except Exception as e:
+            log_error_with_context(
+                e,
+                "react_agent_creation_enhanced",
+                context={
+                    "tool_count": len(tools),
+                    "llm_type": type(llm).__name__,
+                    "memory_token_limit": 8192,
+                },
+            )
+
+            logger.warning(
+                "Enhanced ReActAgent creation failed, trying basic configuration",
+                extra={"original_error": str(e)},
+            )
+
+            # Fallback with basic configuration
+            agent = ReActAgent.from_tools(
+                tools,
+                llm=llm,
+                verbose=True,
+            )
+
+            tool_names = [tool.metadata.name for tool in tools] if tools else []
+
+            logger.warning(
+                f"Using fallback ReActAgent configuration with {len(tools)} tools",
+                extra={
+                    "tool_count": len(tools),
+                    "tool_names": tool_names,
+                    "fallback_mode": True,
+                },
+            )
+            return agent
 
     except Exception as e:
-        logging.error("ReActAgent creation failed: %s", e)
-        # Fallback with basic configuration
-        agent = ReActAgent.from_tools(
-            tools,
-            llm=llm,
-            verbose=True,
+        log_error_with_context(
+            e,
+            "react_agent_creation",
+            context={
+                "llm_type": type(llm).__name__,
+                "index_data_keys": list(index_data.keys()) if index_data else [],
+            },
         )
-        tool_names = [tool.metadata.name for tool in tools] if tools else []
-        logging.warning(
-            "Using fallback ReActAgent configuration with tools: %s",
-            ", ".join(tool_names),
+
+        # Re-raise to trigger fallback decorator
+        raise handle_agent_error(
+            e,
+            operation="react_agent_creation",
+            llm_type=type(llm).__name__,
+            index_data_keys=list(index_data.keys()) if index_data else [],
         )
-        return agent
 
 
+@with_fallback(
+    lambda agent,
+    index_data,
+    prompt_type: f"Analysis failed for prompt type: {prompt_type}"
+)
 def analyze_documents_agentic(
     agent: ReActAgent, index_data: dict[str, Any], prompt_type: str
 ) -> str:
-    """Perform agentic document analysis with multi-step reasoning.
+    """Perform agentic document analysis with structured error handling.
 
     Executes document analysis using the ReActAgent's multi-step reasoning
     capabilities. The agent systematically queries different index types
-    and synthesizes information to provide comprehensive analysis.
+    and synthesizes information to provide comprehensive analysis with
+    comprehensive error handling and performance monitoring.
 
     Analysis process:
     1. Query vector index for content similarity
@@ -306,58 +356,173 @@ def analyze_documents_agentic(
         Analysis response string containing the agent's multi-step reasoning
         and final conclusions.
 
+    Raises:
+        AgentError: If analysis fails critically after fallbacks.
+
     Note:
         This function provides a compatibility layer and fallback mechanism.
         In normal operation, agents should be properly initialized via
         create_agent_with_tools in the main application.
+        Falls back to basic analysis on errors.
 
     Example:
         >>> agent = create_agent_with_tools(index_data, llm)
         >>> analysis = analyze_documents_agentic(agent, index_data, "summary")
         >>> print(analysis)
     """
-    vector_query_engine = index_data["vector"].as_query_engine()
-    kg_query_engine = index_data["kg"].as_query_engine()
+    start_time = time.perf_counter()
 
-    tools = [
-        QueryEngineTool(
-            query_engine=vector_query_engine,
-            metadata=ToolMetadata(
-                name="vector_query",
-                description="Query documents using vector similarity search "
-                "for general content retrieval",
-            ),
-        ),
-        QueryEngineTool(
-            query_engine=kg_query_engine,
-            metadata=ToolMetadata(
-                name="knowledge_graph_query",
-                description="Query documents using knowledge graph "
-                "for entity and relationship-based queries",
-            ),
-        ),
-    ]
-    if not agent:
-        # Agent will be properly initialized in app.py with user-selected LLM
-        # This is a fallback that should not be reached in normal operation
-        agent = ReActAgent.from_tools(
-            tools,
-            llm=Ollama(model=settings.default_model),
-            verbose=True,
+    logger.info(
+        "Starting agentic document analysis",
+        extra={
+            "prompt_type": prompt_type,
+            "has_agent": agent is not None,
+            "has_vector": "vector" in index_data and index_data["vector"] is not None,
+            "has_kg": "kg" in index_data and index_data["kg"] is not None,
+        },
+    )
+
+    try:
+        # Validate inputs
+        if not index_data:
+            raise ConfigurationError(
+                "Empty index_data provided for analysis",
+                context={"prompt_type": prompt_type},
+                operation="analysis_input_validation",
+            )
+
+        # Safe query engine creation with error handling
+        vector_query_engine = None
+        kg_query_engine = None
+
+        if index_data.get("vector"):
+            try:
+                vector_query_engine = index_data["vector"].as_query_engine()
+            except Exception as e:
+                logger.warning(f"Failed to create vector query engine: {e}")
+
+        if index_data.get("kg"):
+            try:
+                kg_query_engine = index_data["kg"].as_query_engine()
+            except Exception as e:
+                logger.warning(f"Failed to create KG query engine: {e}")
+
+        # Use ToolFactory for consistent tool creation
+        from agents.tool_factory import ToolFactory
+
+        tools = []
+        if vector_query_engine:
+            try:
+                tools.append(
+                    ToolFactory.create_query_tool(
+                        vector_query_engine,
+                        "vector_query",
+                        "Query documents using vector similarity search for general content",
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create vector query tool: {e}")
+
+        if kg_query_engine:
+            try:
+                tools.append(
+                    ToolFactory.create_query_tool(
+                        kg_query_engine,
+                        "knowledge_graph_query",
+                        "Query documents using knowledge graph for entity relationships",
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create KG query tool: {e}")
+
+        if not agent:
+            logger.warning(
+                "No agent provided, creating fallback agent",
+                extra={"tool_count": len(tools), "prompt_type": prompt_type},
+            )
+
+            # Agent will be properly initialized in app.py with user-selected LLM
+            # This is a fallback that should not be reached in normal operation
+            agent = ReActAgent.from_tools(
+                tools,
+                llm=Ollama(model=settings.default_model),
+                verbose=True,
+            )
+
+        # Perform analysis with error handling
+        try:
+            response = agent.chat(f"Analyze with prompt: {prompt_type}")
+            analysis_result = response.response
+
+        except Exception as e:
+            log_error_with_context(
+                e,
+                "agent_chat_analysis",
+                context={
+                    "prompt_type": prompt_type,
+                    "tool_count": len(tools) if tools else 0,
+                },
+            )
+
+            # Fallback to basic analysis
+            logger.warning(
+                f"Agent chat failed, providing basic analysis: {e}",
+                extra={"prompt_type": prompt_type},
+            )
+            analysis_result = f"Analysis partially completed for prompt type: {prompt_type}. Agent encountered issues during processing."
+
+        # Log performance and results
+        duration = time.perf_counter() - start_time
+        log_performance(
+            "agentic_document_analysis",
+            duration,
+            prompt_type=prompt_type,
+            tool_count=len(tools) if tools else 0,
+            has_vector=vector_query_engine is not None,
+            has_kg=kg_query_engine is not None,
         )
-    response = agent.chat(f"Analyze with prompt: {prompt_type}")
-    return response.response  # Parse to AnalysisOutput
+
+        logger.success(
+            f"Agentic analysis completed for prompt type: {prompt_type}",
+            extra={
+                "prompt_type": prompt_type,
+                "analysis_length": len(analysis_result),
+                "duration_seconds": round(duration, 2),
+            },
+        )
+
+        return analysis_result
+
+    except Exception as e:
+        log_error_with_context(
+            e,
+            "agentic_document_analysis",
+            context={
+                "prompt_type": prompt_type,
+                "has_agent": agent is not None,
+                "index_data_keys": list(index_data.keys()) if index_data else [],
+            },
+        )
+
+        # Re-raise to trigger fallback decorator
+        raise handle_agent_error(
+            e,
+            operation="agentic_document_analysis",
+            prompt_type=prompt_type,
+            has_agent=agent is not None,
+        )
 
 
+@async_with_timeout(timeout_seconds=120)  # 2 minute timeout for chat
 async def chat_with_agent(
     agent: ReActAgent, user_input: str, memory: ChatMemoryBuffer
 ) -> AsyncGenerator[str, None]:
-    """Stream chat responses from ReActAgent asynchronously.
+    """Stream chat responses from ReActAgent with structured error handling.
 
     Provides asynchronous streaming chat interface with the ReActAgent,
     supporting knowledge graph queries, multimodal processing, and memory
     management. Yields response chunks as they become available for
-    real-time user interaction.
+    real-time user interaction with comprehensive error handling.
 
     Features:
     - Asynchronous streaming response generation
@@ -366,6 +531,7 @@ async def chat_with_agent(
     - Support for multimodal content processing
     - Error handling with meaningful error messages
     - Compatible with various LLM backends
+    - Timeout protection and performance monitoring
 
     Args:
         agent: ReActAgent instance configured with appropriate tools and LLM.
@@ -381,12 +547,14 @@ async def chat_with_agent(
         immediately for improved user experience.
 
     Raises:
-        Exception: If chat generation fails, logs error and re-raises.
+        AgentError: If chat generation fails critically.
+        asyncio.TimeoutError: If chat exceeds timeout limit.
 
     Note:
         The function uses asyncio.to_thread for compatibility with synchronous
         agent implementations. Multimodal handling depends on the underlying
         LLM capabilities (e.g., Gemma for native multimodal, Nemotron for text).
+        Includes timeout protection and error recovery.
 
     Example:
         >>> import asyncio
@@ -399,15 +567,108 @@ async def chat_with_agent(
         >>>
         >>> asyncio.run(chat_example())
     """
+    start_time = time.perf_counter()
+    chunk_count = 0
+
+    logger.info(
+        "Starting agent chat",
+        extra={
+            "user_input_length": len(user_input),
+            "agent_type": type(agent).__name__,
+            "memory_token_limit": getattr(memory, "token_limit", None),
+        },
+    )
+
     try:
-        response = await asyncio.to_thread(
-            agent.async_stream_chat, user_input, memory=memory
-        )
-        async for chunk in response.async_response_gen():  # Using async_gen
-            yield chunk
+        # Validate inputs
+        if not user_input or not user_input.strip():
+            raise ConfigurationError(
+                "Empty user input provided for chat",
+                context={"user_input_length": len(user_input)},
+                operation="chat_input_validation",
+            )
+
+        if not agent:
+            raise ConfigurationError(
+                "No agent provided for chat",
+                context={"user_input_length": len(user_input)},
+                operation="chat_agent_validation",
+            )
+
+        # Perform async streaming chat with error handling
+        try:
+            response = await asyncio.to_thread(
+                agent.async_stream_chat, user_input, memory=memory
+            )
+
+            async for chunk in response.async_response_gen():  # Using async_gen
+                chunk_count += 1
+                yield chunk
+
+        except Exception as stream_error:
+            log_error_with_context(
+                stream_error,
+                "agent_stream_chat",
+                context={
+                    "user_input_length": len(user_input),
+                    "chunk_count": chunk_count,
+                    "agent_type": type(agent).__name__,
+                },
+            )
+
+            logger.error(
+                f"Agent streaming chat failed: {stream_error}",
+                extra={
+                    "user_input_length": len(user_input),
+                    "chunk_count": chunk_count,
+                },
+            )
+
+            # Yield error message as fallback
+            error_message = (
+                f"Chat processing encountered an error: {str(stream_error)[:100]}..."
+            )
+            yield error_message
+
         # Note: Multimodal handling depends on LLM backend:
         # - Gemma: Native multimodal support
         # - Nemotron: Text-only processing with feature extraction
+
     except Exception as e:
-        logging.error("Chat generation error: %s", str(e))
-        raise
+        log_error_with_context(
+            e,
+            "agent_chat",
+            context={
+                "user_input_length": len(user_input),
+                "agent_type": type(agent).__name__ if agent else "None",
+                "memory_token_limit": getattr(memory, "token_limit", None),
+            },
+        )
+
+        # Re-raise structured error
+        raise handle_agent_error(
+            e,
+            operation="agent_chat",
+            user_input_length=len(user_input),
+            agent_type=type(agent).__name__ if agent else "None",
+        )
+
+    finally:
+        # Log performance metrics
+        duration = time.perf_counter() - start_time
+        log_performance(
+            "agent_chat",
+            duration,
+            user_input_length=len(user_input),
+            chunk_count=chunk_count,
+            agent_type=type(agent).__name__ if agent else "None",
+        )
+
+        logger.success(
+            "Agent chat completed",
+            extra={
+                "user_input_length": len(user_input),
+                "chunk_count": chunk_count,
+                "duration_seconds": round(duration, 2),
+            },
+        )

@@ -49,6 +49,7 @@ import io
 import logging
 import os
 import tempfile
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -63,17 +64,28 @@ from unstructured.partition.auto import partition
 from whisper import load_model as whisper_load
 
 from models import AppSettings
+from utils.error_recovery import (
+    async_with_timeout,
+    document_retry,
+    with_fallback,
+)
+from utils.exceptions import (
+    DocumentLoadingError,
+)
+from utils.logging_config import log_error_with_context, log_performance, logger
 from utils.model_manager import ModelManager
 
 settings = AppSettings()
 
 
+@with_fallback(lambda pdf_path: [])
 def extract_images_from_pdf(pdf_path: str) -> list[dict[str, Any]]:
-    """Extract images from PDF files using PyMuPDF.
+    """Extract images from PDF files using PyMuPDF with structured error handling.
 
     Extracts all embedded images from a PDF document and converts them to
     base64-encoded PNG format for storage and processing. Handles various
-    image formats and color spaces with automatic conversion.
+    image formats and color spaces with automatic conversion. Includes
+    comprehensive error handling and performance monitoring.
 
     Args:
         pdf_path: Absolute or relative path to the PDF file to process.
@@ -88,13 +100,14 @@ def extract_images_from_pdf(pdf_path: str) -> list[dict[str, Any]]:
         - 'size' (tuple): Image dimensions as (width, height)
 
     Raises:
+        DocumentLoadingError: If PDF processing fails critically.
         FileNotFoundError: If the PDF file does not exist.
-        Exception: If image extraction fails for any reason.
 
     Note:
         Only processes images in GRAY or RGB color spaces to avoid
         corruption. CMYK and other complex color spaces are skipped.
         Images are converted to PNG format for consistent handling.
+        Falls back to empty list on errors.
 
     Example:
         >>> images = extract_images_from_pdf("document.pdf")
@@ -102,7 +115,9 @@ def extract_images_from_pdf(pdf_path: str) -> list[dict[str, Any]]:
         ...     print(f"Page {img['page_number']}: {img['size']} pixels")
         ...     # Use img['image_data'] for base64 image content
     """
+    start_time = time.perf_counter()
     images = []
+
     try:
         from pathlib import Path
 
@@ -111,7 +126,11 @@ def extract_images_from_pdf(pdf_path: str) -> list[dict[str, Any]]:
         # Validate file exists and is readable
         pdf_path = Path(pdf_path)
         if not pdf_path.exists():
-            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+            raise DocumentLoadingError(
+                f"PDF file not found: {pdf_path}",
+                context={"pdf_path": str(pdf_path)},
+                operation="pdf_file_validation",
+            )
 
         # Use proper resource management for fitz document
         with fitz.open(str(pdf_path)) as doc:
@@ -154,23 +173,61 @@ def extract_images_from_pdf(pdf_path: str) -> list[dict[str, Any]]:
                         if pix is not None:
                             pix = None
 
-        logging.info("Extracted %s images from PDF", len(images))
+        duration = time.perf_counter() - start_time
+        log_performance(
+            "pdf_image_extraction",
+            duration,
+            pdf_path=str(pdf_path),
+            image_count=len(images),
+        )
+
+        logger.success(
+            f"Extracted {len(images)} images from PDF",
+            extra={
+                "pdf_path": str(pdf_path),
+                "image_count": len(images),
+                "duration_ms": round(duration * 1000, 2),
+            },
+        )
 
     except Exception as e:
-        logging.error("PDF image extraction failed: %s", e)
+        log_error_with_context(
+            e,
+            "pdf_image_extraction",
+            context={
+                "pdf_path": str(pdf_path),
+                "attempted_images": len(images),
+            },
+        )
+        # Re-raise to trigger fallback decorator
+        raise DocumentLoadingError(
+            f"PDF image extraction failed for {pdf_path}",
+            context={"pdf_path": str(pdf_path)},
+            original_error=e,
+            operation="pdf_image_extraction",
+        )
 
     return images
 
 
+@with_fallback(
+    lambda text, images=None: {
+        "text_embedding": None,
+        "image_embeddings": [],
+        "combined_embedding": None,
+        "provider_used": "failed_fallback",
+    }
+)
 def create_native_multimodal_embeddings(
     text: str,
     images: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Create multimodal embeddings using FastEmbed native implementation.
+    """Create multimodal embeddings using FastEmbed with structured error handling.
 
     Generates embeddings for both text and image content using FastEmbed's
     LateInteractionMultimodalEmbedding model. Provides unified embedding
-    space for cross-modal similarity search and retrieval.
+    space for cross-modal similarity search and retrieval with comprehensive
+    error handling and performance monitoring.
 
     Features:
     - FastEmbed native multimodal processing
@@ -178,6 +235,7 @@ def create_native_multimodal_embeddings(
     - Memory-efficient batch processing
     - Temporary file management for images
     - Graceful fallbacks for missing components
+    - Structured error handling and retry logic
 
     Args:
         text: Text content to embed. Can be any length but will be truncated
@@ -193,6 +251,9 @@ def create_native_multimodal_embeddings(
         - 'combined_embedding' (list[float] | None): Combined embedding vector
         - 'provider_used' (str): Embedding provider that was used
 
+    Raises:
+        EmbeddingError: If embedding creation fails critically.
+
     Note:
         Images are temporarily saved to disk for FastEmbed processing and
         automatically cleaned up after embedding computation. Falls back
@@ -207,12 +268,23 @@ def create_native_multimodal_embeddings(
         >>> text_emb = embeddings['text_embedding']
         >>> img_embs = embeddings['image_embeddings']
     """
+    start_time = time.perf_counter()
+
     embeddings = {
         "text_embedding": None,
         "image_embeddings": [],
         "combined_embedding": None,
         "provider_used": None,
     }
+
+    logger.info(
+        "Creating multimodal embeddings",
+        extra={
+            "text_length": len(text),
+            "image_count": len(images) if images else 0,
+            "cuda_available": torch.cuda.is_available(),
+        },
+    )
 
     try:
         # Use FastEmbed native LateInteractionMultimodalEmbedding
@@ -239,23 +311,24 @@ def create_native_multimodal_embeddings(
                         logging.warning("Failed to save image %s: %s", i, e)
 
                 if image_paths:
-                    # Native FastEmbed image embeddings
-                    image_embeddings = list(model.embed_image(image_paths))
+                    try:
+                        # Native FastEmbed image embeddings
+                        image_embeddings = list(model.embed_image(image_paths))
 
-                    for i, img_emb in enumerate(image_embeddings):
-                        embeddings["image_embeddings"].append(
-                            {
-                                "embedding": img_emb.flatten().tolist(),
-                                "metadata": images[i] if i < len(images) else {},
-                            }
-                        )
+                        for i, img_emb in enumerate(image_embeddings):
+                            embeddings["image_embeddings"].append(
+                                {
+                                    "embedding": img_emb.flatten().tolist(),
+                                    "metadata": images[i] if i < len(images) else {},
+                                }
+                            )
+                    finally:
+                        # Always clean up temporary files
+                        import contextlib
 
-                    # Clean up temporary files
-                    import contextlib
-
-                    for path in image_paths:
-                        with contextlib.suppress(Exception):
-                            os.unlink(path)
+                        for path in image_paths:
+                            with contextlib.suppress(Exception):
+                                os.unlink(path)
 
             # FastEmbed handles combined embeddings natively
             embeddings["combined_embedding"] = embeddings["text_embedding"]
@@ -279,9 +352,23 @@ def create_native_multimodal_embeddings(
             embeddings["provider_used"] = "fastembed_text_only"
 
     except Exception as e:
-        logging.error("Native multimodal embedding creation failed: %s", e)
+        log_error_with_context(
+            e,
+            "multimodal_embedding_creation",
+            context={
+                "text_length": len(text),
+                "image_count": len(images) if images else 0,
+                "cuda_available": torch.cuda.is_available(),
+            },
+        )
+
         # Ultimate fallback to FastEmbed text-only
         try:
+            logger.warning(
+                "Multimodal embedding failed, falling back to text-only",
+                extra={"original_error": str(e)},
+            )
+
             fastembed_model = FastEmbedEmbedding(
                 model_name=settings.dense_embedding_model,
                 cache_dir="./embeddings_cache",
@@ -289,19 +376,70 @@ def create_native_multimodal_embeddings(
             embeddings["text_embedding"] = fastembed_model.get_text_embedding(text)
             embeddings["combined_embedding"] = embeddings["text_embedding"]
             embeddings["provider_used"] = "fastembed_fallback"
+
         except Exception as fallback_e:
-            logging.error("All embedding methods failed: %s", fallback_e)
-            embeddings["provider_used"] = "failed"
+            log_error_with_context(
+                fallback_e,
+                "multimodal_embedding_fallback",
+                context={
+                    "text_length": len(text),
+                    "original_error": str(e),
+                },
+            )
+
+            # Re-raise to trigger decorator fallback
+            raise handle_embedding_error(
+                fallback_e,
+                operation="multimodal_embedding_creation",
+                text_length=len(text),
+                image_count=len(images) if images else 0,
+                original_error=e,
+            )
+
+    # Log performance and results
+    duration = time.perf_counter() - start_time
+    log_performance(
+        "multimodal_embedding_creation",
+        duration,
+        text_length=len(text),
+        image_count=len(images) if images else 0,
+        provider_used=embeddings["provider_used"],
+        success=embeddings["provider_used"] != "failed",
+    )
+
+    logger.success(
+        f"Multimodal embeddings created using {embeddings['provider_used']}",
+        extra={
+            "text_length": len(text),
+            "image_count": len(images) if images else 0,
+            "provider": embeddings["provider_used"],
+            "duration_ms": round(duration * 1000, 2),
+        },
+    )
 
     return embeddings
 
 
+@document_retry
+@with_fallback(
+    lambda file_path: [
+        Document(
+            text=f"Failed to load document: {file_path}",
+            metadata={
+                "source": file_path,
+                "type": "error_fallback",
+                "has_images": False,
+            },
+        )
+    ]
+)
 def load_documents_unstructured(file_path: str) -> list[Document]:
-    """Load documents using Unstructured for multimodal parsing.
+    """Load documents using Unstructured with structured error handling.
 
     Uses Unstructured library to extract text, images, tables, and other elements
     from documents with high-res strategy for best quality. Supports embedded
     image extraction and semantic chunking while preserving document structure.
+    Includes comprehensive error handling, performance monitoring, and retries.
 
     Args:
         file_path: Path to the document file to process.
@@ -310,10 +448,32 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
         List of Document objects with multimodal elements and metadata.
 
     Raises:
-        Exception: If document parsing fails, falls back to existing loader.
+        DocumentLoadingError: If document parsing fails critically after retries.
+
+    Note:
+        Falls back gracefully to existing loader on Unstructured failures.
+        Includes automatic retry on transient failures and performance logging.
     """
-    logger = logging.getLogger(__name__)
+    start_time = time.perf_counter()
+
+    logger.info(
+        "Loading document with Unstructured",
+        extra={
+            "file_path": file_path,
+            "strategy": settings.parse_strategy,
+            "chunk_size": settings.chunk_size,
+        },
+    )
+
     try:
+        # Validate file exists before processing
+        if not os.path.exists(file_path):
+            raise DocumentLoadingError(
+                f"Document file not found: {file_path}",
+                context={"file_path": file_path},
+                operation="file_validation",
+            )
+
         # Partition document with high-res strategy for multimodal extraction
         elements = partition(
             filename=file_path,
@@ -334,25 +494,26 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
         current_page = None
         page_images = []
 
-        for element in elements:
-            metadata = {
-                "element_type": element.category,
-                "page_number": (
-                    element.metadata.page_number
-                    if hasattr(element.metadata, "page_number")
-                    else None
-                ),
-                "filename": (
-                    element.metadata.filename
-                    if hasattr(element.metadata, "filename")
-                    else os.path.basename(file_path)
-                ),
-                "coordinates": (
-                    element.metadata.coordinates
-                    if hasattr(element.metadata, "coordinates")
-                    else None
-                ),
-            }
+        try:
+            for element in elements:
+                metadata = {
+                    "element_type": element.category,
+                    "page_number": (
+                        element.metadata.page_number
+                        if hasattr(element.metadata, "page_number")
+                        else None
+                    ),
+                    "filename": (
+                        element.metadata.filename
+                        if hasattr(element.metadata, "filename")
+                        else os.path.basename(file_path)
+                    ),
+                    "coordinates": (
+                        element.metadata.coordinates
+                        if hasattr(element.metadata, "coordinates")
+                        else None
+                    ),
+                }
 
             # Handle different element types for multimodal processing
             if element.category == "Image":
@@ -370,8 +531,8 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
                         base64.b64decode(element.text)
                         image_data = element.text
                     except (ValueError, TypeError):
-                        # Not base64 data, skip
-                        continue
+                        # Not base64 data, skip this element
+                        image_data = None
 
                 if image_data:
                     # Create ImageDocument for multimodal index
@@ -414,39 +575,103 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
                     )
                     documents.append(doc)
 
-            # Track current page for image association
-            if metadata.get("page_number") != current_page:
-                current_page = metadata.get("page_number")
-                page_images = []  # Reset for new page
+                # Track current page for image association
+                if metadata.get("page_number") != current_page:
+                    current_page = metadata.get("page_number")
+                    page_images = []  # Reset for new page
+
+        finally:
+            # Clean up large base64 data from elements to prevent memory leaks
+            if elements:
+                for elem in elements:
+                    if hasattr(elem, "metadata") and hasattr(
+                        elem.metadata, "image_base64"
+                    ):
+                        # Clear large base64 data after processing
+                        elem.metadata.image_base64 = None
+                # Explicit cleanup
+                del elements
 
         # Apply additional chunking if documents are too large
         if settings.chunk_size > 0:
             documents = chunk_documents_structured(documents)
 
-        logger.info(
-            f"Loaded {len(documents)} multimodal elements from {file_path} "
-            f"using Unstructured with strategy '{settings.parse_strategy}'"
+        # Log performance and results
+        duration = time.perf_counter() - start_time
+        log_performance(
+            "unstructured_document_loading",
+            duration,
+            file_path=file_path,
+            document_count=len(documents),
+            strategy=settings.parse_strategy,
+        )
+
+        logger.success(
+            f"Loaded {len(documents)} multimodal elements from {file_path}",
+            extra={
+                "file_path": file_path,
+                "document_count": len(documents),
+                "strategy": settings.parse_strategy,
+                "duration_ms": round(duration * 1000, 2),
+            },
         )
         return documents
 
     except Exception as e:
-        logger.error(f"Error loading with Unstructured: {e}")
-        logger.info("Falling back to existing LlamaParse loader")
+        log_error_with_context(
+            e,
+            "unstructured_document_loading",
+            context={
+                "file_path": file_path,
+                "strategy": settings.parse_strategy,
+                "chunk_size": settings.chunk_size,
+            },
+        )
+
+        logger.warning(
+            f"Unstructured loading failed for {file_path}, falling back to LlamaParse",
+            extra={"original_error": str(e)},
+        )
 
         # Fall back to existing loader - create temporary file list for compatibility
-        class TempFile:
-            def __init__(self, path: str):
-                self.name = os.path.basename(path)
-                with open(path, "rb") as f:
-                    self._content = f.read()
+        try:
 
-            def getvalue(self):
-                return self._content
+            class TempFile:
+                def __init__(self, path: str):
+                    self.name = os.path.basename(path)
+                    with open(path, "rb") as f:
+                        self._content = f.read()
 
-        temp_files = [TempFile(file_path)]
-        return load_documents_llama(
-            uploaded_files=temp_files, parse_media=False, enable_multimodal=True
-        )
+                def getvalue(self):
+                    return self._content
+
+            temp_files = [TempFile(file_path)]
+            fallback_docs = load_documents_llama(
+                uploaded_files=temp_files, parse_media=False, enable_multimodal=True
+            )
+
+            logger.info(
+                f"Fallback successful: loaded {len(fallback_docs)} documents via LlamaParse"
+            )
+            return fallback_docs
+
+        except Exception as fallback_error:
+            log_error_with_context(
+                fallback_error,
+                "document_loading_fallback",
+                context={
+                    "file_path": file_path,
+                    "original_error": str(e),
+                },
+            )
+
+            # Re-raise to trigger decorator fallback
+            raise handle_document_loading_error(
+                fallback_error,
+                operation="document_loading_with_fallback",
+                file_path=file_path,
+                original_error=e,
+            )
 
 
 def chunk_documents_structured(documents: list[Document]) -> list[Document]:
@@ -484,13 +709,15 @@ def chunk_documents_structured(documents: list[Document]) -> list[Document]:
     return chunked_docs
 
 
+@document_retry
 def load_documents_llama(
     uploaded_files: list[Any], parse_media: bool = False, enable_multimodal: bool = True
 ) -> list[Document]:
-    """Load documents using LlamaParse with multimodal support.
+    """Load documents using LlamaParse with structured error handling.
 
     Supports standard document formats plus video/audio ingestion and PDF image
-    extraction for multimodal processing with enhanced error handling.
+    extraction for multimodal processing with comprehensive error handling,
+    performance monitoring, and retry logic.
 
     Args:
         uploaded_files: List of uploaded file objects.
@@ -502,8 +729,23 @@ def load_documents_llama(
         List of loaded Document objects with multimodal embeddings where applicable.
 
     Raises:
-        Exception: If critical document loading operations fail.
+        DocumentLoadingError: If critical document loading operations fail after retries.
+
+    Note:
+        Includes automatic retries for transient failures and comprehensive
+        error context preservation for debugging.
     """
+    start_time = time.perf_counter()
+
+    logger.info(
+        "Loading documents with LlamaParse",
+        extra={
+            "file_count": len(uploaded_files),
+            "parse_media": parse_media,
+            "enable_multimodal": enable_multimodal,
+        },
+    )
+
     parser = LlamaParse(result_type="markdown")  # Latest for tables/images
     docs: list[Document] = []
 
@@ -653,11 +895,30 @@ def load_documents_llama(
                 docs.extend(loaded_docs)
 
         except FileNotFoundError as e:
-            logging.error("File not found: %s - %s", file.name, str(e))
+            log_error_with_context(
+                e,
+                "file_not_found",
+                context={"file_name": file.name},
+            )
+            logger.error(f"File not found: {file.name}")
         except ValueError as e:
-            logging.error("Invalid file format: %s - %s", file.name, str(e))
+            log_error_with_context(
+                e,
+                "invalid_file_format",
+                context={"file_name": file.name},
+            )
+            logger.error(f"Invalid file format: {file.name}")
         except Exception as e:
-            logging.error("Unexpected error loading %s: %s", file.name, str(e))
+            log_error_with_context(
+                e,
+                "document_loading_error",
+                context={
+                    "file_name": file.name,
+                    "parse_media": parse_media,
+                    "enable_multimodal": enable_multimodal,
+                },
+            )
+            logger.error(f"Unexpected error loading {file.name}: {e}")
         finally:
             # Ensure temporary file is always cleaned up
             if file_path and os.path.exists(file_path):
@@ -668,9 +929,26 @@ def load_documents_llama(
                         "Failed to cleanup temp file %s: %s", file_path, cleanup_error
                     )
 
-    logging.info(
-        f"Loaded {len(docs)} documents, multimodal processing enabled: "
-        f"{enable_multimodal}"
+    # Log performance and results
+    duration = time.perf_counter() - start_time
+    log_performance(
+        "llamaparse_document_loading",
+        duration,
+        file_count=len(uploaded_files),
+        document_count=len(docs),
+        parse_media=parse_media,
+        enable_multimodal=enable_multimodal,
+    )
+
+    logger.success(
+        f"Loaded {len(docs)} documents via LlamaParse",
+        extra={
+            "file_count": len(uploaded_files),
+            "document_count": len(docs),
+            "parse_media": parse_media,
+            "enable_multimodal": enable_multimodal,
+            "duration_ms": round(duration * 1000, 2),
+        },
     )
     return docs
 
@@ -678,12 +956,14 @@ def load_documents_llama(
 # Streaming Document Processing for Async Performance
 
 
+@async_with_timeout(timeout_seconds=300)
 async def stream_document_processing(file_paths: list[str]) -> AsyncIterator[Document]:
-    """Stream document processing for large document sets.
+    """Stream document processing for large document sets with error handling.
 
     Processes documents asynchronously and yields results as they
     become available, reducing memory usage and improving responsiveness.
-    Provides significant performance improvements for large document collections.
+    Provides significant performance improvements for large document collections
+    with comprehensive error handling and timeout protection.
 
     Args:
         file_paths: List of file paths to process.
@@ -691,19 +971,45 @@ async def stream_document_processing(file_paths: list[str]) -> AsyncIterator[Doc
     Yields:
         Processed Document objects as they become available.
 
+    Raises:
+        DocumentLoadingError: If critical streaming operations fail.
+        asyncio.TimeoutError: If processing exceeds timeout limit.
+
     Note:
         Uses semaphore to limit concurrent processing and prevent resource exhaustion.
         Falls back gracefully on individual document processing failures.
+        Includes timeout protection and performance monitoring.
     """
+    start_time = time.perf_counter()
+    processed_count = 0
+    error_count = 0
+
+    logger.info(
+        "Starting stream document processing",
+        extra={"file_count": len(file_paths), "semaphore_limit": 5},
+    )
+
     semaphore = asyncio.Semaphore(5)  # Limit concurrent processing
 
     async def process_single_file(file_path: str) -> list[Document]:
-        """Process a single file with semaphore limiting."""
+        """Process a single file with semaphore limiting and error handling."""
         async with semaphore:
             try:
                 return await asyncio.to_thread(load_documents_unstructured, file_path)
             except Exception as e:
-                logging.error(f"Document processing failed for {file_path}: {e}")
+                nonlocal error_count
+                error_count += 1
+
+                log_error_with_context(
+                    e,
+                    "stream_document_processing_single_file",
+                    context={"file_path": file_path},
+                )
+
+                logger.warning(
+                    f"Document processing failed for {file_path}, continuing with others",
+                    extra={"error_count": error_count, "file_path": file_path},
+                )
                 return []  # Return empty list on failure
 
     # Create tasks for all files
@@ -716,21 +1022,126 @@ async def stream_document_processing(file_paths: list[str]) -> AsyncIterator[Doc
         try:
             documents = await completed_task
             for doc in documents:
+                processed_count += 1
                 yield doc
         except Exception as e:
-            logging.error(f"Document processing failed: {e}")
+            error_count += 1
+            log_error_with_context(
+                e,
+                "stream_document_processing_task_completion",
+                context={
+                    "processed_count": processed_count,
+                    "error_count": error_count,
+                },
+            )
+            logger.error(
+                f"Document processing task failed: {e}",
+                extra={"processed_count": processed_count, "error_count": error_count},
+            )
             # Continue with other documents
             continue
 
+    # Log final performance metrics
+    duration = time.perf_counter() - start_time
+    log_performance(
+        "stream_document_processing",
+        duration,
+        file_count=len(file_paths),
+        processed_count=processed_count,
+        error_count=error_count,
+    )
 
+    logger.success(
+        "Stream document processing completed",
+        extra={
+            "file_count": len(file_paths),
+            "processed_count": processed_count,
+            "error_count": error_count,
+            "success_rate": (processed_count / len(file_paths)) if file_paths else 0,
+            "duration_seconds": round(duration, 2),
+        },
+    )
+
+
+async def load_documents_parallel(
+    file_paths: list[str], max_concurrent: int = 5
+) -> list[Document]:
+    """Load multiple documents in parallel with concurrency limit."""
+    import asyncio
+    from asyncio import Semaphore
+
+    from utils.logging_config import logger
+
+    semaphore = Semaphore(max_concurrent)
+
+    async def load_with_limit(file_path: str) -> list[Document]:
+        """Load single document with concurrency limit."""
+        async with semaphore:
+            try:
+                if file_path.endswith(".pdf"):
+                    return await load_documents_unstructured_async(file_path)
+                else:
+                    # Use asyncio.to_thread for sync loaders
+                    return await asyncio.to_thread(load_documents_llama_sync, file_path)
+            except Exception as e:
+                logger.error(f"Failed to load {file_path}: {e}")
+                return []
+
+    # Load all documents in parallel
+    logger.info(f"Loading {len(file_paths)} documents in parallel")
+
+    start_time = asyncio.get_event_loop().time()
+    doc_lists = await asyncio.gather(
+        *[load_with_limit(path) for path in file_paths], return_exceptions=False
+    )
+
+    # Flatten results
+    all_docs = []
+    for docs in doc_lists:
+        if docs:
+            all_docs.extend(docs)
+
+    elapsed = asyncio.get_event_loop().time() - start_time
+    logger.info(
+        f"Loaded {len(all_docs)} documents from {len(file_paths)} files "
+        f"in {elapsed:.2f}s"
+    )
+
+    return all_docs
+
+
+async def load_documents_unstructured_async(file_path: str) -> list[Document]:
+    """Async wrapper for Unstructured document loading."""
+    return await asyncio.to_thread(load_documents_unstructured, file_path)
+
+
+def load_documents_llama_sync(file_path: str) -> list[Document]:
+    """Synchronous wrapper for single file loading with LlamaParse."""
+
+    # Create mock file object for existing load_documents_llama
+    class MockFile:
+        def __init__(self, path: str):
+            self.name = os.path.basename(path)
+            with open(path, "rb") as f:
+                self._content = f.read()
+
+        def getvalue(self):
+            return self._content
+
+    mock_file = MockFile(file_path)
+    return load_documents_llama([mock_file], parse_media=False, enable_multimodal=True)
+
+
+@async_with_timeout(timeout_seconds=600)  # 10 minute timeout for large batches
 async def batch_embed_documents(
     documents: list[Document], batch_size: int = 32
 ) -> list[list[float]]:
-    """Batch document embedding with parallel processing.
+    """Batch document embedding with structured error handling.
 
     Embeds documents in parallel batches for optimal performance.
     Uses asyncio.to_thread to prevent blocking the event loop during
-    CPU-intensive embedding operations.
+    CPU-intensive embedding operations. Includes comprehensive error
+    handling, timeout protection, and performance monitoring.
 
     Args:
         documents: Documents to embed.
@@ -739,13 +1150,36 @@ async def batch_embed_documents(
     Returns:
         List of embedding vectors corresponding to input documents.
 
+    Raises:
+        EmbeddingError: If embedding operations fail critically.
+        asyncio.TimeoutError: If embedding exceeds timeout limit.
+
     Note:
         Falls back gracefully on batch failures by providing zero embeddings.
         Processes batches in parallel for maximum throughput.
+        Includes timeout protection for large document collections.
     """
+    start_time = time.perf_counter()
+
+    logger.info(
+        "Starting batch document embedding",
+        extra={
+            "document_count": len(documents),
+            "batch_size": batch_size,
+            "batch_count": (len(documents) + batch_size - 1) // batch_size,
+        },
+    )
+
     from utils.utils import get_embed_model
 
-    embed_model = get_embed_model()
+    try:
+        embed_model = get_embed_model()
+    except Exception as e:
+        raise handle_embedding_error(
+            e,
+            operation="embedding_model_initialization",
+            document_count=len(documents),
+        )
 
     # Split into batches
     batches = [
@@ -753,12 +1187,27 @@ async def batch_embed_documents(
     ]
 
     async def embed_batch(batch: list[Document]) -> list[list[float]]:
-        """Embed a single batch of documents."""
+        """Embed a single batch of documents with error handling."""
         try:
             texts = [doc.text for doc in batch]
             return await asyncio.to_thread(embed_model.embed, texts)
         except Exception as e:
-            logging.error(f"Batch embedding failed: {e}")
+            log_error_with_context(
+                e,
+                "batch_embedding",
+                context={
+                    "batch_size": len(batch),
+                    "text_lengths": [
+                        len(doc.text) for doc in batch[:3]
+                    ],  # Sample sizes
+                },
+            )
+
+            logger.warning(
+                f"Batch embedding failed, using placeholder embeddings: {e}",
+                extra={"batch_size": len(batch)},
+            )
+
             # Add placeholder embeddings for failed batch
             settings_instance = settings
             return [[0.0] * settings_instance.dense_embedding_dimension] * len(batch)
@@ -768,11 +1217,24 @@ async def batch_embed_documents(
         *[embed_batch(batch) for batch in batches], return_exceptions=True
     )
 
-    # Combine results
+    # Combine results with detailed error tracking
     all_embeddings = []
+    failed_batches = 0
+
     for i, result in enumerate(batch_results):
         if isinstance(result, Exception):
-            logging.error(f"Batch {i} embedding failed: {result}")
+            failed_batches += 1
+            log_error_with_context(
+                result,
+                "batch_embedding_result",
+                context={"batch_index": i, "batch_size": len(batches[i])},
+            )
+
+            logger.error(
+                f"Batch {i} embedding failed: {result}",
+                extra={"batch_index": i, "failed_batches": failed_batches},
+            )
+
             # Add placeholder embeddings for failed batch
             failed_batch_size = len(batches[i])
             settings_instance = settings
@@ -783,20 +1245,42 @@ async def batch_embed_documents(
         else:
             all_embeddings.extend(result)
 
-    logging.info(
-        f"Embedded {len(all_embeddings)} documents in {len(batches)} parallel batches"
+    # Log performance and results
+    duration = time.perf_counter() - start_time
+    log_performance(
+        "batch_document_embedding",
+        duration,
+        document_count=len(documents),
+        batch_count=len(batches),
+        failed_batches=failed_batches,
+        embedding_count=len(all_embeddings),
+    )
+
+    logger.success(
+        f"Embedded {len(all_embeddings)} documents in {len(batches)} parallel batches",
+        extra={
+            "document_count": len(documents),
+            "batch_count": len(batches),
+            "failed_batches": failed_batches,
+            "success_rate": (len(batches) - failed_batches) / len(batches)
+            if batches
+            else 0,
+            "duration_seconds": round(duration, 2),
+        },
     )
     return all_embeddings
 
 
+@async_with_timeout(timeout_seconds=900)  # 15 minute timeout for large collections
 async def process_documents_streaming(
     file_paths: list[str], chunk_size: int = 1024, chunk_overlap: int = 200
 ) -> AsyncIterator[Document]:
-    """Process documents with streaming and chunking for memory efficiency.
+    """Process documents with streaming and chunking with error handling.
 
     Combines streaming document processing with intelligent chunking to
     handle large document collections efficiently. Provides real-time
-    progress updates and memory-conscious processing.
+    progress updates and memory-conscious processing with comprehensive
+    error handling and performance monitoring.
 
     Args:
         file_paths: List of file paths to process.
@@ -806,40 +1290,138 @@ async def process_documents_streaming(
     Yields:
         Processed and chunked Document objects as they become available.
 
+    Raises:
+        DocumentLoadingError: If critical streaming operations fail.
+        asyncio.TimeoutError: If processing exceeds timeout limit.
+
     Note:
         Automatically applies semantic chunking to large documents while
         preserving multimodal content. Streams results for immediate processing.
+        Includes timeout protection and detailed error tracking.
     """
+    start_time = time.perf_counter()
     processed_count = 0
+    chunked_count = 0
+    error_count = 0
     total_files = len(file_paths)
 
-    async for document in stream_document_processing(file_paths):
-        # Apply chunking if document is too large
-        if len(document.text) > chunk_size:
-            # Use chunking for large documents
-            from llama_index.core.node_parser import SentenceSplitter
-
-            splitter = SentenceSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                paragraph_separator="\n\n",
-                secondary_chunking_regex="[^,.;。]+[,.;。]?",
-            )
-
-            chunks = await asyncio.to_thread(
-                splitter.get_nodes_from_documents, [document]
-            )
-
-            for chunk in chunks:
-                yield chunk
-        else:
-            # Document is small enough, yield as-is
-            yield document
-
-        processed_count += 1
-        if processed_count % 10 == 0:  # Log progress every 10 documents
-            logging.info(f"Processed {processed_count}/{total_files} documents")
-
-    logging.info(
-        f"Streaming processing completed: {processed_count}/{total_files} documents"
+    logger.info(
+        "Starting streaming document processing with chunking",
+        extra={
+            "file_count": total_files,
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+        },
     )
+
+    try:
+        async for document in stream_document_processing(file_paths):
+            try:
+                # Apply chunking if document is too large
+                if len(document.text) > chunk_size:
+                    # Use chunking for large documents
+                    from llama_index.core.node_parser import SentenceSplitter
+
+                    splitter = SentenceSplitter(
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        paragraph_separator="\n\n",
+                        secondary_chunking_regex="[^,.;。]+[,.;。]?",
+                    )
+
+                    chunks = await asyncio.to_thread(
+                        splitter.get_nodes_from_documents, [document]
+                    )
+
+                    for chunk in chunks:
+                        chunked_count += 1
+                        yield chunk
+
+                    logger.debug(
+                        f"Chunked document into {len(chunks)} pieces",
+                        extra={
+                            "original_length": len(document.text),
+                            "chunks": len(chunks),
+                        },
+                    )
+                else:
+                    # Document is small enough, yield as-is
+                    yield document
+
+                processed_count += 1
+                if processed_count % 10 == 0:  # Log progress every 10 documents
+                    logger.info(
+                        f"Processed {processed_count}/{total_files} documents",
+                        extra={
+                            "processed": processed_count,
+                            "total": total_files,
+                            "chunked_count": chunked_count,
+                            "error_count": error_count,
+                        },
+                    )
+
+            except Exception as e:
+                error_count += 1
+                log_error_with_context(
+                    e,
+                    "streaming_document_chunking",
+                    context={
+                        "processed_count": processed_count,
+                        "document_length": len(document.text)
+                        if hasattr(document, "text")
+                        else 0,
+                        "chunk_size": chunk_size,
+                    },
+                )
+
+                logger.warning(
+                    f"Document chunking failed, skipping document: {e}",
+                    extra={
+                        "error_count": error_count,
+                        "processed_count": processed_count,
+                    },
+                )
+                continue
+
+    except Exception as e:
+        log_error_with_context(
+            e,
+            "streaming_document_processing_main",
+            context={
+                "processed_count": processed_count,
+                "total_files": total_files,
+                "chunk_size": chunk_size,
+            },
+        )
+
+        # Re-raise critical streaming errors
+        raise handle_document_loading_error(
+            e,
+            operation="streaming_document_processing",
+            processed_count=processed_count,
+            total_files=total_files,
+        )
+
+    finally:
+        # Log final performance metrics
+        duration = time.perf_counter() - start_time
+        log_performance(
+            "streaming_document_processing_with_chunking",
+            duration,
+            file_count=total_files,
+            processed_count=processed_count,
+            chunked_count=chunked_count,
+            error_count=error_count,
+        )
+
+        logger.success(
+            "Streaming processing with chunking completed",
+            extra={
+                "file_count": total_files,
+                "processed_count": processed_count,
+                "chunked_count": chunked_count,
+                "error_count": error_count,
+                "success_rate": (processed_count / total_files) if total_files else 0,
+                "duration_seconds": round(duration, 2),
+            },
+        )

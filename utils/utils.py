@@ -33,7 +33,6 @@ Attributes:
 
 import asyncio
 import gc
-import logging
 import subprocess
 import time
 from collections.abc import Callable
@@ -46,37 +45,45 @@ from llama_index.embeddings.fastembed import FastEmbedEmbedding
 from qdrant_client import AsyncQdrantClient
 
 from models import AppSettings
+from utils.error_recovery import (
+    embedding_retry,
+    safe_execute,
+    with_fallback,
+)
+from utils.exceptions import (
+    ConfigurationError,
+    handle_embedding_error,
+)
+from utils.logging_config import log_error_with_context, log_performance, logger
 from utils.model_manager import ModelManager
 
 settings = AppSettings()
 
 
 def setup_logging(log_level: str = "INFO") -> None:
-    """Configure application logging with console and file handlers.
+    """Configure application logging using structured logging.
 
-    Sets up structured logging with timestamped messages, appropriate
-    formatting, and dual output to both console and log file for
-    comprehensive debugging and monitoring.
+    Delegates to the structured logging configuration in logging_config.py
+    for comprehensive error tracking and performance monitoring.
 
     Args:
         log_level: Logging level as string. Must be one of 'DEBUG', 'INFO',
             'WARNING', 'ERROR', or 'CRITICAL'. Defaults to 'INFO'.
 
     Note:
-        Creates a log file named 'docmind.log' in the current directory.
-        Both console and file handlers use the same formatting pattern
-        for consistency.
+        This function is deprecated. Use setup_logging from logging_config
+        directly for full structured logging capabilities.
 
     Example:
         >>> setup_logging("DEBUG")
-        >>> import logging
-        >>> logging.info("Application started")
+        >>> logger.info("Application started")
     """
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(), logging.FileHandler("docmind.log")],
+    from utils.logging_config import setup_logging as setup_structured_logging
+
+    logger.warning(
+        "Using deprecated setup_logging. Use utils.logging_config.setup_logging"
     )
+    setup_structured_logging(console_level=log_level)
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -85,7 +92,7 @@ def detect_hardware() -> dict[str, Any]:
     Performs comprehensive hardware detection including CUDA availability,
     GPU specifications, and FastEmbed execution providers. Uses the model
     manager singleton pattern to prevent redundant model initializations
-    and optimize resource usage.
+    and optimize resource usage with structured error handling.
 
     Returns:
         Dictionary containing hardware information with keys:
@@ -106,6 +113,8 @@ def detect_hardware() -> dict[str, Any]:
         ... else:
         ...     print("Running on CPU")
     """
+    start_time = time.perf_counter()
+
     hardware_info = {
         "cuda_available": False,
         "gpu_name": "Unknown",
@@ -113,46 +122,70 @@ def detect_hardware() -> dict[str, Any]:
         "fastembed_providers": [],
     }
 
-    # Use FastEmbed's native hardware detection
-    try:
-        # FastEmbed automatically detects available providers
+    # Use FastEmbed's native hardware detection with safe execution
+    def detect_fastembed_providers():
         test_model = ModelManager.get_text_embedding_model("BAAI/bge-small-en-v1.5")
-
-        # Get detected providers from FastEmbed
         try:
             providers = test_model.model.model.get_providers()
             hardware_info["fastembed_providers"] = providers
             hardware_info["cuda_available"] = "CUDAExecutionProvider" in providers
-            logging.info("FastEmbed detected providers: %s", providers)
-        except (AttributeError, RuntimeError, ImportError):
-            # Fallback detection
+            logger.info(
+                "FastEmbed providers detected",
+                extra={
+                    "providers": providers,
+                    "cuda_available": hardware_info["cuda_available"],
+                },
+            )
+        except (AttributeError, RuntimeError, ImportError) as e:
+            logger.warning(f"FastEmbed provider detection fallback: {e}")
             hardware_info["cuda_available"] = torch.cuda.is_available()
+        finally:
+            del test_model  # Cleanup
 
-        # Basic GPU info if available
-        if hardware_info["cuda_available"] and torch.cuda.is_available():
-            try:
-                hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
-                vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                hardware_info["vram_total_gb"] = round(vram_gb, 1)
-            except (RuntimeError, AttributeError) as e:
-                logging.warning("GPU info detection failed: %s", e)
+    # Safe execution with fallback
+    safe_execute(
+        detect_fastembed_providers,
+        default_value=None,
+        operation_name="fastembed_detection",
+    )
 
-        del test_model  # Cleanup
-
-    except (ImportError, RuntimeError, AttributeError) as e:
-        logging.warning("FastEmbed hardware detection failed: %s", e)
-        # Ultimate fallback
+    # If FastEmbed detection failed, use basic PyTorch detection
+    if not hardware_info["fastembed_providers"]:
         hardware_info["cuda_available"] = torch.cuda.is_available()
+
+    # Get detailed GPU information with error handling
+    if hardware_info["cuda_available"] and torch.cuda.is_available():
+
+        def get_gpu_info():
+            hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            hardware_info["vram_total_gb"] = round(vram_gb, 1)
+
+        safe_execute(
+            get_gpu_info, default_value=None, operation_name="gpu_info_detection"
+        )
+
+    # Log performance and results
+    duration = time.perf_counter() - start_time
+    log_performance(
+        "hardware_detection",
+        duration,
+        cuda_available=hardware_info["cuda_available"],
+        gpu_name=hardware_info["gpu_name"],
+        providers_count=len(hardware_info["fastembed_providers"]),
+    )
 
     return hardware_info
 
 
+@embedding_retry
 def get_embed_model() -> FastEmbedEmbedding:
-    """Create optimized embedding model with GPU acceleration.
+    """Create optimized embedding model with GPU acceleration and error recovery.
 
     Initializes a FastEmbedEmbedding model with optimal configuration for
     both CPU and GPU environments. Applies torch.compile optimization when
     available and uses research-backed model settings for best performance.
+    Includes structured error handling and automatic retries.
 
     GPU optimizations include:
     - torch.compile with 'reduce-overhead' mode
@@ -163,6 +196,9 @@ def get_embed_model() -> FastEmbedEmbedding:
     Returns:
         FastEmbedEmbedding: Fully configured and optimized embedding model.
 
+    Raises:
+        EmbeddingError: If model initialization fails after retries.
+
     Note:
         The model is configured with:
         - Model: BGE-Large (BAAI/bge-large-en-v1.5) from settings
@@ -170,51 +206,71 @@ def get_embed_model() -> FastEmbedEmbedding:
         - Cache directory: './embeddings_cache'
         - Dynamic batching for variable input sizes
 
-    Raises:
-        Exception: If model initialization fails.
-
     Example:
         >>> embed_model = get_embed_model()
         >>> embeddings = embed_model.get_text_embedding("Hello world")
         >>> print(f"Embedding dimension: {len(embeddings)}")
     """
-    # Initialize embedding model with optimal configuration
-    embed_model = FastEmbedEmbedding(
-        model_name=settings.dense_embedding_model,
-        max_length=512,
-        cache_dir="./embeddings_cache",
-        providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-        if settings.gpu_acceleration and torch.cuda.is_available()
-        else ["CPUExecutionProvider"],
-        batch_size=settings.embedding_batch_size,
+    start_time = time.perf_counter()
+
+    logger.info(
+        "Creating embedding model",
+        extra={
+            "model": settings.dense_embedding_model,
+            "gpu_enabled": settings.gpu_acceleration,
+            "batch_size": settings.embedding_batch_size,
+            "max_length": 512,
+        },
     )
 
-    # Apply GPU optimizations if available
-    if settings.gpu_acceleration and torch.cuda.is_available():
-        # Enable mixed precision and compilation
-        if hasattr(torch, "compile"):
-            embed_model = torch.compile(
-                embed_model,
-                mode="reduce-overhead",  # Best for embedding models
-                dynamic=True,  # Handle variable batch sizes
-            )
-            logging.info(
-                "GPU: torch.compile enabled for embeddings with reduce-overhead mode"
-            )
+    try:
+        # Determine providers based on hardware availability
+        providers = ["CPUExecutionProvider"]
+        if settings.gpu_acceleration and torch.cuda.is_available():
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            logger.info(f"GPU detected: {torch.cuda.get_device_name(0)}")
+        else:
+            logger.info("Using CPU for embeddings")
 
-        # Log GPU configuration
-        try:
-            gpu_name = torch.cuda.get_device_name(0)
-            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            logging.info(
-                "GPU: Using %s with %.1fGB VRAM for embeddings", gpu_name, vram_gb
-            )
-        except (RuntimeError, AttributeError) as e:
-            logging.warning("GPU info detection failed: %s", e)
-    else:
-        logging.info("Using CPU mode for embeddings")
+        # Use factory for consistent embedding model creation
+        from utils.embedding_factory import EmbeddingFactory
 
-    return embed_model
+        embed_model = EmbeddingFactory.create_dense_embedding(
+            use_gpu=settings.gpu_acceleration
+        )
+
+        duration = time.perf_counter() - start_time
+        log_performance(
+            "embedding_model_creation",
+            duration,
+            model=settings.dense_embedding_model,
+            gpu_enabled=settings.gpu_acceleration and torch.cuda.is_available(),
+            providers=providers,
+        )
+
+        logger.success(
+            f"Embedding model created successfully: {settings.dense_embedding_model}"
+        )
+        return embed_model
+
+    except Exception as e:
+        log_error_with_context(
+            e,
+            "embedding_model_creation",
+            context={
+                "model": settings.dense_embedding_model,
+                "gpu_requested": settings.gpu_acceleration,
+                "cuda_available": torch.cuda.is_available(),
+                "batch_size": settings.embedding_batch_size,
+            },
+        )
+        raise handle_embedding_error(
+            e,
+            operation="get_embed_model",
+            model=settings.dense_embedding_model,
+            gpu_requested=settings.gpu_acceleration,
+            cuda_available=torch.cuda.is_available(),
+        )
 
 
 """
@@ -306,16 +362,17 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
         settings.rrf_fusion_weight_dense + settings.rrf_fusion_weight_sparse
     )
 
-    logging.info("RRF Configuration Verification: %s", verification)
+    logger.info("RRF Configuration Verification: %s", verification)
     return verification
 
 
+@with_fallback(lambda model_name: None)  # Graceful fallback returns None
 def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
     """Ensure spaCy model is available, download if needed.
 
     Attempts to load a spaCy model and automatically downloads it if not
-    found locally. Provides robust error handling and informative logging
-    throughout the process.
+    found locally. Provides robust error handling, structured logging,
+    and graceful fallbacks throughout the process.
 
     Args:
         model_name: Name of the spaCy model to load. Common options include:
@@ -325,10 +382,11 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
             Defaults to 'en_core_web_sm'.
 
     Returns:
-        Loaded spaCy Language model instance ready for NLP processing.
+        Loaded spaCy Language model instance ready for NLP processing,
+        or None if loading fails and fallback is used.
 
     Raises:
-        RuntimeError: If the model cannot be loaded or downloaded, or if
+        ConfigurationError: If the model cannot be loaded or downloaded, or if
             spaCy is not installed.
 
     Note:
@@ -338,41 +396,118 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
 
     Example:
         >>> nlp = ensure_spacy_model("en_core_web_sm")
-        >>> doc = nlp("This is a test sentence.")
-        >>> entities = [(ent.text, ent.label_) for ent in doc.ents]
-        >>> print(f"Found entities: {entities}")
+        >>> if nlp:
+        ...     doc = nlp("This is a test sentence.")
+        ...     entities = [(ent.text, ent.label_) for ent in doc.ents]
+        ...     print(f"Found entities: {entities}")
     """
+    start_time = time.perf_counter()
+
+    logger.info(f"Loading spaCy model: {model_name}")
+
     try:
         import spacy
 
-        nlp = spacy.load(model_name)
-        logging.info("spaCy model '%s' loaded successfully", model_name)
-        return nlp
-    except OSError:
-        # Try to download the model
+        # Try to load existing model first
         try:
-            logging.info("Downloading spaCy model '%s'...", model_name)
-            subprocess.run(
-                ["python", "-m", "spacy", "download", model_name],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            import spacy
-
             nlp = spacy.load(model_name)
-            logging.info(
-                "spaCy model '%s' downloaded and loaded successfully", model_name
+            logger.success(f"spaCy model '{model_name}' loaded successfully")
+
+            duration = time.perf_counter() - start_time
+            log_performance(
+                "spacy_model_load",
+                duration,
+                model_name=model_name,
+                loaded_from_cache=True,
             )
             return nlp
-        except (subprocess.CalledProcessError, OSError) as e:
-            error_msg = f"Failed to load or download spaCy model '{model_name}': {e}"
-            logging.error(error_msg)
-            raise RuntimeError(error_msg) from e
+
+        except OSError:
+            # Model not found locally, try to download
+            logger.info(f"spaCy model '{model_name}' not found locally, downloading...")
+
+            try:
+                # Download model with timeout and error handling
+                subprocess.run(
+                    ["python", "-m", "spacy", "download", model_name],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,  # 5 minute timeout for downloads
+                )
+
+                logger.info(f"spaCy model '{model_name}' downloaded successfully")
+
+                # Try loading again after download
+                nlp = spacy.load(model_name)
+                logger.success(f"spaCy model '{model_name}' loaded after download")
+
+                duration = time.perf_counter() - start_time
+                log_performance(
+                    "spacy_model_download_and_load",
+                    duration,
+                    model_name=model_name,
+                    download_required=True,
+                )
+                return nlp
+
+            except subprocess.TimeoutExpired:
+                raise ConfigurationError(
+                    f"spaCy model '{model_name}' download timed out",
+                    context={
+                        "model_name": model_name,
+                        "timeout_seconds": 300,
+                        "suggestion": "Try downloading manually or use a smaller model",
+                    },
+                    operation="spacy_model_download",
+                )
+            except (subprocess.CalledProcessError, OSError) as e:
+                error_context = {
+                    "model_name": model_name,
+                    "command": ["python", "-m", "spacy", "download", model_name],
+                    "stderr": getattr(e, "stderr", str(e)),
+                }
+
+                log_error_with_context(e, "spacy_model_download", context=error_context)
+
+                raise ConfigurationError(
+                    f"Failed to download spaCy model '{model_name}'",
+                    context=error_context,
+                    original_error=e,
+                    operation="spacy_model_download",
+                )
+
     except ImportError as e:
-        error_msg = f"spaCy is not installed: {e}"
-        logging.error(error_msg)
-        raise RuntimeError(error_msg) from e
+        log_error_with_context(
+            e,
+            "spacy_import",
+            context={
+                "model_name": model_name,
+                "suggestion": "Install spaCy with: pip install spacy",
+            },
+        )
+
+        raise ConfigurationError(
+            "spaCy is not installed",
+            context={
+                "model_name": model_name,
+                "installation_command": "pip install spacy",
+            },
+            original_error=e,
+            operation="spacy_import",
+        )
+
+    except Exception as e:
+        log_error_with_context(
+            e, "spacy_model_ensure", context={"model_name": model_name}
+        )
+
+        raise ConfigurationError(
+            f"Unexpected error loading spaCy model '{model_name}'",
+            context={"model_name": model_name},
+            original_error=e,
+            operation="spacy_model_ensure",
+        )
 
 
 # Resource Management Utilities for Critical Fix P0
@@ -422,6 +557,40 @@ async def managed_async_qdrant_client(url: str):
     finally:
         if client is not None:
             await client.close()
+
+
+@asynccontextmanager
+async def managed_embedding_model(model_class, model_kwargs):
+    """Context manager for embedding models with proper cleanup.
+
+    Ensures embedding models are properly cleaned up after use,
+    including GPU memory cleanup for CUDA models.
+
+    Args:
+        model_class: The embedding model class to instantiate
+        model_kwargs: Keyword arguments for model initialization
+
+    Yields:
+        Properly managed embedding model instance
+
+    Usage:
+        async with managed_embedding_model(FastEmbedEmbedding, kwargs) as model:
+            # Use model here
+            pass
+    """
+    model = None
+    try:
+        model = model_class(**model_kwargs)
+        yield model
+    finally:
+        # Clean up model resources
+        if model is not None:
+            # Clear model cache and GPU memory if applicable
+            if hasattr(model, "model") and model.model is not None:
+                del model.model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        gc.collect()
 
 
 class AsyncQdrantConnectionPool:
@@ -712,7 +881,7 @@ def async_timer(func: Callable) -> Callable:
         finally:
             end_time = time.perf_counter()
             duration = end_time - start_time
-            logging.info(f"{func.__name__} completed in {duration:.2f}s")
+            logger.info(f"{func.__name__} completed in {duration:.2f}s")
 
     return wrapper
 
@@ -765,7 +934,7 @@ class PerformanceMonitor:
                 "timestamp": time.time(),
             }
 
-            logging.info(
+            logger.info(
                 f"Performance [{name}]: {end_time - start_time:.2f}s, "
                 f"memory: {(end_memory - start_memory) / 1024 / 1024:.1f}MB, "
                 f"success: {success}"
@@ -808,3 +977,95 @@ class PerformanceMonitor:
             "total_duration": sum(durations),
             "metrics": self.metrics,
         }
+
+
+class EnhancedPerformanceMonitor:
+    """Enhanced performance monitoring with detailed async operation tracking."""
+
+    def __init__(self):
+        self.metrics = {}
+        self.operation_counts = {}
+        self.error_counts = {}
+
+    @asynccontextmanager
+    async def measure(self, operation_name: str):
+        """Measure async operation performance."""
+        start_time = time.perf_counter()
+        start_memory = self._get_memory_usage()
+
+        # Track operation counts
+        self.operation_counts[operation_name] = (
+            self.operation_counts.get(operation_name, 0) + 1
+        )
+
+        try:
+            yield self
+        except Exception as e:
+            # Track errors
+            self.error_counts[operation_name] = (
+                self.error_counts.get(operation_name, 0) + 1
+            )
+            logger.error(f"Operation {operation_name} failed: {e}")
+            raise
+        finally:
+            elapsed = time.perf_counter() - start_time
+            memory_delta = self._get_memory_usage() - start_memory
+
+            self.metrics[operation_name] = {
+                "duration_seconds": elapsed,
+                "memory_delta_mb": memory_delta / 1024 / 1024,
+                "timestamp": time.time(),
+                "success": operation_name not in self.error_counts
+                or self.error_counts[operation_name] == 0,
+            }
+
+            logger.info(
+                f"{operation_name} completed in {elapsed:.2f}s, "
+                f"memory delta: {memory_delta / 1024 / 1024:.2f}MB"
+            )
+
+    def _get_memory_usage(self) -> int:
+        """Get current memory usage in bytes."""
+        try:
+            import psutil
+
+            process = psutil.Process()
+            return process.memory_info().rss
+        except ImportError:
+            return 0
+
+    def get_report(self) -> dict:
+        """Get comprehensive performance report."""
+        total_operations = sum(self.operation_counts.values())
+        total_errors = sum(self.error_counts.values())
+
+        return {
+            "summary": {
+                "total_operations": total_operations,
+                "total_errors": total_errors,
+                "success_rate": (total_operations - total_errors) / total_operations
+                if total_operations > 0
+                else 0,
+                "total_time": sum(m["duration_seconds"] for m in self.metrics.values()),
+                "avg_time": sum(m["duration_seconds"] for m in self.metrics.values())
+                / len(self.metrics)
+                if self.metrics
+                else 0,
+            },
+            "operation_counts": self.operation_counts,
+            "error_counts": self.error_counts,
+            "detailed_metrics": self.metrics,
+        }
+
+    def log_performance_summary(self):
+        """Log a performance summary."""
+        report = self.get_report()
+        summary = report["summary"]
+
+        logger.info(
+            f"Performance Summary - Operations: {summary['total_operations']}, "
+            f"Errors: {summary['total_errors']}, "
+            f"Success Rate: {summary['success_rate']:.2%}, "
+            f"Total Time: {summary['total_time']:.2f}s, "
+            f"Avg Time: {summary['avg_time']:.2f}s"
+        )
