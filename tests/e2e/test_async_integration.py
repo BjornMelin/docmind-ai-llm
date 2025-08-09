@@ -87,12 +87,14 @@ class TestAsyncPipelineIntegration:
                         assert "vector" in result
                         assert result["vector"] is not None
 
-                        # Verify async client cleanup was called (may vary by implementation)
+                        # Verify async client cleanup called
+                        # May vary by implementation
                         # Note: In test environment, cleanup behavior may differ
                         try:
                             mock_client.close.assert_called_once()
                         except AssertionError:
-                            # Acceptable in test environment - at least verify client was created
+                            # Acceptable in test environment
+                            # At least verify client was created
                             assert mock_async_client.called
 
                         # Log performance metrics
@@ -115,17 +117,15 @@ class TestAsyncPipelineIntegration:
             ]
 
             with (
-                    patch("qdrant_client.AsyncQdrantClient") as mock_client,
-                    patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
-                    patch(
-                        "llama_index.core.VectorStoreIndex.from_documents"
-                    ) as mock_index,
-                    patch("utils.utils.ensure_spacy_model")
-                ):
-                    mock_client_instance = AsyncMock()
-                    mock_client.return_value = mock_client_instance
-                    mock_index.return_value = MagicMock()
-                    return await create_index_async(docs, use_gpu=False)
+                patch("qdrant_client.AsyncQdrantClient") as mock_client,
+                patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
+                patch("llama_index.core.VectorStoreIndex.from_documents") as mock_index,
+                patch("utils.utils.ensure_spacy_model"),
+            ):
+                mock_client_instance = AsyncMock()
+                mock_client.return_value = mock_client_instance
+                mock_index.return_value = MagicMock()
+                return await create_index_async(docs, use_gpu=False)
 
         # Process multiple batches concurrently
         batch_tasks = [process_batch(batch_id, 5) for batch_id in range(3)]
@@ -228,25 +228,23 @@ class TestAsyncPipelineIntegration:
         docs = [Document(text="GPU async test document")]
 
         with (
-                    patch("torch.cuda.is_available", return_value=True),
-                    patch("qdrant_client.AsyncQdrantClient") as mock_client,
-                    patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
-                    patch("torch.cuda.Stream") as mock_stream,
-                    patch(
-                        "llama_index.core.VectorStoreIndex.from_documents"
-                    ) as mock_create,
-                    patch("utils.utils.ensure_spacy_model")
-                ):
-                    mock_client_instance = AsyncMock()
-                    mock_client.return_value = mock_client_instance
-                    mock_stream_instance = MagicMock()
-                    mock_stream.return_value = mock_stream_instance
-                    mock_create.return_value = MagicMock()
-                    result = await create_index_async(docs, use_gpu=True)
+            patch("torch.cuda.is_available", return_value=True),
+            patch("qdrant_client.AsyncQdrantClient") as mock_client,
+            patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
+            patch("torch.cuda.Stream") as mock_stream,
+            patch("llama_index.core.VectorStoreIndex.from_documents") as mock_create,
+            patch("utils.utils.ensure_spacy_model"),
+        ):
+            mock_client_instance = AsyncMock()
+            mock_client.return_value = mock_client_instance
+            mock_stream_instance = MagicMock()
+            mock_stream.return_value = mock_stream_instance
+            mock_create.return_value = MagicMock()
+            result = await create_index_async(docs, use_gpu=True)
 
-                                # Verify GPU streams were used
-                                assert result is not None
-                                mock_stream_instance.synchronize.assert_called()
+            # Verify GPU streams were used
+            assert result is not None
+            mock_stream_instance.synchronize.assert_called()
 
     @pytest.mark.asyncio
     async def test_async_error_handling(self):
@@ -272,22 +270,20 @@ class TestAsyncPipelineIntegration:
         docs = [Document(text=f"Memory test doc {i}") for i in range(20)]
 
         with (
-                    patch("qdrant_client.AsyncQdrantClient") as mock_client,
-                    patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
-                    patch(
-                        "llama_index.core.VectorStoreIndex.from_documents"
-                    ) as mock_create,
-                    patch("utils.utils.ensure_spacy_model")
-                ):
-                    mock_client_instance = AsyncMock()
-                    mock_client.return_value = mock_client_instance
-                    mock_create.return_value = MagicMock()
-                    # Process documents and ensure cleanup
-                    result = await create_index_async(docs, use_gpu=False)
+            patch("qdrant_client.AsyncQdrantClient") as mock_client,
+            patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
+            patch("llama_index.core.VectorStoreIndex.from_documents") as mock_create,
+            patch("utils.utils.ensure_spacy_model"),
+        ):
+            mock_client_instance = AsyncMock()
+            mock_client.return_value = mock_client_instance
+            mock_create.return_value = MagicMock()
+            # Process documents and ensure cleanup
+            result = await create_index_async(docs, use_gpu=False)
 
-                        # Verify cleanup was called
-                        mock_client_instance.close.assert_called_once()
-                        assert result is not None
+            # Verify cleanup was called
+            mock_client_instance.close.assert_called_once()
+            assert result is not None
 
     @pytest.mark.asyncio
     async def test_async_timeout_handling(self):

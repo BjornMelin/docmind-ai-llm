@@ -111,7 +111,10 @@ class TestEndToEndPipeline:
             ) as mock_agent_create:
                 mock_agent = MagicMock()
                 mock_response = MagicMock()
-                mock_response.response = "DocMind AI is a document analysis system using SPLADE++ embeddings."
+                mock_response.response = (
+                    "DocMind AI is a document analysis system "
+                    "using SPLADE++ embeddings."
+                )
                 mock_agent.chat.return_value = mock_response
                 mock_agent_create.return_value = mock_agent
 
@@ -143,23 +146,21 @@ class TestEndToEndPipeline:
         with (
             patch("qdrant_client.QdrantClient"),
             patch("utils.qdrant_utils.setup_hybrid_qdrant"),
-            patch(
+            patch("llama_index.core.VectorStoreIndex.from_documents") as mock_vector,
         ):
-                    "llama_index.core.VectorStoreIndex.from_documents"
-                ) as mock_vector:
-                    mock_vector.return_value = MagicMock()
+            mock_vector.return_value = MagicMock()
 
-                    with patch(
-                        "llama_index.core.KnowledgeGraphIndex.from_documents"
-                    ) as mock_kg:
-                        mock_kg.side_effect = Exception("KG creation failed")
+            with patch(
+                "llama_index.core.KnowledgeGraphIndex.from_documents"
+            ) as mock_kg:
+                mock_kg.side_effect = Exception("KG creation failed")
 
-                        with patch("utils.utils.ensure_spacy_model"):
-                            result = create_index(docs, use_gpu=False)
+                with patch("utils.utils.ensure_spacy_model"):
+                    result = create_index(docs, use_gpu=False)
 
-                            # Should have vector but no KG
-                            assert result["vector"] is not None
-                            assert result.get("kg") is None
+                    # Should have vector but no KG
+                    assert result["vector"] is not None
+                    assert result.get("kg") is None
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
     def test_gpu_pipeline_integration(self):
@@ -169,42 +170,28 @@ class TestEndToEndPipeline:
         docs = [Document(text="GPU test document for integration testing")]
 
         with (
-
-
-            ,
-
-
-            ,
-
-
-            patch("torch.cuda.is_available", return_value=True):,
-
-
-            patch("qdrant_client.QdrantClient"):,
-
-
-            patch("utils.qdrant_utils.setup_hybrid_qdrant"):
-
-
+            patch("torch.cuda.is_available", return_value=True),
+            patch("qdrant_client.QdrantClient"),
+            patch("utils.qdrant_utils.setup_hybrid_qdrant"),
         ):
-                    with patch(
-                        "llama_index.core.VectorStoreIndex.from_documents"
-                    ) as mock_create:
-                        mock_index = MagicMock()
-                        mock_create.return_value = mock_index
+            with patch(
+                "llama_index.core.VectorStoreIndex.from_documents"
+            ) as mock_create:
+                mock_index = MagicMock()
+                mock_create.return_value = mock_index
 
-                        with patch("torch.cuda.Stream") as mock_stream:
-                            mock_stream.return_value.__enter__ = MagicMock()
-                            mock_stream.return_value.__exit__ = MagicMock()
-                            mock_stream.return_value.synchronize = MagicMock()
+                with patch("torch.cuda.Stream") as mock_stream:
+                    mock_stream.return_value.__enter__ = MagicMock()
+                    mock_stream.return_value.__exit__ = MagicMock()
+                    mock_stream.return_value.synchronize = MagicMock()
 
-                            with patch("utils.utils.ensure_spacy_model"):
-                                result = create_index(docs, use_gpu=True)
+                    with patch("utils.utils.ensure_spacy_model"):
+                        result = create_index(docs, use_gpu=True)
 
-                                # Should successfully create index with GPU
-                                assert result is not None
-                                assert result["vector"] is not None
-                                mock_stream.return_value.synchronize.assert_called()
+                        # Should successfully create index with GPU
+                        assert result is not None
+                        assert result["vector"] is not None
+                        mock_stream.return_value.synchronize.assert_called()
 
     def test_partial_failure_handling(self):
         """Test handling of partial failures in pipeline."""
@@ -220,18 +207,16 @@ class TestEndToEndPipeline:
         with (
             patch("qdrant_client.QdrantClient"),
             patch("utils.qdrant_utils.setup_hybrid_qdrant"),
-            patch(
+            patch("llama_index.core.VectorStoreIndex.from_documents") as mock_create,
         ):
-                    "llama_index.core.VectorStoreIndex.from_documents"
-                ) as mock_create:
-                    mock_index = MagicMock()
-                    mock_create.return_value = mock_index
+            mock_index = MagicMock()
+            mock_create.return_value = mock_index
 
-                    with patch("utils.utils.ensure_spacy_model"):
-                        # Should handle mixed document quality gracefully
-                        result = create_index(docs, use_gpu=False)
-                        assert result is not None
-                        assert result["vector"] is not None
+            with patch("utils.utils.ensure_spacy_model"):
+                # Should handle mixed document quality gracefully
+                result = create_index(docs, use_gpu=False)
+                assert result is not None
+                assert result["vector"] is not None
 
 
 class TestMultiAgentIntegration:
@@ -360,14 +345,14 @@ class TestPerformanceIntegration:
                 patch("qdrant_client.QdrantClient"),
                 patch("utils.qdrant_utils.setup_hybrid_qdrant"),
                 patch(
+                    "llama_index.core.VectorStoreIndex.from_documents"
+                ) as mock_create,
             ):
-                        "llama_index.core.VectorStoreIndex.from_documents"
-                    ) as mock_create:
-                        mock_index = MagicMock()
-                        mock_create.return_value = mock_index
+                mock_index = MagicMock()
+                mock_create.return_value = mock_index
 
-                        with patch("utils.utils.ensure_spacy_model"):
-                            return create_index(docs, use_gpu=False)
+                with patch("utils.utils.ensure_spacy_model"):
+                    return create_index(docs, use_gpu=False)
 
         # Test concurrent processing of multiple document batches
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
@@ -405,28 +390,14 @@ class TestPerformanceIntegration:
         ]
 
         with (
-
-
-            ,
-
-
-            ,
-
-
-            patch("qdrant_client.QdrantClient"):,
-
-
-            patch("utils.qdrant_utils.setup_hybrid_qdrant"):,
-
-
-            patch("llama_index.core.VectorStoreIndex.from_documents"):
-
-
+            patch("qdrant_client.QdrantClient"),
+            patch("utils.qdrant_utils.setup_hybrid_qdrant"),
+            patch("llama_index.core.VectorStoreIndex.from_documents"),
         ):
-                    with patch("utils.utils.ensure_spacy_model"):
-                        from utils.index_builder import create_index
+            with patch("utils.utils.ensure_spacy_model"):
+                from utils.index_builder import create_index
 
-                        create_index(docs, use_gpu=False)
+                create_index(docs, use_gpu=False)
 
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
         memory_increase = final_memory - initial_memory
@@ -453,15 +424,15 @@ class TestPerformanceIntegration:
                 patch("qdrant_client.QdrantClient"),
                 patch("utils.qdrant_utils.setup_hybrid_qdrant"),
                 patch(
+                    "llama_index.core.VectorStoreIndex.from_documents"
+                ) as mock_create,
             ):
-                        "llama_index.core.VectorStoreIndex.from_documents"
-                    ) as mock_create:
-                        mock_index = MagicMock()
-                        mock_index.as_query_engine.return_value = MagicMock()
-                        mock_create.return_value = mock_index
+                mock_index = MagicMock()
+                mock_index.as_query_engine.return_value = MagicMock()
+                mock_create.return_value = mock_index
 
-                        with patch("utils.utils.ensure_spacy_model"):
-                            index_result = create_index(docs, use_gpu=False)
+                with patch("utils.utils.ensure_spacy_model"):
+                    index_result = create_index(docs, use_gpu=False)
 
             tools = create_tools_from_index(index_result)
 
@@ -539,24 +510,20 @@ class TestErrorRecoveryIntegration:
         with (
             patch("qdrant_client.QdrantClient"),
             patch("utils.qdrant_utils.setup_hybrid_qdrant"),
-            patch(
+            patch("llama_index.core.VectorStoreIndex.from_documents") as mock_create,
         ):
-                    "llama_index.core.VectorStoreIndex.from_documents"
-                ) as mock_create:
-                    # Simulate memory error
-                    mock_create.side_effect = MemoryError("Insufficient memory")
+            # Simulate memory error
+            mock_create.side_effect = MemoryError("Insufficient memory")
 
-                    try:
-                        create_index(docs, use_gpu=False)
-                        pytest.fail("Should have raised MemoryError")
-                    except MemoryError:
-                        # Expected - should be handled gracefully by calling code
-                        pass
-                    except Exception as e:
-                        # Other exceptions should be caught and handled
-                        logging.warning(
-                            f"Unexpected exception during resource test: {e}"
-                        )
+            try:
+                create_index(docs, use_gpu=False)
+                pytest.fail("Should have raised MemoryError")
+            except MemoryError:
+                # Expected - should be handled gracefully by calling code
+                pass
+            except Exception as e:
+                # Other exceptions should be caught and handled
+                logging.warning(f"Unexpected exception during resource test: {e}")
 
 
 # Integration test markers and configuration

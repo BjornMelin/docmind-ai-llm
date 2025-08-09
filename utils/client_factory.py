@@ -354,7 +354,10 @@ class QdrantBatchOperations:
 
         elapsed = time.perf_counter() - start_time
         logging.info(
-            f"Upserted {len(vectors)} vectors in {len(batches)} batches ({elapsed:.2f}s)"
+            
+                f"Upserted {len(vectors)} vectors in {len(batches)} "
+                f"batches ({elapsed:.2f}s)"
+            
         )
 
     @staticmethod

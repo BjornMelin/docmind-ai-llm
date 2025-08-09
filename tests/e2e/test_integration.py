@@ -19,7 +19,11 @@ from agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
-from agents.agent_utils import create_tools_from_index
+from agents.agent_utils import (
+    chat_with_agent,
+    create_agent_with_tools,
+    create_tools_from_index,
+)
 from models import AppSettings
 from utils import create_index_async
 from utils.model_manager import ModelManager
@@ -873,7 +877,8 @@ class TestRRFHybridSearchIntegration:
             )
             assert len(fused_results) == 4, "RRF should combine all unique documents"
 
-            # Document 2 appears in both - should be top ranked with research-backed weights
+            # Document 2 appears in both
+            # Should be top ranked with research-backed weights
             doc_ids = [doc_id for doc_id, _ in fused_results]
             assert 2 in doc_ids, "Overlapping document should be present"
             top_doc_id = fused_results[0][0]
@@ -1040,7 +1045,10 @@ class TestCompleteAgentIntegration:
                 )
 
                 # Step 3: Test async streaming chat
-                query = "How does RRF fusion with SPLADE++ and BGE-Large improve search quality?"
+                query = (
+                    "How does RRF fusion with SPLADE++ and "
+                    "BGE-Large improve search quality?"
+                )
                 response_chunks = []
 
                 async for chunk in chat_with_agent(agent, query, mock_memory_instance):

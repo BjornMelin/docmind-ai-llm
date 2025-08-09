@@ -62,16 +62,16 @@ async def test_managed_gpu_operation_cleanup():
         patch("torch.cuda.is_available", return_value=True),
         patch("torch.cuda.synchronize") as mock_sync,
         patch("torch.cuda.empty_cache") as mock_empty_cache,
-        patch("gc.collect") as mock_gc
+        patch("gc.collect") as mock_gc,
     ):
-                    # Test normal operation
-                    async with managed_gpu_operation():
-                        pass  # Simulate GPU operation
+        # Test normal operation
+        async with managed_gpu_operation():
+            pass  # Simulate GPU operation
 
-                    # Verify cleanup was called
-                    mock_sync.assert_called_once()
-                    mock_empty_cache.assert_called_once()
-                    mock_gc.assert_called_once()
+        # Verify cleanup was called
+        mock_sync.assert_called_once()
+        mock_empty_cache.assert_called_once()
+        mock_gc.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -83,17 +83,17 @@ async def test_managed_gpu_operation_cleanup_on_exception():
         patch("torch.cuda.is_available", return_value=True),
         patch("torch.cuda.synchronize") as mock_sync,
         patch("torch.cuda.empty_cache") as mock_empty_cache,
-        patch("gc.collect") as mock_gc
+        patch("gc.collect") as mock_gc,
     ):
-                    # Test exception handling
-                    with pytest.raises(RuntimeError):
-                        async with managed_gpu_operation():
-                            raise RuntimeError("GPU operation failed")
+        # Test exception handling
+        with pytest.raises(RuntimeError):
+            async with managed_gpu_operation():
+                raise RuntimeError("GPU operation failed")
 
-                    # Verify cleanup still occurred
-                    mock_sync.assert_called_once()
-                    mock_empty_cache.assert_called_once()
-                    mock_gc.assert_called_once()
+        # Verify cleanup still occurred
+        mock_sync.assert_called_once()
+        mock_empty_cache.assert_called_once()
+        mock_gc.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -106,33 +106,31 @@ async def test_create_index_async_resource_management():
     with (
         patch("utils.index_builder.managed_async_qdrant_client") as mock_context,
         patch("utils.index_builder.setup_hybrid_qdrant_async") as mock_setup,
-        patch(
+        patch("utils.index_builder.VectorStoreIndex.from_documents") as mock_index,
     ):
-                "utils.index_builder.VectorStoreIndex.from_documents"
-            ) as mock_index:
-                with patch("utils.index_builder.ensure_spacy_model"):
-                    # Mock the async context manager
-                    mock_client = AsyncMock()
-                    mock_context.return_value.__aenter__.return_value = mock_client
-                    mock_context.return_value.__aexit__.return_value = None
+        with patch("utils.index_builder.ensure_spacy_model"):
+            # Mock the async context manager
+            mock_client = AsyncMock()
+            mock_context.return_value.__aenter__.return_value = mock_client
+            mock_context.return_value.__aexit__.return_value = None
 
-                    # Mock other dependencies
-                    mock_setup.return_value = MagicMock()
-                    mock_index.return_value = MagicMock()
+            # Mock other dependencies
+            mock_setup.return_value = MagicMock()
+            mock_index.return_value = MagicMock()
 
-                    # Test the function
-                    docs = [Document(text="test document")]
-                    result = await create_index_async(docs, use_gpu=False)
+            # Test the function
+            docs = [Document(text="test document")]
+            result = await create_index_async(docs, use_gpu=False)
 
-                    # Verify context manager was used
-                    mock_context.assert_called_once()
-                    mock_context.return_value.__aenter__.assert_called_once()
-                    mock_context.return_value.__aexit__.assert_called_once()
+            # Verify context manager was used
+            mock_context.assert_called_once()
+            mock_context.return_value.__aenter__.assert_called_once()
+            mock_context.return_value.__aexit__.assert_called_once()
 
-                    # Verify result structure
-                    assert "vector" in result
-                    assert "kg" in result
-                    assert "retriever" in result
+            # Verify result structure
+            assert "vector" in result
+            assert "kg" in result
+            assert "retriever" in result
 
 
 def test_extract_images_from_pdf_resource_management():
@@ -233,30 +231,30 @@ def test_load_documents_llama_temp_file_cleanup():
         patch("tempfile.NamedTemporaryFile") as mock_temp,
         patch("utils.document_loader.SimpleDirectoryReader") as mock_reader,
         patch("utils.document_loader.LlamaParse") as mock_llama_parse,
-        patch("os.remove") as mock_remove
+        patch("os.remove") as mock_remove,
     ):
-                    # Mock temporary file context manager
-                    mock_temp_file = MagicMock()
-                    mock_temp_file.name = "/tmp/test_temp_file.txt"
-                    mock_temp.__enter__ = MagicMock(return_value=mock_temp_file)
-                    mock_temp.__exit__ = MagicMock(return_value=None)
-                    mock_temp.return_value = mock_temp
+        # Mock temporary file context manager
+        mock_temp_file = MagicMock()
+        mock_temp_file.name = "/tmp/test_temp_file.txt"
+        mock_temp.__enter__ = MagicMock(return_value=mock_temp_file)
+        mock_temp.__exit__ = MagicMock(return_value=None)
+        mock_temp.return_value = mock_temp
 
-                    # Mock LlamaParse parser
-                    mock_parser = MagicMock()
-                    mock_llama_parse.return_value = mock_parser
+        # Mock LlamaParse parser
+        mock_parser = MagicMock()
+        mock_llama_parse.return_value = mock_parser
 
-                    # Mock document reader
-                    mock_reader.return_value.load_data.return_value = [
-                        MagicMock(text="test", metadata={})
-                    ]
+        # Mock document reader
+        mock_reader.return_value.load_data.return_value = [
+            MagicMock(text="test", metadata={})
+        ]
 
-                    # Test the function
-                    result = load_documents_llama([mock_file])
+        # Test the function
+        result = load_documents_llama([mock_file])
 
-                    # Verify temporary file cleanup was called
-                    mock_remove.assert_called()
-                    assert len(result) > 0
+        # Verify temporary file cleanup was called
+        mock_remove.assert_called()
+        assert len(result) > 0
 
 
 def test_load_documents_llama_video_resource_cleanup():
@@ -275,43 +273,39 @@ def test_load_documents_llama_video_resource_cleanup():
         patch("utils.document_loader.whisper_load") as mock_whisper,
         patch("utils.document_loader.LlamaParse") as mock_llama_parse,
         patch("os.remove") as mock_remove,
-        patch("os.path.exists", return_value=True)
+        patch("os.path.exists", return_value=True),
     ):
-                            # Mock LlamaParse parser
-                            mock_parser = MagicMock()
-                            mock_llama_parse.return_value = mock_parser
+        # Mock LlamaParse parser
+        mock_parser = MagicMock()
+        mock_llama_parse.return_value = mock_parser
 
-                            # Mock temporary file
-                            mock_temp_file = MagicMock()
-                            mock_temp_file.name = "/tmp/test_video.mp4"
-                            mock_temp.__enter__ = MagicMock(return_value=mock_temp_file)
-                            mock_temp.__exit__ = MagicMock(return_value=None)
-                            mock_temp.return_value = mock_temp
+        # Mock temporary file
+        mock_temp_file = MagicMock()
+        mock_temp_file.name = "/tmp/test_video.mp4"
+        mock_temp.__enter__ = MagicMock(return_value=mock_temp_file)
+        mock_temp.__exit__ = MagicMock(return_value=None)
+        mock_temp.return_value = mock_temp
 
-                            # Mock video clip
-                            mock_clip = MagicMock()
-                            mock_clip.duration = 10
-                            mock_clip.audio.write_audiofile = MagicMock()
-                            mock_clip.close = MagicMock()
-                            mock_video.return_value = mock_clip
+        # Mock video clip
+        mock_clip = MagicMock()
+        mock_clip.duration = 10
+        mock_clip.audio.write_audiofile = MagicMock()
+        mock_clip.close = MagicMock()
+        mock_video.return_value = mock_clip
 
-                            # Mock whisper
-                            mock_model = MagicMock()
-                            mock_model.transcribe.return_value = {
-                                "text": "transcribed text"
-                            }
-                            mock_whisper.return_value = mock_model
+        # Mock whisper
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = {"text": "transcribed text"}
+        mock_whisper.return_value = mock_model
 
-                            # Test the function
-                            result = load_documents_llama([mock_file], parse_media=True)
+        # Test the function
+        result = load_documents_llama([mock_file], parse_media=True)
 
-                            # Verify video clip was closed
-                            mock_clip.close.assert_called_once()
+        # Verify video clip was closed
+        mock_clip.close.assert_called_once()
 
-                            # Verify temp files were removed
-                            assert (
-                                mock_remove.call_count >= 1
-                            )  # At least main file cleanup
+        # Verify temp files were removed
+        assert mock_remove.call_count >= 1  # At least main file cleanup
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")

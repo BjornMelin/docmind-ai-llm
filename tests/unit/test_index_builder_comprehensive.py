@@ -75,7 +75,7 @@ class TestCreateHybridRetriever:
 
     def test_create_hybrid_retriever_invalid_index(self):
         """Test hybrid retriever creation with invalid index."""
-        with pytest.raises(Exception):  # Should raise due to None index
+        with pytest.raises(ValueError, match="Invalid index: None"):  # Should raise due to None index
             create_hybrid_retriever(None)
 
     def test_create_hybrid_retriever_exception_fallback(self, sample_documents):

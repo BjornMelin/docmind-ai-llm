@@ -25,6 +25,7 @@ from agent_factory import (
 from agents.agent_utils import create_tools_from_index
 from models import AppSettings
 from utils import create_index_async
+from utils.model_manager import ModelManager
 
 
 class TestEndToEndWorkflow:

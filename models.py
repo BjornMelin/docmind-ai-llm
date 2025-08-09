@@ -1,7 +1,8 @@
 """Pydantic models for DocMind AI - Compatibility Layer.
 
 This module provides backward compatibility for the refactored settings system.
-The monolithic AppSettings has been split into modular groups for better maintainability.
+The monolithic AppSettings has been split into modular
+groups for better maintainability.
 
 **MIGRATION NOTICE**:
 The settings system has been refactored into modular groups. For new code, use:
@@ -21,7 +22,8 @@ For backward compatibility, the old API still works:
 
 Classes:
     AnalysisOutput: Structured schema for document analysis results.
-    AppSettings: Backward compatibility wrapper (use models.settings.settings for new code).
+    AppSettings: Backward compatibility wrapper
+(use models.settings.settings for new code).
 """
 
 # Backward compatibility imports

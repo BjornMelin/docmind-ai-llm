@@ -40,6 +40,7 @@ from utils import (
     setup_hybrid_qdrant_async,
     verify_rrf_configuration,
 )
+from utils.model_manager import ModelManager
 
 
 class TestFastEmbedModelManager:

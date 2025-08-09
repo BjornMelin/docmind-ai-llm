@@ -24,6 +24,7 @@ from utils import (
     detect_hardware,
     verify_rrf_configuration,
 )
+from utils.model_manager import ModelManager
 
 
 class TestRealConfiguration:

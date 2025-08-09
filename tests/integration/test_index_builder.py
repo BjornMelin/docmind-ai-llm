@@ -234,9 +234,9 @@ class TestIndexCreation:
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
             patch(
+                "utils.index_builder.StorageContext.from_defaults"
+            ) as mock_storage,
         ):
-                    "utils.index_builder.StorageContext.from_defaults"
-                ) as mock_storage:
                     mock_stream_instance = MagicMock()
                     mock_stream.return_value = mock_stream_instance
                     mock_storage_context = MagicMock()
@@ -357,19 +357,17 @@ class TestIndexCreation:
             patch("utils.index_builder.setup_hybrid_qdrant") as mock_setup,
             patch("utils.index_builder.FastEmbedEmbedding"),
             patch("utils.index_builder.SparseTextEmbedding"),
-            patch(
+            patch("utils.index_builder.VectorStoreIndex.from_documents"),
         ):
-                                    "utils.index_builder.VectorStoreIndex.from_documents"
-                                ):
-                                    create_index(sample_documents, use_gpu=False)
+            create_index(sample_documents, use_gpu=False)
 
-                                    # Verify warnings were logged
-                                    mock_log_warning.assert_called()
-                                    warning_message = mock_log_warning.call_args[0][0]
-                                    assert "RRF Configuration Issues" in warning_message
+            # Verify warnings were logged
+            mock_log_warning.assert_called()
+            warning_message = mock_log_warning.call_args[0][0]
+            assert "RRF Configuration Issues" in warning_message
 
-                                    # Verify recommendations were logged
-                                    assert mock_log_info.call_count >= 2
+            # Verify recommendations were logged
+            assert mock_log_info.call_count >= 2
 
 
 class TestAsyncIndexCreation:
@@ -437,9 +435,9 @@ class TestAsyncIndexCreation:
             patch("utils.index_builder.settings", mock_settings),
             patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
             patch(
+                "utils.index_builder.StorageContext.from_defaults"
+            ) as mock_storage,
         ):
-                    "utils.index_builder.StorageContext.from_defaults"
-                ) as mock_storage:
                     mock_stream_instance = MagicMock()
                     mock_stream.return_value = mock_stream_instance
                     mock_storage.return_value = MagicMock()
@@ -496,28 +494,22 @@ class TestAsyncIndexCreation:
             patch("utils.index_builder.setup_hybrid_qdrant_async"),
             patch("utils.index_builder.FastEmbedEmbedding"),
             patch("utils.index_builder.SparseTextEmbedding"),
-            patch(
+            patch("utils.index_builder.VectorStoreIndex.from_documents") as mock_vector_index,
         ):
-                            "utils.index_builder.VectorStoreIndex.from_documents"
-                        ) as mock_vector_index:
-                            with patch(
-                                "utils.index_builder.logging.warning"
-                            ) as mock_log_warning:
-                                mock_index = MagicMock()
-                                mock_vector_index.return_value = mock_index
+            with patch("utils.index_builder.logging.warning") as mock_log_warning:
+                mock_index = MagicMock()
+                mock_vector_index.return_value = mock_index
 
-                                result = await create_index_async(
-                                    sample_documents, use_gpu=False
-                                )
+                result = await create_index_async(sample_documents, use_gpu=False)
 
-                                # Verify warning was logged
-                                mock_log_warning.assert_called()
-                                warning_message = mock_log_warning.call_args[0][0]
-                                assert "Failed to create KG index" in warning_message
+                # Verify warning was logged
+                mock_log_warning.assert_called()
+                warning_message = mock_log_warning.call_args[0][0]
+                assert "Failed to create KG index" in warning_message
 
-                                # Verify KG index is None
-                                assert result["kg"] is None
-                                assert result["vector"] == mock_index
+                # Verify KG index is None
+                assert result["kg"] is None
+                assert result["vector"] == mock_index
 
 
 class TestMultimodalIndex:

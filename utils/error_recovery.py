@@ -264,7 +264,7 @@ def async_with_timeout(timeout_seconds: float = 30.0):
                 return await asyncio.wait_for(
                     func(*args, **kwargs), timeout=timeout_seconds
                 )
-            except TimeoutError:
+            except TimeoutError as e:
                 logger.error(
                     f"{func.__name__} timed out after {timeout_seconds}s",
                     extra={
@@ -517,7 +517,10 @@ def retry_with_context(
                 ):
                     with attempt:
                         logger.debug(
-                            f"Attempting {operation_name} (attempt {attempt.retry_state.attempt_number})",
+                            (
+                                f"Attempting {operation_name} "
+                                f"(attempt {attempt.retry_state.attempt_number})"
+                            ),
                             extra={"context": operation_context},
                         )
                         return func(*args, **kwargs)
@@ -525,7 +528,10 @@ def retry_with_context(
             except RetryError as e:
                 # Convert to our custom exception with full context
                 raise RetryExhaustedError(
-                    f"Operation '{operation_name}' failed after {max_attempts} attempts",
+                    (
+                        f"Operation '{operation_name}' failed "
+                        f"after {max_attempts} attempts"
+                    ),
                     context=operation_context,
                     original_error=e.last_attempt.exception(),
                     operation=operation_name,

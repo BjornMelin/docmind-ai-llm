@@ -71,6 +71,8 @@ from utils.error_recovery import (
 )
 from utils.exceptions import (
     DocumentLoadingError,
+    handle_document_loading_error,
+    handle_embedding_error,
 )
 from utils.logging_config import log_error_with_context, log_performance, logger
 from utils.model_manager import ModelManager
@@ -651,7 +653,8 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
             )
 
             logger.info(
-                f"Fallback successful: loaded {len(fallback_docs)} documents via LlamaParse"
+                f"Fallback successful: loaded {len(fallback_docs)} "
+                "documents via LlamaParse"
             )
             return fallback_docs
 
@@ -671,7 +674,7 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
                 operation="document_loading_with_fallback",
                 file_path=file_path,
                 original_error=e,
-            ) from e from e
+            ) from e
 
 
 def chunk_documents_structured(documents: list[Document]) -> list[Document]:
@@ -729,7 +732,8 @@ def load_documents_llama(
         List of loaded Document objects with multimodal embeddings where applicable.
 
     Raises:
-        DocumentLoadingError: If critical document loading operations fail after retries.
+        DocumentLoadingError: If critical document loading
+        operations fail after retries.
 
     Note:
         Includes automatic retries for transient failures and comprehensive
@@ -1007,7 +1011,10 @@ async def stream_document_processing(file_paths: list[str]) -> AsyncIterator[Doc
                 )
 
                 logger.warning(
-                    f"Document processing failed for {file_path}, continuing with others",
+                    (
+                        f"Document processing failed for {file_path}, "
+                        "continuing with others"
+                    ),
                     extra={"error_count": error_count, "file_path": file_path},
                 )
                 return []  # Return empty list on failure
@@ -1179,7 +1186,7 @@ async def batch_embed_documents(
             e,
             operation="embedding_model_initialization",
             document_count=len(documents),
-        ) from e from e
+        ) from e
 
     # Split into batches
     batches = [
@@ -1400,7 +1407,7 @@ async def process_documents_streaming(
             operation="streaming_document_processing",
             processed_count=processed_count,
             total_files=total_files,
-        ) from e from e
+        ) from e
 
     finally:
         # Log final performance metrics

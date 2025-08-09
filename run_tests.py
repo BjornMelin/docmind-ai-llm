@@ -142,13 +142,15 @@ class TestRunner:
                 print(f"✅ {description} completed successfully")
                 if result.passed > 0:
                     print(
-                        f"   📊 {result.passed} passed, {result.failed} failed, {result.skipped} skipped"
+                        f"   📊 {result.passed} passed, "
+                        f"{result.failed} failed, {result.skipped} skipped"
                     )
             else:
                 print(f"❌ {description} failed with exit code {result.exit_code}")
                 if result.failed > 0:
                     print(
-                        f"   📊 {result.passed} passed, {result.failed} failed, {result.skipped} skipped"
+                        f"   📊 {result.passed} passed, "
+                        f"{result.failed} failed, {result.skipped} skipped"
                     )
 
             print(f"   ⏱️  Duration: {result.duration:.2f}s")
@@ -459,7 +461,8 @@ else:
             print(f"   {status} {result.command}")
             if result.passed > 0 or result.failed > 0:
                 print(
-                    f"      📊 {result.passed}P {result.failed}F {result.skipped}S - {result.duration:.1f}s"
+                    f"      📊 {result.passed}P {result.failed}F "
+                    f"{result.skipped}S - {result.duration:.1f}s"
                 )
             else:
                 print(f"      ⏱️  {result.duration:.1f}s")

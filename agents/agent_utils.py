@@ -469,7 +469,10 @@ def analyze_documents_agentic(
                 f"Agent chat failed, providing basic analysis: {e}",
                 extra={"prompt_type": prompt_type},
             )
-            analysis_result = f"Analysis partially completed for prompt type: {prompt_type}. Agent encountered issues during processing."
+            analysis_result = (
+                f"Analysis partially completed for prompt type: {prompt_type}. "
+                "Agent encountered processing issues."
+            )
 
         # Log performance and results
         duration = time.perf_counter() - start_time

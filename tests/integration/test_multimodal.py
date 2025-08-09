@@ -292,11 +292,11 @@ class TestMultimodalIndexCreation:
             with (
                 patch("utils.index_builder.settings", mock_multimodal_settings),
                 patch("utils.index_builder.logging.error") as mock_log_error,
-                patch("utils.index_builder.logging.info") as mock_log_info
+                patch("utils.index_builder.logging.info") as mock_log_info,
             ):
-                        result = create_multimodal_index(
-                            sample_multimodal_documents, use_gpu=False
-                        )
+                result = create_multimodal_index(
+                    sample_multimodal_documents, use_gpu=False
+                )
 
             # Verify error logging
             mock_log_error.assert_called_once()
@@ -396,13 +396,13 @@ class TestAsyncMultimodalIndex:
 
         with (
             patch("utils.index_builder.settings", mock_multimodal_settings),
-            patch("utils.index_builder.logging.error") as mock_log_error
+            patch("utils.index_builder.logging.error") as mock_log_error,
         ):
-                result = await create_multimodal_index_async(
-                    sample_multimodal_documents,
-                    use_gpu=True,
-                    collection_name="async_fallback",
-                )
+            result = await create_multimodal_index_async(
+                sample_multimodal_documents,
+                use_gpu=True,
+                collection_name="async_fallback",
+            )
 
         # Verify error logging
         mock_log_error.assert_called_once()
@@ -500,9 +500,9 @@ class TestHybridFusionRetrieverEnhanced:
         with (
             patch("utils.index_builder.settings", mock_multimodal_settings),
             patch("utils.index_builder.logging.error") as mock_log_error,
-            patch("utils.index_builder.logging.warning") as mock_log_warning
+            patch("utils.index_builder.logging.warning") as mock_log_warning,
         ):
-                    result = create_hybrid_retriever(mock_index)
+            result = create_hybrid_retriever(mock_index)
 
         # Verify error and warning logging
         mock_log_error.assert_called_once()
@@ -765,9 +765,9 @@ class TestUnstructuredMultimodalParsing:
 
         with (
             patch("utils.document_loader.logging.error") as mock_log_error,
-            patch("utils.document_loader.logging.info") as mock_log_info
+            patch("utils.document_loader.logging.info") as mock_log_info,
         ):
-                result = load_documents_unstructured(str(test_file))
+            result = load_documents_unstructured(str(test_file))
 
         # Verify error and fallback logging
         mock_log_error.assert_called_once()
@@ -823,24 +823,24 @@ class TestDocumentStructuredChunking:
 
         with (
             patch("utils.document_loader.settings", mock_multimodal_settings),
-            patch("utils.document_loader.SentenceSplitter") as mock_splitter
+            patch("utils.document_loader.SentenceSplitter") as mock_splitter,
         ):
-                mock_splitter_instance = MagicMock()
+            mock_splitter_instance = MagicMock()
 
-                # Mock chunking: long doc -> 2 chunks, short doc -> 1 chunk
-                chunk1 = Document(text="Chunk 1", metadata=text_doc.metadata)
-                chunk2 = Document(text="Chunk 2", metadata=text_doc.metadata)
-                short_chunk = Document(
-                    text="Short content", metadata=short_text_doc.metadata
-                )
+            # Mock chunking: long doc -> 2 chunks, short doc -> 1 chunk
+            chunk1 = Document(text="Chunk 1", metadata=text_doc.metadata)
+            chunk2 = Document(text="Chunk 2", metadata=text_doc.metadata)
+            short_chunk = Document(
+                text="Short content", metadata=short_text_doc.metadata
+            )
 
-                mock_splitter_instance.get_nodes_from_documents.side_effect = [
-                    [chunk1, chunk2],  # Long text doc chunked
-                    [short_chunk],  # Short text doc unchanged
-                ]
-                mock_splitter.return_value = mock_splitter_instance
+            mock_splitter_instance.get_nodes_from_documents.side_effect = [
+                [chunk1, chunk2],  # Long text doc chunked
+                [short_chunk],  # Short text doc unchanged
+            ]
+            mock_splitter.return_value = mock_splitter_instance
 
-                result = chunk_documents_structured(documents)
+            result = chunk_documents_structured(documents)
 
         # Verify splitter configuration
         mock_splitter.assert_called_once()
@@ -925,9 +925,9 @@ class TestPerformanceAndBenchmarks:
             ):
                 with (
                     patch("builtins.open", create=True),
-                    patch("utils.document_loader.os.unlink")
+                    patch("utils.document_loader.os.unlink"),
                 ):
-                        results = benchmark(batch_embedding_operation)
+                    results = benchmark(batch_embedding_operation)
 
             assert len(results) == 10
             for result in results:
@@ -1025,9 +1025,9 @@ class TestErrorHandlingAndEdgeCases:
 
         with (
             patch("utils.index_builder.logging.error") as mock_log_error,
-            pytest.raises(Exception)
+            pytest.raises(ValueError, match="No documents provided"),
         ):
-                create_multimodal_index([], use_gpu=False)
+            create_multimodal_index([], use_gpu=False)
 
     def test_unstructured_parsing_empty_file(self, tmp_path, mock_multimodal_settings):
         """Test handling of empty file in Unstructured parsing."""
@@ -1053,9 +1053,9 @@ class TestErrorHandlingAndEdgeCases:
 
             with (
                 patch("utils.index_builder.logging.error") as mock_log_error,
-                patch("utils.index_builder.logging.warning") as mock_log_warning
+                patch("utils.index_builder.logging.warning") as mock_log_warning,
             ):
-                    result = create_hybrid_retriever(None)
+                result = create_hybrid_retriever(None)
 
             # Should use final fallback
             mock_log_error.assert_called()

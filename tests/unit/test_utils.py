@@ -367,11 +367,11 @@ def test_ensure_spacy_model_download_fails(mock_subprocess, mock_spacy_load):
 
     with (
         patch("utils.utils.logging.error") as mock_log_error,
-        pytest.raises(RuntimeError, match="Failed to load or download")
+        pytest.raises(RuntimeError, match="Failed to load or download"),
     ):
-            ensure_spacy_model("en_core_web_sm")
+        ensure_spacy_model("en_core_web_sm")
 
-        mock_log_error.assert_called()
+    mock_log_error.assert_called()
 
 
 def test_ensure_spacy_model_import_error():
@@ -384,11 +384,11 @@ def test_ensure_spacy_model_import_error():
     ):
         with (
             patch("utils.utils.logging.error") as mock_log_error,
-            pytest.raises(RuntimeError, match="spaCy is not installed")
+            pytest.raises(RuntimeError, match="spaCy is not installed"),
         ):
-                ensure_spacy_model("en_core_web_sm")
+            ensure_spacy_model("en_core_web_sm")
 
-            mock_log_error.assert_called()
+        mock_log_error.assert_called()
 
 
 @pytest.mark.parametrize(
@@ -440,31 +440,29 @@ def test_get_embed_model_gpu_memory_logging(mock_cuda_available):
     """
     with (
         patch("utils.utils.torch.cuda.get_device_name", return_value="Tesla V100"),
-        patch("utils.utils.torch.cuda.get_device_properties") as mock_props
+        patch("utils.utils.torch.cuda.get_device_properties") as mock_props,
     ):
-            mock_props.return_value.total_memory = 32 * 1024**3  # 32GB
+        mock_props.return_value.total_memory = 32 * 1024**3  # 32GB
 
-            with (
-                patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
-                patch("utils.utils.settings") as mock_settings
-            ):
-                    mock_settings.gpu_acceleration = True
-                    mock_settings.dense_embedding_model = "test/model"
-                    mock_settings.embedding_batch_size = 64
+        with (
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
+            patch("utils.utils.settings") as mock_settings,
+        ):
+            mock_settings.gpu_acceleration = True
+            mock_settings.dense_embedding_model = "test/model"
+            mock_settings.embedding_batch_size = 64
 
-                    with patch("utils.utils.logging.info") as mock_log_info:
-                        get_embed_model()
+            with patch("utils.utils.logging.info") as mock_log_info:
+                get_embed_model()
 
-                        # Check that GPU info was logged
-                        logged_messages = [
-                            call[0][0] for call in mock_log_info.call_args_list
-                        ]
-                        gpu_message = next(
-                            (
-                                msg
-                                for msg in logged_messages
-                                if "Tesla V100" in msg and "32.0GB" in msg
-                            ),
-                            None,
-                        )
-                        assert gpu_message is not None
+                # Check that GPU info was logged
+                logged_messages = [call[0][0] for call in mock_log_info.call_args_list]
+                gpu_message = next(
+                    (
+                        msg
+                        for msg in logged_messages
+                        if "Tesla V100" in msg and "32.0GB" in msg
+                    ),
+                    None,
+                )
+                assert gpu_message is not None
