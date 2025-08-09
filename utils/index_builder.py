@@ -155,7 +155,8 @@ def create_hybrid_retriever(index: VectorStoreIndex) -> QueryFusionRetriever:
         # Create dense retriever (semantic search)
         dense_retriever = VectorIndexRetriever(
             index=index,
-            similarity_top_k=settings.gpu.prefetch_factor * settings.retrieval.similarity_top_k,
+            similarity_top_k=settings.gpu.prefetch_factor
+            * settings.retrieval.similarity_top_k,
             vector_store_query_mode="default",
         )
 
@@ -163,7 +164,8 @@ def create_hybrid_retriever(index: VectorStoreIndex) -> QueryFusionRetriever:
         try:
             sparse_retriever = VectorIndexRetriever(
                 index=index,
-                similarity_top_k=settings.gpu.prefetch_factor * settings.retrieval.similarity_top_k,
+                similarity_top_k=settings.gpu.prefetch_factor
+                * settings.retrieval.similarity_top_k,
                 vector_store_query_mode="sparse",
             )
         except Exception as e:
@@ -186,7 +188,9 @@ def create_hybrid_retriever(index: VectorStoreIndex) -> QueryFusionRetriever:
             num_queries=1,  # Single query, multiple retrievers
             mode="reciprocal_rerank",  # RRF fusion strategy
             use_async=True,
-            verbose=settings.embedding.debug_mode if hasattr(settings, "debug_mode") else False,
+            verbose=settings.embedding.debug_mode
+            if hasattr(settings, "debug_mode")
+            else False,
         )
 
         duration = time.perf_counter() - start_time
@@ -201,8 +205,10 @@ def create_hybrid_retriever(index: VectorStoreIndex) -> QueryFusionRetriever:
         logger.success(
             "HybridFusionRetriever created with RRF fusion",
             extra={
-                "dense_prefetch": settings.gpu.prefetch_factor * settings.retrieval.similarity_top_k,
-                "sparse_prefetch": settings.gpu.prefetch_factor * settings.retrieval.similarity_top_k,
+                "dense_prefetch": settings.gpu.prefetch_factor
+                * settings.retrieval.similarity_top_k,
+                "sparse_prefetch": settings.gpu.prefetch_factor
+                * settings.retrieval.similarity_top_k,
                 "final_top_k": settings.retrieval.similarity_top_k,
                 "duration_ms": round(duration * 1000, 2),
             },
@@ -917,7 +923,9 @@ async def create_multimodal_index_async(
         )
 
         # Use managed async Qdrant client with proper cleanup
-        async with managed_async_qdrant_client(settings.storage.qdrant_url) as async_client:
+        async with managed_async_qdrant_client(
+            settings.storage.qdrant_url
+        ) as async_client:
             from llama_index.vector_stores.qdrant import QdrantVectorStore
 
             vector_store = QdrantVectorStore(

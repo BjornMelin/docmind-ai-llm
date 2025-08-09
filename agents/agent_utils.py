@@ -153,7 +153,7 @@ def create_tools_from_index(index_data: dict[str, Any]) -> list[QueryEngineTool]
             e,
             operation="tool_creation_from_index",
             index_data_keys=list(index_data.keys()) if index_data else [],
-        )
+        ) from e
 
 
 @with_fallback(
@@ -319,7 +319,7 @@ def create_agent_with_tools(index_data: dict[str, Any], llm: Any) -> ReActAgent:
             operation="react_agent_creation",
             llm_type=type(llm).__name__,
             index_data_keys=list(index_data.keys()) if index_data else [],
-        )
+        ) from e
 
 
 @with_fallback(
@@ -417,7 +417,7 @@ def analyze_documents_agentic(
                     ToolFactory.create_query_tool(
                         vector_query_engine,
                         "vector_query",
-                        "Query documents using vector similarity search for general content",
+                        "Query documents using vector similarity search",
                     )
                 )
             except Exception as e:
@@ -429,7 +429,7 @@ def analyze_documents_agentic(
                     ToolFactory.create_query_tool(
                         kg_query_engine,
                         "knowledge_graph_query",
-                        "Query documents using knowledge graph for entity relationships",
+                        "Query knowledge graph for entity relationships",
                     )
                 )
             except Exception as e:

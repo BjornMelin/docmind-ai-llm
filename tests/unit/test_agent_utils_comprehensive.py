@@ -5,7 +5,6 @@ including utility functions, helper methods, error handling,
 and integration patterns to achieve 70%+ coverage.
 """
 
-
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st

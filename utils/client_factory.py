@@ -320,7 +320,9 @@ class QdrantBatchOperations:
 
             points = [
                 PointStruct(id=i + j, vector=vec, payload=payload)
-                for j, (vec, payload) in enumerate(zip(batch_vectors, batch_payloads, strict=False))
+                for j, (vec, payload) in enumerate(
+                    zip(batch_vectors, batch_payloads, strict=False)
+                )
             ]
 
             batches.append(
