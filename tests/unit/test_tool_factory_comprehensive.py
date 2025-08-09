@@ -82,8 +82,10 @@ class TestToolFactoryReranker:
             reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5
         )
 
-        with patch("agents.tool_factory.settings", test_settings):
-            with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
+        with (
+            patch("agents.tool_factory.settings", test_settings),
+            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class
+        ):
                 mock_reranker = MagicMock()
                 mock_colbert_class.return_value = mock_reranker
 
@@ -118,8 +120,10 @@ class TestToolFactoryReranker:
             reranker_model="colbert-ir/colbertv2.0", reranking_top_k=None
         )
 
-        with patch("agents.tool_factory.settings", test_settings):
-            with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
+        with (
+            patch("agents.tool_factory.settings", test_settings),
+            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class
+        ):
                 mock_reranker = MagicMock()
                 mock_colbert_class.return_value = mock_reranker
 
@@ -202,8 +206,10 @@ class TestToolFactoryVectorSearch:
             reranking_top_k=3,
         )
 
-        with patch("agents.tool_factory.settings", test_settings):
-            with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
+        with (
+            patch("agents.tool_factory.settings", test_settings),
+            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class
+        ):
                 mock_reranker = MagicMock()
                 mock_colbert_class.return_value = mock_reranker
 
@@ -283,8 +289,10 @@ class TestToolFactoryKnowledgeGraph:
             debug_mode=True, reranker_model="colbert-ir/colbertv2.0"
         )
 
-        with patch("agents.tool_factory.settings", test_settings):
-            with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
+        with (
+            patch("agents.tool_factory.settings", test_settings),
+            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class
+        ):
                 mock_reranker = MagicMock()
                 mock_colbert_class.return_value = mock_reranker
 
@@ -357,8 +365,10 @@ class TestToolFactoryHybridSearch:
                 reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5
             )
 
-            with patch("agents.tool_factory.settings", test_settings):
-                with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
+            with (
+                patch("agents.tool_factory.settings", test_settings),
+                patch("agents.tool_factory.ColbertRerank") as mock_colbert_class
+            ):
                     mock_reranker = MagicMock()
                     mock_colbert_class.return_value = mock_reranker
 
@@ -434,8 +444,10 @@ class TestToolFactoryHybridVector:
             reranking_top_k=3,
         )
 
-        with patch("agents.tool_factory.settings", test_settings):
-            with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
+        with (
+            patch("agents.tool_factory.settings", test_settings),
+            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class
+        ):
                 mock_reranker = MagicMock()
                 mock_colbert_class.return_value = mock_reranker
 
@@ -473,9 +485,11 @@ class TestToolFactoryFromIndexes:
         mock_kg_index = MagicMock()
         mock_retriever = MagicMock()
 
-        with patch.object(ToolFactory, "create_hybrid_search_tool") as mock_hybrid:
-            with patch.object(ToolFactory, "create_kg_search_tool") as mock_kg:
-                with patch.object(
+        with (
+            patch.object(ToolFactory, "create_hybrid_search_tool") as mock_hybrid,
+            patch.object(ToolFactory, "create_kg_search_tool") as mock_kg,
+            patch.object(
+        ):
                     ToolFactory, "create_vector_search_tool"
                 ) as mock_vector:
                     # Configure mock returns
@@ -805,8 +819,10 @@ class TestToolFactoryPerformanceScenarios:
         with patch.object(
             ToolFactory, "create_hybrid_vector_tool"
         ) as mock_hybrid_vector:
-            with patch.object(ToolFactory, "create_vector_search_tool") as mock_vector:
-                with patch("agents.tool_factory.logging") as mock_logging:
+            with (
+                patch.object(ToolFactory, "create_vector_search_tool") as mock_vector,
+                patch("agents.tool_factory.logging") as mock_logging
+            ):
                     mock_hybrid_vector.return_value = MagicMock()
                     mock_vector.return_value = MagicMock()
 
@@ -823,8 +839,10 @@ class TestToolFactoryPerformanceScenarios:
             reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5
         )
 
-        with patch("agents.tool_factory.settings", test_settings):
-            with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
+        with (
+            patch("agents.tool_factory.settings", test_settings),
+            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class
+        ):
                 mock_reranker1 = MagicMock()
                 mock_reranker2 = MagicMock()
                 mock_colbert_class.side_effect = [mock_reranker1, mock_reranker2]
@@ -889,9 +907,11 @@ class TestToolFactoryIntegration:
             reranking_top_k=5,
         )
 
-        with patch("agents.tool_factory.settings", test_settings):
-            with patch("agents.tool_factory.ColbertRerank") as mock_colbert_class:
-                with patch(
+        with (
+            patch("agents.tool_factory.settings", test_settings),
+            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch(
+        ):
                     "agents.tool_factory.RetrieverQueryEngine", return_value=MagicMock()
                 ):
                     mock_reranker = MagicMock()

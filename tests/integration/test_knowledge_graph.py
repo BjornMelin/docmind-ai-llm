@@ -793,8 +793,10 @@ class TestIntegrationScenarios:
         """Test proper logging throughout the integration."""
         from utils.index_builder import create_index
 
-        with caplog.at_level(logging.INFO):
-            with patch("utils.utils.ensure_spacy_model") as mock_spacy:
+        with (
+            caplog.at_level(logging.INFO),
+            patch("utils.utils.ensure_spacy_model") as mock_spacy
+        ):
                 mock_nlp = MagicMock()
                 mock_spacy.return_value = mock_nlp
 
@@ -804,9 +806,11 @@ class TestIntegrationScenarios:
                     mock_kg_instance = MagicMock()
                     mock_kg.return_value = mock_kg_instance
 
-                    with patch("llama_index.llms.ollama.Ollama"):
-                        with patch("utils.index_builder.setup_hybrid_qdrant"):
-                            with patch(
+                    with (
+                        patch("llama_index.llms.ollama.Ollama"),
+                        patch("utils.index_builder.setup_hybrid_qdrant"),
+                        patch(
+                    ):
                                 "llama_index.core.VectorStoreIndex.from_documents"
                             ):
                                 with patch(

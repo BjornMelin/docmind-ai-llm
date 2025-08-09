@@ -365,8 +365,10 @@ def test_ensure_spacy_model_download_fails(mock_subprocess, mock_spacy_load):
     # Mock failed subprocess run
     mock_subprocess.side_effect = subprocess.CalledProcessError(1, "cmd")
 
-    with patch("utils.utils.logging.error") as mock_log_error:
-        with pytest.raises(RuntimeError, match="Failed to load or download"):
+    with (
+        patch("utils.utils.logging.error") as mock_log_error,
+        pytest.raises(RuntimeError, match="Failed to load or download")
+    ):
             ensure_spacy_model("en_core_web_sm")
 
         mock_log_error.assert_called()
@@ -380,8 +382,10 @@ def test_ensure_spacy_model_import_error():
     with patch(
         "builtins.__import__", side_effect=ImportError("No module named 'spacy'")
     ):
-        with patch("utils.utils.logging.error") as mock_log_error:
-            with pytest.raises(RuntimeError, match="spaCy is not installed"):
+        with (
+            patch("utils.utils.logging.error") as mock_log_error,
+            pytest.raises(RuntimeError, match="spaCy is not installed")
+        ):
                 ensure_spacy_model("en_core_web_sm")
 
             mock_log_error.assert_called()
@@ -434,12 +438,16 @@ def test_get_embed_model_gpu_memory_logging(mock_cuda_available):
     Verifies that GPU memory information is properly logged
     when GPU acceleration is enabled.
     """
-    with patch("utils.utils.torch.cuda.get_device_name", return_value="Tesla V100"):
-        with patch("utils.utils.torch.cuda.get_device_properties") as mock_props:
+    with (
+        patch("utils.utils.torch.cuda.get_device_name", return_value="Tesla V100"),
+        patch("utils.utils.torch.cuda.get_device_properties") as mock_props
+    ):
             mock_props.return_value.total_memory = 32 * 1024**3  # 32GB
 
-            with patch("utils.utils.FastEmbedEmbedding") as mock_fastembed:
-                with patch("utils.utils.settings") as mock_settings:
+            with (
+                patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
+                patch("utils.utils.settings") as mock_settings
+            ):
                     mock_settings.gpu_acceleration = True
                     mock_settings.dense_embedding_model = "test/model"
                     mock_settings.embedding_batch_size = 64

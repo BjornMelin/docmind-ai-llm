@@ -87,8 +87,10 @@ class TestQdrantClientFactory:
         """Test sync client creation failure handling."""
         mock_qdrant_client.side_effect = ConnectionError("Connection failed")
 
-        with pytest.raises(ConnectionError, match="Connection failed"):
-            with QdrantClientFactory.create_sync_client():
+        with (
+            pytest.raises(ConnectionError, match="Connection failed"),
+            QdrantClientFactory.create_sync_client()
+        ):
                 pass  # Should not reach here
 
         # Verify error was logged
@@ -257,8 +259,10 @@ class TestQdrantClientFactory:
         mock_client = MagicMock()
         mock_qdrant_client.return_value = mock_client
 
-        with pytest.raises(ValueError, match="Test error"):
-            with QdrantClientFactory.create_sync_client() as client:
+        with (
+            pytest.raises(ValueError, match="Test error"),
+            QdrantClientFactory.create_sync_client() as client
+        ):
                 assert client == mock_client
                 raise ValueError("Test error")
 
@@ -487,8 +491,10 @@ class TestQdrantClientFactory:
         """Test sync client creation handles various exception types."""
         mock_qdrant_client.side_effect = exception_type(error_message)
 
-        with pytest.raises(exception_type, match=error_message):
-            with QdrantClientFactory.create_sync_client():
+        with (
+            pytest.raises(exception_type, match=error_message),
+            QdrantClientFactory.create_sync_client()
+        ):
                 pass
 
         # Verify error was logged with correct message

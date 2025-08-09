@@ -205,7 +205,7 @@ def extract_images_from_pdf(pdf_path: str) -> list[dict[str, Any]]:
             context={"pdf_path": str(pdf_path)},
             original_error=e,
             operation="pdf_image_extraction",
-        )
+        ) from e
 
     return images
 
@@ -394,7 +394,7 @@ def create_native_multimodal_embeddings(
                 text_length=len(text),
                 image_count=len(images) if images else 0,
                 original_error=e,
-            )
+            ) from e
 
     # Log performance and results
     duration = time.perf_counter() - start_time
@@ -671,7 +671,7 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
                 operation="document_loading_with_fallback",
                 file_path=file_path,
                 original_error=e,
-            )
+            ) from e from e
 
 
 def chunk_documents_structured(documents: list[Document]) -> list[Document]:
@@ -1179,7 +1179,7 @@ async def batch_embed_documents(
             e,
             operation="embedding_model_initialization",
             document_count=len(documents),
-        )
+        ) from e from e
 
     # Split into batches
     batches = [
@@ -1400,7 +1400,7 @@ async def process_documents_streaming(
             operation="streaming_document_processing",
             processed_count=processed_count,
             total_files=total_files,
-        )
+        ) from e from e
 
     finally:
         # Log final performance metrics

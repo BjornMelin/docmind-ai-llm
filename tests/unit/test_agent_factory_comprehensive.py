@@ -169,8 +169,10 @@ class TestCreateSingleAgent:
         mock_tools = [MagicMock(spec=QueryEngineTool)]
         mock_llm = MagicMock()
 
-        with patch("llama_index.core.agent.ReActAgent") as mock_react_agent:
-            with patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory:
+        with (
+            patch("llama_index.core.agent.ReActAgent") as mock_react_agent,
+            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory
+        ):
                 # Arrange mocks
                 mock_agent = MagicMock()
                 mock_react_agent.from_tools.return_value = mock_agent
@@ -198,10 +200,12 @@ class TestCreateSingleAgent:
 
         test_settings = AppSettings(context_size=8192, max_iterations=20)
 
-        with patch("agent_factory.settings", test_settings):
-            with patch("llama_index.core.agent.ReActAgent") as mock_react_agent:
-                with patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory:
-                    with patch("llama_index.core.tools.QueryEngineTool"):
+        with (
+            patch("agent_factory.settings", test_settings),
+            patch("llama_index.core.agent.ReActAgent") as mock_react_agent,
+            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory,
+            patch("llama_index.core.tools.QueryEngineTool")
+        ):
                         # Act
                         create_single_agent(mock_index, mock_llm)
 
@@ -219,8 +223,10 @@ class TestCreateSingleAgent:
             "llama_index.core.agent.ReActAgent.from_tools",
             side_effect=RuntimeError("Agent creation failed"),
         ):
-            with patch("llama_index.core.memory.ChatMemoryBuffer"):
-                with patch("llama_index.core.tools.QueryEngineTool"):
+            with (
+                patch("llama_index.core.memory.ChatMemoryBuffer"),
+                patch("llama_index.core.tools.QueryEngineTool")
+            ):
                     # Should propagate the error
                     with pytest.raises(RuntimeError, match="Agent creation failed"):
                         create_single_agent(mock_index, mock_llm)
@@ -238,8 +244,10 @@ class TestCreateMultiAgentGraph:
             "multimodal_agent": MagicMock(),
         }
 
-        with patch("langgraph.graph.StateGraph") as mock_state_graph:
-            with patch("langgraph.prebuilt.create_react_agent") as mock_create_react:
+        with (
+            patch("langgraph.graph.StateGraph") as mock_state_graph,
+            patch("langgraph.prebuilt.create_react_agent") as mock_create_react
+        ):
                 # Arrange mocks
                 mock_graph_instance = MagicMock()
                 mock_state_graph.return_value = mock_graph_instance
@@ -259,8 +267,10 @@ class TestCreateMultiAgentGraph:
         """Test multi-agent graph creation includes supervisor logic."""
         mock_agents = {"document_agent": MagicMock(), "kg_agent": MagicMock()}
 
-        with patch("langgraph.graph.StateGraph") as mock_state_graph:
-            with patch("langgraph.prebuilt.create_react_agent"):
+        with (
+            patch("langgraph.graph.StateGraph") as mock_state_graph,
+            patch("langgraph.prebuilt.create_react_agent")
+        ):
                 mock_graph_instance = MagicMock()
                 mock_state_graph.return_value = mock_graph_instance
 
@@ -296,8 +306,10 @@ class TestCreateMultiAgentGraph:
             "multimodal_agent": MagicMock(),
         }
 
-        with patch("langgraph.graph.StateGraph") as mock_state_graph:
-            with patch("langgraph.prebuilt.create_react_agent"):
+        with (
+            patch("langgraph.graph.StateGraph") as mock_state_graph,
+            patch("langgraph.prebuilt.create_react_agent")
+        ):
                 mock_graph_instance = MagicMock()
                 mock_state_graph.return_value = mock_graph_instance
 
@@ -345,9 +357,11 @@ class TestAgentFactory:
 
         factory = AgentFactory(mock_index_data, mock_llm)
 
-        with patch.object(factory, "_create_document_agent") as mock_doc_agent:
-            with patch.object(factory, "_create_kg_agent") as mock_kg_agent:
-                with patch.object(factory, "_create_multimodal_agent") as mock_mm_agent:
+        with (
+            patch.object(factory, "_create_document_agent") as mock_doc_agent,
+            patch.object(factory, "_create_kg_agent") as mock_kg_agent,
+            patch.object(factory, "_create_multimodal_agent") as mock_mm_agent
+        ):
                     # Arrange mocks
                     mock_doc_agent.return_value = MagicMock()
                     mock_kg_agent.return_value = MagicMock()
@@ -495,8 +509,10 @@ class TestPropertyBasedAgentFactory:
         # Create mock agents
         mock_agents = {f"agent_{i}": MagicMock() for i in range(num_agents)}
 
-        with patch("langgraph.graph.StateGraph") as mock_state_graph:
-            with patch("langgraph.prebuilt.create_react_agent"):
+        with (
+            patch("langgraph.graph.StateGraph") as mock_state_graph,
+            patch("langgraph.prebuilt.create_react_agent")
+        ):
                 mock_graph_instance = MagicMock()
                 mock_state_graph.return_value = mock_graph_instance
                 mock_graph_instance.compile.return_value = MagicMock()

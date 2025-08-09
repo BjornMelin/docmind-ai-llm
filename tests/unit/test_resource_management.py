@@ -58,10 +58,12 @@ async def test_managed_gpu_operation_cleanup():
     """Test that GPU operations are properly cleaned up."""
     from utils.utils import managed_gpu_operation
 
-    with patch("torch.cuda.is_available", return_value=True):
-        with patch("torch.cuda.synchronize") as mock_sync:
-            with patch("torch.cuda.empty_cache") as mock_empty_cache:
-                with patch("gc.collect") as mock_gc:
+    with (
+        patch("torch.cuda.is_available", return_value=True),
+        patch("torch.cuda.synchronize") as mock_sync,
+        patch("torch.cuda.empty_cache") as mock_empty_cache,
+        patch("gc.collect") as mock_gc
+    ):
                     # Test normal operation
                     async with managed_gpu_operation():
                         pass  # Simulate GPU operation
@@ -77,10 +79,12 @@ async def test_managed_gpu_operation_cleanup_on_exception():
     """Test that GPU cleanup occurs even when operations fail."""
     from utils.utils import managed_gpu_operation
 
-    with patch("torch.cuda.is_available", return_value=True):
-        with patch("torch.cuda.synchronize") as mock_sync:
-            with patch("torch.cuda.empty_cache") as mock_empty_cache:
-                with patch("gc.collect") as mock_gc:
+    with (
+        patch("torch.cuda.is_available", return_value=True),
+        patch("torch.cuda.synchronize") as mock_sync,
+        patch("torch.cuda.empty_cache") as mock_empty_cache,
+        patch("gc.collect") as mock_gc
+    ):
                     # Test exception handling
                     with pytest.raises(RuntimeError):
                         async with managed_gpu_operation():
@@ -99,9 +103,11 @@ async def test_create_index_async_resource_management():
 
     from utils.index_builder import create_index_async
 
-    with patch("utils.index_builder.managed_async_qdrant_client") as mock_context:
-        with patch("utils.index_builder.setup_hybrid_qdrant_async") as mock_setup:
-            with patch(
+    with (
+        patch("utils.index_builder.managed_async_qdrant_client") as mock_context,
+        patch("utils.index_builder.setup_hybrid_qdrant_async") as mock_setup,
+        patch(
+    ):
                 "utils.index_builder.VectorStoreIndex.from_documents"
             ) as mock_index:
                 with patch("utils.index_builder.ensure_spacy_model"):
@@ -223,10 +229,12 @@ def test_load_documents_llama_temp_file_cleanup():
     mock_file.name = "test.txt"
     mock_file.getvalue.return_value = b"test content"
 
-    with patch("tempfile.NamedTemporaryFile") as mock_temp:
-        with patch("utils.document_loader.SimpleDirectoryReader") as mock_reader:
-            with patch("utils.document_loader.LlamaParse") as mock_llama_parse:
-                with patch("os.remove") as mock_remove:
+    with (
+        patch("tempfile.NamedTemporaryFile") as mock_temp,
+        patch("utils.document_loader.SimpleDirectoryReader") as mock_reader,
+        patch("utils.document_loader.LlamaParse") as mock_llama_parse,
+        patch("os.remove") as mock_remove
+    ):
                     # Mock temporary file context manager
                     mock_temp_file = MagicMock()
                     mock_temp_file.name = "/tmp/test_temp_file.txt"
@@ -261,12 +269,14 @@ def test_load_documents_llama_video_resource_cleanup():
     mock_file.type = "video/mp4"
     mock_file.getvalue.return_value = b"video content"
 
-    with patch("tempfile.NamedTemporaryFile") as mock_temp:
-        with patch("moviepy.video.io.VideoFileClip.VideoFileClip") as mock_video:
-            with patch("utils.document_loader.whisper_load") as mock_whisper:
-                with patch("utils.document_loader.LlamaParse") as mock_llama_parse:
-                    with patch("os.remove") as mock_remove:
-                        with patch("os.path.exists", return_value=True):
+    with (
+        patch("tempfile.NamedTemporaryFile") as mock_temp,
+        patch("moviepy.video.io.VideoFileClip.VideoFileClip") as mock_video,
+        patch("utils.document_loader.whisper_load") as mock_whisper,
+        patch("utils.document_loader.LlamaParse") as mock_llama_parse,
+        patch("os.remove") as mock_remove,
+        patch("os.path.exists", return_value=True)
+    ):
                             # Mock LlamaParse parser
                             mock_parser = MagicMock()
                             mock_llama_parse.return_value = mock_parser

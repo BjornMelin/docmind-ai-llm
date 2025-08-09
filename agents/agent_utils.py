@@ -510,7 +510,7 @@ def analyze_documents_agentic(
             operation="agentic_document_analysis",
             prompt_type=prompt_type,
             has_agent=agent is not None,
-        )
+        ) from e
 
 
 @async_with_timeout(timeout_seconds=120)  # 2 minute timeout for chat
@@ -651,7 +651,7 @@ async def chat_with_agent(
             operation="agent_chat",
             user_input_length=len(user_input),
             agent_type=type(agent).__name__ if agent else "None",
-        )
+        ) from e
 
     finally:
         # Log performance metrics

@@ -167,8 +167,10 @@ class TestEmbeddingModelManagement:
             dense_embedding_model="test-model", embedding_batch_size=32
         )
 
-        with patch("utils.utils.settings", test_settings):
-            with patch("fastembed.TextEmbedding") as mock_embedding:
+        with (
+            patch("utils.utils.settings", test_settings),
+            patch("fastembed.TextEmbedding") as mock_embedding
+        ):
                 mock_embedding.return_value = MagicMock()
 
                 get_embed_model()
@@ -181,17 +183,19 @@ class TestEmbeddingModelManagement:
         """Embedding model should handle GPU optimization when available."""
         test_settings = AppSettings(gpu_acceleration=True)
 
-        with patch("utils.utils.settings", test_settings):
-            with patch("fastembed.TextEmbedding") as mock_embedding:
-                with patch("utils.utils.detect_hardware") as mock_hardware:
-                    # Mock GPU available
-                    mock_hardware.return_value = {
-                        "cuda_available": True,
-                        "fastembed_providers": ["CUDAExecutionProvider"],
-                    }
-                    mock_embedding.return_value = MagicMock()
+        with (
+                patch("utils.utils.settings", test_settings),
+                patch("fastembed.TextEmbedding") as mock_embedding,
+                patch("utils.utils.detect_hardware") as mock_hardware
+            ):
+                # Mock GPU available
+                mock_hardware.return_value = {
+                    "cuda_available": True,
+                    "fastembed_providers": ["CUDAExecutionProvider"],
+                }
+                mock_embedding.return_value = MagicMock()
 
-                    result = get_embed_model()
+                result = get_embed_model()
 
                     assert result is not None
                     mock_embedding.assert_called_once()
@@ -200,27 +204,31 @@ class TestEmbeddingModelManagement:
         """Embedding model should fallback to CPU when GPU unavailable."""
         test_settings = AppSettings(gpu_acceleration=True)
 
-        with patch("utils.utils.settings", test_settings):
-            with patch("fastembed.TextEmbedding") as mock_embedding:
-                with patch("utils.utils.detect_hardware") as mock_hardware:
-                    # Mock GPU not available
-                    mock_hardware.return_value = {
-                        "cuda_available": False,
-                        "fastembed_providers": ["CPUExecutionProvider"],
-                    }
-                    mock_embedding.return_value = MagicMock()
+        with (
+                patch("utils.utils.settings", test_settings),
+                patch("fastembed.TextEmbedding") as mock_embedding,
+                patch("utils.utils.detect_hardware") as mock_hardware
+            ):
+                # Mock GPU not available
+                mock_hardware.return_value = {
+                    "cuda_available": False,
+                    "fastembed_providers": ["CPUExecutionProvider"],
+                }
+                mock_embedding.return_value = MagicMock()
 
-                    result = get_embed_model()
+                result = get_embed_model()
 
                     assert result is not None
                     mock_embedding.assert_called_once()
 
     def test_get_embed_model_error_handling(self):
         """Embedding model creation should handle errors gracefully."""
-        with patch(
-            "fastembed.TextEmbedding", side_effect=RuntimeError("Model load failed")
-        ):
-            with pytest.raises(RuntimeError, match="Model load failed"):
+        with (
+                patch(
+                    "fastembed.TextEmbedding", side_effect=RuntimeError("Model load failed")
+                ),
+                pytest.raises(RuntimeError, match="Model load failed")
+            ):
                 get_embed_model()
 
 
@@ -367,8 +375,10 @@ class TestSpacyModelManagement:
 
     def test_ensure_spacy_model_with_download_fallback(self):
         """SpaCy models should be downloaded when not available."""
-        with patch("spacy.load") as mock_load:
-            with patch("subprocess.run") as mock_subprocess:
+        with (
+                patch("spacy.load") as mock_load,
+                patch("subprocess.run") as mock_subprocess
+            ):
                 # First call fails (model not found), second succeeds after download
                 mock_nlp = MagicMock()
                 mock_load.side_effect = [OSError("Model not found"), mock_nlp]
@@ -382,23 +392,25 @@ class TestSpacyModelManagement:
 
     def test_ensure_spacy_model_download_failure(self):
         """SpaCy model download failures should be handled."""
-        with patch("spacy.load", side_effect=OSError("Model not found")):
-            with patch("subprocess.run") as mock_subprocess:
+        with (
+                patch("spacy.load", side_effect=OSError("Model not found")),
+                patch("subprocess.run") as mock_subprocess,
+                pytest.raises(RuntimeError, match="Failed to download")
+            ):
                 # Download fails
                 mock_subprocess.return_value = MagicMock(returncode=1)
-
-                with pytest.raises(RuntimeError, match="Failed to download"):
-                    ensure_spacy_model("en_core_web_sm")
+                ensure_spacy_model("en_core_web_sm")
 
     def test_ensure_spacy_model_invalid_model_name(self):
         """Invalid spaCy model names should be handled gracefully."""
-        with patch("spacy.load", side_effect=OSError("Model not found")):
-            with patch("subprocess.run") as mock_subprocess:
+        with (
+                patch("spacy.load", side_effect=OSError("Model not found")),
+                patch("subprocess.run") as mock_subprocess,
+                pytest.raises(RuntimeError, match="Model still not available")
+            ):
                 # Download succeeds but model still can't load
                 mock_subprocess.return_value = MagicMock(returncode=0)
-
-                with pytest.raises(RuntimeError, match="Model still not available"):
-                    ensure_spacy_model("invalid_model")
+                ensure_spacy_model("invalid_model")
 
 
 class TestPerformanceOptimization:
@@ -504,11 +516,13 @@ class TestRealWorldUsageScenarios:
                 )
 
         # Model loading failures
-        with patch(
-            "fastembed.TextEmbedding", side_effect=RuntimeError("CUDA out of memory")
-        ):
-            # Should propagate model errors for fallback handling
-            with pytest.raises(RuntimeError):
+        with (
+                patch(
+                    "fastembed.TextEmbedding", side_effect=RuntimeError("CUDA out of memory")
+                ),
+                pytest.raises(RuntimeError)
+            ):
+                # Should propagate model errors for fallback handling
                 get_embed_model()
 
     def test_resource_constraint_handling(self):

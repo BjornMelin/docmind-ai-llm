@@ -206,8 +206,10 @@ class TestSingleAgentCreation:
         mock_tools = [MagicMock(spec=QueryEngineTool)]
         mock_llm = MagicMock()
 
-        with patch("llama_index.core.agent.ReActAgent") as mock_react_agent:
-            with patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory:
+        with (
+            patch("llama_index.core.agent.ReActAgent") as mock_react_agent,
+            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory
+        ):
                 mock_agent = MagicMock()
                 mock_react_agent.from_tools.return_value = mock_agent
                 mock_memory.from_defaults.return_value = MagicMock()
@@ -231,8 +233,10 @@ class TestSingleAgentCreation:
             "llama_index.core.agent.ReActAgent.from_tools",
             side_effect=RuntimeError("Agent creation failed"),
         ):
-            with patch("llama_index.core.memory.ChatMemoryBuffer"):
-                with pytest.raises(RuntimeError, match="Agent creation failed"):
+            with (
+                patch("llama_index.core.memory.ChatMemoryBuffer"),
+                pytest.raises(RuntimeError, match="Agent creation failed")
+            ):
                     create_single_agent(mock_tools, mock_llm)
 
 
@@ -244,8 +248,10 @@ class TestMultiAgentSystemCreation:
         mock_tools = [MagicMock(spec=QueryEngineTool)]
         mock_llm = MagicMock()
 
-        with patch("langgraph.graph.StateGraph") as mock_state_graph:
-            with patch("langgraph.prebuilt.create_react_agent") as mock_create_react:
+        with (
+            patch("langgraph.graph.StateGraph") as mock_state_graph,
+            patch("langgraph.prebuilt.create_react_agent") as mock_create_react
+        ):
                 # Setup mocks
                 mock_graph = MagicMock()
                 mock_state_graph.return_value = mock_graph
@@ -283,8 +289,10 @@ class TestAgentSystemSelection:
         mock_tools = [MagicMock(spec=QueryEngineTool)]
         mock_llm = MagicMock()
 
-        with patch("agent_factory.create_langgraph_supervisor_system") as mock_multi:
-            with patch("agent_factory.create_single_agent") as mock_single:
+        with (
+            patch("agent_factory.create_langgraph_supervisor_system") as mock_multi,
+            patch("agent_factory.create_single_agent") as mock_single
+        ):
                 mock_multi_system = MagicMock()
                 mock_multi.return_value = mock_multi_system
 

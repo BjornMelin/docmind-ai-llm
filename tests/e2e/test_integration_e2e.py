@@ -140,9 +140,11 @@ class TestEndToEndPipeline:
         # Test KG creation fails but vector index succeeds
         from utils.index_builder import create_index
 
-        with patch("qdrant_client.QdrantClient"):
-            with patch("utils.qdrant_utils.setup_hybrid_qdrant"):
-                with patch(
+        with (
+            patch("qdrant_client.QdrantClient"),
+            patch("utils.qdrant_utils.setup_hybrid_qdrant"),
+            patch(
+        ):
                     "llama_index.core.VectorStoreIndex.from_documents"
                 ) as mock_vector:
                     mock_vector.return_value = MagicMock()
@@ -166,9 +168,25 @@ class TestEndToEndPipeline:
 
         docs = [Document(text="GPU test document for integration testing")]
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("qdrant_client.QdrantClient"):
-                with patch("utils.qdrant_utils.setup_hybrid_qdrant"):
+        with (
+
+
+            ,
+
+
+            ,
+
+
+            patch("torch.cuda.is_available", return_value=True):,
+
+
+            patch("qdrant_client.QdrantClient"):,
+
+
+            patch("utils.qdrant_utils.setup_hybrid_qdrant"):
+
+
+        ):
                     with patch(
                         "llama_index.core.VectorStoreIndex.from_documents"
                     ) as mock_create:
@@ -199,9 +217,11 @@ class TestEndToEndPipeline:
             Document(text=""),  # Empty document
         ]
 
-        with patch("qdrant_client.QdrantClient"):
-            with patch("utils.qdrant_utils.setup_hybrid_qdrant"):
-                with patch(
+        with (
+            patch("qdrant_client.QdrantClient"),
+            patch("utils.qdrant_utils.setup_hybrid_qdrant"),
+            patch(
+        ):
                     "llama_index.core.VectorStoreIndex.from_documents"
                 ) as mock_create:
                     mock_index = MagicMock()
@@ -336,9 +356,11 @@ class TestPerformanceIntegration:
                 for i in range(3)
             ]
 
-            with patch("qdrant_client.QdrantClient"):
-                with patch("utils.qdrant_utils.setup_hybrid_qdrant"):
-                    with patch(
+            with (
+                patch("qdrant_client.QdrantClient"),
+                patch("utils.qdrant_utils.setup_hybrid_qdrant"),
+                patch(
+            ):
                         "llama_index.core.VectorStoreIndex.from_documents"
                     ) as mock_create:
                         mock_index = MagicMock()
@@ -382,9 +404,25 @@ class TestPerformanceIntegration:
             for i in range(50)
         ]
 
-        with patch("qdrant_client.QdrantClient"):
-            with patch("utils.qdrant_utils.setup_hybrid_qdrant"):
-                with patch("llama_index.core.VectorStoreIndex.from_documents"):
+        with (
+
+
+            ,
+
+
+            ,
+
+
+            patch("qdrant_client.QdrantClient"):,
+
+
+            patch("utils.qdrant_utils.setup_hybrid_qdrant"):,
+
+
+            patch("llama_index.core.VectorStoreIndex.from_documents"):
+
+
+        ):
                     with patch("utils.utils.ensure_spacy_model"):
                         from utils.index_builder import create_index
 
@@ -411,9 +449,11 @@ class TestPerformanceIntegration:
         docs = [Document(text=f"Benchmark document {i}") for i in range(10)]
 
         def full_pipeline():
-            with patch("qdrant_client.QdrantClient"):
-                with patch("utils.qdrant_utils.setup_hybrid_qdrant"):
-                    with patch(
+            with (
+                patch("qdrant_client.QdrantClient"),
+                patch("utils.qdrant_utils.setup_hybrid_qdrant"),
+                patch(
+            ):
                         "llama_index.core.VectorStoreIndex.from_documents"
                     ) as mock_create:
                         mock_index = MagicMock()
@@ -496,9 +536,11 @@ class TestErrorRecoveryIntegration:
             Document(text=f"Resource test document {i} " * 1000) for i in range(100)
         ]
 
-        with patch("qdrant_client.QdrantClient"):
-            with patch("utils.qdrant_utils.setup_hybrid_qdrant"):
-                with patch(
+        with (
+            patch("qdrant_client.QdrantClient"),
+            patch("utils.qdrant_utils.setup_hybrid_qdrant"),
+            patch(
+        ):
                     "llama_index.core.VectorStoreIndex.from_documents"
                 ) as mock_create:
                     # Simulate memory error

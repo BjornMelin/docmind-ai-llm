@@ -104,9 +104,11 @@ class TestHybridRetriever:
 
     def test_create_hybrid_retriever_success(self, mock_vector_index, mock_settings):
         """Test successful hybrid retriever creation with RRF fusion."""
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.VectorIndexRetriever") as mock_retriever:
-                with patch("utils.index_builder.QueryFusionRetriever") as mock_fusion:
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.VectorIndexRetriever") as mock_retriever,
+            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion
+        ):
                     mock_dense_retriever = MagicMock()
                     mock_sparse_retriever = MagicMock()
                     mock_fusion_retriever = MagicMock()
@@ -145,9 +147,11 @@ class TestHybridRetriever:
 
     def test_create_hybrid_retriever_fallback(self, mock_vector_index, mock_settings):
         """Test fallback to dense-only retriever when fusion fails."""
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.VectorIndexRetriever") as mock_retriever:
-                with patch("utils.index_builder.QueryFusionRetriever") as mock_fusion:
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.VectorIndexRetriever") as mock_retriever,
+            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion
+        ):
                     # Mock fusion retriever creation failure
                     mock_fusion.side_effect = Exception("Fusion failed")
 
@@ -226,9 +230,11 @@ class TestIndexCreation:
         mock_retriever = MagicMock()
         mock_create_retriever.return_value = mock_retriever
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.torch.cuda.Stream") as mock_stream:
-                with patch(
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
+            patch(
+        ):
                     "utils.index_builder.StorageContext.from_defaults"
                 ) as mock_storage:
                     mock_stream_instance = MagicMock()
@@ -344,13 +350,15 @@ class TestIndexCreation:
             "recommendations": ["Use 0.7/0.3 weights", "Set alpha to 60"],
         }
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.logging.warning") as mock_log_warning:
-                with patch("utils.index_builder.logging.info") as mock_log_info:
-                    with patch("utils.index_builder.setup_hybrid_qdrant") as mock_setup:
-                        with patch("utils.index_builder.FastEmbedEmbedding"):
-                            with patch("utils.index_builder.SparseTextEmbedding"):
-                                with patch(
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.logging.warning") as mock_log_warning,
+            patch("utils.index_builder.logging.info") as mock_log_info,
+            patch("utils.index_builder.setup_hybrid_qdrant") as mock_setup,
+            patch("utils.index_builder.FastEmbedEmbedding"),
+            patch("utils.index_builder.SparseTextEmbedding"),
+            patch(
+        ):
                                     "utils.index_builder.VectorStoreIndex.from_documents"
                                 ):
                                     create_index(sample_documents, use_gpu=False)
@@ -425,9 +433,11 @@ class TestAsyncIndexCreation:
         mock_retriever = MagicMock()
         mock_create_retriever.return_value = mock_retriever
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.torch.cuda.Stream") as mock_stream:
-                with patch(
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
+            patch(
+        ):
                     "utils.index_builder.StorageContext.from_defaults"
                 ) as mock_storage:
                     mock_stream_instance = MagicMock()
@@ -481,11 +491,13 @@ class TestAsyncIndexCreation:
         # Mock spaCy model failure
         mock_spacy_model.side_effect = Exception("spaCy model failed")
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                with patch("utils.index_builder.FastEmbedEmbedding"):
-                    with patch("utils.index_builder.SparseTextEmbedding"):
-                        with patch(
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.setup_hybrid_qdrant_async"),
+            patch("utils.index_builder.FastEmbedEmbedding"),
+            patch("utils.index_builder.SparseTextEmbedding"),
+            patch(
+        ):
                             "utils.index_builder.VectorStoreIndex.from_documents"
                         ) as mock_vector_index:
                             with patch(
@@ -543,9 +555,11 @@ class TestMultimodalIndex:
         # Combine text and image documents
         all_documents = sample_documents + sample_image_documents
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.torch.cuda.Stream") as mock_stream:
-                with patch(
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
+            patch(
+        ):
                     "utils.index_builder.StorageContext.from_defaults"
                 ) as mock_storage:
                     mock_stream_instance = MagicMock()
@@ -578,11 +592,13 @@ class TestMultimodalIndex:
         self, mock_cuda_available, sample_documents, mock_settings
     ):
         """Test multimodal index creation in CPU mode."""
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.HuggingFaceEmbedding") as mock_hf_embedding:
-                with patch("utils.index_builder.QdrantClient"):
-                    with patch("utils.index_builder.QdrantVectorStore"):
-                        with patch(
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.HuggingFaceEmbedding") as mock_hf_embedding,
+            patch("utils.index_builder.QdrantClient"),
+            patch("utils.index_builder.QdrantVectorStore"),
+            patch(
+        ):
                             "utils.index_builder.MultiModalVectorStoreIndex.from_documents"
                         ) as mock_multimodal_index:
                             mock_index = MagicMock()
@@ -606,10 +622,12 @@ class TestMultimodalIndex:
         # Mock embedding model failure
         mock_hf_embedding.side_effect = Exception("Embedding model failed")
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.create_index") as mock_create_index:
-                with patch("utils.index_builder.logging.error") as mock_log_error:
-                    with patch("utils.index_builder.logging.info") as mock_log_info:
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.create_index") as mock_create_index,
+            patch("utils.index_builder.logging.error") as mock_log_error,
+            patch("utils.index_builder.logging.info") as mock_log_info
+        ):
                         mock_fallback_result = {"vector": MagicMock()}
                         mock_create_index.return_value = mock_fallback_result
 
@@ -661,9 +679,11 @@ class TestMultimodalIndex:
 
         all_documents = sample_documents + sample_image_documents
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.torch.cuda.Stream") as mock_stream:
-                with patch("utils.index_builder.StorageContext.from_defaults"):
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.torch.cuda.Stream") as mock_stream,
+            patch("utils.index_builder.StorageContext.from_defaults")
+        ):
                     mock_stream_instance = MagicMock()
                     mock_stream.return_value = mock_stream_instance
 
@@ -712,15 +732,19 @@ class TestEdgeCases:
 
     def test_create_index_empty_documents(self, mock_settings):
         """Test index creation with empty document list."""
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.verify_rrf_configuration") as mock_verify:
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.verify_rrf_configuration") as mock_verify
+        ):
                 mock_verify.return_value = {"issues": [], "recommendations": []}
 
-                with patch("utils.index_builder.QdrantClient"):
-                    with patch("utils.index_builder.setup_hybrid_qdrant"):
-                        with patch("utils.index_builder.FastEmbedEmbedding"):
-                            with patch("utils.index_builder.SparseTextEmbedding"):
-                                with patch(
+                with (
+                    patch("utils.index_builder.QdrantClient"),
+                    patch("utils.index_builder.setup_hybrid_qdrant"),
+                    patch("utils.index_builder.FastEmbedEmbedding"),
+                    patch("utils.index_builder.SparseTextEmbedding"),
+                    patch(
+                ):
                                     "utils.index_builder.VectorStoreIndex.from_documents"
                                 ) as mock_vector_index:
                                     mock_index = MagicMock()
@@ -739,18 +763,22 @@ class TestEdgeCases:
         """Test index creation with debug mode profiling."""
         mock_settings.debug_mode = debug_mode
 
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.verify_rrf_configuration") as mock_verify:
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.verify_rrf_configuration") as mock_verify
+        ):
                 mock_verify.return_value = {"issues": [], "recommendations": []}
 
                 with patch(
                     "utils.index_builder.torch.profiler.profile"
                 ) as mock_profiler:
-                    with patch("utils.index_builder.QdrantClient"):
-                        with patch("utils.index_builder.setup_hybrid_qdrant"):
-                            with patch("utils.index_builder.FastEmbedEmbedding"):
-                                with patch("utils.index_builder.SparseTextEmbedding"):
-                                    with patch(
+                    with (
+                        patch("utils.index_builder.QdrantClient"),
+                        patch("utils.index_builder.setup_hybrid_qdrant"),
+                        patch("utils.index_builder.FastEmbedEmbedding"),
+                        patch("utils.index_builder.SparseTextEmbedding"),
+                        patch(
+                    ):
                                         "utils.index_builder.VectorStoreIndex.from_documents"
                                     ):
                                         with patch(
@@ -772,9 +800,11 @@ class TestEdgeCases:
 
     def test_create_index_configuration_error(self, sample_documents, mock_settings):
         """Test index creation with configuration validation error."""
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.verify_rrf_configuration"):
-                with patch("utils.index_builder.QdrantClient") as mock_client:
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.verify_rrf_configuration"),
+            patch("utils.index_builder.QdrantClient") as mock_client
+        ):
                     # Mock client creation failure
                     mock_client.side_effect = ValueError("Invalid configuration")
 
@@ -786,9 +816,11 @@ class TestEdgeCases:
         self, mock_log_info, mock_vector_index, mock_settings
     ):
         """Test that hybrid retriever creation logs appropriate information."""
-        with patch("utils.index_builder.settings", mock_settings):
-            with patch("utils.index_builder.VectorIndexRetriever") as mock_retriever:
-                with patch("utils.index_builder.QueryFusionRetriever") as mock_fusion:
+        with (
+            patch("utils.index_builder.settings", mock_settings),
+            patch("utils.index_builder.VectorIndexRetriever") as mock_retriever,
+            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion
+        ):
                     mock_fusion_retriever = MagicMock()
                     mock_fusion.return_value = mock_fusion_retriever
 

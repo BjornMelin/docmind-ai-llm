@@ -289,9 +289,11 @@ class TestMultimodalIndexCreation:
             mock_fallback_index = MagicMock()
             mock_create_index.return_value = {"vector": mock_fallback_index}
 
-            with patch("utils.index_builder.settings", mock_multimodal_settings):
-                with patch("utils.index_builder.logging.error") as mock_log_error:
-                    with patch("utils.index_builder.logging.info") as mock_log_info:
+            with (
+                patch("utils.index_builder.settings", mock_multimodal_settings),
+                patch("utils.index_builder.logging.error") as mock_log_error,
+                patch("utils.index_builder.logging.info") as mock_log_info
+            ):
                         result = create_multimodal_index(
                             sample_multimodal_documents, use_gpu=False
                         )
@@ -392,8 +394,10 @@ class TestAsyncMultimodalIndex:
         mock_fallback_index = MagicMock()
         mock_sync_create.return_value = mock_fallback_index
 
-        with patch("utils.index_builder.settings", mock_multimodal_settings):
-            with patch("utils.index_builder.logging.error") as mock_log_error:
+        with (
+            patch("utils.index_builder.settings", mock_multimodal_settings),
+            patch("utils.index_builder.logging.error") as mock_log_error
+        ):
                 result = await create_multimodal_index_async(
                     sample_multimodal_documents,
                     use_gpu=True,
@@ -493,9 +497,11 @@ class TestHybridFusionRetrieverEnhanced:
             mock_dense_retriever,  # Fallback succeeds
         ]
 
-        with patch("utils.index_builder.settings", mock_multimodal_settings):
-            with patch("utils.index_builder.logging.error") as mock_log_error:
-                with patch("utils.index_builder.logging.warning") as mock_log_warning:
+        with (
+            patch("utils.index_builder.settings", mock_multimodal_settings),
+            patch("utils.index_builder.logging.error") as mock_log_error,
+            patch("utils.index_builder.logging.warning") as mock_log_warning
+        ):
                     result = create_hybrid_retriever(mock_index)
 
         # Verify error and warning logging
@@ -757,8 +763,10 @@ class TestUnstructuredMultimodalParsing:
         ]
         mock_llama_load.return_value = mock_fallback_docs
 
-        with patch("utils.document_loader.logging.error") as mock_log_error:
-            with patch("utils.document_loader.logging.info") as mock_log_info:
+        with (
+            patch("utils.document_loader.logging.error") as mock_log_error,
+            patch("utils.document_loader.logging.info") as mock_log_info
+        ):
                 result = load_documents_unstructured(str(test_file))
 
         # Verify error and fallback logging
@@ -813,8 +821,10 @@ class TestDocumentStructuredChunking:
 
         documents = [text_doc, image_doc, short_text_doc]
 
-        with patch("utils.document_loader.settings", mock_multimodal_settings):
-            with patch("utils.document_loader.SentenceSplitter") as mock_splitter:
+        with (
+            patch("utils.document_loader.settings", mock_multimodal_settings),
+            patch("utils.document_loader.SentenceSplitter") as mock_splitter
+        ):
                 mock_splitter_instance = MagicMock()
 
                 # Mock chunking: long doc -> 2 chunks, short doc -> 1 chunk
@@ -913,8 +923,10 @@ class TestPerformanceAndBenchmarks:
             with patch(
                 "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
             ):
-                with patch("builtins.open", create=True):
-                    with patch("utils.document_loader.os.unlink"):
+                with (
+                    patch("builtins.open", create=True),
+                    patch("utils.document_loader.os.unlink")
+                ):
                         results = benchmark(batch_embedding_operation)
 
             assert len(results) == 10
@@ -1011,8 +1023,10 @@ class TestErrorHandlingAndEdgeCases:
         """Test error handling when creating index with no documents."""
         from utils.index_builder import create_multimodal_index
 
-        with patch("utils.index_builder.logging.error") as mock_log_error:
-            with pytest.raises(Exception):
+        with (
+            patch("utils.index_builder.logging.error") as mock_log_error,
+            pytest.raises(Exception)
+        ):
                 create_multimodal_index([], use_gpu=False)
 
     def test_unstructured_parsing_empty_file(self, tmp_path, mock_multimodal_settings):
@@ -1037,8 +1051,10 @@ class TestErrorHandlingAndEdgeCases:
         with patch("utils.index_builder.VectorIndexRetriever") as mock_retriever:
             mock_retriever.side_effect = ValueError("Invalid index")
 
-            with patch("utils.index_builder.logging.error") as mock_log_error:
-                with patch("utils.index_builder.logging.warning") as mock_log_warning:
+            with (
+                patch("utils.index_builder.logging.error") as mock_log_error,
+                patch("utils.index_builder.logging.warning") as mock_log_warning
+            ):
                     result = create_hybrid_retriever(None)
 
             # Should use final fallback

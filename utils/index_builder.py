@@ -57,6 +57,9 @@ from llama_index.llms.ollama import Ollama
 from qdrant_client import AsyncQdrantClient, QdrantClient
 
 from models.settings import settings
+
+# Add missing EmbeddingFactory import
+from utils.embedding_factory import EmbeddingFactory
 from utils.error_recovery import (
     async_managed_resource,
     index_retry,
@@ -179,7 +182,7 @@ def create_hybrid_retriever(index: VectorStoreIndex) -> QueryFusionRetriever:
                 context={"mode": "sparse"},
                 original_error=e,
                 operation="sparse_retriever_creation",
-            )
+            ) from e
 
         # Create fusion retriever with RRF (Reciprocal Rank Fusion)
         fusion_retriever = QueryFusionRetriever(
@@ -326,7 +329,7 @@ async def create_index_async(docs: list[Document], use_gpu: bool) -> dict[str, A
                     operation="embedding_model_creation",
                     use_gpu=use_gpu,
                     cuda_available=torch.cuda.is_available(),
-                )
+                ) from e
 
             # Setup Qdrant with proper hybrid search configuration
             try:
@@ -342,7 +345,7 @@ async def create_index_async(docs: list[Document], use_gpu: bool) -> dict[str, A
                     operation="vector_store_setup",
                     collection_name="docmind",
                     embedding_size=settings.dense_embedding_dimension,
-                )
+                ) from e
 
             # Create vector index with GPU optimization and error handling
             try:
@@ -363,7 +366,7 @@ async def create_index_async(docs: list[Document], use_gpu: bool) -> dict[str, A
                     operation="vector_index_creation",
                     doc_count=len(docs),
                     use_gpu=use_gpu,
-                )
+                ) from e
 
             # Calculate and log RRF fusion configuration
             hybrid_alpha = settings.rrf_fusion_weight_dense / (
@@ -446,7 +449,7 @@ async def create_index_async(docs: list[Document], use_gpu: bool) -> dict[str, A
                 operation="async_index_creation",
                 doc_count=len(docs),
                 use_gpu=use_gpu,
-            )
+            ) from e
 
 
 def create_index(docs: list[Document], use_gpu: bool) -> dict[str, Any]:
@@ -516,7 +519,8 @@ def create_index(docs: list[Document], use_gpu: bool) -> dict[str, Any]:
         # Use FastEmbed native GPU acceleration for both dense and sparse embeddings
         # Dense embedding model with optimized configuration
         embed_model = FastEmbedEmbedding(
-            model_name=settings.embedding.dense_embedding_model,  # BAAI/bge-large-en-v1.5
+            # Using BGE-Large embedding model
+            model_name=settings.embedding.dense_embedding_model,
             cache_dir="./embeddings_cache",
             providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
             if use_gpu and torch.cuda.is_available()
@@ -991,7 +995,8 @@ async def generate_embeddings_parallel(
     from utils.logging_config import logger
 
     # Split documents into batches
-    batches = [docs[i : i + batch_size] for i in range(0, len(docs), batch_size)]
+    # Generate batches with explicit indexing
+    batches = [docs[_i : _i + batch_size] for _i in range(0, len(docs), batch_size)]
 
     async def process_batch(batch: list[Document]) -> list:
         """Process a single batch of documents."""
@@ -1010,15 +1015,15 @@ async def generate_embeddings_parallel(
 
     # Handle any exceptions
     embeddings = []
-    for i, result in enumerate(embeddings_lists):
+    for _i, result in enumerate(embeddings_lists):
         if isinstance(result, Exception):
-            logger.error(f"Batch {i} failed: {result}")
+            logger.error(f"Batch {_i} failed: {result}")
             # Retry failed batch with smaller size
-            retry_batch = batches[i]
-            for doc in retry_batch:
+            retry_batch = batches[_i]
+            for _doc in retry_batch:
                 try:
-                    emb = await asyncio.to_thread(embed_model.embed, [doc.text])
-                    embeddings.extend(emb)
+                    _emb = await asyncio.to_thread(embed_model.embed, [_doc.text])
+                    embeddings.extend(_emb)
                 except Exception as e:
                     logger.error(f"Document embedding failed: {e}")
                     embeddings.append(None)  # Placeholder
@@ -1051,7 +1056,9 @@ async def generate_dense_embeddings_async(
         Uses asyncio.to_thread to prevent blocking the event loop during
         CPU-intensive embedding computation. Falls back gracefully on errors.
     """
-    embed_model = get_embed_model(use_gpu)
+    from utils.utils import get_embed_model as _get_embed_model
+
+    embed_model = _get_embed_model(use_gpu=use_gpu)
 
     async def process_batch(batch: list[Document]) -> list[list[float]]:
         """Process a single batch of documents asynchronously."""
@@ -1065,24 +1072,25 @@ async def generate_dense_embeddings_async(
             return [[0.0] * settings.dense_embedding_dimension] * len(batch)
 
     # Process batches in parallel
-    batch_tasks = [process_batch(batch) for batch in doc_batches]
+    batch_tasks = [process_batch(_batch) for _batch in doc_batches]
     batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
 
     # Flatten results and handle exceptions
     all_embeddings = []
-    for i, result in enumerate(batch_results):
+    for _i, result in enumerate(batch_results):
         if isinstance(result, Exception):
-            logging.error(f"Batch {i} embedding failed: {result}")
+            logging.error(f"Batch {_i} embedding failed: {result}")
             # Add placeholder embeddings for failed batch
-            failed_batch_size = len(doc_batches[i])
+            _failed_batch_size = len(doc_batches[_i])
             all_embeddings.extend(
-                [[0.0] * settings.dense_embedding_dimension] * failed_batch_size
+                [[0.0] * settings.dense_embedding_dimension] * _failed_batch_size
             )
         else:
             all_embeddings.extend(result)
 
     logging.info(
-        f"Generated {len(all_embeddings)} dense embeddings across {len(doc_batches)} batches"
+        f"Generated {len(all_embeddings)} embeddings "  # Explicit split
+        f"across {len(doc_batches)} batches"
     )
     return all_embeddings
 
@@ -1129,21 +1137,22 @@ async def generate_sparse_embeddings_async(
                 return [{}] * len(batch)
 
         # Process batches in parallel
-        batch_tasks = [process_sparse_batch(batch) for batch in doc_batches]
+        batch_tasks = [process_sparse_batch(_batch) for _batch in doc_batches]
         batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
 
         # Flatten results and handle exceptions
         all_sparse_embeddings = []
-        for i, result in enumerate(batch_results):
+        for _i, result in enumerate(batch_results):
             if isinstance(result, Exception):
-                logging.error(f"Sparse batch {i} failed: {result}")
+                logging.error(f"Sparse batch {_i} failed: {result}")
                 # Add empty sparse embeddings for failed batch
-                all_sparse_embeddings.extend([{}] * len(doc_batches[i]))
+                all_sparse_embeddings.extend([{}] * len(doc_batches[_i]))
             else:
                 all_sparse_embeddings.extend(result)
 
         logging.info(
-            f"Generated {len(all_sparse_embeddings)} sparse embeddings across {len(doc_batches)} batches"
+            f"Generated {len(all_sparse_embeddings)} sparse"
+            f" embeddings across {len(doc_batches)} batches"
         )
         return all_sparse_embeddings
 
@@ -1298,7 +1307,7 @@ async def _create_embedding_models_async(use_gpu: bool) -> FastEmbedEmbedding:
             operation="dense_embedding_creation",
             use_gpu=use_gpu,
             cuda_available=torch.cuda.is_available(),
-        )
+        ) from e
 
 
 async def _create_sparse_embedding_models_async(
@@ -1412,11 +1421,11 @@ async def _create_vector_index_with_gpu_async(
             doc_count=len(docs),
             use_gpu=use_gpu,
             has_sparse=sparse_embed_model is not None,
-        )
+        ) from e
 
 
 async def _create_kg_index_async(
-    docs: list[Document], embed_model: FastEmbedEmbedding
+    docs: list[Document], embed_model: FastEmbedEmbedding | Any
 ) -> KnowledgeGraphIndex | None:
     """Create knowledge graph index asynchronously with error handling.
 
@@ -1472,22 +1481,7 @@ async def _create_kg_index_async(
         return None
 
 
-def get_embed_model(use_gpu: bool = True) -> FastEmbedEmbedding:
-    """Get optimized embedding model for async operations.
-
-    Creates a FastEmbedEmbedding model with optimal configuration for
-    both CPU and GPU environments. Reuses the existing get_embed_model
-    from utils with additional async-specific optimizations.
-
-    Args:
-        use_gpu: Whether to enable GPU acceleration.
-
-    Returns:
-        Configured FastEmbedEmbedding model.
-    """
-    from utils.utils import get_embed_model as utils_get_embed_model
-
-    return utils_get_embed_model()
+# Removed duplicate get_embed_model to resolve F811 warning
 
 
 @async_timer
@@ -1528,8 +1522,9 @@ async def create_index_async_optimized(
 
         # Split documents into batches for parallel processing
         batch_size = 50
+        # Split documents into batches with explicit indexing
         doc_batches = [
-            docs[i : i + batch_size] for i in range(0, len(docs), batch_size)
+            docs[_i : _i + batch_size] for _i in range(0, len(docs), batch_size)
         ]
         logging.info(f"Processing {len(docs)} documents in {len(doc_batches)} batches")
 
@@ -1593,12 +1588,12 @@ async def create_index_async_optimized(
 
             # Build result dictionary
             result_dict = {}
-            for (name, _), result in zip(tasks, results, strict=False):
-                if isinstance(result, Exception):
-                    logging.error(f"{name} index creation failed: {result}")
-                    result_dict[name] = None
+            for (_name, _), _result in zip(tasks, results, strict=False):
+                if isinstance(_result, Exception):
+                    logging.error(f"{_name} index creation failed: {_result}")
+                    result_dict[_name] = None
                 else:
-                    result_dict[name] = result
+                    result_dict[_name] = _result
 
             # Create hybrid fusion retriever if vector index succeeded
             if result_dict.get("vector"):
@@ -1616,8 +1611,10 @@ async def create_index_async_optimized(
             )
 
             logging.info(
-                f"Async index creation completed: vector={result_dict['vector'] is not None}, "
-                f"kg={result_dict['kg'] is not None}, retriever={result_dict['retriever'] is not None}"
+                "Async index completed: "  # Explicitly format to respect line length
+                f"vector={result_dict['vector'] is not None}, "
+                f"kg={result_dict['kg'] is not None}, "
+                f"retriever={result_dict['retriever'] is not None}"
             )
 
             return result_dict

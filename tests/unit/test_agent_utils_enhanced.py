@@ -212,8 +212,10 @@ class TestCreateAgentWithTools:
         index_data = {"vector": MagicMock()}
         mock_llm = MagicMock()
 
-        with patch("agents.agent_utils.create_tools_from_index", return_value=[]):
-            with patch("agents.agent_utils.ReActAgent.from_tools") as mock_agent_class:
+        with (
+            patch("agents.agent_utils.create_tools_from_index", return_value=[]),
+            patch("agents.agent_utils.ReActAgent.from_tools") as mock_agent_class
+        ):
                 mock_agent = MagicMock()
                 mock_agent_class.return_value = mock_agent
 
@@ -395,8 +397,10 @@ class TestAnalyzeDocumentsAgentic:
             "Query engine failed"
         )
 
-        with patch("agents.agent_utils.ToolFactory") as mock_tool_factory:
-            with patch("agents.agent_utils.logger") as mock_logger:
+        with (
+            patch("agents.agent_utils.ToolFactory") as mock_tool_factory,
+            patch("agents.agent_utils.logger") as mock_logger
+        ):
                 result = analyze_documents_agentic(mock_agent, index_data, "summary")
 
                 assert result == "Analysis with limited tools"
@@ -421,8 +425,10 @@ class TestAnalyzeDocumentsAgentic:
                 mock_fallback_agent.chat.return_value = mock_response
                 mock_agent_class.return_value = mock_fallback_agent
 
-                with patch("agents.agent_utils.Ollama") as mock_ollama:
-                    with patch("agents.agent_utils.settings") as mock_settings:
+                with (
+                    patch("agents.agent_utils.Ollama") as mock_ollama,
+                    patch("agents.agent_utils.settings") as mock_settings
+                ):
                         mock_settings.default_model = "llama2"
 
                         result = analyze_documents_agentic(None, index_data, "summary")
@@ -610,8 +616,10 @@ class TestChatWithAgent:
         mock_memory = MagicMock()
         mock_memory.token_limit = 4096
 
-        with patch("asyncio.to_thread", side_effect=RuntimeError("Streaming failed")):
-            with patch("agents.agent_utils.log_error_with_context") as mock_log_error:
+        with (
+            patch("asyncio.to_thread", side_effect=RuntimeError("Streaming failed")),
+            patch("agents.agent_utils.log_error_with_context") as mock_log_error
+        ):
                 chunks = []
                 async for chunk in chat_with_agent(mock_agent, "Hello", mock_memory):
                     chunks.append(chunk)
@@ -639,8 +647,10 @@ class TestChatWithAgent:
 
         mock_response.async_response_gen.return_value = failing_generator()
 
-        with patch("asyncio.to_thread", return_value=mock_response):
-            with patch("agents.agent_utils.log_error_with_context"):
+        with (
+            patch("asyncio.to_thread", return_value=mock_response),
+            patch("agents.agent_utils.log_error_with_context")
+        ):
                 chunks = []
                 async for chunk in chat_with_agent(mock_agent, "Hello", mock_memory):
                     chunks.append(chunk)
@@ -666,8 +676,10 @@ class TestChatWithAgent:
 
         mock_response.async_response_gen.return_value = mock_generator()
 
-        with patch("asyncio.to_thread", return_value=mock_response):
-            with patch("agents.agent_utils.log_performance") as mock_log_perf:
+        with (
+            patch("asyncio.to_thread", return_value=mock_response),
+            patch("agents.agent_utils.log_performance") as mock_log_perf
+        ):
                 chunks = []
                 async for chunk in chat_with_agent(
                     mock_agent, "Long user query", mock_memory
@@ -691,8 +703,10 @@ class TestChatWithAgent:
             await asyncio.sleep(300)  # 5 minutes - should exceed 2 minute timeout
             return MagicMock()
 
-        with patch("asyncio.to_thread", side_effect=slow_operation):
-            with pytest.raises(asyncio.TimeoutError):
+        with (
+            patch("asyncio.to_thread", side_effect=slow_operation),
+            pytest.raises(asyncio.TimeoutError)
+        ):
                 async for chunk in chat_with_agent(mock_agent, "Hello", mock_memory):
                     pass
 
@@ -981,8 +995,10 @@ class TestAgentUtilsErrorRecovery:
         mock_response = MagicMock()
         mock_response.async_response_gen.return_value = partial_failure_generator()
 
-        with patch("asyncio.to_thread", return_value=mock_response):
-            with patch("agents.agent_utils.log_error_with_context"):
+        with (
+            patch("asyncio.to_thread", return_value=mock_response),
+            patch("agents.agent_utils.log_error_with_context")
+        ):
                 chunks = []
                 async for chunk in chat_with_agent(mock_agent, "Hello", mock_memory):
                     chunks.append(chunk)

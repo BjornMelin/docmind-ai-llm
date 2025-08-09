@@ -257,10 +257,12 @@ class TestCreateNativeMultimodalEmbeddings:
 
         mock_model_manager.return_value = mock_model
 
-        with patch("utils.document_loader.tempfile.gettempdir", return_value="/tmp"):
-            with patch("builtins.open", create=True) as mock_open:
-                with patch("utils.document_loader.os.unlink") as mock_unlink:
-                    with patch("utils.document_loader.logging.info") as mock_log_info:
+        with (
+            patch("utils.document_loader.tempfile.gettempdir", return_value="/tmp"),
+            patch("builtins.open", create=True) as mock_open,
+            patch("utils.document_loader.os.unlink") as mock_unlink,
+            patch("utils.document_loader.logging.info") as mock_log_info
+        ):
                         result = create_native_multimodal_embeddings(
                             "Test text content", sample_images_data
                         )
@@ -327,8 +329,10 @@ class TestCreateNativeMultimodalEmbeddings:
             mock_text_model.get_text_embedding.return_value = [0.7, 0.8, 0.9]
             mock_fastembed.return_value = mock_text_model
 
-            with patch("utils.document_loader.settings", mock_settings):
-                with patch("utils.document_loader.logging.warning") as mock_log_warning:
+            with (
+                patch("utils.document_loader.settings", mock_settings),
+                patch("utils.document_loader.logging.warning") as mock_log_warning
+            ):
                     result = create_native_multimodal_embeddings("Test text")
 
                     # Verify fallback model creation
@@ -362,8 +366,10 @@ class TestCreateNativeMultimodalEmbeddings:
         with patch("utils.document_loader.FastEmbedEmbedding") as mock_fastembed:
             mock_fastembed.side_effect = Exception("FastEmbed also failed")
 
-            with patch("utils.document_loader.settings", mock_settings):
-                with patch("utils.document_loader.logging.error") as mock_log_error:
+            with (
+                patch("utils.document_loader.settings", mock_settings),
+                patch("utils.document_loader.logging.error") as mock_log_error
+            ):
                     result = create_native_multimodal_embeddings("Test text")
 
                     # Verify failure result
@@ -536,8 +542,10 @@ class TestLoadDocumentsUnstructured:
         with patch("utils.document_loader.load_documents_llama") as mock_llama_load:
             mock_llama_load.return_value = [Document(text="Fallback content")]
 
-            with patch("utils.document_loader.logging.error") as mock_log_error:
-                with patch("utils.document_loader.logging.info") as mock_log_info:
+            with (
+                patch("utils.document_loader.logging.error") as mock_log_error,
+                patch("utils.document_loader.logging.info") as mock_log_info
+            ):
                     result = load_documents_unstructured(str(test_file))
 
                     # Verify error and fallback logging
@@ -721,8 +729,10 @@ class TestLoadDocumentsLlama:
             mock_temp_file.name = "/tmp/test.pdf"
             mock_temp.__enter__.return_value = mock_temp_file
 
-            with patch("utils.document_loader.os.remove"):
-                with patch("utils.document_loader.logging.info") as mock_log_info:
+            with (
+                patch("utils.document_loader.os.remove"),
+                patch("utils.document_loader.logging.info") as mock_log_info
+            ):
                     result = load_documents_llama(
                         [mock_uploaded_file], parse_media=False, enable_multimodal=True
                     )
@@ -889,8 +899,10 @@ class TestLoadDocumentsLlama:
             mock_temp_file.name = "/tmp/test.pdf"
             mock_temp.__enter__.return_value = mock_temp_file
 
-            with patch("utils.document_loader.os.remove"):
-                with patch("utils.document_loader.logging.info") as mock_log_info:
+            with (
+                patch("utils.document_loader.os.remove"),
+                patch("utils.document_loader.logging.info") as mock_log_info
+            ):
                     load_documents_llama(
                         [mock_uploaded_file], parse_media=False, enable_multimodal=True
                     )
@@ -1034,9 +1046,11 @@ class TestAdvancedMultimodalFeatures:
             with patch(
                 "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
             ):
-                with patch("builtins.open", create=True):
-                    with patch("utils.document_loader.os.unlink"):
-                        with patch(
+                with (
+                    patch("builtins.open", create=True),
+                    patch("utils.document_loader.os.unlink"),
+                    patch(
+                ):
                             "utils.document_loader.logging.warning"
                         ) as mock_warning:
                             result = create_native_multimodal_embeddings(
@@ -1192,8 +1206,10 @@ class TestAdvancedMultimodalFeatures:
             with patch(
                 "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
             ):
-                with patch("builtins.open", create=True):
-                    with patch("utils.document_loader.os.unlink"):
+                with (
+                    patch("builtins.open", create=True),
+                    patch("utils.document_loader.os.unlink")
+                ):
                         # Process multiple documents concurrently (simulated)
                         results = []
                         for text in batch_texts:
@@ -1245,8 +1261,10 @@ class TestAdvancedMultimodalFeatures:
             with patch(
                 "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
             ):
-                with patch("builtins.open", create=True):
-                    with patch("utils.document_loader.os.unlink"):
+                with (
+                    patch("builtins.open", create=True),
+                    patch("utils.document_loader.os.unlink")
+                ):
                         result = create_native_multimodal_embeddings(
                             text_query, sample_images_data
                         )
@@ -1335,8 +1353,10 @@ class TestIntegrationScenarios:
             with patch(
                 "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
             ):
-                with patch("builtins.open", create=True):
-                    with patch("utils.document_loader.os.unlink"):
+                with (
+                    patch("builtins.open", create=True),
+                    patch("utils.document_loader.os.unlink")
+                ):
                         result = create_native_multimodal_embeddings(
                             "Test text", sample_images_data
                         )

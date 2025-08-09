@@ -136,8 +136,10 @@ class TestCreateToolsFromIndex:
         mock_kg_tool = MagicMock()
         mock_query_tool.side_effect = [mock_hybrid_tool, mock_kg_tool]
 
-        with patch("agents.agent_utils.settings", mock_settings):
-            with patch("agents.agent_utils.logging.info") as mock_log_info:
+        with (
+            patch("agents.agent_utils.settings", mock_settings),
+            patch("agents.agent_utils.logging.info") as mock_log_info
+        ):
                 tools = create_tools_from_index(mock_index_data_complete)
 
                 # Verify ColBERT reranker creation
@@ -212,9 +214,11 @@ class TestCreateToolsFromIndex:
         mock_vector_tool = MagicMock()
         mock_query_tool.return_value = mock_vector_tool
 
-        with patch("agents.agent_utils.settings", mock_settings):
-            with patch("agents.agent_utils.logging.info") as mock_log_info:
-                with patch("agents.agent_utils.logging.warning") as mock_log_warning:
+        with (
+            patch("agents.agent_utils.settings", mock_settings),
+            patch("agents.agent_utils.logging.info") as mock_log_info,
+            patch("agents.agent_utils.logging.warning") as mock_log_warning
+        ):
                     tools = create_tools_from_index(mock_index_data_vector_only)
 
                     # Verify fallback vector query engine creation
@@ -273,8 +277,10 @@ class TestCreateToolsFromIndex:
         """Test tool creation with empty index data."""
         empty_index_data = {"vector": None, "kg": None, "retriever": None}
 
-        with patch("agents.agent_utils.settings", mock_settings):
-            with pytest.raises(AttributeError):
+        with (
+            patch("agents.agent_utils.settings", mock_settings),
+            pytest.raises(AttributeError)
+        ):
                 create_tools_from_index(empty_index_data)
 
 
@@ -359,8 +365,10 @@ class TestCreateAgentWithTools:
             mock_fallback_agent,
         ]
 
-        with patch("agents.agent_utils.logging.error") as mock_log_error:
-            with patch("agents.agent_utils.logging.warning") as mock_log_warning:
+        with (
+            patch("agents.agent_utils.logging.error") as mock_log_error,
+            patch("agents.agent_utils.logging.warning") as mock_log_warning
+        ):
                 result = create_agent_with_tools(mock_index_data_complete, mock_llm)
 
                 # Verify error handling
@@ -553,8 +561,10 @@ class TestChatWithAgent:
             side_effect=Exception("Chat generation failed")
         )
 
-        with patch("agents.agent_utils.logging.error") as mock_log_error:
-            with pytest.raises(Exception, match="Chat generation failed"):
+        with (
+            patch("agents.agent_utils.logging.error") as mock_log_error,
+            pytest.raises(Exception, match="Chat generation failed")
+        ):
                 async for chunk in chat_with_agent(
                     mock_agent, "Test query", mock_memory
                 ):
@@ -785,8 +795,10 @@ class TestErrorHandling:
         """Test handling of invalid index data structure."""
         invalid_index_data = "not a dictionary"
 
-        with patch("agents.agent_utils.settings", mock_settings):
-            with pytest.raises((AttributeError, TypeError)):
+        with (
+            patch("agents.agent_utils.settings", mock_settings),
+            pytest.raises((AttributeError, TypeError))
+        ):
                 create_tools_from_index(invalid_index_data)
 
     def test_colbert_rerank_initialization_failure(
@@ -797,8 +809,10 @@ class TestErrorHandling:
             # Mock reranker initialization failure
             mock_colbert_rerank.side_effect = Exception("Reranker init failed")
 
-            with patch("agents.agent_utils.settings", mock_settings):
-                with pytest.raises(Exception, match="Reranker init failed"):
+            with (
+                patch("agents.agent_utils.settings", mock_settings),
+                pytest.raises(Exception, match="Reranker init failed")
+            ):
                     create_tools_from_index(mock_index_data_complete)
 
     @patch("agents.agent_utils.create_tools_from_index")

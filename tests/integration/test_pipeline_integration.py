@@ -365,8 +365,10 @@ class TestPipelineIntegration:
         self, sample_documents, mock_llm, mock_embedding_model, temporary_storage_dir
     ):
         """Test pipeline performance monitoring and logging."""
-        with patch("utils.logging_config.log_performance") as mock_log_perf:
-            with patch("time.time") as mock_time:
+        with (
+            patch("utils.logging_config.log_performance") as mock_log_perf,
+            patch("time.time") as mock_time
+        ):
                 # Mock timing
                 mock_time.side_effect = [
                     0,

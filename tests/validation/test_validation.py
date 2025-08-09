@@ -295,18 +295,18 @@ class TestSystemIntegration:
                 ),
             ]
 
-            with patch("utils.document_loader.settings", mock_settings):
-                with patch(
-                    "llama_index.core.node_parser.SentenceSplitter"
-                ) as mock_splitter:
-                    mock_instance = MagicMock()
-                    mock_instance.get_nodes_from_documents.return_value = docs
-                    mock_splitter.return_value = mock_instance
+            with (
+                patch("utils.document_loader.settings", mock_settings),
+                patch("llama_index.core.node_parser.SentenceSplitter") as mock_splitter,
+            ):
+                mock_instance = MagicMock()
+                mock_instance.get_nodes_from_documents.return_value = docs
+                mock_splitter.return_value = mock_instance
 
-                    result = chunk_documents_structured(docs)
+                result = chunk_documents_structured(docs)
 
-                    assert isinstance(result, list)
-                    assert len(result) >= len(docs)
+                assert isinstance(result, list)
+                assert len(result) >= len(docs)
 
         except ImportError:
             pytest.skip("Document processing components not available")

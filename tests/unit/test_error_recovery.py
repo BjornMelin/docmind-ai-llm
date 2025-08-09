@@ -436,13 +436,17 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=2)
 
         # First failure
-        with pytest.raises(ValueError):
-            with breaker:
+        with (
+            pytest.raises(ValueError),
+            breaker
+        ):
                 raise ValueError("First failure")
 
         # Second failure - should open circuit
-        with pytest.raises(ValueError):
-            with breaker:
+        with (
+            pytest.raises(ValueError),
+            breaker
+        ):
                 raise ValueError("Second failure")
 
         assert breaker.state == "OPEN"
@@ -453,13 +457,17 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=1.0)
 
         # Cause failure to open circuit
-        with pytest.raises(ValueError):
-            with breaker:
+        with (
+            pytest.raises(ValueError),
+            breaker
+        ):
                 raise ValueError("Failure")
 
         # Next call should be rejected immediately
-        with pytest.raises(ResourceError, match="Circuit breaker is OPEN"):
-            with breaker:
+        with (
+            pytest.raises(ResourceError, match="Circuit breaker is OPEN"),
+            breaker
+        ):
                 pass
 
     @patch("time.time")
@@ -470,8 +478,10 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=1.0)
 
         # Cause failure
-        with pytest.raises(ValueError):
-            with breaker:
+        with (
+            pytest.raises(ValueError),
+            breaker
+        ):
                 raise ValueError("Failure")
 
         # Should enter half-open after timeout
@@ -488,8 +498,10 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=1.0)
 
         # Cause failure
-        with pytest.raises(RuntimeError):
-            with breaker:
+        with (
+            pytest.raises(RuntimeError),
+            breaker
+        ):
                 raise RuntimeError("Initial failure")
 
         # Successful recovery
@@ -506,16 +518,20 @@ class TestCircuitBreaker:
         )
 
         # ValueError should not count as failure
-        with pytest.raises(ValueError):
-            with breaker:
+        with (
+            pytest.raises(ValueError),
+            breaker
+        ):
                 raise ValueError("Not counted")
 
         assert breaker.failure_count == 0
         assert breaker.state == "CLOSED"
 
         # ConnectionError should count
-        with pytest.raises(ConnectionError):
-            with breaker:
+        with (
+            pytest.raises(ConnectionError),
+            breaker
+        ):
                 raise ConnectionError("Counted failure")
 
         assert breaker.failure_count == 1
@@ -526,8 +542,10 @@ class TestCircuitBreaker:
         breaker = CircuitBreaker(failure_threshold=1)
 
         # Cause failure to open circuit
-        with pytest.raises(RuntimeError):
-            with breaker:
+        with (
+            pytest.raises(RuntimeError),
+            breaker
+        ):
                 raise RuntimeError("Test failure")
 
         mock_logger.warning.assert_called_once()
@@ -556,8 +574,10 @@ class TestManagedResource:
         resource = MagicMock()
         factory = Mock(return_value=resource)
 
-        with pytest.raises(ValueError):
-            with managed_resource(factory) as managed:
+        with (
+            pytest.raises(ValueError),
+            managed_resource(factory) as managed
+        ):
                 raise ValueError("Test exception")
 
         resource.close.assert_called_once()
@@ -600,8 +620,10 @@ class TestManagedResource:
         """Test managed resource when factory fails."""
         factory = Mock(side_effect=RuntimeError("Factory failed"))
 
-        with pytest.raises(RuntimeError, match="Factory failed"):
-            with managed_resource(factory):
+        with (
+            pytest.raises(RuntimeError, match="Factory failed"),
+            managed_resource(factory)
+        ):
                 pass
 
     def test_managed_resource_exit_method(self):
@@ -988,8 +1010,10 @@ class TestErrorRecoveryEdgeCases:
 
     def test_managed_resource_none_factory(self):
         """Test managed resource with None factory."""
-        with pytest.raises(TypeError):
-            with managed_resource(None):
+        with (
+            pytest.raises(TypeError),
+            managed_resource(None)
+        ):
                 pass
 
     def test_fallback_with_none_fallback(self):

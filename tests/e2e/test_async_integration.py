@@ -114,18 +114,18 @@ class TestAsyncPipelineIntegration:
                 for i in range(batch_size)
             ]
 
-            with patch("qdrant_client.AsyncQdrantClient") as mock_client:
-                mock_client_instance = AsyncMock()
-                mock_client.return_value = mock_client_instance
-
-                with patch("utils.qdrant_utils.setup_hybrid_qdrant_async"):
-                    with patch(
+            with (
+                    patch("qdrant_client.AsyncQdrantClient") as mock_client,
+                    patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
+                    patch(
                         "llama_index.core.VectorStoreIndex.from_documents"
-                    ) as mock_index:
-                        mock_index.return_value = MagicMock()
-
-                        with patch("utils.utils.ensure_spacy_model"):
-                            return await create_index_async(docs, use_gpu=False)
+                    ) as mock_index,
+                    patch("utils.utils.ensure_spacy_model")
+                ):
+                    mock_client_instance = AsyncMock()
+                    mock_client.return_value = mock_client_instance
+                    mock_index.return_value = MagicMock()
+                    return await create_index_async(docs, use_gpu=False)
 
         # Process multiple batches concurrently
         batch_tasks = [process_batch(batch_id, 5) for batch_id in range(3)]
@@ -227,23 +227,22 @@ class TestAsyncPipelineIntegration:
 
         docs = [Document(text="GPU async test document")]
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("qdrant_client.AsyncQdrantClient") as mock_client:
-                mock_client_instance = AsyncMock()
-                mock_client.return_value = mock_client_instance
-
-                with patch("utils.qdrant_utils.setup_hybrid_qdrant_async"):
-                    with patch("torch.cuda.Stream") as mock_stream:
-                        mock_stream_instance = MagicMock()
-                        mock_stream.return_value = mock_stream_instance
-
-                        with patch(
-                            "llama_index.core.VectorStoreIndex.from_documents"
-                        ) as mock_create:
-                            mock_create.return_value = MagicMock()
-
-                            with patch("utils.utils.ensure_spacy_model"):
-                                result = await create_index_async(docs, use_gpu=True)
+        with (
+                    patch("torch.cuda.is_available", return_value=True),
+                    patch("qdrant_client.AsyncQdrantClient") as mock_client,
+                    patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
+                    patch("torch.cuda.Stream") as mock_stream,
+                    patch(
+                        "llama_index.core.VectorStoreIndex.from_documents"
+                    ) as mock_create,
+                    patch("utils.utils.ensure_spacy_model")
+                ):
+                    mock_client_instance = AsyncMock()
+                    mock_client.return_value = mock_client_instance
+                    mock_stream_instance = MagicMock()
+                    mock_stream.return_value = mock_stream_instance
+                    mock_create.return_value = MagicMock()
+                    result = await create_index_async(docs, use_gpu=True)
 
                                 # Verify GPU streams were used
                                 assert result is not None
@@ -272,19 +271,19 @@ class TestAsyncPipelineIntegration:
 
         docs = [Document(text=f"Memory test doc {i}") for i in range(20)]
 
-        with patch("qdrant_client.AsyncQdrantClient") as mock_client:
-            mock_client_instance = AsyncMock()
-            mock_client.return_value = mock_client_instance
-
-            with patch("utils.qdrant_utils.setup_hybrid_qdrant_async"):
-                with patch(
-                    "llama_index.core.VectorStoreIndex.from_documents"
-                ) as mock_create:
+        with (
+                    patch("qdrant_client.AsyncQdrantClient") as mock_client,
+                    patch("utils.qdrant_utils.setup_hybrid_qdrant_async"),
+                    patch(
+                        "llama_index.core.VectorStoreIndex.from_documents"
+                    ) as mock_create,
+                    patch("utils.utils.ensure_spacy_model")
+                ):
+                    mock_client_instance = AsyncMock()
+                    mock_client.return_value = mock_client_instance
                     mock_create.return_value = MagicMock()
-
-                    with patch("utils.utils.ensure_spacy_model"):
-                        # Process documents and ensure cleanup
-                        result = await create_index_async(docs, use_gpu=False)
+                    # Process documents and ensure cleanup
+                    result = await create_index_async(docs, use_gpu=False)
 
                         # Verify cleanup was called
                         mock_client_instance.close.assert_called_once()

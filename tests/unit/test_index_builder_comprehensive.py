@@ -34,8 +34,10 @@ class TestCreateHybridRetriever:
         mock_index = MagicMock()
         mock_index.docstore.docs.values.return_value = sample_documents
 
-        with patch("utils.index_builder.VectorIndexRetriever") as mock_vector_retriever:
-            with patch("utils.index_builder.QueryFusionRetriever") as mock_fusion:
+        with (
+            patch("utils.index_builder.VectorIndexRetriever") as mock_vector_retriever,
+            patch("utils.index_builder.QueryFusionRetriever") as mock_fusion
+        ):
                 mock_dense_retriever = MagicMock()
                 mock_sparse_retriever = MagicMock()
                 mock_vector_retriever.side_effect = [
@@ -136,9 +138,11 @@ class TestCreateIndexAsync:
         with patch(
             "utils.index_builder.managed_async_qdrant_client"
         ) as mock_client_ctx:
-            with patch("utils.index_builder.setup_hybrid_qdrant_async") as mock_setup:
-                with patch("utils.index_builder.FastEmbedEmbedding") as mock_embed:
-                    with patch(
+            with (
+                patch("utils.index_builder.setup_hybrid_qdrant_async") as mock_setup,
+                patch("utils.index_builder.FastEmbedEmbedding") as mock_embed,
+                patch(
+            ):
                         "utils.index_builder.SparseTextEmbedding"
                     ) as mock_sparse:
                         with patch(
@@ -196,10 +200,12 @@ class TestCreateIndexAsync:
     @pytest.mark.asyncio
     async def test_create_index_async_gpu_enabled(self, sample_documents):
         """Test async index creation with GPU acceleration."""
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.cuda.Stream") as mock_stream_cls:
-                with patch("torch.profiler.profile") as mock_profiler:
-                    with patch(
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.Stream") as mock_stream_cls,
+            patch("torch.profiler.profile") as mock_profiler,
+            patch(
+        ):
                         "utils.index_builder.managed_async_qdrant_client"
                     ) as mock_client_ctx:
                         with patch(
@@ -218,9 +224,11 @@ class TestCreateIndexAsync:
                             mock_gpu_ctx.return_value.__aenter__ = AsyncMock()
                             mock_gpu_ctx.return_value.__aexit__ = AsyncMock()
 
-                            with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                                with patch("utils.index_builder.FastEmbedEmbedding"):
-                                    with patch(
+                            with (
+                                patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                                patch("utils.index_builder.FastEmbedEmbedding"),
+                                patch(
+                            ):
                                         "utils.index_builder.SparseTextEmbedding"
                                     ):
                                         with patch(
@@ -251,10 +259,12 @@ class TestCreateIndexAsync:
         with patch(
             "utils.index_builder.managed_async_qdrant_client"
         ) as mock_client_ctx:
-            with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                with patch("utils.index_builder.FastEmbedEmbedding"):
-                    with patch("utils.index_builder.SparseTextEmbedding"):
-                        with patch(
+            with (
+                patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                patch("utils.index_builder.FastEmbedEmbedding"),
+                patch("utils.index_builder.SparseTextEmbedding"),
+                patch(
+            ):
                             "utils.index_builder.VectorStoreIndex"
                         ) as mock_index_cls:
                             with patch("utils.index_builder.create_hybrid_retriever"):
@@ -296,10 +306,12 @@ class TestCreateIndexAsync:
         with patch(
             "utils.index_builder.managed_async_qdrant_client"
         ) as mock_client_ctx:
-            with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                with patch("utils.index_builder.FastEmbedEmbedding"):
-                    with patch("utils.index_builder.SparseTextEmbedding"):
-                        with patch(
+            with (
+                patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                patch("utils.index_builder.FastEmbedEmbedding"),
+                patch("utils.index_builder.SparseTextEmbedding"),
+                patch(
+            ):
                             "utils.index_builder.VectorStoreIndex"
                         ) as mock_index_cls:
                             # Arrange - Retriever creation fails
@@ -353,11 +365,13 @@ class TestCreateIndexAsync:
                 mock_client_ctx.return_value.__aenter__.return_value = mock_client
                 mock_client_ctx.return_value.__aexit__.return_value = None
 
-                with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                    with patch("utils.index_builder.FastEmbedEmbedding"):
-                        with patch("utils.index_builder.SparseTextEmbedding"):
-                            with patch("utils.index_builder.VectorStoreIndex"):
-                                with patch(
+                with (
+                    patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                    patch("utils.index_builder.FastEmbedEmbedding"),
+                    patch("utils.index_builder.SparseTextEmbedding"),
+                    patch("utils.index_builder.VectorStoreIndex"),
+                    patch(
+                ):
                                     "utils.index_builder.create_hybrid_retriever"
                                 ):
                                     with patch(
@@ -382,10 +396,12 @@ class TestCreateIndex:
 
     def test_create_index_success(self, sample_documents):
         """Test successful synchronous index creation."""
-        with patch("utils.index_builder.QdrantClient") as mock_client_cls:
-            with patch("utils.index_builder.setup_hybrid_qdrant") as mock_setup:
-                with patch("utils.index_builder.FastEmbedEmbedding") as mock_embed:
-                    with patch(
+        with (
+            patch("utils.index_builder.QdrantClient") as mock_client_cls,
+            patch("utils.index_builder.setup_hybrid_qdrant") as mock_setup,
+            patch("utils.index_builder.FastEmbedEmbedding") as mock_embed,
+            patch(
+        ):
                         "utils.index_builder.SparseTextEmbedding"
                     ) as mock_sparse:
                         with patch(
@@ -434,11 +450,13 @@ class TestCreateIndex:
 
     def test_create_index_empty_documents(self):
         """Test index creation with empty document list."""
-        with patch("utils.index_builder.QdrantClient"):
-            with patch("utils.index_builder.setup_hybrid_qdrant"):
-                with patch("utils.index_builder.FastEmbedEmbedding"):
-                    with patch("utils.index_builder.SparseTextEmbedding"):
-                        with patch(
+        with (
+            patch("utils.index_builder.QdrantClient"),
+            patch("utils.index_builder.setup_hybrid_qdrant"),
+            patch("utils.index_builder.FastEmbedEmbedding"),
+            patch("utils.index_builder.SparseTextEmbedding"),
+            patch(
+        ):
                             "utils.index_builder.VectorStoreIndex"
                         ) as mock_index_cls:
                             with patch("utils.index_builder.create_hybrid_retriever"):
@@ -459,15 +477,17 @@ class TestCreateIndex:
 
     def test_create_index_gpu_cuda_stream_operations(self, sample_documents):
         """Test GPU CUDA stream operations in synchronous index creation."""
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.cuda.Stream") as mock_stream_cls:
-                with patch("torch.cuda.empty_cache") as mock_empty_cache:
-                    with patch("utils.index_builder.QdrantClient"):
-                        with patch("utils.index_builder.setup_hybrid_qdrant"):
-                            with patch("utils.index_builder.FastEmbedEmbedding"):
-                                with patch("utils.index_builder.SparseTextEmbedding"):
-                                    with patch("utils.index_builder.VectorStoreIndex"):
-                                        with patch(
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.Stream") as mock_stream_cls,
+            patch("torch.cuda.empty_cache") as mock_empty_cache,
+            patch("utils.index_builder.QdrantClient"),
+            patch("utils.index_builder.setup_hybrid_qdrant"),
+            patch("utils.index_builder.FastEmbedEmbedding"),
+            patch("utils.index_builder.SparseTextEmbedding"),
+            patch("utils.index_builder.VectorStoreIndex"),
+            patch(
+        ):
                                             "utils.index_builder.create_hybrid_retriever"
                                         ):
                                             with patch(
@@ -517,13 +537,15 @@ class TestCreateIndex:
             rrf_fusion_weight_dense=0.7, rrf_fusion_weight_sparse=0.3
         )
 
-        with patch("utils.index_builder.settings", test_settings):
-            with patch("utils.index_builder.QdrantClient"):
-                with patch("utils.index_builder.setup_hybrid_qdrant"):
-                    with patch("utils.index_builder.FastEmbedEmbedding"):
-                        with patch("utils.index_builder.SparseTextEmbedding"):
-                            with patch("utils.index_builder.VectorStoreIndex"):
-                                with patch(
+        with (
+            patch("utils.index_builder.settings", test_settings),
+            patch("utils.index_builder.QdrantClient"),
+            patch("utils.index_builder.setup_hybrid_qdrant"),
+            patch("utils.index_builder.FastEmbedEmbedding"),
+            patch("utils.index_builder.SparseTextEmbedding"),
+            patch("utils.index_builder.VectorStoreIndex"),
+            patch(
+        ):
                                     "utils.index_builder.create_hybrid_retriever"
                                 ):
                                     with patch(
@@ -554,10 +576,12 @@ class TestCreateMultimodalIndex:
         image_docs = [ImageDocument(image="base64data", metadata={"type": "image"})]
         mixed_docs = text_docs + image_docs
 
-        with patch("utils.index_builder.QdrantClient"):
-            with patch("utils.index_builder.QdrantVectorStore"):
-                with patch("utils.index_builder.StorageContext"):
-                    with patch(
+        with (
+            patch("utils.index_builder.QdrantClient"),
+            patch("utils.index_builder.QdrantVectorStore"),
+            patch("utils.index_builder.StorageContext"),
+            patch(
+        ):
                         "llama_index.embeddings.huggingface.HuggingFaceEmbedding"
                     ):
                         with patch(
@@ -621,10 +645,12 @@ class TestCreateMultimodalIndex:
                 with patch(
                     "llama_index.embeddings.huggingface.HuggingFaceEmbedding"
                 ) as mock_embed:
-                    with patch("utils.index_builder.QdrantClient"):
-                        with patch("utils.index_builder.QdrantVectorStore"):
-                            with patch("utils.index_builder.StorageContext"):
-                                with patch(
+                    with (
+                        patch("utils.index_builder.QdrantClient"),
+                        patch("utils.index_builder.QdrantVectorStore"),
+                        patch("utils.index_builder.StorageContext"),
+                        patch(
+                    ):
                                     "utils.index_builder.MultiModalVectorStoreIndex"
                                 ):
                                     # Act
@@ -638,12 +664,14 @@ class TestCreateMultimodalIndex:
         """Test GPU CUDA streams in multimodal index creation."""
         docs = [Document(text="Text content")]
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.cuda.Stream") as mock_stream_cls:
-                with patch("utils.index_builder.QdrantClient"):
-                    with patch("utils.index_builder.QdrantVectorStore"):
-                        with patch("utils.index_builder.StorageContext"):
-                            with patch(
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.Stream") as mock_stream_cls,
+            patch("utils.index_builder.QdrantClient"),
+            patch("utils.index_builder.QdrantVectorStore"),
+            patch("utils.index_builder.StorageContext"),
+            patch(
+        ):
                                 "llama_index.embeddings.huggingface.HuggingFaceEmbedding"
                             ):
                                 with patch(
@@ -674,9 +702,11 @@ class TestCreateMultimodalIndexAsync:
         with patch(
             "utils.index_builder.managed_async_qdrant_client"
         ) as mock_client_ctx:
-            with patch("utils.index_builder.QdrantVectorStore"):
-                with patch("utils.index_builder.StorageContext"):
-                    with patch(
+            with (
+                patch("utils.index_builder.QdrantVectorStore"),
+                patch("utils.index_builder.StorageContext"),
+                patch(
+            ):
                         "llama_index.embeddings.huggingface.HuggingFaceEmbedding"
                     ):
                         with patch(
@@ -725,17 +755,21 @@ class TestCreateMultimodalIndexAsync:
         """Test GPU operations in async multimodal index creation."""
         docs = [Document(text="Text content")]
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.cuda.Stream") as mock_stream_cls:
-                with patch(
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.Stream") as mock_stream_cls,
+            patch(
+        ):
                     "utils.index_builder.managed_async_qdrant_client"
                 ) as mock_client_ctx:
                     with patch(
                         "utils.index_builder.managed_gpu_operation"
                     ) as mock_gpu_ctx:
-                        with patch("utils.index_builder.QdrantVectorStore"):
-                            with patch("utils.index_builder.StorageContext"):
-                                with patch(
+                        with (
+                            patch("utils.index_builder.QdrantVectorStore"),
+                            patch("utils.index_builder.StorageContext"),
+                            patch(
+                        ):
                                     "llama_index.embeddings.huggingface.HuggingFaceEmbedding"
                                 ):
                                     with patch(
@@ -776,11 +810,13 @@ class TestPropertyBasedIndexBuilder:
         """Test index creation properties with various inputs."""
         docs = [Document(text=text) for text in texts]
 
-        with patch("utils.index_builder.QdrantClient"):
-            with patch("utils.index_builder.setup_hybrid_qdrant"):
-                with patch("utils.index_builder.FastEmbedEmbedding"):
-                    with patch("utils.index_builder.SparseTextEmbedding"):
-                        with patch(
+        with (
+            patch("utils.index_builder.QdrantClient"),
+            patch("utils.index_builder.setup_hybrid_qdrant"),
+            patch("utils.index_builder.FastEmbedEmbedding"),
+            patch("utils.index_builder.SparseTextEmbedding"),
+            patch(
+        ):
                             "utils.index_builder.VectorStoreIndex"
                         ) as mock_index_cls:
                             with patch("utils.index_builder.create_hybrid_retriever"):

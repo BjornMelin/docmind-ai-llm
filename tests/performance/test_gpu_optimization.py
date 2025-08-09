@@ -54,10 +54,12 @@ class TestGPUOptimization:
             mock_stream.__enter__ = MagicMock(return_value=mock_stream)
             mock_stream.__exit__ = MagicMock(return_value=None)
 
-            with patch("torch.cuda.is_available", return_value=True):
-                with patch("utils.index_builder.AsyncQdrantClient"):
-                    with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                        with patch("llama_index.core.VectorStoreIndex.from_documents"):
+            with (
+                patch("torch.cuda.is_available", return_value=True),
+                patch("utils.index_builder.AsyncQdrantClient"),
+                patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                patch("llama_index.core.VectorStoreIndex.from_documents")
+            ):
                             # Test stream creation in async context
                             docs = [Document(text="test")]
                             try:
@@ -80,10 +82,12 @@ class TestGPUOptimization:
             mock_stream.__enter__ = MagicMock(return_value=mock_stream)
             mock_stream.__exit__ = MagicMock(return_value=None)
 
-            with patch("torch.cuda.is_available", return_value=True):
-                with patch("qdrant_client.QdrantClient"):
-                    with patch("utils.index_builder.setup_hybrid_qdrant"):
-                        with patch("llama_index.core.VectorStoreIndex.from_documents"):
+            with (
+                patch("torch.cuda.is_available", return_value=True),
+                patch("qdrant_client.QdrantClient"),
+                patch("utils.index_builder.setup_hybrid_qdrant"),
+                patch("llama_index.core.VectorStoreIndex.from_documents")
+            ):
                             # Test stream creation in sync context
                             docs = [Document(text="test")]
                             try:
@@ -113,8 +117,10 @@ class TestGPUOptimization:
 
     def test_gpu_fallback_exception_handling(self):
         """Test graceful fallback when GPU operations fail."""
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("utils.utils.FastEmbedEmbedding") as mock_fastembed:
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+        ):
                 # Simulate GPU failure
                 mock_fastembed.side_effect = Exception("GPU memory error")
 
@@ -131,8 +137,10 @@ class TestMixedPrecisionOptimization:
         """Test FastEmbed GPU provider configuration."""
         from utils.utils import get_embed_model
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("utils.utils.FastEmbedEmbedding") as mock_fastembed:
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+        ):
                 mock_model = MagicMock()
                 mock_fastembed.return_value = mock_model
 
@@ -189,16 +197,20 @@ class TestProfilingAndDebugMode:
             mock_settings.default_model = "test-model"
             mock_settings_class.return_value = mock_settings
 
-            with patch("torch.cuda.is_available", return_value=True):
-                with patch("torch.profiler.profile") as mock_profile:
+            with (
+                patch("torch.cuda.is_available", return_value=True),
+                patch("torch.profiler.profile") as mock_profile
+            ):
                     mock_profiler = MagicMock()
                     mock_profile.return_value = mock_profiler
                     mock_profiler.__enter__ = MagicMock(return_value=mock_profiler)
                     mock_profiler.__exit__ = MagicMock(return_value=None)
 
-                    with patch("utils.index_builder.AsyncQdrantClient"):
-                        with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                            with patch(
+                    with (
+                        patch("utils.index_builder.AsyncQdrantClient"),
+                        patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                        patch(
+                    ):
                                 "llama_index.core.VectorStoreIndex.from_documents"
                             ):
                                 docs = [Document(text="test")]
@@ -235,16 +247,20 @@ class TestProfilingAndDebugMode:
             mock_settings.default_model = "test-model"
             mock_settings_class.return_value = mock_settings
 
-            with patch("torch.cuda.is_available", return_value=True):
-                with patch("torch.profiler.profile") as mock_profile:
+            with (
+                patch("torch.cuda.is_available", return_value=True),
+                patch("torch.profiler.profile") as mock_profile
+            ):
                     mock_profiler = MagicMock()
                     mock_profile.return_value = mock_profiler
                     mock_profiler.__enter__ = MagicMock(return_value=mock_profiler)
                     mock_profiler.__exit__ = MagicMock(return_value=None)
 
-                    with patch("qdrant_client.QdrantClient"):
-                        with patch("utils.index_builder.setup_hybrid_qdrant"):
-                            with patch(
+                    with (
+                        patch("qdrant_client.QdrantClient"),
+                        patch("utils.index_builder.setup_hybrid_qdrant"),
+                        patch(
+                    ):
                                 "llama_index.core.VectorStoreIndex.from_documents"
                             ):
                                 docs = [Document(text="test")]
@@ -265,15 +281,19 @@ class TestProfilingAndDebugMode:
         """Test GPU information logging."""
         from utils.utils import get_embed_model
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.cuda.get_device_name", return_value="Tesla V100"):
-                with patch("torch.cuda.get_device_properties") as mock_props:
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.get_device_name", return_value="Tesla V100"),
+            patch("torch.cuda.get_device_properties") as mock_props
+        ):
                     mock_device_props = MagicMock()
                     mock_device_props.total_memory = 32 * 1024**3  # 32GB
                     mock_props.return_value = mock_device_props
 
-                    with patch("utils.utils.FastEmbedEmbedding"):
-                        with patch("logging.info") as mock_log:
+                    with (
+                        patch("utils.utils.FastEmbedEmbedding"),
+                        patch("logging.info") as mock_log
+                    ):
                             get_embed_model()
 
                             # Should log GPU information
@@ -299,8 +319,10 @@ class TestPerformanceBenchmarks:
         """Benchmark embedding performance on CPU."""
         from utils.utils import get_embed_model
 
-        with patch("torch.cuda.is_available", return_value=False):
-            with patch("utils.utils.FastEmbedEmbedding") as mock_fastembed:
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+        ):
                 mock_model = MagicMock()
                 # Mock realistic embedding output
                 mock_model.embed_documents.return_value = [
@@ -355,9 +377,11 @@ class TestHardwareDetection:
         """Test hardware detection when GPU is available."""
         from utils.utils import detect_hardware
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.cuda.get_device_name", return_value="RTX 4090"):
-                with patch("torch.cuda.get_device_properties") as mock_props:
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.get_device_name", return_value="RTX 4090"),
+            patch("torch.cuda.get_device_properties") as mock_props
+        ):
                     mock_device_props = MagicMock()
                     mock_device_props.total_memory = 24 * 1024**3  # 24GB
                     mock_props.return_value = mock_device_props
@@ -426,13 +450,17 @@ class TestAsyncGPUOperations:
 
         from utils.index_builder import create_index_async
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("utils.index_builder.AsyncQdrantClient") as mock_client:
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("utils.index_builder.AsyncQdrantClient") as mock_client
+        ):
                 mock_async_client = MagicMock()
                 mock_client.return_value = mock_async_client
 
-                with patch("utils.index_builder.setup_hybrid_qdrant_async"):
-                    with patch("llama_index.core.VectorStoreIndex.from_documents"):
+                with (
+                    patch("utils.index_builder.setup_hybrid_qdrant_async"),
+                    patch("llama_index.core.VectorStoreIndex.from_documents")
+                ):
                         docs = [Document(text="test document")]
 
                         try:
@@ -482,12 +510,14 @@ class TestFastEmbedGPUAcceleration:
 
         from utils.index_builder import create_index
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("utils.index_builder.FastEmbedEmbedding") as mock_fastembed:
-                with patch("utils.index_builder.SparseTextEmbedding") as mock_sparse:
-                    with patch("qdrant_client.QdrantClient"):
-                        with patch("utils.index_builder.setup_hybrid_qdrant"):
-                            with patch(
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("utils.index_builder.FastEmbedEmbedding") as mock_fastembed,
+            patch("utils.index_builder.SparseTextEmbedding") as mock_sparse,
+            patch("qdrant_client.QdrantClient"),
+            patch("utils.index_builder.setup_hybrid_qdrant"),
+            patch(
+        ):
                                 "llama_index.core.VectorStoreIndex.from_documents"
                             ):
                                 docs = [Document(text="test")]
@@ -528,11 +558,13 @@ class TestFastEmbedGPUAcceleration:
 
         from utils.index_builder import create_index
 
-        with patch("utils.index_builder.FastEmbedEmbedding") as mock_fastembed:
-            with patch("utils.index_builder.SparseTextEmbedding") as mock_sparse:
-                with patch("qdrant_client.QdrantClient"):
-                    with patch("utils.index_builder.setup_hybrid_qdrant"):
-                        with patch("llama_index.core.VectorStoreIndex.from_documents"):
+        with (
+            patch("utils.index_builder.FastEmbedEmbedding") as mock_fastembed,
+            patch("utils.index_builder.SparseTextEmbedding") as mock_sparse,
+            patch("qdrant_client.QdrantClient"),
+            patch("utils.index_builder.setup_hybrid_qdrant"),
+            patch("llama_index.core.VectorStoreIndex.from_documents")
+        ):
                             docs = [Document(text="test")]
 
                             try:
@@ -593,11 +625,13 @@ class TestEmbeddingPipelineIntegration:
 
         from utils.index_builder import create_index
 
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("utils.index_builder.FastEmbedEmbedding") as mock_dense:
-                with patch("utils.index_builder.SparseTextEmbedding") as mock_sparse:
-                    with patch("qdrant_client.QdrantClient"):
-                        with patch(
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("utils.index_builder.FastEmbedEmbedding") as mock_dense,
+            patch("utils.index_builder.SparseTextEmbedding") as mock_sparse,
+            patch("qdrant_client.QdrantClient"),
+            patch(
+        ):
                             "utils.index_builder.setup_hybrid_qdrant"
                         ) as mock_setup:
                             with patch(

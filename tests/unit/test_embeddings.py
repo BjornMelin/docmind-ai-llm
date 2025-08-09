@@ -167,8 +167,10 @@ class TestSparseEmbeddings:
 
     def test_splade_gpu_providers(self):
         """Test SPLADE++ GPU provider configuration."""
-        with patch("fastembed.SparseTextEmbedding") as mock_sparse:
-            with patch("torch.cuda.is_available", return_value=True):
+        with (
+            patch("fastembed.SparseTextEmbedding") as mock_sparse,
+            patch("torch.cuda.is_available", return_value=True)
+        ):
                 # Should use GPU providers when available
                 expected_providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
@@ -247,8 +249,10 @@ class TestGPUOptimization:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU not available")
     def test_gpu_acceleration_detection(self, test_settings):
         """Test GPU acceleration detection and configuration."""
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("utils.utils.FastEmbedEmbedding") as mock_fastembed:
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+        ):
                 mock_model = MagicMock()
                 mock_fastembed.return_value = mock_model
 
@@ -264,9 +268,11 @@ class TestGPUOptimization:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU not available")
     def test_torch_compile_optimization(self, test_settings):
         """Test torch.compile optimization for GPU acceleration."""
-        with patch("torch.cuda.is_available", return_value=True):
-            with patch("torch.compile") as mock_compile:
-                with patch("utils.utils.FastEmbedEmbedding") as mock_fastembed:
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.compile") as mock_compile,
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+        ):
                     mock_model = MagicMock()
                     mock_fastembed.return_value = mock_model
                     mock_compile.return_value = mock_model

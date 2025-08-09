@@ -275,7 +275,7 @@ def async_with_timeout(timeout_seconds: float = 30.0):
                 )
                 raise TimeoutError(
                     f"{func.__name__} exceeded {timeout_seconds}s timeout"
-                )
+                ) from e
 
         return wrapper
 
@@ -529,7 +529,7 @@ def retry_with_context(
                     context=operation_context,
                     original_error=e.last_attempt.exception(),
                     operation=operation_name,
-                )
+                ) from e
 
         return wrapper
 

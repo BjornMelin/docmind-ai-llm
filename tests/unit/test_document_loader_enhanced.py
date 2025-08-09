@@ -57,8 +57,10 @@ class TestExtractImagesFromPDF:
                 mock_pixmap_class.return_value = mock_pixmap
 
                 # Mock PIL Image processing
-                with patch("io.BytesIO"):
-                    with patch("PIL.Image.open") as mock_pil_open:
+                with (
+                    patch("io.BytesIO"),
+                    patch("PIL.Image.open") as mock_pil_open
+                ):
                         mock_img = MagicMock()
                         mock_img.size = (640, 480)
                         mock_img.__enter__ = MagicMock(return_value=mock_img)
@@ -88,8 +90,10 @@ class TestExtractImagesFromPDF:
         pdf_path = tmp_path / "corrupted.pdf"
         pdf_path.write_bytes(b"not a pdf")
 
-        with patch("fitz.open", side_effect=RuntimeError("Corrupted PDF")):
-            with pytest.raises(DocumentLoadingError):
+        with (
+            patch("fitz.open", side_effect=RuntimeError("Corrupted PDF")),
+            pytest.raises(DocumentLoadingError)
+        ):
                 extract_images_from_pdf(str(pdf_path))
 
     def test_extract_images_from_pdf_no_images(self, tmp_path):
@@ -198,9 +202,11 @@ class TestCreateNativeMultimodalEmbeddings:
 
             mock_get_model.return_value = mock_model
 
-            with patch("tempfile.gettempdir", return_value="/tmp"):
-                with patch("builtins.open", create=True):
-                    with patch("os.unlink"):
+            with (
+                patch("tempfile.gettempdir", return_value="/tmp"),
+                patch("builtins.open", create=True),
+                patch("os.unlink")
+            ):
                         result = create_native_multimodal_embeddings(
                             "test text", images
                         )
@@ -428,8 +434,10 @@ class TestLoadDocumentsLlama:
                     mock_temp_file.__exit__ = Mock(return_value=None)
                     mock_temp.return_value = mock_temp_file
 
-                    with patch("os.path.exists", return_value=True):
-                        with patch("os.remove"):
+                    with (
+                        patch("os.path.exists", return_value=True),
+                        patch("os.remove")
+                    ):
                             result = load_documents_llama([mock_file])
 
                             assert len(result) == 1
@@ -473,8 +481,10 @@ class TestLoadDocumentsLlama:
                             mock_temp_file.__exit__ = Mock(return_value=None)
                             mock_temp.return_value = mock_temp_file
 
-                            with patch("os.path.exists", return_value=True):
-                                with patch("os.remove"):
+                            with (
+                                patch("os.path.exists", return_value=True),
+                                patch("os.remove")
+                            ):
                                     result = load_documents_llama(
                                         [mock_file], enable_multimodal=True
                                     )
@@ -507,8 +517,10 @@ class TestLoadDocumentsLlama:
                 }
                 mock_whisper.return_value = mock_model
 
-                with patch("torch.cuda.is_available", return_value=True):
-                    with patch("PIL.Image.fromarray") as mock_pil:
+                with (
+                    patch("torch.cuda.is_available", return_value=True),
+                    patch("PIL.Image.fromarray") as mock_pil
+                ):
                         mock_image = Mock()
                         mock_pil.return_value = mock_image
 
@@ -519,8 +531,10 @@ class TestLoadDocumentsLlama:
                             mock_temp_file.__exit__ = Mock(return_value=None)
                             mock_temp.return_value = mock_temp_file
 
-                            with patch("os.path.exists", return_value=True):
-                                with patch("os.remove"):
+                            with (
+                                patch("os.path.exists", return_value=True),
+                                patch("os.remove")
+                            ):
                                     result = load_documents_llama(
                                         [mock_file], parse_media=True
                                     )
@@ -542,16 +556,20 @@ class TestLoadDocumentsLlama:
             mock_model.transcribe.return_value = {"text": "Transcribed audio content"}
             mock_whisper.return_value = mock_model
 
-            with patch("torch.cuda.is_available", return_value=False):
-                with patch("tempfile.NamedTemporaryFile") as mock_temp:
+            with (
+                patch("torch.cuda.is_available", return_value=False),
+                patch("tempfile.NamedTemporaryFile") as mock_temp
+            ):
                     mock_temp_file = Mock()
                     mock_temp_file.name = "/tmp/audio.mp3"
                     mock_temp_file.__enter__ = Mock(return_value=mock_temp_file)
                     mock_temp_file.__exit__ = Mock(return_value=None)
                     mock_temp.return_value = mock_temp_file
 
-                    with patch("os.path.exists", return_value=True):
-                        with patch("os.remove"):
+                    with (
+                        patch("os.path.exists", return_value=True),
+                        patch("os.remove")
+                    ):
                             result = load_documents_llama([mock_file], parse_media=True)
 
                             assert len(result) == 1
@@ -876,8 +894,10 @@ class TestErrorRecoveryScenarios:
                 "utils.document_loader.SimpleDirectoryReader",
                 side_effect=RuntimeError("Reader failed"),
             ):
-                with patch("os.path.exists", return_value=True):
-                    with patch("os.remove") as mock_remove:
+                with (
+                    patch("os.path.exists", return_value=True),
+                    patch("os.remove") as mock_remove
+                ):
                         result = load_documents_llama([mock_file])
 
                         # Should handle error gracefully
@@ -926,8 +946,10 @@ class TestPerformanceAndMonitoring:
 
     def test_create_native_multimodal_embeddings_performance_logging(self):
         """Test performance logging in embedding creation."""
-        with patch("utils.document_loader.ModelManager.get_multimodal_embedding_model"):
-            with patch("utils.document_loader.log_performance") as mock_log_perf:
+        with (
+            patch("utils.document_loader.ModelManager.get_multimodal_embedding_model"),
+            patch("utils.document_loader.log_performance") as mock_log_perf
+        ):
                 create_native_multimodal_embeddings("test")
 
                 mock_log_perf.assert_called_once()
@@ -940,8 +962,10 @@ class TestPerformanceAndMonitoring:
         mock_file.name = "test.pdf"
         mock_file.getvalue.return_value = b"content"
 
-        with patch("utils.document_loader.LlamaParse"):
-            with patch("utils.document_loader.SimpleDirectoryReader") as mock_reader:
+        with (
+            patch("utils.document_loader.LlamaParse"),
+            patch("utils.document_loader.SimpleDirectoryReader") as mock_reader
+        ):
                 mock_reader.return_value.load_data.return_value = []
 
                 with patch("tempfile.NamedTemporaryFile") as mock_temp:
@@ -951,9 +975,11 @@ class TestPerformanceAndMonitoring:
                     mock_temp_file.__exit__ = Mock(return_value=None)
                     mock_temp.return_value = mock_temp_file
 
-                    with patch("os.path.exists", return_value=True):
-                        with patch("os.remove"):
-                            with patch(
+                    with (
+                        patch("os.path.exists", return_value=True),
+                        patch("os.remove"),
+                        patch(
+                    ):
                                 "utils.document_loader.log_performance"
                             ) as mock_log_perf:
                                 load_documents_llama([mock_file])

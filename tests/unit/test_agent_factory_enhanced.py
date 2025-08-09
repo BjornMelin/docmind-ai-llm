@@ -218,8 +218,10 @@ class TestSingleAgentCreation:
             "agent_factory.ReActAgent.from_tools",
             side_effect=RuntimeError("Agent creation failed"),
         ):
-            with patch("agent_factory.logger") as mock_logger:
-                with pytest.raises(RuntimeError):
+            with (
+                patch("agent_factory.logger") as mock_logger,
+                pytest.raises(RuntimeError)
+            ):
                     create_single_agent(mock_tools, mock_llm)
 
                 # Should log the error
@@ -433,9 +435,11 @@ class TestLangGraphSupervisorSystem:
         mock_tools = [MagicMock(), MagicMock()]
         mock_llm = MagicMock()
 
-        with patch("agent_factory.create_document_specialist_agent") as mock_doc:
-            with patch("agent_factory.create_knowledge_specialist_agent") as mock_kg:
-                with patch(
+        with (
+            patch("agent_factory.create_document_specialist_agent") as mock_doc,
+            patch("agent_factory.create_knowledge_specialist_agent") as mock_kg,
+            patch(
+        ):
                     "agent_factory.create_multimodal_specialist_agent"
                 ) as mock_mm:
                     with patch("agent_factory.StateGraph") as mock_graph_class:
