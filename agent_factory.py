@@ -8,7 +8,7 @@ and multi-agent modes based on query complexity.
 import logging
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
 from llama_index.core.agent import ReActAgent
@@ -19,6 +19,13 @@ from models import AppSettings
 
 settings = AppSettings()
 logger = logging.getLogger(__name__)
+
+
+"""
+Class documentation for AgentState.
+
+TODO: Add detailed description.
+"""
 
 
 class AgentState(MessagesState):
@@ -96,7 +103,7 @@ def analyze_query_complexity(query: str) -> tuple[str, str]:
     else:
         query_type = "general"
 
-    logger.info(f"Query analysis: complexity={complexity}, type={query_type}")
+    logger.info("Query analysis: complexity=%s, type=%s", complexity, query_type)
     return complexity, query_type
 
 
@@ -126,7 +133,7 @@ def create_single_agent(
         logger.info("Single ReActAgent created successfully")
         return agent
     except Exception as e:
-        logger.error(f"Single agent creation failed: {e}")
+        logger.error("Single agent creation failed: %s", e)
         raise
 
 
@@ -289,7 +296,7 @@ def create_langgraph_supervisor_system(
         return multi_agent_system
 
     except Exception as e:
-        logger.error(f"LangGraph supervisor system creation failed: {e}")
+        logger.error("LangGraph supervisor system creation failed: %s", e)
         return None
 
 

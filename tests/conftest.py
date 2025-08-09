@@ -6,6 +6,7 @@ all test modules. It follows 2025 pytest best practices for AI/ML systems.
 
 import asyncio
 import logging
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,7 +14,9 @@ import pytest
 import pytest_asyncio
 from llama_index.core import Document
 
-from models import Settings
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from models import AppSettings
 
 # Configure pytest-asyncio for proper async handling
 pytest_plugins = ("pytest_asyncio",)
@@ -35,9 +38,9 @@ def configure_logging():
 
 
 @pytest.fixture(scope="session")
-def test_settings() -> Settings:
+def test_settings() -> AppSettings:
     """Provide test settings with safe defaults."""
-    return Settings(
+    return AppSettings(
         backend="ollama",
         default_model="llama3.2:3b",
         dense_embedding_model="BAAI/bge-large-en-v1.5",

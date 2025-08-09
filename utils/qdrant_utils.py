@@ -179,8 +179,10 @@ async def create_qdrant_hybrid_query_async(
     )
 
     logging.info(
-        f"Async Qdrant native RRF fusion - prefetch: {prefetch_limit}, "
-        f"final: {limit}, alpha: {rrf_alpha}"
+        "Async Qdrant native RRF fusion - prefetch: %s, final: %s, alpha: %s",
+        prefetch_limit,
+        limit,
+        rrf_alpha,
     )
     return results.points
 
@@ -230,7 +232,9 @@ def create_qdrant_hybrid_query(
     )
 
     logging.info(
-        f"Qdrant native RRF fusion - prefetch: {prefetch_limit}, "
-        f"final: {limit}, alpha: {rrf_alpha}"
+        "Qdrant native RRF fusion - prefetch: %s, final: %s, alpha: %s",
+        prefetch_limit,
+        limit,
+        rrf_alpha,
     )
     return results.points

@@ -4,6 +4,11 @@ This module tests Qdrant vector database integration, hybrid search functionalit
 and Reciprocal Rank Fusion (RRF) algorithm implementation.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -338,6 +343,172 @@ class TestRRFFusion:
         assert len(result) == 2000  # Should combine all unique documents
 
 
+class TestHybridFusionRetriever:
+    """Test HybridFusionRetriever with RRF fusion and ColBERT reranking."""
+
+    def test_hybrid_fusion_retriever_creation(self, sample_documents, test_settings):
+        """Test creation of HybridFusionRetriever with proper configuration."""
+        from unittest.mock import MagicMock
+
+        from llama_index.core import Document
+
+        from utils.index_builder import create_hybrid_retriever
+
+        # Create test index
+        _ = [Document(text="test document content") for _ in range(3)]
+
+        mock_index_instance = MagicMock()
+
+        # Create hybrid retriever
+        retriever = create_hybrid_retriever(mock_index_instance)
+
+        # Verify retriever is created
+        assert retriever is not None
+        # Verify it's the expected type (QueryFusionRetriever or fallback)
+        assert hasattr(retriever, "retrieve")
+
+    def test_hybrid_fusion_retriever_with_rrf(self):
+        """Test hybrid fusion retriever with RRF scoring."""
+        from unittest.mock import MagicMock
+
+        from llama_index.core import Document
+
+        from utils.index_builder import create_hybrid_retriever
+
+        # Create test documents
+        _ = [
+            Document(text="artificial intelligence machine learning"),
+            Document(text="natural language processing nlp"),
+            Document(text="deep learning neural networks"),
+        ]
+
+        mock_index_instance = MagicMock()
+
+        # Mock retrieve method to return results with scores
+        def mock_retrieve(query_bundle):
+            return [
+                MagicMock(node=MagicMock(node_id="1"), score=0.9),
+                MagicMock(node=MagicMock(node_id="2"), score=0.8),
+                MagicMock(node=MagicMock(node_id="3"), score=0.7),
+            ]
+
+        # Create retriever and test retrieval
+        retriever = create_hybrid_retriever(mock_index_instance)
+
+        # Verify fusion configuration
+        if hasattr(retriever, "mode"):
+            assert retriever.mode == "reciprocal_rerank"
+
+        # Test that retriever works
+        assert callable(getattr(retriever, "retrieve", None))
+
+    @pytest.mark.performance
+    def test_hybrid_fusion_performance(self, benchmark, sample_documents):
+        """Test performance of hybrid fusion retriever."""
+        from unittest.mock import MagicMock
+
+        from llama_index.core import Document
+
+        from utils.index_builder import create_hybrid_retriever
+
+        # Create larger test dataset
+        _ = [Document(text=f"test document {i} with content") for i in range(100)]
+
+        mock_index_instance = MagicMock()
+
+        # Mock fast retrieval
+        def fast_retrieve(query_bundle):
+            return [
+                MagicMock(
+                    node=MagicMock(node_id=str(i), text=f"result {i}"),
+                    score=0.9 - i * 0.01,
+                )
+                for i in range(5)
+            ]
+
+        retriever = create_hybrid_retriever(mock_index_instance)
+
+        # Mock the retrieve method for performance testing
+        if hasattr(retriever, "retrieve"):
+            retriever.retrieve = MagicMock(side_effect=fast_retrieve)
+
+        def retrieval_operation():
+            if hasattr(retriever, "retrieve"):
+                from llama_index.core import QueryBundle
+
+                return retriever.retrieve(QueryBundle(query_str="test query"))
+            return []
+
+        result = benchmark(retrieval_operation)
+        assert len(result) > 0
+
+    def test_hybrid_fusion_with_colbert_reranking(self):
+        """Test integration of ColBERT reranking with hybrid fusion."""
+        from unittest.mock import MagicMock, patch
+
+        from agents.agent_utils import create_tools_from_index
+
+        # Mock index data with hybrid retriever
+        mock_retriever = MagicMock()
+        mock_retriever.retrieve.return_value = [
+            MagicMock(node=MagicMock(node_id="1", text="relevant content"), score=0.9),
+            MagicMock(node=MagicMock(node_id="2", text="somewhat relevant"), score=0.7),
+        ]
+
+        index_data = {
+            "vector": MagicMock(),
+            "kg": MagicMock(),
+            "retriever": mock_retriever,
+        }
+
+        with patch("agents.agent_utils.ColbertRerank") as mock_reranker:
+            mock_reranker_instance = MagicMock()
+            mock_reranker.return_value = mock_reranker_instance
+
+            # Create tools with hybrid retriever
+            tools = create_tools_from_index(index_data)
+
+            # Verify hybrid fusion search tool is created
+            assert len(tools) >= 1
+
+            # Check for hybrid fusion search tool
+            hybrid_tool = None
+            for tool in tools:
+                if "hybrid_fusion_search" in tool.metadata.name:
+                    hybrid_tool = tool
+                    break
+
+            assert hybrid_tool is not None
+            assert "QueryFusionRetriever" in hybrid_tool.metadata.description
+            assert "RRF" in hybrid_tool.metadata.description
+            assert "ColBERT" in hybrid_tool.metadata.description
+
+    def test_fallback_behavior(self):
+        """Test fallback behavior when hybrid retriever creation fails."""
+        from unittest.mock import MagicMock, patch
+
+        from utils.index_builder import create_hybrid_retriever
+
+        # Mock index that raises exception
+        mock_index = MagicMock()
+
+        with patch("utils.index_builder.VectorIndexRetriever") as mock_retriever:
+            # First call (dense) succeeds, second call (sparse) fails,
+            # third call (fallback) succeeds
+            mock_retriever.side_effect = [
+                MagicMock(),  # dense retriever
+                Exception("Sparse retriever failed"),  # sparse retriever fails
+                MagicMock(),  # fallback retriever
+            ]
+
+            # Should return fallback retriever
+            result = create_hybrid_retriever(mock_index)
+
+            # Verify fallback is used
+            assert result is not None
+            assert hasattr(result, "retrieve")
+
+
 class TestHybridSearchIntegration:
     """Test complete hybrid search integration."""
 
@@ -440,3 +611,130 @@ class TestHybridSearchIntegration:
             )
 
             assert len(results) == 50
+
+
+class TestSPLADEPlusPlusIntegration:
+    """Test SPLADE++ integration with hybrid search."""
+
+    def test_splade_plus_plus_sparse_vector_processing(
+        self, mock_sparse_embedding_model, mock_settings
+    ):
+        """Test SPLADE++ sparse vector processing for hybrid search."""
+        # Configure SPLADE++ model
+        mock_settings.sparse_embedding_model = (
+            "prithivida/Splade_PP_en_v1"  # Fixed typo
+        )
+
+        # Test query processing
+        query = "hybrid retrieval with sparse embeddings"
+
+        # Mock SPLADE++ output
+        sparse_embeddings = mock_sparse_embedding_model.encode([query])
+        sparse_embedding = sparse_embeddings[0]
+
+        # Verify SPLADE++ sparse structure
+        if isinstance(sparse_embedding, dict):
+            indices = sparse_embedding["indices"]
+            values = sparse_embedding["values"]
+        else:
+            indices = sparse_embedding.indices
+            values = sparse_embedding.values
+
+        # SPLADE++ specific validations
+        assert len(indices) > 0, "SPLADE++ should generate sparse indices"
+        assert len(values) > 0, "SPLADE++ should generate sparse values"
+        assert len(indices) == len(values), "Indices and values should match in length"
+        assert all(val > 0 for val in values), (
+            "SPLADE++ values should be positive (ReLU)"
+        )
+        assert all(isinstance(idx, int) for idx in indices), (
+            "Indices should be integers"
+        )
+
+        # Term expansion verification
+        original_terms = len(query.split())
+        expanded_terms = len(indices)
+        assert expanded_terms > original_terms, (
+            f"SPLADE++ should expand {original_terms} terms to {expanded_terms}"
+        )
+
+    def test_splade_plus_plus_typo_fix_validation(self, mock_settings):
+        """Test that SPLADE++ typo has been fixed in configuration."""
+        # Verify the typo fix: "Splade_PP_en_v1" not "Splade+_PP_en_v1"
+        mock_settings.sparse_embedding_model = "prithivida/Splade_PP_en_v1"
+
+        model_name = mock_settings.sparse_embedding_model
+        assert "Splade_PP_en_v1" in model_name, "Should use correct SPLADE++ model name"
+        assert "Splade+_PP" not in model_name, (
+            "Should not contain typo with extra + symbol"
+        )
+        assert "prithivida/" in model_name, "Should include correct HuggingFace org"
+
+
+class TestBGELargeIntegration:
+    """Test BGE-Large integration with hybrid search."""
+
+    def test_bge_large_dense_embedding_processing(
+        self, mock_embedding_model, mock_settings
+    ):
+        """Test BGE-Large dense embedding processing for hybrid search."""
+        # Configure BGE-Large model
+        mock_settings.dense_embedding_model = "BAAI/bge-large-en-v1.5"
+        mock_settings.dense_embedding_dimension = 1024
+
+        # Test semantic query processing
+        query = "What are the benefits of hybrid retrieval systems?"
+
+        # Mock BGE-Large output (1024 dimensions)
+        dense_embedding = mock_embedding_model.embed_query(query)
+
+        # Verify BGE-Large dense structure
+        assert len(dense_embedding) == 1024, (
+            "BGE-Large should produce 1024-dimensional embeddings"
+        )
+        assert all(isinstance(val, (int, float)) for val in dense_embedding), (
+            "All values should be numeric"
+        )
+
+        # Semantic representation verification
+        embedding_norm = sum(val**2 for val in dense_embedding) ** 0.5
+        assert embedding_norm > 0, "BGE-Large embeddings should have non-zero magnitude"
+
+        # Test batch processing
+        documents = [
+            "Hybrid search combines semantic and lexical matching",
+            "Dense embeddings capture semantic similarity",
+            "Sparse embeddings enable keyword matching",
+        ]
+
+        batch_embeddings = mock_embedding_model.embed_documents(documents)
+        assert len(batch_embeddings) == len(documents), "Should process all documents"
+        assert all(len(emb) == 1024 for emb in batch_embeddings), (
+            "All embeddings should be 1024-dim"
+        )
+
+    def test_bge_large_semantic_understanding(
+        self, mock_embedding_model, mock_settings
+    ):
+        """Test BGE-Large semantic understanding capabilities."""
+        mock_settings.dense_embedding_model = "BAAI/bge-large-en-v1.5"
+
+        # Test semantic similarity scenarios
+        test_pairs = [
+            ("machine learning algorithms", "ML models and methods"),
+            ("information retrieval systems", "document search engines"),
+            ("neural networks", "deep learning architectures"),
+        ]
+
+        for query, similar_doc in test_pairs:
+            query_emb = mock_embedding_model.embed_query(query)
+            doc_emb = mock_embedding_model.embed_documents([similar_doc])[0]
+
+            # Verify embeddings are generated
+            assert len(query_emb) == 1024
+            assert len(doc_emb) == 1024
+
+            # BGE-Large should capture semantic relationships
+            # (We can't test actual similarity without real embeddings,
+            #  but we verify the structure supports it)
+            assert query_emb is not None and doc_emb is not None

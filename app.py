@@ -22,7 +22,6 @@ Attributes:
     st.session_state.memory: LlamaIndex memory for session persistence.
     st.session_state.agent: ReActAgent for analysis and chat.
     st.session_state.index: LlamaIndex for document storage and retrieval.
-
 """
 
 import asyncio
@@ -187,7 +186,7 @@ try:
         )
 except Exception as e:
     st.error(f"Model initialization error: {str(e)}")
-    logging.error(f"Model init error: {str(e)}")
+    logging.error("Model init error: %s", str(e))
     st.stop()
 
 
@@ -233,13 +232,14 @@ async def upload_section() -> None:
                 - Documents processed: {len(docs)}
                 """)
                 logging.info(
-                    f"Async processing completed in {total_time:.2f}s for "
-                    f"{len(docs)} documents"
+                    "Async processing completed in %.2fs for %s documents",
+                    total_time,
+                    len(docs),
                 )
 
             except Exception as e:
                 st.error(f"Document processing failed: {str(e)}")
-                logging.error(f"Doc process error: {str(e)}")
+                logging.error("Doc process error: %s", str(e))
 
 
 # Analysis Options and Agentic Analysis with Error Handling
@@ -286,7 +286,7 @@ async def run_analysis() -> None:
 
             except Exception as e:
                 st.error(f"Analysis failed: {str(e)}")
-                logging.error(f"Analysis error: {str(e)}")
+                logging.error("Analysis error: %s", str(e))
 
 
 if st.button("Analyze"):
@@ -357,7 +357,7 @@ if user_input:
                 st.error("Please upload and process documents first before chatting.")
         except Exception as e:
             st.error(f"Chat response failed: {str(e)}")
-            logging.error(f"Chat error: {str(e)}")
+            logging.error("Chat error: %s", str(e))
 
     # Store user message in memory
     st.session_state.memory.put({"role": "user", "content": user_input})
@@ -369,7 +369,7 @@ if st.button("Save Session"):
         st.success("Saved!")
     except Exception as e:
         st.error(f"Save failed: {str(e)}")
-        logging.error(f"Save error: {str(e)}")
+        logging.error("Save error: %s", str(e))
 
 if st.button("Load Session"):
     try:
@@ -377,7 +377,7 @@ if st.button("Load Session"):
         st.success("Loaded!")
     except Exception as e:
         st.error(f"Load failed: {str(e)}")
-        logging.error(f"Load error: {str(e)}")
+        logging.error("Load error: %s", str(e))
 
 # Phoenix Dashboard Link if enabled
 if use_phoenix:

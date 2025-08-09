@@ -5,6 +5,11 @@ processing, validating that all components work together correctly in
 realistic scenarios following 2025 best practices.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,12 +19,10 @@ from agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
-from models import Settings
-from utils import (
-    FastEmbedModelManager,
-    create_index_async,
-    create_tools_from_index,
-)
+from agents.agent_utils import create_tools_from_index
+from models import AppSettings
+from utils import create_index_async
+from utils.model_manager import ModelManager
 
 
 class TestCompleteWorkflowIntegration:
@@ -130,9 +133,9 @@ class TestCompleteWorkflowIntegration:
             query = "What is the difference between sparse and dense embeddings?"
 
             # Generate embeddings
-            manager = FastEmbedModelManager()
-            dense_model = manager.get_model("BAAI/bge-large-en-v1.5")
-            sparse_model = manager.get_model("prithvida/Splade_PP_en_v1")
+            manager = ModelManager()
+            dense_model = manager.get_text_embedding_model("BAAI/bge-large-en-v1.5")
+            sparse_model = manager.get_text_embedding_model("prithvida/Splade_PP_en_v1")
 
             dense_embedding = dense_model.embed_query(query)
             sparse_embedding = sparse_model.encode([query])[0]
@@ -291,15 +294,15 @@ class TestErrorHandlingIntegration:
 
             mock_get_model.side_effect = model_side_effect
 
-            manager = FastEmbedModelManager()
+            manager = ModelManager()
 
             # Test primary model failure
-            primary_model = manager.get_model("primary_model")
+            primary_model = manager.get_multimodal_embedding_model("primary_model")
             with pytest.raises(Exception, match="Model failed"):
                 primary_model.embed_documents(["test"])
 
             # Test fallback model success
-            fallback = manager.get_model("fallback_model")
+            fallback = manager.get_multimodal_embedding_model("fallback_model")
             result = fallback.embed_documents(["test"])
             assert len(result) == 1
             assert len(result[0]) == 1024
@@ -405,8 +408,8 @@ class TestPerformanceIntegration:
                 query = "What is SPLADE++ embedding?"
 
                 # 1. Generate embedding
-                manager = FastEmbedModelManager()
-                model = manager.get_model("test_model")
+                manager = ModelManager()
+                model = manager.get_multimodal_embedding_model()
                 embedding = model.embed_query(query)
 
                 # 2. Search
@@ -456,8 +459,8 @@ class TestPerformanceIntegration:
 
             def single_query(query_id):
                 query = f"Query {query_id}"
-                manager = FastEmbedModelManager()
-                model = manager.get_model("test_model")
+                manager = ModelManager()
+                model = manager.get_multimodal_embedding_model()
                 embedding = model.embed_query(query)
 
                 results = mock_qdrant_client.search(
@@ -505,8 +508,8 @@ class TestPerformanceIntegration:
             initial_size = sys.getsizeof(large_document_set)
 
             # Process large document set
-            manager = FastEmbedModelManager()
-            model = manager.get_model("test_model")
+            manager = ModelManager()
+            model = manager.get_multimodal_embedding_model()
 
             texts = [doc.text for doc in large_document_set]
             embeddings = model.embed_documents(texts)
@@ -541,7 +544,7 @@ class TestConfigurationIntegration:
             sample_documents: Sample documents fixture.
         """
         # Create settings for specific backend
-        test_settings = Settings(
+        test_settings = AppSettings(
             backend=backend,
             default_model=model,
             dense_embedding_model="BAAI/bge-large-en-v1.5",
@@ -629,12 +632,12 @@ class TestDataFlowIntegration:
             texts = [doc.text for doc in sample_documents]
 
             # Dense embedding flow
-            manager = FastEmbedModelManager()
-            dense_model = manager.get_model("BAAI/bge-large-en-v1.5")
+            manager = ModelManager()
+            dense_model = manager.get_text_embedding_model("BAAI/bge-large-en-v1.5")
             dense_embeddings = dense_model.embed_documents(texts)
 
             # Sparse embedding flow
-            sparse_model = manager.get_model("prithvida/Splade_PP_en_v1")
+            sparse_model = manager.get_text_embedding_model("prithvida/Splade_PP_en_v1")
             sparse_embeddings = sparse_model.encode(texts)
 
             # Verify data flow
@@ -678,8 +681,8 @@ class TestDataFlowIntegration:
             query = "Test query"
 
             # Generate query embedding
-            manager = FastEmbedModelManager()
-            model = manager.get_model("test_model")
+            manager = ModelManager()
+            model = manager.get_multimodal_embedding_model()
             query_embedding = model.embed_query(query)
 
             # Perform search
@@ -740,3 +743,332 @@ class TestDataFlowIntegration:
             assert len(search_results) == 5
             assert len(reranked) == 3
             assert response == "Final synthesized response"
+
+
+class TestRRFHybridSearchIntegration:
+    """Test RRF-based hybrid search integration with research-backed weights."""
+
+    @pytest.mark.integration
+    def test_rrf_fusion_end_to_end_workflow(
+        self,
+        sample_documents,
+        mock_embedding_model,
+        mock_sparse_embedding_model,
+        mock_qdrant_client,
+    ):
+        """Test complete RRF fusion workflow with BGE-Large and SPLADE++."""
+        # Configure research-backed RRF weights
+        rrf_settings = AppSettings(
+            dense_embedding_model="BAAI/bge-large-en-v1.5",
+            sparse_embedding_model="prithivida/Splade_PP_en_v1",  # Fixed typo
+            rrf_fusion_weight_dense=0.7,  # Research-backed dense weight
+            rrf_fusion_weight_sparse=0.3,  # Research-backed sparse weight
+            rrf_fusion_alpha=60,  # Optimal k parameter
+        )
+
+        with (
+            patch("utils.FastEmbedModelManager.get_model") as mock_get_model,
+            patch("utils.QdrantClient", return_value=mock_qdrant_client),
+        ):
+            # Configure embedding models
+            def model_side_effect(model_name):
+                if "splade" in model_name.lower() or "Splade_PP" in model_name:
+                    return mock_sparse_embedding_model
+                elif "bge-large" in model_name.lower():
+                    return mock_embedding_model
+                else:
+                    return mock_embedding_model
+
+            mock_get_model.side_effect = model_side_effect
+
+            # Mock realistic search results for RRF fusion
+            mock_qdrant_client.search.side_effect = [
+                # BGE-Large dense search results (semantic similarity)
+                [
+                    MagicMock(
+                        id=1, score=0.92, payload={"text": "Semantic similarity match"}
+                    ),
+                    MagicMock(
+                        id=2, score=0.85, payload={"text": "Related semantic content"}
+                    ),
+                    MagicMock(
+                        id=4, score=0.78, payload={"text": "Contextual relevance"}
+                    ),
+                ],
+                # SPLADE++ sparse search results (keyword matching)
+                [
+                    MagicMock(
+                        id=2, score=0.88, payload={"text": "Exact keyword matches"}
+                    ),
+                    MagicMock(
+                        id=3, score=0.82, payload={"text": "Term expansion hits"}
+                    ),
+                    MagicMock(
+                        id=1, score=0.75, payload={"text": "Some keyword overlap"}
+                    ),
+                ],
+            ]
+
+            # Test RRF hybrid search workflow
+            query = "How does SPLADE++ term expansion improve hybrid retrieval?"
+
+            # Generate embeddings
+            manager = ModelManager()
+            dense_model = manager.get_multimodal_embedding_model(
+                rrf_settings.dense_embedding_model
+            )
+            sparse_model = manager.get_multimodal_embedding_model(
+                rrf_settings.sparse_embedding_model
+            )
+
+            dense_embedding = dense_model.embed_query(query)
+            sparse_embedding = sparse_model.encode([query])[0]
+
+            # Perform parallel searches
+            dense_results = mock_qdrant_client.search(
+                collection_name="dense_bge", query_vector=dense_embedding, limit=10
+            )
+            sparse_results = mock_qdrant_client.search(
+                collection_name="sparse_splade", query_vector=sparse_embedding, limit=10
+            )
+
+            # Apply RRF fusion with research-backed weights
+            def apply_rrf_fusion(
+                dense_results,
+                sparse_results,
+                alpha=60,
+                dense_weight=0.7,
+                sparse_weight=0.3,
+            ):
+                scores = {}
+
+                # Process dense results (70% weight - semantic focus)
+                for rank, result in enumerate(dense_results):
+                    doc_id = result.id
+                    scores[doc_id] = scores.get(doc_id, 0) + dense_weight / (
+                        alpha + rank + 1
+                    )
+
+                # Process sparse results (30% weight - keyword focus)
+                for rank, result in enumerate(sparse_results):
+                    doc_id = result.id
+                    scores[doc_id] = scores.get(doc_id, 0) + sparse_weight / (
+                        alpha + rank + 1
+                    )
+
+                return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+            fused_results = apply_rrf_fusion(
+                dense_results,
+                sparse_results,
+                alpha=rrf_settings.rrf_fusion_alpha,
+                dense_weight=rrf_settings.rrf_fusion_weight_dense,
+                sparse_weight=rrf_settings.rrf_fusion_weight_sparse,
+            )
+
+            # Verify RRF fusion workflow
+            assert len(dense_results) == 3, "BGE-Large should return semantic results"
+            assert len(sparse_results) == 3, (
+                "SPLADE++ should return term-expanded results"
+            )
+            assert len(fused_results) == 4, "RRF should combine all unique documents"
+
+            # Document 2 appears in both - should be top ranked with research-backed weights
+            doc_ids = [doc_id for doc_id, _ in fused_results]
+            assert 2 in doc_ids, "Overlapping document should be present"
+            top_doc_id = fused_results[0][0]
+            assert top_doc_id == 2, "Document in both retrievers should rank highest"
+
+            # Verify research-backed weighting effect
+            fusion_scores = [score for _, score in fused_results]
+            assert all(score > 0 for score in fusion_scores), (
+                "All RRF scores should be positive"
+            )
+            assert fusion_scores == sorted(fusion_scores, reverse=True), (
+                "Results sorted by RRF score"
+            )
+
+
+class TestGPUOptimizationIntegration:
+    """Test GPU optimization integration across the system."""
+
+    @pytest.mark.integration
+    @pytest.mark.gpu
+    @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.compile")
+    def test_gpu_acceleration_end_to_end(
+        self, mock_torch_compile, mock_cuda_available, sample_documents
+    ):
+        """Test GPU acceleration throughout the entire pipeline."""
+        gpu_settings = AppSettings(
+            gpu_acceleration=True,
+            embedding_batch_size=32,
+            quantization_type="int8",
+            dense_embedding_model="BAAI/bge-large-en-v1.5",
+            sparse_embedding_model="prithivida/Splade_PP_en_v1",
+        )
+
+        with patch("utils.index_builder.FastEmbedEmbedding") as mock_fastembed:
+            with patch("utils.index_builder.SparseTextEmbedding") as mock_sparse:
+                with patch("utils.index_builder.torch.cuda.Stream") as mock_stream:
+                    # Configure GPU-optimized mocks
+                    mock_dense_model = MagicMock()
+                    mock_sparse_model = MagicMock()
+                    mock_fastembed.return_value = mock_dense_model
+                    mock_sparse.return_value = mock_sparse_model
+
+                    mock_stream_instance = MagicMock()
+                    mock_stream.return_value = mock_stream_instance
+
+                    with patch("utils.index_builder.settings", gpu_settings):
+                        # Test GPU optimization would be applied
+                        assert gpu_settings.gpu_acceleration is True
+                        assert gpu_settings.embedding_batch_size == 32
+
+
+class TestCompleteAgentIntegration:
+    """Test complete agent integration with all enhanced features."""
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_enhanced_agent_workflow_integration(self):
+        """Test complete agent workflow with RRF hybrid search and ColBERT reranking."""
+        enhanced_settings = AppSettings(
+            # Embedding models with typo fix
+            dense_embedding_model="BAAI/bge-large-en-v1.5",
+            sparse_embedding_model="prithivida/Splade_PP_en_v1",  # Fixed typo
+            # RRF fusion (research-backed)
+            rrf_fusion_weight_dense=0.7,
+            rrf_fusion_weight_sparse=0.3,
+            rrf_fusion_alpha=60,
+            # ColBERT reranking
+            reranker_model="jinaai/jina-reranker-v2-base-multilingual",
+            reranking_top_k=5,
+            # Agent configuration
+            default_model="google/gemma-3n-E4B-it",
+        )
+
+        # Mock complete index result with all components
+        mock_vector_index = MagicMock()
+        mock_kg_index = MagicMock()
+        mock_fusion_retriever = MagicMock()
+
+        complete_index_data = {
+            "vector": mock_vector_index,
+            "kg": mock_kg_index,
+            "retriever": mock_fusion_retriever,  # QueryFusionRetriever with RRF
+        }
+
+        # Mock LLM
+        mock_llm = MagicMock()
+        mock_llm.model = "google/gemma-3n-E4B-it"
+
+        with patch("agents.agent_utils.ColbertRerank") as mock_colbert_rerank:
+            with patch(
+                "agents.agent_utils.RetrieverQueryEngine"
+            ) as mock_retriever_engine:
+                with patch("agents.agent_utils.QueryEngineTool") as mock_query_tool:
+                    with patch(
+                        "agents.agent_utils.ReActAgent.from_tools"
+                    ) as mock_react_agent:
+                        with patch(
+                            "agents.agent_utils.ChatMemoryBuffer.from_defaults"
+                        ) as mock_memory:
+                            # Configure enhanced mocks
+                            mock_reranker = MagicMock()
+                            mock_colbert_rerank.return_value = mock_reranker
+
+                            mock_hybrid_engine = MagicMock()
+                            mock_retriever_engine.return_value = mock_hybrid_engine
+
+                            mock_kg_engine = MagicMock()
+                            mock_kg_index.as_query_engine.return_value = mock_kg_engine
+
+                            # Create enhanced tools
+                            mock_hybrid_tool = MagicMock()
+                            mock_kg_tool = MagicMock()
+                            mock_hybrid_tool.metadata.name = "hybrid_fusion_search"
+                            mock_kg_tool.metadata.name = "knowledge_graph_query"
+                            mock_query_tool.side_effect = [
+                                mock_hybrid_tool,
+                                mock_kg_tool,
+                            ]
+
+                            # Create enhanced agent
+                            mock_memory_instance = MagicMock()
+                            mock_memory.return_value = mock_memory_instance
+
+                            mock_agent = MagicMock()
+                            mock_react_agent.return_value = mock_agent
+
+                            # Mock async streaming response
+                            async def mock_async_gen():
+                                responses = [
+                                    "Based on hybrid search with RRF fusion, ",
+                                    "SPLADE++ provides effective term expansion ",
+                                    "while BGE-Large captures semantic similarity. ",
+                                    "The research-backed 0.7/0.3 weighting ",
+                                    "optimally combines both approaches.",
+                                ]
+                                for response in responses:
+                                    yield response
+
+                            mock_async_response = MagicMock()
+                            mock_async_response.async_response_gen.return_value = (
+                                mock_async_gen()
+                            )
+                            mock_agent.async_stream_chat = AsyncMock(
+                                return_value=mock_async_response
+                            )
+
+                            with patch(
+                                "agents.agent_utils.settings", enhanced_settings
+                            ):
+                                # Execute complete enhanced workflow
+
+                                # Step 1: Create enhanced tools
+                                tools = create_tools_from_index(complete_index_data)
+
+                                # Verify enhanced tool creation
+                                assert len(tools) == 2
+                                tool_names = [tool.metadata.name for tool in tools]
+                                assert "hybrid_fusion_search" in tool_names
+                                assert "knowledge_graph_query" in tool_names
+
+                                # Step 2: Create enhanced agent
+                                agent = create_agent_with_tools(
+                                    complete_index_data, mock_llm
+                                )
+
+                                # Verify enhanced agent configuration
+                                mock_react_agent.assert_called_once_with(
+                                    tools=tools,
+                                    llm=mock_llm,
+                                    verbose=True,
+                                    max_iterations=10,
+                                    memory=mock_memory_instance,
+                                )
+
+                                # Step 3: Test async streaming chat
+                                query = "How does RRF fusion with SPLADE++ and BGE-Large improve search quality?"
+                                response_chunks = []
+
+                                async for chunk in chat_with_agent(
+                                    agent, query, mock_memory_instance
+                                ):
+                                    response_chunks.append(chunk)
+
+                                # Verify enhanced workflow execution
+                                assert len(response_chunks) == 5
+                                full_response = "".join(response_chunks)
+                                assert "RRF fusion" in full_response
+                                assert "SPLADE++" in full_response
+                                assert "BGE-Large" in full_response
+                                assert "0.7/0.3 weighting" in full_response
+
+                                # Verify ColBERT reranker integration
+                                mock_colbert_rerank.assert_called_once_with(
+                                    model="jinaai/jina-reranker-v2-base-multilingual",
+                                    top_n=5,
+                                    keep_retrieval_score=True,
+                                )

@@ -4,6 +4,11 @@ This module tests ColBERT reranking functionality, performance characteristics,
 and integration with the hybrid search pipeline following 2025 best practices.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from unittest.mock import MagicMock, patch
 
 import pytest

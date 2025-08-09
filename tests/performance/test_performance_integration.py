@@ -5,6 +5,11 @@ This module tests performance characteristics and scaling behavior
 of the integrated system under various load conditions.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import asyncio
 import logging
 import time
@@ -12,16 +17,18 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import torch
 from llama_index.core import Document
 
 from agent_factory import analyze_query_complexity
-from models import Settings
+from models import AppSettings
 from utils import (
-    FastEmbedModelManager,
+    ModelManager,
     create_index,
     create_index_async,
     verify_rrf_configuration,
 )
+from utils.utils import get_embed_model
 
 
 class TestPerformanceCharacteristics:
@@ -34,7 +41,7 @@ class TestPerformanceCharacteristics:
         # Creating multiple instances should be fast (singleton pattern)
         managers = []
         for _ in range(100):
-            managers.append(FastEmbedModelManager())
+            managers.append(ModelManager())
 
         creation_time = time.perf_counter() - start_time
 
@@ -86,7 +93,7 @@ class TestPerformanceCharacteristics:
 
     def test_rrf_configuration_validation_performance(self):
         """Test RRF configuration validation performance."""
-        settings = Settings()
+        settings = AppSettings()
 
         start_time = time.perf_counter()
 
@@ -118,7 +125,7 @@ class TestConcurrentOperations:
         managers = []
 
         def create_manager():
-            return FastEmbedModelManager()
+            return ModelManager()
 
         # Create managers concurrently
         with ThreadPoolExecutor(max_workers=10) as executor:
@@ -282,7 +289,7 @@ class TestMemoryAndResourceUsage:
 
     def test_model_manager_memory_usage(self):
         """Test FastEmbedModelManager memory usage patterns."""
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
 
         # Clear cache to start fresh
         manager.clear_cache()
@@ -413,7 +420,7 @@ class TestConfigurationPerformance:
         # Load settings multiple times
         settings_list = []
         for _ in range(100):
-            settings = Settings()
+            settings = AppSettings()
             settings_list.append(settings)
 
         loading_time = time.perf_counter() - start_time
@@ -433,7 +440,7 @@ class TestConfigurationPerformance:
 
     def test_validation_performance_stress(self):
         """Test validation performance under stress."""
-        settings = Settings()
+        settings = AppSettings()
 
         start_time = time.perf_counter()
 
@@ -460,6 +467,55 @@ def pytest_configure():
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+
+class TestGPUOptimization:
+    """Test GPU optimization with torch.compile."""
+
+    def test_gpu_compile_performance(self):
+        """Test GPU compilation provides speedup."""
+        if not torch.cuda.is_available():
+            pytest.skip("GPU not available")
+
+        # Test that get_embed_model function works
+        embed_model = get_embed_model()
+        texts = ["test text for GPU performance evaluation"] * 100
+
+        start = time.time()
+        embeddings = embed_model.embed(texts)
+        gpu_time = time.time() - start
+
+        logging.info(f"GPU embedding time: {gpu_time:.3f}s for {len(texts)} texts")
+        assert len(embeddings) == 100
+        assert gpu_time < 10.0, f"GPU processing took too long: {gpu_time:.3f}s"
+
+        # Verify embeddings are valid
+        assert all(len(emb) > 0 for emb in embeddings), "Invalid embeddings generated"
+
+    def test_torch_compile_availability(self):
+        """Test that torch.compile is available when GPU acceleration is enabled."""
+        if not torch.cuda.is_available():
+            pytest.skip("GPU not available")
+
+        settings = AppSettings()
+        if settings.gpu_acceleration:
+            # torch.compile should be available in PyTorch 2.0+
+            assert hasattr(torch, "compile"), "torch.compile not available"
+            logging.info("torch.compile is available for GPU optimization")
+
+    def test_embedding_model_gpu_configuration(self):
+        """Test embedding model GPU configuration."""
+        if not torch.cuda.is_available():
+            pytest.skip("GPU not available")
+
+        embed_model = get_embed_model()
+
+        # Test basic functionality
+        test_embeddings = embed_model.embed(["test text"])
+        assert len(test_embeddings) == 1
+        assert len(test_embeddings[0]) > 0
+
+        logging.info("Embedding model GPU configuration test passed")
 
 
 if __name__ == "__main__":

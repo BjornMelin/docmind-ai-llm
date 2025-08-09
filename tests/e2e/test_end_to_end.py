@@ -6,6 +6,11 @@ agent processing, validating that all components work together correctly
 in realistic scenarios.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,12 +22,9 @@ from agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
-from models import Settings
-from utils import (
-    FastEmbedModelManager,
-    create_index_async,
-    create_tools_from_index,
-)
+from agents.agent_utils import create_tools_from_index
+from models import AppSettings
+from utils import create_index_async
 
 
 class TestEndToEndWorkflow:
@@ -198,13 +200,13 @@ class TestEndToEndWorkflow:
             patch("utils.torch.cuda.is_available", return_value=True),
             patch("utils.torch.cuda.get_device_name", return_value="RTX 4090"),
         ):
-            settings = Settings()
+            settings = AppSettings()
 
             # Verify GPU settings affect workflow
             assert settings.gpu_acceleration is True
 
             # Test model manager configuration
-            manager = FastEmbedModelManager()
+            manager = ModelManager()
 
             with patch("utils.TextEmbedding") as mock_embedding:
                 manager.get_dense_embedding_model()
@@ -216,10 +218,10 @@ class TestEndToEndWorkflow:
 
         # Test CPU fallback workflow
         with patch("utils.torch.cuda.is_available", return_value=False):
-            settings = Settings()
+            settings = AppSettings()
 
             # CPU mode should still work
-            manager = FastEmbedModelManager()
+            manager = ModelManager()
 
             with patch("utils.TextEmbedding") as mock_embedding:
                 manager.get_dense_embedding_model()
@@ -299,7 +301,7 @@ class TestWorkflowIntegration:
 
     def test_settings_workflow_integration(self):
         """Test that settings properly integrate throughout workflow."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Verify key settings for workflow
         assert settings.dense_embedding_model is not None
@@ -313,11 +315,11 @@ class TestWorkflowIntegration:
 
     def test_model_manager_workflow_integration(self):
         """Test FastEmbedModelManager integration throughout workflow."""
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
 
         # Test singleton behavior in workflow context
-        manager1 = FastEmbedModelManager()
-        manager2 = FastEmbedModelManager()
+        manager1 = ModelManager()
+        manager2 = ModelManager()
 
         assert manager1 is manager2
         assert manager1 is manager
@@ -379,7 +381,7 @@ class TestWorkflowValidation:
 
     def test_workflow_configuration_validation(self):
         """Test workflow configuration validation."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Validate critical configurations
         assert settings.dense_embedding_model.startswith("BAAI/bge-large")
@@ -390,7 +392,7 @@ class TestWorkflowValidation:
     def test_workflow_error_handling(self):
         """Test error handling throughout workflow."""
         # Test invalid settings handling
-        settings = Settings()
+        settings = AppSettings()
 
         # Should handle validation gracefully
         from utils import verify_rrf_configuration

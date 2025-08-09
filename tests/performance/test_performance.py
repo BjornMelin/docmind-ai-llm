@@ -5,6 +5,11 @@ for critical system components including embeddings, search, reranking, and
 complete workflows following 2025 best practices.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent_factory import analyze_query_complexity, get_agent_system
-from utils import FastEmbedModelManager
+from utils.model_manager import ModelManager
 
 
 class TestEmbeddingPerformance:
@@ -34,8 +39,8 @@ class TestEmbeddingPerformance:
             ]
 
             def embed_documents():
-                manager = FastEmbedModelManager()
-                model = manager.get_model("BAAI/bge-large-en-v1.5")
+                manager = ModelManager()
+                model = manager.get_text_embedding_model("BAAI/bge-large-en-v1.5")
                 return model.embed_documents(texts)
 
             result = benchmark(embed_documents)
@@ -56,8 +61,8 @@ class TestEmbeddingPerformance:
             texts = [f"Document {i} analyzing various AI concepts" for i in range(50)]
 
             def encode_documents():
-                manager = FastEmbedModelManager()
-                model = manager.get_model("prithvida/Splade_PP_en_v1")
+                manager = ModelManager()
+                model = manager.get_text_embedding_model("prithvida/Splade_PP_en_v1")
                 return model.encode(texts)
 
             result = benchmark(encode_documents)
@@ -75,11 +80,11 @@ class TestEmbeddingPerformance:
             mock_load.return_value = mock_model
 
             def access_cached_model():
-                manager = FastEmbedModelManager()
+                manager = ModelManager()
                 # Access same model multiple times - should be cached
-                model1 = manager.get_model("test_model")
-                model2 = manager.get_model("test_model")
-                model3 = manager.get_model("test_model")
+                model1 = manager.get_multimodal_embedding_model()
+                model2 = manager.get_multimodal_embedding_model()
+                model3 = manager.get_multimodal_embedding_model()
                 return model1, model2, model3
 
             result = benchmark(access_cached_model)
@@ -105,8 +110,8 @@ class TestEmbeddingPerformance:
                 texts = [f"Text batch {i}" for i in range(20)]
 
                 def embed_single_text(text):
-                    manager = FastEmbedModelManager()
-                    model = manager.get_model("test_model")
+                    manager = ModelManager()
+                    model = manager.get_multimodal_embedding_model()
                     return model.embed_query(text)
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
@@ -193,11 +198,13 @@ class TestSearchPerformance:
 
             def hybrid_search():
                 query = "Test hybrid search query"
-                manager = FastEmbedModelManager()
+                manager = ModelManager()
 
                 # Generate embeddings
-                dense_model = manager.get_model("BAAI/bge-large-en-v1.5")
-                sparse_model = manager.get_model("prithvida/Splade_PP_en_v1")
+                dense_model = manager.get_text_embedding_model("BAAI/bge-large-en-v1.5")
+                sparse_model = manager.get_text_embedding_model(
+                    "prithvida/Splade_PP_en_v1"
+                )
 
                 dense_embedding = dense_model.embed_query(query)
                 sparse_embedding = sparse_model.encode([query])[0]
@@ -439,8 +446,8 @@ class TestMemoryPerformance:
             # Start memory tracing
             tracemalloc.start()
 
-            manager = FastEmbedModelManager()
-            model = manager.get_model("test_model")
+            manager = ModelManager()
+            model = manager.get_multimodal_embedding_model()
 
             # Process in batches to test memory efficiency
             batch_size = 20
@@ -596,8 +603,8 @@ class TestLatencyMonitoring:
             texts = ["Test document for latency measurement"]
 
             start_time = time.perf_counter()
-            manager = FastEmbedModelManager()
-            model = manager.get_model("test_model")
+            manager = ModelManager()
+            model = manager.get_multimodal_embedding_model()
             embeddings = model.embed_documents(texts)
             end_time = time.perf_counter()
 
@@ -694,9 +701,9 @@ class TestLatencyMonitoring:
             query = "End-to-end performance test"
 
             # 1. Generate embeddings
-            manager = FastEmbedModelManager()
-            dense_model = manager.get_model("BAAI/bge-large-en-v1.5")
-            sparse_model = manager.get_model("prithvida/Splade_PP_en_v1")
+            manager = ModelManager()
+            dense_model = manager.get_text_embedding_model("BAAI/bge-large-en-v1.5")
+            sparse_model = manager.get_text_embedding_model("prithvida/Splade_PP_en_v1")
 
             dense_embedding = dense_model.embed_query(query)
             sparse_embedding = sparse_model.encode([query])[0]

@@ -27,10 +27,11 @@ Example:
 Classes:
     AnalysisOutput: Structured schema for document analysis results.
     AppSettings: Application configuration loaded from environment variables.
-
 """
 
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +74,7 @@ class AppSettings(BaseSettings):
         - RRF fusion parameters optimized from research (0.7/0.3 weight distribution)
         - GPU acceleration toggles and batch processing optimization
         - ColBERT reranking pipeline configuration
+        - Unstructured library for multimodal document parsing
 
     Attributes:
         backend: Default backend type for LLM inference.
@@ -112,6 +114,12 @@ class AppSettings(BaseSettings):
         enable_colbert_reranking: Enable ColBERT late interaction reranking.
         reranking_top_k: Number of documents to rerank.
 
+        # Document Processing Configuration
+        parse_strategy: Parsing strategy for Unstructured library.
+        chunk_size: Optimal chunk size for embeddings.
+        chunk_overlap: Overlap between chunks for context preservation.
+        max_entities: Maximum entities for knowledge graph extraction.
+
         model_config: Pydantic configuration for settings loading.
 
     """
@@ -144,6 +152,12 @@ class AppSettings(BaseSettings):
         default="http://localhost:6333",
         description="URL for the Qdrant vector database server",
     )
+    qdrant_pool_size: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum number of connections in Qdrant connection pool",
+    )
 
     # Dense Embedding Configuration (Research-backed BGE-Large)
     dense_embedding_model: str = Field(
@@ -154,9 +168,29 @@ class AppSettings(BaseSettings):
         default=1024, ge=1, description="Vector dimension for BGE-Large embeddings"
     )
 
+    @field_validator("dense_embedding_dimension")
+    @classmethod
+    def validate_embedding_dimension(cls, v: int) -> int:
+        """Validate embedding dimension is positive and reasonable.
+
+        Args:
+            v: Embedding dimension to validate.
+
+        Returns:
+            Validated dimension.
+
+        Raises:
+            ValueError: If dimension is invalid.
+        """
+        if v <= 0:
+            raise ValueError(f"Embedding dimension must be positive, got {v}")
+        if v > 10000:
+            raise ValueError(f"Embedding dimension seems too large: {v}")
+        return v
+
     # Sparse Embedding Configuration (Research-backed SPLADE++)
     sparse_embedding_model: str = Field(
-        default="prithvida/Splade_PP_en_v1",
+        default="prithivida/Splade_PP_en_v1",
         description="Research-backed SPLADE++ model for sparse embeddings",
     )
     enable_sparse_embeddings: bool = Field(
@@ -181,6 +215,43 @@ class AppSettings(BaseSettings):
         ge=1,
         description="Alpha parameter for RRF fusion algorithm (from Qdrant research)",
     )
+
+    @field_validator("rrf_fusion_weight_dense", "rrf_fusion_weight_sparse")
+    @classmethod
+    def validate_weight_range(cls, v: float) -> float:
+        """Validate RRF weights are in valid range [0, 1].
+
+        Args:
+            v: Weight value to validate.
+
+        Returns:
+            Validated weight value.
+
+        Raises:
+            ValueError: If weight is not in range [0, 1].
+        """
+        if not 0 <= v <= 1:
+            raise ValueError(f"RRF weight must be between 0 and 1, got {v}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_rrf_weights_sum(self) -> "AppSettings":
+        """Validate that RRF weights sum to 1.0.
+
+        Returns:
+            Validated settings instance.
+
+        Raises:
+            ValueError: If weights don't sum to 1.0 (within tolerance).
+        """
+        total = self.rrf_fusion_weight_dense + self.rrf_fusion_weight_sparse
+        if abs(total - 1.0) > 0.001:  # Small tolerance for floating point
+            raise ValueError(
+                f"RRF weights must sum to 1.0, got "
+                f"dense={self.rrf_fusion_weight_dense}, "
+                f"sparse={self.rrf_fusion_weight_sparse}, total={total:.3f}"
+            )
+        return self
 
     # GPU Acceleration Configuration
     gpu_acceleration: bool = Field(
@@ -228,12 +299,110 @@ class AppSettings(BaseSettings):
         ),
     )
 
+    # Document Processing Configuration (Unstructured)
+    parse_strategy: str = Field(
+        default="hi_res",
+        description="Parsing strategy: 'hi_res' for best quality, 'fast' for speed",
+    )
+    chunk_size: int = Field(
+        default=1024,
+        ge=256,
+        le=4096,
+        description="Optimal chunk size for embeddings (1024 recommended)",
+    )
+    chunk_overlap: int = Field(
+        default=200,
+        ge=0,
+        le=512,
+        description="Overlap between chunks for context preservation",
+    )
+    max_entities: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum entities for knowledge graph extraction",
+    )
+
+    # Debug and Development Configuration
+    debug_mode: bool = Field(
+        default=False,
+        description="Enable debug mode with profiling and additional logging",
+    )
+
+    # Query Configuration
+    similarity_top_k: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Number of top similar documents to retrieve",
+    )
+
+    # Compatibility alias for reranker
+    reranker_model: str | None = Field(
+        default=None,
+        description="Reranker model name (alias for default_reranker_model)",
+    )
+
+    def model_post_init(self, __context: Any) -> None:
+        """Set up compatibility aliases after model initialization."""
+        if self.reranker_model is None:
+            object.__setattr__(self, "reranker_model", self.default_reranker_model)
+
     # Legacy Support (backward compatibility)
     default_embedding_model: str | None = Field(
         default="jinaai/jina-embeddings-v4",
         description="Legacy embedding model (deprecated, use dense_embedding_model)",
         alias="DEFAULT_EMBEDDING_MODEL",  # For env var compatibility
     )
+
+    @model_validator(mode="after")
+    def validate_chunk_configuration(self) -> "AppSettings":
+        """Validate chunk configuration is consistent.
+
+        Returns:
+            Validated settings instance.
+
+        Raises:
+            ValueError: If chunk configuration is invalid.
+        """
+        if self.chunk_size <= self.chunk_overlap:
+            raise ValueError(
+                f"Chunk size ({self.chunk_size}) must be larger than "
+                f"chunk overlap ({self.chunk_overlap})"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_model_compatibility(self) -> "AppSettings":
+        """Validate that model configurations are compatible.
+
+        Returns:
+            Validated settings instance.
+
+        Raises:
+            ValueError: If model settings are incompatible.
+        """
+        # Validate BGE-Large dimension
+        if (
+            self.dense_embedding_model == "BAAI/bge-large-en-v1.5"
+            and self.dense_embedding_dimension != 1024
+        ):
+            raise ValueError(
+                f"BGE-Large model requires 1024 dimensions, "
+                f"got {self.dense_embedding_dimension}"
+            )
+
+        # Validate SPLADE++ model name
+        if (
+            self.sparse_embedding_model
+            and "prithivida" not in self.sparse_embedding_model
+        ):
+            raise ValueError(
+                f"Invalid SPLADE++ model name: {self.sparse_embedding_model}. "
+                'Expected "prithivida/Splade_PP_en_v1"'
+            )
+
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

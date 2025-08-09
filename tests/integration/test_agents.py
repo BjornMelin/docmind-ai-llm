@@ -4,6 +4,11 @@ This module tests the ReActAgent system, tool integration, query complexity
 analysis, and multi-agent workflows following 2025 best practices.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

@@ -6,6 +6,11 @@ that the system works correctly in real scenarios. Tests that require
 external services are marked with appropriate pytest marks.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 
 import pytest
@@ -14,9 +19,8 @@ from llama_index.core import Document
 from agent_factory import analyze_query_complexity
 
 # Import DocMind AI components
-from models import AppSettings, Settings
+from models import AppSettings
 from utils import (
-    FastEmbedModelManager,
     detect_hardware,
     verify_rrf_configuration,
 )
@@ -27,7 +31,7 @@ class TestRealConfiguration:
 
     def test_settings_loading(self):
         """Test that settings load correctly from environment."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Verify core configuration is loaded
         assert isinstance(settings.backend, str)
@@ -47,7 +51,7 @@ class TestRealConfiguration:
 
     def test_rrf_configuration_real_settings(self):
         """Test RRF configuration with real settings."""
-        settings = Settings()
+        settings = AppSettings()
         verification = verify_rrf_configuration(settings)
 
         # Log verification results for debugging
@@ -70,7 +74,7 @@ class TestRealConfiguration:
 
     def test_gpu_configuration_consistency(self):
         """Test GPU configuration is consistent across settings."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Verify GPU settings are boolean
         assert isinstance(settings.gpu_acceleration, bool)
@@ -211,15 +215,15 @@ class TestModelManagerReal:
 
     def test_model_manager_singleton_real(self):
         """Test singleton behavior with real instance."""
-        manager1 = FastEmbedModelManager()
-        manager2 = FastEmbedModelManager()
+        manager1 = ModelManager()
+        manager2 = ModelManager()
 
         assert manager1 is manager2
         assert id(manager1) == id(manager2)
 
     def test_model_cache_persistence(self):
         """Test that model cache persists across calls."""
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
         initial_cache_size = len(manager._models)
 
         # This should not create actual models without proper dependencies
@@ -231,7 +235,7 @@ class TestModelManagerReal:
 
     def test_model_manager_clear_cache_real(self):
         """Test cache clearing with real manager."""
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
 
         # Add something to cache if possible
 
@@ -292,7 +296,7 @@ class TestConfigurationValidation:
 
     def test_embedding_dimension_consistency(self):
         """Test that embedding dimensions are consistent."""
-        settings = Settings()
+        settings = AppSettings()
 
         # BGE-Large should be 1024 dimensions
         if "bge-large" in settings.dense_embedding_model.lower():
@@ -303,7 +307,7 @@ class TestConfigurationValidation:
 
     def test_batch_size_configurations(self):
         """Test batch size configurations are reasonable."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Embedding batch size should be reasonable for most hardware
         assert 1 <= settings.embedding_batch_size <= 512
@@ -313,7 +317,7 @@ class TestConfigurationValidation:
 
     def test_reranking_configuration(self):
         """Test reranking configuration meets Phase 2.2 requirements."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Phase 2.2: retrieve 20, rerank to 5
         assert settings.reranking_top_k == 5
@@ -401,7 +405,7 @@ class TestIntegrationReadiness:
 
     def test_all_required_models_configured(self):
         """Test that all required models are properly configured."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Dense embedding model
         assert settings.dense_embedding_model is not None
@@ -415,7 +419,7 @@ class TestIntegrationReadiness:
 
     def test_qdrant_configuration(self):
         """Test Qdrant configuration is properly set."""
-        settings = Settings()
+        settings = AppSettings()
 
         assert settings.qdrant_url is not None
         assert len(settings.qdrant_url) > 0
@@ -423,7 +427,7 @@ class TestIntegrationReadiness:
 
     def test_llm_backend_configuration(self):
         """Test LLM backend configuration."""
-        settings = Settings()
+        settings = AppSettings()
 
         assert settings.backend in ["ollama", "lmstudio", "llamacpp"]
         assert settings.default_model is not None

@@ -13,6 +13,11 @@ Tests validate that all components work together correctly and handle
 edge cases gracefully.
 """
 
+import sys
+from pathlib import Path
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -24,13 +29,12 @@ from agent_factory import (
     analyze_query_complexity,
     get_agent_system,
 )
+from agents.agent_utils import create_tools_from_index
 
 # Import DocMind AI components
-from models import Settings
+from models import AppSettings
 from utils import (
-    FastEmbedModelManager,
     create_index_async,
-    create_tools_from_index,
     detect_hardware,
     setup_hybrid_qdrant,
     setup_hybrid_qdrant_async,
@@ -43,8 +47,8 @@ class TestFastEmbedModelManager:
 
     def test_singleton_behavior(self):
         """Test that FastEmbedModelManager follows singleton pattern."""
-        manager1 = FastEmbedModelManager()
-        manager2 = FastEmbedModelManager()
+        manager1 = ModelManager()
+        manager2 = ModelManager()
 
         assert manager1 is manager2, "FastEmbedModelManager should be singleton"
         assert id(manager1) == id(manager2), "Instances should have same memory address"
@@ -55,7 +59,7 @@ class TestFastEmbedModelManager:
         mock_model = MagicMock()
         mock_text_embedding.return_value = mock_model
 
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
         manager.clear_cache()  # Start with clean cache
 
         # First call should create model
@@ -73,7 +77,7 @@ class TestFastEmbedModelManager:
         mock_model = MagicMock()
         mock_sparse_embedding.return_value = mock_model
 
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
         manager.clear_cache()
 
         # Test SPLADE++ model caching
@@ -85,7 +89,7 @@ class TestFastEmbedModelManager:
 
     def test_gpu_provider_configuration(self):
         """Test GPU provider configuration based on settings."""
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
 
         with (
             patch("utils.TextEmbedding") as mock_embedding,
@@ -101,7 +105,7 @@ class TestFastEmbedModelManager:
 
     def test_cache_clearing(self):
         """Test cache clearing functionality."""
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
 
         with patch("utils.TextEmbedding"):
             # Create a model to populate cache
@@ -118,7 +122,7 @@ class TestHybridSearchIntegration:
 
     def test_rrf_configuration_validation(self):
         """Test RRF configuration validation against Phase 2.1 requirements."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Test with correct research-backed weights
         settings.rrf_fusion_weight_dense = 0.7
@@ -134,7 +138,7 @@ class TestHybridSearchIntegration:
 
     def test_rrf_configuration_validation_failures(self):
         """Test RRF configuration validation with incorrect weights."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Test with incorrect weights
         settings.rrf_fusion_weight_dense = 0.5
@@ -227,7 +231,7 @@ class TestColBERTReranking:
     def test_colbert_reranking_improves_relevance(self):
         """Test that ColBERT reranking improves result relevance."""
         # This would require actual embedding models, so we'll test the configuration
-        settings = Settings()
+        settings = AppSettings()
 
         # Verify Phase 2.2 configuration: retrieve 20, rerank to 5
         assert settings.reranking_top_k == 5
@@ -355,7 +359,7 @@ class TestErrorHandlingAndFallbacks:
 
     def test_model_initialization_error_handling(self):
         """Test error handling during model initialization."""
-        manager = FastEmbedModelManager()
+        manager = ModelManager()
         manager.clear_cache()
 
         with (
@@ -385,7 +389,7 @@ class TestPerformanceAndScaling:
 
     def test_embedding_batch_size_configuration(self):
         """Test embedding batch size configuration for performance."""
-        settings = Settings()
+        settings = AppSettings()
 
         # Test default batch size is reasonable for GPU
         assert settings.embedding_batch_size >= 1
@@ -396,7 +400,7 @@ class TestPerformanceAndScaling:
 
     def test_concurrent_request_limits(self):
         """Test concurrent request limiting configuration."""
-        settings = Settings()
+        settings = AppSettings()
 
         assert 1 <= settings.max_concurrent_requests <= 100
 
