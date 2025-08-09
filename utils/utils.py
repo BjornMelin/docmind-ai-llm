@@ -270,7 +270,7 @@ def get_embed_model() -> FastEmbedEmbedding:
             model=settings.dense_embedding_model,
             gpu_requested=settings.gpu_acceleration,
             cuda_available=torch.cuda.is_available(),
-        )
+        ) from e
 
 
 """
@@ -460,7 +460,7 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
                         "suggestion": "Try downloading manually or use a smaller model",
                     },
                     operation="spacy_model_download",
-                )
+                ) from e
             except (subprocess.CalledProcessError, OSError) as e:
                 error_context = {
                     "model_name": model_name,
@@ -475,7 +475,7 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
                     context=error_context,
                     original_error=e,
                     operation="spacy_model_download",
-                )
+                ) from e
 
     except ImportError as e:
         log_error_with_context(
@@ -495,7 +495,7 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
             },
             original_error=e,
             operation="spacy_import",
-        )
+        ) from e
 
     except Exception as e:
         log_error_with_context(
@@ -507,7 +507,7 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
             context={"model_name": model_name},
             original_error=e,
             operation="spacy_model_ensure",
-        )
+        ) from e
 
 
 # Resource Management Utilities for Critical Fix P0
@@ -983,6 +983,28 @@ class EnhancedPerformanceMonitor:
     """Enhanced performance monitoring with detailed async operation tracking."""
 
     def __init__(self):
+        """Initialize an Enhanced Performance Monitor for comprehensive async operation tracking.
+
+        Provides detailed metrics and performance insights for async operations,
+        tracking execution duration, memory usage, error rates, and operation counts.
+
+        Attributes:
+            metrics (dict): Stores performance metrics for each async operation.
+                Each entry includes:
+                - duration_seconds: Operation execution time
+                - memory_delta_mb: Memory usage change
+                - timestamp: Operation execution time
+                - success: Whether the operation completed without errors
+
+            operation_counts (dict): Tracks the number of times each operation is called.
+
+            error_counts (dict): Tracks the number of errors encountered for each operation.
+
+        Note:
+            - Performance tracking is done with minimal overhead
+            - Supports multiple concurrent operation tracking
+            - Provides methods for generating performance summaries
+        """
         self.metrics = {}
         self.operation_counts = {}
         self.error_counts = {}

@@ -347,6 +347,20 @@ class CriticalError(DocMindError):
     """Critical system error requiring immediate attention."""
 
     def __init__(self, *args, **kwargs):
+        """Initialize a CriticalError instance with elevated logging.
+
+        Critical errors require immediate system attention and trigger
+        high-priority logging mechanisms to alert system administrators.
+
+        Args:
+            *args: Positional arguments passed to parent DocMindError.
+            **kwargs: Keyword arguments passed to parent DocMindError.
+
+        Note:
+            - Automatically triggers critical-level logging
+            - Includes detailed error information in log extra payload
+            - Marks error as requiring immediate system intervention
+        """
         super().__init__(*args, **kwargs)
         # Critical errors get elevated logging
         logger.critical(

@@ -30,6 +30,21 @@ class TestResult:
     """Container for test execution results."""
 
     def __init__(self):
+        """Initialize a TestResult instance.
+
+        Tracks comprehensive test execution metrics including pass/fail status,
+        timing, command details, and execution outputs.
+
+        Attributes:
+            passed (int): Number of tests passed.
+            failed (int): Number of tests failed.
+            skipped (int): Number of tests skipped.
+            errors (int): Number of test errors.
+            duration (float): Total test execution time in seconds.
+            command (str): Command that was executed.
+            output (str): Complete test execution output.
+            exit_code (int): Exit code of the test execution.
+        """
         self.passed = 0
         self.failed = 0
         self.skipped = 0
@@ -44,6 +59,17 @@ class TestRunner:
     """Comprehensive test runner for DocMind AI."""
 
     def __init__(self, project_root: Path):
+        """Initialize a TestRunner instance.
+
+        Manages comprehensive test execution for a specific project root.
+
+        Args:
+            project_root (Path): Absolute path to the project's root directory.
+
+        Attributes:
+            project_root (Path): Directory containing the project being tested.
+            results (list[TestResult]): Collected test results from various test runs.
+        """
         self.project_root = project_root
         self.results: list[TestResult] = []
 

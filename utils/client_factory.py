@@ -216,6 +216,26 @@ class QdrantConnectionPool:
     """Connection pool for Qdrant clients."""
 
     def __init__(self, pool_size: int = 5):
+        """Initialize a connection pool for Qdrant clients.
+
+        Manages an asynchronous queue of Qdrant clients to optimize connection reuse
+        and improve performance for concurrent database operations.
+
+        Args:
+            pool_size (int, optional): Maximum number of concurrent connections.
+                Defaults to 5. Allows multiple simultaneous clients to distribute load.
+
+        Attributes:
+            pool_size (int): Maximum number of clients in the pool.
+            _pool (asyncio.Queue): Asynchronous queue managing client connections.
+            _initialized (bool): Flag indicating whether the pool has been initialized.
+            _lock (asyncio.Lock): Synchronization lock for thread-safe pool operations.
+            _stats (dict): Tracks connection and request statistics including:
+                - total_connections: Total number of connections created
+                - active_connections: Currently active connections
+                - total_requests: Total connection requests
+                - failed_requests: Requests that could not be fulfilled
+        """
         self.pool_size = pool_size
         self._pool: asyncio.Queue = asyncio.Queue(maxsize=pool_size)
         self._initialized = False
