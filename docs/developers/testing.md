@@ -5,7 +5,9 @@ This guide details how to write, run, and maintain tests for DocMind AI to ensur
 ## Testing Framework
 
 - **Tool**: pytest v8.3.1 (installed via `uv sync --extra test`).
+
 - **Location**: Tests in `tests/` directory.
+
 - **Coverage**: Aim for >80% coverage on `utils.py` and `app.py`.
 
 ## Setup
@@ -21,6 +23,10 @@ This guide details how to write, run, and maintain tests for DocMind AI to ensur
    ```bash
    pytest
    ```
+
+## Performance Validation
+
+For comprehensive performance benchmarks and validation results, see [performance-validation.md](./performance-validation.md).
 
 ## Writing Tests
 
@@ -60,18 +66,23 @@ This guide details how to write, run, and maintain tests for DocMind AI to ensur
 ## Running Tests
 
 - All tests: `pytest`.
+
 - Specific file: `pytest tests/test_utils.py`.
+
 - Coverage: `pytest --cov=docmind_ai --cov-report=html`.
 
 ## Best Practices
 
 - Mock external dependencies (e.g., Ollama, Qdrant) using `unittest.mock`.
+
 - Test error handling (e.g., file errors, parsing failures).
+
 - Update tests for new features; maintain DRY with fixtures.
 
 ## CI Integration
 
 - GitHub Actions runs `pytest` and `ruff check` on PRs.
+
 - Ensure tests pass before submitting PRs.
 
 Report issues or suggest test cases via GitHub.
