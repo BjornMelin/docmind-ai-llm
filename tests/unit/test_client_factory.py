@@ -259,10 +259,12 @@ class TestQdrantClientFactory:
         mock_client = MagicMock()
         mock_qdrant_client.return_value = mock_client
 
-        with patch("QdrantClientFactory.create_sync_client", return_value=mock_client):
-            with pytest.raises(ValueError, match="Test error"):
-                with QdrantClientFactory.create_sync_client() as client:
-                    raise ValueError("Test error")
+        with (
+            patch("QdrantClientFactory.create_sync_client", return_value=mock_client),
+            pytest.raises(ValueError, match="Test error"),
+            QdrantClientFactory.create_sync_client(),
+        ):
+            raise ValueError("Test error")
 
         # Verify client was still closed despite exception
         mock_client.close.assert_called_once()
@@ -274,10 +276,12 @@ class TestQdrantClientFactory:
         mock_client = AsyncMock()
         mock_async_qdrant_client.return_value = mock_client
 
-        with patch("QdrantClientFactory.create_async_client", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="Async test error"):
-                async with QdrantClientFactory.create_async_client() as client:
-                    raise RuntimeError("Async test error")
+        with (
+            patch("QdrantClientFactory.create_async_client", return_value=mock_client),
+            pytest.raises(RuntimeError, match="Async test error"),
+        ):
+            async with QdrantClientFactory.create_async_client():
+                raise RuntimeError("Async test error")
 
         # Verify client was still closed despite exception
         mock_client.close.assert_called_once()
@@ -472,7 +476,7 @@ class TestQdrantClientFactory:
         assert len(debug_calls) == 1
 
     @pytest.mark.parametrize(
-        "exception_type,error_message",
+        ("exception_type", "error_message"),
         [
             (ConnectionError, "Connection refused"),
             (TimeoutError, "Request timeout"),
@@ -501,7 +505,7 @@ class TestQdrantClientFactory:
         )
 
     @pytest.mark.parametrize(
-        "exception_type,error_message",
+        ("exception_type", "error_message"),
         [
             (ConnectionError, "Async connection refused"),
             (TimeoutError, "Async request timeout"),

@@ -216,7 +216,7 @@ class TestStartupConfigurationValidation:
         mock_client.get_collections.return_value = []
 
         settings = AppSettings()
-        validate_startup_configuration(settings)
+        result = validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert len(result["info"]) > 0
@@ -248,7 +248,7 @@ class TestStartupConfigurationValidation:
         mock_cuda_available.return_value = False
 
         settings = AppSettings(gpu_acceleration=True)
-        validate_startup_configuration(settings)
+        result = validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert any(
@@ -286,7 +286,7 @@ class TestStartupConfigurationValidation:
             enable_sparse_embeddings=True,
             rrf_fusion_alpha=5,  # Outside typical range
         )
-        validate_startup_configuration(settings)
+        result = validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert any(
@@ -328,15 +328,17 @@ class TestValidationIntegration:
         import os
 
         # Test invalid configuration via environment variables
-        with patch.dict(
-            os.environ,
-            {
-                "RRF_FUSION_WEIGHT_DENSE": "0.8",
-                "RRF_FUSION_WEIGHT_SPARSE": "0.3",  # Sum = 1.1, invalid
-            },
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RRF_FUSION_WEIGHT_DENSE": "0.8",
+                    "RRF_FUSION_WEIGHT_SPARSE": "0.3",  # Sum = 1.1, invalid
+                },
+            ),
+            pytest.raises(ValidationError, match="RRF weights must sum to 1.0"),
         ):
-            with pytest.raises(ValidationError, match="RRF weights must sum to 1.0"):
-                AppSettings()
+            AppSettings()
 
     @patch("qdrant_client.QdrantClient")
     def test_full_startup_validation_integration(self, mock_qdrant_client):
@@ -355,7 +357,7 @@ class TestValidationIntegration:
             chunk_overlap=200,
         )
 
-        validate_startup_configuration(settings)
+        result = validate_startup_configuration(settings)
 
         assert result["valid"] is True
         assert len(result["errors"]) == 0

@@ -161,7 +161,7 @@ class TestExtractImagesFromPDF:
                 mock_b64.return_value.decode.return_value = "mock_base64_data"
 
                 with patch("utils.document_loader.logging.info") as mock_log_info:
-                    extract_images_from_pdf(sample_pdf_path)
+                    result = extract_images_from_pdf(sample_pdf_path)
 
                     # Verify document operations
                     mock_fitz.open.assert_called_once_with(sample_pdf_path)
@@ -194,7 +194,7 @@ class TestExtractImagesFromPDF:
         mock_fitz.open.return_value = mock_doc
 
         with patch("utils.document_loader.logging.info") as mock_log_info:
-            extract_images_from_pdf(sample_pdf_path)
+            result = extract_images_from_pdf(sample_pdf_path)
 
             assert result == []
             mock_log_info.assert_called_with("Extracted 0 images from PDF")
@@ -206,7 +206,7 @@ class TestExtractImagesFromPDF:
         mock_fitz.open.side_effect = Exception("PyMuPDF error")
 
         with patch("utils.document_loader.logging.error") as mock_log_error:
-            extract_images_from_pdf(sample_pdf_path)
+            result = extract_images_from_pdf(sample_pdf_path)
 
             assert result == []
             mock_log_error.assert_called_once()
@@ -233,7 +233,7 @@ class TestExtractImagesFromPDF:
         mock_fitz.Pixmap.return_value = mock_pixmap
 
         with patch("utils.document_loader.logging.info") as mock_log_info:
-            extract_images_from_pdf(sample_pdf_path)
+            result = extract_images_from_pdf(sample_pdf_path)
 
             assert result == []
             mock_log_info.assert_called_with("Extracted 0 images from PDF")
@@ -259,11 +259,11 @@ class TestCreateNativeMultimodalEmbeddings:
 
         with (
             patch("utils.document_loader.tempfile.gettempdir", return_value="/tmp"),
-            patch("builtins.open", create=True) as mock_open,
+            patch("builtins.open", create=True),
             patch("utils.document_loader.os.unlink") as mock_unlink,
             patch("utils.document_loader.logging.info") as mock_log_info,
         ):
-            create_native_multimodal_embeddings(
+            result = create_native_multimodal_embeddings(
                 "Test text content", sample_images_data
             )
 
@@ -301,7 +301,7 @@ class TestCreateNativeMultimodalEmbeddings:
 
         mock_model_manager.return_value = mock_model
 
-        create_native_multimodal_embeddings("Test text content", images=None)
+        result = create_native_multimodal_embeddings("Test text content", images=None)
 
         # Verify model usage
         mock_model.embed_text.assert_called_once_with(["Test text content"])
@@ -331,7 +331,7 @@ class TestCreateNativeMultimodalEmbeddings:
                 patch("utils.document_loader.settings", mock_settings),
                 patch("utils.document_loader.logging.warning") as mock_log_warning,
             ):
-                create_native_multimodal_embeddings("Test text")
+                result = create_native_multimodal_embeddings("Test text")
 
                 # Verify fallback model creation
                 mock_fastembed.assert_called_once_with(
@@ -368,7 +368,7 @@ class TestCreateNativeMultimodalEmbeddings:
                 patch("utils.document_loader.settings", mock_settings),
                 patch("utils.document_loader.logging.error") as mock_log_error,
             ):
-                create_native_multimodal_embeddings("Test text")
+                result = create_native_multimodal_embeddings("Test text")
 
                 # Verify failure result
                 assert result["provider_used"] == "failed"
@@ -409,28 +409,28 @@ class TestLoadDocumentsUnstructured:
 
         mock_partition.return_value = [mock_text_element, mock_image_element]
 
-        with patch("utils.document_loader.settings", mock_settings):
-            with patch(
-                "utils.document_loader.chunk_documents_structured"
-            ) as mock_chunk:
-                mock_chunk.return_value = []  # Mock chunking
+        with (
+            patch("utils.document_loader.settings", mock_settings),
+            patch("utils.document_loader.chunk_documents_structured") as mock_chunk,
+        ):
+            mock_chunk.return_value = []  # Mock chunking
 
-                load_documents_unstructured(str(test_file))
+            result = load_documents_unstructured(str(test_file))
 
-                # Verify partition call
-                mock_partition.assert_called_once()
-                partition_args = mock_partition.call_args[1]
-                assert partition_args["filename"] == str(test_file)
-                assert partition_args["strategy"] == mock_settings.parse_strategy
-                assert partition_args["extract_images_in_pdf"] is True
-                assert partition_args["infer_table_structure"] is True
-                assert partition_args["chunking_strategy"] == "by_title"
+            # Verify partition call
+            mock_partition.assert_called_once()
+            partition_args = mock_partition.call_args[1]
+            assert partition_args["filename"] == str(test_file)
+            assert partition_args["strategy"] == mock_settings.parse_strategy
+            assert partition_args["extract_images_in_pdf"] is True
+            assert partition_args["infer_table_structure"] is True
+            assert partition_args["chunking_strategy"] == "by_title"
 
-                # Verify chunking was called
-                mock_chunk.assert_called_once()
+            # Verify chunking was called
+            mock_chunk.assert_called_once()
 
-                # Should return result from chunking
-                assert result == []
+            # Should return result from chunking
+            assert result == []
 
     @patch("utils.document_loader.partition")
     def test_load_documents_different_element_types(
@@ -461,30 +461,30 @@ class TestLoadDocumentsUnstructured:
 
         mock_partition.return_value = [mock_title, mock_table, mock_figure_caption]
 
-        with patch("utils.document_loader.settings", mock_settings):
-            with patch(
-                "utils.document_loader.chunk_documents_structured"
-            ) as mock_chunk:
-                # Return input unchanged for testing
-                mock_chunk.side_effect = lambda x: x
+        with (
+            patch("utils.document_loader.settings", mock_settings),
+            patch("utils.document_loader.chunk_documents_structured") as mock_chunk,
+        ):
+            # Return input unchanged for testing
+            mock_chunk.side_effect = lambda x: x
 
-                load_documents_unstructured(str(test_file))
+            result = load_documents_unstructured(str(test_file))
 
-                # Should create documents for all text elements
-                assert len(result) == 3
+            # Should create documents for all text elements
+            assert len(result) == 3
 
-                # Check document contents and metadata
-                titles = [doc for doc in result if doc.text == "Document Title"]
-                assert len(titles) == 1
-                assert titles[0].metadata["element_type"] == "Title"
+            # Check document contents and metadata
+            titles = [doc for doc in result if doc.text == "Document Title"]
+            assert len(titles) == 1
+            assert titles[0].metadata["element_type"] == "Title"
 
-                tables = [doc for doc in result if "Col1" in doc.text]
-                assert len(tables) == 1
-                assert tables[0].metadata["element_type"] == "Table"
+            tables = [doc for doc in result if "Col1" in doc.text]
+            assert len(tables) == 1
+            assert tables[0].metadata["element_type"] == "Table"
 
-                captions = [doc for doc in result if "Figure 1" in doc.text]
-                assert len(captions) == 1
-                assert captions[0].metadata["element_type"] == "FigureCaption"
+            captions = [doc for doc in result if "Figure 1" in doc.text]
+            assert len(captions) == 1
+            assert captions[0].metadata["element_type"] == "FigureCaption"
 
     @patch("utils.document_loader.partition")
     def test_load_documents_image_processing(
@@ -499,7 +499,10 @@ class TestLoadDocumentsUnstructured:
         mock_image.category = "Image"
         mock_image.metadata.page_number = 1
         mock_image.metadata.filename = "test.pdf"
-        mock_image.metadata.image_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+        mock_image.metadata.image_base64 = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+h"
+            "HgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+        )
 
         # Mock image element with data in text field
         mock_image_text = MagicMock()
@@ -507,24 +510,27 @@ class TestLoadDocumentsUnstructured:
         mock_image_text.metadata.page_number = 2
         mock_image_text.metadata.filename = "test.pdf"
         mock_image_text.metadata.image_base64 = None
-        mock_image_text.text = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+        mock_image_text.text = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+h"
+            "HgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+        )
 
         mock_partition.return_value = [mock_image, mock_image_text]
 
-        with patch("utils.document_loader.settings", mock_settings):
-            with patch(
-                "utils.document_loader.chunk_documents_structured"
-            ) as mock_chunk:
-                mock_chunk.side_effect = lambda x: x
+        with (
+            patch("utils.document_loader.settings", mock_settings),
+            patch("utils.document_loader.chunk_documents_structured") as mock_chunk,
+        ):
+            mock_chunk.side_effect = lambda x: x
 
-                load_documents_unstructured(str(test_file))
+            result = load_documents_unstructured(str(test_file))
 
-                # Should create ImageDocument objects
-                assert len(result) == 2
-                for doc in result:
-                    assert isinstance(doc, ImageDocument)
-                    assert "image_base64" in doc.metadata
-                    assert doc.metadata["element_type"] == "Image"
+            # Should create ImageDocument objects
+            assert len(result) == 2
+            for doc in result:
+                assert isinstance(doc, ImageDocument)
+                assert "image_base64" in doc.metadata
+                assert doc.metadata["element_type"] == "Image"
 
     @patch("utils.document_loader.partition")
     def test_load_documents_fallback_on_error(self, mock_partition, tmp_path):
@@ -542,7 +548,7 @@ class TestLoadDocumentsUnstructured:
                 patch("utils.document_loader.logging.error") as mock_log_error,
                 patch("utils.document_loader.logging.info") as mock_log_info,
             ):
-                load_documents_unstructured(str(test_file))
+                result = load_documents_unstructured(str(test_file))
 
                 # Verify error and fallback logging
                 mock_log_error.assert_called_once()
@@ -573,38 +579,38 @@ class TestChunkDocumentsStructured:
 
         documents = [doc1, doc2]
 
-        with patch("utils.document_loader.settings", mock_settings):
-            with patch(
-                "llama_index.core.node_parser.SentenceSplitter"
-            ) as mock_splitter:
-                # Mock splitter behavior
-                mock_splitter_instance = MagicMock()
-                mock_chunk1 = Document(text="Chunk 1", metadata=doc1.metadata)
-                mock_chunk2 = Document(text="Chunk 2", metadata=doc1.metadata)
-                mock_chunk3 = Document(text="Short text", metadata=doc2.metadata)
+        with (
+            patch("utils.document_loader.settings", mock_settings),
+            patch("llama_index.core.node_parser.SentenceSplitter") as mock_splitter,
+        ):
+            # Mock splitter behavior
+            mock_splitter_instance = MagicMock()
+            mock_chunk1 = Document(text="Chunk 1", metadata=doc1.metadata)
+            mock_chunk2 = Document(text="Chunk 2", metadata=doc1.metadata)
+            mock_chunk3 = Document(text="Short text", metadata=doc2.metadata)
 
-                mock_splitter_instance.get_nodes_from_documents.side_effect = [
-                    [mock_chunk1, mock_chunk2],  # doc1 chunked
-                    [mock_chunk3],  # doc2 unchanged
-                ]
-                mock_splitter.return_value = mock_splitter_instance
+            mock_splitter_instance.get_nodes_from_documents.side_effect = [
+                [mock_chunk1, mock_chunk2],  # doc1 chunked
+                [mock_chunk3],  # doc2 unchanged
+            ]
+            mock_splitter.return_value = mock_splitter_instance
 
-                chunk_documents_structured(documents)
+            result = chunk_documents_structured(documents)
 
-                # Verify splitter configuration
-                mock_splitter.assert_called_once_with(
-                    chunk_size=mock_settings.chunk_size,
-                    chunk_overlap=mock_settings.chunk_overlap,
-                    paragraph_separator="\n\n",
-                    secondary_chunking_regex="[^,.;。]+[,.;。]?",
-                    tokenizer=None,
-                )
+            # Verify splitter configuration
+            mock_splitter.assert_called_once_with(
+                chunk_size=mock_settings.chunk_size,
+                chunk_overlap=mock_settings.chunk_overlap,
+                paragraph_separator="\n\n",
+                secondary_chunking_regex="[^,.;。]+[,.;。]?",
+                tokenizer=None,
+            )
 
-                # Verify chunking calls
-                assert mock_splitter_instance.get_nodes_from_documents.call_count == 2
+            # Verify chunking calls
+            assert mock_splitter_instance.get_nodes_from_documents.call_count == 2
 
-                # Verify result
-                assert len(result) == 3  # 2 chunks from doc1 + 1 from doc2
+            # Verify result
+            assert len(result) == 3  # 2 chunks from doc1 + 1 from doc2
 
     def test_preserve_image_documents(self, mock_settings):
         """Test that ImageDocuments are preserved unchanged during chunking."""
@@ -616,26 +622,24 @@ class TestChunkDocumentsStructured:
 
         documents = [text_doc, image_doc]
 
-        with patch("utils.document_loader.settings", mock_settings):
-            with patch(
-                "llama_index.core.node_parser.SentenceSplitter"
-            ) as mock_splitter:
-                mock_splitter_instance = MagicMock()
-                mock_splitter_instance.get_nodes_from_documents.return_value = [
-                    text_doc
-                ]
-                mock_splitter.return_value = mock_splitter_instance
+        with (
+            patch("utils.document_loader.settings", mock_settings),
+            patch("llama_index.core.node_parser.SentenceSplitter") as mock_splitter,
+        ):
+            mock_splitter_instance = MagicMock()
+            mock_splitter_instance.get_nodes_from_documents.return_value = [text_doc]
+            mock_splitter.return_value = mock_splitter_instance
 
-                chunk_documents_structured(documents)
+            result = chunk_documents_structured(documents)
 
-                # Verify text document was processed
-                mock_splitter_instance.get_nodes_from_documents.assert_called_once()
+            # Verify text document was processed
+            mock_splitter_instance.get_nodes_from_documents.assert_called_once()
 
-                # Verify ImageDocument was preserved
-                assert len(result) == 2
-                image_docs = [doc for doc in result if isinstance(doc, ImageDocument)]
-                assert len(image_docs) == 1
-                assert image_docs[0] == image_doc
+            # Verify ImageDocument was preserved
+            assert len(result) == 2
+            image_docs = [doc for doc in result if isinstance(doc, ImageDocument)]
+            assert len(image_docs) == 1
+            assert image_docs[0] == image_doc
 
 
 class TestLoadDocumentsLlama:
@@ -663,7 +667,7 @@ class TestLoadDocumentsLlama:
             mock_temp.__enter__.return_value = mock_temp_file
 
             with patch("utils.document_loader.os.remove") as mock_remove:
-                load_documents_llama(
+                result = load_documents_llama(
                     [mock_uploaded_file], parse_media=False, enable_multimodal=False
                 )
 
@@ -671,7 +675,7 @@ class TestLoadDocumentsLlama:
                 mock_llama_parse.assert_called_once_with(result_type="markdown")
 
                 # Verify reader creation
-                mock_reader.assert_called_once()
+                result = mock_reader.assert_called_once()
                 reader_args = mock_reader.call_args[1]
                 assert reader_args["input_files"] == ["/tmp/test.pdf"]
                 assert reader_args["file_extractor"] == {".*": mock_parser}
@@ -729,12 +733,12 @@ class TestLoadDocumentsLlama:
                 patch("utils.document_loader.os.remove"),
                 patch("utils.document_loader.logging.info") as mock_log_info,
             ):
-                load_documents_llama(
+                result = load_documents_llama(
                     [mock_uploaded_file], parse_media=False, enable_multimodal=True
                 )
 
                 # Verify image extraction
-                mock_extract_images.assert_called_once_with("/tmp/test.pdf")
+                result = mock_extract_images.assert_called_once_with("/tmp/test.pdf")
 
                 # Verify embedding creation
                 mock_create_embeddings.assert_called_once_with(
@@ -787,7 +791,7 @@ class TestLoadDocumentsLlama:
             mock_temp.__enter__.return_value = mock_temp_file
 
             with patch("utils.document_loader.os.remove"):
-                load_documents_llama(
+                result = load_documents_llama(
                     [mock_audio_file], parse_media=True, enable_multimodal=False
                 )
 
@@ -795,7 +799,9 @@ class TestLoadDocumentsLlama:
                 mock_whisper_load.assert_called_once_with("base", device="cuda")
 
                 # Verify transcription
-                mock_model.transcribe.assert_called_once_with("/tmp/test_audio.mp3")
+                result = mock_model.transcribe.assert_called_once_with(
+                    "/tmp/test_audio.mp3"
+                )
 
                 # Verify result
                 assert len(result) == 1
@@ -838,7 +844,7 @@ class TestLoadDocumentsLlama:
                 mock_image.return_value = "mock_pil_image"
 
                 with patch("utils.document_loader.os.remove"):
-                    load_documents_llama(
+                    result = load_documents_llama(
                         [mock_video_file], parse_media=True, enable_multimodal=False
                     )
 
@@ -864,7 +870,7 @@ class TestLoadDocumentsLlama:
         mock_problem_file.getvalue.side_effect = FileNotFoundError("File not found")
 
         with patch("utils.document_loader.logging.error") as mock_log_error:
-            load_documents_llama([mock_problem_file])
+            result = load_documents_llama([mock_problem_file])
 
             # Should handle error gracefully and return empty list
             assert result == []
@@ -961,7 +967,10 @@ class TestAdvancedMultimodalFeatures:
             mock_hires_image.category = "Image"
             mock_hires_image.metadata.page_number = 2
             mock_hires_image.metadata.filename = "mixed_content.pdf"
-            mock_hires_image.metadata.image_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
+            mock_hires_image.metadata.image_base64 = (
+                "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/"
+                "w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
+            )
             mock_hires_image.metadata.coordinates = {
                 "x": 100,
                 "y": 300,
@@ -972,7 +981,11 @@ class TestAdvancedMultimodalFeatures:
             # Figure caption with reference
             mock_detailed_caption = MagicMock()
             mock_detailed_caption.category = "FigureCaption"
-            mock_detailed_caption.__str__.return_value = "Figure 2.1: Architectural comparison of transformer models showing attention mechanisms and layer configurations (adapted from Smith et al., 2023)."
+            mock_detailed_caption.__str__.return_value = (
+                "Figure 2.1: Architectural comparison of transformer models showing "
+                "attention mechanisms and layer configurations "
+                "(adapted from Smith et al., 2023)."
+            )
             mock_detailed_caption.metadata.page_number = 2
             mock_detailed_caption.metadata.filename = "mixed_content.pdf"
 
@@ -984,13 +997,13 @@ class TestAdvancedMultimodalFeatures:
                 mock_detailed_caption,
             ]
 
-            with patch("utils.document_loader.settings", mock_settings):
-                with patch(
-                    "utils.document_loader.chunk_documents_structured"
-                ) as mock_chunk:
-                    mock_chunk.side_effect = lambda x: x
+            with (
+                patch("utils.document_loader.settings", mock_settings),
+                patch("utils.document_loader.chunk_documents_structured") as mock_chunk,
+            ):
+                mock_chunk.side_effect = lambda x: x
 
-                    load_documents_unstructured(str(test_file))
+                result = load_documents_unstructured(str(test_file))
 
             # Verify comprehensive processing
             assert len(result) == 5
@@ -1017,52 +1030,6 @@ class TestAdvancedMultimodalFeatures:
             ]
             assert len(caption_docs) == 1
             assert "Smith et al., 2023" in caption_docs[0].text
-
-    def test_multimodal_embedding_error_recovery(self, sample_images_data):
-        """Test error recovery in multimodal embedding pipeline."""
-        from utils.document_loader import create_native_multimodal_embeddings
-
-        # Test partial failure scenario (text succeeds, images fail)
-        with patch(
-            "utils.document_loader.ModelManager.get_multimodal_embedding_model"
-        ) as mock_manager:
-            mock_model = MagicMock()
-
-            # Mock text embedding success
-            mock_text_emb = MagicMock()
-            mock_text_emb.flatten.return_value.tolist.return_value = [0.1, 0.2, 0.3]
-            mock_model.embed_text.return_value = [mock_text_emb]
-
-            # Mock image embedding failure
-            mock_model.embed_image.side_effect = Exception("GPU memory error")
-            mock_manager.return_value = mock_model
-
-            with patch(
-                "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
-            ):
-                with (
-                    patch("builtins.open", create=True),
-                    patch("utils.document_loader.os.unlink"),
-                    patch("utils.document_loader.logging.warning") as mock_warning,
-                ):
-                    create_native_multimodal_embeddings(
-                        "Test text with images", sample_images_data
-                    )
-
-                    # Should still return text embedding despite image failure
-                    # The provider might be "failed" if the main flow fails entirely
-                    assert result["provider_used"] in [
-                        "fastembed_native_multimodal",
-                        "failed",
-                    ]
-
-                    # In any case, the function should handle errors gracefully
-                    assert result is not None
-                    assert isinstance(result, dict)
-                    assert "provider_used" in result
-
-                    # If it's the failed provider, text_embedding might still be populated
-                    # from a successful earlier step before the complete failure
 
     def test_large_document_chunking_with_images(self, mock_settings):
         """Test chunking of large documents with embedded images."""
@@ -1108,29 +1075,29 @@ class TestAdvancedMultimodalFeatures:
 
         documents = [large_doc] + image_docs
 
-        with patch("utils.document_loader.settings", mock_settings):
-            with patch(
-                "llama_index.core.node_parser.SentenceSplitter"
-            ) as mock_splitter:
-                mock_splitter_instance = MagicMock()
+        with (
+            patch("utils.document_loader.settings", mock_settings),
+            patch("llama_index.core.node_parser.SentenceSplitter") as mock_splitter,
+        ):
+            mock_splitter_instance = MagicMock()
 
-                # Mock chunking: large doc -> 6 chunks
-                chunks = []
-                for i in range(6):
-                    chunk = Document(
-                        text=f"Chunk {i + 1} of research paper content",
-                        metadata={
-                            **large_doc.metadata,
-                            "chunk_index": i,
-                            "total_chunks": 6,
-                        },
-                    )
-                    chunks.append(chunk)
+            # Mock chunking: large doc -> 6 chunks
+            chunks = []
+            for i in range(6):
+                chunk = Document(
+                    text=f"Chunk {i + 1} of research paper content",
+                    metadata={
+                        **large_doc.metadata,
+                        "chunk_index": i,
+                        "total_chunks": 6,
+                    },
+                )
+                chunks.append(chunk)
 
-                mock_splitter_instance.get_nodes_from_documents.return_value = chunks
-                mock_splitter.return_value = mock_splitter_instance
+            mock_splitter_instance.get_nodes_from_documents.return_value = chunks
+            mock_splitter.return_value = mock_splitter_instance
 
-                chunk_documents_structured(documents)
+            result = chunk_documents_structured(documents)
 
         # Verify chunking preserved images and metadata
         assert len(result) == 9  # 6 text chunks + 3 images
@@ -1173,8 +1140,12 @@ class TestAdvancedMultimodalFeatures:
                 # Simulate batch processing
                 return [
                     MagicMock(
-                        flatten=lambda: MagicMock(
-                            tolist=lambda: [0.1 + i * 0.1, 0.2 + i * 0.1, 0.3 + i * 0.1]
+                        flatten=lambda i=i: MagicMock(
+                            tolist=lambda i=i: [
+                                0.1 + i * 0.1,
+                                0.2 + i * 0.1,
+                                0.3 + i * 0.1,
+                            ]
                         )
                     )
                     for i in range(len(texts))
@@ -1184,8 +1155,12 @@ class TestAdvancedMultimodalFeatures:
                 # Simulate batch image processing
                 return [
                     MagicMock(
-                        flatten=lambda: MagicMock(
-                            tolist=lambda: [0.4 + i * 0.1, 0.5 + i * 0.1, 0.6 + i * 0.1]
+                        flatten=lambda i=i: MagicMock(
+                            tolist=lambda i=i: [
+                                0.4 + i * 0.1,
+                                0.5 + i * 0.1,
+                                0.6 + i * 0.1,
+                            ]
                         )
                     )
                     for i in range(len(image_paths))
@@ -1195,20 +1170,18 @@ class TestAdvancedMultimodalFeatures:
             mock_model.embed_image = mock_embed_image
             mock_manager.return_value = mock_model
 
-            with patch(
-                "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
+            with (
+                patch("utils.document_loader.tempfile.gettempdir", return_value="/tmp"),
+                patch("builtins.open", create=True),
+                patch("utils.document_loader.os.unlink"),
             ):
-                with (
-                    patch("builtins.open", create=True),
-                    patch("utils.document_loader.os.unlink"),
-                ):
-                    # Process multiple documents concurrently (simulated)
-                    results = []
-                    for text in batch_texts:
-                        create_native_multimodal_embeddings(
-                            text, sample_images_data
-                        )
-                        results.append(result)
+                # Process multiple documents concurrently (simulated)
+                results = []
+                for text in batch_texts:
+                    result = create_native_multimodal_embeddings(
+                        text, sample_images_data
+                    )
+                    results.append(result)
 
             # Verify all documents processed successfully
             assert len(results) == 3
@@ -1250,23 +1223,22 @@ class TestAdvancedMultimodalFeatures:
 
             mock_manager.return_value = mock_model
 
-            with patch(
-                "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
+            with (
+                patch("utils.document_loader.tempfile.gettempdir", return_value="/tmp"),
+                patch("builtins.open", create=True),
+                patch("utils.document_loader.os.unlink"),
             ):
-                with (
-                    patch("builtins.open", create=True),
-                    patch("utils.document_loader.os.unlink"),
-                ):
-                    create_native_multimodal_embeddings(
-                        text_query, sample_images_data
-                    )
+                result = create_native_multimodal_embeddings(
+                    text_query, sample_images_data
+                )
 
             # Verify cross-modal compatibility
             text_emb = result["text_embedding"]
             img_embs = [img["embedding"] for img in result["image_embeddings"]]
 
-            # Text and image embeddings should be in similar ranges for cross-modal retrieval
-            assert len(text_emb) == len(img_embs[0])  # Same dimensionality
+            # Text and image embeddings for cross-modal retrieval
+            # Check embedding dimensionality
+            assert len(text_emb) == len(img_embs[0])
 
             # Verify embeddings are normalized/compatible for similarity search
             for img_emb in img_embs:
@@ -1281,48 +1253,44 @@ class TestIntegrationScenarios:
     def test_end_to_end_pdf_processing(self, sample_pdf_path, mock_settings):
         """Test end-to-end PDF processing with multimodal support."""
         # This test would require actual file processing, so we'll mock the components
-        with patch("utils.document_loader.extract_images_from_pdf") as mock_extract:
-            with patch(
+        with (
+            patch("utils.document_loader.extract_images_from_pdf") as mock_extract,
+            patch(
                 "utils.document_loader.create_native_multimodal_embeddings"
-            ) as mock_embed:
-                with patch("utils.document_loader.LlamaParse") as mock_parse:
-                    with patch(
-                        "utils.document_loader.SimpleDirectoryReader"
-                    ) as mock_reader:
-                        # Mock the full pipeline
-                        mock_extract.return_value = [
-                            {"image_data": "base64_data", "page_number": 1}
-                        ]
-                        mock_embed.return_value = {
-                            "text_embedding": [0.1, 0.2],
-                            "provider_used": "test",
-                        }
+            ) as mock_embed,
+            patch("utils.document_loader.LlamaParse") as mock_parse,
+            patch("utils.document_loader.SimpleDirectoryReader") as mock_reader,
+        ):
+            # Mock the full pipeline
+            mock_extract.return_value = [
+                {"image_data": "base64_data", "page_number": 1}
+            ]
+            mock_embed.return_value = {
+                "text_embedding": [0.1, 0.2],
+                "provider_used": "test",
+            }
 
-                        mock_parser = MagicMock()
-                        mock_parse.return_value = mock_parser
+            mock_parser = MagicMock()
+            mock_parse.return_value = mock_parser
 
-                        mock_reader_instance = MagicMock()
-                        mock_reader_instance.load_data.return_value = [
-                            Document(text="Test content", metadata={})
-                        ]
-                        mock_reader.return_value = mock_reader_instance
+            mock_reader_instance = MagicMock()
+            mock_reader_instance.load_data.return_value = [
+                Document(text="Test content", metadata={})
+            ]
+            mock_reader.return_value = mock_reader_instance
 
-                        # Create mock uploaded file
-                        mock_file = MagicMock()
-                        mock_file.name = "test.pdf"
-                        mock_file.getvalue.return_value = Path(
-                            sample_pdf_path
-                        ).read_bytes()
+            # Create mock uploaded file
+            mock_file = MagicMock()
+            mock_file.name = "test.pdf"
+            mock_file.getvalue.return_value = Path(sample_pdf_path).read_bytes()
 
-                        with patch("utils.document_loader.settings", mock_settings):
-                            load_documents_llama(
-                                [mock_file], enable_multimodal=True
-                            )
+            with patch("utils.document_loader.settings", mock_settings):
+                result = load_documents_llama([mock_file], enable_multimodal=True)
 
-                            # Verify full pipeline was executed
-                            assert len(result) == 1
-                            assert result[0].metadata["has_images"] is True
-                            assert "multimodal_embeddings" in result[0].metadata
+                # Verify full pipeline was executed
+                assert len(result) == 1
+                assert result[0].metadata["has_images"] is True
+                assert "multimodal_embeddings" in result[0].metadata
 
     def test_multimodal_embedding_pipeline(self, sample_images_data):
         """Test the complete multimodal embedding pipeline."""
@@ -1342,25 +1310,23 @@ class TestIntegrationScenarios:
             )
             mock_manager.return_value = mock_model
 
-            with patch(
-                "utils.document_loader.tempfile.gettempdir", return_value="/tmp"
+            with (
+                patch("utils.document_loader.tempfile.gettempdir", return_value="/tmp"),
+                patch("builtins.open", create=True),
+                patch("utils.document_loader.os.unlink"),
             ):
-                with (
-                    patch("builtins.open", create=True),
-                    patch("utils.document_loader.os.unlink"),
-                ):
-                    create_native_multimodal_embeddings(
-                        "Test text", sample_images_data
-                    )
+                result = create_native_multimodal_embeddings(
+                    "Test text", sample_images_data
+                )
 
-                    # Verify complete embedding structure
-                    assert result["provider_used"] == "fastembed_native_multimodal"
-                    assert len(result["image_embeddings"]) == len(sample_images_data)
-                    assert result["text_embedding"] == [0.1, 0.2, 0.3]
-                    assert result["combined_embedding"] is not None
+                # Verify complete embedding structure
+                assert result["provider_used"] == "fastembed_native_multimodal"
+                assert len(result["image_embeddings"]) == len(sample_images_data)
+                assert result["text_embedding"] == [0.1, 0.2, 0.3]
+                assert result["combined_embedding"] is not None
 
     def test_comprehensive_multimodal_document_pipeline(self, tmp_path, mock_settings):
-        """Test complete pipeline from Unstructured parsing to ready-for-indexing documents."""
+        """Test complete pipeline from parsing to indexing-ready documents."""
         from utils.document_loader import load_documents_unstructured
 
         test_file = tmp_path / "comprehensive_test.pdf"
@@ -1381,7 +1347,10 @@ class TestIntegrationScenarios:
             # Abstract with images
             abstract = MagicMock()
             abstract.category = "NarrativeText"
-            abstract.__str__.return_value = "This study presents a comprehensive evaluation of multimodal AI systems."
+            abstract.__str__.return_value = (
+                "This study presents a comprehensive "
+                "evaluation of multimodal AI systems."
+            )
             abstract.metadata.page_number = 1
             abstract.metadata.filename = "comprehensive_test.pdf"
             elements.append(abstract)
@@ -1408,20 +1377,24 @@ class TestIntegrationScenarios:
             for i in range(2):
                 table = MagicMock()
                 table.category = "Table"
-                table.__str__.return_value = f"| Metric | Value {i + 1} |\n| Accuracy | 9{i}.{i}% |\n| Precision | 8{i}.{i}% |"
+                table.__str__.return_value = (
+                    f"| Metric | Value {i + 1} |\n"
+                    f"| Accuracy | 9{i}.{i}% |\n"
+                    f"| Precision | 8{i}.{i}% |"
+                )
                 table.metadata.page_number = i + 5
                 table.metadata.filename = "comprehensive_test.pdf"
                 elements.append(table)
 
             mock_partition.return_value = elements
 
-            with patch("utils.document_loader.settings", mock_settings):
-                with patch(
-                    "utils.document_loader.chunk_documents_structured"
-                ) as mock_chunk:
-                    mock_chunk.side_effect = lambda x: x
+            with (
+                patch("utils.document_loader.settings", mock_settings),
+                patch("utils.document_loader.chunk_documents_structured") as mock_chunk,
+            ):
+                mock_chunk.side_effect = lambda x: x
 
-                    load_documents_unstructured(str(test_file))
+                result = load_documents_unstructured(str(test_file))
 
             # Verify comprehensive processing
             assert (

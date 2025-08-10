@@ -6,6 +6,7 @@ improvements and proper error handling.
 """
 
 import asyncio
+import contextlib
 import time
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -20,7 +21,7 @@ from utils.document_loader import (
 
 # Import the functions we want to test
 from utils.index_builder import (
-    create_index_async_optimized,
+    create_index_async,
     generate_dense_embeddings_async,
     generate_sparse_embeddings_async,
 )
@@ -48,7 +49,7 @@ class TestAsyncPerformanceOptimizations:
 
             # Test parallel embedding generation
             start_time = time.perf_counter()
-            await generate_dense_embeddings_async(mock_docs, use_gpu=False)
+            result = await generate_dense_embeddings_async(mock_docs, use_gpu=False)
             end_time = time.perf_counter()
 
             # Verify results
@@ -78,7 +79,7 @@ class TestAsyncPerformanceOptimizations:
             )
 
             # Test sparse embedding generation with failure
-            await generate_sparse_embeddings_async(mock_docs, use_gpu=False)
+            result = await generate_sparse_embeddings_async(mock_docs, use_gpu=False)
 
             # Should return None on failure
             assert result is None
@@ -127,11 +128,9 @@ class TestAsyncPerformanceOptimizations:
 
                 # This should block since pool is at max capacity
                 # We'll use asyncio.wait_for to prevent hanging
-                try:
+                with contextlib.suppress(TimeoutError):
                     client3 = await asyncio.wait_for(pool.acquire(), timeout=0.1)
-                except TimeoutError:
                     # Expected behavior - should block when pool is full
-                    pass
 
             # Release one client to make room
             await pool.release(client1)
@@ -163,7 +162,7 @@ class TestAsyncPerformanceOptimizations:
             raise ValueError("Test error")
 
         # Test successful operation monitoring
-        await monitor.measure_async_operation("test_op", sample_operation)
+        result = await monitor.measure_async_operation("test_op", sample_operation)
         assert result == "success"
 
         # Test failing operation monitoring
@@ -189,7 +188,7 @@ class TestAsyncPerformanceOptimizations:
             return "completed"
 
         with patch("utils.utils.logging") as mock_logging:
-            await timed_function()
+            result = await timed_function()
 
             assert result == "completed"
             # Verify logging was called with timing information
@@ -204,7 +203,7 @@ class TestAsyncPerformanceOptimizations:
         file_paths = ["/fake/path1.txt", "/fake/path2.txt", "/fake/path3.txt"]
 
         # Mock load_documents_unstructured
-        mock_docs = [Document(text=f"Content of document {i}") for i in range(3)]
+        [Document(text=f"Content of document {i}") for i in range(3)]
 
         with patch("utils.document_loader.load_documents_unstructured") as mock_loader:
             mock_loader.side_effect = lambda path: [
@@ -345,8 +344,8 @@ class TestAsyncPerformanceOptimizations:
                                     mock_hybrid_retriever = Mock()
                                     mock_retriever.return_value = mock_hybrid_retriever
 
-                                    # Test optimized index creation
-                                    await create_index_async_optimized(
+                                    # Test async index creation
+                                    result = await create_index_async(
                                         documents, use_gpu=False
                                     )
 
@@ -381,7 +380,7 @@ class TestAsyncErrorHandling:
             mock_get_embed.return_value = mock_embed_model
 
             # Test with partial failures
-            await generate_dense_embeddings_async(mock_docs, use_gpu=False)
+            result = await generate_dense_embeddings_async(mock_docs, use_gpu=False)
 
             # Should handle partial failures with fallback embeddings
             assert len(result) == 9  # 3 batches * 3 docs each

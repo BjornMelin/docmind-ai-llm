@@ -107,30 +107,30 @@ async def test_create_index_async_resource_management():
         patch("utils.index_builder.managed_async_qdrant_client") as mock_context,
         patch("utils.index_builder.setup_hybrid_qdrant_async") as mock_setup,
         patch("utils.index_builder.VectorStoreIndex.from_documents") as mock_index,
+        patch("utils.index_builder.ensure_spacy_model"),
     ):
-        with patch("utils.index_builder.ensure_spacy_model"):
-            # Mock the async context manager
-            mock_client = AsyncMock()
-            mock_context.return_value.__aenter__.return_value = mock_client
-            mock_context.return_value.__aexit__.return_value = None
+        # Mock the async context manager
+        mock_client = AsyncMock()
+        mock_context.return_value.__aenter__.return_value = mock_client
+        mock_context.return_value.__aexit__.return_value = None
 
-            # Mock other dependencies
-            mock_setup.return_value = MagicMock()
-            mock_index.return_value = MagicMock()
+        # Mock other dependencies
+        mock_setup.return_value = MagicMock()
+        mock_index.return_value = MagicMock()
 
-            # Test the function
-            docs = [Document(text="test document")]
-            await create_index_async(docs, use_gpu=False)
+        # Test the function
+        docs = [Document(text="test document")]
+        await create_index_async(docs, use_gpu=False)
 
-            # Verify context manager was used
-            mock_context.assert_called_once()
-            mock_context.return_value.__aenter__.assert_called_once()
-            mock_context.return_value.__aexit__.assert_called_once()
+        # Verify context manager was used
+        mock_context.assert_called_once()
+        mock_context.return_value.__aenter__.assert_called_once()
+        result = mock_context.return_value.__aexit__.assert_called_once()
 
-            # Verify result structure
-            assert "vector" in result
-            assert "kg" in result
-            assert "retriever" in result
+        # Verify result structure
+        assert "vector" in result
+        assert "kg" in result
+        assert "retriever" in result
 
 
 def test_extract_images_from_pdf_resource_management():
@@ -151,7 +151,7 @@ def test_extract_images_from_pdf_resource_management():
             mock_fitz_open.return_value = mock_doc
 
             # Test the function
-            extract_images_from_pdf(tmp_path)
+            result = extract_images_from_pdf(tmp_path)
 
             # Verify context manager was used
             mock_fitz_open.assert_called_once_with(tmp_path)
@@ -172,7 +172,7 @@ def test_extract_images_from_pdf_file_not_found():
     from utils.document_loader import extract_images_from_pdf
 
     # Test with non-existent file
-    extract_images_from_pdf("/nonexistent/file.pdf")
+    result = extract_images_from_pdf("/nonexistent/file.pdf")
 
     # Should return empty list, not crash
     assert result == []
@@ -250,10 +250,10 @@ def test_load_documents_llama_temp_file_cleanup():
         ]
 
         # Test the function
-        load_documents_llama([mock_file])
+        result = load_documents_llama([mock_file])
 
         # Verify temporary file cleanup was called
-        mock_remove.assert_called()
+        result = mock_remove.assert_called()
         assert len(result) > 0
 
 

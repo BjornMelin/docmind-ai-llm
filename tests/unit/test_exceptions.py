@@ -21,7 +21,8 @@ sys.modules["utils.logging_config"].logger = logger_mock
 # Add utils directory to path for direct import
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "utils"))
 
-from exceptions import (
+# Import must be after sys.path modifications
+from exceptions import (  # noqa: E402
     AgentError,
     ConfigurationError,
     CriticalError,
@@ -94,7 +95,7 @@ class TestDocMindError:
             operation="test_op",
         )
 
-        error.to_dict()
+        result = error.to_dict()
 
         # The message should be "Test error" but __str__ includes operation prefix
         assert "Test error" in str(error)
@@ -176,7 +177,7 @@ class TestHelperFunctions:
         """Test handle_embedding_error helper function."""
         original_error = RuntimeError("CUDA memory error")
 
-        handle_embedding_error(
+        result = handle_embedding_error(
             original_error, operation="model_loading", model="bge-large", gpu_memory=8
         )
 
@@ -191,7 +192,7 @@ class TestHelperFunctions:
         """Test handle_embedding_error with default operation."""
         original_error = ValueError("Invalid input")
 
-        handle_embedding_error(original_error)
+        result = handle_embedding_error(original_error)
 
         assert isinstance(result, EmbeddingError)
         assert result.operation == "embedding_generation"
@@ -200,7 +201,7 @@ class TestHelperFunctions:
         """Test handle_index_error helper function."""
         original_error = ConnectionError("Qdrant connection failed")
 
-        handle_index_error(
+        result = handle_index_error(
             original_error,
             operation="vector_store_creation",
             doc_count=1000,
@@ -217,7 +218,7 @@ class TestHelperFunctions:
         """Test handle_document_error helper function."""
         original_error = FileNotFoundError("Document not found")
 
-        handle_document_error(
+        result = handle_document_error(
             original_error,
             operation="pdf_parsing",
             file_path="/docs/missing.pdf",
@@ -236,24 +237,30 @@ class TestExceptionChaining:
 
     def test_exception_chaining_preserves_traceback(self):
         """Test that exception chaining preserves original traceback."""
-        try:
-            # Create nested exception scenario
+
+        # Helper function to create the nested exception
+        def create_nested_exception():
             try:
                 raise ValueError("Original error")
             except ValueError as e:
                 raise EmbeddingError("Wrapper error", original_error=e) from e
-        except EmbeddingError as wrapped:
-            assert wrapped.original_error is not None
-            assert isinstance(wrapped.original_error, ValueError)
-            assert str(wrapped.original_error) == "Original error"
-            assert wrapped.__cause__ is wrapped.original_error
+
+        with pytest.raises(EmbeddingError) as exc_info:
+            create_nested_exception()
+
+        wrapped = exc_info.value
+        assert wrapped.original_error is not None
+        assert isinstance(wrapped.original_error, ValueError)
+        assert str(wrapped.original_error) == "Original error"
+        assert wrapped.__cause__ is wrapped.original_error
 
     def test_nested_exception_context_preservation(self):
         """Test that nested exceptions preserve all context."""
         original_context = {"level": "deep", "function": "nested"}
         wrapper_context = {"level": "surface", "operation": "wrapper"}
 
-        try:
+        # Helper function to create the deeply nested exception
+        def create_deeply_nested_exception():
             try:
                 raise RuntimeError("Deep error")
             except RuntimeError as e:
@@ -262,13 +269,17 @@ class TestExceptionChaining:
                 )
                 raise IndexCreationError(
                     "Outer wrapper", context=wrapper_context, original_error=inner
-                )
-        except IndexCreationError as final:
-            # Final exception should have its own context
-            assert final.context == wrapper_context
-            # But should preserve reference to original
-            assert isinstance(final.original_error, EmbeddingError)
-            assert final.original_error.context == original_context
+                ) from inner
+
+        with pytest.raises(IndexCreationError) as exc_info:
+            create_deeply_nested_exception()
+
+        final = exc_info.value
+        # Final exception should have its own context
+        assert final.context == wrapper_context
+        # But should preserve reference to original
+        assert isinstance(final.original_error, EmbeddingError)
+        assert final.original_error.context == original_context
 
 
 class TestExceptionEdgeCases:

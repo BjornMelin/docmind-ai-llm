@@ -94,7 +94,7 @@ class TestEmbeddingFactory:
         mock_fastembed.return_value = mock_model
 
         # Clear cache before test
-        EmbeddingFactory.clear_cache()
+        result = EmbeddingFactory.clear_cache()
 
         EmbeddingFactory.create_dense_embedding(use_gpu=False)
 
@@ -141,7 +141,7 @@ class TestEmbeddingFactory:
         mock_torch_compile.return_value = mock_compiled_model
 
         # Clear cache before test
-        EmbeddingFactory.clear_cache()
+        result = EmbeddingFactory.clear_cache()
 
         # Mock torch.compile availability
         with patch("hasattr", return_value=True):
@@ -181,7 +181,7 @@ class TestEmbeddingFactory:
         mock_torch_compile.side_effect = RuntimeError("Compile failed")
 
         # Clear cache before test
-        EmbeddingFactory.clear_cache()
+        result = EmbeddingFactory.clear_cache()
 
         with patch("hasattr", return_value=True):
             EmbeddingFactory.create_dense_embedding(use_gpu=True)
@@ -210,7 +210,7 @@ class TestEmbeddingFactory:
         mock_sparse.return_value = mock_model
 
         # Clear cache before test
-        EmbeddingFactory.clear_cache()
+        result = EmbeddingFactory.clear_cache()
 
         EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
@@ -232,7 +232,7 @@ class TestEmbeddingFactory:
         mock_settings.enable_sparse_embeddings = False
 
         # Clear cache before test
-        EmbeddingFactory.clear_cache()
+        result = EmbeddingFactory.clear_cache()
 
         EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
@@ -256,7 +256,7 @@ class TestEmbeddingFactory:
         mock_sparse.side_effect = RuntimeError("Model loading failed")
 
         # Clear cache before test
-        EmbeddingFactory.clear_cache()
+        result = EmbeddingFactory.clear_cache()
 
         EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
@@ -280,7 +280,7 @@ class TestEmbeddingFactory:
         mock_model = MagicMock()
         mock_hf.return_value = mock_model
 
-        EmbeddingFactory.create_multimodal_embedding(use_gpu=False)
+        result = EmbeddingFactory.create_multimodal_embedding(use_gpu=False)
 
         assert result == mock_model
         mock_hf.assert_called_once_with(
@@ -309,7 +309,7 @@ class TestEmbeddingFactory:
         mock_model = MagicMock()
         mock_hf.return_value = mock_model
 
-        EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
+        result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
 
         assert result == mock_model
         mock_hf.assert_called_once_with(
@@ -343,7 +343,7 @@ class TestEmbeddingFactory:
         with patch(
             "transformers.BitsAndBytesConfig", return_value=mock_quantization_config
         ):
-            EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
+            result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
 
         assert result == mock_model
 
@@ -371,7 +371,7 @@ class TestEmbeddingFactory:
 
         # Mock ImportError for transformers
         with patch("transformers.BitsAndBytesConfig", side_effect=ImportError):
-            EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
+            result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
 
         assert result == mock_model
         mock_logging.warning.assert_called_with(
@@ -661,7 +661,7 @@ class TestEmbeddingFactory:
             # The cache maxsize is 2, so create 3 different parameter combinations
             # This should cause cache eviction
             model1 = EmbeddingFactory.create_dense_embedding(use_gpu=False)
-            model2 = EmbeddingFactory.create_dense_embedding(use_gpu=True)
+            EmbeddingFactory.create_dense_embedding(use_gpu=True)
 
             # Access first model again (should be cached)
             model1_again = EmbeddingFactory.create_dense_embedding(use_gpu=False)

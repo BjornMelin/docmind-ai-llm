@@ -306,7 +306,7 @@ def test_ensure_spacy_model_already_loaded(mock_spacy_load):
     mock_spacy_load.return_value = mock_nlp
 
     with patch("utils.utils.logging.info") as mock_log_info:
-        ensure_spacy_model("en_core_web_sm")
+        result = ensure_spacy_model("en_core_web_sm")
 
         assert result == mock_nlp
         mock_spacy_load.assert_called_once_with("en_core_web_sm")
@@ -332,7 +332,7 @@ def test_ensure_spacy_model_needs_download(mock_subprocess, mock_spacy_load):
     mock_subprocess.return_value = MagicMock(returncode=0)
 
     with patch("utils.utils.logging.info") as mock_log_info:
-        ensure_spacy_model("en_core_web_sm")
+        result = ensure_spacy_model("en_core_web_sm")
 
         assert result == mock_nlp
 
@@ -408,7 +408,7 @@ def test_ensure_spacy_model_different_models(mock_spacy_load, model_name, expect
     mock_nlp = MagicMock()
     mock_spacy_load.return_value = mock_nlp
 
-    ensure_spacy_model(model_name)
+    result = ensure_spacy_model(model_name)
 
     assert result == mock_nlp
     mock_spacy_load.assert_called_once_with(expected)

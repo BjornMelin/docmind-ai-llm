@@ -71,7 +71,8 @@ class TestSparseEmbeddings:
             # Test encoding with SPLADE++ specific features
             texts = [
                 "Hybrid retrieval with SPLADE++ sparse embeddings",
-                "Dense BGE-Large semantic understanding combined with sparse term expansion",
+                "Dense BGE-Large semantic understanding "
+                "combined with sparse term expansion",
             ]
             embeddings = mock_sparse_embedding_model.encode(texts)
 
@@ -137,7 +138,8 @@ class TestSparseEmbeddings:
         """Test SPLADE++ embedding properties and sparse structure."""
         texts = [
             "Short query",
-            "Much longer document with technical terminology and domain-specific concepts",
+            "Much longer document with technical terminology "
+            "and domain-specific concepts",
         ]
         embeddings = mock_sparse_embedding_model.encode(texts)
 
@@ -169,13 +171,12 @@ class TestSparseEmbeddings:
         """Test SPLADE++ GPU provider configuration."""
         with (
             patch("fastembed.SparseTextEmbedding") as mock_sparse,
-            patch("torch.cuda.is_available", return_value=True)
+            patch("torch.cuda.is_available", return_value=True),
         ):
-                # Should use GPU providers when available
-                expected_providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            # Should use GPU providers when available
 
-                # Mock call verification
-                mock_sparse.assert_not_called()  # Not called yet
+            # Mock call verification
+            mock_sparse.assert_not_called()  # Not called yet
 
     def test_splade_batch_processing(self, mock_sparse_embedding_model):
         """Test SPLADE++ batch processing capabilities."""
@@ -231,7 +232,7 @@ class TestDenseEmbeddings:
             assert len(doc_embeddings) == len(texts)
             for i, embedding in enumerate(doc_embeddings):
                 assert len(embedding) == expected_dim
-                assert all(isinstance(val, (int, float)) for val in embedding)
+                assert all(isinstance(val, int | float) for val in embedding)
                 # Verify embeddings are different for different content
                 if i > 0:
                     assert embedding != doc_embeddings[i - 1]
@@ -251,19 +252,19 @@ class TestGPUOptimization:
         """Test GPU acceleration detection and configuration."""
         with (
             patch("torch.cuda.is_available", return_value=True),
-            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
         ):
-                mock_model = MagicMock()
-                mock_fastembed.return_value = mock_model
+            mock_model = MagicMock()
+            mock_fastembed.return_value = mock_model
 
-                # Test GPU optimization with torch.compile
-                model = get_embed_model()
+            # Test GPU optimization with torch.compile
+            model = get_embed_model()
 
-                # Verify GPU optimization was attempted
-                assert model is not None
-                # Check that GPU providers were configured
-                call_kwargs = mock_fastembed.call_args[1]
-                assert "CUDAExecutionProvider" in call_kwargs.get("providers", [])
+            # Verify GPU optimization was attempted
+            assert model is not None
+            # Check that GPU providers were configured
+            call_kwargs = mock_fastembed.call_args[1]
+            assert "CUDAExecutionProvider" in call_kwargs.get("providers", [])
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU not available")
     def test_torch_compile_optimization(self, test_settings):
@@ -271,18 +272,18 @@ class TestGPUOptimization:
         with (
             patch("torch.cuda.is_available", return_value=True),
             patch("torch.compile") as mock_compile,
-            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed
+            patch("utils.utils.FastEmbedEmbedding") as mock_fastembed,
         ):
-                    mock_model = MagicMock()
-                    mock_fastembed.return_value = mock_model
-                    mock_compile.return_value = mock_model
+            mock_model = MagicMock()
+            mock_fastembed.return_value = mock_model
+            mock_compile.return_value = mock_model
 
-                    # Test torch.compile optimization
-                    model = get_embed_model()
+            # Test torch.compile optimization
+            model = get_embed_model()
 
-                    # Verify torch.compile was called for GPU optimization
-                    mock_compile.assert_called()
-                    assert model is not None
+            # Verify torch.compile was called for GPU optimization
+            mock_compile.assert_called()
+            assert model is not None
 
 
 class TestMultimodalEmbeddings:

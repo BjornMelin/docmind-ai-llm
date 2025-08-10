@@ -32,45 +32,45 @@ class TestToolFactoryBasicMethods:
         tool_name = "test_tool"
         tool_description = "Test tool description"
 
-        tool = ToolFactory.create_query_tool(
+        result = ToolFactory.create_query_tool(
             mock_query_engine, tool_name, tool_description
         )
 
-        assert isinstance(tool, QueryEngineTool)
-        assert tool.query_engine == mock_query_engine
-        assert tool.metadata.name == tool_name
-        assert tool.metadata.description == tool_description
-        assert tool.metadata.return_direct is False
+        assert isinstance(result, QueryEngineTool)
+        assert result.query_engine == mock_query_engine
+        assert result.metadata.name == tool_name
+        assert result.metadata.description == tool_description
+        assert result.metadata.return_direct is False
 
     def test_create_query_tool_with_empty_name(self):
         """Test query tool creation with empty name."""
         mock_query_engine = MagicMock()
 
-        tool = ToolFactory.create_query_tool(mock_query_engine, "", "Description")
+        result = ToolFactory.create_query_tool(mock_query_engine, "", "Description")
 
         # Should still create tool even with empty name
-        assert isinstance(tool, QueryEngineTool)
-        assert tool.metadata.name == ""
+        assert isinstance(result, QueryEngineTool)
+        assert result.metadata.name == ""
 
     def test_create_query_tool_with_none_query_engine(self):
         """Test query tool creation with None query engine."""
-        tool = ToolFactory.create_query_tool(None, "test_tool", "Description")
+        result = ToolFactory.create_query_tool(None, "test_tool", "Description")
 
         # Should create tool but with None query engine
-        assert isinstance(tool, QueryEngineTool)
-        assert tool.query_engine is None
+        assert isinstance(result, QueryEngineTool)
+        assert result.query_engine is None
 
     def test_create_query_tool_with_long_description(self):
         """Test query tool creation with very long description."""
         mock_query_engine = MagicMock()
         long_description = "Very long description. " * 100
 
-        tool = ToolFactory.create_query_tool(
+        result = ToolFactory.create_query_tool(
             mock_query_engine, "test_tool", long_description
         )
 
         # Should handle long descriptions without issue
-        assert tool.metadata.description == long_description
+        assert result.metadata.description == long_description
 
 
 class TestToolFactoryReranker:
@@ -89,7 +89,7 @@ class TestToolFactoryReranker:
             mock_reranker = MagicMock()
             mock_colbert_class.return_value = mock_reranker
 
-            ToolFactory._create_reranker()
+            result = ToolFactory._create_reranker()
 
             assert result == mock_reranker
             mock_colbert_class.assert_called_once_with(
@@ -101,7 +101,7 @@ class TestToolFactoryReranker:
         test_settings = AppSettings(reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
-            ToolFactory._create_reranker()
+            result = ToolFactory._create_reranker()
 
             assert result is None
 
@@ -110,7 +110,7 @@ class TestToolFactoryReranker:
         test_settings = AppSettings(reranker_model="")
 
         with patch("agents.tool_factory.settings", test_settings):
-            ToolFactory._create_reranker()
+            result = ToolFactory._create_reranker()
 
             assert result is None
 
@@ -146,7 +146,7 @@ class TestToolFactoryReranker:
             ),
             patch("agents.tool_factory.logging.warning") as mock_warning,
         ):
-            ToolFactory._create_reranker()
+            result = ToolFactory._create_reranker()
 
             assert result is None
             mock_warning.assert_called_once()
@@ -165,7 +165,7 @@ class TestToolFactoryReranker:
             ),
             patch("agents.tool_factory.logging.warning") as mock_warning,
         ):
-            ToolFactory._create_reranker()
+            result = ToolFactory._create_reranker()
 
             assert result is None
             mock_warning.assert_called_once()
@@ -185,12 +185,12 @@ class TestToolFactoryVectorSearch:
         )
 
         with patch("agents.tool_factory.settings", test_settings):
-            ToolFactory.create_vector_search_tool(mock_index)
+            result = ToolFactory.create_vector_search_tool(mock_index)
 
-            assert isinstance(tool, QueryEngineTool)
-            assert tool.query_engine == mock_query_engine
-            assert tool.metadata.name == "vector_search"
-            assert "semantic similarity search" in tool.metadata.description.lower()
+            assert isinstance(result, QueryEngineTool)
+            assert result.query_engine == mock_query_engine
+            assert result.metadata.name == "vector_search"
+            assert "semantic similarity search" in result.metadata.description.lower()
 
             # Verify query engine configuration
             mock_index.as_query_engine.assert_called_once_with(
@@ -217,9 +217,9 @@ class TestToolFactoryVectorSearch:
             mock_reranker = MagicMock()
             mock_colbert_class.return_value = mock_reranker
 
-            ToolFactory.create_vector_search_tool(mock_index)
+            result = ToolFactory.create_vector_search_tool(mock_index)
 
-            assert isinstance(tool, QueryEngineTool)
+            assert isinstance(result, QueryEngineTool)
 
             # Verify reranker was created and used
             mock_colbert_class.assert_called_once()
@@ -267,13 +267,13 @@ class TestToolFactoryKnowledgeGraph:
         test_settings = AppSettings(debug_mode=False, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
-            ToolFactory.create_kg_search_tool(mock_kg_index)
+            result = ToolFactory.create_kg_search_tool(mock_kg_index)
 
-            assert isinstance(tool, QueryEngineTool)
-            assert tool.query_engine == mock_query_engine
-            assert tool.metadata.name == "knowledge_graph"
-            assert "knowledge graph search" in tool.metadata.description.lower()
-            assert "entity" in tool.metadata.description.lower()
+            assert isinstance(result, QueryEngineTool)
+            assert result.query_engine == mock_query_engine
+            assert result.metadata.name == "knowledge_graph"
+            assert "knowledge graph search" in result.metadata.description.lower()
+            assert "entity" in result.metadata.description.lower()
 
             # Verify KG-specific configuration
             mock_kg_index.as_query_engine.assert_called_once_with(
@@ -312,20 +312,20 @@ class TestToolFactoryKnowledgeGraph:
 
     def test_create_kg_search_tool_none_index(self):
         """Test KG search tool creation with None index."""
-        ToolFactory.create_kg_search_tool(None)
+        result = ToolFactory.create_kg_search_tool(None)
 
         assert result is None
 
     def test_create_kg_search_tool_false_index(self):
         """Test KG search tool creation with falsy index."""
-        ToolFactory.create_kg_search_tool(False)
+        result = ToolFactory.create_kg_search_tool(False)
 
         assert result is None
 
     def test_create_kg_search_tool_empty_index(self):
         """Test KG search tool creation with empty object."""
         # Test with an empty dict or similar falsy object
-        ToolFactory.create_kg_search_tool({})
+        result = ToolFactory.create_kg_search_tool({})
 
         assert result is None
 
@@ -344,13 +344,13 @@ class TestToolFactoryHybridSearch:
             test_settings = AppSettings(reranker_model=None)
 
             with patch("agents.tool_factory.settings", test_settings):
-                ToolFactory.create_hybrid_search_tool(mock_retriever)
+                result = ToolFactory.create_hybrid_search_tool(mock_retriever)
 
-                assert isinstance(tool, QueryEngineTool)
-                assert tool.query_engine == mock_query_engine
-                assert tool.metadata.name == "hybrid_fusion_search"
-                assert "rrf" in tool.metadata.description.lower()
-                assert "reciprocal rank fusion" in tool.metadata.description.lower()
+                assert isinstance(result, QueryEngineTool)
+                assert result.query_engine == mock_query_engine
+                assert result.metadata.name == "hybrid_fusion_search"
+                assert "rrf" in result.metadata.description.lower()
+                assert "reciprocal rank fusion" in result.metadata.description.lower()
 
                 # Verify engine configuration
                 mock_engine_class.assert_called_once_with(
@@ -385,19 +385,19 @@ class TestToolFactoryHybridSearch:
 
     def test_create_hybrid_search_tool_none_retriever(self):
         """Test hybrid search tool creation with None retriever."""
-        ToolFactory.create_hybrid_search_tool(None)
+        result = ToolFactory.create_hybrid_search_tool(None)
 
         # Should still create tool with None retriever
-        assert isinstance(tool, QueryEngineTool)
+        assert isinstance(result, QueryEngineTool)
 
     def test_create_hybrid_search_tool_description_content(self):
         """Test that hybrid search tool has comprehensive description."""
         mock_retriever = MagicMock()
 
         with patch("agents.tool_factory.RetrieverQueryEngine"):
-            ToolFactory.create_hybrid_search_tool(mock_retriever)
+            result = ToolFactory.create_hybrid_search_tool(mock_retriever)
 
-            description = tool.metadata.description.lower()
+            description = result.metadata.description.lower()
             # Verify key concepts are mentioned in description
             assert "hybrid" in description
             assert "rrf" in description or "reciprocal rank fusion" in description
@@ -421,14 +421,14 @@ class TestToolFactoryHybridVector:
         )
 
         with patch("agents.tool_factory.settings", test_settings):
-            ToolFactory.create_hybrid_vector_tool(mock_index)
+            result = ToolFactory.create_hybrid_vector_tool(mock_index)
 
-            assert isinstance(tool, QueryEngineTool)
-            assert tool.query_engine == mock_query_engine
-            assert tool.metadata.name == "hybrid_vector_search"
-            assert "hybrid" in tool.metadata.description.lower()
-            assert "dense" in tool.metadata.description.lower()
-            assert "sparse" in tool.metadata.description.lower()
+            assert isinstance(result, QueryEngineTool)
+            assert result.query_engine == mock_query_engine
+            assert result.metadata.name == "hybrid_vector_search"
+            assert "hybrid" in result.metadata.description.lower()
+            assert "dense" in result.metadata.description.lower()
+            assert "sparse" in result.metadata.description.lower()
 
             # Verify configuration
             mock_index.as_query_engine.assert_called_once_with(
@@ -470,9 +470,9 @@ class TestToolFactoryHybridVector:
         mock_index.as_query_engine.return_value = MagicMock()
 
         with patch("agents.tool_factory.settings", AppSettings()):
-            ToolFactory.create_hybrid_vector_tool(mock_index)
+            result = ToolFactory.create_hybrid_vector_tool(mock_index)
 
-            description = tool.metadata.description.lower()
+            description = result.metadata.description.lower()
             assert "bge-large" in description
             assert "splade++" in description
             assert "colbert" in description
@@ -504,7 +504,7 @@ class TestToolFactoryFromIndexes:
             mock_vector.return_value = mock_vector_tool
 
             with patch("agents.tool_factory.logging") as mock_logging:
-                ToolFactory.create_tools_from_indexes(
+                result = ToolFactory.create_tools_from_indexes(
                     vector_index=mock_vector_index,
                     kg_index=mock_kg_index,
                     retriever=mock_retriever,
@@ -548,7 +548,7 @@ class TestToolFactoryFromIndexes:
             mock_hybrid_vector.return_value = mock_hybrid_vector_tool
             mock_vector.return_value = mock_vector_tool
 
-            ToolFactory.create_tools_from_indexes(
+            result = ToolFactory.create_tools_from_indexes(
                 vector_index=mock_vector_index, kg_index=None, retriever=None
             )
 
@@ -574,7 +574,7 @@ class TestToolFactoryFromIndexes:
     def test_create_tools_from_indexes_no_vector_index(self):
         """Test tool creation with no vector index (error case)."""
         with patch("agents.tool_factory.logging") as mock_logging:
-            ToolFactory.create_tools_from_indexes(
+            result = ToolFactory.create_tools_from_indexes(
                 vector_index=None, kg_index=MagicMock(), retriever=MagicMock()
             )
 
@@ -602,7 +602,7 @@ class TestToolFactoryFromIndexes:
             mock_hybrid_vector.return_value = mock_hybrid_vector_tool
             mock_vector.return_value = mock_vector_tool
 
-            ToolFactory.create_tools_from_indexes(
+            result = ToolFactory.create_tools_from_indexes(
                 vector_index=mock_vector_index,
                 kg_index=mock_kg_index,
                 retriever=None,
@@ -638,7 +638,7 @@ class TestToolFactoryFromIndexes:
                 ToolFactory, "create_vector_search_tool", return_value=mock_vector_tool
             ),
         ):
-            ToolFactory.create_tools_from_indexes(
+            result = ToolFactory.create_tools_from_indexes(
                 vector_index=mock_vector_index,
                 kg_index=mock_kg_index,
                 retriever=mock_retriever,
@@ -666,7 +666,7 @@ class TestToolFactoryBasicTools:
             mock_tools = [MagicMock(), MagicMock()]
             mock_create.return_value = mock_tools
 
-            ToolFactory.create_basic_tools(index_data)
+            result = ToolFactory.create_basic_tools(index_data)
 
             assert result == mock_tools
             mock_create.assert_called_once_with(
@@ -741,14 +741,14 @@ class TestToolFactoryEdgeCases:
         for settings in test_cases:
             with patch("agents.tool_factory.settings", settings):
                 # Test all tool creation methods don't crash
-                vector_tool = ToolFactory.create_vector_search_tool(mock_index)
-                assert isinstance(vector_tool, QueryEngineTool)
+                vector_result = ToolFactory.create_vector_search_tool(mock_index)
+                assert isinstance(vector_result, QueryEngineTool)
 
-                kg_tool = ToolFactory.create_kg_search_tool(mock_index)
-                assert isinstance(kg_tool, QueryEngineTool)
+                kg_result = ToolFactory.create_kg_search_tool(mock_index)
+                assert isinstance(kg_result, QueryEngineTool)
 
-                hybrid_vector_tool = ToolFactory.create_hybrid_vector_tool(mock_index)
-                assert isinstance(hybrid_vector_tool, QueryEngineTool)
+                hybrid_vector_result = ToolFactory.create_hybrid_vector_tool(mock_index)
+                assert isinstance(hybrid_vector_result, QueryEngineTool)
 
     def test_tool_metadata_consistency(self):
         """Test that all created tools have consistent metadata structure."""
@@ -872,7 +872,7 @@ class TestToolFactoryPerformanceScenarios:
             patch("agents.tool_factory.logging"),
         ):
             # Create many tool sets
-            for i in range(10):
+            for _i in range(10):
                 tools = ToolFactory.create_tools_from_indexes(
                     vector_index=mock_vector_index,
                     kg_index=mock_kg_index,
@@ -968,10 +968,10 @@ class TestToolFactoryIntegration:
                     with patch(
                         "agents.tool_factory.ColbertRerank", return_value=MagicMock()
                     ):
-                        tool = ToolFactory.create_vector_search_tool(mock_index)
+                        result = ToolFactory.create_vector_search_tool(mock_index)
                 else:
-                    tool = ToolFactory.create_vector_search_tool(mock_index)
+                    result = ToolFactory.create_vector_search_tool(mock_index)
 
                 # Should work with all configurations
-                assert isinstance(tool, QueryEngineTool)
-                assert tool.metadata.name == "vector_search"
+                assert isinstance(result, QueryEngineTool)
+                assert result.metadata.name == "vector_search"
