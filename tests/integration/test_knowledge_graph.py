@@ -206,7 +206,7 @@ class TestKnowledgeGraphIndex:
                             mock_vector_instance = MagicMock()
                             mock_vector_index.return_value = mock_vector_instance
 
-                            create_index(sample_docs, use_gpu=False)
+                            result = create_index(sample_docs, use_gpu=False)
 
                             # Verify KG index was created
                             assert "kg" in result
@@ -241,7 +241,7 @@ class TestKnowledgeGraphIndex:
                     mock_vector_instance = MagicMock()
                     mock_vector_index.return_value = mock_vector_instance
 
-                    create_index(sample_docs, use_gpu=False)
+                    result = create_index(sample_docs, use_gpu=False)
 
                     # Should still create vector index
                     assert "vector" in result
@@ -270,7 +270,7 @@ class TestKnowledgeGraphIndex:
                         mock_vector_instance = MagicMock()
                         mock_vector_index.return_value = mock_vector_instance
 
-                        create_index(sample_docs, use_gpu=False)
+                        result = create_index(sample_docs, use_gpu=False)
 
                         # Should still create vector index
                         assert "vector" in result
@@ -330,7 +330,7 @@ class TestKnowledgeGraphIndex:
                                             mock_client_instance
                                         )
 
-                                        await create_index_async(
+                                        result = await create_index_async(
                                             sample_docs, use_gpu=False
                                         )
 
@@ -381,7 +381,7 @@ class TestKnowledgeGraphIndex:
                                 mock_client_instance = AsyncMock()
                                 mock_async_client.return_value = mock_client_instance
 
-                                await create_index_async(
+                                result = await create_index_async(
                                     sample_docs, use_gpu=False
                                 )
 
@@ -846,7 +846,7 @@ class TestPerformanceAndEdgeCases:
                 mock_vector_instance = MagicMock()
                 mock_vector_index.return_value = mock_vector_instance
 
-                create_index([], use_gpu=False)
+                result = create_index([], use_gpu=False)
 
                 # Should still attempt to create indexes
                 assert "vector" in result
@@ -913,7 +913,7 @@ class TestPerformanceAndEdgeCases:
 
                     # Should complete within reasonable time
                     start_time = asyncio.get_event_loop().time()
-                    await create_index_async(sample_docs, use_gpu=False)
+                    result = await create_index_async(sample_docs, use_gpu=False)
                     end_time = asyncio.get_event_loop().time()
 
                     assert result is not None

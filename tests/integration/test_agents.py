@@ -61,7 +61,7 @@ class TestQueryComplexityAnalysis:
                 },
             }
 
-            analyze_query_complexity(query)
+            result = analyze_query_complexity(query)
 
             assert result["complexity"] == expected_complexity
             assert "reasoning" in result
@@ -97,7 +97,7 @@ class TestQueryComplexityAnalysis:
                     },
                 }
 
-                analyze_query_complexity(query)
+                result = analyze_query_complexity(query)
                 features = result["features"]
 
                 assert features["word_count"] > 0
@@ -126,7 +126,7 @@ class TestQueryComplexityAnalysis:
             def analyze_operation():
                 return analyze_query_complexity(test_query)
 
-            benchmark(analyze_operation)
+            result = benchmark(analyze_operation)
             assert result["complexity"] in ["simple", "moderate", "complex"]
 
     def test_query_complexity_edge_cases(self):
@@ -155,7 +155,7 @@ class TestQueryComplexityAnalysis:
                         "features": {"word_count": len(query.split())},
                     }
 
-                analyze_query_complexity(query)
+                result = analyze_query_complexity(query)
                 assert result["complexity"] in ["simple", "moderate", "complex"]
 
 
@@ -195,7 +195,7 @@ class TestAgentSystem:
 
             # Test async processing
             query = "What is hybrid search?"
-            await agent_system.arun(query)
+            result = await agent_system.arun(query)
 
             assert result == "Mock agent response"
             mock_agent.arun.assert_called_once_with(query)
@@ -262,7 +262,7 @@ class TestAgentSystem:
             mock_get_agent.return_value = mock_agent
 
             query = "Test query"
-            complexity_analyze_query_complexity(query)
+            complexity_result = analyze_query_complexity(query)
             agent_system = get_agent_system(settings=test_settings)
 
             assert complexity_result["complexity"] == query_complexity
@@ -294,7 +294,7 @@ class TestAgentToolIntegration:
             tools = mock_create_tools(index=mock_qdrant_client)
             search_tool = tools[0]
 
-            search_tool.func("test query")
+            result = search_tool.func("test query")
 
             assert result == "Search results"
             assert search_tool.name == "vector_search"
@@ -317,7 +317,7 @@ class TestAgentToolIntegration:
             tools = mock_create_tools(llm=mock_llm)
             analysis_tool = tools[0]
 
-            analysis_tool.func("Document content")
+            result = analysis_tool.func("Document content")
 
             assert result == "Analysis complete"
             assert analysis_tool.name == "document_analysis"
@@ -365,7 +365,7 @@ class TestAgentToolIntegration:
             def tool_operation():
                 return fast_tool.func("test input")
 
-            benchmark(tool_operation)
+            result = benchmark(tool_operation)
             assert result == "Fast result"
 
 
@@ -397,7 +397,7 @@ class TestMultiAgentWorkflows:
             agent_system = get_agent_system(settings=test_settings)
 
             # Test multi-agent workflow
-            await agent_system.arun("Complex multi-step query")
+            result = await agent_system.arun("Complex multi-step query")
 
             assert result == "Workflow completed"
 
@@ -422,11 +422,11 @@ class TestMultiAgentWorkflows:
             agent_system = get_agent_system(settings=test_settings)
 
             # Test agent communication
-            _ = agent_system.agents[0]
-            _ = agent_system.agents[1]
+            sent_agent1 = agent_system.agents[0]
+            received_agent2 = agent_system.agents[1]
 
-            sent_agent1.send_message("Test message")
-            received_agent2.receive_message("Test message")
+            sent_result = sent_agent1.send_message("Test message")
+            received_result = received_agent2.receive_message("Test message")
 
             assert sent_result == "Message sent"
             assert received_result == "Message received"
@@ -461,7 +461,7 @@ class TestMultiAgentWorkflows:
             agent_system = get_agent_system(settings=test_settings)
 
             # Test error recovery
-            agent_system.run("Test query")
+            result = agent_system.run("Test query")
             assert result == "Backup successful"
 
 

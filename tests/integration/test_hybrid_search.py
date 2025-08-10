@@ -121,7 +121,7 @@ class TestQdrantIntegration:
                     collection_name="test", query_vector=[0.1] * 1024, limit=10
                 )
 
-            benchmark(search_operation)
+            result = benchmark(search_operation)
             assert len(result) == 10
 
 
@@ -296,18 +296,18 @@ class TestRRFFusion:
 
         # Test with empty dense results
         sparse_only = [{"id": "doc1", "score": 0.8}]
-        rrf_fusion([], sparse_only)
+        result = rrf_fusion([], sparse_only)
         assert len(result) == 1
         assert result[0][0] == "doc1"
 
         # Test with empty sparse results
         dense_only = [{"id": "doc2", "score": 0.9}]
-        rrf_fusion(dense_only, [])
+        result = rrf_fusion(dense_only, [])
         assert len(result) == 1
         assert result[0][0] == "doc2"
 
         # Test with both empty (should return empty)
-        rrf_fusion([], [])
+        result = rrf_fusion([], [])
         assert len(result) == 0
 
     @pytest.mark.performance
@@ -339,7 +339,7 @@ class TestRRFFusion:
         def fusion_operation():
             return rrf_fusion(dense_results, sparse_results)
 
-        benchmark(fusion_operation)
+        result = benchmark(fusion_operation)
         assert len(result) == 2000  # Should combine all unique documents
 
 
@@ -439,7 +439,7 @@ class TestHybridFusionRetriever:
                 return retriever.retrieve(QueryBundle(query_str="test query"))
             return []
 
-        benchmark(retrieval_operation)
+        result = benchmark(retrieval_operation)
         assert len(result) > 0
 
     def test_hybrid_fusion_with_colbert_reranking(self):
@@ -502,7 +502,7 @@ class TestHybridFusionRetriever:
             ]
 
             # Should return fallback retriever
-            create_hybrid_retriever(mock_index)
+            result = create_hybrid_retriever(mock_index)
 
             # Verify fallback is used
             assert result is not None
@@ -692,7 +692,7 @@ class TestBGELargeIntegration:
         assert len(dense_embedding) == 1024, (
             "BGE-Large should produce 1024-dimensional embeddings"
         )
-        assert all(isinstance(val, (int, float)) for val in dense_embedding), (
+        assert all(isinstance(val, int | float) for val in dense_embedding), (
             "All values should be numeric"
         )
 
@@ -737,4 +737,5 @@ class TestBGELargeIntegration:
             # BGE-Large should capture semantic relationships
             # (We can't test actual similarity without real embeddings,
             #  but we verify the structure supports it)
-            assert query_emb is not None and doc_emb is not None
+            assert query_emb is not None
+            assert doc_emb is not None

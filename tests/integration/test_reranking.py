@@ -129,7 +129,7 @@ class TestColBERTReranking:
         def rerank_operation():
             return mock_reranker.rerank(query=query, documents=documents, top_k=50)
 
-        benchmark(rerank_operation)
+        result = benchmark(rerank_operation)
         assert len(result) == 50
 
     def test_reranking_consistency(self, mock_reranker):
@@ -318,11 +318,13 @@ class TestRerankingPerformanceMonitoring:
         def batch_rerank():
             results = []
             for query in queries:
-                mock_reranker.rerank(query=query, documents=documents, top_k=2)
-                results.extend(result)
+                rerank_result = mock_reranker.rerank(
+                    query=query, documents=documents, top_k=2
+                )
+                results.extend(rerank_result)
             return results
 
-        benchmark(batch_rerank)
+        result = benchmark(batch_rerank)
         assert len(result) == 20  # 10 queries * 2 results each
 
     def test_reranking_memory_efficiency(self, mock_reranker):

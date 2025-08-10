@@ -119,7 +119,7 @@ class TestHybridRetriever:
             ]
             mock_fusion.return_value = mock_fusion_retriever
 
-            create_hybrid_retriever(mock_vector_index)
+            result = create_hybrid_retriever(mock_vector_index)
 
             # Verify dense retriever creation
             dense_call = mock_retriever.call_args_list[0]
@@ -136,7 +136,7 @@ class TestHybridRetriever:
             assert sparse_call[1]["vector_store_query_mode"] == "sparse"
 
             # Verify fusion retriever creation
-            mock_fusion.assert_called_once()
+            result = mock_fusion.assert_called_once()
             fusion_args = mock_fusion.call_args[1]
             assert len(fusion_args["retrievers"]) == 2
             assert fusion_args["similarity_top_k"] == 5
@@ -162,7 +162,7 @@ class TestHybridRetriever:
                 patch("utils.index_builder.logging.error") as mock_log_error,
                 patch("utils.index_builder.logging.warning") as mock_log_warning,
             ):
-                create_hybrid_retriever(mock_vector_index)
+                result = create_hybrid_retriever(mock_vector_index)
 
                 # Verify error logging
                 mock_log_error.assert_called_once()
@@ -240,7 +240,7 @@ class TestIndexCreation:
             mock_storage_context = MagicMock()
             mock_storage.return_value = mock_storage_context
 
-            create_index(sample_documents, use_gpu=True)
+            result = create_index(sample_documents, use_gpu=True)
 
             # Verify GPU stream usage
             mock_stream.assert_called_once()
@@ -324,7 +324,7 @@ class TestIndexCreation:
         ):
             mock_storage.return_value = MagicMock()
 
-            create_index(sample_documents, use_gpu=False)
+            result = create_index(sample_documents, use_gpu=False)
 
             # Verify CPU-only providers
             dense_args = mock_dense_embed.call_args[1]
@@ -500,7 +500,7 @@ class TestAsyncIndexCreation:
             mock_index = MagicMock()
             mock_vector_index.return_value = mock_index
 
-            await create_index_async(sample_documents, use_gpu=False)
+            result = await create_index_async(sample_documents, use_gpu=False)
 
             # Verify warning was logged
             mock_log_warning.assert_called()
@@ -556,7 +556,7 @@ class TestMultimodalIndex:
             mock_stream.return_value = mock_stream_instance
             mock_storage.return_value = MagicMock()
 
-            create_multimodal_index(all_documents, use_gpu=True)
+            result = create_multimodal_index(all_documents, use_gpu=True)
 
             # Verify Jina v3 embedding model setup
             mock_hf_embedding.assert_called_once()
@@ -594,7 +594,7 @@ class TestMultimodalIndex:
             mock_index = MagicMock()
             mock_multimodal_index.return_value = mock_index
 
-            create_multimodal_index(sample_documents, use_gpu=False)
+            result = create_multimodal_index(sample_documents, use_gpu=False)
 
             # Verify CPU device configuration
             embed_args = mock_hf_embedding.call_args[1]
@@ -619,7 +619,7 @@ class TestMultimodalIndex:
             mock_fallback_result = {"vector": MagicMock()}
             mock_create_index.return_value = mock_fallback_result
 
-            create_multimodal_index(sample_documents, use_gpu=False)
+            result = create_multimodal_index(sample_documents, use_gpu=False)
 
             # Verify error and fallback messages
             mock_log_error.assert_called()
@@ -671,7 +671,7 @@ class TestMultimodalIndex:
             mock_stream_instance = MagicMock()
             mock_stream.return_value = mock_stream_instance
 
-            await create_multimodal_index_async(all_documents, use_gpu=True)
+            result = await create_multimodal_index_async(all_documents, use_gpu=True)
 
             # Verify async client was used and closed
             mock_async_client.assert_called_once()
@@ -697,7 +697,9 @@ class TestMultimodalIndex:
                 mock_fallback_result = MagicMock()
                 mock_create_multimodal.return_value = mock_fallback_result
 
-                await create_multimodal_index_async(sample_documents, use_gpu=False)
+                result = await create_multimodal_index_async(
+                    sample_documents, use_gpu=False
+                )
 
                 # Verify error was logged
                 mock_log_error.assert_called()
@@ -730,7 +732,7 @@ class TestEdgeCases:
                 mock_index = MagicMock()
                 mock_vector_index.return_value = mock_index
 
-                create_index([], use_gpu=False)
+                result = create_index([], use_gpu=False)
 
                 # Should still create index with empty documents
                 assert result["vector"] == mock_index

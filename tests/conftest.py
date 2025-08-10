@@ -5,7 +5,6 @@ all test modules. It follows 2025 pytest best practices for AI/ML systems.
 """
 
 import asyncio
-import logging
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -31,6 +30,10 @@ def event_loop_policy():
 @pytest.fixture(scope="session", autouse=True)
 def configure_logging():
     """Configure logging for tests to reduce noise."""
+    # Loguru is already configured in __init__.py
+    # These libraries will still log to their own loggers, but we can suppress them
+    import logging
+
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
