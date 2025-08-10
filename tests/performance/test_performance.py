@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Performance benchmarks and optimization tests for DocMind AI system.
 
 This module provides comprehensive performance testing using pytest-benchmark
@@ -15,6 +16,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import torch
 
 from agent_factory import analyze_query_complexity, get_agent_system
 from utils.model_manager import ModelManager
@@ -43,7 +45,7 @@ class TestEmbeddingPerformance:
                 model = manager.get_text_embedding_model("BAAI/bge-large-en-v1.5")
                 return model.embed_documents(texts)
 
-            benchmark(embed_documents)
+            result = benchmark(embed_documents)
             assert len(result) == 50
 
     @pytest.mark.performance
@@ -65,7 +67,7 @@ class TestEmbeddingPerformance:
                 model = manager.get_text_embedding_model("prithvida/Splade_PP_en_v1")
                 return model.encode(texts)
 
-            benchmark(encode_documents)
+            result = benchmark(encode_documents)
             assert len(result) == 50
 
     @pytest.mark.performance
@@ -87,7 +89,7 @@ class TestEmbeddingPerformance:
                 model3 = manager.get_multimodal_embedding_model()
                 return model1, model2, model3
 
-            benchmark(access_cached_model)
+            result = benchmark(access_cached_model)
             # Should only load once due to caching
             assert mock_load.call_count == 1
             assert all(model is result[0] for model in result)
@@ -121,7 +123,7 @@ class TestEmbeddingPerformance:
                     results = [future.result() for future in futures]
                 return results
 
-            benchmark(concurrent_embedding)
+            result = benchmark(concurrent_embedding)
             assert len(result) == 20
 
 
@@ -150,7 +152,7 @@ class TestSearchPerformance:
                     collection_name="test", query_vector=query_vector, limit=20
                 )
 
-            benchmark(search_operation)
+            result = benchmark(search_operation)
             assert len(result) == 20
 
     @pytest.mark.performance
@@ -219,7 +221,7 @@ class TestSearchPerformance:
 
                 return dense_results, sparse_results
 
-            benchmark(hybrid_search)
+            result = benchmark(hybrid_search)
             assert len(result[0]) == 10  # Dense results
             assert len(result[1]) == 10  # Sparse results
 
@@ -249,7 +251,7 @@ class TestSearchPerformance:
                     results.extend(result)
                 return results
 
-            benchmark(batch_search)
+            result = benchmark(batch_search)
             assert len(result) == 100  # 20 queries * 5 results each
 
 
@@ -275,7 +277,7 @@ class TestRerankingPerformance:
         def rerank_operation():
             return mock_reranker.rerank(query=query, documents=documents, top_k=20)
 
-        benchmark(rerank_operation)
+        result = benchmark(rerank_operation)
         assert len(result) == 20
 
     @pytest.mark.performance
@@ -301,7 +303,7 @@ class TestRerankingPerformance:
                 results.extend(result)
             return results
 
-        benchmark(batch_rerank)
+        result = benchmark(batch_rerank)
         assert len(result) == 20  # 10 queries * 2 results each
 
     @pytest.mark.performance
@@ -327,7 +329,7 @@ class TestRerankingPerformance:
                 query=query, documents=large_document_set, top_k=50
             )
 
-        benchmark(large_scale_rerank)
+        result = benchmark(large_scale_rerank)
         assert len(result) == 50
 
 
@@ -357,7 +359,7 @@ class TestAgentPerformance:
             def analyze_operation():
                 return analyze_query_complexity(complex_query)
 
-            benchmark(analyze_operation)
+            result = benchmark(analyze_operation)
             assert result["complexity"] == "complex"
 
     @pytest.mark.performance
@@ -382,7 +384,7 @@ class TestAgentPerformance:
             def sync_wrapper():
                 return asyncio.run(agent_operation())
 
-            benchmark(sync_wrapper)
+            result = benchmark(sync_wrapper)
             assert result == "Fast agent response"
 
     @pytest.mark.performance
@@ -416,7 +418,7 @@ class TestAgentPerformance:
                     results.append(result)
                 return results
 
-            benchmark(tool_invocation)
+            result = benchmark(tool_invocation)
             assert len(result) == 5
 
 
@@ -552,7 +554,7 @@ class TestConcurrencyPerformance:
                         results.extend(future.result())
                 return results
 
-            benchmark(concurrent_search)
+            result = benchmark(concurrent_search)
             assert len(result) == 60  # 20 queries * 3 results each
 
     @pytest.mark.performance
@@ -584,7 +586,7 @@ class TestConcurrencyPerformance:
                     results.extend(future.result())
                 return results
 
-            benchmark(concurrent_rerank)
+            result = benchmark(concurrent_rerank)
             assert len(result) == 20  # 10 queries * 2 results each
 
 
@@ -732,3 +734,63 @@ class TestLatencyMonitoring:
 
             # Performance requirement (mocked operations should be very fast)
             assert total_latency < 2.0  # Less than 2 seconds for complete workflow
+
+
+class TestHardwareAndGPUOptimization:
+    """Test hardware detection and GPU optimization features."""
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU not available")
+    def test_torch_compile_applied(self):
+        """Test torch.compile is applied when GPU available."""
+        from utils.utils import get_embed_model
+
+        with patch("torch.compile") as mock_compile:
+            mock_compile.return_value = MagicMock()
+
+            with patch("models.AppSettings") as mock_settings_class:
+                mock_settings = MagicMock()
+                mock_settings.gpu_acceleration = True
+                mock_settings.dense_embedding_model = "BAAI/bge-large-en-v1.5"
+                mock_settings.embedding_batch_size = 32
+                mock_settings_class.return_value = mock_settings
+
+                with patch("torch.cuda.is_available", return_value=True):
+                    get_embed_model()
+
+                    mock_compile.assert_called_once()
+                    assert mock_compile.call_args[1]["mode"] == "reduce-overhead"
+                    assert mock_compile.call_args[1]["dynamic"]
+
+    def test_hardware_detection(self):
+        """Test hardware detection capabilities."""
+        from utils.utils import detect_hardware
+
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.get_device_name", return_value="RTX 4090"),
+            patch("torch.cuda.get_device_properties") as mock_props,
+        ):
+            mock_device_props = MagicMock()
+            mock_device_props.total_memory = 24 * 1024**3  # 24GB
+            mock_props.return_value = mock_device_props
+
+            hardware = detect_hardware()
+
+            assert hardware["cuda_available"] is True
+            assert hardware["gpu_name"] == "RTX 4090"
+            assert hardware["vram_total_gb"] == 24.0
+
+    def test_gpu_fallback(self):
+        """Test graceful fallback when GPU is unavailable."""
+        with patch("torch.cuda.is_available", return_value=False):
+            from utils.utils import get_embed_model
+
+            embed_model = get_embed_model()
+            assert embed_model is not None  # Should work on CPU
+
+
+# Performance test configuration
+def pytest_configure():
+    """Configure pytest for performance tests."""
+    # Loguru is configured in __init__.py
+    pass
