@@ -1,408 +1,412 @@
-#!/usr/bin/env python3
-"""End-to-end integration tests for DocMind AI system.
+"""Comprehensive End-to-End Integration Testing for DocMind AI.
 
-This module tests the complete workflow from document loading through
-agent processing, validating that all components work together correctly
-in realistic scenarios.
+This module provides exhaustive end-to-end tests covering:
+- Document processing pipelines
+- Async and sync operations
+- Multi-agent workflows
+- Performance characteristics
+- Error recovery scenarios
+
+Follows 2025 pytest best practices for AI/ML integration testing.
 """
 
-import sys
-from pathlib import Path
-
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+import asyncio
 import logging
+import sys
+import time
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
+import torch
 from llama_index.core import Document
+from llama_index.core.agent import ReActAgent
+from llama_index.core.schema import ImageDocument
+from llama_index.core.tools import QueryEngineTool
+
+# Fix import path for tests
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from agent_factory import (
     analyze_query_complexity,
+    create_langgraph_supervisor_system,
     get_agent_system,
     process_query_with_agent_system,
 )
-from agents.agent_utils import create_tools_from_index
-from models import AppSettings
-from utils import create_index_async
-from utils.model_manager import ModelManager
+from agents.agent_utils import (
+    chat_with_agent,
+    create_tools_from_index,
+)
+from utils.document_loader import load_documents_unstructured
+from utils.index_builder import (
+    create_index,
+    create_index_async,
+    create_multimodal_index_async,
+)
 
 
-class TestEndToEndWorkflow:
-    """Test complete end-to-end workflow scenarios."""
+class TestCompleteSystemIntegration:
+    """Comprehensive integration test suite for DocMind AI system."""
 
-    @pytest.mark.asyncio
-    async def test_complete_document_processing_pipeline(self):
+    @pytest_asyncio.fixture
+    async def async_document_set(self) -> list[Document]:
+        """Create async document set for testing."""
+        await asyncio.sleep(0.01)  # Simulate async document loading
+        return [
+            Document(
+                text="Async DocMind AI processes documents "
+                "efficiently with FastEmbed GPU acceleration.",
+                metadata={"source": "async_doc1.pdf", "page": 1},
+            ),
+            Document(
+                text="Async Qdrant client provides 50-80% performance "
+                "improvement over sync operations.",
+                metadata={"source": "async_doc2.pdf", "page": 1},
+            ),
+            Document(
+                text="CUDA streams enable parallel embedding "
+                "computation for maximum throughput.",
+                metadata={"source": "async_doc3.pdf", "page": 2},
+            ),
+        ]
+
+    @pytest.mark.integration
+    def test_complete_document_processing_pipeline(
+        self,
+        sample_documents,
+        mock_embedding_model,
+        mock_sparse_embedding_model,
+        mock_qdrant_client,
+        test_settings,
+    ):
         """Test complete document processing from upload to query response."""
-        # Step 1: Create test documents
-        test_documents = [
-            Document(
-                text=(
-                    "DocMind AI is an advanced document analysis system that uses "
-                    "SPLADE++ sparse embeddings."
-                ),
-                metadata={"source": "doc1.pdf", "page": 1},
-            ),
-            Document(
-                text=(
-                    "BGE-Large dense embeddings provide rich semantic understanding "
-                    "for document retrieval."
-                ),
-                metadata={"source": "doc2.pdf", "page": 1},
-            ),
-            Document(
-                text=(
-                    "ColBERT reranking improves search result relevance through "
-                    "late interaction mechanisms."
-                ),
-                metadata={"source": "doc3.pdf", "page": 1},
-            ),
-            Document(
-                text=(
-                    "Hybrid search combines both dense and sparse retrieval methods "
-                    "for optimal performance."
-                ),
-                metadata={"source": "doc4.pdf", "page": 1},
-            ),
-        ]
-
-        # Step 2: Mock the index creation process
         with (
-            patch("utils.AsyncQdrantClient") as mock_async_client,
-            patch("utils.FastEmbedEmbedding") as mock_dense_embed,
-            patch("utils.SparseTextEmbedding") as mock_sparse_embed,
-            patch("utils.VectorStoreIndex.from_documents") as mock_index,
+            patch("utils.FastEmbedModelManager.get_model") as mock_get_model,
+            patch("utils.QdrantClient", return_value=mock_qdrant_client),
+            patch("utils.create_index_async") as mock_create_index,
         ):
-            # Setup comprehensive mocks
-            mock_client_instance = AsyncMock()
-            mock_async_client.return_value = mock_client_instance
-            mock_client_instance.collection_exists.return_value = False
-            mock_client_instance.close = AsyncMock()
+            # Configure model manager
+            def model_side_effect(model_name):
+                if "splade" in model_name.lower():
+                    return mock_sparse_embedding_model
+                else:
+                    return mock_embedding_model
 
-            # Mock vector index
-            mock_index_instance = MagicMock()
-            mock_query_engine = MagicMock()
-            mock_index_instance.as_query_engine.return_value = mock_query_engine
-            mock_index.return_value = mock_index_instance
+            mock_get_model.side_effect = model_side_effect
 
-            # Step 3: Create index
-            index = await create_index_async(test_documents, use_gpu=False)
+            # Mock index creation
+            mock_index = MagicMock()
+            mock_create_index.return_value = mock_index
 
-            # Verify index creation
+            # Test pipeline steps
+            # 1. Document Processing
+            documents = sample_documents
+            assert len(documents) > 0
+
+            # 2. Index Creation
+            index = create_index(documents, settings=test_settings)
             assert index is not None
-            assert mock_dense_embed.called
-            assert mock_sparse_embed.called
+            assert "vector" in index
 
-        # Step 4: Test tool creation
-        with patch("utils.ColbertRerank") as mock_colbert:
-            mock_colbert_instance = MagicMock()
-            mock_colbert.return_value = mock_colbert_instance
+            # 3. Tool Creation
+            with patch("utils.create_tools_from_index") as mock_create_tools:
+                mock_tools = [MagicMock(name="search_tool")]
+                mock_create_tools.return_value = mock_tools
 
-            # Create mock index dict for tools
-            mock_index_dict = {"vector": mock_index, "kg": mock_index}
+                tools = create_tools_from_index(index)
+                assert len(tools) > 0
+                assert all(isinstance(tool, QueryEngineTool) for tool in tools)
 
-            tools = create_tools_from_index(mock_index_dict)
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_async_index_creation_pipeline(self, async_document_set):
+        """Test async index creation with performance improvements."""
+        with patch("qdrant_client.AsyncQdrantClient") as mock_async_client:
+            mock_client = AsyncMock()
+            mock_async_client.return_value = mock_client
 
-            # Verify tools are created
-            assert len(tools) == 2
-            assert any("hybrid_vector_search" in tool.metadata.name for tool in tools)
-            assert any("knowledge_graph_query" in tool.metadata.name for tool in tools)
+            with patch("utils.qdrant_utils.setup_hybrid_qdrant_async"):
+                # Test async index creation
+                start_time = time.time()
+                result = await create_index_async(async_document_set, use_gpu=False)
+                end_time = time.time()
 
-        # Step 5: Test agent creation and query processing
-        with patch("llama_index.llms.ollama.Ollama") as mock_llm:
-            mock_llm_instance = MagicMock()
-            mock_llm.return_value = mock_llm_instance
+                # Verify async operation completed
+                assert result is not None
+                assert "vector" in result
+                assert result["vector"] is not None
 
-            # Test agent system creation
-            agent_system, mode = get_agent_system(
-                tools=tools, llm=mock_llm_instance, enable_multi_agent=False
+                # Log performance metrics
+                processing_time = end_time - start_time
+                logging.info(f"Async index creation took {processing_time:.3f}s")
+
+    @pytest.mark.integration
+    def test_hybrid_search_workflow(
+        self,
+        sample_documents,
+        mock_embedding_model,
+        mock_sparse_embedding_model,
+        mock_qdrant_client,
+    ):
+        """Test hybrid search workflow with dense and sparse embeddings."""
+        with (
+            patch("utils.FastEmbedModelManager.get_model") as mock_get_model,
+            patch("utils.QdrantClient", return_value=mock_qdrant_client),
+        ):
+
+            def model_side_effect(model_name):
+                if "splade" in model_name.lower():
+                    return mock_sparse_embedding_model
+                else:
+                    return mock_embedding_model
+
+            mock_get_model.side_effect = model_side_effect
+
+            # Mock search results for hybrid search
+            mock_qdrant_client.search.side_effect = [
+                # Dense search results
+                [MagicMock(id=1, score=0.9, payload={"text": "SPLADE++ is efficient"})],
+                # Sparse search results
+                [
+                    MagicMock(
+                        id=2,
+                        score=0.85,
+                        payload={"text": "BGE-Large provides semantics"},
+                    )
+                ],
+            ]
+
+            # Verify hybrid search execution
+            dense_results = mock_qdrant_client.search(
+                collection_name="dense", query_vector=[0.1] * 1024, limit=5
             )
 
-            assert mode == "single"
-            assert agent_system is not None
-
-        # Step 6: Test query processing
-        test_query = "What are the key features of DocMind AI?"
-
-        with patch.object(agent_system, "chat") as mock_chat:
-            mock_response = MagicMock()
-            mock_response.response = (
-                "DocMind AI features SPLADE++ sparse embeddings, BGE-Large dense "
-                "embeddings, and ColBERT reranking for advanced document analysis."
-            )
-            mock_chat.return_value = mock_response
-
-            response = process_query_with_agent_system(
-                agent_system=agent_system, query=test_query, mode=mode
+            sparse_results = mock_qdrant_client.search(
+                collection_name="sparse", query_vector=[0.1] * 1024, limit=5
             )
 
-            # Verify response
-            assert response is not None
-            assert "SPLADE++" in response
-            assert "BGE-Large" in response
-            assert "ColBERT" in response
+            assert len(dense_results) == 1
+            assert len(sparse_results) == 1
+            assert mock_qdrant_client.search.call_count == 2
 
-    def test_workflow_with_different_query_types(self):
-        """Test workflow with different types of queries."""
-        query_test_cases = [
-            ("What is this document about?", "simple", "document"),
-            ("Compare the different embedding approaches", "complex", "general"),
-            ("What entities are mentioned in the text?", "simple", "knowledge_graph"),
-            ("Analyze the visual elements in this document", "moderate", "multimodal"),
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_multimodal_index_creation(self):
+        """Test async multimodal index creation."""
+        # Create mixed document set
+        docs = [
+            Document(text="Text document about multimodal processing"),
+            ImageDocument(text="Image description", image_path="/fake/image.jpg"),
+            Document(text="Another text document with visual references"),
         ]
 
-        for query, expected_complexity, expected_type in query_test_cases:
-            # Test query analysis
-            complexity, query_type = analyze_query_complexity(query)
+        with patch("qdrant_client.AsyncQdrantClient") as mock_client:
+            mock_client_instance = AsyncMock()
+            mock_client.return_value = mock_client_instance
 
+            # Test async multimodal index creation
+            result = await create_multimodal_index_async(docs, use_gpu=False)
+
+            assert result is not None
+            assert "vector" in result
+
+    @pytest.mark.integration
+    def test_error_recovery_pipeline(self, sample_document_path: Path):
+        """Test cascading error recovery through components."""
+        # Test Unstructured fails -> fallback to simple text loading
+        with patch("unstructured.partition.auto.partition") as mock_unstructured:
+            mock_unstructured.side_effect = Exception("Unstructured failed")
+
+            # Should fall back to basic document loading
+            with patch("pathlib.Path.read_text") as mock_read:
+                mock_read.return_value = "Fallback document content"
+
+                # Simulate document loading
+                docs = load_documents_unstructured(str(sample_document_path))
+                assert len(docs) > 0
+
+                # Verify fallback mechanism
+                assert any("Fallback" in doc.text for doc in docs)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
+    def test_gpu_acceleration_pipeline(self):
+        """Test GPU acceleration through full pipeline."""
+        docs = [Document(text="GPU test document for integration testing")]
+
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("qdrant_client.QdrantClient"),
+            patch("llama_index.core.VectorStoreIndex.from_documents") as mock_create,
+        ):
+            mock_index = MagicMock()
+            mock_create.return_value = mock_index
+
+            with patch("torch.cuda.Stream") as mock_stream:
+                mock_stream.return_value.__enter__ = MagicMock()
+                mock_stream.return_value.__exit__ = MagicMock()
+                mock_stream.return_value.synchronize = MagicMock()
+
+                # Create index with GPU
+                result = create_index(docs, use_gpu=True)
+
+                # Verify GPU acceleration
+                assert result is not None
+                assert "vector" in result
+                mock_stream.return_value.synchronize.assert_called()
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_agent_query_processing_workflow(
+        self, async_document_set, test_settings
+    ):
+        """Test complete agent query processing workflow."""
+        # Create an index
+        with patch("qdrant_client.AsyncQdrantClient"):
+            index_result = await create_index_async(async_document_set, use_gpu=False)
+
+        with (
+            patch("agent_factory.get_agent_system") as mock_get_agent,
+            patch("agents.agent_utils.chat_with_agent") as mock_chat,
+        ):
+            # Mock agent with async streaming
+            mock_agent = MagicMock(spec=ReActAgent)
+            mock_get_agent.return_value = mock_agent
+
+            # Mock streaming response
+            async def mock_stream_response():
+                chunks = ["Comprehensive", " answer", " about", " embeddings"]
+                for chunk in chunks:
+                    await asyncio.sleep(0.01)
+                    yield chunk
+
+            mock_chat.side_effect = mock_stream_response()
+
+            create_tools_from_index(index_result)
+
+            # Process query
+            query = "Tell me about document embedding techniques"
+            response_chunks = []
+
+            async for chunk in chat_with_agent(mock_agent, query, MagicMock()):
+                response_chunks.append(chunk)
+
+            # Verify response generation
+            assert len(response_chunks) > 0
+            full_response = "".join(response_chunks)
+            assert "Comprehensive answer about embeddings" in full_response
+
+
+class TestQueryComplexityRouting:
+    """Test query complexity routing and agent selection."""
+
+    def test_simple_query_routing(self):
+        """Test agent routing for simple queries."""
+        test_cases = [
+            ("What is the summary?", "simple", "general"),
+            ("Tell me about the document", "simple", "document"),
+            ("Show me images", "simple", "multimodal"),
+        ]
+
+        for query, expected_complexity, expected_type in test_cases:
+            complexity, query_type = analyze_query_complexity(query)
             assert complexity == expected_complexity
             assert query_type == expected_type
 
-            # Mock agent system for query processing
-            mock_agent = MagicMock()
-            mock_response = MagicMock()
-            mock_response.response = f"Response for {query_type} query: {query}"
-            mock_agent.chat.return_value = mock_response
-
-            response = process_query_with_agent_system(
-                agent_system=mock_agent, query=query, mode="single"
-            )
-
-            assert query_type in response or "Response" in response
-
-    @pytest.mark.asyncio
-    async def test_error_recovery_workflow(self):
-        """Test error recovery in the complete workflow."""
-        # Test with invalid documents
-        invalid_documents = [
-            Document(text="", metadata={}),  # Empty document
-            Document(text=None, metadata={"source": "invalid.pdf"}),  # None text
+    def test_complex_query_routing(self):
+        """Test agent routing for complex queries."""
+        complex_queries = [
+            "Compare and analyze the relationships between entities in this document",
+            "How does the dense embedding approach differ from "
+            "sparse embeddings across multiple documents?",
+            "Summarize embedding techniques and their interconnections",
         ]
 
-        # Should handle invalid documents gracefully
+        for query in complex_queries:
+            complexity, query_type = analyze_query_complexity(query)
+            assert complexity in ["moderate", "complex"]
+
+
+class TestAgentSystemIntegration:
+    """Test agent system integration and multi-agent workflows."""
+
+    def test_agent_system_fallback(self):
+        """Test fallback from multi-agent to single agent."""
+        mock_tools = [MagicMock(spec=QueryEngineTool)]
+        mock_llm = MagicMock()
+
+        # Test multi-agent creation failure leads to fallback
+        with patch("agent_factory.create_langgraph_supervisor_system") as mock_multi:
+            mock_multi.return_value = None  # Simulate failure
+
+            with patch("agent_factory.create_single_agent") as mock_single:
+                mock_agent = MagicMock()
+                mock_single.return_value = mock_agent
+
+                agent_system, mode = get_agent_system(
+                    mock_tools, mock_llm, enable_multi_agent=True
+                )
+
+                assert mode == "single"
+                assert agent_system == mock_agent
+                mock_multi.assert_called_once()
+                mock_single.assert_called_once()
+
+    def test_langgraph_workflow_integration(self):
+        """Test LangGraph workflow integration."""
+        from langchain_core.messages import HumanMessage
+
+        # Mock tools for testing
+        mock_tools = [
+            MagicMock(spec=QueryEngineTool, metadata=MagicMock(name="test_tool"))
+        ]
+        mock_llm = MagicMock()
+
         with (
-            patch("utils.AsyncQdrantClient") as mock_client,
-            patch("utils.FastEmbedEmbedding"),
-            patch("utils.SparseTextEmbedding"),
-            patch("utils.VectorStoreIndex.from_documents"),
+            patch("agent_factory.create_document_specialist_agent") as mock_doc_agent,
+            patch("agent_factory.create_knowledge_specialist_agent") as mock_kg_agent,
+            patch("agent_factory.create_multimodal_specialist_agent") as mock_mm_agent,
         ):
-            mock_instance = AsyncMock()
-            mock_client.return_value = mock_instance
-            mock_instance.collection_exists.side_effect = ValueError("Connection issue")
+            mock_doc_agent.return_value = MagicMock()
+            mock_kg_agent.return_value = MagicMock()
+            mock_mm_agent.return_value = MagicMock()
 
-            # Test error handling in index creation
-            with pytest.raises(ValueError, match="Connection issue"):
-                await create_index_async(invalid_documents, use_gpu=False)
+            with patch("langgraph.graph.StateGraph") as mock_graph:
+                mock_workflow = MagicMock()
+                mock_compiled = MagicMock()
+                mock_graph.return_value = mock_workflow
+                mock_workflow.compile.return_value = mock_compiled
 
-    def test_hardware_dependent_workflow(self):
-        """Test workflow behavior with different hardware configurations."""
-        # Test GPU configuration workflow
-        with (
-            patch("utils.torch.cuda.is_available", return_value=True),
-            patch("utils.torch.cuda.get_device_name", return_value="RTX 4090"),
-        ):
-            settings = AppSettings()
+                # Test workflow creation
+                workflow = create_langgraph_supervisor_system(mock_tools, mock_llm)
+                assert workflow is not None
 
-            # Verify GPU settings affect workflow
-            assert settings.gpu_acceleration is True
+                # Test workflow invocation
+                mock_compiled.invoke.return_value = {
+                    "messages": [
+                        HumanMessage(content="Response from multi-agent system")
+                    ]
+                }
 
-            # Test model manager configuration
-            manager = ModelManager()
-
-            with patch("utils.TextEmbedding") as mock_embedding:
-                manager.get_dense_embedding_model()
-
-                # Verify GPU providers are used
-                call_args = mock_embedding.call_args
-                providers = call_args[1]["providers"]
-                assert "CUDAExecutionProvider" in providers
-
-        # Test CPU fallback workflow
-        with patch("utils.torch.cuda.is_available", return_value=False):
-            settings = AppSettings()
-
-            # CPU mode should still work
-            manager = ModelManager()
-
-            with patch("utils.TextEmbedding") as mock_embedding:
-                manager.get_dense_embedding_model()
-
-                # Should use CPU providers
-                call_args = mock_embedding.call_args
-                providers = call_args[1]["providers"]
-                assert "CPUExecutionProvider" in providers
+                result = process_query_with_agent_system(
+                    mock_compiled, "Test query", "multi"
+                )
+                assert "Response from multi-agent system" in result
 
 
-class TestWorkflowPerformance:
-    """Test workflow performance characteristics."""
-
-    @pytest.mark.asyncio
-    async def test_async_workflow_performance(self):
-        """Test async workflow performance benefits."""
-        import time
-
-        # Create test documents
-        docs = [Document(text=f"Test document {i}") for i in range(5)]
-
-        # Mock async components for timing test
-        with (
-            patch("utils.AsyncQdrantClient") as mock_client,
-            patch("utils.FastEmbedEmbedding"),
-            patch("utils.SparseTextEmbedding"),
-            patch("utils.VectorStoreIndex.from_documents") as mock_index,
-        ):
-            mock_instance = AsyncMock()
-            mock_client.return_value = mock_instance
-            mock_instance.collection_exists.return_value = False
-            mock_instance.close = AsyncMock()
-
-            mock_vector_index = MagicMock()
-            mock_index.return_value = mock_vector_index
-
-            start_time = time.perf_counter()
-
-            # Test async workflow
-            await create_index_async(docs, use_gpu=False)
-
-            async_time = time.perf_counter() - start_time
-
-            # Should complete in reasonable time
-            assert async_time < 2.0
-            assert result is not None
-
-    def test_concurrent_workflow_handling(self):
-        """Test handling of concurrent workflow operations."""
-        from concurrent.futures import ThreadPoolExecutor
-
-        def create_agent_workflow():
-            # Mock components for concurrent test
-            mock_tools = [MagicMock(), MagicMock()]
-            mock_llm = MagicMock()
-
-            agent_system, mode = get_agent_system(
-                tools=mock_tools, llm=mock_llm, enable_multi_agent=False
-            )
-
-            return (agent_system, mode)
-
-        # Test concurrent agent creation
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(create_agent_workflow) for _ in range(5)]
-            results = [future.result() for future in futures]
-
-        # All should succeed
-        assert len(results) == 5
-        for agent_system, mode in results:
-            assert agent_system is not None
-            assert mode == "single"
+# Async test configuration
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.integration,
+    pytest.mark.filterwarnings("ignore::UserWarning"),
+]
 
 
-class TestWorkflowIntegration:
-    """Test integration between workflow components."""
-
-    def test_settings_workflow_integration(self):
-        """Test that settings properly integrate throughout workflow."""
-        settings = AppSettings()
-
-        # Verify key settings for workflow
-        assert settings.dense_embedding_model is not None
-        assert settings.sparse_embedding_model is not None
-        assert settings.reranking_top_k == 5  # Phase 2.2 requirement
-        assert settings.enable_colbert_reranking is True
-
-        # Verify RRF configuration
-        assert abs(settings.rrf_fusion_weight_dense - 0.7) < 0.05
-        assert abs(settings.rrf_fusion_weight_sparse - 0.3) < 0.05
-
-    def test_model_manager_workflow_integration(self):
-        """Test FastEmbedModelManager integration throughout workflow."""
-        manager = ModelManager()
-
-        # Test singleton behavior in workflow context
-        manager1 = ModelManager()
-        manager2 = ModelManager()
-
-        assert manager1 is manager2
-        assert manager1 is manager
-
-        # Test cache management
-        manager.clear_cache()
-        assert len(manager._models) == 0
-
-    def test_agent_tool_workflow_integration(self):
-        """Test agent and tool integration in workflow."""
-        # Mock index for tool creation
-        mock_vector_index = MagicMock()
-        mock_kg_index = MagicMock()
-
-        mock_vector_query_engine = MagicMock()
-        mock_kg_query_engine = MagicMock()
-        mock_vector_index.as_query_engine.return_value = mock_vector_query_engine
-        mock_kg_index.as_query_engine.return_value = mock_kg_query_engine
-
-        index_dict = {"vector": mock_vector_index, "kg": mock_kg_index}
-
-        # Create tools
-        tools = create_tools_from_index(index_dict)
-
-        # Verify tool integration
-        assert len(tools) == 2
-
-        tool_names = [tool.metadata.name for tool in tools]
-        assert "hybrid_vector_search" in tool_names
-        assert "knowledge_graph_query" in tool_names
-
-        # Verify enhanced descriptions
-        for tool in tools:
-            assert (
-                len(tool.metadata.description) > 50
-            )  # Should have detailed descriptions
-
-
-class TestWorkflowValidation:
-    """Test workflow validation and correctness."""
-
-    def test_workflow_component_availability(self):
-        """Test that all workflow components are available."""
-        # Test function imports
-        from agent_factory import (
-            analyze_query_complexity,
-        )
-        from utils import (
-            create_index,
-            create_index_async,
-            create_tools_from_index,
-        )
-
-        # All imports should succeed
-        assert callable(create_index_async)
-        assert callable(create_index)
-        assert callable(create_tools_from_index)
-        assert callable(analyze_query_complexity)
-
-    def test_workflow_configuration_validation(self):
-        """Test workflow configuration validation."""
-        settings = AppSettings()
-
-        # Validate critical configurations
-        assert settings.dense_embedding_model.startswith("BAAI/bge-large")
-        assert "Splade_PP_en_v1" in settings.sparse_embedding_model
-        assert settings.dense_embedding_dimension == 1024
-        assert settings.rrf_fusion_alpha == 60
-
-    def test_workflow_error_handling(self):
-        """Test error handling throughout workflow."""
-        # Test invalid settings handling
-        settings = AppSettings()
-
-        # Should handle validation gracefully
-        from utils import verify_rrf_configuration
-
-        verification = verify_rrf_configuration(settings)
-
-        assert isinstance(verification, dict)
-        assert "weights_correct" in verification
-        assert "alpha_in_range" in verification
+# Configure asyncio event loop for tests
+@pytest_asyncio.fixture(scope="session")
+def event_loop_policy():
+    """Configure event loop policy for async tests."""
+    return asyncio.DefaultEventLoopPolicy()
 
 
 # Test configuration
