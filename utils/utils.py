@@ -50,12 +50,13 @@ except ImportError:
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
-from models import AppSettings
+from models.core import settings
 
 from .exceptions import (
     ConfigurationError,
     handle_embedding_error,
 )
+from .logging_utils import log_error_with_context, log_performance
 from .model_manager import ModelManager
 from .retry_utils import (
     embedding_retry,
@@ -63,85 +64,7 @@ from .retry_utils import (
     with_fallback,
 )
 
-
-def log_error_with_context(
-    error: Exception, operation: str, context: dict | None = None, **kwargs
-) -> None:
-    """Log errors with comprehensive context information."""
-    error_context = {
-        "operation": operation,
-        "error_type": type(error).__name__,
-        "error_message": str(error),
-        **(context or {}),
-        **kwargs,
-    }
-    logger.error(
-        f"Operation failed: {operation}",
-        extra={"error_context": error_context},
-        exception=error,
-    )
-
-
-def log_performance(operation: str, duration: float, **kwargs) -> None:
-    """Log performance metrics with structured data."""
-    logger.info(
-        f"Performance: {operation} completed",
-        extra={
-            "performance": {
-                "operation": operation,
-                "duration_seconds": round(duration, 3),
-                "duration_human": f"{duration:.2f}s",
-                **kwargs,
-            }
-        },
-    )
-
-
-def setup_logging(log_level: str = "INFO") -> None:
-    """Set up loguru logging configuration.
-
-    Args:
-        log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-    Note:
-        This is a simplified logging setup. The original logging configuration
-        from logging_config.py has been consolidated here.
-    """
-    import sys
-
-    # Remove default handler
-    logger.remove()
-
-    # Add console handler with colored output
-    logger.add(
-        sys.stdout,
-        level=log_level,
-        format=(
-            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-            "<level>{message}</level>"
-        ),
-        colorize=True,
-    )
-
-    # Add file handler for persistent logging
-    logger.add(
-        "logs/docmind.log",
-        level=log_level,
-        format=lambda record: (
-            f"{record['time']:YYYY-MM-DD HH:mm:ss} | "
-            f"{record['level']: <8} | "
-            f"{record['name']}:{record['function']}:{record['line']} - "
-            f"{record['message']}"
-        ),
-        rotation="10 MB",
-        retention="7 days",
-        compression="zip",
-    )
-
-
-settings = AppSettings()
+# settings is now imported from models.core
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -331,10 +254,28 @@ def get_embed_model() -> FastEmbedEmbedding:
         ) from e
 
 
-"""
-Def documentation for verify_rrf_configuration.
+"""Verify and validate Reciprocal Rank Fusion (RRF) configuration parameters.
 
-TODO: Add detailed description.
+This function performs a comprehensive validation of RRF configuration settings
+against established research recommendations. It ensures that embedding fusion
+weights, alpha parameters, and other critical settings are optimally configured
+for hybrid search performance.
+
+Research-backed validation includes:
+- Dense and sparse embedding weight distribution
+- RRF alpha parameter range
+- Prefetch mechanism status
+- Embedding dimension compatibility
+
+The function provides a detailed verification report with:
+- Weights correctness
+- Alpha parameter validation
+- Prefetch mechanism status
+- Potential configuration issues
+- Recommended improvements
+
+Helps prevent misconfiguration and ensures alignment with best practices in
+hybrid search and embedding fusion strategies.
 """
 
 
@@ -370,8 +311,7 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
         This value is used by LlamaIndex for hybrid query processing.
 
     Example:
-        >>> from models import AppSettings
-        >>> settings = AppSettings()
+        >>> from models.core import settings
         >>> verification = verify_rrf_configuration(settings)
         >>> if verification['issues']:
         ...     for issue in verification['issues']:
@@ -426,11 +366,12 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
 
 @with_fallback(lambda model_name: None)  # Graceful fallback returns None
 def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
-    """Ensure spaCy model is available, download if needed.
+    """Ensure spaCy model is available, download if needed using standard package mgmt.
 
     Attempts to load a spaCy model and automatically downloads it if not
-    found locally. Provides robust error handling, structured logging,
-    and graceful fallbacks throughout the process.
+    found locally. Uses `uv run` when available for better environment
+    handling, falls back to standard Python execution. This approach
+    follows security best practices by avoiding custom URL dependencies.
 
     Args:
         model_name: Name of the spaCy model to load. Common options include:
@@ -449,8 +390,14 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
 
     Note:
         Downloads can take several minutes depending on model size and
-        network speed. The function handles subprocess execution for
-        model downloads and provides detailed logging throughout.
+        network speed. The function prefers `uv run python -m spacy download`
+        for consistency with project tooling, but falls back to standard
+        `python -m spacy download` if uv is not available.
+
+    Security:
+        This function uses standard spaCy model installation which downloads
+        models from spaCy's official distribution, avoiding custom URL
+        dependencies that bypass security scanning.
 
     Example:
         >>> nlp = ensure_spacy_model("en_core_web_sm")
@@ -485,9 +432,29 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
             logger.info(f"spaCy model '{model_name}' not found locally, downloading...")
 
             try:
-                # Download model with timeout and error handling
+                # Download model with timeout and error handling using uv
+                # First try with uv run for better environment handling
+                import os
+
+                download_cmd = [
+                    "uv",
+                    "run",
+                    "python",
+                    "-m",
+                    "spacy",
+                    "download",
+                    model_name,
+                ]
+
+                # Fallback to regular python if uv is not available
+                if not any(
+                    os.path.exists(os.path.join(path, "uv"))
+                    for path in os.environ.get("PATH", "").split(os.pathsep)
+                ):
+                    download_cmd = ["python", "-m", "spacy", "download", model_name]
+
                 subprocess.run(
-                    ["python", "-m", "spacy", "download", model_name],
+                    download_cmd,
                     check=True,
                     capture_output=True,
                     text=True,
@@ -522,7 +489,7 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
             except (subprocess.CalledProcessError, OSError) as e:
                 error_context = {
                     "model_name": model_name,
-                    "command": ["python", "-m", "spacy", "download", model_name],
+                    "command": download_cmd,
                     "stderr": getattr(e, "stderr", str(e)),
                 }
 
@@ -887,210 +854,5 @@ def async_timer(func: Callable) -> Callable:
     return wrapper
 
 
-class PerformanceMonitor:
-    """Monitor async operation performance with detailed metrics.
-
-    Tracks execution time, memory usage, success rates, and provides
-    comprehensive performance analytics for optimization.
-    """
-
-    def __init__(self):
-        """Initialize performance monitor."""
-        self.metrics = {}
-
-    async def measure_async_operation(self, name: str, operation: Callable) -> Any:
-        """Measure and record async operation performance.
-
-        Args:
-            name: Name of the operation for metrics tracking
-            operation: Async callable to measure
-
-        Returns:
-            Result of the operation
-
-        Note:
-            Records timing, memory usage, and success/failure status
-        """
-        start_time = time.perf_counter()
-        start_memory = self._get_memory_usage()
-
-        try:
-            result = await operation()
-            success = True
-            error = None
-        except Exception as e:
-            success = False
-            error = str(e)
-            result = None
-            raise  # Re-raise the exception
-        finally:
-            end_time = time.perf_counter()
-            end_memory = self._get_memory_usage()
-
-            self.metrics[name] = {
-                "duration": end_time - start_time,
-                "memory_delta": end_memory - start_memory,
-                "success": success,
-                "error": error,
-                "timestamp": time.time(),
-            }
-
-            logger.info(
-                f"Performance [{name}]: {end_time - start_time:.2f}s, "
-                f"memory: {(end_memory - start_memory) / 1024 / 1024:.1f}MB, "
-                f"success: {success}"
-            )
-
-        return result
-
-    def _get_memory_usage(self) -> int:
-        """Get current memory usage in bytes.
-
-        Returns:
-            Current memory usage in bytes, or 0 if psutil unavailable
-        """
-        try:
-            import psutil
-
-            process = psutil.Process()
-            return process.memory_info().rss
-        except ImportError:
-            return 0
-
-    def get_metrics_summary(self) -> dict[str, Any]:
-        """Get performance metrics summary.
-
-        Returns:
-            Dictionary with aggregated performance statistics
-        """
-        if not self.metrics:
-            return {"total_operations": 0}
-
-        durations = [m["duration"] for m in self.metrics.values()]
-        successes = sum(1 for m in self.metrics.values() if m["success"])
-
-        return {
-            "total_operations": len(self.metrics),
-            "success_rate": successes / len(self.metrics),
-            "avg_duration": sum(durations) / len(durations),
-            "min_duration": min(durations),
-            "max_duration": max(durations),
-            "total_duration": sum(durations),
-            "metrics": self.metrics,
-        }
-
-
-class EnhancedPerformanceMonitor:
-    """Enhanced performance monitoring with detailed async operation tracking."""
-
-    def __init__(self):
-        """Initialize an Enhanced Performance Monitor for async operations.
-
-        Provides detailed metrics and performance insights, tracking
-        execution duration, memory usage, error rates, and operation counts.
-
-        Attributes:
-            metrics (dict): Stores performance metrics for each async operation.
-                Each entry includes:
-                - duration_seconds: Operation execution time
-                - memory_delta_mb: Memory usage change
-                - timestamp: Operation execution time
-                - success: Whether operation completed without errors
-
-            operation_counts (dict): Tracks the number of times each
-                operation is called.
-
-            error_counts (dict): Tracks the number of errors encountered
-                for each operation.
-
-        Note:
-            - Performance tracking is done with minimal overhead
-            - Supports multiple concurrent operation tracking
-            - Provides methods for generating performance summaries
-        """
-        self.metrics = {}
-        self.operation_counts = {}
-        self.error_counts = {}
-
-    @asynccontextmanager
-    async def measure(self, operation_name: str):
-        """Measure async operation performance."""
-        start_time = time.perf_counter()
-        start_memory = self._get_memory_usage()
-
-        # Track operation counts
-        self.operation_counts[operation_name] = (
-            self.operation_counts.get(operation_name, 0) + 1
-        )
-
-        try:
-            yield self
-        except Exception as e:
-            # Track errors
-            self.error_counts[operation_name] = (
-                self.error_counts.get(operation_name, 0) + 1
-            )
-            logger.error(f"Operation {operation_name} failed: {e}")
-            raise
-        finally:
-            elapsed = time.perf_counter() - start_time
-            memory_delta = self._get_memory_usage() - start_memory
-
-            self.metrics[operation_name] = {
-                "duration_seconds": elapsed,
-                "memory_delta_mb": memory_delta / 1024 / 1024,
-                "timestamp": time.time(),
-                "success": operation_name not in self.error_counts
-                or self.error_counts[operation_name] == 0,
-            }
-
-            logger.info(
-                f"{operation_name} completed in {elapsed:.2f}s, "
-                f"memory delta: {memory_delta / 1024 / 1024:.2f}MB"
-            )
-
-    def _get_memory_usage(self) -> int:
-        """Get current memory usage in bytes."""
-        try:
-            import psutil
-
-            process = psutil.Process()
-            return process.memory_info().rss
-        except ImportError:
-            return 0
-
-    def get_report(self) -> dict:
-        """Get comprehensive performance report."""
-        total_operations = sum(self.operation_counts.values())
-        total_errors = sum(self.error_counts.values())
-
-        return {
-            "summary": {
-                "total_operations": total_operations,
-                "total_errors": total_errors,
-                "success_rate": (total_operations - total_errors) / total_operations
-                if total_operations > 0
-                else 0,
-                "total_time": sum(m["duration_seconds"] for m in self.metrics.values()),
-                "avg_time": sum(m["duration_seconds"] for m in self.metrics.values())
-                / len(self.metrics)
-                if self.metrics
-                else 0,
-            },
-            "operation_counts": self.operation_counts,
-            "error_counts": self.error_counts,
-            "detailed_metrics": self.metrics,
-        }
-
-    def log_performance_summary(self):
-        """Log a performance summary."""
-        report = self.get_report()
-        summary = report["summary"]
-
-        logger.info(
-            f"Performance Summary - Operations: {summary['total_operations']}, "
-            f"Errors: {summary['total_errors']}, "
-            f"Success Rate: {summary['success_rate']:.2%}, "
-            f"Total Time: {summary['total_time']:.2f}s, "
-            f"Avg Time: {summary['avg_time']:.2f}s"
-        )
+# NOTE: PerformanceMonitor implementations consolidated to utils.monitoring.py
+# Use: from utils.monitoring import get_performance_monitor

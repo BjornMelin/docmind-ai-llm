@@ -25,7 +25,7 @@ from utils.index_builder import (
     generate_dense_embeddings_async,
     generate_sparse_embeddings_async,
 )
-from utils.utils import AsyncQdrantConnectionPool, PerformanceMonitor, async_timer
+from utils.utils import AsyncQdrantConnectionPool, async_timer
 
 
 class TestAsyncPerformanceOptimizations:
@@ -149,7 +149,7 @@ class TestAsyncPerformanceOptimizations:
     @pytest.mark.asyncio
     async def test_performance_monitor(self):
         """Test performance monitoring and metrics collection."""
-        monitor = PerformanceMonitor()
+        monitor = get_performance_monitor()
 
         async def sample_operation():
             """Sample async operation for testing."""

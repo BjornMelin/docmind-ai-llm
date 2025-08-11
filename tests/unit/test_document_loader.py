@@ -1418,3 +1418,755 @@ class TestIntegrationScenarios:
             for img_doc in image_docs:
                 assert "image_base64" in img_doc.metadata
                 assert img_doc.metadata["image_base64"].startswith("mock_image_data_")
+
+
+class TestPerformanceMonitoring:
+    """Test performance monitoring functionality."""
+
+    def test_processing_metrics_creation(self):
+        """Test ProcessingMetrics dataclass creation and attributes."""
+        from utils.document_loader import ProcessingMetrics
+
+        metric = ProcessingMetrics(
+            operation="test_operation",
+            file_path="/tmp/test.pdf",
+            file_size_mb=5.2,
+            duration_seconds=3.14,
+            document_count=10,
+            table_count=2,
+            image_count=3,
+            success=True,
+            error_message=None,
+        )
+
+        assert metric.operation == "test_operation"
+        assert metric.file_path == "/tmp/test.pdf"
+        assert metric.file_size_mb == 5.2
+        assert metric.duration_seconds == 3.14
+        assert metric.document_count == 10
+        assert metric.table_count == 2
+        assert metric.image_count == 3
+        assert metric.success is True
+        assert metric.error_message is None
+
+    def test_processing_metrics_with_error(self):
+        """Test ProcessingMetrics with error information."""
+        from utils.document_loader import ProcessingMetrics
+
+        metric = ProcessingMetrics(
+            operation="failed_operation",
+            file_path="/tmp/error.pdf",
+            file_size_mb=1.0,
+            duration_seconds=0.5,
+            document_count=0,
+            table_count=0,
+            image_count=0,
+            success=False,
+            error_message="File processing failed",
+        )
+
+        assert metric.success is False
+        assert metric.error_message == "File processing failed"
+
+    def test_performance_monitor_init(self):
+        """Test PerformanceMonitor initialization."""
+        monitor = get_performance_monitor()
+        assert monitor.metrics == []
+
+    def test_performance_monitor_context_manager(self, tmp_path):
+        """Test PerformanceMonitor context manager functionality."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        monitor = get_performance_monitor()
+
+        with patch("utils.document_loader.time.perf_counter", side_effect=[0.0, 1.5]):
+            with monitor.monitor_processing("test_op", str(test_file)) as metric:
+                metric.document_count = 5
+                metric.table_count = 1
+                metric.image_count = 2
+
+        assert len(monitor.metrics) == 1
+        recorded_metric = monitor.metrics[0]
+        assert recorded_metric.operation == "test_op"
+        assert recorded_metric.file_path == str(test_file)
+        assert recorded_metric.duration_seconds == 1.5
+        assert recorded_metric.document_count == 5
+        assert recorded_metric.success is True
+
+    def test_performance_monitor_context_manager_with_exception(self, tmp_path):
+        """Test PerformanceMonitor context manager with exception handling."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        monitor = get_performance_monitor()
+
+        with patch("utils.document_loader.time.perf_counter", side_effect=[0.0, 0.8]):
+            try:
+                with monitor.monitor_processing("failed_op", str(test_file)) as metric:
+                    metric.document_count = 0
+                    raise ValueError("Processing failed")
+            except ValueError:
+                pass
+
+        assert len(monitor.metrics) == 1
+        recorded_metric = monitor.metrics[0]
+        assert recorded_metric.success is False
+        assert recorded_metric.error_message == "Processing failed"
+        assert recorded_metric.duration_seconds == 0.8
+
+    @patch("utils.document_loader.logger")
+    def test_performance_monitor_log_metric(self, mock_logger, tmp_path):
+        """Test performance monitor logging functionality."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        monitor = get_performance_monitor()
+
+        with patch("utils.document_loader.time.perf_counter", side_effect=[0.0, 2.0]):
+            with monitor.monitor_processing("log_test", str(test_file)) as metric:
+                metric.document_count = 3
+                metric.table_count = 1
+                metric.image_count = 0
+
+        # Verify logging was called
+        mock_logger.info.assert_called()
+        call_args = mock_logger.info.call_args
+        assert "✅ log_test" in call_args[0][0]
+        assert "test.txt" in call_args[0][0]
+
+        # Verify performance data in extra
+        extra_data = call_args[1]["extra"]["performance"]
+        assert extra_data["operation"] == "log_test"
+        assert extra_data["duration_seconds"] == 2.0
+        assert extra_data["document_count"] == 3
+        assert extra_data["success"] is True
+
+
+class TestDocumentCaching:
+    """Test document caching functionality."""
+
+    def test_document_cache_init(self):
+        """Test DocumentCache initialization."""
+        from utils.document_loader import DocumentCache
+
+        with patch("diskcache.Cache") as mock_cache:
+            cache = DocumentCache("/tmp/test_cache")
+
+            assert cache.cache_dir.name == "test_cache"
+            mock_cache.assert_called_once_with("/tmp/test_cache")
+
+    def test_document_cache_get_file_hash(self, tmp_path):
+        """Test file hash generation."""
+        from utils.document_loader import DocumentCache
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_bytes(b"test content for hashing")
+
+        with patch("diskcache.Cache"):
+            cache = DocumentCache()
+            file_hash = cache.get_file_hash(str(test_file))
+
+            # Verify hash is consistent
+            assert isinstance(file_hash, str)
+            assert len(file_hash) == 64  # SHA-256 hex digest length
+
+            # Same file should produce same hash
+            second_hash = cache.get_file_hash(str(test_file))
+            assert file_hash == second_hash
+
+    def test_document_cache_is_cached(self, tmp_path):
+        """Test cache existence checking."""
+        from utils.document_loader import DocumentCache
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("cached content")
+
+        with patch("diskcache.Cache") as mock_cache_class:
+            mock_cache = MagicMock()
+            mock_cache_class.return_value = mock_cache
+            mock_cache.__contains__.return_value = True
+
+            cache = DocumentCache()
+
+            with patch.object(cache, "get_file_hash", return_value="test_hash"):
+                result = cache.is_cached(str(test_file))
+
+                assert result is True
+                mock_cache.__contains__.assert_called_once_with("test_hash")
+
+    def test_document_cache_get_cached(self, tmp_path):
+        """Test retrieving cached documents."""
+        from utils.document_loader import Document, DocumentCache
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("cached content")
+
+        mock_documents = [Document(text="cached doc", metadata={"cached": True})]
+
+        with patch("diskcache.Cache") as mock_cache_class:
+            mock_cache = MagicMock()
+            mock_cache_class.return_value = mock_cache
+            mock_cache.get.return_value = mock_documents
+
+            cache = DocumentCache()
+
+            with (
+                patch.object(cache, "get_file_hash", return_value="test_hash"),
+                patch.object(cache, "is_cached", return_value=True),
+            ):
+                result = cache.get_cached(str(test_file))
+
+                assert result == mock_documents
+                mock_cache.get.assert_called_once_with("test_hash")
+
+    def test_document_cache_get_cached_not_found(self, tmp_path):
+        """Test retrieving cached documents when not found."""
+        from utils.document_loader import DocumentCache
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("uncached content")
+
+        with patch("diskcache.Cache"):
+            cache = DocumentCache()
+
+            with patch.object(cache, "is_cached", return_value=False):
+                result = cache.get_cached(str(test_file))
+                assert result is None
+
+    def test_document_cache_cache_document(self, tmp_path):
+        """Test caching documents with expiry."""
+        from utils.document_loader import Document, DocumentCache
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("content to cache")
+
+        documents = [Document(text="doc to cache", metadata={"source": "test"})]
+
+        with patch("diskcache.Cache") as mock_cache_class:
+            mock_cache = MagicMock()
+            mock_cache_class.return_value = mock_cache
+
+            cache = DocumentCache()
+
+            with patch.object(cache, "get_file_hash", return_value="cache_hash"):
+                cache.cache_document(str(test_file), documents)
+
+                mock_cache.set.assert_called_once_with(
+                    "cache_hash", documents, expire=3600
+                )
+
+    def test_cached_document_processing_decorator(self, tmp_path):
+        """Test the cached_document_processing decorator."""
+        from utils.document_loader import Document, cached_document_processing
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("decorator test content")
+
+        mock_documents = [Document(text="cached result", metadata={})]
+
+        @cached_document_processing
+        def dummy_processor(file_path, *args, **kwargs):
+            return [Document(text="fresh result", metadata={})]
+
+        with (
+            patch("utils.document_loader._document_cache") as mock_cache,
+            patch("utils.document_loader.logger") as mock_logger,
+        ):
+            # Test cache hit
+            mock_cache.get_cached.return_value = mock_documents
+            result = dummy_processor(str(test_file))
+
+            assert result == mock_documents
+            mock_logger.info.assert_called_with(
+                f"Using cached document for {test_file.name}"
+            )
+            mock_cache.cache_document.assert_not_called()
+
+        with (
+            patch("utils.document_loader._document_cache") as mock_cache,
+            patch("utils.document_loader.logger") as mock_logger,
+        ):
+            # Test cache miss
+            mock_cache.get_cached.return_value = None
+            result = dummy_processor(str(test_file))
+
+            assert len(result) == 1
+            assert result[0].text == "fresh result"
+            mock_cache.cache_document.assert_called_once()
+
+
+class TestMemoryMonitoring:
+    """Test memory monitoring functionality."""
+
+    def test_memory_monitor_get_memory_usage(self):
+        """Test memory usage retrieval."""
+        from utils.document_loader import MemoryMonitor
+
+        with patch("psutil.Process") as mock_process_class:
+            mock_process = MagicMock()
+            mock_memory_info = MagicMock()
+            mock_memory_info.rss = 1024 * 1024 * 100  # 100MB
+            mock_memory_info.vms = 1024 * 1024 * 200  # 200MB
+            mock_process.memory_info.return_value = mock_memory_info
+            mock_process.memory_percent.return_value = 15.5
+            mock_process_class.return_value = mock_process
+
+            memory_usage = MemoryMonitor.get_memory_usage()
+
+            assert memory_usage["rss_mb"] == 100.0
+            assert memory_usage["vms_mb"] == 200.0
+            assert memory_usage["percent"] == 15.5
+
+    @patch("utils.document_loader.gc.collect")
+    @patch("utils.document_loader.logger")
+    def test_memory_monitor_context_manager(self, mock_logger, mock_gc_collect):
+        """Test memory monitor context manager."""
+        from utils.document_loader import MemoryMonitor
+
+        mock_gc_collect.return_value = 42  # Number of collected objects
+
+        monitor = MemoryMonitor()
+
+        # Mock memory usage progression
+        initial_memory = {"rss_mb": 50.0, "vms_mb": 100.0, "percent": 10.0}
+        final_memory = {"rss_mb": 55.0, "vms_mb": 105.0, "percent": 11.0}
+
+        with patch.object(
+            monitor, "get_memory_usage", side_effect=[initial_memory, final_memory]
+        ):
+            with monitor.memory_managed_processing("test_operation"):
+                pass  # Simulate processing
+
+        # Verify logging
+        assert mock_logger.info.call_count == 2
+
+        start_call = mock_logger.info.call_args_list[0][0][0]
+        assert "Starting test_operation - Memory: 50.0MB" in start_call
+
+        end_call = mock_logger.info.call_args_list[1][0][0]
+        assert "Completed test_operation - Memory: 55.0MB" in end_call
+        assert "(Δ+5.0MB)" in end_call
+        assert "GC collected: 42 objects" in end_call
+
+        mock_gc_collect.assert_called_once()
+
+    def test_memory_efficient_processing_decorator(self):
+        """Test memory_efficient_processing decorator."""
+        from utils.document_loader import memory_efficient_processing
+
+        @memory_efficient_processing
+        def test_function(arg1, arg2, kwarg1=None):
+            return f"result: {arg1}, {arg2}, {kwarg1}"
+
+        with patch("utils.document_loader._memory_monitor") as mock_monitor:
+            mock_context = MagicMock()
+            mock_monitor.memory_managed_processing.return_value = mock_context
+
+            result = test_function("value1", "value2", kwarg1="kwarg_value")
+
+            assert result == "result: value1, value2, kwarg_value"
+            mock_monitor.memory_managed_processing.assert_called_once_with(
+                "test_function"
+            )
+
+    def test_monitor_performance_decorator(self, tmp_path):
+        """Test monitor_performance decorator functionality."""
+        from utils.document_loader import Document, monitor_performance
+
+        test_file = tmp_path / "perf_test.txt"
+        test_file.write_text("performance test content")
+
+        @monitor_performance("test_monitoring")
+        def test_processor(file_path, *args, **kwargs):
+            return [
+                Document(text="doc1", metadata={"element_type": "Table"}),
+                Document(text="doc2", metadata={"has_images": True}),
+                Document(text="doc3", metadata={}),
+            ]
+
+        with patch("utils.document_loader._performance_monitor") as mock_monitor:
+            mock_context = MagicMock()
+            mock_metric = MagicMock()
+            mock_context.__enter__.return_value = mock_metric
+            mock_monitor.monitor_processing.return_value = mock_context
+
+            result = test_processor(str(test_file), "extra_arg")
+
+            # Verify monitor was called correctly
+            mock_monitor.monitor_processing.assert_called_once_with(
+                "test_monitoring", str(test_file)
+            )
+
+            # Verify metrics were updated
+            assert mock_metric.document_count == 3
+            assert mock_metric.table_count == 1  # One Table element
+            assert mock_metric.image_count == 1  # One with has_images=True
+
+            assert len(result) == 3
+
+
+class TestLogUtilities:
+    """Test logging utility functions."""
+
+    @patch("utils.logging_utils.logger")
+    def test_log_error_with_context(self, mock_logger):
+        """Test error logging with context."""
+        from utils.logging_utils import log_error_with_context
+
+        test_error = ValueError("Test error message")
+        context = {"file_path": "/test/path", "operation_stage": "parsing"}
+
+        log_error_with_context(
+            test_error, "test_operation", context=context, extra_param="extra_value"
+        )
+
+        mock_logger.error.assert_called_once()
+        call_args = mock_logger.error.call_args
+
+        # Verify error message
+        assert "Operation failed: test_operation" in call_args[0][0]
+
+        # Verify context data
+        extra_data = call_args[1]["extra"]["error_context"]
+        assert extra_data["operation"] == "test_operation"
+        assert extra_data["error_type"] == "ValueError"
+        assert extra_data["error_message"] == "Test error message"
+        assert extra_data["file_path"] == "/test/path"
+        assert extra_data["operation_stage"] == "parsing"
+        assert extra_data["extra_param"] == "extra_value"
+
+        # Verify exception is passed
+        assert call_args[1]["exception"] == test_error
+
+    @patch("utils.logging_utils.logger")
+    def test_log_performance(self, mock_logger):
+        """Test performance logging."""
+        from utils.logging_utils import log_performance
+
+        log_performance(
+            "test_operation", 2.5, file_count=10, document_count=25, success_rate=0.95
+        )
+
+        mock_logger.info.assert_called_once()
+        call_args = mock_logger.info.call_args
+
+        # Verify message
+        assert "Performance: test_operation completed" in call_args[0][0]
+
+        # Verify performance data
+        perf_data = call_args[1]["extra"]["performance"]
+        assert perf_data["operation"] == "test_operation"
+        assert perf_data["duration_seconds"] == 2.5
+        assert perf_data["duration_human"] == "2.50s"
+        assert perf_data["file_count"] == 10
+        assert perf_data["document_count"] == 25
+        assert perf_data["success_rate"] == 0.95
+
+
+class TestAsyncDocumentProcessing:
+    """Test async document processing functions."""
+
+    @pytest.mark.asyncio
+    async def test_stream_document_processing_basic(self, tmp_path):
+        """Test basic streaming document processing."""
+        from utils.document_loader import Document, stream_document_processing
+
+        # Create test files
+        file1 = tmp_path / "doc1.txt"
+        file2 = tmp_path / "doc2.txt"
+        file1.write_text("content 1")
+        file2.write_text("content 2")
+
+        file_paths = [str(file1), str(file2)]
+
+        mock_docs = [
+            [Document(text="doc1 content", metadata={"source": str(file1)})],
+            [Document(text="doc2 content", metadata={"source": str(file2)})],
+        ]
+
+        with (
+            patch(
+                "utils.document_loader.load_documents_unstructured",
+                side_effect=mock_docs,
+            ),
+            patch("utils.document_loader.logger") as mock_logger,
+        ):
+            documents = []
+            async for doc in stream_document_processing(file_paths):
+                documents.append(doc)
+
+            assert len(documents) == 2
+            assert documents[0].text == "doc1 content"
+            assert documents[1].text == "doc2 content"
+
+            # Verify logging
+            mock_logger.info.assert_called()
+            success_log = next(
+                call
+                for call in mock_logger.info.call_args_list
+                if "Stream document processing completed" in str(call)
+            )
+            assert success_log is not None
+
+    @pytest.mark.asyncio
+    async def test_stream_document_processing_with_errors(self, tmp_path):
+        """Test streaming with some files failing."""
+        from utils.document_loader import Document, stream_document_processing
+
+        file1 = tmp_path / "doc1.txt"
+        file2 = tmp_path / "doc2.txt"
+        file1.write_text("good content")
+        file2.write_text("content that will fail")
+
+        file_paths = [str(file1), str(file2)]
+
+        def mock_load_docs(file_path):
+            if "doc2" in file_path:
+                raise Exception("Processing failed")
+            return [Document(text="successful doc", metadata={})]
+
+        with (
+            patch(
+                "utils.document_loader.load_documents_unstructured",
+                side_effect=mock_load_docs,
+            ),
+            patch("utils.document_loader.logger") as mock_logger,
+        ):
+            documents = []
+            async for doc in stream_document_processing(file_paths):
+                documents.append(doc)
+
+            # Should get docs from successful file only
+            assert len(documents) == 1
+            assert documents[0].text == "successful doc"
+
+            # Verify error logging
+            error_calls = [
+                call
+                for call in mock_logger.warning.call_args_list
+                if "Document processing failed" in str(call)
+            ]
+            assert len(error_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_batch_embed_documents(self):
+        """Test batch document embedding."""
+        from utils.document_loader import Document, batch_embed_documents
+
+        documents = [
+            Document(text="doc 1 content", metadata={}),
+            Document(text="doc 2 content", metadata={}),
+            Document(text="doc 3 content", metadata={}),
+        ]
+
+        mock_embeddings = [
+            [0.1, 0.2, 0.3],  # doc 1 embedding
+            [0.4, 0.5, 0.6],  # doc 2 embedding
+            [0.7, 0.8, 0.9],  # doc 3 embedding
+        ]
+
+        with (
+            patch("utils.document_loader.get_embed_model") as mock_get_model,
+            patch("utils.document_loader.logger") as mock_logger,
+        ):
+            mock_model = MagicMock()
+            mock_model.embed.return_value = mock_embeddings
+            mock_get_model.return_value = mock_model
+
+            embeddings = await batch_embed_documents(documents, batch_size=2)
+
+            assert len(embeddings) == 3
+            assert embeddings[0] == [0.1, 0.2, 0.3]
+            assert embeddings[1] == [0.4, 0.5, 0.6]
+            assert embeddings[2] == [0.7, 0.8, 0.9]
+
+            # Verify success logging
+            success_calls = [
+                call
+                for call in mock_logger.success.call_args_list
+                if "Embedded 3 documents" in str(call)
+            ]
+            assert len(success_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_batch_embed_documents_with_failures(self):
+        """Test batch embedding with some batch failures."""
+        from utils.document_loader import Document, batch_embed_documents
+
+        documents = [
+            Document(text="doc 1", metadata={}),
+            Document(text="doc 2", metadata={}),
+            Document(text="doc 3", metadata={}),
+            Document(text="doc 4", metadata={}),
+        ]
+
+        def mock_embed_batch(texts):
+            if "doc 3" in texts[0] or "doc 4" in texts[0]:
+                raise Exception("Embedding failed")
+            return [[0.1, 0.2], [0.3, 0.4]]
+
+        with (
+            patch("utils.document_loader.get_embed_model") as mock_get_model,
+            patch("utils.document_loader.settings") as mock_settings,
+            patch("utils.document_loader.logger") as mock_logger,
+        ):
+            mock_model = MagicMock()
+            mock_model.embed = mock_embed_batch
+            mock_get_model.return_value = mock_model
+            mock_settings.dense_embedding_dimension = 128
+
+            embeddings = await batch_embed_documents(documents, batch_size=2)
+
+            # Should get embeddings for successful batch + placeholders for failed batch
+            assert len(embeddings) == 4
+            assert embeddings[0] == [0.1, 0.2]
+            assert embeddings[1] == [0.3, 0.4]
+            assert embeddings[2] == [0.0] * 128  # Placeholder
+            assert embeddings[3] == [0.0] * 128  # Placeholder
+
+            # Verify error logging
+            error_calls = [
+                call
+                for call in mock_logger.error.call_args_list
+                if "Batch" in str(call) and "embedding failed" in str(call)
+            ]
+            assert len(error_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_process_documents_streaming_with_chunking(self, tmp_path):
+        """Test streaming processing with document chunking."""
+        from utils.document_loader import Document, process_documents_streaming
+
+        # Create test file
+        test_file = tmp_path / "large_doc.txt"
+        test_file.write_text("content")
+
+        # Mock large document that needs chunking
+        large_text = "A" * 2000  # Larger than chunk_size of 1024
+        mock_document = Document(text=large_text, metadata={"source": "large_doc.txt"})
+
+        mock_chunks = [
+            Document(text="Chunk 1", metadata={"chunk": 1}),
+            Document(text="Chunk 2", metadata={"chunk": 2}),
+        ]
+
+        with (
+            patch("utils.document_loader.stream_document_processing") as mock_stream,
+            patch(
+                "llama_index.core.node_parser.SentenceSplitter"
+            ) as mock_splitter_class,
+        ):
+            # Mock streaming to return large document
+            async def mock_stream_docs(file_paths):
+                yield mock_document
+
+            mock_stream.return_value = mock_stream_docs([str(test_file)])
+
+            # Mock splitter
+            mock_splitter = MagicMock()
+            mock_splitter.get_nodes_from_documents.return_value = mock_chunks
+            mock_splitter_class.return_value = mock_splitter
+
+            # Process documents
+            processed_docs = []
+            async for doc in process_documents_streaming(
+                [str(test_file)], chunk_size=1024, chunk_overlap=200
+            ):
+                processed_docs.append(doc)
+
+            # Should get chunked documents
+            assert len(processed_docs) == 2
+            assert processed_docs[0].text == "Chunk 1"
+            assert processed_docs[1].text == "Chunk 2"
+
+            # Verify splitter was configured correctly
+            mock_splitter_class.assert_called_once_with(
+                chunk_size=1024,
+                chunk_overlap=200,
+                paragraph_separator="\n\n",
+                secondary_chunking_regex="[^,.;。]+[,.;。]?",
+            )
+
+    @pytest.mark.asyncio
+    async def test_load_documents_parallel(self, tmp_path):
+        """Test parallel document loading."""
+        from utils.document_loader import Document, load_documents_parallel
+
+        # Create test files
+        files = []
+        for i in range(3):
+            file_path = tmp_path / f"doc{i}.pdf"
+            file_path.write_text(f"content {i}")
+            files.append(str(file_path))
+
+        mock_results = [
+            [Document(text=f"loaded doc {i}", metadata={"source": f"doc{i}.pdf"})]
+            for i in range(3)
+        ]
+
+        with (
+            patch(
+                "utils.document_loader.load_documents_unstructured_async",
+                side_effect=mock_results,
+            ),
+            patch("utils.document_loader.logger") as mock_logger,
+        ):
+            documents = await load_documents_parallel(files, max_concurrent=2)
+
+            # Should combine all documents
+            assert len(documents) == 3
+            for i, doc in enumerate(documents):
+                assert doc.text == f"loaded doc {i}"
+                assert doc.metadata["source"] == f"doc{i}.pdf"
+
+            # Verify logging
+            info_calls = [
+                call
+                for call in mock_logger.info.call_args_list
+                if "Loading 3 documents in parallel" in str(call)
+            ]
+            assert len(info_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_load_documents_unstructured_async(self, tmp_path):
+        """Test async wrapper for unstructured loading."""
+        from utils.document_loader import Document, load_documents_unstructured_async
+
+        test_file = tmp_path / "async_test.pdf"
+        test_file.write_text("async content")
+
+        mock_docs = [Document(text="async loaded", metadata={})]
+
+        with patch(
+            "utils.document_loader.load_documents_unstructured", return_value=mock_docs
+        ):
+            result = await load_documents_unstructured_async(str(test_file))
+
+            assert result == mock_docs
+
+    def test_load_documents_llama_sync(self, tmp_path):
+        """Test synchronous wrapper for LlamaParse loading."""
+        from utils.document_loader import Document, load_documents_llama_sync
+
+        test_file = tmp_path / "sync_test.txt"
+        test_file.write_text("sync content")
+
+        mock_docs = [Document(text="sync loaded", metadata={})]
+
+        with patch(
+            "utils.document_loader.load_documents_llama", return_value=mock_docs
+        ) as mock_load:
+            result = load_documents_llama_sync(str(test_file))
+
+            assert result == mock_docs
+
+            # Verify mock file was created and passed correctly
+            mock_load.assert_called_once()
+            call_args = mock_load.call_args[0][
+                0
+            ]  # First positional arg (uploaded_files list)
+            assert len(call_args) == 1
+            mock_file = call_args[0]
+            assert mock_file.name == "sync_test.txt"
+            assert mock_file.getvalue() == b"sync content"

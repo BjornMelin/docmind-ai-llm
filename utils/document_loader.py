@@ -70,56 +70,26 @@ try:
 except ImportError:
     # FastEmbedEmbedding not available, will use fallback if needed
     FastEmbedEmbedding = None
-from llama_parse import LlamaParse
+try:
+    from llama_parse import LlamaParse
+except ImportError:
+    # LlamaParse not available, will use fallback if needed
+    LlamaParse = None
 from loguru import logger
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from PIL import Image
 from unstructured.partition.auto import partition
 from whisper import load_model as whisper_load
 
-from models import AppSettings
+from models.core import settings
 from utils.exceptions import (
     DocumentLoadingError,
     handle_document_error,
     handle_embedding_error,
 )
+from utils.logging_utils import log_error_with_context, log_performance
 
-
-def log_error_with_context(
-    error: Exception, operation: str, context: dict | None = None, **kwargs
-) -> None:
-    """Log errors with comprehensive context information."""
-    error_context = {
-        "operation": operation,
-        "error_type": type(error).__name__,
-        "error_message": str(error),
-        **(context or {}),
-        **kwargs,
-    }
-    logger.error(
-        f"Operation failed: {operation}",
-        extra={"error_context": error_context},
-        exception=error,
-    )
-
-
-def log_performance(operation: str, duration: float, **kwargs) -> None:
-    """Log performance metrics with structured data."""
-    logger.info(
-        f"Performance: {operation} completed",
-        extra={
-            "performance": {
-                "operation": operation,
-                "duration_seconds": round(duration, 3),
-                "duration_human": f"{duration:.2f}s",
-                **kwargs,
-            }
-        },
-    )
-
-
-settings = AppSettings()
-
+# settings is now imported from models.core
 from utils.model_manager import ModelManager  # noqa: E402
 from utils.retry_utils import (  # noqa: E402
     async_with_timeout,
@@ -211,70 +181,18 @@ class MemoryMonitor:
             )
 
 
-class PerformanceMonitor:
-    """Performance monitoring with structured metrics collection."""
-
-    def __init__(self):
-        """Initialize performance monitor with empty metrics list."""
-        self.metrics: list[ProcessingMetrics] = []
-
-    @contextmanager
-    def monitor_processing(self, operation: str, file_path: str):
-        """Context manager for monitoring document processing performance."""
-        start_time = time.perf_counter()
-        file_size_mb = Path(file_path).stat().st_size / 1024 / 1024
-
-        metric = ProcessingMetrics(
-            operation=operation,
-            file_path=file_path,
-            file_size_mb=file_size_mb,
-            duration_seconds=0,
-            document_count=0,
-            table_count=0,
-            image_count=0,
-            success=False,
-        )
-
-        try:
-            yield metric
-            metric.success = True
-        except Exception as e:
-            metric.error_message = str(e)
-            raise
-        finally:
-            metric.duration_seconds = time.perf_counter() - start_time
-            self.metrics.append(metric)
-            self._log_metric(metric)
-
-    def _log_metric(self, metric: ProcessingMetrics) -> None:
-        """Log processing metric with structured data."""
-        status = "✅" if metric.success else "❌"
-        logger.info(
-            f"{status} {metric.operation}: {Path(metric.file_path).name}",
-            extra={
-                "performance": {
-                    "operation": metric.operation,
-                    "file_size_mb": metric.file_size_mb,
-                    "duration_seconds": metric.duration_seconds,
-                    "throughput_mb_per_sec": (
-                        metric.file_size_mb / metric.duration_seconds
-                        if metric.duration_seconds > 0
-                        else 0
-                    ),
-                    "document_count": metric.document_count,
-                    "table_count": metric.table_count,
-                    "image_count": metric.image_count,
-                    "success": metric.success,
-                    "error": metric.error_message,
-                }
-            },
-        )
+# NOTE: PerformanceMonitor class consolidated to utils.monitoring.py
+# ProcessingMetrics kept for backward compatibility with existing code
 
 
 # Global optimization instances
 _document_cache = DocumentCache()
 _memory_monitor = MemoryMonitor()
-_performance_monitor = PerformanceMonitor()
+
+# Use unified performance monitoring
+from .monitoring import get_performance_monitor
+
+_performance_monitor = get_performance_monitor()
 
 
 def cached_document_processing(processor_func):
@@ -308,15 +226,16 @@ def memory_efficient_processing(func):
 
 
 def monitor_performance(operation: str):
-    """Decorator for monitoring function performance."""
+    """Decorator for monitoring function performance using unified monitoring system."""
 
     def decorator(func):
         @wraps(func)
-        def wrapper(file_path: str, *args, **kwargs):
-            with _performance_monitor.monitor_processing(
+        async def async_wrapper(file_path: str, *args, **kwargs):
+            # Use unified async monitoring for async functions
+            async with _performance_monitor.measure_document_processing(
                 operation, file_path
             ) as metric:
-                result = func(file_path, *args, **kwargs)
+                result = await func(file_path, *args, **kwargs)
 
                 # Update metric with results
                 if isinstance(result, list):
@@ -333,7 +252,52 @@ def monitor_performance(operation: str):
 
                 return result
 
-        return wrapper
+        @wraps(func)
+        def sync_wrapper(file_path: str, *args, **kwargs):
+            # For sync functions, we'll use a simple approach with manual timing
+            # since the unified system is async-focused
+            import time
+
+            start_time = time.perf_counter()
+
+            try:
+                result = func(file_path, *args, **kwargs)
+
+                # Manual logging for sync compatibility
+                duration = time.perf_counter() - start_time
+                file_size_mb = Path(file_path).stat().st_size / 1024 / 1024
+
+                # Count results if it's a document list
+                doc_count = len(result) if isinstance(result, list) else 0
+                table_count = (
+                    sum(
+                        1
+                        for doc in result
+                        if isinstance(result, list)
+                        and doc.metadata.get("element_type") == "Table"
+                    )
+                    if isinstance(result, list)
+                    else 0
+                )
+
+                logger.info(
+                    f"✅ {operation}: {Path(file_path).name} - "
+                    f"{duration:.2f}s, {file_size_mb:.1f}MB, {doc_count} docs, {table_count} tables"
+                )
+
+                return result
+            except Exception as e:
+                duration = time.perf_counter() - start_time
+                logger.error(
+                    f"❌ {operation}: {Path(file_path).name} failed in {duration:.2f}s - {e}"
+                )
+                raise
+
+        # Return async wrapper if function is async, sync wrapper otherwise
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
 
     return decorator
 
@@ -1025,6 +989,10 @@ def load_documents_llama(
         },
     )
 
+    if LlamaParse is None:
+        raise ImportError(
+            "LlamaParse is not available. Please install llama-parse package."
+        )
     parser = LlamaParse(result_type="markdown")  # Latest for tables/images
     docs: list[Document] = []
 
