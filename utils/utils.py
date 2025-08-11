@@ -42,7 +42,11 @@ from functools import wraps
 from typing import Any
 
 import torch
-from llama_index.embeddings.fastembed import FastEmbedEmbedding
+
+try:
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
+except ImportError:
+    FastEmbedEmbedding = None
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
@@ -112,7 +116,12 @@ def setup_logging(log_level: str = "INFO") -> None:
     logger.add(
         sys.stdout,
         level=log_level,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+            "<level>{message}</level>"
+        ),
         colorize=True,
     )
 
@@ -120,7 +129,12 @@ def setup_logging(log_level: str = "INFO") -> None:
     logger.add(
         "logs/docmind.log",
         level=log_level,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        format=lambda record: (
+            f"{record['time']:YYYY-MM-DD HH:mm:ss} | "
+            f"{record['level']: <8} | "
+            f"{record['name']}:{record['function']}:{record['line']} - "
+            f"{record['message']}"
+        ),
         rotation="10 MB",
         retention="7 days",
         compression="zip",

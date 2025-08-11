@@ -265,7 +265,7 @@ class TestSystemIntegration:
             sparse_embedding_model="prithvida/Splade_PP_en_v1",
         )
 
-    # Removed duplicate query complexity analysis test - consolidated into test_agent_factory.py
+    # Removed duplicate query complexity analysis test - consolidated into test_agent_factory.py  # noqa: E501
 
     def test_document_processing_workflow(self, mock_settings):
         """Test basic document processing workflow."""

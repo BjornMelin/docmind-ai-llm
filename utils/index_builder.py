@@ -39,7 +39,11 @@ import time
 from typing import Any
 
 import torch
-from fastembed import SparseTextEmbedding
+
+try:
+    from fastembed import SparseTextEmbedding
+except ImportError:
+    SparseTextEmbedding = None
 from llama_index.core import (
     Document,
     KnowledgeGraphIndex,
@@ -52,7 +56,11 @@ from llama_index.core.retrievers import (
     VectorIndexRetriever,
 )
 from llama_index.core.schema import ImageDocument
-from llama_index.embeddings.fastembed import FastEmbedEmbedding
+
+try:
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
+except ImportError:
+    FastEmbedEmbedding = None
 from llama_index.llms.ollama import Ollama
 from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
@@ -569,25 +577,34 @@ def create_index(docs: list[Document], use_gpu: bool) -> dict[str, Any]:
         # Use optimized embedding model from utils with torch.compile
         # Use FastEmbed native GPU acceleration for both dense and sparse embeddings
         # Dense embedding model with optimized configuration
-        embed_model = FastEmbedEmbedding(
-            # Using BGE-Large embedding model
-            model_name=settings.embedding.dense_embedding_model,
-            cache_dir="./embeddings_cache",
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-            if use_gpu and torch.cuda.is_available()
-            else ["CPUExecutionProvider"],
-            batch_size=settings.embedding_batch_size,
-        )
+        if FastEmbedEmbedding is not None:
+            embed_model = FastEmbedEmbedding(
+                # Using BGE-Large embedding model
+                model_name=settings.embedding.dense_embedding_model,
+                cache_dir="./embeddings_cache",
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+                if use_gpu and torch.cuda.is_available()
+                else ["CPUExecutionProvider"],
+                batch_size=settings.embedding_batch_size,
+            )
+        else:
+            # Fallback to HuggingFace embedding
+            from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
+            embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
         # Sparse embedding model with optimized configuration
-        sparse_embed_model = SparseTextEmbedding(
-            model_name=settings.embedding.sparse_embedding_model,
-            cache_dir="./embeddings_cache",
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-            if use_gpu and torch.cuda.is_available()
-            else ["CPUExecutionProvider"],
-            batch_size=settings.embedding_batch_size,
-        )
+        if SparseTextEmbedding is not None:
+            sparse_embed_model = SparseTextEmbedding(
+                model_name=settings.embedding.sparse_embedding_model,
+                cache_dir="./embeddings_cache",
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+                if use_gpu and torch.cuda.is_available()
+                else ["CPUExecutionProvider"],
+                batch_size=settings.embedding_batch_size,
+            )
+        else:
+            sparse_embed_model = None
         # Note: torch.compile disabled for FastEmbed models due to compatibility
         # FastEmbed provides its own optimized GPU acceleration
         if settings.gpu.gpu_acceleration and torch.cuda.is_available():
@@ -1117,14 +1134,18 @@ async def generate_sparse_embeddings_async(
         to continue with dense-only embeddings.
     """
     try:
-        sparse_embed_model = SparseTextEmbedding(
-            model_name=settings.embedding.sparse_embedding_model,
-            cache_dir="./embeddings_cache",
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-            if use_gpu and torch.cuda.is_available()
-            else ["CPUExecutionProvider"],
-            batch_size=settings.embedding_batch_size,
-        )
+        if SparseTextEmbedding is not None:
+            sparse_embed_model = SparseTextEmbedding(
+                model_name=settings.embedding.sparse_embedding_model,
+                cache_dir="./embeddings_cache",
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+                if use_gpu and torch.cuda.is_available()
+                else ["CPUExecutionProvider"],
+                batch_size=settings.embedding_batch_size,
+            )
+        else:
+            # Return None if SparseTextEmbedding is not available
+            return None
 
         async def process_sparse_batch(batch: list[Document]) -> list[dict[str, float]]:
             """Process a single batch for sparse embeddings."""
@@ -1241,8 +1262,8 @@ async def create_vector_index_async(
 
 async def _create_vector_index_with_gpu_async(
     docs: list[Document],
-    embed_model: FastEmbedEmbedding,
-    sparse_embed_model: SparseTextEmbedding | None,
+    embed_model: Any,
+    sparse_embed_model: Any,
     vector_store: Any,
     use_gpu: bool,
 ) -> VectorStoreIndex:

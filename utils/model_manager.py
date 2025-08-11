@@ -9,8 +9,15 @@ Classes:
 
 from typing import Any
 
-from fastembed import LateInteractionMultimodalEmbedding
-from llama_index.embeddings.fastembed import FastEmbedEmbedding
+try:
+    from fastembed import LateInteractionMultimodalEmbedding
+except ImportError:
+    LateInteractionMultimodalEmbedding = None
+
+try:
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
+except ImportError:
+    FastEmbedEmbedding = None
 
 
 class ModelManager:
@@ -29,14 +36,22 @@ class ModelManager:
     def get_text_embedding_model(self, model_name: str) -> Any:
         """Get or initialize text embedding model."""
         if self._text_model is None:
-            self._text_model = FastEmbedEmbedding(model_name)
+            if FastEmbedEmbedding is not None:
+                self._text_model = FastEmbedEmbedding(model_name)
+            else:
+                # Return None if FastEmbedEmbedding is not available
+                return None
         return self._text_model
 
     def get_multimodal_embedding_model(self) -> Any:
         """Get or initialize multimodal embedding model."""
         if self._multimodal_model is None:
-            self._multimodal_model = LateInteractionMultimodalEmbedding(
-                model_name="Qdrant/jina-clip-v1",
-                max_length=512,
-            )
+            if LateInteractionMultimodalEmbedding is not None:
+                self._multimodal_model = LateInteractionMultimodalEmbedding(
+                    model_name="Qdrant/jina-clip-v1",
+                    max_length=512,
+                )
+            else:
+                # Return None if LateInteractionMultimodalEmbedding is not available
+                return None
         return self._multimodal_model

@@ -31,10 +31,19 @@ Attributes:
 """
 
 from functools import lru_cache
+from typing import Any
 
 import torch
-from fastembed import SparseTextEmbedding
-from llama_index.embeddings.fastembed import FastEmbedEmbedding
+
+try:
+    from fastembed import SparseTextEmbedding
+except ImportError:
+    SparseTextEmbedding = None
+
+try:
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
+except ImportError:
+    FastEmbedEmbedding = None
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from loguru import logger
 
@@ -108,13 +117,17 @@ class EmbeddingFactory:
         """
         providers = cls.get_providers(use_gpu)
 
-        embed_model = FastEmbedEmbedding(
-            model_name=settings.dense_embedding_model,
-            max_length=512,
-            providers=providers,
-            batch_size=settings.embedding_batch_size,
-            cache_dir="./embeddings_cache",
-        )
+        if FastEmbedEmbedding is not None:
+            embed_model = FastEmbedEmbedding(
+                model_name=settings.dense_embedding_model,
+                max_length=512,
+                providers=providers,
+                batch_size=settings.embedding_batch_size,
+                cache_dir="./embeddings_cache",
+            )
+        else:
+            # Fallback to HuggingFace if FastEmbed not available
+            embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
         # Apply torch.compile optimization if available and using GPU
         if use_gpu and torch.cuda.is_available() and hasattr(torch, "compile"):
@@ -136,9 +149,7 @@ class EmbeddingFactory:
 
     @classmethod
     @lru_cache(maxsize=2)
-    def create_sparse_embedding(
-        cls, use_gpu: bool | None = None
-    ) -> SparseTextEmbedding | None:
+    def create_sparse_embedding(cls, use_gpu: bool | None = None) -> Any:
         """Create sparse embedding model with caching.
 
         Creates and caches a SparseTextEmbedding model for keyword-based search.
@@ -167,12 +178,16 @@ class EmbeddingFactory:
         providers = cls.get_providers(use_gpu)
 
         try:
-            sparse_model = SparseTextEmbedding(
-                model_name=settings.sparse_embedding_model,
-                providers=providers,
-                batch_size=settings.embedding_batch_size,
-                cache_dir="./embeddings_cache",
-            )
+            if SparseTextEmbedding is not None:
+                sparse_model = SparseTextEmbedding(
+                    model_name=settings.sparse_embedding_model,
+                    providers=providers,
+                    batch_size=settings.embedding_batch_size,
+                    cache_dir="./embeddings_cache",
+                )
+            else:
+                logger.warning("SparseTextEmbedding not available - returning None")
+                return None
 
             logger.info(
                 f"Sparse embedding model created: {settings.sparse_embedding_model}"
@@ -247,9 +262,7 @@ class EmbeddingFactory:
         return embed_model
 
     @classmethod
-    def create_hybrid_embeddings(
-        cls, use_gpu: bool | None = None
-    ) -> tuple[FastEmbedEmbedding, SparseTextEmbedding | None]:
+    def create_hybrid_embeddings(cls, use_gpu: bool | None = None) -> tuple[Any, Any]:
         """Create both dense and sparse embeddings for hybrid search.
 
         Creates a tuple of dense and sparse embedding models optimized for

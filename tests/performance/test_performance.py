@@ -337,7 +337,8 @@ class TestAgentPerformance:
     """Performance tests for agent system operations."""
 
     @pytest.mark.performance
-    # Removed duplicate query complexity performance test - consolidated into test_agent_factory.py
+    # Removed duplicate query complexity performance test
+    # Consolidated into test_agent_factory.py
 
     @pytest.mark.performance
     @pytest.mark.asyncio
