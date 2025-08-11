@@ -15,10 +15,11 @@ The module focuses on:
 Example:
     Basic usage of core utilities::
 
-        from utils.utils import setup_logging, detect_hardware, get_embed_model
+        from utils.utils import detect_hardware, get_embed_model
+        from loguru import logger
 
-        # Setup logging
-        setup_logging("INFO")
+        # Loguru is auto-configured
+        logger.info("Application starting")
 
         # Check hardware capabilities
         hardware = detect_hardware()
@@ -38,7 +39,7 @@ import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from llama_index.embeddings.fastembed import FastEmbedEmbedding
@@ -46,12 +47,13 @@ from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
 from models import AppSettings
-from utils.exceptions import (
+
+from .exceptions import (
     ConfigurationError,
     handle_embedding_error,
 )
-from utils.model_manager import ModelManager
-from utils.retry_utils import (
+from .model_manager import ModelManager
+from .retry_utils import (
     embedding_retry,
     safe_execute,
     with_fallback,
@@ -91,30 +93,41 @@ def log_performance(operation: str, duration: float, **kwargs) -> None:
     )
 
 
-settings = AppSettings()
-
-
 def setup_logging(log_level: str = "INFO") -> None:
-    """Configure application logging using structured logging.
-
-    Delegates to the structured logging configuration in logging_config.py
-    for comprehensive error tracking and performance monitoring.
+    """Set up loguru logging configuration.
 
     Args:
-        log_level: Logging level as string. Must be one of 'DEBUG', 'INFO',
-            'WARNING', 'ERROR', or 'CRITICAL'. Defaults to 'INFO'.
+        log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
     Note:
-        This function is deprecated. Use setup_logging from logging_config
-        directly for full structured logging capabilities.
-
-    Example:
-        >>> setup_logging("DEBUG")
-        >>> logger.info("Application started")
+        This is a simplified logging setup. The original logging configuration
+        from logging_config.py has been consolidated here.
     """
-    logger.warning(
-        "setup_logging is deprecated - loguru is auto-configured in __init__.py"
+    import sys
+
+    # Remove default handler
+    logger.remove()
+
+    # Add console handler with colored output
+    logger.add(
+        sys.stdout,
+        level=log_level,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        colorize=True,
     )
+
+    # Add file handler for persistent logging
+    logger.add(
+        "logs/docmind.log",
+        level=log_level,
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        rotation="10 MB",
+        retention="7 days",
+        compression="zip",
+    )
+
+
+settings = AppSettings()
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -264,7 +277,7 @@ def get_embed_model() -> FastEmbedEmbedding:
             logger.info("Using CPU for embeddings")
 
         # Use factory for consistent embedding model creation
-        from utils.embedding_factory import EmbeddingFactory
+        from .embedding_factory import EmbeddingFactory
 
         embed_model = EmbeddingFactory.create_dense_embedding(
             use_gpu=settings.gpu_acceleration
@@ -723,63 +736,6 @@ class AsyncQdrantConnectionPool:
             )
 
         self._current_size = 0
-
-
-class QdrantConnectionPool:
-    """Legacy connection pool for backward compatibility.
-
-    Maintains existing interface while delegating to AsyncQdrantConnectionPool.
-    """
-
-    _instance: Optional["QdrantConnectionPool"] = None
-    _pool: AsyncQdrantConnectionPool | None = None
-    _lock = asyncio.Lock()
-
-    def __new__(cls):
-        """Create or return the singleton instance."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def configure(self, url: str, max_size: int = 10):
-        """Configure the connection pool.
-
-        Args:
-            url: Qdrant server URL
-            max_size: Maximum number of connections in pool
-        """
-        self._pool = AsyncQdrantConnectionPool(url, max_size)
-
-    async def get_client(self) -> AsyncQdrantClient:
-        """Get client from pool or create new.
-
-        Returns:
-            AsyncQdrantClient: Client instance from pool or newly created
-
-        Raises:
-            RuntimeError: If pool is not configured
-        """
-        if self._pool is None:
-            raise RuntimeError(
-                "Connection pool not configured. Call configure() first."
-            )
-        return await self._pool.acquire()
-
-    async def return_client(self, client: AsyncQdrantClient):
-        """Return client to pool.
-
-        Args:
-            client: AsyncQdrantClient to return to pool
-        """
-        if self._pool is not None:
-            await self._pool.release(client)
-        else:
-            await client.close()
-
-    async def close_all(self):
-        """Close all clients in the pool."""
-        if self._pool is not None:
-            await self._pool.close()
 
 
 def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:

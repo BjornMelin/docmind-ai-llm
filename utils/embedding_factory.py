@@ -30,13 +30,13 @@ Attributes:
     settings (AppSettings): Global application settings for embedding configuration.
 """
 
-import logging
 from functools import lru_cache
 
 import torch
 from fastembed import SparseTextEmbedding
 from llama_index.embeddings.fastembed import FastEmbedEmbedding
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from loguru import logger
 
 from models import AppSettings
 
@@ -74,12 +74,12 @@ class EmbeddingFactory:
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             try:
                 gpu_name = torch.cuda.get_device_name(0)
-                logging.info(f"Using GPU for embeddings: {gpu_name}")
+                logger.info(f"Using GPU for embeddings: {gpu_name}")
             except (RuntimeError, AttributeError) as e:
-                logging.warning(f"GPU info detection failed: {e}")
+                logger.warning(f"GPU info detection failed: {e}")
         else:
             providers = ["CPUExecutionProvider"]
-            logging.info("Using CPU for embeddings")
+            logger.info("Using CPU for embeddings")
 
         return providers
 
@@ -125,13 +125,13 @@ class EmbeddingFactory:
                     dynamic=True,  # Handle variable batch sizes
                     fullgraph=False,  # Allow partial graph compilation
                 )
-                logging.info(
+                logger.info(
                     "torch.compile applied to dense embeddings with reduce-overhead"
                 )
             except Exception as e:
-                logging.warning(f"torch.compile failed for dense embeddings: {e}")
+                logger.warning(f"torch.compile failed for dense embeddings: {e}")
 
-        logging.info(f"Dense embedding model created: {settings.dense_embedding_model}")
+        logger.info(f"Dense embedding model created: {settings.dense_embedding_model}")
         return embed_model
 
     @classmethod
@@ -161,7 +161,7 @@ class EmbeddingFactory:
             ...     sparse_embeddings = model.embed(["Hello world"])
         """
         if not settings.enable_sparse_embeddings:
-            logging.info("Sparse embeddings disabled in settings")
+            logger.info("Sparse embeddings disabled in settings")
             return None
 
         providers = cls.get_providers(use_gpu)
@@ -174,13 +174,13 @@ class EmbeddingFactory:
                 cache_dir="./embeddings_cache",
             )
 
-            logging.info(
+            logger.info(
                 f"Sparse embedding model created: {settings.sparse_embedding_model}"
             )
             return sparse_model
 
         except Exception as e:
-            logging.error(f"Failed to create sparse embedding model: {e}")
+            logger.error(f"Failed to create sparse embedding model: {e}")
             return None
 
     @classmethod
@@ -200,7 +200,7 @@ class EmbeddingFactory:
             HuggingFaceEmbedding: Configured multimodal embedding model.
 
         Note:
-            Uses Jina v3 embeddings for state-of-the-art multimodal performance.
+            Uses Jina v3 embeddings for multimodal performance.
             Applies quantization if enabled in settings for memory efficiency.
 
         Example:
@@ -220,9 +220,9 @@ class EmbeddingFactory:
                     llm_int8_threshold=6.0,
                     llm_int8_has_fp16_weight=False,
                 )
-                logging.info("Quantization enabled for multimodal embeddings")
+                logger.info("Quantization enabled for multimodal embeddings")
             except ImportError:
-                logging.warning(
+                logger.warning(
                     "transformers package not available, quantization disabled"
                 )
 
@@ -243,7 +243,7 @@ class EmbeddingFactory:
             model_kwargs=model_kwargs,
         )
 
-        logging.info(f"Multimodal embedding model created on {device}")
+        logger.info(f"Multimodal embedding model created on {device}")
         return embed_model
 
     @classmethod
@@ -286,7 +286,7 @@ class EmbeddingFactory:
         if sparse_model:
             embedding_types.append("sparse")
 
-        logging.info(f"Hybrid embeddings created: {', '.join(embedding_types)}")
+        logger.info(f"Hybrid embeddings created: {', '.join(embedding_types)}")
         return dense_model, sparse_model
 
     @classmethod
@@ -302,7 +302,7 @@ class EmbeddingFactory:
         """
         cls.create_dense_embedding.cache_clear()
         cls.create_sparse_embedding.cache_clear()
-        logging.info("Embedding model cache cleared")
+        logger.info("Embedding model cache cleared")
 
     @classmethod
     def get_cache_info(cls) -> dict:

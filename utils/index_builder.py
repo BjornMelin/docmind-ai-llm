@@ -54,18 +54,13 @@ from llama_index.core.retrievers import (
 from llama_index.core.schema import ImageDocument
 from llama_index.embeddings.fastembed import FastEmbedEmbedding
 from llama_index.llms.ollama import Ollama
+from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
 
-from models.settings import settings
+from models import settings
 
 # Add missing EmbeddingFactory import
 from utils.embedding_factory import EmbeddingFactory
-from utils.error_recovery import (
-    async_managed_resource,
-    index_retry,
-    safe_execute,
-    with_fallback,
-)
 from utils.exceptions import (
     EmbeddingError,
     IndexCreationError,
@@ -73,17 +68,54 @@ from utils.exceptions import (
     handle_embedding_error,
     handle_index_error,
 )
-from utils.logging_config import log_error_with_context, log_performance, logger
 from utils.qdrant_utils import setup_hybrid_qdrant, setup_hybrid_qdrant_async
+from utils.retry_utils import (
+    async_managed_resource,
+    index_retry,
+    safe_execute,
+    with_fallback,
+)
 from utils.utils import (
-    PerformanceMonitor,
     async_timer,
     ensure_spacy_model,
-    get_qdrant_pool,
     managed_async_qdrant_client,
     managed_gpu_operation,
     verify_rrf_configuration,
 )
+
+
+def log_error_with_context(
+    error: Exception, operation: str, context: dict | None = None, **kwargs
+) -> None:
+    """Log errors with comprehensive context information."""
+    error_context = {
+        "operation": operation,
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+        **(context or {}),
+        **kwargs,
+    }
+    logger.error(
+        f"Operation failed: {operation}",
+        extra={"error_context": error_context},
+        exception=error,
+    )
+
+
+def log_performance(operation: str, duration: float, **kwargs) -> None:
+    """Log performance metrics with structured data."""
+    logger.info(
+        f"Performance: {operation} completed",
+        extra={
+            "performance": {
+                "operation": operation,
+                "duration_seconds": round(duration, 3),
+                "duration_human": f"{duration:.2f}s",
+                **kwargs,
+            }
+        },
+    )
+
 
 # settings is now imported directly as a configured instance
 
@@ -319,10 +351,29 @@ async def create_index_async(docs: list[Document], use_gpu: bool) -> dict[str, A
         ) as async_client:
             # Create embedding models with error handling
             try:
-                embed_model = await _create_embedding_models_async(use_gpu)
-                sparse_embed_model = await _create_sparse_embedding_models_async(
-                    use_gpu
+                embed_model = await asyncio.to_thread(
+                    EmbeddingFactory.create_dense_embedding, use_gpu
                 )
+
+                # Create sparse embedding model with graceful fallback
+                if settings.embedding.enable_sparse_embeddings:
+                    try:
+                        sparse_embed_model = await asyncio.to_thread(
+                            EmbeddingFactory.create_sparse_embedding, use_gpu
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Sparse embedding creation failed, continuing dense-only",
+                            extra={
+                                "error": str(e),
+                                "use_gpu": use_gpu,
+                                "cuda_available": torch.cuda.is_available(),
+                            },
+                        )
+                        sparse_embed_model = None
+                else:
+                    logger.info("Sparse embeddings disabled in settings")
+                    sparse_embed_model = None
             except Exception as e:
                 raise handle_embedding_error(
                     e,
@@ -674,7 +725,7 @@ def create_multimodal_index(
     """Create multimodal index for text and images using Jina v3 embeddings.
 
     Builds a MultiModalVectorStoreIndex supporting both text and image documents
-    in a unified embedding space for cross-modal retrieval. Uses state-of-the-art
+    in a unified embedding space for cross-modal retrieval. Uses
     Jina v3 multimodal embeddings with optional quantization for memory efficiency.
 
     The index enables:
@@ -986,56 +1037,6 @@ async def create_multimodal_index_async(
 # New Async Performance Functions
 
 
-async def generate_embeddings_parallel(
-    docs: list[Document], embed_model: Any, batch_size: int = 32
-) -> list:
-    """Generate embeddings in parallel batches."""
-    import asyncio
-
-    from utils.logging_config import logger
-
-    # Split documents into batches
-    # Generate batches with explicit indexing
-    batches = [docs[_i : _i + batch_size] for _i in range(0, len(docs), batch_size)]
-
-    async def process_batch(batch: list[Document]) -> list:
-        """Process a single batch of documents."""
-        texts = [doc.text for doc in batch]
-        # Use asyncio.to_thread for CPU-bound embedding generation
-        embeddings = await asyncio.to_thread(embed_model.embed, texts)
-        return embeddings
-
-    # Process all batches in parallel
-    logger.info(f"Processing {len(batches)} batches in parallel")
-
-    start_time = asyncio.get_event_loop().time()
-    embeddings_lists = await asyncio.gather(
-        *[process_batch(batch) for batch in batches], return_exceptions=True
-    )
-
-    # Handle any exceptions
-    embeddings = []
-    for _i, result in enumerate(embeddings_lists):
-        if isinstance(result, Exception):
-            logger.error(f"Batch {_i} failed: {result}")
-            # Retry failed batch with smaller size
-            retry_batch = batches[_i]
-            for _doc in retry_batch:
-                try:
-                    _emb = await asyncio.to_thread(embed_model.embed, [_doc.text])
-                    embeddings.extend(_emb)
-                except Exception as e:
-                    logger.error(f"Document embedding failed: {e}")
-                    embeddings.append(None)  # Placeholder
-        else:
-            embeddings.extend(result)
-
-    elapsed = asyncio.get_event_loop().time() - start_time
-    logger.info(f"Generated {len(embeddings)} embeddings in {elapsed:.2f}s")
-
-    return embeddings
-
-
 async def generate_dense_embeddings_async(
     doc_batches: list[list[Document]], use_gpu: bool
 ) -> list[list[float]]:
@@ -1235,111 +1236,7 @@ async def create_vector_index_async(
     return index
 
 
-async def create_kg_index_async(docs: list[Document]) -> KnowledgeGraphIndex | None:
-    """Create knowledge graph index asynchronously.
-
-    Creates a KnowledgeGraphIndex using spaCy for entity extraction
-    and Ollama for relationship inference. Uses async processing
-    for improved performance.
-
-    Args:
-        docs: List of documents to process for knowledge graph extraction.
-
-    Returns:
-        KnowledgeGraphIndex or None if creation fails.
-
-    Note:
-        Uses asyncio.to_thread for CPU-bound spaCy processing.
-        Falls back gracefully on errors to allow vector-only indexing.
-    """
-    try:
-        # Load spaCy model asynchronously
-        spacy_extractor = await asyncio.to_thread(ensure_spacy_model, "en_core_web_sm")
-
-        # Use factory for consistent embedding model creation
-        embed_model = EmbeddingFactory.create_dense_embedding(
-            use_gpu=settings.gpu.gpu_acceleration
-        )
-
-        # Create KG index with async-compatible components
-        kg_index = await asyncio.to_thread(
-            KnowledgeGraphIndex.from_documents,
-            docs,
-            llm=Ollama(model=settings.llm.default_model),
-            embed_model=embed_model,
-            extractor=spacy_extractor,
-            max_entities=settings.max_entities,
-        )
-
-        logging.info(
-            f"Knowledge Graph index created with {settings.max_entities} max entities"
-        )
-        return kg_index
-
-    except Exception as e:
-        logging.warning(f"KG index creation failed: {e}")
-        return None
-
-
 # Helper functions for create_index_async
-
-
-async def _create_embedding_models_async(use_gpu: bool) -> FastEmbedEmbedding:
-    """Create dense embedding model asynchronously with error handling.
-
-    Args:
-        use_gpu: Whether to use GPU acceleration
-
-    Returns:
-        Configured FastEmbedEmbedding model
-
-    Raises:
-        EmbeddingError: If model creation fails
-    """
-    try:
-        # Use factory for consistent model creation
-        from utils.embedding_factory import EmbeddingFactory
-
-        return await asyncio.to_thread(EmbeddingFactory.create_dense_embedding, use_gpu)
-    except Exception as e:
-        raise handle_embedding_error(
-            e,
-            operation="dense_embedding_creation",
-            use_gpu=use_gpu,
-            cuda_available=torch.cuda.is_available(),
-        ) from e
-
-
-async def _create_sparse_embedding_models_async(
-    use_gpu: bool,
-) -> SparseTextEmbedding | None:
-    """Create sparse embedding model asynchronously with error handling.
-
-    Args:
-        use_gpu: Whether to use GPU acceleration
-
-    Returns:
-        Configured SparseTextEmbedding model or None if disabled/failed
-
-    Note:
-        Returns None gracefully if sparse embeddings are disabled or fail
-    """
-    try:
-        if not settings.embedding.enable_sparse_embeddings:
-            logger.info("Sparse embeddings disabled in settings")
-            return None
-
-        from utils.embedding_factory import EmbeddingFactory
-
-        return await asyncio.to_thread(
-            EmbeddingFactory.create_sparse_embedding, use_gpu
-        )
-    except Exception as e:
-        logger.warning(
-            f"Sparse embedding creation failed, continuing with dense-only: {e}",
-            extra={"use_gpu": use_gpu, "cuda_available": torch.cuda.is_available()},
-        )
-        return None
 
 
 async def _create_vector_index_with_gpu_async(
@@ -1482,210 +1379,3 @@ async def _create_kg_index_async(
 
 
 # Removed duplicate get_embed_model to resolve F811 warning
-
-
-@async_timer
-async def create_index_async_optimized(
-    docs: list[Document], use_gpu: bool
-) -> dict[str, Any]:
-    """Create hybrid index with parallel processing for 50-80% performance improvement.
-
-    Enhanced version of create_index_async with parallel embedding generation,
-    concurrent index creation, and optimized connection pooling. Provides
-    significant performance improvements through asyncio.gather() parallelization.
-
-    Performance improvements:
-    - Parallel dense and sparse embedding generation
-    - Concurrent vector and KG index creation
-    - Connection pool management for Qdrant
-    - Batch processing with optimal sizes
-    - Comprehensive error handling with graceful fallbacks
-
-    Args:
-        docs: List of Document objects to index.
-        use_gpu: Whether to enable GPU acceleration.
-
-    Returns:
-        Dictionary containing indexed components with performance metrics.
-
-    Raises:
-        ValueError: If index configuration is invalid.
-        Exception: If critical indexing operations fail.
-    """
-    try:
-        performance_monitor = PerformanceMonitor()
-
-        # Verify RRF configuration
-        rrf_verification = verify_rrf_configuration(settings)
-        if rrf_verification["issues"]:
-            logging.warning("RRF Configuration Issues: %s", rrf_verification["issues"])
-
-        # Split documents into batches for parallel processing
-        batch_size = 50
-        # Split documents into batches with explicit indexing
-        doc_batches = [
-            docs[_i : _i + batch_size] for _i in range(0, len(docs), batch_size)
-        ]
-        logging.info(f"Processing {len(docs)} documents in {len(doc_batches)} batches")
-
-        # Use connection pool for better resource management
-        pool = await get_qdrant_pool()
-        client = await pool.acquire()
-
-        try:
-            # Parallel embedding generation
-            async def generate_embeddings():
-                dense_task = asyncio.create_task(
-                    generate_dense_embeddings_async(doc_batches, use_gpu)
-                )
-                sparse_task = asyncio.create_task(
-                    generate_sparse_embeddings_async(doc_batches, use_gpu)
-                )
-
-                return await asyncio.gather(
-                    dense_task, sparse_task, return_exceptions=True
-                )
-
-            # Measure embedding generation performance
-            (
-                dense_embeddings,
-                sparse_embeddings,
-            ) = await performance_monitor.measure_async_operation(
-                "embedding_generation", generate_embeddings
-            )
-
-            # Handle embedding generation results
-            if isinstance(dense_embeddings, Exception):
-                logging.error(f"Dense embedding generation failed: {dense_embeddings}")
-                raise dense_embeddings
-
-            if isinstance(sparse_embeddings, Exception):
-                logging.error(
-                    f"Sparse embedding generation failed: {sparse_embeddings}"
-                )
-                sparse_embeddings = None  # Continue with dense-only
-
-            # Parallel index creation
-            tasks = []
-
-            # Vector index creation
-            vector_task = asyncio.create_task(
-                create_vector_index_async(
-                    docs, dense_embeddings, sparse_embeddings, client
-                )
-            )
-            tasks.append(("vector", vector_task))
-
-            # KG index creation (if enabled)
-            if settings.max_entities > 0:
-                kg_task = asyncio.create_task(create_kg_index_async(docs))
-                tasks.append(("kg", kg_task))
-
-            # Wait for all index creation to complete
-            results = await asyncio.gather(
-                *[task for _, task in tasks], return_exceptions=True
-            )
-
-            # Build result dictionary
-            result_dict = {}
-            for (_name, _), _result in zip(tasks, results, strict=False):
-                if isinstance(_result, Exception):
-                    logging.error(f"{_name} index creation failed: {_result}")
-                    result_dict[_name] = None
-                else:
-                    result_dict[_name] = _result
-
-            # Create hybrid fusion retriever if vector index succeeded
-            if result_dict.get("vector"):
-                try:
-                    hybrid_retriever = create_hybrid_retriever(result_dict["vector"])
-                    result_dict["retriever"] = hybrid_retriever
-                    logging.info("HybridFusionRetriever created successfully")
-                except Exception as e:
-                    logging.warning(f"Failed to create hybrid retriever: {e}")
-                    result_dict["retriever"] = None
-
-            # Add performance metrics
-            result_dict["performance_metrics"] = (
-                performance_monitor.get_metrics_summary()
-            )
-
-            logging.info(
-                "Async index completed: "  # Explicitly format to respect line length
-                f"vector={result_dict['vector'] is not None}, "
-                f"kg={result_dict['kg'] is not None}, "
-                f"retriever={result_dict['retriever'] is not None}"
-            )
-
-            return result_dict
-
-        finally:
-            # Always return client to pool
-            await pool.release(client)
-
-    except ValueError as e:
-        logging.error(f"Invalid configuration for async index: {e}")
-        raise
-    except Exception as e:
-        logging.error(f"Async index creation error: {e}")
-        raise
-
-
-async def create_vector_index_with_embeddings(
-    docs: list[Document],
-    dense_embeddings: list,
-    sparse_embeddings: list | None,
-    client: Any,
-) -> VectorStoreIndex:
-    """Create vector index with pre-computed embeddings asynchronously."""
-    # Import here to avoid circular imports
-    from utils.embedding_factory import EmbeddingFactory
-
-    # Setup Qdrant with async client and proper hybrid configuration
-    vector_store = await setup_hybrid_qdrant_async(
-        client=client,
-        collection_name="docmind",
-        dense_embedding_size=settings.dense_embedding_dimension,
-        recreate=False,
-    )
-
-    # Use factory for consistent embedding model creation
-    embed_model = EmbeddingFactory.create_dense_embedding(
-        use_gpu=settings.gpu.gpu_acceleration
-    )
-
-    # Create storage context and index
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
-
-    # Create index with or without sparse embeddings
-    if sparse_embeddings:
-        # Use factory for sparse embedding model
-        sparse_embed_model = EmbeddingFactory.create_sparse_embedding(
-            use_gpu=settings.gpu.gpu_acceleration
-        )
-        if sparse_embed_model:
-            index = VectorStoreIndex.from_documents(
-                docs,
-                storage_context=storage_context,
-                embed_model=embed_model,
-                sparse_embed_model=sparse_embed_model,
-            )
-            logger.info("Created vector index with hybrid dense + sparse embeddings")
-        else:
-            index = VectorStoreIndex.from_documents(
-                docs,
-                storage_context=storage_context,
-                embed_model=embed_model,
-            )
-            logger.info(
-                "Created vector index with dense embeddings only (sparse disabled)"
-            )
-    else:
-        index = VectorStoreIndex.from_documents(
-            docs,
-            storage_context=storage_context,
-            embed_model=embed_model,
-        )
-        logger.info("Created vector index with dense embeddings only")
-
-    return index

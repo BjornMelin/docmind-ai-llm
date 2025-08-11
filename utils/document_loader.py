@@ -45,39 +45,292 @@ Attributes:
 
 import asyncio
 import base64
+import gc
+import hashlib
 import io
 import logging
 import os
 import tempfile
 import time
 from collections.abc import AsyncIterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+from functools import wraps
+from pathlib import Path
 from typing import Any
 
+import diskcache
+import psutil
 import torch
 from llama_index.core import Document, SimpleDirectoryReader
 from llama_index.core.schema import ImageDocument
 from llama_index.embeddings.fastembed import FastEmbedEmbedding
 from llama_parse import LlamaParse
+from loguru import logger
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from PIL import Image
 from unstructured.partition.auto import partition
 from whisper import load_model as whisper_load
 
 from models import AppSettings
-from utils.error_recovery import (
+from utils.exceptions import (
+    DocumentLoadingError,
+    handle_document_error,
+    handle_embedding_error,
+)
+
+
+def log_error_with_context(
+    error: Exception, operation: str, context: dict | None = None, **kwargs
+) -> None:
+    """Log errors with comprehensive context information."""
+    error_context = {
+        "operation": operation,
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+        **(context or {}),
+        **kwargs,
+    }
+    logger.error(
+        f"Operation failed: {operation}",
+        extra={"error_context": error_context},
+        exception=error,
+    )
+
+
+def log_performance(operation: str, duration: float, **kwargs) -> None:
+    """Log performance metrics with structured data."""
+    logger.info(
+        f"Performance: {operation} completed",
+        extra={
+            "performance": {
+                "operation": operation,
+                "duration_seconds": round(duration, 3),
+                "duration_human": f"{duration:.2f}s",
+                **kwargs,
+            }
+        },
+    )
+
+
+settings = AppSettings()
+
+from utils.model_manager import ModelManager  # noqa: E402
+from utils.retry_utils import (  # noqa: E402
     async_with_timeout,
     document_retry,
     with_fallback,
 )
-from utils.exceptions import (
-    DocumentLoadingError,
-    handle_document_loading_error,
-    handle_embedding_error,
-)
-from utils.logging_config import log_error_with_context, log_performance, logger
-from utils.model_manager import ModelManager
 
-settings = AppSettings()
+
+# Performance and Caching Optimizations
+@dataclass
+class ProcessingMetrics:
+    """Document processing performance metrics."""
+
+    operation: str
+    file_path: str
+    file_size_mb: float
+    duration_seconds: float
+    document_count: int
+    table_count: int
+    image_count: int
+    success: bool
+    error_message: str | None = None
+
+
+class DocumentCache:
+    """Hash-based caching for processed documents using diskcache."""
+
+    def __init__(self, cache_dir: str = "./cache/documents"):
+        """Initialize document cache with specified directory."""
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache = diskcache.Cache(str(self.cache_dir))
+
+    def get_file_hash(self, file_path: str) -> str:
+        """Generate SHA-256 hash for file content."""
+        with open(file_path, "rb") as f:
+            content = f.read()
+        return hashlib.sha256(content).hexdigest()
+
+    def is_cached(self, file_path: str) -> bool:
+        """Check if document is cached."""
+        file_hash = self.get_file_hash(file_path)
+        return file_hash in self.cache
+
+    def get_cached(self, file_path: str) -> list[Document] | None:
+        """Get cached document."""
+        if not self.is_cached(file_path):
+            return None
+        file_hash = self.get_file_hash(file_path)
+        return self.cache.get(file_hash)
+
+    def cache_document(self, file_path: str, documents: list[Document]) -> None:
+        """Cache processed document with 1 hour expiry."""
+        file_hash = self.get_file_hash(file_path)
+        self.cache.set(file_hash, documents, expire=3600)
+
+
+class MemoryMonitor:
+    """Memory usage monitoring and optimization."""
+
+    @staticmethod
+    def get_memory_usage() -> dict[str, float]:
+        """Get current memory usage statistics."""
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        return {
+            "rss_mb": memory_info.rss / 1024 / 1024,
+            "vms_mb": memory_info.vms / 1024 / 1024,
+            "percent": process.memory_percent(),
+        }
+
+    @contextmanager
+    def memory_managed_processing(self, operation: str):
+        """Context manager for memory-efficient processing."""
+        initial_memory = self.get_memory_usage()
+        logger.info(f"Starting {operation} - Memory: {initial_memory['rss_mb']:.1f}MB")
+
+        try:
+            yield
+        finally:
+            # Force garbage collection
+            collected = gc.collect()
+            final_memory = self.get_memory_usage()
+
+            memory_delta = final_memory["rss_mb"] - initial_memory["rss_mb"]
+            logger.info(
+                f"Completed {operation} - Memory: {final_memory['rss_mb']:.1f}MB "
+                f"(Δ{memory_delta:+.1f}MB), GC collected: {collected} objects"
+            )
+
+
+class PerformanceMonitor:
+    """Performance monitoring with structured metrics collection."""
+
+    def __init__(self):
+        """Initialize performance monitor with empty metrics list."""
+        self.metrics: list[ProcessingMetrics] = []
+
+    @contextmanager
+    def monitor_processing(self, operation: str, file_path: str):
+        """Context manager for monitoring document processing performance."""
+        start_time = time.perf_counter()
+        file_size_mb = Path(file_path).stat().st_size / 1024 / 1024
+
+        metric = ProcessingMetrics(
+            operation=operation,
+            file_path=file_path,
+            file_size_mb=file_size_mb,
+            duration_seconds=0,
+            document_count=0,
+            table_count=0,
+            image_count=0,
+            success=False,
+        )
+
+        try:
+            yield metric
+            metric.success = True
+        except Exception as e:
+            metric.error_message = str(e)
+            raise
+        finally:
+            metric.duration_seconds = time.perf_counter() - start_time
+            self.metrics.append(metric)
+            self._log_metric(metric)
+
+    def _log_metric(self, metric: ProcessingMetrics) -> None:
+        """Log processing metric with structured data."""
+        status = "✅" if metric.success else "❌"
+        logger.info(
+            f"{status} {metric.operation}: {Path(metric.file_path).name}",
+            extra={
+                "performance": {
+                    "operation": metric.operation,
+                    "file_size_mb": metric.file_size_mb,
+                    "duration_seconds": metric.duration_seconds,
+                    "throughput_mb_per_sec": (
+                        metric.file_size_mb / metric.duration_seconds
+                        if metric.duration_seconds > 0
+                        else 0
+                    ),
+                    "document_count": metric.document_count,
+                    "table_count": metric.table_count,
+                    "image_count": metric.image_count,
+                    "success": metric.success,
+                    "error": metric.error_message,
+                }
+            },
+        )
+
+
+# Global optimization instances
+_document_cache = DocumentCache()
+_memory_monitor = MemoryMonitor()
+_performance_monitor = PerformanceMonitor()
+
+
+def cached_document_processing(processor_func):
+    """Decorator for caching document processing results."""
+
+    @wraps(processor_func)
+    def wrapper(file_path: str, *args, **kwargs):
+        # Check cache first
+        cached_docs = _document_cache.get_cached(file_path)
+        if cached_docs:
+            logger.info(f"Using cached document for {Path(file_path).name}")
+            return cached_docs
+
+        # Process and cache
+        documents = processor_func(file_path, *args, **kwargs)
+        _document_cache.cache_document(file_path, documents)
+        return documents
+
+    return wrapper
+
+
+def memory_efficient_processing(func):
+    """Decorator for memory-efficient processing."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with _memory_monitor.memory_managed_processing(func.__name__):
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
+def monitor_performance(operation: str):
+    """Decorator for monitoring function performance."""
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(file_path: str, *args, **kwargs):
+            with _performance_monitor.monitor_processing(
+                operation, file_path
+            ) as metric:
+                result = func(file_path, *args, **kwargs)
+
+                # Update metric with results
+                if isinstance(result, list):
+                    metric.document_count = len(result)
+                    # Count tables and images from metadata
+                    metric.table_count = sum(
+                        1
+                        for doc in result
+                        if doc.metadata.get("element_type") == "Table"
+                    )
+                    metric.image_count = sum(
+                        1 for doc in result if doc.metadata.get("has_images", False)
+                    )
+
+                return result
+
+        return wrapper
+
+    return decorator
 
 
 @with_fallback(lambda pdf_path: [])
@@ -220,6 +473,7 @@ def extract_images_from_pdf(pdf_path: str) -> list[dict[str, Any]]:
         "provider_used": "failed_fallback",
     }
 )
+@memory_efficient_processing
 def create_native_multimodal_embeddings(
     text: str,
     images: list[dict[str, Any]] | None = None,
@@ -435,6 +689,9 @@ def create_native_multimodal_embeddings(
         )
     ]
 )
+@cached_document_processing
+@monitor_performance("unstructured_processing")
+@memory_efficient_processing
 def load_documents_unstructured(file_path: str) -> list[Document]:
     """Load documents using Unstructured with structured error handling.
 
@@ -669,7 +926,7 @@ def load_documents_unstructured(file_path: str) -> list[Document]:
             )
 
             # Re-raise to trigger decorator fallback
-            raise handle_document_loading_error(
+            raise handle_document_error(
                 fallback_error,
                 operation="document_loading_with_fallback",
                 file_path=file_path,
@@ -713,6 +970,7 @@ def chunk_documents_structured(documents: list[Document]) -> list[Document]:
 
 
 @document_retry
+@memory_efficient_processing
 def load_documents_llama(
     uploaded_files: list[Any], parse_media: bool = False, enable_multimodal: bool = True
 ) -> list[Document]:
@@ -1077,7 +1335,7 @@ async def load_documents_parallel(
     import asyncio
     from asyncio import Semaphore
 
-    from utils.logging_config import logger
+    from loguru import logger
 
     semaphore = Semaphore(max_concurrent)
 
@@ -1122,6 +1380,8 @@ async def load_documents_unstructured_async(file_path: str) -> list[Document]:
     return await asyncio.to_thread(load_documents_unstructured, file_path)
 
 
+@monitor_performance("llamaparse_processing")
+@memory_efficient_processing
 def load_documents_llama_sync(file_path: str) -> list[Document]:
     """Synchronous wrapper for single file loading with LlamaParse."""
 
@@ -1402,7 +1662,7 @@ async def process_documents_streaming(
         )
 
         # Re-raise critical streaming errors
-        raise handle_document_loading_error(
+        raise handle_document_error(
             e,
             operation="streaming_document_processing",
             processed_count=processed_count,

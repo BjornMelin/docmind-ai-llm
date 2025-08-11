@@ -24,10 +24,9 @@ from .qdrant_utils import (
     setup_hybrid_qdrant,
     setup_hybrid_qdrant_async,
 )
-from .utils import detect_hardware, setup_logging, verify_rrf_configuration
+from .utils import detect_hardware, verify_rrf_configuration
 
 __all__ = [
-    "setup_logging",
     "detect_hardware",
     "verify_rrf_configuration",
     "ModelManager",

@@ -39,7 +39,7 @@ Classes:
 import time
 from typing import Any
 
-from utils.logging_config import logger
+from loguru import logger
 
 
 class DocMindError(Exception):
