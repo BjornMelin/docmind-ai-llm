@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_factory import get_agent_system
+from agent_factory import analyze_query_complexity, get_agent_system
 
 
 class TestAgentSystem:

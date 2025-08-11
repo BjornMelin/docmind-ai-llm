@@ -8,11 +8,11 @@ following 2025 best practices.
 
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import subprocess
-from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -21,6 +21,7 @@ from utils.utils import (
     detect_hardware,
     ensure_spacy_model,
     get_embed_model,
+    managed_async_qdrant_client,
     verify_rrf_configuration,
 )
 

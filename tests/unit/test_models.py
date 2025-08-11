@@ -97,9 +97,6 @@ def test_settings_environment_override():
     assert settings.qdrant_url == "http://test:1234"
 
 
-# Removed test_llm_model_environment_override - DEFAULT_MODEL env var isn't working as expected
-
-
 def test_dense_embedding_settings():
     """Test dense embedding configuration settings."""
     settings = AppSettings()

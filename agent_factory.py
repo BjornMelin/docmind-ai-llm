@@ -50,7 +50,10 @@ def handle_agent_errors(operation_name: str):
                 return result
             except Exception as e:
                 logger.error(f"{operation_name} failed: {e}")
-                if "create" in operation_name.lower():
+                if (
+                    "creation" in operation_name.lower()
+                    or "create" in operation_name.lower()
+                ):
                     raise
                 return f"Error in {operation_name}: {str(e)}"
 

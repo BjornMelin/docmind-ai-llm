@@ -132,14 +132,20 @@ class TestLoadDocumentsUnstructured:
         mock_image_metadata.category = "Image"
         mock_image_metadata.metadata.page_number = 1
         mock_image_metadata.metadata.filename = "test.pdf"
-        mock_image_metadata.metadata.image_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAHgSJ/JVwAAAABJRU5ErkJggg=="
+        mock_image_metadata.metadata.image_base64 = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4"
+            "2mNkYPhfDwAChAHgSJ/JVwAAAABJRU5ErkJggg=="
+        )
 
         mock_image_text = Mock()
         mock_image_text.category = "Image"
         mock_image_text.metadata.page_number = 2
         mock_image_text.metadata.filename = "test.pdf"
         mock_image_text.metadata.image_base64 = None
-        mock_image_text.text = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAHgSJ/JVwAAAABJRU5ErkJggg=="
+        mock_image_text.text = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4"
+            "2mNkYPhfDwAChAHgSJ/JVwAAAABJRU5ErkJggg=="
+        )
 
         mock_partition.return_value = [mock_image_metadata, mock_image_text]
 
@@ -197,7 +203,7 @@ class TestChunkDocumentsStructured:
     """Test structured document chunking functionality with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "chunk_size,chunk_overlap,expected_chunks",
+        ("chunk_size", "chunk_overlap", "expected_chunks"),
         [
             (512, 50, 2),  # Small chunks, expect multiple
             (2048, 200, 1),  # Large chunks, expect fewer
@@ -313,7 +319,7 @@ class TestLoadDocumentsLlama:
     """Test LlamaParse document loading functionality with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "file_type,expected_type",
+        ("file_type", "expected_type"),
         [
             ("pdf", "standard_document"),
             ("docx", "standard_document"),
@@ -368,7 +374,7 @@ class TestLoadDocumentsLlama:
                 assert result[0].metadata["has_images"] is False
 
     @pytest.mark.parametrize(
-        "audio_format,expected_device",
+        ("audio_format", "expected_device"),
         [
             ("mp3", "cuda"),  # Will use CUDA if available
             ("wav", "cuda"),
@@ -482,7 +488,7 @@ class TestLoadDocumentsLlama:
                 assert "images" in result[0].metadata
 
     @pytest.mark.parametrize(
-        "error_type,expected_log",
+        ("error_type", "expected_log"),
         [
             (FileNotFoundError("File not found"), "File not found"),
             (PermissionError("Permission denied"), "Permission denied"),

@@ -25,7 +25,7 @@ class TestCreateNativeMultimodalEmbeddings:
     """Test native multimodal embedding creation with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "image_count,expected_embeddings",
+        ("image_count", "expected_embeddings"),
         [
             (1, 1),
             (2, 2),
@@ -108,7 +108,7 @@ class TestCreateNativeMultimodalEmbeddings:
         assert result["provider_used"] == "fastembed_native_multimodal"
 
     @pytest.mark.parametrize(
-        "fallback_scenario,error_message",
+        ("fallback_scenario", "error_message"),
         [
             ("import_error", "Multimodal not available"),
             ("runtime_error", "Model initialization failed"),
@@ -226,7 +226,7 @@ class TestCreateNativeMultimodalEmbeddings:
             if temp_file_error:
                 mock_open.side_effect = OSError("Cannot create temp file")
 
-                with pytest.raises(IOError):
+                with pytest.raises(OSError, match="Cannot create temp file"):
                     create_native_multimodal_embeddings(
                         "Test text content", sample_images_data
                     )
@@ -264,7 +264,7 @@ class TestCreateNativeMultimodalEmbeddings:
         with (
             patch("utils.document_loader.tempfile.gettempdir", return_value="/tmp"),
             patch("builtins.open", create=True),
-            patch("utils.document_loader.os.unlink") as mock_unlink,
+            patch("utils.document_loader.os.unlink"),
             patch("utils.document_loader.base64.b64decode") as mock_b64decode,
             patch("utils.document_loader.logging.warning") as mock_log_warning,
         ):
@@ -289,7 +289,7 @@ class TestAdvancedMultimodalFeatures:
     """Test advanced multimodal features and integration scenarios."""
 
     @pytest.mark.parametrize(
-        "document_type,expected_processing",
+        ("document_type", "expected_processing"),
         [
             ("text_only", "text_processing"),
             ("image_only", "image_processing"),
@@ -366,7 +366,9 @@ class TestAdvancedMultimodalFeatures:
 
             sample_images = [
                 {
-                    "image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAHgSJ/JVwAAAABJRU5ErkJggg==",
+                    "image_base64": (
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAHgSJ/JVwAAAABJRU5ErkJggg=="
+                    ),
                     "image_mimetype": "image/png",
                     "image_path": "test.png",
                 }

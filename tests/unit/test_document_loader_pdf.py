@@ -22,7 +22,7 @@ class TestExtractImagesFromPDF:
     """Test PDF image extraction functionality with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "page_count,expected_calls",
+        ("page_count", "expected_calls"),
         [
             (1, 1),
             (2, 2),
@@ -108,7 +108,7 @@ class TestExtractImagesFromPDF:
             mock_log_info.assert_called_with("Extracted 0 images from PDF")
 
     @pytest.mark.parametrize(
-        "error_type,error_message",
+        ("error_type", "error_message"),
         [
             (Exception("PyMuPDF error"), "PyMuPDF error"),
             (FileNotFoundError("File not found"), "File not found"),
@@ -135,7 +135,7 @@ class TestExtractImagesFromPDF:
             assert "PDF image extraction failed" in logged_message
 
     @pytest.mark.parametrize(
-        "pixmap_n,pixmap_alpha,should_skip",
+        ("pixmap_n", "pixmap_alpha", "should_skip"),
         [
             (3, 0, False),  # RGB, no alpha - should process
             (4, 1, False),  # RGB + alpha - should process
@@ -252,7 +252,7 @@ class TestExtractImagesFromPDF:
         mock_fitz.open.return_value = mock_fitz_document
         mock_fitz.Pixmap.return_value = mock_fitz_pixmap
 
-        with patch("utils.document_loader.logging.error") as mock_log_error:
+        with patch("utils.document_loader.logging.error"):
             result = extract_images_from_pdf(sample_pdf_path)
 
             # Should still close document despite error

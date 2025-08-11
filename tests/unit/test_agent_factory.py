@@ -4,7 +4,7 @@ Tests agent factory's core functionalities: query complexity analysis,
 routing, multi-agent coordination, and error handling.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -101,12 +101,14 @@ class TestQueryComplexityAnalysis:
                 "general",
             ),
             (
-                "Summarize all documents and identify relationships among various concepts",
+                "Summarize all documents and identify relationships among "
+                "various concepts",
                 "complex",
                 "knowledge_graph",
             ),
             (
-                "Analyze how several different authors approach this topic across documents",
+                "Analyze how several different authors approach this "
+                "topic across documents",
                 "complex",
                 "document",
             ),
@@ -288,8 +290,8 @@ class TestSingleAgentCreation:
         mock_llm = MagicMock()
 
         with (
-            patch("llama_index.core.agent.ReActAgent") as mock_react_agent,
-            patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory,
+            patch("agent_factory.ReActAgent") as mock_react_agent,
+            patch("agent_factory.ChatMemoryBuffer") as mock_memory,
         ):
             mock_agent = MagicMock()
             mock_react_agent.from_tools.return_value = mock_agent
@@ -311,7 +313,7 @@ class TestSingleAgentCreation:
         mock_llm = MagicMock()
         custom_memory = MagicMock()
 
-        with patch("llama_index.core.agent.ReActAgent.from_tools") as mock_agent_class:
+        with patch("agent_factory.ReActAgent.from_tools") as mock_agent_class:
             mock_agent = MagicMock()
             mock_agent_class.return_value = mock_agent
 
@@ -328,7 +330,7 @@ class TestSingleAgentCreation:
 
         with (
             patch(
-                "llama_index.core.agent.ReActAgent.from_tools",
+                "agent_factory.ReActAgent.from_tools",
                 side_effect=RuntimeError("Agent creation failed"),
             ),
             patch("agent_factory.logger") as mock_logger,
@@ -363,8 +365,8 @@ class TestSpecialistAgentCreation:
             assert result == mock_agent
             mock_create.assert_called_once_with(
                 model=mock_llm,
-                tools=pytest.mock.ANY,  # Filtered tools
-                messages_modifier=pytest.mock.ANY,
+                tools=ANY,  # Filtered tools
+                messages_modifier=ANY,
             )
 
     def test_create_knowledge_specialist_agent_success(self):
@@ -598,8 +600,8 @@ class TestQueryProcessing:
         assert result == "Multi-agent response"
         # Verify proper state initialization
         call_args = mock_system.invoke.call_args[0][0]
-        assert len(call_args.messages) == 1
-        assert call_args.messages[0].content == "Analyze this complex document"
+        assert len(call_args["messages"]) == 1
+        assert call_args["messages"][0].content == "Analyze this complex document"
 
     def test_query_processing_error_handling(self):
         """Query processing should handle errors gracefully."""
@@ -608,7 +610,7 @@ class TestQueryProcessing:
 
         result = process_query_with_agent_system(mock_agent, "Test query", "single")
 
-        assert "Error processing query" in result
+        assert "Error in Query processing" in result
         assert "Processing failed" in result
 
     def test_multi_agent_processing_without_messages(self):
@@ -660,5 +662,5 @@ class TestAgentFactoryErrorHandling:
             mock_agent, "Troublesome query", "single"
         )
 
-        assert "Error processing query" in result
+        assert "Error in Query processing" in result
         assert "Unexpected agent failure" in result

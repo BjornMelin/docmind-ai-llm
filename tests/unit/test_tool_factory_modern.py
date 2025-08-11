@@ -47,7 +47,7 @@ class TestToolFactoryBasicMethods:
     """Test basic ToolFactory methods with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "tool_name,tool_description,expected_name",
+        ("tool_name", "tool_description", "expected_name"),
         [
             ("test_tool", "Test description", "test_tool"),
             ("", "Empty name test", ""),
@@ -79,7 +79,7 @@ class TestToolFactoryBasicMethods:
         assert result.metadata.return_direct is False
 
     @pytest.mark.parametrize(
-        "description_length,multiplier",
+        ("description_length", "multiplier"),
         [
             ("Short description", 1),
             ("Medium length description with more detail", 1),
@@ -104,7 +104,7 @@ class TestToolFactoryBasicMethods:
         assert len(result.metadata.description) == len(long_description)
 
     @pytest.mark.parametrize(
-        "query_engine,should_succeed",
+        ("query_engine", "should_succeed"),
         [
             (None, True),  # Should handle None gracefully
             ("mock_engine", True),  # Should work with any object
@@ -133,7 +133,7 @@ class TestToolFactoryReranker:
     """Test ColBERT reranker creation and configuration with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "model_name,top_k,expected_calls",
+        ("model_name", "top_k", "expected_calls"),
         [
             ("colbert-ir/colbertv2.0", 5, 1),
             ("colbert-ir/colbertv1.0", 10, 1),
@@ -168,7 +168,7 @@ class TestToolFactoryReranker:
             )
 
     @pytest.mark.parametrize(
-        "missing_config",
+        ("missing_config"),
         [
             "no_model",
             "no_top_k",
@@ -236,7 +236,7 @@ class TestToolFactoryConfiguration:
     """Test configuration-related functionality with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "config_scenario",
+        ("config_scenario"),
         [
             "valid_complete",
             "valid_minimal",
@@ -252,18 +252,14 @@ class TestToolFactoryConfiguration:
                 reranking_top_k=5,
                 # Add other required settings
             )
-            expected_valid = True
         elif config_scenario == "valid_minimal":
             settings = AppSettings()  # Default values
-            expected_valid = True
         elif config_scenario == "invalid_missing_required":
             # This would depend on what's actually required
             settings = AppSettings()
-            expected_valid = True  # Adjust based on actual requirements
         else:  # invalid_wrong_types
             # This would test type validation if it exists
             settings = AppSettings()
-            expected_valid = True  # Adjust based on actual validation
 
         # Test configuration usage - this would depend on actual validation logic
         # For now, just verify settings can be created
@@ -274,7 +270,7 @@ class TestToolFactoryErrorHandling:
     """Test error handling scenarios with modern fixtures."""
 
     @pytest.mark.parametrize(
-        "error_type,error_message,expected_result",
+        ("error_type", "error_message", "expected_result"),
         [
             (ImportError, "Module not found", None),
             (RuntimeError, "Runtime error", None),
@@ -352,9 +348,6 @@ class TestToolFactoryPerformance:
     def test_memory_usage_reasonable(self, mock_query_engine: Mock) -> None:
         """Test that tool creation doesn't use excessive memory."""
         import sys
-
-        # Get initial memory usage
-        initial_size = sys.getsizeof(mock_query_engine)
 
         # Create many tools
         tools = []
