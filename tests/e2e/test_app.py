@@ -26,7 +26,7 @@ def app_test():
     return AppTest.from_file("app.py")
 
 
-@patch("app.detect_hardware", return_value=("GPU detected", 16))
+@patch("src.app.detect_hardware", return_value=("GPU detected", 16))
 def test_app_hardware_detection(mock_detect, app_test):
     """Test hardware detection display in the application.
 
@@ -38,7 +38,7 @@ def test_app_hardware_detection(mock_detect, app_test):
     assert "Detected Hardware: GPU detected, VRAM: 16GB" in app.info[0].value
 
 
-@patch("app.Ollama")
+@patch("src.app.Ollama")
 def test_app_model_selection(mock_ollama, app_test):
     """Test model selection functionality.
 
@@ -79,7 +79,7 @@ def test_app_chat_functionality(app_test, tmp_path):
     """
     app = app_test.run()
     # Setup vectorstore mock
-    with patch("app.create_vectorstore") as mock_vs:
+    with patch("src.app.create_vectorstore") as mock_vs:
         mock_vs.return_value = MagicMock()
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"%PDF dummy")

@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_factory import analyze_query_complexity, get_agent_system
+from src.agents.agent_factory import analyze_query_complexity, get_agent_system
 
 
 class TestAgentSystem:
@@ -25,7 +25,7 @@ class TestAgentSystem:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             mock_agent = MagicMock()
             mock_get_agent.return_value = mock_agent
 
@@ -42,7 +42,7 @@ class TestAgentSystem:
             mock_async_llm: Mock async LLM fixture.
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             # Create mock async agent
             mock_agent = AsyncMock()
             mock_agent.arun.return_value = "Mock agent response"
@@ -64,8 +64,8 @@ class TestAgentSystem:
             test_settings: Test settings fixture.
         """
         with (
-            patch("agent_factory.get_agent_system") as mock_get_agent,
-            patch("utils.create_tools_from_index") as mock_create_tools,
+            patch("src.agents.agent_factory.get_agent_system") as mock_get_agent,
+            patch("src.utils.create_tools_from_index") as mock_create_tools,
         ):
             # Mock tools creation
             mock_tools = [
@@ -104,8 +104,8 @@ class TestAgentSystem:
             test_settings: Test settings fixture.
         """
         with (
-            patch("agent_factory.analyze_query_complexity") as mock_analyze,
-            patch("agent_factory.get_agent_system") as mock_get_agent,
+            patch("src.agents.agent_factory.analyze_query_complexity") as mock_analyze,
+            patch("src.agents.agent_factory.get_agent_system") as mock_get_agent,
         ):
             # Mock complexity analysis
             mock_analyze.return_value = {
@@ -137,8 +137,8 @@ class TestAgentToolIntegration:
             test_settings: Test settings fixture.
         """
         with (
-            patch("utils.create_tools_from_index") as mock_create_tools,
-            patch("utils.QdrantClient", return_value=mock_qdrant_client),
+            patch("src.utils.create_tools_from_index") as mock_create_tools,
+            patch("src.utils.QdrantClient", return_value=mock_qdrant_client),
         ):
             # Mock search tool
             mock_search_tool = MagicMock()
@@ -163,7 +163,7 @@ class TestAgentToolIntegration:
             mock_llm: Mock LLM fixture.
             test_settings: Test settings fixture.
         """
-        with patch("utils.create_tools_from_index") as mock_create_tools:
+        with patch("src.utils.create_tools_from_index") as mock_create_tools:
             # Mock analysis tool
             mock_analysis_tool = MagicMock()
             mock_analysis_tool.name = "document_analysis"
@@ -185,7 +185,7 @@ class TestAgentToolIntegration:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("utils.create_tools_from_index") as mock_create_tools:
+        with patch("src.utils.create_tools_from_index") as mock_create_tools:
             # Mock tool that raises exception
             mock_failing_tool = MagicMock()
             mock_failing_tool.name = "failing_tool"
@@ -208,7 +208,7 @@ class TestAgentToolIntegration:
             benchmark: Pytest benchmark fixture.
             test_settings: Test settings fixture.
         """
-        with patch("utils.create_tools_from_index") as mock_create_tools:
+        with patch("src.utils.create_tools_from_index") as mock_create_tools:
             # Mock fast tool
             mock_fast_tool = MagicMock()
             mock_fast_tool.name = "fast_tool"
@@ -236,7 +236,7 @@ class TestMultiAgentWorkflows:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             # Mock multiple agents
             search_agent = AsyncMock()
             search_agent.arun.return_value = "Search completed"
@@ -264,7 +264,7 @@ class TestMultiAgentWorkflows:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             # Mock agents with communication
             mock_agent1 = MagicMock()
             mock_agent1.send_message.return_value = "Message sent"
@@ -294,7 +294,7 @@ class TestMultiAgentWorkflows:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             # Mock agents with failure scenarios
             failing_agent = MagicMock()
             failing_agent.run.side_effect = Exception("Agent failed")
@@ -331,7 +331,7 @@ class TestAgentMemoryAndContext:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             # Mock agent with memory
             mock_agent = MagicMock()
             mock_agent.memory = []
@@ -359,7 +359,7 @@ class TestAgentMemoryAndContext:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             # Mock agent with context window limits
             mock_agent = MagicMock()
             mock_agent.context_window_size = test_settings.context_size
@@ -386,7 +386,7 @@ class TestAgentMemoryAndContext:
         Args:
             test_settings: Test settings fixture.
         """
-        with patch("agent_factory.get_agent_system") as mock_get_agent:
+        with patch("src.agents.agent_factory.get_agent_system") as mock_get_agent:
             # Mock agent with conversation history
             mock_agent = MagicMock()
             mock_agent.conversation_history = []

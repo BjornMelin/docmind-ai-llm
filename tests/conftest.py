@@ -15,7 +15,7 @@ from llama_index.core import Document
 
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from models import AppSettings
+from src.models import AppSettings
 
 # Configure pytest-asyncio for proper async handling
 pytest_plugins = ("pytest_asyncio",)
