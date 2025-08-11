@@ -184,7 +184,7 @@ PYTEST_OPTIMIZATION_REPORT.md
 # Model caches and embeddings
 embeddings_cache/
 .fastembed_cache/
-models/
+# models/
 qdrant_storage/
 .archived/
 
