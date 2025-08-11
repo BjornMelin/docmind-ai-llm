@@ -74,7 +74,7 @@ Implement tiered hardware-adaptive model selection with Google Gemma 3n as the b
 
 ```python
 
-# In app.py hardware-adaptive selection
+# In src/app.py hardware-adaptive selection
 hardware_status = detect_hardware()
 vram = hardware_status.get("vram_total_gb")
 
@@ -97,13 +97,13 @@ else:
 
 ```python
 
-# In models.py AppSettings
+# In src/models.py AppSettings
 default_model: str = Field(
     default="google/gemma-3n-E4B-it",
     description="Default base model with hardware-adaptive variants"
 )
 
-# In utils.py hardware detection
+# In src/utils.py hardware detection
 def detect_hardware() -> dict[str, Any]:
     """Enhanced hardware detection for model selection."""
     return {
@@ -118,7 +118,7 @@ def detect_hardware() -> dict[str, Any]:
 
 ```python
 
-# In app.py automatic model provisioning
+# In src/app.py automatic model provisioning
 if backend == "ollama" and model_name not in model_options:
     with st.sidebar.status("Downloading model..."):
         ollama.pull(model_name)

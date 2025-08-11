@@ -8,7 +8,7 @@ This guide details how to write, run, and maintain tests for DocMind AI to ensur
 
 - **Location**: Tests in `tests/` directory.
 
-- **Coverage**: Aim for >80% coverage on `utils.py` and `app.py`.
+- **Coverage**: Aim for >80% coverage on `src/utils/` and `src/app.py`.
 
 ## Setup
 
@@ -31,7 +31,7 @@ For comprehensive performance benchmarks and validation results, see [performanc
 ## Writing Tests
 
 - **Unit Tests**:
-  - Target: Functions in `utils.py` (e.g., `load_documents`, `create_vectorstore`).
+  - Target: Functions in `src/utils/` (e.g., `load_documents`, `create_vectorstore`).
   - Example:
 
     ```python
@@ -47,12 +47,12 @@ For comprehensive performance benchmarks and validation results, see [performanc
   - Focus: Edge cases (empty files, unsupported formats, large docs).
 
 - **Integration Tests**:
-  - Target: End-to-end flows in `app.py` (e.g., upload → analysis → chat).
+  - Target: End-to-end flows in `src/app.py` (e.g., upload → analysis → chat).
   - Example:
 
     ```python
     def test_analysis_pipeline(monkeypatch):
-        monkeypatch.setattr("utils.load_documents", lambda x: [Document(page_content="test")])
+        monkeypatch.setattr("src.utils.load_documents", lambda x: [Document(page_content="test")])
         result = analyze_documents(mock_llm, ["test"], "Comprehensive", "", "Neutral", "General Assistant", "Concise", 4096)
         assert isinstance(result, AnalysisOutput)
     ```

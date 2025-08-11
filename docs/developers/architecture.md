@@ -14,7 +14,7 @@
 
 ## Data Flow
 
-1. User uploads docs → Loaded/split in utils.py.
+1. User uploads docs → Loaded/split in src/utils/.
 2. Indexed in Qdrant with hybrid embeddings (Jina v4 dense, FastEmbed sparse).
 3. Analysis: LLMChain processes with prompts → Structured via Pydantic.
 4. Chat: RetrievalQA with reranking (Jina v2 + submodular opt).

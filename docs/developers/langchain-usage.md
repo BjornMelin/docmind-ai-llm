@@ -5,8 +5,10 @@ LangChain is the core orchestration framework in DocMind AI, handling LLM intera
 ## Overview
 
 - **Version:** langchain>=0.3.26, langchain-community==0.3.27.
+
 - **Purpose:** Simplifies building LLM applications with modular components for chains, retrievers, splitters, embeddings, and vector stores.
-- **Integration Points:** Primarily in `utils.py` for processing and `app.py` for invoking analysis/chat.
+
+- **Integration Points:** Primarily in `src/utils/` for processing and `src/app.py` for invoking analysis/chat.
 
 ## Key Components and Usage
 
@@ -86,13 +88,17 @@ LangChain is the core orchestration framework in DocMind AI, handling LLM intera
 ## Best Practices in DocMind AI
 
 - **RAG Pipelines:** Combine retrievers with chains for context-aware chat; use hybrid search for better recall.
+
 - **Document Analysis:** Chain splitters → embeddings → chains for scalable processing.
+
 - **Error Handling:** Fallback to raw outputs if parsing fails; log errors.
+
 - **Extensibility:** LangChain's modular design allows easy swaps (e.g., different embeddings/retrievers).
 
 ## References
 
 - LangChain Docs: [Introduction](https://python.langchain.com/docs/get_started/introduction), [Qdrant Integration](https://python.langchain.com/docs/integrations/vectorstores/qdrant).
-- Codebase: See `utils.py` for implementations.
+
+- Codebase: See `src/utils/` for implementations.
 
 For updates as of July 2025, LangChain continues to support Pydantic 2 and hybrid retrievals without major breaks in our usage.

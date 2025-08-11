@@ -15,7 +15,7 @@ This guide covers deployment options for DocMind AI, including local, Docker, an
 2. Run:
 
    ```bash
-   streamlit run app.py
+   streamlit run src/app.py
    ```
 
 3. Access: <http://localhost:8501>.
@@ -41,6 +41,7 @@ This guide covers deployment options for DocMind AI, including local, Docker, an
   - Server with Python 3.9+, optional NVIDIA GPU.
   - Ollama running locally or on a dedicated server.
   - Qdrant in `:memory:` or persistent mode (e.g., Docker volume).
+
 - **Steps**:
   1. Clone repo and install dependencies.
   2. Configure environment:
@@ -54,10 +55,11 @@ This guide covers deployment options for DocMind AI, including local, Docker, an
 
      ```bash
      pip install gunicorn
-     gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8501 streamlit run app.py
+     gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8501 streamlit run src/app.py
      ```
 
   4. Optional: Use nginx as a reverse proxy.
+
 - **Scaling**:
   - Increase workers in gunicorn for high traffic.
   - Use persistent Qdrant storage for large datasets.
@@ -66,8 +68,11 @@ This guide covers deployment options for DocMind AI, including local, Docker, an
 ## Best Practices
 
 - Monitor logs: `logs/app.log`.
+
 - Use environment variables for sensitive configs.
+
 - Test GPU support before production deployment.
+
 - Regularly update dependencies via `uv sync`.
 
 For issues, see [../user/troubleshooting.md](../user/troubleshooting.md).

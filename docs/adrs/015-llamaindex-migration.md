@@ -44,7 +44,7 @@ Full migration to LlamaIndex (indexing/retrieval/pipelines/multimodal/KG/chunkin
 
 - **Migration Steps**: Replace chains with QueryPipeline, loaders with UnstructuredReader, agents with LangGraph (tools from LlamaIndex retrievers)
 
-- **Integration**: utils.py/app.py/agent_factory.py LlamaIndex-centric (e.g., VectorStoreIndex, QueryPipeline in tools). LangGraph workers use LlamaIndex tools
+- **Integration**: src/utils/*/src/app.py/src/agent_factory.py LlamaIndex-centric (e.g., VectorStoreIndex, QueryPipeline in tools). LangGraph workers use LlamaIndex tools
 
 - **Implementation Notes**: Ensure offline (local Ollama in LlamaIndex LLM). No LangChain imports
 
@@ -53,6 +53,7 @@ Full migration to LlamaIndex (indexing/retrieval/pipelines/multimodal/KG/chunkin
 ## Consequences
 
 - Offline-optimized RAG (pipelines/multimodal)
+
 - Simpler/maintainable (unified library)
 
 - Initial refactor (but complete now)

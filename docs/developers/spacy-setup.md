@@ -139,7 +139,7 @@ uv run python -m spacy download en_core_web_sm
 
 ## Integration with DocMind AI
 
-DocMind AI automatically handles spaCy model loading through the `ensure_spacy_model()` function in `utils/utils.py`. This function:
+DocMind AI automatically handles spaCy model loading through the `ensure_spacy_model()` function in `src/utils/core.py`. This function:
 
 1. **Attempts to load** the specified model (default: `en_core_web_sm`)
 2. **Auto-downloads** if the model is not found locally
@@ -151,7 +151,7 @@ DocMind AI automatically handles spaCy model loading through the `ensure_spacy_m
 You can configure which spaCy model to use by modifying the application settings or by calling the function with a different model name:
 
 ```python
-from utils.core import ensure_spacy_model
+from src.utils.core import ensure_spacy_model
 
 # Use small model (default)
 nlp = ensure_spacy_model("en_core_web_sm")
@@ -197,7 +197,7 @@ To verify your spaCy setup is working correctly:
 
 # Test model loading and basic functionality
 uv run python -c "
-from utils.core import ensure_spacy_model
+from src.utils.core import ensure_spacy_model
 
 # Load and test the model
 nlp = ensure_spacy_model('en_core_web_sm')

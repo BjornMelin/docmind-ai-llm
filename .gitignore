@@ -187,6 +187,11 @@ embeddings_cache/
 # models/
 qdrant_storage/
 .archived/
+DEPENDENCY_VERSIONING_REPORT.md
+ADR_COMPLIANCE_VERIFIED.md
+REMAINING_TASKS_AND_FINDINGS.md
+VERIFIED_REFACTORING_PLAN.md
+REFACTORING_TASKS.md
 
 # Document processing cache
 cache/

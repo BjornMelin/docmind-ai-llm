@@ -29,16 +29,19 @@ DocMind AI welcomes contributions from the community! This guide outlines how to
 3. **Run Locally:**
 
    ```bash
-   streamlit run app.py
+   streamlit run src/app.py
    ```
 
 ## Coding Standards
 
 - **Style:** Use Google-style docstrings, type hints, and max line length of 88.
+
 - **Linting:** Run `ruff check .` and `ruff format .` (configured in `pyproject.toml`).
   - Selected rules: E, F, I, UP, N, S, B, A, C4, PT, SIM, TID, D.
   - Ignored: D203, D213, S301, S603, S607, S108.
+
 - **Principles:** Follow KISS (Keep It Simple, Stupid), DRY (Don't Repeat Yourself), and YAGNI (You Aren't Gonna Need It).
+
 - **Dependencies:** Prefer library-first solutions to minimize custom code.
 
 ## Contribution Workflow
@@ -50,7 +53,7 @@ DocMind AI welcomes contributions from the community! This guide outlines how to
    ```
 
 2. **Develop and Test:**
-   - Write code in `app.py`, `utils.py`, or appropriate modules.
+   - Write code in `src/app.py`, `src/utils/`, or appropriate modules.
    - Add tests in `tests/` using pytest.
    - Ensure tests pass: `pytest`.
 3. **Commit Changes:**
@@ -65,14 +68,18 @@ DocMind AI welcomes contributions from the community! This guide outlines how to
 
 ## Testing
 
-- Write unit tests for `utils.py` functions (e.g., document loading, vectorstore creation).
-- Test integration flows in `app.py` (e.g., analysis, chat).
+- Write unit tests for `src/utils/` functions (e.g., document loading, vectorstore creation).
+
+- Test integration flows in `src/app.py` (e.g., analysis, chat).
+
 - Cover edge cases: large documents, GPU on/off, unsupported formats.
+
 - Run: `pytest`.
 
 ## Deployment
 
-- **Local:** Use `streamlit run app.py`.
+- **Local:** Use `streamlit run src/app.py`.
+
 - **Docker:** Build and run:
 
   ```bash
@@ -84,11 +91,13 @@ DocMind AI welcomes contributions from the community! This guide outlines how to
 ## Reporting Issues
 
 - Use GitHub Issues for bugs, feature requests, or questions.
+
 - Provide detailed descriptions, including steps to reproduce and logs (`logs/app.log`).
 
 ## Community
 
 - Join discussions on GitHub.
+
 - Contact maintainers via issues or [LinkedIn](https://www.linkedin.com/in/bjorn-melin/).
 
 Thank you for contributing to DocMind AI!

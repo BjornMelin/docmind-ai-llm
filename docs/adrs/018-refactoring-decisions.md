@@ -85,9 +85,9 @@ def process_document(file_path: str, settings: dict) -> dict:
 
 ### Phase 1: Quick Wins (Week 1)
 
-- **Error Recovery Replacement**: Replaced utils/error_recovery.py with tenacity decorators
+- **Error Recovery Replacement**: Replaced src/utils/error_recovery.py with tenacity decorators
 
-- **Logging Simplification**: Replaced utils/logging_config.py with loguru configuration
+- **Logging Simplification**: Replaced src/utils/logging_config.py with loguru configuration
 
 - **Configuration Cleanup**: Simplified to essential settings using Pydantic BaseSettings
 
@@ -121,7 +121,7 @@ def process_document(file_path: str, settings: dict) -> dict:
 
 ```python
 
-# BEFORE (85 lines in utils/error_recovery.py)
+# BEFORE (85 lines in src/utils/error_recovery.py)
 def with_retry(max_attempts=3, backoff_factor=2):
     def decorator(func):
         @functools.wraps(func)

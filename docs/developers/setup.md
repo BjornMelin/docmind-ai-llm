@@ -3,8 +3,11 @@
 ## Prerequisites
 
 - Python 3.9+.
+
 - uv for package management.
+
 - Git.
+
 - Optional: Docker, NVIDIA CUDA for GPU testing.
 
 ## Installation
@@ -33,7 +36,7 @@
 ## Running Locally
 
 ```bash
-streamlit run app.py
+streamlit run src/app.py
 ```
 
 ## Testing
