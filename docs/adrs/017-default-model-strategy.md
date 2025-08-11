@@ -164,7 +164,7 @@ def test_model_download_fallback():
 
 - **Memory Efficiency**: Quantization prevents out-of-memory errors
 
-- **Scalability**: Supports wide range of hardware from consumer to enterprise GPUs
+- **Scalability**: Supports wide range of hardware from consumer to high-end GPUs
 
 - **Future-Proof**: Architecture supports adding new models as they become available
 

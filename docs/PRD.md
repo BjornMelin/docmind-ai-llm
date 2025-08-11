@@ -81,7 +81,7 @@ DocMind AI is an offline-first document analysis system that combines hybrid vec
 
 ### Market Positioning
 
-DocMind AI targets privacy-conscious professionals who need powerful document intelligence without compromising data security. Unlike cloud-based solutions, we provide enterprise-grade AI capabilities that run entirely on user hardware.
+DocMind AI targets privacy-conscious professionals who need powerful document intelligence without compromising data security. Unlike cloud-based solutions, we provide AI capabilities that run entirely on user hardware.
 
 ## User Research & Personas
 
@@ -505,11 +505,11 @@ graph TD
 
 #### Potential Future Revenue Streams
 
-- **Enterprise Support**: Professional services and support contracts
+- **Professional Support**: Professional services and support contracts
 
 - **Training Programs**: Workshops and certification programs  
 
-- **Cloud Deployment**: Optional managed hosting for enterprises
+- **Cloud Deployment**: Optional managed hosting for multi-device setups
 
 - **Custom Models**: Domain-specific model fine-tuning services
 
@@ -587,7 +587,7 @@ graph TD
   - Comprehensive documentation with video tutorials
   - Pre-configured settings for common use cases
 
-- **Contingency Plan**: Professional services support for enterprise users
+- **Contingency Plan**: Professional services support for advanced users
 
 - **Monitoring**: User onboarding completion rates and support ticket analysis
 
@@ -667,7 +667,7 @@ graph TD
 
 - Custom model fine-tuning for domain-specific documents
 
-- Distributed processing for enterprise deployments
+- Distributed processing for multi-device setups
 
 - Additional multimodal formats (audio, video)
 
