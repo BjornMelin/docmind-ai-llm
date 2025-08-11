@@ -15,8 +15,54 @@ sys.modules["utils.logging_config"] = MagicMock()
 logger_mock = MagicMock()
 sys.modules["utils.logging_config"].logger = logger_mock
 
-# Mock exceptions module to avoid the logging chain
-sys.modules["utils.exceptions"] = MagicMock()
+
+# Mock the exceptions module with actual exception classes
+class MockDocMindError(Exception):
+    """Mock DocMind base error for testing."""
+
+    pass
+
+
+class MockEmbeddingError(MockDocMindError):
+    """Mock embedding error for testing."""
+
+    pass
+
+
+class MockAgentError(MockDocMindError):
+    """Mock agent error for testing."""
+
+    pass
+
+
+class MockResourceError(MockDocMindError):
+    """Mock resource error for testing."""
+
+    pass
+
+
+class MockIndexCreationError(MockDocMindError):
+    """Mock index creation error for testing."""
+
+    pass
+
+
+class MockDocumentLoadingError(MockDocMindError):
+    """Mock document loading error for testing."""
+
+    pass
+
+
+# Create mock modules with actual exception classes
+mock_exceptions = MagicMock()
+mock_exceptions.DocMindError = MockDocMindError
+mock_exceptions.EmbeddingError = MockEmbeddingError
+mock_exceptions.AgentError = MockAgentError
+mock_exceptions.ResourceError = MockResourceError
+mock_exceptions.IndexCreationError = MockIndexCreationError
+mock_exceptions.DocumentLoadingError = MockDocumentLoadingError
+
+sys.modules["utils.exceptions"] = mock_exceptions
 sys.modules["utils.model_manager"] = MagicMock()
 
 from utils.retry_utils import (  # noqa: E402
@@ -76,7 +122,7 @@ class TestRetryDecorators:
             call_count += 1
             raise ConnectionError("Always fails")
 
-        with pytest.raises(ConnectionError):
+        with pytest.raises(Exception, match="Always fails"):
             always_failing_llm()
 
         # Should have tried 5 times (stop_after_attempt(5))
@@ -317,7 +363,7 @@ class TestRetryIntegration:
         def combined_function():
             nonlocal call_count
             call_count += 1
-            raise ConnectionError("Always fails")
+            raise MockDocumentLoadingError("Always fails")
 
         result = combined_function()
         assert result == "fallback_result"

@@ -22,46 +22,46 @@ class TestEmbeddingFactory:
         with (
             patch("torch.cuda.is_available", return_value=True),
             patch("torch.cuda.get_device_name", return_value="Tesla V100"),
-            patch("utils.embedding_factory.logging") as mock_logging,
+            patch("utils.embedding_factory.logger") as mock_logger,
         ):
             providers = EmbeddingFactory.get_providers(use_gpu=True)
 
             assert providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            mock_logging.info.assert_called_with("Using GPU for embeddings: Tesla V100")
+            mock_logger.info.assert_called_with("Using GPU for embeddings: Tesla V100")
 
     def test_get_providers_gpu_enabled_unavailable(self):
         """Test provider selection when GPU is enabled but unavailable."""
         with (
             patch("torch.cuda.is_available", return_value=False),
-            patch("utils.embedding_factory.logging") as mock_logging,
+            patch("utils.embedding_factory.logger") as mock_logger,
         ):
             providers = EmbeddingFactory.get_providers(use_gpu=True)
 
             assert providers == ["CPUExecutionProvider"]
-            mock_logging.info.assert_called_with("Using CPU for embeddings")
+            mock_logger.info.assert_called_with("Using CPU for embeddings")
 
     def test_get_providers_gpu_disabled(self):
         """Test provider selection when GPU is explicitly disabled."""
         with (
             patch("torch.cuda.is_available", return_value=True),
-            patch("utils.embedding_factory.logging") as mock_logging,
+            patch("utils.embedding_factory.logger") as mock_logger,
         ):
             providers = EmbeddingFactory.get_providers(use_gpu=False)
 
             assert providers == ["CPUExecutionProvider"]
-            mock_logging.info.assert_called_with("Using CPU for embeddings")
+            mock_logger.info.assert_called_with("Using CPU for embeddings")
 
     def test_get_providers_gpu_detection_error(self):
         """Test provider selection when GPU info detection fails."""
         with (
             patch("torch.cuda.is_available", return_value=True),
             patch("torch.cuda.get_device_name", side_effect=RuntimeError("CUDA error")),
-            patch("utils.embedding_factory.logging") as mock_logging,
+            patch("utils.embedding_factory.logger") as mock_logger,
         ):
             providers = EmbeddingFactory.get_providers(use_gpu=True)
 
             assert providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            mock_logging.warning.assert_called_with(
+            mock_logger.warning.assert_called_with(
                 "GPU info detection failed: CUDA error"
             )
 
@@ -83,7 +83,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_dense_embedding_basic(
-        self, mock_logging, mock_settings, mock_get_providers, mock_fastembed
+        self, mock_logger, mock_settings, mock_get_providers, mock_fastembed
     ):
         """Test basic dense embedding model creation."""
         # Setup mocks
@@ -106,7 +106,7 @@ class TestEmbeddingFactory:
             batch_size=32,
             cache_dir="./embeddings_cache",
         )
-        mock_logging.info.assert_called_with(
+        mock_logger.info.assert_called_with(
             "Dense embedding model created: BAAI/bge-large-en-v1.5"
         )
 
@@ -118,7 +118,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.logging")
     def test_create_dense_embedding_with_torch_compile(
         self,
-        mock_logging,
+        mock_logger,
         mock_settings,
         mock_cuda_available,
         mock_torch_compile,
@@ -151,7 +151,7 @@ class TestEmbeddingFactory:
         mock_torch_compile.assert_called_once_with(
             mock_model, mode="reduce-overhead", dynamic=True, fullgraph=False
         )
-        mock_logging.info.assert_called_with(
+        mock_logger.info.assert_called_with(
             "torch.compile applied to dense embeddings with reduce-overhead"
         )
 
@@ -162,7 +162,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.logging")
     def test_create_dense_embedding_torch_compile_failure(
         self,
-        mock_logging,
+        mock_logger,
         mock_cuda_available,
         mock_torch_compile,
         mock_get_providers,
@@ -188,7 +188,7 @@ class TestEmbeddingFactory:
 
         # Should return original model when compile fails
         assert result == mock_model
-        mock_logging.warning.assert_called_with(
+        mock_logger.warning.assert_called_with(
             "torch.compile failed for dense embeddings: Compile failed"
         )
 
@@ -197,7 +197,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_sparse_embedding_enabled(
-        self, mock_logging, mock_settings, mock_get_providers, mock_sparse
+        self, mock_logger, mock_settings, mock_get_providers, mock_sparse
     ):
         """Test sparse embedding model creation when enabled."""
         # Setup mocks
@@ -221,13 +221,13 @@ class TestEmbeddingFactory:
             batch_size=32,
             cache_dir="./embeddings_cache",
         )
-        mock_logging.info.assert_called_with(
+        mock_logger.info.assert_called_with(
             "Sparse embedding model created: prithivida/Splade_PP_en_v1"
         )
 
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
-    def test_create_sparse_embedding_disabled(self, mock_logging, mock_settings):
+    def test_create_sparse_embedding_disabled(self, mock_logger, mock_settings):
         """Test sparse embedding creation when disabled in settings."""
         mock_settings.enable_sparse_embeddings = False
 
@@ -237,14 +237,14 @@ class TestEmbeddingFactory:
         EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
         assert result is None
-        mock_logging.info.assert_called_with("Sparse embeddings disabled in settings")
+        mock_logger.info.assert_called_with("Sparse embeddings disabled in settings")
 
     @patch("utils.embedding_factory.SparseTextEmbedding")
     @patch.object(EmbeddingFactory, "get_providers")
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_sparse_embedding_creation_failure(
-        self, mock_logging, mock_settings, mock_get_providers, mock_sparse
+        self, mock_logger, mock_settings, mock_get_providers, mock_sparse
     ):
         """Test sparse embedding creation failure handling."""
         # Setup mocks
@@ -261,7 +261,7 @@ class TestEmbeddingFactory:
         EmbeddingFactory.create_sparse_embedding(use_gpu=False)
 
         assert result is None
-        mock_logging.error.assert_called_with(
+        mock_logger.error.assert_called_with(
             "Failed to create sparse embedding model: Model loading failed"
         )
 
@@ -270,7 +270,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_multimodal_embedding_cpu(
-        self, mock_logging, mock_settings, mock_cuda_available, mock_hf
+        self, mock_logger, mock_settings, mock_cuda_available, mock_hf
     ):
         """Test multimodal embedding creation on CPU."""
         mock_cuda_available.return_value = False
@@ -290,16 +290,14 @@ class TestEmbeddingFactory:
             trust_remote_code=True,
             model_kwargs={"torch_dtype": torch.float32},
         )
-        mock_logging.info.assert_called_with(
-            "Multimodal embedding model created on cpu"
-        )
+        mock_logger.info.assert_called_with("Multimodal embedding model created on cpu")
 
     @patch("utils.embedding_factory.HuggingFaceEmbedding")
     @patch("torch.cuda.is_available")
     @patch("utils.embedding_factory.settings")
-    @patch("utils.embedding_factory.logging")
+    @patch("utils.embedding_factory.logger")
     def test_create_multimodal_embedding_gpu(
-        self, mock_logging, mock_settings, mock_cuda_available, mock_hf
+        self, mock_logger, mock_settings, mock_cuda_available, mock_hf
     ):
         """Test multimodal embedding creation on GPU."""
         mock_cuda_available.return_value = True
@@ -319,7 +317,7 @@ class TestEmbeddingFactory:
             trust_remote_code=True,
             model_kwargs={"torch_dtype": torch.float16},
         )
-        mock_logging.info.assert_called_with(
+        mock_logger.info.assert_called_with(
             "Multimodal embedding model created on cuda"
         )
 
@@ -328,7 +326,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_multimodal_embedding_with_quantization(
-        self, mock_logging, mock_settings, mock_cuda_available, mock_hf
+        self, mock_logger, mock_settings, mock_cuda_available, mock_hf
     ):
         """Test multimodal embedding creation with quantization."""
         mock_cuda_available.return_value = True
@@ -350,7 +348,7 @@ class TestEmbeddingFactory:
         # Verify quantization config was included
         call_args = mock_hf.call_args[1]
         assert "quantization_config" in call_args["model_kwargs"]
-        mock_logging.info.assert_called_with(
+        mock_logger.info.assert_called_with(
             "Quantization enabled for multimodal embeddings"
         )
 
@@ -359,7 +357,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_multimodal_embedding_quantization_import_error(
-        self, mock_logging, mock_settings, mock_cuda_available, mock_hf
+        self, mock_logger, mock_settings, mock_cuda_available, mock_hf
     ):
         """Test multimodal embedding creation when transformers package unavailable."""
         mock_cuda_available.return_value = True
@@ -374,7 +372,7 @@ class TestEmbeddingFactory:
             result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
 
         assert result == mock_model
-        mock_logging.warning.assert_called_with(
+        mock_logger.warning.assert_called_with(
             "transformers package not available, quantization disabled"
         )
 
@@ -383,7 +381,7 @@ class TestEmbeddingFactory:
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_hybrid_embeddings_both_enabled(
-        self, mock_logging, mock_settings, mock_create_sparse, mock_create_dense
+        self, mock_logger, mock_settings, mock_create_sparse, mock_create_dense
     ):
         """Test hybrid embedding creation with both dense and sparse enabled."""
         mock_settings.enable_sparse_embeddings = True
@@ -400,13 +398,13 @@ class TestEmbeddingFactory:
 
         mock_create_dense.assert_called_once_with(True)
         mock_create_sparse.assert_called_once_with(True)
-        mock_logging.info.assert_called_with("Hybrid embeddings created: dense, sparse")
+        mock_logger.info.assert_called_with("Hybrid embeddings created: dense, sparse")
 
     @patch.object(EmbeddingFactory, "create_dense_embedding")
     @patch("utils.embedding_factory.settings")
     @patch("utils.embedding_factory.logging")
     def test_create_hybrid_embeddings_dense_only(
-        self, mock_logging, mock_settings, mock_create_dense
+        self, mock_logger, mock_settings, mock_create_dense
     ):
         """Test hybrid embedding creation with only dense enabled."""
         mock_settings.enable_sparse_embeddings = False
@@ -420,7 +418,7 @@ class TestEmbeddingFactory:
         assert sparse is None
 
         mock_create_dense.assert_called_once_with(True)
-        mock_logging.info.assert_called_with("Hybrid embeddings created: dense")
+        mock_logger.info.assert_called_with("Hybrid embeddings created: dense")
 
     def test_lru_cache_functionality(self):
         """Test LRU cache functionality for embedding models."""
@@ -461,7 +459,7 @@ class TestEmbeddingFactory:
                 EmbeddingFactory, "get_providers", return_value=["CPUExecutionProvider"]
             ),
             patch("utils.embedding_factory.settings") as mock_settings,
-            patch("utils.embedding_factory.logging") as mock_logging,
+            patch("utils.embedding_factory.logger") as mock_logger,
         ):
             mock_settings.enable_sparse_embeddings = True
             mock_dense_model = MagicMock()
@@ -482,7 +480,7 @@ class TestEmbeddingFactory:
 
             assert mock_fastembed.call_count == 2  # Called twice
             assert mock_sparse.call_count == 2  # Called twice
-            mock_logging.info.assert_called_with("Embedding model cache cleared")
+            mock_logger.info.assert_called_with("Embedding model cache cleared")
 
     def test_get_cache_info(self):
         """Test cache information retrieval."""
@@ -619,6 +617,271 @@ class TestEmbeddingFactory:
                 "CPUExecutionProvider",
             ]
 
+    @patch(
+        "utils.embedding_factory.FastEmbedEmbedding", None
+    )  # Simulate import failure
+    @patch("utils.embedding_factory.HuggingFaceEmbedding")
+    @patch.object(EmbeddingFactory, "get_providers")
+    @patch("utils.embedding_factory.settings")
+    @patch("utils.embedding_factory.logger")
+    def test_create_dense_embedding_fastembed_unavailable(
+        self, mock_logger, mock_settings, mock_get_providers, mock_hf
+    ):
+        """Test dense embedding creation when FastEmbedEmbedding is unavailable."""
+        mock_settings.dense_embedding_model = "BAAI/bge-large-en-v1.5"
+        mock_settings.embedding_batch_size = 32
+        mock_get_providers.return_value = ["CPUExecutionProvider"]
+
+        mock_model = MagicMock()
+        mock_hf.return_value = mock_model
+
+        # Clear cache before test
+        EmbeddingFactory.clear_cache()
+
+        result = EmbeddingFactory.create_dense_embedding(use_gpu=False)
+
+        # Should fallback to HuggingFace model
+        assert result == mock_model
+        mock_hf.assert_called_once_with(model_name="BAAI/bge-small-en-v1.5")
+        mock_logger.info.assert_called_with(
+            "Dense embedding model created: BAAI/bge-large-en-v1.5"
+        )
+
+    @patch(
+        "utils.embedding_factory.SparseTextEmbedding", None
+    )  # Simulate import failure
+    @patch("utils.embedding_factory.settings")
+    @patch("utils.embedding_factory.logger")
+    def test_create_sparse_embedding_module_unavailable(
+        self, mock_logger, mock_settings
+    ):
+        """Test sparse embedding creation when SparseTextEmbedding module is unavailable."""
+        mock_settings.enable_sparse_embeddings = True
+
+        # Clear cache before test
+        EmbeddingFactory.clear_cache()
+
+        result = EmbeddingFactory.create_sparse_embedding(use_gpu=False)
+
+        assert result is None
+        mock_logger.warning.assert_called_with(
+            "SparseTextEmbedding not available - returning None"
+        )
+
+    @patch("utils.embedding_factory.FastEmbedEmbedding")
+    @patch.object(EmbeddingFactory, "get_providers")
+    @patch("torch.cuda.is_available")
+    @patch("utils.embedding_factory.logger")
+    def test_create_dense_embedding_torch_compile_not_available(
+        self, mock_logger, mock_cuda_available, mock_get_providers, mock_fastembed
+    ):
+        """Test dense embedding creation when torch.compile is not available."""
+        mock_get_providers.return_value = [
+            "CUDAExecutionProvider",
+            "CPUExecutionProvider",
+        ]
+        mock_cuda_available.return_value = True
+
+        mock_model = MagicMock()
+        mock_fastembed.return_value = mock_model
+
+        # Clear cache before test
+        EmbeddingFactory.clear_cache()
+
+        # Mock hasattr to return False (torch.compile not available)
+        with patch("hasattr", return_value=False):
+            result = EmbeddingFactory.create_dense_embedding(use_gpu=True)
+
+            # Should return original model without compilation
+            assert result == mock_model
+            # Should not attempt to compile
+            assert not any(
+                call
+                for call in mock_logger.info.call_args_list
+                if "torch.compile applied" in str(call)
+            )
+
+    @patch("utils.embedding_factory.HuggingFaceEmbedding")
+    @patch("torch.cuda.is_available")
+    @patch("utils.embedding_factory.settings")
+    @patch("utils.embedding_factory.logger")
+    def test_create_multimodal_embedding_quantization_with_import_module_error(
+        self, mock_logger, mock_settings, mock_cuda_available, mock_hf
+    ):
+        """Test multimodal embedding creation when transformers module has attribute but import fails."""
+        mock_cuda_available.return_value = True
+        mock_settings.embedding_batch_size = 16
+        mock_settings.enable_quantization = True
+
+        mock_model = MagicMock()
+        mock_hf.return_value = mock_model
+
+        # Mock module import failure at import time, not class instantiation
+        with patch.dict("sys.modules", {"transformers": None}):
+            result = EmbeddingFactory.create_multimodal_embedding(use_gpu=True)
+
+            assert result == mock_model
+            # Verify no quantization config was added
+            call_args = mock_hf.call_args[1]
+            assert "quantization_config" not in call_args["model_kwargs"]
+
+    @patch.object(EmbeddingFactory, "create_dense_embedding")
+    @patch("utils.embedding_factory.settings")
+    def test_create_hybrid_embeddings_settings_override(
+        self, mock_settings, mock_create_dense
+    ):
+        """Test hybrid embedding creation with settings override behavior."""
+        # Test when sparse embeddings are disabled in settings but we still call create_sparse
+        mock_settings.enable_sparse_embeddings = False
+
+        mock_dense_model = MagicMock()
+        mock_create_dense.return_value = mock_dense_model
+
+        with patch.object(
+            EmbeddingFactory, "create_sparse_embedding"
+        ) as mock_create_sparse:
+            mock_create_sparse.return_value = None  # Would return None when disabled
+
+            dense, sparse = EmbeddingFactory.create_hybrid_embeddings(use_gpu=True)
+
+            # Verify sparse embedding creation was not attempted due to settings
+            mock_create_sparse.assert_not_called()
+            assert dense == mock_dense_model
+            assert sparse is None
+
+    def test_get_cache_info_structure(self):
+        """Test cache info returns proper structure with named tuple conversion."""
+        with (
+            patch("utils.embedding_factory.FastEmbedEmbedding") as mock_fastembed,
+            patch("utils.embedding_factory.SparseTextEmbedding") as mock_sparse,
+            patch.object(
+                EmbeddingFactory, "get_providers", return_value=["CPUExecutionProvider"]
+            ),
+            patch("utils.embedding_factory.settings") as mock_settings,
+        ):
+            mock_settings.enable_sparse_embeddings = True
+            mock_fastembed.return_value = MagicMock()
+            mock_sparse.return_value = MagicMock()
+
+            # Clear cache and create some activity
+            EmbeddingFactory.clear_cache()
+            EmbeddingFactory.create_dense_embedding(use_gpu=False)
+            EmbeddingFactory.create_sparse_embedding(use_gpu=False)
+
+            cache_info = EmbeddingFactory.get_cache_info()
+
+            # Verify structure
+            assert isinstance(cache_info, dict)
+            assert "dense" in cache_info
+            assert "sparse" in cache_info
+
+            # Verify named tuple conversion
+            dense_info = cache_info["dense"]
+            sparse_info = cache_info["sparse"]
+
+            assert isinstance(dense_info, dict)
+            assert isinstance(sparse_info, dict)
+
+            # Should have standard cache_info fields
+            expected_fields = ["hits", "misses", "maxsize", "currsize"]
+            for field in expected_fields:
+                assert field in dense_info
+                assert field in sparse_info
+
+    @patch("torch.cuda.get_device_name")
+    @patch("torch.cuda.is_available")
+    @patch("utils.embedding_factory.logger")
+    def test_gpu_info_edge_case_errors(
+        self, mock_logger, mock_cuda_available, mock_get_device_name
+    ):
+        """Test GPU info detection with various edge case errors."""
+        mock_cuda_available.return_value = True
+
+        # Test with SystemError (different from RuntimeError/AttributeError)
+        mock_get_device_name.side_effect = SystemError("System level GPU error")
+
+        providers = EmbeddingFactory.get_providers(use_gpu=True)
+
+        # Should still return CUDA providers but log warning
+        assert providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        mock_logger.warning.assert_called_with(
+            "GPU info detection failed: System level GPU error"
+        )
+
+        # Test with OSError (another edge case)
+        mock_get_device_name.side_effect = OSError("GPU device access denied")
+
+        providers = EmbeddingFactory.get_providers(use_gpu=True)
+
+        assert providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        mock_logger.warning.assert_called_with(
+            "GPU info detection failed: GPU device access denied"
+        )
+
+    def test_embedding_factory_class_behavior(self):
+        """Test EmbeddingFactory class-level behavior and static nature."""
+        # Test that class can be instantiated but has no instance state
+        factory1 = EmbeddingFactory()
+        factory2 = EmbeddingFactory()
+
+        assert len(factory1.__dict__) == 0
+        assert len(factory2.__dict__) == 0
+        assert factory1.__class__ == factory2.__class__
+
+        # Test that all methods are accessible from class
+        methods = [
+            "get_providers",
+            "create_dense_embedding",
+            "create_sparse_embedding",
+            "create_multimodal_embedding",
+            "create_hybrid_embeddings",
+            "clear_cache",
+            "get_cache_info",
+        ]
+
+        for method_name in methods:
+            assert hasattr(EmbeddingFactory, method_name)
+            method = getattr(EmbeddingFactory, method_name)
+            assert callable(method)
+
+    @patch("utils.embedding_factory.settings")
+    def test_settings_integration_edge_cases(self, mock_settings):
+        """Test settings integration with edge case values."""
+        # Test with unusual batch sizes and model names
+        mock_settings.dense_embedding_model = "custom/unusual-model-name"
+        mock_settings.sparse_embedding_model = "test/model"
+        mock_settings.embedding_batch_size = 1  # Very small batch
+        mock_settings.enable_sparse_embeddings = True
+        mock_settings.enable_quantization = False
+        mock_settings.gpu_acceleration = True
+
+        with (
+            patch("utils.embedding_factory.FastEmbedEmbedding") as mock_fastembed,
+            patch("utils.embedding_factory.SparseTextEmbedding") as mock_sparse,
+            patch("torch.cuda.is_available", return_value=True),
+        ):
+            mock_dense_model = MagicMock()
+            mock_sparse_model = MagicMock()
+            mock_fastembed.return_value = mock_dense_model
+            mock_sparse.return_value = mock_sparse_model
+
+            # Clear cache before test
+            EmbeddingFactory.clear_cache()
+
+            dense = EmbeddingFactory.create_dense_embedding()
+            sparse = EmbeddingFactory.create_sparse_embedding()
+
+            # Verify unusual settings were used correctly
+            mock_fastembed.assert_called_once()
+            dense_call = mock_fastembed.call_args[1]
+            assert dense_call["model_name"] == "custom/unusual-model-name"
+            assert dense_call["batch_size"] == 1
+
+            mock_sparse.assert_called_once()
+            sparse_call = mock_sparse.call_args[1]
+            assert sparse_call["model_name"] == "test/model"
+            assert sparse_call["batch_size"] == 1
+
     @patch("torch.cuda.get_device_name")
     @patch("torch.cuda.is_available")
     def test_gpu_info_error_handling(self, mock_cuda_available, mock_get_device_name):
@@ -627,19 +890,19 @@ class TestEmbeddingFactory:
 
         # Test RuntimeError
         mock_get_device_name.side_effect = RuntimeError("CUDA driver error")
-        with patch("utils.embedding_factory.logging") as mock_logging:
+        with patch("utils.embedding_factory.logging") as mock_logger:
             providers = EmbeddingFactory.get_providers(use_gpu=True)
             assert providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            mock_logging.warning.assert_called_with(
+            mock_logger.warning.assert_called_with(
                 "GPU info detection failed: CUDA driver error"
             )
 
         # Test AttributeError
         mock_get_device_name.side_effect = AttributeError("No attribute")
-        with patch("utils.embedding_factory.logging") as mock_logging:
+        with patch("utils.embedding_factory.logging") as mock_logger:
             providers = EmbeddingFactory.get_providers(use_gpu=True)
             assert providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            mock_logging.warning.assert_called_with(
+            mock_logger.warning.assert_called_with(
                 "GPU info detection failed: No attribute"
             )
 

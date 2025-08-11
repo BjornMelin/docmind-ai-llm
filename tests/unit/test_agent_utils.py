@@ -134,14 +134,14 @@ class TestCreateToolsFromIndex:
             ),
         ],
     )
-    @patch("agents.agent_utils.ColbertRerank")
     @patch("agents.agent_utils.RetrieverQueryEngine")
+    @patch("agents.agent_utils.ColbertRerank")
     @patch("agents.agent_utils.QueryEngineTool")
     def test_create_tools_with_hybrid_configuration(
         self,
         mock_query_tool,
-        mock_retriever_query_engine,
         mock_colbert_rerank,
+        mock_retriever_query_engine,
         mock_settings,
         test_data,
         expected_count,

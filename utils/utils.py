@@ -32,7 +32,6 @@ Attributes:
     settings (AppSettings): Global application settings instance.
 """
 
-import asyncio
 import gc
 import subprocess
 import time
@@ -50,6 +49,7 @@ except ImportError:
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
+from models import AppSettings
 from models.core import settings
 
 from .exceptions import (
@@ -618,107 +618,6 @@ async def managed_embedding_model(model_class, model_kwargs):
         gc.collect()
 
 
-class AsyncQdrantConnectionPool:
-    """Production-ready async Qdrant connection pool.
-
-    Provides efficient connection pooling for AsyncQdrantClient instances
-    with proper lifecycle management, resource cleanup, and performance
-    optimization for concurrent operations.
-    """
-
-    def __init__(self, url: str, max_size: int = 10, min_size: int = 2):
-        """Initialize connection pool.
-
-        Args:
-            url: Qdrant server URL
-            max_size: Maximum number of connections in pool
-            min_size: Minimum number of connections to maintain
-        """
-        self.url = url
-        self.max_size = max_size
-        self.min_size = min_size
-        self._pool: asyncio.Queue[AsyncQdrantClient] = asyncio.Queue(max_size)
-        self._current_size = 0
-        self._lock = asyncio.Lock()
-        self._closed = False
-
-    async def _create_client(self) -> AsyncQdrantClient:
-        """Create a new client connection."""
-        return AsyncQdrantClient(
-            url=self.url,
-            timeout=30.0,
-            prefer_grpc=True,  # Better performance
-        )
-
-    async def acquire(self) -> AsyncQdrantClient:
-        """Acquire a client from the pool.
-
-        Returns:
-            AsyncQdrantClient: Client instance ready for use
-
-        Raises:
-            RuntimeError: If connection pool is closed
-        """
-        if self._closed:
-            raise RuntimeError("Connection pool is closed")
-
-        # Try to get from pool first
-        try:
-            client = self._pool.get_nowait()
-            return client
-        except asyncio.QueueEmpty:
-            pass
-
-        # Create new client if under max size
-        async with self._lock:
-            if self._current_size < self.max_size:
-                client = await self._create_client()
-                self._current_size += 1
-                return client
-
-        # Wait for available client
-        return await self._pool.get()
-
-    async def release(self, client: AsyncQdrantClient):
-        """Release a client back to the pool.
-
-        Args:
-            client: AsyncQdrantClient to return to pool
-        """
-        if self._closed:
-            await client.close()
-            return
-
-        try:
-            self._pool.put_nowait(client)
-        except asyncio.QueueFull:
-            # Pool is full, close excess client
-            await client.close()
-            async with self._lock:
-                self._current_size -= 1
-
-    async def close(self):
-        """Close all connections in the pool."""
-        self._closed = True
-
-        # Close all clients in pool
-        clients_to_close = []
-        while not self._pool.empty():
-            try:
-                client = self._pool.get_nowait()
-                clients_to_close.append(client)
-            except asyncio.QueueEmpty:
-                break
-
-        # Close all clients in parallel
-        if clients_to_close:
-            await asyncio.gather(
-                *[client.close() for client in clients_to_close], return_exceptions=True
-            )
-
-        self._current_size = 0
-
-
 def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
     """Perform comprehensive startup configuration validation.
 
@@ -808,26 +707,6 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
         raise RuntimeError(error_msg)
 
     return results
-
-
-# Global pool instance
-_qdrant_pool: AsyncQdrantConnectionPool | None = None
-
-
-async def get_qdrant_pool() -> AsyncQdrantConnectionPool:
-    """Get or create the global Qdrant connection pool.
-
-    Returns:
-        AsyncQdrantConnectionPool: Global connection pool instance
-    """
-    global _qdrant_pool
-    if _qdrant_pool is None or _qdrant_pool._closed:
-        settings_instance = AppSettings()
-        _qdrant_pool = AsyncQdrantConnectionPool(
-            url=settings_instance.qdrant_url,
-            max_size=getattr(settings_instance, "qdrant_pool_size", 10),
-        )
-    return _qdrant_pool
 
 
 def async_timer(func: Callable) -> Callable:

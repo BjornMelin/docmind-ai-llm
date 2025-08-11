@@ -26,7 +26,6 @@ dependencies = [
     "python-docx==1.2.0",
     "polars==1.31.0",
     "python-dotenv==1.1.1",
-    "ruff==0.12.8",
     "qdrant-client==1.15.1",
     "tiktoken==0.9.0",
     "transformers==4.54.1",
@@ -38,7 +37,7 @@ dependencies = [
     "llama-index-vector-stores-qdrant",
     "langgraph==0.5.4",
     "moviepy==2.2.1",
-    "openai>=1.98.0,<1.99.0",
+    "openai>=1.98.0,<2.0.0",
     "openai-whisper==20250625",
     "numba==0.61.2",
     "ragatouille==0.0.9.post2",
@@ -59,8 +58,6 @@ dependencies = [
     "llama-index-question-gen-openai",
     "unstructured[all-docs]>=0.18.11",
     "diskcache==5.6.3",
-    "en-core-web-sm",
-    "pytest-cov>=6.0.0",
     "tenacity>=8.0.0",
     "loguru>=0.7.0",
     "pyarrow<21.0.0",
@@ -70,6 +67,9 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest==8.3.1"]
 gpu = ["fastembed-gpu==0.7.1", "llama-cpp-python[cuda]"]
+
+# Note: spaCy models are not PyPI packages and must be installed separately:
+# uv run python -m spacy download en_core_web_sm
 
 [project.urls]
 Repository = "https://github.com/BjornMelin/docmind-ai"
@@ -100,8 +100,6 @@ known-first-party = ["docmind_ai"]
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.uv.sources]
-en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -125,6 +123,8 @@ asyncio_default_fixture_loop_scope = "function"
 
 [dependency-groups]
 dev = [
+    "ruff==0.12.8",
+    "pytest-cov>=6.0.0",
     "hypothesis>=6.137.1",
     "pytest>=8.3.1",
     "pytest-asyncio>=0.23.0",

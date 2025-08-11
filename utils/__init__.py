@@ -12,9 +12,11 @@ Modules:
 """  # noqa: N999
 
 from .document_loader import (
-    create_native_multimodal_embeddings,
-    extract_images_from_pdf,
-    load_documents_llama,
+    clear_document_cache,
+    get_cache_stats,
+    get_document_info,
+    load_documents_from_directory,
+    load_documents_unstructured,
 )
 from .index_builder import create_index, create_index_async
 from .model_manager import ModelManager
@@ -30,9 +32,11 @@ __all__ = [
     "detect_hardware",
     "verify_rrf_configuration",
     "ModelManager",
-    "extract_images_from_pdf",
-    "create_native_multimodal_embeddings",
-    "load_documents_llama",
+    "load_documents_unstructured",
+    "load_documents_from_directory",
+    "get_document_info",
+    "clear_document_cache",
+    "get_cache_stats",
     "setup_hybrid_qdrant_async",
     "setup_hybrid_qdrant",
     "create_qdrant_hybrid_query_async",

@@ -43,13 +43,37 @@ from agent_factory import (
     process_query_with_agent_system,
 )
 from agents.agent_utils import create_tools_from_index
-from models import AppSettings
+from models.core import settings
 from prompts import PREDEFINED_PROMPTS
 from utils import detect_hardware
 from utils.document_loader import load_documents_llama
 from utils.index_builder import create_index_async
+from utils.utils import validate_startup_configuration
 
-settings: AppSettings = AppSettings()
+# settings is now imported from models.core
+
+
+# Simple wrapper functions for Ollama API calls
+async def get_ollama_models():
+    """Get list of available Ollama models."""
+    return ollama.list()
+
+
+async def pull_ollama_model(model_name: str):
+    """Pull an Ollama model."""
+    return ollama.pull(model_name)
+
+
+# Validate configuration at startup
+try:
+    validate_startup_configuration(settings)
+except RuntimeError as e:
+    st.error(f"⚠️ Configuration Error: {e}")
+    st.error(
+        "Please check your .env file and ensure all required settings are "
+        "properly configured."
+    )
+    st.stop()
 
 st.set_page_config(page_title="DocMind AI", page_icon="🧠")
 
@@ -147,7 +171,9 @@ if backend == "ollama":
         "Ollama URL", value=settings.ollama_base_url
     )
     try:
-        model_options = [m["name"] for m in ollama.list()["models"]]
+        # Use rate-limited model listing
+        models_response = asyncio.run(get_ollama_models())
+        model_options = [m["name"] for m in models_response["models"]]
     except Exception as e:
         st.sidebar.error(f"Error fetching models: {str(e)}")
 model_name: str = (
@@ -158,7 +184,8 @@ model_name: str = (
 if backend == "ollama" and model_name not in model_options:
     try:
         with st.sidebar.status("Downloading model..."):
-            ollama.pull(model_name)
+            # Use rate-limited model pulling
+            asyncio.run(pull_ollama_model(model_name))
             st.sidebar.success("Model downloaded!")
     except Exception as e:
         st.sidebar.error(f"Download failed: {str(e)}")

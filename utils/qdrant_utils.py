@@ -23,9 +23,7 @@ from qdrant_client.http.models import (
     VectorParams,
 )
 
-from models import AppSettings
-
-settings = AppSettings()
+from models.core import settings
 
 
 async def setup_hybrid_qdrant_async(

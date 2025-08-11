@@ -49,48 +49,15 @@ from llama_index.core.tools import QueryEngineTool
 from llama_index.llms.ollama import Ollama
 from loguru import logger
 
-from models import AppSettings
+from models.core import settings
 from utils.exceptions import (
     ConfigurationError,
     handle_agent_error,
 )
+from utils.logging_utils import log_error_with_context, log_performance
 from utils.retry_utils import async_with_timeout, with_fallback
 
-
-def log_error_with_context(
-    error: Exception, operation: str, context: dict | None = None, **kwargs
-) -> None:
-    """Log errors with comprehensive context information."""
-    error_context = {
-        "operation": operation,
-        "error_type": type(error).__name__,
-        "error_message": str(error),
-        **(context or {}),
-        **kwargs,
-    }
-    logger.error(
-        f"Operation failed: {operation}",
-        extra={"error_context": error_context},
-        exception=error,
-    )
-
-
-def log_performance(operation: str, duration: float, **kwargs) -> None:
-    """Log performance metrics with structured data."""
-    logger.info(
-        f"Performance: {operation} completed",
-        extra={
-            "performance": {
-                "operation": operation,
-                "duration_seconds": round(duration, 3),
-                "duration_human": f"{duration:.2f}s",
-                **kwargs,
-            }
-        },
-    )
-
-
-settings = AppSettings()
+# settings is now imported from models.core
 
 
 @with_fallback(lambda index_data: [])

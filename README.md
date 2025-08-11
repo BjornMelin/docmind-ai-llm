@@ -108,7 +108,7 @@
 
 - [Ollama](https://ollama.com/) installed and running locally.
 
-- Python 3.9 or higher.
+- Python 3.11+ (tested with 3.11, 3.12)
 
 - (Optional) Docker and Docker Compose for containerized deployment.
 
@@ -119,8 +119,8 @@
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/BjornMelin/docmind-ai.git
-   cd docmind-ai
+   git clone https://github.com/BjornMelin/docmind-ai-llm.git
+   cd docmind-ai-llm
    ```
 
 2. **Install dependencies:**
@@ -130,14 +130,43 @@
    ```
 
    **Key Dependencies Included:**
-   - **LlamaIndex (0.12.52)**: High-level RAG framework with QueryEngine patterns
-   - **LangGraph (0.5.4)**: Multi-agent orchestration and human-in-loop workflows
-   - **Tenacity (8.5.0)**: Retry strategies with exponential backoff
-   - **Loguru (0.7.0)**: Structured logging with automatic rotation
-   - **Diskcache (5.6.3)**: Document processing cache
-   - **Pydantic Settings (2.10.1)**: Configuration management
+   - **LlamaIndex Core**: RAG framework with QueryPipeline patterns
+   - **LangGraph (0.5.4)**: Multi-agent orchestration and workflows
+   - **Streamlit (1.48.0)**: Web interface framework
+   - **Ollama (0.5.1)**: Local LLM integration
+   - **Qdrant Client (1.15.1)**: Vector database operations
+   - **FastEmbed (0.3.0+)**: High-performance embeddings
+   - **Tenacity (8.0.0+)**: Retry strategies with exponential backoff
+   - **Loguru (0.7.0+)**: Structured logging
+   - **Pydantic (2.11.7)**: Data validation and settings
 
-3. **(Optional) Install GPU support:**
+3. **Install spaCy language model:**
+
+   DocMind AI uses spaCy for named entity recognition and linguistic analysis. Install the English language model:
+
+   ```bash
+   # Install the small English model (recommended, ~15MB)
+   uv run python -m spacy download en_core_web_sm
+   
+   # Optional: Install larger models for better accuracy
+   # Medium model (~50MB): uv run python -m spacy download en_core_web_md
+   # Large model (~560MB): uv run python -m spacy download en_core_web_lg
+   ```
+
+   **Note:** spaCy models are downloaded and cached locally. The application will automatically attempt to download `en_core_web_sm` if not found, but manual installation ensures offline functionality.
+
+4. **Set up environment configuration:**
+
+   Copy the example environment file and configure your settings:
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your preferred settings
+   ```
+
+5. **(Optional) Install GPU support:**
+
+   For NVIDIA GPU acceleration (requires CUDA 12.x):
 
    ```bash
    uv sync --extra gpu
@@ -163,10 +192,24 @@ Access the app at `http://localhost:8501`.
 
 ### 🎛️ Selecting a Model
 
-1. Enter the **Ollama Base URL** (default: `http://localhost:11434`).
-2. Select an **Ollama Model Name** (e.g., `qwen2:7b`) or pull a new model.
-3. Toggle **Use GPU if available** for accelerated processing (recommended for NVIDIA GPUs).
-4. Adjust **Context Size** (e.g., 4096, 8192) based on model and document needs.
+1. **Start Ollama service** (if not already running):
+   ```bash
+   ollama serve
+   ```
+
+2. **Enter the Ollama Base URL** (default: `http://localhost:11434`).
+
+3. **Select an Ollama Model Name** (e.g., `qwen2:7b`). If the model isn't installed:
+   ```bash
+   ollama pull qwen2:7b
+   ```
+
+4. **Toggle "Use GPU if available"** for accelerated processing (recommended for NVIDIA GPUs with 4GB+ VRAM).
+
+5. **Adjust Context Size** based on your model and hardware:
+   - **2048**: Small models, limited VRAM
+   - **4096**: Standard setting for most use cases  
+   - **8192+**: Large models with sufficient resources
 
 ### 📁 Uploading Documents
 
@@ -267,33 +310,148 @@ Results include summaries, insights, action items, and open questions, exportabl
 
 Use the chat interface to ask follow-up questions. The LLM leverages hybrid search (Jina v4 dense + FastEmbed SPLADE++ sparse) with submodular-optimized reranking for context-aware, high-quality responses.
 
+## 🔧 API Usage Examples
+
+### Programmatic Document Analysis
+
+```python
+import asyncio
+from pathlib import Path
+from models import AppSettings
+from utils.document_loader import load_documents_llama
+from utils.index_builder import create_index_async
+from agent_factory import get_agent_system
+
+async def analyze_document(file_path: str, query: str):
+    """Example: Analyze a document programmatically."""
+    settings = AppSettings()
+    
+    # Load and process document
+    documents = await load_documents_llama([Path(file_path)], settings)
+    index = await create_index_async(documents, settings)
+    
+    # Create agent system
+    agent_system = get_agent_system(index, settings)
+    
+    # Run analysis
+    response = await agent_system.arun(query)
+    return response
+
+# Usage
+async def main():
+    result = await analyze_document(
+        "path/to/document.pdf", 
+        "Summarize the key findings and action items"
+    )
+    print(result)
+
+asyncio.run(main())
+```
+
+### Custom Configuration
+
+```python
+from models import AppSettings
+import os
+
+# Override default settings
+os.environ["DEFAULT_MODEL"] = "llama3.2"
+os.environ["GPU_ACCELERATION"] = "true"
+os.environ["ENABLE_COLBERT_RERANKING"] = "true"
+
+settings = AppSettings()
+print(f"Using model: {settings.default_model}")
+print(f"GPU enabled: {settings.gpu_acceleration}")
+```
+
+### Batch Document Processing
+
+```python
+import asyncio
+from pathlib import Path
+from models import AppSettings
+from utils.document_loader import load_documents_llama
+from utils.index_builder import create_index_async
+
+async def process_document_folder(folder_path: str):
+    """Process all supported documents in a folder."""
+    settings = AppSettings()
+    
+    # Find all supported documents
+    folder = Path(folder_path)
+    supported_extensions = {'.pdf', '.docx', '.txt', '.md', '.json'}
+    documents_paths = [
+        f for f in folder.rglob("*") 
+        if f.suffix.lower() in supported_extensions
+    ]
+    
+    if not documents_paths:
+        print("No supported documents found")
+        return
+    
+    print(f"Processing {len(documents_paths)} documents...")
+    
+    # Load and index all documents
+    documents = await load_documents_llama(documents_paths, settings)
+    index = await create_index_async(documents, settings)
+    
+    print("Documents processed and indexed successfully!")
+    return index
+
+# Usage
+asyncio.run(process_document_folder("/path/to/documents"))
+```
+
 ## 🏗️ Architecture
 
 ```mermaid
 graph TD
-    A[Document Upload] --> B[Unstructured Parser<br/>hi-res strategy]
-    B --> C[Text + Images + Tables]
-    C --> D[LlamaIndex Ingestion Pipeline]
-    D --> E[SentenceSplitter<br/>1024/200 chunks]
-    D --> F[spaCy Metadata<br/>Entity Extraction]
-    E --> G[Hybrid Embeddings]
-    F --> H[Knowledge Graph<br/>Entity Relations]
-    G --> I[BGE-Large Dense 1024D<br/>SPLADE++ Sparse]
-    I --> J[Qdrant Vector Store<br/>RRF Fusion α=0.7]
-    H --> K[KG Index<br/>Relationship Queries]
-    J --> L[Query Pipeline<br/>Async/Parallel]
-    K --> L
-    L --> M[LangGraph Multi-Agent<br/>Supervisor + Specialists]
-    M --> N[Doc Agent<br/>KG Agent<br/>Multimodal Agent<br/>Planning Agent]
-    N --> O[ColBERT Reranking<br/>Late Interaction top-5]
-    O --> P[Local Ollama LLM<br/>Response Synthesis]
-    P --> Q[Streamlit UI<br/>Results + Chat]
+    A[Document Upload<br/>Streamlit UI] --> B[Unstructured Parser<br/>hi-res parsing]
+    B --> C[Text + Images + Tables<br/>Multimodal Content]
+    C --> D[LlamaIndex Ingestion Pipeline<br/>Document Processing]
     
-    R[SQLite WAL<br/>Session Persistence] <--> L
-    R <--> M
-    S[GPU Acceleration<br/>CUDA + Mixed Precision] <--> I
-    S <--> O
-    T[Human-in-Loop<br/>Interrupts] <--> M
+    D --> E[SentenceSplitter<br/>1024 tokens / 200 overlap]
+    D --> F[spaCy NLP Pipeline<br/>Entity Recognition]
+    
+    E --> G[Multi-Modal Embeddings]
+    F --> H[Knowledge Graph Builder<br/>Entity Relations]
+    
+    G --> I[Dense: BGE-Large 1024D<br/>Sparse: SPLADE++ FastEmbed<br/>Multimodal: Jina v4 512D]
+    I --> J[Qdrant Vector Store<br/>RRF Fusion α=0.7]
+    
+    H --> K[Knowledge Graph Index<br/>NetworkX Relations]
+    
+    J --> L[LlamaIndex QueryPipeline<br/>Multi-Stage Processing]
+    K --> L
+    
+    L --> M[LangGraph Agent System<br/>Supervisor Coordination]
+    M --> N[Specialized Agents:<br/>• Document Agent<br/>• Knowledge Graph Agent<br/>• Multimodal Agent<br/>• Planning Agent]
+    
+    N --> O[ColBERT Reranker<br/>Late Interaction top-5]
+    O --> P[Local LLM Backend<br/>Ollama/LM Studio/LlamaCpp]
+    P --> Q[Response Synthesis<br/>Structured Output]
+    Q --> R[Streamlit Interface<br/>Chat + Analysis Results]
+    
+    S[SQLite WAL Database<br/>Session Persistence] <--> M
+    S <--> L
+    T[DiskCache<br/>Document Processing] <--> D
+    U[GPU Acceleration<br/>CUDA + Mixed Precision] <--> I
+    U <--> O
+    V[Human-in-the-Loop<br/>Agent Interrupts] <--> M
+    
+    subgraph "Local Infrastructure"
+        P
+        S
+        T
+        J
+    end
+    
+    subgraph "AI Processing"
+        I
+        O
+        M
+        N
+    end
 ```
 
 ## 🛠️ Implementation Details
@@ -320,13 +478,19 @@ graph TD
 
 ### Multi-Agent Coordination
 
-- **Supervisor:** LangGraph coordinator analyzes query complexity and delegates to specialists
+- **Supervisor Pattern:** LangGraph coordinator analyzes query complexity and routes to appropriate specialist agents
 
-- **Specialists:** Document retrieval, knowledge graph queries, multimodal analysis, and planning agents
+- **Agent Types:** 
+  - **Document Agent:** Text retrieval and analysis using hybrid search
+  - **Knowledge Graph Agent:** Entity-relationship queries and graph traversal
+  - **Multimodal Agent:** Image and table analysis with vision embeddings
+  - **Planning Agent:** Complex multi-step reasoning and task decomposition
 
-- **Tools:** LlamaIndex QueryEngineTool integration for seamless agent-to-pipeline communication
+- **Tool Integration:** LlamaIndex QueryEngine tools provide seamless access to vector stores and knowledge graphs
 
-- **Persistence:** SQLite WAL checkpointer for session state and human-in-loop workflows
+- **Session Management:** SQLite WAL database with checkpointer support for conversation history and human-in-the-loop workflows
+
+- **Async Execution:** Concurrent agent operations with proper resource management
 
 ### Performance Optimizations
 
@@ -360,17 +524,32 @@ class Settings(BaseSettings):
 
 ### Environment Variables
 
-Create a `.env` file in your project root:
+DocMind AI uses environment variables for configuration. Copy the example file and customize:
+
+```bash
+cp .env.example .env
+```
+
+Key configuration options in `.env`:
 
 ```bash
 
-# .env file
-LLM_MODEL=ollama/qwen2:7b
+# Backend Services
+OLLAMA_BASE_URL=http://localhost:11434
+LMSTUDIO_BASE_URL=http://localhost:1234/v1
+QDRANT_URL=http://localhost:6333
+
+# Model Configuration
+DEFAULT_MODEL=qwen2:7b
 EMBEDDING_MODEL=BAAI/bge-large-en-v1.5
-SIMILARITY_TOP_K=10
-HYBRID_ALPHA=0.7
-GPU_ENABLED=true
+
+# Search & Performance
+RRF_FUSION_ALPHA=0.7
+GPU_ACCELERATION=true
+ENABLE_COLBERT_RERANKING=true
 ```
+
+See the complete [.env.example](.env.example) file for all available configuration options.
 
 ### Cache Configuration
 
@@ -387,12 +566,15 @@ cache_size_limit = 1e9  # 1GB
 
 | Operation | Performance | Notes |
 |-----------|-------------|--------|
-| **Document Processing (Cold)** | ~28 seconds | 50-page PDF with GPU |
-| **Document Processing (Warm)** | ~3 seconds | Cached results |
-| **Query Response** | <5 seconds | Hybrid retrieval + reranking |
-| **Test Suite Execution** | 12-15 minutes | 85%+ coverage maintained |
-| **Memory Usage** | 1.3GB average | Optimized caching strategy |
-| **GPU Utilization** | 2-3x speedup | CUDA + mixed precision |
+| **Document Processing (Cold)** | ~15-30 seconds | 50-page PDF with GPU acceleration |
+| **Document Processing (Warm)** | ~2-5 seconds | DiskCache + index caching |
+| **Query Response** | 1-3 seconds | Hybrid retrieval + ColBERT reranking |
+| **Agent System Response** | 3-8 seconds | Multi-agent coordination overhead |
+| **Vector Search** | <500ms | Qdrant in-memory with GPU embeddings |
+| **Test Suite (99 tests)** | ~40 seconds | Comprehensive coverage |
+| **Memory Usage (Idle)** | 400-500MB | Base application |
+| **Memory Usage (Processing)** | 1.2-2.1GB | During document analysis |
+| **GPU Memory Usage** | 4-8GB | Model + embedding cache |
 
 ### Caching Performance
 
@@ -451,6 +633,112 @@ cache_size_limit = 1e9  # 1GB
 
 > *Benchmarks performed on RTX 4090 Laptop GPU, 16GB RAM, NVMe SSD*
 
+## 🔧 Offline Operation
+
+DocMind AI is designed for complete offline operation:
+
+### Prerequisites for Offline Use
+
+1. **Install Ollama locally:**
+   ```bash
+   # Download from https://ollama.com/download
+   ollama serve  # Start the service
+   ```
+
+2. **Pull required models:**
+   ```bash
+   ollama pull qwen2:7b  # Recommended lightweight model
+   ollama pull llama3.2  # Alternative option
+   ```
+
+3. **Verify GPU setup (optional):**
+   ```bash
+   nvidia-smi  # Check GPU availability
+   python scripts/gpu_validation.py  # Validate CUDA setup
+   ```
+
+### Model Requirements
+
+| Model Size | RAM Required | GPU VRAM | Performance |
+|------------|-------------|----------|-------------|
+| 7B (e.g., qwen2:7b) | 8GB+ | 4GB+ | Good |
+| 13B | 16GB+ | 8GB+ | Better |
+| 70B+ | 32GB+ | 16GB+ | Best |
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+#### 1. Ollama Connection Errors
+
+```bash
+
+# Check if Ollama is running
+curl http://localhost:11434/api/version
+
+# If not running, start it
+ollama serve
+```
+
+#### 2. GPU Not Detected
+
+```bash
+
+# Install GPU dependencies
+uv sync --extra gpu
+
+# Verify CUDA installation
+nvidia-smi
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
+#### 3. Model Download Issues
+
+```bash
+
+# Pull models manually
+ollama pull qwen2:7b
+ollama list  # Verify installation
+```
+
+#### 4. Memory Issues
+
+- Reduce context size in UI (4096 → 2048)
+
+- Use smaller models (7B instead of 13B+)
+
+- Enable document chunking for large files
+
+- Close other applications to free RAM
+
+#### 5. Document Processing Errors
+
+```bash
+
+# Check supported formats
+echo "Supported: PDF, DOCX, TXT, XLSX, CSV, JSON, XML, MD, RTF, MSG, PPTX, ODT, EPUB"
+
+# For unsupported formats, convert to PDF first
+```
+
+### Performance Optimization
+
+1. **Enable GPU acceleration** in the UI sidebar
+2. **Use appropriate model sizes** for your hardware
+3. **Enable caching** to speed up repeat analysis
+4. **Adjust chunk sizes** based on document complexity
+5. **Use hybrid search** for better retrieval quality
+
+### Getting Help
+
+- Check logs in `logs/` directory for detailed errors
+
+- Review [troubleshooting guide](docs/user/troubleshooting.md)
+
+- Search existing [GitHub Issues](https://github.com/BjornMelin/docmind-ai-llm/issues)
+
+- Open a new issue with: steps to reproduce, error logs, system info
+
 ## 📖 How to Cite
 
 If you use DocMind AI in your research or work, please cite it as follows:
@@ -459,7 +747,7 @@ If you use DocMind AI in your research or work, please cite it as follows:
 @software{melin_docmind_ai_2025,
   author = {Melin, Bjorn},
   title = {DocMind AI: Local LLM for AI-Powered Document Analysis},
-  url = {https://github.com/BjornMelin/docmind-ai},
+  url = {https://github.com/BjornMelin/docmind-ai-llm},
   version = {0.1.0},
   year = {2025}
 }
@@ -467,7 +755,37 @@ If you use DocMind AI in your research or work, please cite it as follows:
 
 ## 🙌 Contributing
 
-Contributions are welcome! See the [CONTRIBUTING.md](CONTRIBUTING.md) file for details on how to contribute.
+Contributions are welcome! Please follow these steps:
+
+1. **Fork the repository** and create a feature branch
+2. **Set up development environment:**
+   ```bash
+   git clone https://github.com/your-username/docmind-ai-llm.git
+   cd docmind-ai-llm
+   uv sync --group dev
+   ```
+3. **Make your changes** following the established patterns
+4. **Run tests and linting:**
+   ```bash
+   ruff check . --fix
+   ruff format .
+   pytest tests/
+   ```
+5. **Submit a pull request** with clear description of changes
+
+### Development Guidelines
+
+- Follow PEP 8 style guide (enforced by Ruff)
+
+- Add type hints for all functions
+
+- Include docstrings for public APIs
+
+- Write tests for new functionality
+
+- Update documentation as needed
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## 📃 License
 

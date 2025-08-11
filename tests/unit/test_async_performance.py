@@ -308,56 +308,49 @@ class TestAsyncPerformanceOptimizations:
         with patch("utils.index_builder.verify_rrf_configuration") as mock_verify:
             mock_verify.return_value = {"issues": []}
 
-            with patch("utils.index_builder.get_qdrant_pool") as mock_pool:
-                # Mock connection pool
-                mock_client = AsyncMock()
-                mock_pool_instance = AsyncMock()
-                mock_pool_instance.acquire.return_value = mock_client
-                mock_pool.return_value = mock_pool_instance
+            # Mock embedding functions
+            with patch(
+                "utils.index_builder.generate_dense_embeddings_async"
+            ) as mock_dense:
+                mock_dense.return_value = [[0.1] * 1024] * 10
 
-                # Mock embedding functions
                 with patch(
-                    "utils.index_builder.generate_dense_embeddings_async"
-                ) as mock_dense:
-                    mock_dense.return_value = [[0.1] * 1024] * 10
+                    "utils.index_builder.generate_sparse_embeddings_async"
+                ) as mock_sparse:
+                    mock_sparse.return_value = [{"token": 0.5}] * 10
 
                     with patch(
-                        "utils.index_builder.generate_sparse_embeddings_async"
-                    ) as mock_sparse:
-                        mock_sparse.return_value = [{"token": 0.5}] * 10
+                        "utils.index_builder.create_vector_index_async"
+                    ) as mock_vector:
+                        mock_index = Mock()
+                        mock_vector.return_value = mock_index
 
                         with patch(
-                            "utils.index_builder.create_vector_index_async"
-                        ) as mock_vector:
-                            mock_index = Mock()
-                            mock_vector.return_value = mock_index
+                            "utils.index_builder.create_kg_index_async"
+                        ) as mock_kg:
+                            mock_kg_index = Mock()
+                            mock_kg.return_value = mock_kg_index
 
                             with patch(
-                                "utils.index_builder.create_kg_index_async"
-                            ) as mock_kg:
-                                mock_kg_index = Mock()
-                                mock_kg.return_value = mock_kg_index
+                                "utils.index_builder.create_hybrid_retriever"
+                            ) as mock_retriever:
+                                mock_hybrid_retriever = Mock()
+                                mock_retriever.return_value = mock_hybrid_retriever
 
-                                with patch(
-                                    "utils.index_builder.create_hybrid_retriever"
-                                ) as mock_retriever:
-                                    mock_hybrid_retriever = Mock()
-                                    mock_retriever.return_value = mock_hybrid_retriever
+                                # Test async index creation
+                                result = await create_index_async(
+                                    documents, use_gpu=False
+                                )
 
-                                    # Test async index creation
-                                    result = await create_index_async(
-                                        documents, use_gpu=False
-                                    )
+                                # Verify all components were created
+                                assert result["vector"] == mock_index
+                                assert result["kg"] == mock_kg_index
+                                assert result["retriever"] == mock_hybrid_retriever
+                                assert "performance_metrics" in result
 
-                                    # Verify all components were created
-                                    assert result["vector"] == mock_index
-                                    assert result["kg"] == mock_kg_index
-                                    assert result["retriever"] == mock_hybrid_retriever
-                                    assert "performance_metrics" in result
-
-                                    # Verify pool was used correctly
-                                    mock_pool_instance.acquire.assert_called_once()
-                                    mock_pool_instance.release.assert_called_once()
+                                # Verify pool was used correctly
+                                mock_pool_instance.acquire.assert_called_once()
+                                mock_pool_instance.release.assert_called_once()
 
 
 class TestAsyncErrorHandling:

@@ -49,7 +49,7 @@ import asyncio
 import functools
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any
+from typing import Any, TypeVar
 
 from loguru import logger
 from tenacity import (
@@ -68,6 +68,8 @@ from utils.exceptions import (
     IndexCreationError,
     ResourceError,
 )
+
+T = TypeVar("T")
 
 # Standard retry patterns using tenacity
 standard_retry = retry(
@@ -123,7 +125,7 @@ network_retry = retry(
 )
 
 
-def with_fallback[T](fallback_func: Callable[..., T]):
+def with_fallback(fallback_func):
     """Simple fallback decorator when primary function fails.
 
     Args:
@@ -341,6 +343,12 @@ async def async_managed_resource(
                         resource.close()
             except Exception as e:
                 logger.warning(f"Async resource cleanup failed: {e}")
+
+
+# Rate-limited retry patterns combining tenacity with rate limiting
+
+
+# Rate limiting integration removed - use standard retry patterns for local app
 
 
 # Export all retry utilities

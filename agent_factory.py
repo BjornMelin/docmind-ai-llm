@@ -16,8 +16,6 @@ from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core.tools import QueryEngineTool
 from loguru import logger
 
-from models import AppSettings
-
 # Optional import for persistence - may not be available in all versions
 try:
     from langgraph.checkpoint.sqlite import SqliteSaver
@@ -27,7 +25,7 @@ except ImportError:
     CHECKPOINT_AVAILABLE = False
     logger.warning("SqliteSaver not available - persistence features disabled")
 
-settings = AppSettings()
+# settings is now imported from models.core
 
 
 class AgentState(MessagesState):

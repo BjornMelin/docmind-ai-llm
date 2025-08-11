@@ -47,9 +47,7 @@ except ImportError:
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from loguru import logger
 
-from models import AppSettings
-
-settings = AppSettings()
+from models.core import settings
 
 
 class EmbeddingFactory:
@@ -335,3 +333,9 @@ class EmbeddingFactory:
             "dense": cls.create_dense_embedding.cache_info()._asdict(),
             "sparse": cls.create_sparse_embedding.cache_info()._asdict(),
         }
+
+
+# Rate-limited wrapper functions for embedding operations
+
+
+# Rate limiting functions removed - not needed for local document processing app
