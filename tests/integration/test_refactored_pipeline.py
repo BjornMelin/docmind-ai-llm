@@ -355,7 +355,7 @@ class TestRefactoredPipelineIntegration:
         - Log level filtering
         - Performance context logging
         """
-        from utils.logging_config import logger
+        from loguru import logger
 
         # Test structured logging
         test_context = {

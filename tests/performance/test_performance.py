@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import torch
 
-from agent_factory import analyze_query_complexity, get_agent_system
+from agent_factory import get_agent_system
 from utils.model_manager import ModelManager
 
 
@@ -337,30 +337,7 @@ class TestAgentPerformance:
     """Performance tests for agent system operations."""
 
     @pytest.mark.performance
-    def test_query_complexity_analysis_performance(self, benchmark):
-        """Benchmark query complexity analysis performance.
-
-        Args:
-            benchmark: Pytest benchmark fixture.
-        """
-        complex_query = (
-            "How do hybrid search systems integrate SPLADE++ sparse embeddings "
-            "with BGE-Large dense embeddings using Reciprocal Rank Fusion for "
-            "optimized document retrieval in large-scale AI applications?"
-        )
-
-        with patch("agent_factory.analyze_query_complexity") as mock_analyze:
-            mock_analyze.return_value = {
-                "complexity": "complex",
-                "reasoning": "Multi-step analysis required",
-                "features": {"word_count": 25, "technical_terms": 8},
-            }
-
-            def analyze_operation():
-                return analyze_query_complexity(complex_query)
-
-            result = benchmark(analyze_operation)
-            assert result["complexity"] == "complex"
+    # Removed duplicate query complexity performance test - consolidated into test_agent_factory.py
 
     @pytest.mark.performance
     @pytest.mark.asyncio
