@@ -310,7 +310,6 @@ class TestRunner:
             "run",
             "pytest",
             "tests/test_models.py::test_app_settings_clean_defaults",
-            "tests/test_utils.py::test_setup_logging",
             "tests/test_agent_utils.py::test_agent_creation_with_default_settings",
             "-v",
             "--tb=line",
@@ -331,7 +330,7 @@ import sys
 import importlib
 
 modules = [
-    'models', 'utils.utils', 'utils.document_loader', 
+    'models', 'utils.utils', 'utils.document_loader',
     'utils.index_builder', 'utils.model_manager',
     'agents.agent_utils', 'agent_factory'
 ]

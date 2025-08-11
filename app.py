@@ -25,7 +25,6 @@ Attributes:
 """
 
 import asyncio
-import logging
 import time
 from typing import Any
 
@@ -37,6 +36,7 @@ from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.llms.llama_cpp import LlamaCPP
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.openai import OpenAI
+from loguru import logger
 
 from agent_factory import (
     get_agent_system,
@@ -45,12 +45,9 @@ from agent_factory import (
 from agents.agent_utils import create_tools_from_index
 from models import AppSettings
 from prompts import PREDEFINED_PROMPTS
-from utils import detect_hardware, setup_logging
+from utils import detect_hardware
 from utils.document_loader import load_documents_llama
 from utils.index_builder import create_index_async
-
-setup_logging()
-
 
 settings: AppSettings = AppSettings()
 
@@ -186,7 +183,7 @@ try:
         )
 except Exception as e:
     st.error(f"Model initialization error: {str(e)}")
-    logging.error("Model init error: %s", str(e))
+    logger.error(f"Model init error: {str(e)}")
     st.stop()
 
 
@@ -227,11 +224,11 @@ async def upload_section() -> None:
                 st.info(f"""
                 **Performance Metrics (Async Mode):**
                 - Document loading: {doc_load_time:.2f}s
-                - Index creation: {index_time:.2f}s  
+                - Index creation: {index_time:.2f}s
                 - Total processing: {total_time:.2f}s
                 - Documents processed: {len(docs)}
                 """)
-                logging.info(
+                logger.info(
                     "Async processing completed in %.2fs for %s documents",
                     total_time,
                     len(docs),
@@ -239,7 +236,7 @@ async def upload_section() -> None:
 
             except Exception as e:
                 st.error(f"Document processing failed: {str(e)}")
-                logging.error("Doc process error: %s", str(e))
+                logger.error(f"Doc process error: {str(e)}")
 
 
 # Analysis Options and Agentic Analysis with Error Handling
@@ -286,7 +283,7 @@ async def run_analysis() -> None:
 
             except Exception as e:
                 st.error(f"Analysis failed: {str(e)}")
-                logging.error("Analysis error: %s", str(e))
+                logger.error(f"Analysis error: {str(e)}")
 
 
 if st.button("Analyze"):
@@ -357,7 +354,7 @@ if user_input:
                 st.error("Please upload and process documents first before chatting.")
         except Exception as e:
             st.error(f"Chat response failed: {str(e)}")
-            logging.error("Chat error: %s", str(e))
+            logger.error(f"Chat error: {str(e)}")
 
     # Store user message in memory
     st.session_state.memory.put({"role": "user", "content": user_input})
@@ -369,7 +366,7 @@ if st.button("Save Session"):
         st.success("Saved!")
     except Exception as e:
         st.error(f"Save failed: {str(e)}")
-        logging.error("Save error: %s", str(e))
+        logger.error(f"Save error: {str(e)}")
 
 if st.button("Load Session"):
     try:
@@ -377,7 +374,7 @@ if st.button("Load Session"):
         st.success("Loaded!")
     except Exception as e:
         st.error(f"Load failed: {str(e)}")
-        logging.error("Load error: %s", str(e))
+        logger.error(f"Load error: {str(e)}")
 
 # Phoenix Dashboard Link if enabled
 if use_phoenix:
