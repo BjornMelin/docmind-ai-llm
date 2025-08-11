@@ -7,7 +7,7 @@ Modules:
     agent_utils: Utilities for creating and managing agents
     agent_types: Types for agents
     agent_tools: Tools for agents
-"""
+"""  # noqa: N999
 
 from .agent_utils import (
     analyze_documents_agentic,

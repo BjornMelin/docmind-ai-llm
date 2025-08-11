@@ -1,7 +1,7 @@
-"""Advanced agent utilities for DocMind AI with hybrid search integration.
+"""Agent utilities for DocMind AI with hybrid search integration.
 
 This module provides comprehensive agent functionality including:
-- ReActAgent creation with advanced tool integration
+- ReActAgent creation with tool integration
 - Hybrid search tools with RRF fusion and ColBERT reranking
 - Query engine configuration with vector and knowledge graph indexes
 - Asynchronous streaming chat capabilities
@@ -47,17 +47,48 @@ from llama_index.core.agent import ReActAgent
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core.tools import QueryEngineTool
 from llama_index.llms.ollama import Ollama
+from loguru import logger
 
 from models import AppSettings
-from utils.error_recovery import (
-    async_with_timeout,
-    with_fallback,
-)
 from utils.exceptions import (
     ConfigurationError,
     handle_agent_error,
 )
-from utils.logging_config import log_error_with_context, log_performance, logger
+from utils.retry_utils import async_with_timeout, with_fallback
+
+
+def log_error_with_context(
+    error: Exception, operation: str, context: dict | None = None, **kwargs
+) -> None:
+    """Log errors with comprehensive context information."""
+    error_context = {
+        "operation": operation,
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+        **(context or {}),
+        **kwargs,
+    }
+    logger.error(
+        f"Operation failed: {operation}",
+        extra={"error_context": error_context},
+        exception=error,
+    )
+
+
+def log_performance(operation: str, duration: float, **kwargs) -> None:
+    """Log performance metrics with structured data."""
+    logger.info(
+        f"Performance: {operation} completed",
+        extra={
+            "performance": {
+                "operation": operation,
+                "duration_seconds": round(duration, 3),
+                "duration_human": f"{duration:.2f}s",
+                **kwargs,
+            }
+        },
+    )
+
 
 settings = AppSettings()
 
@@ -68,7 +99,7 @@ def create_tools_from_index(index_data: dict[str, Any]) -> list[QueryEngineTool]
 
     Uses the ToolFactory to create QueryEngineTool instances from provided indexes,
     ensuring consistent configuration and eliminating code duplication.
-    Provides the same advanced search capabilities with centralized tool creation
+    Provides the same search capabilities with centralized tool creation
     and comprehensive error handling.
 
     Args:
@@ -169,7 +200,7 @@ def create_agent_with_tools(index_data: dict[str, Any], llm: Any) -> ReActAgent:
 
     Constructs a fully-featured ReActAgent equipped with hybrid search tools,
     knowledge graph queries, and memory management. Integrates all available
-    advanced features including RRF fusion, ColBERT reranking, and GPU
+    features including RRF fusion, ColBERT reranking, and GPU
     acceleration for optimal performance with comprehensive error handling.
 
     Agent capabilities:

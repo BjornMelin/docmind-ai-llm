@@ -10,10 +10,10 @@ Functions:
     create_qdrant_hybrid_query: Sync hybrid query with RRF.
 """
 
-import logging
 from typing import Any
 
 from llama_index.vector_stores.qdrant import QdrantVectorStore
+from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http.models import (
     Distance,
@@ -178,7 +178,7 @@ async def create_qdrant_hybrid_query_async(
         limit=limit,
     )
 
-    logging.info(
+    logger.info(
         "Async Qdrant native RRF fusion - prefetch: %s, final: %s, alpha: %s",
         prefetch_limit,
         limit,
@@ -231,7 +231,7 @@ def create_qdrant_hybrid_query(
         limit=limit,
     )
 
-    logging.info(
+    logger.info(
         "Qdrant native RRF fusion - prefetch: %s, final: %s, alpha: %s",
         prefetch_limit,
         limit,

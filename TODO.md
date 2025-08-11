@@ -2,6 +2,8 @@
 
 **Source**: Based on full conversation review, final decisions, architecture (e.g., LlamaIndex pipelines/retrievers, LangGraph supervisor with planning/Send, Unstructured parsing, SQLite/diskcache caching), and current codebase state (e.g., partial hybrid/SPLADE++, custom multimodal to evolve, KG commented—enable, no pipeline/chunking/caching yet). Incorporates critical findings from `MASTER_REVIEW_DOCUMENT.md` and `crawled/` research.
 
+**IMPORTANT**: See `REFACTORING_TASKS.md` for comprehensive 12-week refactoring plan to reduce codebase by 25-35% while preserving all capabilities. Refactoring should be done in parallel with feature implementation where possible.
+
 **KISS Principle**: Simple, library-first solutions (e.g., LlamaIndex QueryPipeline over custom, UnstructuredReader for parsing) that work locally/offline, avoiding complexity (no distributed/Redis—MVP local multi-process with SQLite WAL/diskcache locks). Fast shipping: 1-week MVP on Groups 1-2.
 
 > **System Requirements Note**: Fully offline/local (no API keys, e.g., Ollama for LLM/VLM, HuggingFace for Jina). Use AppSettings (models.py) for all configs (e.g., chunk_size=1024, chunk_overlap=200, gpu_acceleration). Library versions from pyproject.toml (e.g., llama-index==0.12.52, langgraph==0.5.4, unstructured[all-docs]==0.15.13, diskcache==5.6.3—add if missing). Must support multimodal search and retrieval (text + image) for hybrid and RAG pipelines, including PDF/image processing and multimodal reranking.
@@ -101,10 +103,10 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
 
 - [ ] **Task 6: Optimize Query Pipeline Architecture** (Not Implemented; Add Chunking/Pipeline)
   - [ ] Subtask 6.1: Implement Multi-Stage Query Processing (Not Implemented; Add)
-    - **Instructions**: In utils.py create_index, from llama_index.core import IngestionPipeline; from llama_index.core.node_parser import SentenceSplitter, MetadataExtractor; pipeline = IngestionPipeline(transformations=[SentenceSplitter(chunk_size=AppSettings.chunk_size or 1024, chunk_overlap=AppSettings.chunk_overlap or 200), MetadataExtractor()]); nodes = pipeline.run(documents=docs); index = VectorStoreIndex(nodes). Build QueryPipeline: from llama_index.core.query_pipeline import QueryPipeline; from llama_index.postprocessor import ColbertRerank; from utils import CustomJinaReranker; qp = QueryPipeline(chain=[retriever, ColbertRerank(top_n=AppSettings.reranking_top_k or 5), CustomJinaReranker(model_name="jinaai/jina-reranker-m0", top_n=AppSettings.reranking_top_k or 5), synthesizer], async_mode=True, parallel=True). Use in create_tools_from_index as qp.as_query_engine(). Test in tests/test_performance_integration.py: def test_pipeline_latency(): qp.run("query"); assert latency < threshold.
-    - **Libraries**: llama-index==0.12.52 (add diskcache==5.6.3 to deps)
+    - **Instructions**: In utils/index_builder.py (not utils.py), enhance create_index function: from llama_index.core import IngestionPipeline; from llama_index.core.node_parser import SentenceSplitter, MetadataExtractor; pipeline = IngestionPipeline(transformations=[SentenceSplitter(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap), MetadataExtractor()]); nodes = pipeline.run(documents=docs); index = VectorStoreIndex(nodes). Build QueryPipeline: from llama_index.core.query_pipeline import QueryPipeline; from llama_index.postprocessor import ColbertRerank; qp = QueryPipeline(chain=[retriever, ColbertRerank(top_n=settings.reranking_top_k), synthesizer], async_mode=True, parallel=True). Use in tool_factory.py as qp.as_query_engine(). Test in tests/test_performance_integration.py: def test_pipeline_latency(): qp.run("query"); assert latency < threshold.
+    - **Libraries**: llama-index==0.12.52, diskcache==5.6.3
     - **Classes/Functions/Features**: IngestionPipeline (transformations for chunking/extraction); SentenceSplitter (semantic); MetadataExtractor (entities); QueryPipeline (chain/async/parallel/prefetch); Cache (ttl=3600 via diskcache).
-    - **Note**: Implement `CustomJinaReranker` in utils.py to interface with "jinaai/jina-reranker-m0" for multimodal reranking.
+    - **Note**: Leverage existing ColbertRerank configuration instead of custom implementation.
   - [ ] Subtask 6.2: Add Analytics and Routing (Not Implemented; Add)
     - **Instructions**: Use LangGraph for routing (integrate with QueryPipeline); log metrics via callbacks. Test in tests/test_performance_integration.py.
     - **Libraries**: langgraph==0.5.4
@@ -118,15 +120,15 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
 
 **Deadline**: End of Week 2
 
-- [ ] **Task 7: Implement LangGraph Supervisor Architecture** (Implemented; Evolve to Advanced)
-  - [ ] Subtask 7.1: Create Supervisor and Specialist Agents (Implemented; Add Custom/Offline)
-    - **Instructions**: In agent_factory.py, from langgraph.prebuilt import create_react_agent; workers = [create_react_agent(llm=Ollama(AppSettings.default_model), tools=tools_from_utils, state_modifier="RAG supervisor prompt for routing") for_ in ["doc", "kg", "multimodal"]]. Evolve StateGraph with supervisor node (prompt for RAG decisions). Test in tests/test_agents.py: def test_supervisor_routing(): graph = workflow.compile(); output = graph.invoke({"messages": [{"content": "query"}]}); assert "routed" in output.
+- [ ] **Task 7: Enhance LangGraph Supervisor Architecture** (Implemented; Optimize)
+  - [ ] Subtask 7.1: Optimize Supervisor and Specialist Agents (Implemented; Streamline)
+    - **Instructions**: In agent_factory.py, maintain existing create_react_agent structure but optimize routing logic. Keep human-in-loop and planning capabilities. Ensure StateGraph preserves session persistence via SqliteSaver. Test in tests/unit/test_agent_factory.py: def test_supervisor_routing(): verify routing to correct specialist based on query type.
     - **Libraries**: langgraph==0.5.4
-    - **Classes/Functions/Features**: create_react_agent (workers with local LLM/tools); SupervisorAgent (event-driven StateGraph); add_edge (handoffs via Send API).
-  - [ ] Subtask 7.2: Add Query Routing and Coordination (Implemented; Add Persistence/Human-in-Loop)
-    - **Instructions**: Already in routing_logic. Add from langgraph.checkpoint import MemorySaver; checkpointer=MemorySaver(); workflow.compile(checkpointer=checkpointer). Add interrupt_before=["tool_call"] for human-in-loop (pause/resume via UI toggle). Test in tests/test_agents.py: def test_persistence_interrupt(): state = graph.invoke(input, config={"thread_id": "1"}); resumed = graph.invoke(None, config={"thread_id": "1"}); assert resumed["human_approved"].
+    - **Classes/Functions/Features**: create_react_agent (workers with local LLM/tools); StateGraph (supervisor pattern); SqliteSaver (session persistence).
+  - [ ] Subtask 7.2: Enhance Query Routing and Coordination (Implemented; Refine)
+    - **Instructions**: Keep existing routing_logic but optimize for efficiency. Maintain SqliteSaver for persistence: from langgraph.checkpoint.sqlite import SqliteSaver; checkpointer = SqliteSaver.from_conn_string(":memory:"). Keep interrupt_before for human-in-loop. Test in tests/unit/test_agent_factory.py: def test_persistence_interrupt(): verify state persistence across interrupts.
     - **Libraries**: langgraph==0.5.4
-    - **Classes/Functions/Features**: MemorySaver (persistence, offline); interrupt_before/interrupt_after (human-in-loop); AgentExecutor (recovery/handoffs).
+    - **Classes/Functions/Features**: SqliteSaver (persistence); interrupt_before/interrupt_after (human-in-loop); StateGraph (coordination).
 
 - [ ] **Task 8: Create Agent Factory & UI Integration** (Implemented; Add Easy Win)
   - [ ] Subtask 8.1: Develop agent_factory.py (Implemented; Add Monitoring)
@@ -148,7 +150,7 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
 
 - [ ] **Task 9: Streamlit UI Improvements** (Partial; Enhance)
   - [ ] Subtask 9.1: Fix Upload/Processing Flow (Partial; Add Errors/Progress)
-    - **Instructions**: In app.py upload_section, with st.status("Processing..."): try: docs = load_documents_llama(...); except Exception as e: st.error(f"Error: {e}"); logger.error(e); return. Add st.progress for steps. Test in tests/test_app.py: def test_upload_error(): app.file_uploader.upload(invalid_file); app.run(); assert "Error" in app.error.value.
+    - **Instructions**: In app.py upload_section, use existing load_documents_unstructured from utils/document_loader.py. Add with st.status("Processing..."): try: docs = load_documents_unstructured(file_paths, settings); except Exception as e: st.error(f"Error: {e}"); logger.error(e); return. Add st.progress for steps. Test manually via UI.
     - **Libraries**: streamlit==1.47.1
     - **Classes/Functions/Features**: st.status; st.error; st.progress.
   - [ ] Subtask 9.2: Add Model Selection and Query Interface (Implemented; Add Display)
@@ -159,14 +161,14 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
     - **Instructions**: Enhance input/output formatting, show which tools the agent is using, display retrieval sources and confidence, show multimodal results (text + images).
 
 - [ ] **Task 10: Update Dependencies & Configuration** (Implemented; Minor Add)
-  - [ ] Subtask 10.1: Update pyproject.toml (Implemented; Add Deps)
-    - **Instructions**: Add unstructured[all-docs]==0.15.13, diskcache==5.6.3; remove unused. Test in tests/test_real_validation.py: def test_deps_offline(): import unstructured; assert unstructured.partition_pdf("test.pdf").
-    - **Libraries**: All pinned.
-    - **Classes/Functions/Features**: N/A.
-  - [ ] Subtask 10.2: Update models.py (Implemented; Add Chunk Settings)
-    - **Instructions**: Add chunk_size=1024, chunk_overlap=200 to AppSettings. Test in tests/test_models.py: def test_chunk_settings(): settings = AppSettings(); assert settings.chunk_size == 1024.
+  - [ ] Subtask 10.1: Update pyproject.toml (Verify Dependencies)
+    - **Instructions**: Verify unstructured[all-docs] and diskcache==5.6.3 are present. Remove any unused dependencies identified during refactoring. Run uv pip compile pyproject.toml to verify dependency resolution.
+    - **Libraries**: All versions pinned
+    - **Classes/Functions/Features**: N/A
+  - [ ] Subtask 10.2: Verify models.py Settings (Implemented; Confirm)
+    - **Instructions**: Confirm chunk_size=1024, chunk_overlap=200 exist in AppSettings. These are used by IngestionPipeline. Test in tests/unit/test_config_validation.py: def test_chunk_settings(): settings = AppSettings(); assert settings.chunk_size == 1024.
     - **Libraries**: pydantic==2.11.7
-    - **Classes/Functions/Features**: BaseSettings (validation).
+    - **Classes/Functions/Features**: BaseSettings (validation)
 
 - [ ] **Task 11: Cleanup & Polish** (Not Implemented; Add Tests)
   - [ ] Subtask 11.1: Update README and ADRs (Not Implemented; Update)
@@ -174,9 +176,9 @@ Prioritize: End-to-end hybrid retrieval with fixes/enhancements; Test offline in
     - **Libraries**: N/A.
     - **Classes/Functions/Features**: N/A.
   - [ ] Subtask 11.2: Add Error Handling, Logging, Caching (Partial; Add Caching/Tests)
-    - **Instructions**: Enhance try/except; add diskcache to embeds (e.g., @cache(ttl=3600) on embed functions). Add tests in tests/test_utils.py (Unstructured), tests/test_embeddings.py (dims/chunking), tests/test_real_validation.py (offline checks). Include logging with different levels and file rotation from original Phase 7.2.
-    - **Libraries**: diskcache==5.6.3
-    - **Classes/Functions/Features**: Cache (persistence).
+    - **Instructions**: After refactoring to use tenacity and loguru (see REFACTORING_TASKS.md), add diskcache to embedding functions in utils/embedding_factory.py. Add comprehensive tests for refactored components. Include appropriate logging levels.
+    - **Libraries**: diskcache==5.6.3, tenacity==8.5.0, loguru==0.7.0
+    - **Classes/Functions/Features**: Cache (persistence), @retry decorators, logger configuration
 
 ---
 

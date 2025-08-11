@@ -42,20 +42,54 @@ from typing import Any, Optional
 
 import torch
 from llama_index.embeddings.fastembed import FastEmbedEmbedding
+from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
 from models import AppSettings
-from utils.error_recovery import (
-    embedding_retry,
-    safe_execute,
-    with_fallback,
-)
 from utils.exceptions import (
     ConfigurationError,
     handle_embedding_error,
 )
-from utils.logging_config import log_error_with_context, log_performance, logger
 from utils.model_manager import ModelManager
+from utils.retry_utils import (
+    embedding_retry,
+    safe_execute,
+    with_fallback,
+)
+
+
+def log_error_with_context(
+    error: Exception, operation: str, context: dict | None = None, **kwargs
+) -> None:
+    """Log errors with comprehensive context information."""
+    error_context = {
+        "operation": operation,
+        "error_type": type(error).__name__,
+        "error_message": str(error),
+        **(context or {}),
+        **kwargs,
+    }
+    logger.error(
+        f"Operation failed: {operation}",
+        extra={"error_context": error_context},
+        exception=error,
+    )
+
+
+def log_performance(operation: str, duration: float, **kwargs) -> None:
+    """Log performance metrics with structured data."""
+    logger.info(
+        f"Performance: {operation} completed",
+        extra={
+            "performance": {
+                "operation": operation,
+                "duration_seconds": round(duration, 3),
+                "duration_human": f"{duration:.2f}s",
+                **kwargs,
+            }
+        },
+    )
+
 
 settings = AppSettings()
 
@@ -78,12 +112,9 @@ def setup_logging(log_level: str = "INFO") -> None:
         >>> setup_logging("DEBUG")
         >>> logger.info("Application started")
     """
-    from utils.logging_config import setup_logging as setup_structured_logging
-
     logger.warning(
-        "Using deprecated setup_logging. Use utils.logging_config.setup_logging"
+        "setup_logging is deprecated - loguru is auto-configured in __init__.py"
     )
-    setup_structured_logging(console_level=log_level)
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -983,12 +1014,10 @@ class EnhancedPerformanceMonitor:
     """Enhanced performance monitoring with detailed async operation tracking."""
 
     def __init__(self):
-        """Initialize an Enhanced Performance Monitor for comprehensive
-        async operation tracking.
+        """Initialize an Enhanced Performance Monitor for async operations.
 
-        Provides detailed metrics and performance insights for async
-        operations, tracking execution duration, memory usage, error
-        rates, and operation counts.
+        Provides detailed metrics and performance insights, tracking
+        execution duration, memory usage, error rates, and operation counts.
 
         Attributes:
             metrics (dict): Stores performance metrics for each async operation.

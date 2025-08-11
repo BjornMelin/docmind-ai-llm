@@ -44,6 +44,6 @@ DocMind AI follows modern library-first principles for reliability and maintaina
 
 - **High-Performance Caching**: Document processing cache layer delivers 90% speed improvement
 
-- **Production-Ready Components**: Enterprise-grade reliability with comprehensive error recovery
+- **Production-Ready Components**: Robust reliability with comprehensive error recovery
 
 See ADRs in [../adrs/](../adrs/) for all architectural decisions.

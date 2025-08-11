@@ -31,12 +31,12 @@ Attributes:
     settings (AppSettings): Global application settings for tool configuration.
 """
 
-import logging
 from typing import Any
 
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.postprocessor.colbert_rerank import ColbertRerank
+from loguru import logger
 
 from models import AppSettings
 
@@ -102,10 +102,10 @@ class ToolFactory:
                 model=settings.reranker_model,
                 keep_retrieval_score=True,
             )
-            logging.info(f"ColBERT reranker created: {settings.reranker_model}")
+            logger.info(f"ColBERT reranker created: {settings.reranker_model}")
             return reranker
         except Exception as e:
-            logging.warning(f"Failed to create ColBERT reranker: {e}")
+            logger.warning(f"Failed to create ColBERT reranker: {e}")
             return None
 
     @classmethod
@@ -197,7 +197,7 @@ class ToolFactory:
     def create_hybrid_search_tool(cls, retriever: Any) -> QueryEngineTool:
         """Create hybrid search tool with RRF fusion and reranking.
 
-        Creates an advanced hybrid search tool using QueryFusionRetriever
+        Creates a hybrid search tool using QueryFusionRetriever
         with RRF (Reciprocal Rank Fusion) and ColBERT reranking for optimal
         search performance.
 
@@ -285,7 +285,7 @@ class ToolFactory:
         """Create all available tools from index components.
 
         Creates a comprehensive set of query tools based on available index
-        components. Prioritizes advanced features when available and provides
+        components. Prioritizes features when available and provides
         fallbacks for missing components.
 
         Args:
@@ -314,32 +314,32 @@ class ToolFactory:
         tools = []
 
         if not vector_index:
-            logging.error("Vector index is required for tool creation")
+            logger.error("Vector index is required for tool creation")
             return tools
 
         # Add hybrid fusion search if retriever is available (highest priority)
         if retriever:
             tools.append(cls.create_hybrid_search_tool(retriever))
-            logging.info("Added hybrid fusion search tool")
+            logger.info("Added hybrid fusion search tool")
         else:
             # Fallback to hybrid vector search
             tools.append(cls.create_hybrid_vector_tool(vector_index))
-            logging.info("Added hybrid vector search tool (fallback)")
+            logger.info("Added hybrid vector search tool (fallback)")
 
         # Add knowledge graph search if available
         if kg_index:
             kg_tool = cls.create_kg_search_tool(kg_index)
             if kg_tool:
                 tools.append(kg_tool)
-                logging.info("Added knowledge graph search tool")
+                logger.info("Added knowledge graph search tool")
         else:
-            logging.info("Knowledge graph index not available")
+            logger.info("Knowledge graph index not available")
 
         # Add basic vector search as additional option
         tools.append(cls.create_vector_search_tool(vector_index))
-        logging.info("Added vector search tool")
+        logger.info("Added vector search tool")
 
-        logging.info(f"Created {len(tools)} tools for agent")
+        logger.info(f"Created {len(tools)} tools for agent")
         return tools
 
     @classmethod

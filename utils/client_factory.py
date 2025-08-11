@@ -29,11 +29,11 @@ Attributes:
 """
 
 import asyncio
-import logging
 import time
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
+from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
 
 from models import AppSettings
@@ -97,18 +97,18 @@ class QdrantClientFactory:
         client = None
         try:
             client = QdrantClient(**config)
-            logging.info(f"Sync Qdrant client connected to {settings.qdrant_url}")
+            logger.info(f"Sync Qdrant client connected to {settings.qdrant_url}")
             yield client
         except Exception as e:
-            logging.error(f"Failed to create sync Qdrant client: {e}")
+            logger.error(f"Failed to create sync Qdrant client: {e}")
             raise
         finally:
             if client:
                 try:
                     client.close()
-                    logging.debug("Sync Qdrant client closed successfully")
+                    logger.debug("Sync Qdrant client closed successfully")
                 except Exception as e:
-                    logging.warning(f"Error closing sync client: {e}")
+                    logger.warning(f"Error closing sync client: {e}")
 
     @classmethod
     @asynccontextmanager
@@ -134,18 +134,18 @@ class QdrantClientFactory:
         client = None
         try:
             client = AsyncQdrantClient(**config)
-            logging.info(f"Async Qdrant client connected to {settings.qdrant_url}")
+            logger.info(f"Async Qdrant client connected to {settings.qdrant_url}")
             yield client
         except Exception as e:
-            logging.error(f"Failed to create async Qdrant client: {e}")
+            logger.error(f"Failed to create async Qdrant client: {e}")
             raise
         finally:
             if client:
                 try:
                     await client.close()
-                    logging.debug("Async Qdrant client closed successfully")
+                    logger.debug("Async Qdrant client closed successfully")
                 except Exception as e:
-                    logging.warning(f"Error closing async client: {e}")
+                    logger.warning(f"Error closing async client: {e}")
 
     @classmethod
     def create_direct_sync_client(cls) -> QdrantClient:
@@ -171,10 +171,10 @@ class QdrantClientFactory:
         config = cls.get_client_config()
         try:
             client = QdrantClient(**config)
-            logging.info(f"Direct sync Qdrant client created: {settings.qdrant_url}")
+            logger.info(f"Direct sync Qdrant client created: {settings.qdrant_url}")
             return client
         except Exception as e:
-            logging.error(f"Failed to create direct sync Qdrant client: {e}")
+            logger.error(f"Failed to create direct sync Qdrant client: {e}")
             raise
 
     @classmethod
@@ -201,10 +201,10 @@ class QdrantClientFactory:
         config = cls.get_client_config()
         try:
             client = AsyncQdrantClient(**config)
-            logging.info(f"Direct async Qdrant client created: {settings.qdrant_url}")
+            logger.info(f"Direct async Qdrant client created: {settings.qdrant_url}")
             return client
         except Exception as e:
-            logging.error(f"Failed to create direct async Qdrant client: {e}")
+            logger.error(f"Failed to create direct async Qdrant client: {e}")
             raise
 
 
@@ -256,7 +256,7 @@ class QdrantConnectionPool:
                 self._stats["total_connections"] += 1
 
             self._initialized = True
-            logging.info(f"Initialized Qdrant pool with {self.pool_size} connections")
+            logger.info(f"Initialized Qdrant pool with {self.pool_size} connections")
 
     @asynccontextmanager
     async def get_client(self):
@@ -273,11 +273,11 @@ class QdrantConnectionPool:
             yield client
         except TimeoutError:
             self._stats["failed_requests"] += 1
-            logging.error("Timeout waiting for Qdrant client from pool")
+            logger.error("Timeout waiting for Qdrant client from pool")
             raise
         except Exception as e:
             self._stats["failed_requests"] += 1
-            logging.error(f"Error getting Qdrant client: {e}")
+            logger.error(f"Error getting Qdrant client: {e}")
             raise
         finally:
             # Return to pool
@@ -293,11 +293,11 @@ class QdrantConnectionPool:
                     client = self._pool.get_nowait()
                     await client.close()
                 except Exception as e:
-                    logging.warning(f"Error closing client: {e}")
+                    logger.warning(f"Error closing client: {e}")
 
             self._initialized = False
             self._stats["total_connections"] = 0
-            logging.info("Closed all connections in Qdrant pool")
+            logger.info("Closed all connections in Qdrant pool")
 
     def get_stats(self) -> dict[str, Any]:
         """Get connection pool statistics."""
@@ -349,7 +349,7 @@ class QdrantBatchOperations:
         await asyncio.gather(*batches)
 
         elapsed = time.perf_counter() - start_time
-        logging.info(
+        logger.info(
             f"Upserted {len(vectors)} vectors in {len(batches)} "
             f"batches ({elapsed:.2f}s)"
         )
@@ -361,7 +361,7 @@ class QdrantBatchOperations:
             await client.get_collections()
             return True
         except Exception as e:
-            logging.warning(f"Qdrant health check failed: {e}")
+            logger.warning(f"Qdrant health check failed: {e}")
             return False
 
 

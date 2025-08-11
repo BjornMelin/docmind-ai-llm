@@ -9,7 +9,7 @@ Modules:
     model_manager: Manages AI models and embeddings
     qdrant_utils: Qdrant-specific utilities
     utils: General utility functions
-"""
+"""  # noqa: N999
 
 from .document_loader import (
     create_native_multimodal_embeddings,
