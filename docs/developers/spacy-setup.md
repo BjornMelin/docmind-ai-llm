@@ -92,16 +92,19 @@ uv run python -c "import spacy; nlp = spacy.load('en_core_web_sm'); print('Model
 If you encounter `OSError: [E050] Can't find model 'en_core_web_sm'`:
 
 1. **Check Installation**: Verify the model is installed
+
    ```bash
    uv run python -m spacy info en_core_web_sm
    ```
 
 2. **Reinstall Model**: Download and install again
+
    ```bash
    uv run python -m spacy download en_core_web_sm --force-reinstall
    ```
 
 3. **Check Virtual Environment**: Ensure you're using the correct environment
+
    ```bash
    which python
    uv run python -c "import spacy; print(spacy.__file__)"
@@ -112,11 +115,13 @@ If you encounter `OSError: [E050] Can't find model 'en_core_web_sm'`:
 If model download fails:
 
 1. **Check Network**: Ensure internet connectivity
-2. **Use Alternative Installation**: 
+2. **Use Alternative Installation**:
+
    ```bash
    # Alternative download method
    pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
    ```
+
 3. **Manual Installation**: Download wheel from GitHub releases
 
 ### Permission Issues
@@ -146,7 +151,7 @@ DocMind AI automatically handles spaCy model loading through the `ensure_spacy_m
 You can configure which spaCy model to use by modifying the application settings or by calling the function with a different model name:
 
 ```python
-from utils.utils import ensure_spacy_model
+from utils.core import ensure_spacy_model
 
 # Use small model (default)
 nlp = ensure_spacy_model("en_core_web_sm")
@@ -192,7 +197,7 @@ To verify your spaCy setup is working correctly:
 
 # Test model loading and basic functionality
 uv run python -c "
-from utils.utils import ensure_spacy_model
+from utils.core import ensure_spacy_model
 
 # Load and test the model
 nlp = ensure_spacy_model('en_core_web_sm')
@@ -206,7 +211,8 @@ else:
 ```
 
 Expected output:
-```
+
+```text
 ✅ spaCy is working correctly
 Entities found: [('Apple Inc.', 'ORG')]
 ```
