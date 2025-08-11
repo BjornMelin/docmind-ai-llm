@@ -64,7 +64,7 @@ class TestImportValidation:
 
                 # Test that modules have expected functions
                 if module_name == "utils.utils":
-                    assert hasattr(module, "setup_logging")
+                    # setup_logging was removed - loguru is auto-configured
                     assert hasattr(module, "detect_hardware")
                     assert hasattr(module, "get_embed_model")
 
@@ -158,13 +158,18 @@ class TestBasicFunctionality:
         assert len(output.action_items) == 1
         assert len(output.open_questions) == 1
 
-    def test_logging_setup(self):
-        """Test that logging can be set up."""
-        from utils.utils import setup_logging
+    def test_loguru_logging(self):
+        """Test that loguru logging works."""
+        from loguru import logger
 
-        with patch("logging.basicConfig") as mock_config:
-            setup_logging("INFO")
-            mock_config.assert_called_once()
+        # Test basic logging functionality
+        try:
+            logger.info("Test validation message")
+            success = True
+        except Exception:
+            success = False
+
+        assert success
 
     def test_hardware_detection(self):
         """Test basic hardware detection functionality."""
@@ -260,32 +265,7 @@ class TestSystemIntegration:
             sparse_embedding_model="prithvida/Splade_PP_en_v1",
         )
 
-    def test_query_complexity_analysis(self, mock_settings):
-        """Test query complexity analysis workflow."""
-        if analyze_query_complexity is None:
-            pytest.skip("Agent factory analyze_query_complexity not available")
-
-        try:
-            with patch("agent_factory.settings", mock_settings):
-                # Test simple query
-                simple_result = analyze_query_complexity("What is AI?")
-                assert isinstance(simple_result, tuple)
-                assert len(simple_result) == 2
-                complexity, query_type = simple_result
-                assert complexity in ["simple", "moderate", "complex"]
-
-                # Test complex query
-                complex_result = analyze_query_complexity(
-                    "Analyze the performance implications of hybrid retrieval systems "
-                    "using dense and sparse embeddings with RRF fusion."
-                )
-                assert isinstance(complex_result, tuple)
-                assert len(complex_result) == 2
-                complexity, query_type = complex_result
-                assert complexity in ["simple", "moderate", "complex"]
-
-        except ImportError:
-            pytest.skip("Agent factory not available for testing")
+    # Removed duplicate query complexity analysis test - consolidated into test_agent_factory.py
 
     def test_document_processing_workflow(self, mock_settings):
         """Test basic document processing workflow."""
@@ -476,10 +456,12 @@ class TestMemoryAndResources:
 
         # Perform basic operations
         from models import AppSettings
-        from utils.utils import setup_logging
+        # Loguru is auto-configured, no setup needed
 
         settings = AppSettings()
-        setup_logging(settings.logging_level)
+        from loguru import logger
+
+        logger.info(f"Using logging level: {settings.logging_level}")
 
         # Check memory after operations
         final_memory = process.memory_info().rss / 1024 / 1024  # MB

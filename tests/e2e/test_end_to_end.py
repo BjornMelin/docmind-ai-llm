@@ -394,6 +394,48 @@ class TestAgentSystemIntegration:
                 assert "Response from multi-agent system" in result
 
 
+class TestEndToEndPipelineIntegration:
+    """Test complete end-to-end pipeline integration scenarios."""
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_pipeline_integration(self):
+        """Test end-to-end pipeline integration with mocked components."""
+        # Create test documents
+        docs = [
+            Document(text="Machine learning enables intelligent document analysis"),
+            Document(text="SPLADE++ provides sparse embeddings for keyword matching"),
+            Document(
+                text="BGE-Large offers dense embeddings for semantic understanding"
+            ),
+        ]
+
+        with (
+            patch("utils.AsyncQdrantClient") as mock_client,
+            patch("utils.FastEmbedEmbedding") as mock_dense_embed,
+            patch("utils.SparseTextEmbedding") as mock_sparse_embed,
+            patch("utils.VectorStoreIndex.from_documents") as mock_index,
+        ):
+            mock_instance = AsyncMock()
+            mock_client.return_value = mock_instance
+            mock_instance.collection_exists.return_value = False
+
+            mock_vector_index = MagicMock()
+            mock_index.return_value = mock_vector_index
+
+            # Test async index creation
+            await create_index_async(docs, use_gpu=False)
+
+            # Verify components were called
+            assert mock_dense_embed.called
+            assert mock_sparse_embed.called
+            assert mock_index.called
+
+            # Verify index configuration
+            index_call_kwargs = mock_index.call_args[1]
+            assert "embed_model" in index_call_kwargs
+            assert "sparse_embed_model" in index_call_kwargs
+
+
 # Async test configuration
 pytestmark = [
     pytest.mark.asyncio,
