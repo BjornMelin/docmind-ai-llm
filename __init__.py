@@ -1,4 +1,8 @@
-"""DocMind AI Package."""  # noqa: N999
+"""Package initialization for DocMind AI.
+
+Sets up logging configuration for the entire DocMind AI project,
+creating a logs directory and configuring loguru for file and console logging.
+"""  # noqa: N999
 
 import sys
 from pathlib import Path

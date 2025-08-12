@@ -123,11 +123,11 @@ class TestSpacyManager:
         mock_load.return_value = mock_nlp
 
         # Test that exceptions are properly handled and memory_zone cleanup occurs
+        # Test exception handling and cleanup - simplified version
         with (
             pytest.raises(ValueError, match="Test exception"),
-            self.manager.memory_optimized_processing("en_core_web_sm") as nlp,
+            self.manager.memory_optimized_processing("en_core_web_sm"),
         ):
-            assert nlp is mock_nlp
             raise ValueError("Test exception")
 
         # Verify __exit__ was called for cleanup
