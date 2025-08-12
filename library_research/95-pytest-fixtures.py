@@ -1,8 +1,11 @@
 """Comprehensive pytest fixtures for DocMind AI test suite.
 
-This module provides reusable fixtures for all test scenarios across document ingestion,
-orchestration agents, and embedding/vectorstore clusters. Fixtures follow 2025 pytest
-best practices with proper async handling, resource management, and deterministic behavior.
+This module provides reusable fixtures for all test scenarios.
+
+It covers document ingestion, orchestration agents, and
+embedding/vectorstore clusters. Fixtures follow 2025 pytest
+best practices with proper async handling, resource
+management, and deterministic behavior.
 
 Usage:
     # In test files
@@ -126,7 +129,8 @@ def production_settings(mock_settings):
 def deterministic_random():
     """Provide deterministic random state for tests."""
     random.seed(RANDOM_SEED)
-    return random.Random(RANDOM_SEED)
+    random_instance = random.Random(RANDOM_SEED)
+    return random_instance
 
 
 @pytest.fixture
@@ -143,7 +147,7 @@ def sample_documents(deterministic_random) -> list[Document]:
             },
         ),
         Document(
-            text="Qdrant vector database provides native BM25 sparse embeddings support.",
+            text="Qdrant vector provides native BM25 sparse embeddings.",
             metadata={
                 "source": "doc2.pdf",
                 "page": 1,
@@ -161,7 +165,7 @@ def sample_documents(deterministic_random) -> list[Document]:
             },
         ),
         Document(
-            text="Binary quantization reduces memory usage by up to 70% with minimal accuracy loss.",
+            text="Binary quantization reduces memory usage with minimal loss.",
             metadata={
                 "source": "doc4.pdf",
                 "page": 1,
@@ -170,7 +174,7 @@ def sample_documents(deterministic_random) -> list[Document]:
             },
         ),
         Document(
-            text="Hybrid search combines dense semantic and sparse keyword retrieval methods.",
+            text="Hybrid search combines semantic and keyword retrieval.",
             metadata={
                 "source": "doc5.pdf",
                 "page": 3,
@@ -250,7 +254,7 @@ def multimodal_documents(sample_image_base64) -> list[Document]:
     """Generate documents with multimodal content."""
     return [
         Document(
-            text="This document contains an embedded image showing neural network architecture.",
+            text="This document contains an image of a neural network.",
             metadata={
                 "source": "multimodal_doc1.pdf",
                 "page": 1,
@@ -261,7 +265,7 @@ def multimodal_documents(sample_image_base64) -> list[Document]:
             },
         ),
         Document(
-            text="Visualization of data flow in machine learning pipelines with diagrams.",
+            text="Visualization of data flow in ML pipelines.",
             metadata={
                 "source": "multimodal_doc2.pdf",
                 "page": 2,
@@ -330,7 +334,7 @@ def mock_sparse_embedding_model() -> MagicMock:
     def mock_encode(texts):
         # Simulate sparse embeddings with token indices and values
         results = []
-        for i, text in enumerate(texts):
+        for _i, text in enumerate(texts):
             # Deterministic sparse embedding based on text hash
             text_hash = hash(text) % 1000
             indices = [text_hash % 100, (text_hash + 1) % 100, (text_hash + 2) % 100]
@@ -1068,9 +1072,11 @@ def deterministic_uuid():
 @pytest.fixture
 def mock_time():
     """Mock time functions for deterministic testing."""
-    with pytest.mock.patch("time.time", return_value=1692700800.0):  # Fixed timestamp
-        with pytest.mock.patch("time.perf_counter", return_value=100.0):
-            yield
+    with (
+        pytest.mock.patch("time.time", return_value=1692700800.0),  # Fixed timestamp
+        pytest.mock.patch("time.perf_counter", return_value=100.0),
+    ):
+        yield
 
 
 @pytest.fixture

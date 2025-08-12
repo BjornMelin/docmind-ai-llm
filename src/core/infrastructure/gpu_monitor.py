@@ -14,7 +14,14 @@ import torch
 
 @dataclass(frozen=True)
 class GPUMetrics:
-    """GPU metrics using PyTorch native APIs."""
+    """Dataclass representing GPU performance metrics.
+
+    Attributes:
+        device_name (str): The name of the GPU device.
+        memory_allocated_gb (float): Memory allocated by PyTorch, in gigabytes.
+        memory_reserved_gb (float): Total memory reserved by the GPU, in gigabytes.
+        utilization_percent (float): GPU memory utilization percentage (0-100).
+    """
 
     device_name: str
     memory_allocated_gb: float
@@ -24,7 +31,17 @@ class GPUMetrics:
 
 @asynccontextmanager
 async def gpu_performance_monitor() -> AsyncGenerator[GPUMetrics | None, None]:
-    """Async context manager for GPU performance monitoring."""
+    """Async context manager for monitoring GPU performance.
+
+    Returns:
+        An async generator yielding GPUMetrics if a CUDA device is available,
+        or None if no CUDA device is present.
+
+    Example:
+        async with gpu_performance_monitor() as metrics:
+            if metrics:
+                print(f"GPU Utilization: {metrics.utilization_percent}%")
+    """
     if not torch.cuda.is_available():
         yield None
         return

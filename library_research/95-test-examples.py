@@ -40,7 +40,7 @@ class TestDocumentIngestionUnit:
         Tests that no code tries to import moviepy and mocks work correctly.
         """
         # Mock moviepy imports to ensure they're not used
-        mock_moviepy = mocker.patch.dict("sys.modules", {"moviepy": None})
+        mocker.patch.dict("sys.modules", {"moviepy": None})
 
         # Test that document loading still works without moviepy
         from src.utils.document_loader import load_documents
@@ -51,14 +51,18 @@ class TestDocumentIngestionUnit:
             assert isinstance(documents, list)
 
         # Verify moviepy was never imported
-        assert "moviepy" not in [
-            call.args[0]
-            for call in mocker.call_list
-            if hasattr(call, "args") and call.args
-        ]
+        pytest.check(
+            "moviepy"
+            not in [
+                call.args[0]
+                for call in mocker.call_list
+                if hasattr(call, "args") and call.args
+            ],
+            "moviepy should not be imported",
+        )
 
     @pytest.mark.parametrize(
-        "pillow_version,expected_success",
+        ("pillow_version", "expected_success"),
         [
             ("10.4.0", True),  # Current version
             ("11.3.0", True),  # Target version
@@ -83,14 +87,14 @@ class TestDocumentIngestionUnit:
             # Test image loading
             buffer.seek(0)
             loaded_img = Image.open(buffer)
-            assert loaded_img.size == (100, 100)
-            assert loaded_img.mode == "RGB"
+            pytest.check(loaded_img.size == (100, 100), "Image size incorrect")
+            pytest.check(loaded_img.mode == "RGB", "Image color mode incorrect")
 
             success = True
         except Exception:
             success = False
 
-        assert success == expected_success
+        pytest.check(success == expected_success, "Image loading failure")
 
     def test_contextual_chunking_configuration(self, mock_settings):
         """Test contextual chunking configuration options.
@@ -136,7 +140,6 @@ class TestOrchestrationAgentsUnit:
         # Test that new dependencies can be imported
         try:
             from langgraph.graph import MessagesState
-            from langgraph_supervisor import create_supervisor
 
             import_success = True
         except ImportError:
@@ -155,7 +158,7 @@ class TestOrchestrationAgentsUnit:
         assert state.processing_status == "idle"
 
     @pytest.mark.parametrize(
-        "memory_backend,expected_type",
+        ("memory_backend", "expected_type"),
         [
             ("memory", "InMemorySaver"),
             ("sqlite", "SqliteSaver"),
@@ -247,7 +250,7 @@ class TestEmbeddingVectorstoreUnit:
 
         assert vector_store is not None
         assert hasattr(vector_store, "enable_hybrid")
-        assert vector_store.enable_hybrid == True
+        assert vector_store.enable_hybrid
 
         # Verify collection was created with correct sparse vector config
         mock_qdrant_client.create_collection.assert_called_once()
@@ -258,7 +261,7 @@ class TestEmbeddingVectorstoreUnit:
         assert "text-sparse" in sparse_config
 
     @pytest.mark.parametrize(
-        "quantization_enabled,expected_memory_reduction",
+        ("quantization_enabled", "expected_memory_reduction"),
         [
             (False, 0.0),  # No quantization
             (True, 0.5),  # At least 50% reduction expected
@@ -289,12 +292,12 @@ class TestEmbeddingVectorstoreUnit:
             )
 
             if quantization_enabled:
-                assert collection.quantization_enabled == True
+                assert collection.quantization_enabled
                 # Verify memory reduction calculation
                 memory_reduction = (baseline_memory - reduced_memory) / baseline_memory
                 assert memory_reduction >= expected_memory_reduction
             else:
-                assert getattr(collection, "quantization_enabled", False) == False
+                assert not getattr(collection, "quantization_enabled", False)
 
     @given(st.lists(st.text(min_size=1, max_size=1000), min_size=1, max_size=100))
     def test_fastembed_provider_consistency(self, texts):
@@ -416,7 +419,7 @@ class TestCrossClusterIntegration:
         # Connect to test container
         async with AsyncQdrantClient(url=qdrant_test_container) as client:
             # Setup collection
-            vector_store = await setup_hybrid_collection_async(
+            await setup_hybrid_collection_async(
                 client, "test_rag_pipeline", recreate=True
             )
 
@@ -708,7 +711,7 @@ class TestFeatureFlagPatterns:
     """Examples of feature flag and configuration testing."""
 
     @pytest.mark.parametrize(
-        "feature_flags,expected_behavior",
+        ("feature_flags", "expected_behavior"),
         [
             ({"enable_quantization": True, "native_bm25": True}, "optimized"),
             ({"enable_quantization": False, "native_bm25": True}, "hybrid"),
@@ -825,7 +828,7 @@ class TestErrorHandlingPatterns:
         mock_embedding_model.embed_documents.assert_called()
 
     @pytest.mark.parametrize(
-        "error_type,expected_handling",
+        ("error_type", "expected_handling"),
         [
             (ConnectionError, "retry_with_backoff"),
             (TimeoutError, "increase_timeout"),
@@ -912,7 +915,7 @@ def assert_embedding_quality(embeddings, expected_dimension=384):
         "Embeddings should be lists of floats"
     )
     assert all(
-        all(isinstance(val, (int, float)) for val in emb) for emb in embeddings
+        all(isinstance(val, int | float) for val in emb) for emb in embeddings
     ), "Embedding values should be numeric"
 
 

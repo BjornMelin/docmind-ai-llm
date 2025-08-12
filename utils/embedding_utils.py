@@ -38,10 +38,10 @@ try:
 except ImportError:
     FastEmbedEmbedding = None
 
-from models.core import settings
+from src.core.infrastructure.hardware_utils import get_optimal_providers
+from src.models.core import settings
 
 from .exceptions import handle_embedding_error
-from .hardware_utils import get_optimal_providers
 from .logging_utils import log_error_with_context, log_performance
 from .retry_utils import embedding_retry
 
@@ -245,7 +245,12 @@ class EmbeddingModelManager:
     _instance = None
     _models = {}
 
-    def __new__(cls):
+    def __new__(cls) -> "EmbeddingModelManager":
+        """Create or return the singleton instance of EmbeddingModelManager.
+
+        Returns:
+            EmbeddingModelManager: The singleton instance.
+        """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -421,10 +426,10 @@ def benchmark_embedding_model(
     """
     if test_texts is None:
         test_texts = [
-            "This is a short test sentence.",
-            "This is a longer test sentence that contains more words and should provide a better benchmark for embedding performance.",
-            "Short text.",
-            "Medium length text for testing embedding performance with various sentence lengths.",
+            "Short test.",
+            "Longer test sentence with more context for benchmarking.",
+            "Compact text.",
+            "Medium-length text for performance evaluation.",
         ] * 10  # 40 texts total
 
     if batch_sizes is None:
@@ -474,7 +479,7 @@ def benchmark_embedding_model(
                 optimal_batch = batch_size
 
             logger.info(
-                f"Batch size {batch_size}: {throughput:.2f} texts/sec, {duration:.2f}s total"
+                f"Batch {batch_size}: {throughput:.2f} texts/sec, {duration:.2f}s"
             )
 
         benchmark_results["optimal_batch_size"] = optimal_batch

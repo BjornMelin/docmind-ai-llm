@@ -15,14 +15,34 @@ from spacy.util import is_package
 
 
 class SpacyManager:
-    """Lightweight spaCy manager using native 3.8+ features."""
+    """Lightweight spaCy model management and caching system.
 
-    def __init__(self):
-        """Initialize with empty model cache."""
+    Provides efficient downloading, loading, and caching of spaCy language models
+    with memory optimization and fallback mechanisms.
+
+    Attributes:
+        _models (dict[str, spacy.Language]): Cache of loaded spaCy language models.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the SpaCy manager with an empty model cache."""
         self._models: dict[str, spacy.Language] = {}
 
     def ensure_model(self, model_name: str = "en_core_web_sm") -> spacy.Language:
-        """Ensure model is available using native spaCy APIs."""
+        """Ensure a specific spaCy language model is available and loaded.
+
+        Downloads the model if not already installed, and caches it for future use.
+
+        Args:
+            model_name (str, optional): Name of the spaCy language model to load.
+                Defaults to "en_core_web_sm" (small English model).
+
+        Returns:
+            spacy.Language: The loaded spaCy language model.
+
+        Raises:
+            subprocess.CalledProcessError: If model download fails.
+        """
         if model_name in self._models:
             return self._models[model_name]
 
@@ -39,7 +59,21 @@ class SpacyManager:
     def memory_optimized_processing(
         self, model_name: str = "en_core_web_sm"
     ) -> Generator[spacy.Language, None, None]:
-        """Process texts with memory optimization using memory_zone()."""
+        """Create a context manager for memory-optimized spaCy text processing.
+
+        Uses spaCy's memory_zone() to manage memory during language model processing.
+
+        Args:
+            model_name (str, optional): Name of the spaCy language model to use.
+                Defaults to "en_core_web_sm" (small English model).
+
+        Yields:
+            spacy.Language: A spaCy language model within an optimized memory context.
+
+        Example:
+            with spacy_manager.memory_optimized_processing() as nlp:
+                doc = nlp("Process some text efficiently")
+        """
         nlp = self.ensure_model(model_name)
         with nlp.memory_zone():
             yield nlp
@@ -50,5 +84,10 @@ _spacy_manager = SpacyManager()
 
 
 def get_spacy_manager() -> SpacyManager:
-    """Get global spaCy manager instance."""
+    """Get the global SpaCy manager instance.
+
+    Returns:
+        SpacyManager: A singleton instance of the SpaCy manager for efficient
+        model management and processing.
+    """
     return _spacy_manager
