@@ -76,12 +76,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest==8.3.1",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=6.0.0",
-    "moviepy==2.2.1",  # Only needed for video processing tests
-]
 gpu = [
     "fastembed-gpu>=0.7.0", 
     "llama-cpp-python[cuda]>=0.2.32,<0.3.0",
@@ -148,6 +142,11 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-benchmark>=4.0.0",
     "hypothesis>=6.137.1",
+]
+test = [
+    "pytest==8.3.1",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=6.0.0",
     "moviepy==2.2.1",  # Only needed for video processing tests
 ]
 performance = [

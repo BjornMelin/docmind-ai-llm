@@ -40,7 +40,7 @@ try:
     from llama_index.llms.llama_cpp import LlamaCPP
 
     LLAMACPP_AVAILABLE = True
-except Exception as e:
+except (ImportError, ModuleNotFoundError) as e:
     logger.warning(f"LlamaCPP not available: {e}")
     LlamaCPP = None
     LLAMACPP_AVAILABLE = False
