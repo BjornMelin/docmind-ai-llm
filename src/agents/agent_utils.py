@@ -56,7 +56,7 @@ from src.utils.monitoring import log_error_with_context, log_performance
 T = TypeVar("T")
 
 
-def with_fallback(  # noqa: UP047
+def with_fallback(
     fallback_func: Callable[..., T],
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Decorator to provide fallback value on function failure."""
@@ -66,7 +66,7 @@ def with_fallback(  # noqa: UP047
         def wrapper(*args, **kwargs) -> T:
             try:
                 return func(*args, **kwargs)
-            except Exception as e:
+            except (ValueError, TypeError, RuntimeError, AttributeError) as e:
                 logger.error(f"Function {func.__name__} failed: {e}")
                 return fallback_func(*args, **kwargs)
 

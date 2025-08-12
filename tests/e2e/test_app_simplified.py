@@ -14,17 +14,27 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Mock problematic dependencies before any imports
+# Exclude torch from global mocking to preserve version info for spacy compatibility
 mock_modules = [
     "llama_index.llms.llama_cpp",
     "llama_cpp",
     "ollama",
-    "torch",
     "transformers",
     "sentence_transformers",
 ]
 
 for module in mock_modules:
     sys.modules[module] = MagicMock()
+
+# Mock torch with preserved attributes for spacy compatibility
+if "torch" not in sys.modules:
+    torch_mock = MagicMock()
+    torch_mock.__version__ = "2.7.1+cu126"
+    torch_mock.__spec__ = MagicMock()
+    torch_mock.__spec__.name = "torch"
+    torch_mock.cuda.is_available.return_value = True
+    torch_mock.cuda.device_count.return_value = 1
+    sys.modules["torch"] = torch_mock
 
 
 def test_app_imports():

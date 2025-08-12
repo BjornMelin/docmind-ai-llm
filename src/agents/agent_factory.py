@@ -5,16 +5,16 @@ Replaces complex multi-agent orchestration with single intelligent agent.
 Target: <80 lines, <2s response time, 82.5% accuracy
 """
 
-from typing import Any
 
 from llama_index.core.agent import ReActAgent
+from llama_index.core.llms.base import BaseLLM
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core.tools import QueryEngineTool
 from loguru import logger
 
 
 def create_agentic_rag_system(
-    tools: list[QueryEngineTool], llm: Any, memory: ChatMemoryBuffer | None = None
+    tools: list[QueryEngineTool], llm: BaseLLM, memory: ChatMemoryBuffer | None = None
 ) -> ReActAgent:
     """Create single ReActAgent with full agentic capabilities."""
     if not tools:
@@ -40,7 +40,7 @@ Think step-by-step and use the most appropriate tools for each query:
 
 # Backward compatibility functions
 def create_single_agent(
-    tools: list[QueryEngineTool], llm: Any, memory: ChatMemoryBuffer | None = None
+    tools: list[QueryEngineTool], llm: BaseLLM, memory: ChatMemoryBuffer | None = None
 ) -> ReActAgent:
     """Legacy compatibility."""
     return create_agentic_rag_system(tools, llm, memory)
@@ -48,7 +48,7 @@ def create_single_agent(
 
 def get_agent_system(
     tools: list[QueryEngineTool],
-    llm: Any,
+    llm: BaseLLM,
     enable_multi_agent: bool = False,
     enable_human_in_loop: bool = False,
     checkpoint_path: str | None = None,

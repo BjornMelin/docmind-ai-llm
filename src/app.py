@@ -40,19 +40,19 @@ try:
     from llama_index.llms.llama_cpp import LlamaCPP
 
     LLAMACPP_AVAILABLE = True
-except (ImportError, ModuleNotFoundError) as e:
+except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
     logger.warning("LlamaCPP not available. Running without LlamaCPP support.")
     logger.debug(f"LlamaCPP import failed: {e}")
     LlamaCPP = None
     LLAMACPP_AVAILABLE = False
 
-from agents.agent_factory import (
+from src.agents.agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
-from agents.agent_utils import create_tools_from_index
-from models.core import settings
-from prompts import PREDEFINED_PROMPTS
+from src.agents.agent_utils import create_tools_from_index
+from src.models.core import settings
+from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_llama
 from src.utils.embedding import create_index_async
