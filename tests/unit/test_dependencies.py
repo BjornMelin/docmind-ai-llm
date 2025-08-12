@@ -281,7 +281,7 @@ class TestOptionalPackages:
 
         try:
             # Test importing core components
-            from models.core import settings
+            from src.models.core import settings
 
             assert settings is not None
             print("App core components import successfully")
