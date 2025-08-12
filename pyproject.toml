@@ -40,7 +40,6 @@ dependencies = [
     "openai>=1.98.0,<2.0.0",
     "openai-whisper==20250625",
     "numba==0.61.2",
-    "ragatouille==0.0.9.post2",
     "openinference-instrumentation-llama-index==4.3.2",
     "arize-phoenix==11.13.2",
     "llama-index-llms-openai",
