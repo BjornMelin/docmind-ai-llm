@@ -18,9 +18,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from llama_index.core import Document
-from llama_index.core.schema import ImageDocument
-
 from agent_factory import (
     analyze_query_complexity,
     create_langgraph_supervisor_system,
@@ -28,6 +25,9 @@ from agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
+from llama_index.core import Document
+from llama_index.core.schema import ImageDocument
+
 from models import AppSettings
 from utils.document_loader import load_documents_unstructured
 from utils.exceptions import DocumentLoadingError, EmbeddingError

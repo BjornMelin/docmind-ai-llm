@@ -49,7 +49,8 @@ def detect_hardware() -> dict[str, Any]:
         try:
             vram_available = device_props.total_memory - torch.cuda.memory_allocated(0)
             hardware_info["vram_available_gb"] = round(vram_available / (1024**3), 1)
-        except Exception:
+        except (RuntimeError, OSError):
+            # Handle CUDA runtime errors or system-level issues
             hardware_info["vram_available_gb"] = hardware_info["vram_total_gb"]
 
         hardware_info["gpu_compute_capability"] = (
@@ -111,8 +112,8 @@ def get_recommended_batch_size(model_type: str = "embedding") -> int:
     try:
         device_props = torch.cuda.get_device_properties(0)
         vram_gb = device_props.total_memory / (1024**3)
-    except Exception:
-        vram_gb = 4  # Fallback assumption
+    except (RuntimeError, OSError):
+        vram_gb = 4  # Fallback assumption for CUDA errors or system issues
 
     # GPU batch sizes based on available VRAM
     if vram_gb >= 16:  # High-end GPU

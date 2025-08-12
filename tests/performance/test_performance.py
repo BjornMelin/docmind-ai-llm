@@ -17,8 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import torch
-
 from agent_factory import get_agent_system
+
 from utils.model_manager import ModelManager
 
 

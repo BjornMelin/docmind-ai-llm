@@ -14,9 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 
 import pytest
-from llama_index.core import Document
-
 from agent_factory import analyze_query_complexity
+from llama_index.core import Document
 
 # Import DocMind AI components
 from models import AppSettings

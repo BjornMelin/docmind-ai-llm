@@ -7,9 +7,6 @@ routing, multi-agent coordination, and error handling.
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
-from llama_index.core.tools import QueryEngineTool
-
 from agent_factory import (
     AgentState,
     analyze_query_complexity,
@@ -19,6 +16,8 @@ from agent_factory import (
     process_query_with_agent_system,
     supervisor_routing_logic,
 )
+from langchain_core.messages import AIMessage, HumanMessage
+from llama_index.core.tools import QueryEngineTool
 
 
 class TestQueryComplexityAnalysis:

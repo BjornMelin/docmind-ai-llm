@@ -147,6 +147,7 @@ class TestPipelineIntegration:
                                 get_agent_system,
                                 process_query_with_agent_system,
                             )
+
                             from agents.tool_factory import ToolFactory
                             from utils.document_loader import load_documents_llama
 
@@ -266,6 +267,7 @@ class TestPipelineIntegration:
                                 from agent_factory import (
                                     process_query_with_agent_system,
                                 )
+
                                 from utils.document_loader import (
                                     extract_images_from_pdf,
                                 )
@@ -339,6 +341,7 @@ class TestPipelineIntegration:
                                     get_agent_system,
                                     process_query_with_agent_system,
                                 )
+
                                 from utils.index_builder import (
                                     create_index,
                                     create_index_async,
@@ -419,12 +422,12 @@ class TestPipelineIntegration:
                             mock_process.return_value = "Performance test response"
 
                             # Test performance logging throughout pipeline
-                            from loguru import logger
-
                             from agent_factory import (
                                 get_agent_system,
                                 process_query_with_agent_system,
                             )
+                            from loguru import logger
+
                             from utils.document_loader import load_documents_llama
 
                             def log_performance(
@@ -534,6 +537,7 @@ class TestPipelineIntegration:
                             get_agent_system,
                             process_query_with_agent_system,
                         )
+
                         from agents.tool_factory import ToolFactory
 
                         # Create indexes with KG enabled
@@ -615,6 +619,7 @@ class TestPipelineIntegration:
 
                     # Test concurrent processing
                     from agent_factory import get_agent_system
+
                     from utils.document_loader import stream_document_processing
 
                     # Stream document processing
@@ -738,6 +743,7 @@ class TestPipelineEdgeCases:
                         get_agent_system,
                         process_query_with_agent_system,
                     )
+
                     from utils.document_loader import batch_embed_documents
 
                     # Batch embedding

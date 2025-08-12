@@ -26,12 +26,16 @@ class SpacyManager:
 
     def __init__(self) -> None:
         """Initialize the SpaCy manager with an empty model cache."""
+        import threading
+
         self._models: dict[str, spacy.Language] = {}
+        self._lock = threading.RLock()
 
     def ensure_model(self, model_name: str = "en_core_web_sm") -> spacy.Language:
         """Ensure a specific spaCy language model is available and loaded.
 
         Downloads the model if not already installed, and caches it for future use.
+        Uses double-checked locking pattern for thread safety.
 
         Args:
             model_name (str, optional): Name of the spaCy language model to load.
@@ -43,17 +47,26 @@ class SpacyManager:
         Raises:
             subprocess.CalledProcessError: If model download fails.
         """
+        # First check (outside lock for performance)
         if model_name in self._models:
             return self._models[model_name]
 
-        if not is_package(model_name):
-            logger.info(f"Downloading spaCy model: {model_name}")
-            download(model_name)
+        # Acquire lock for model loading
+        with self._lock:
+            # Second check (inside lock to prevent race conditions)
+            if model_name in self._models:
+                return self._models[model_name]
 
-        nlp = spacy.load(model_name)
-        self._models[model_name] = nlp
-        logger.info(f"Loaded spaCy model: {model_name}")
-        return nlp
+            # Download model if not installed
+            if not is_package(model_name):
+                logger.info(f"Downloading spaCy model: {model_name}")
+                download(model_name)
+
+            # Load and cache the model
+            nlp = spacy.load(model_name)
+            self._models[model_name] = nlp
+            logger.info(f"Loaded spaCy model: {model_name}")
+            return nlp
 
     @contextmanager
     def memory_optimized_processing(

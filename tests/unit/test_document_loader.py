@@ -28,6 +28,7 @@ from utils.document_loader import (
     load_documents_llama,
     load_documents_unstructured,
 )
+from utils.monitoring import get_performance_monitor
 
 
 @pytest.fixture
@@ -69,10 +70,10 @@ endobj
 endobj
 xref
 0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
 trailer
 <<
 /Size 4
@@ -1480,11 +1481,13 @@ class TestPerformanceMonitoring:
 
         monitor = get_performance_monitor()
 
-        with patch("utils.document_loader.time.perf_counter", side_effect=[0.0, 1.5]):
-            with monitor.monitor_processing("test_op", str(test_file)) as metric:
-                metric.document_count = 5
-                metric.table_count = 1
-                metric.image_count = 2
+        with (
+            patch("utils.document_loader.time.perf_counter", side_effect=[0.0, 1.5]),
+            monitor.monitor_processing("test_op", str(test_file)) as metric,
+        ):
+            metric.document_count = 5
+            metric.table_count = 1
+        metric.image_count = 2
 
         assert len(monitor.metrics) == 1
         recorded_metric = monitor.metrics[0]
@@ -1523,11 +1526,13 @@ class TestPerformanceMonitoring:
 
         monitor = get_performance_monitor()
 
-        with patch("utils.document_loader.time.perf_counter", side_effect=[0.0, 2.0]):
-            with monitor.monitor_processing("log_test", str(test_file)) as metric:
-                metric.document_count = 3
-                metric.table_count = 1
-                metric.image_count = 0
+        with (
+            patch("utils.document_loader.time.perf_counter", side_effect=[0.0, 2.0]),
+            monitor.monitor_processing("log_test", str(test_file)) as metric,
+        ):
+            metric.document_count = 3
+            metric.table_count = 1
+        metric.image_count = 0
 
         # Verify logging was called
         mock_logger.info.assert_called()
@@ -1732,11 +1737,13 @@ class TestMemoryMonitoring:
         initial_memory = {"rss_mb": 50.0, "vms_mb": 100.0, "percent": 10.0}
         final_memory = {"rss_mb": 55.0, "vms_mb": 105.0, "percent": 11.0}
 
-        with patch.object(
-            monitor, "get_memory_usage", side_effect=[initial_memory, final_memory]
+        with (
+            patch.object(
+                monitor, "get_memory_usage", side_effect=[initial_memory, final_memory]
+            ),
+            monitor.memory_managed_processing("test_operation"),
         ):
-            with monitor.memory_managed_processing("test_operation"):
-                pass  # Simulate processing
+            pass  # Simulate processing
 
         # Verify logging
         assert mock_logger.info.call_count == 2

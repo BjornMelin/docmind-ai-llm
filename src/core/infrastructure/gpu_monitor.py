@@ -46,9 +46,10 @@ async def gpu_performance_monitor() -> AsyncGenerator[GPUMetrics | None, None]:
         yield None
         return
 
-    device_props = torch.cuda.get_device_properties(0)
-    allocated = torch.cuda.memory_allocated() / 1024**3
-    reserved = torch.cuda.memory_reserved() / 1024**3
+    current_device = torch.cuda.current_device()
+    device_props = torch.cuda.get_device_properties(current_device)
+    allocated = torch.cuda.memory_allocated(current_device) / 1024**3
+    reserved = torch.cuda.memory_reserved(current_device) / 1024**3
     utilization = min((allocated / (device_props.total_memory / 1024**3)) * 100, 100.0)
 
     yield GPUMetrics(device_props.name, allocated, reserved, utilization)
