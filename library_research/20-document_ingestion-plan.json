@@ -1,0 +1,319 @@
+{
+  "integration_plan": {
+    "cluster_name": "document_ingestion",
+    "compliance_requirements": {
+      "adr_004": "maintain_offline_document_processing_with_unstructured_hi_res_strategy",
+      "kiss_principle": "minimal_complexity_increase_with_clear_justification",
+      "library_first": "all_changes_use_existing_library_capabilities_where_possible",
+      "security": "no_introduction_of_new_security_vulnerabilities"
+    },
+    "dependency_updates": [
+      {
+        "action": "remove",
+        "current_version": "2.2.1",
+        "package": "moviepy",
+        "pr_id": "DOC-001",
+        "reason": "Only used in test mocks, reduces bundle size by ~129MB"
+      },
+      {
+        "action": "upgrade",
+        "current_version": "~=10.4.0",
+        "package": "pillow",
+        "pr_id": "DOC-002",
+        "reason": "Security patches and performance improvements",
+        "target_version": "~=11.3.0"
+      },
+      {
+        "action": "add",
+        "package": "psutil",
+        "pr_id": "INFRA-001",
+        "reason": "Make transitive dependency explicit (used in monitoring)",
+        "target_version": ">=6.0.0"
+      }
+    ],
+    "integration_date": "2025-01-12",
+    "monitoring_and_alerting": {
+      "alert_thresholds": {
+        "cache_hit_rate": "<70%",
+        "error_rate": ">5%",
+        "memory_usage": ">150% of baseline",
+        "processing_latency": ">200% of baseline"
+      },
+      "key_metrics": [
+        "document_processing_latency_ms",
+        "cache_hit_rate_percentage",
+        "error_rate_per_document_type",
+        "memory_usage_mb_per_document"
+      ]
+    },
+    "pr_based_changes": [
+      {
+        "description": "Remove moviepy dependency that's only used in test mocks, reducing bundle size by ~129MB while maintaining test functionality through generic mocking",
+        "effort_days": 2,
+        "files_changed": [
+          "pyproject.toml",
+          "tests/unit/test_resource_management.py",
+          "tests/unit/test_document_loader_core.py",
+          "tests/unit/test_document_loader.py"
+        ],
+        "impact": "HIGH",
+        "implementation_steps": [
+          {
+            "action": "analyze_current_moviepy_usage",
+            "description": "Confirm moviepy is only used in test mocks",
+            "step": 1,
+            "verification": "grep -r 'moviepy\\|VideoFileClip' src/ tests/"
+          },
+          {
+            "action": "replace_test_mocks",
+            "description": "Replace moviepy.VideoFileClip mocks with generic MagicMock objects",
+            "step": 2,
+            "verification": "grep -r 'VideoFileClip' tests/"
+          },
+          {
+            "action": "remove_dependency",
+            "description": "Remove moviepy==2.2.1 from pyproject.toml dependencies array",
+            "step": 3,
+            "verification": "grep moviepy pyproject.toml"
+          },
+          {
+            "action": "update_lockfile",
+            "description": "Update dependency resolution and verify bundle size reduction",
+            "step": 4,
+            "verification": "uv lock && uv tree | grep moviepy"
+          },
+          {
+            "action": "run_tests",
+            "description": "Execute full test suite to ensure no regressions",
+            "step": 5,
+            "verification": "uv run pytest tests/ -v --tb=short"
+          }
+        ],
+        "pr_id": "DOC-001",
+        "priority": 1,
+        "risk_level": "LOW",
+        "rollback_plan": "Re-add moviepy==2.2.1 to pyproject.toml dependencies if test failures detected",
+        "success_criteria": [
+          "All tests pass without moviepy import",
+          "Bundle size reduced by expected amount",
+          "No video processing functionality impacted"
+        ],
+        "title": "feat: remove unused moviepy dependency to reduce bundle size"
+      },
+      {
+        "description": "Upgrade pillow from 10.4.0 to 11.3.0 to get latest security patches and performance optimizations for image processing in multimodal documents",
+        "effort_days": 3,
+        "files_changed": [
+          "pyproject.toml",
+          "src/utils/document.py",
+          "tests/integration/test_multimodal.py"
+        ],
+        "impact": "MEDIUM",
+        "implementation_steps": [
+          {
+            "action": "create_test_environment",
+            "description": "Create isolated test environment with pillow 11.3.0",
+            "step": 1,
+            "verification": "uv add 'pillow~=11.3.0' --dry-run"
+          },
+          {
+            "action": "performance_baseline",
+            "description": "Establish current image processing performance baseline",
+            "step": 2,
+            "verification": "uv run python -c \"from PIL import Image; import time; start=time.time(); img=Image.new('RGB', (1000,1000)); print(f'Baseline: {time.time()-start:.3f}s')\""
+          },
+          {
+            "action": "upgrade_dependency",
+            "description": "Update pillow version constraint in pyproject.toml to ~=11.3.0",
+            "step": 3,
+            "verification": "grep 'pillow~=' pyproject.toml"
+          },
+          {
+            "action": "validate_api_compatibility",
+            "description": "Check for any deprecated API usage in document.py and related files",
+            "step": 4,
+            "verification": "uv run python -c \"from PIL import Image; print(f'Pillow version: {Image.__version__}')\""
+          },
+          {
+            "action": "run_image_tests",
+            "description": "Run comprehensive image processing test suite",
+            "step": 5,
+            "verification": "uv run pytest tests/integration/test_multimodal.py -v"
+          },
+          {
+            "action": "performance_comparison",
+            "description": "Compare performance before/after upgrade",
+            "step": 6,
+            "verification": "uv run python -c \"from PIL import Image; import time; start=time.time(); img=Image.new('RGB', (1000,1000)); print(f'After upgrade: {time.time()-start:.3f}s')\""
+          }
+        ],
+        "pr_id": "DOC-002",
+        "priority": 2,
+        "risk_level": "MEDIUM",
+        "rollback_plan": "Revert pyproject.toml to pillow~=10.4.0 if breaking changes or performance regression detected",
+        "success_criteria": [
+          "All image processing tests pass",
+          "No performance regression (max 5% slowdown acceptable)",
+          "Security vulnerabilities resolved",
+          "No deprecated API warnings"
+        ],
+        "title": "feat: upgrade pillow to 11.3.0 for security and performance improvements"
+      },
+      {
+        "description": "Research and prototype unstructured library's contextual chunking feature to improve RAG retrieval accuracy while maintaining ADR-004 compliance",
+        "effort_days": 4,
+        "files_changed": [
+          "src/utils/document.py",
+          "tests/integration/test_pipeline_integration.py",
+          "docs/research/contextual-chunking-evaluation.md"
+        ],
+        "impact": "MEDIUM",
+        "implementation_steps": [
+          {
+            "action": "research_api",
+            "description": "Research unstructured contextual chunking API and capabilities",
+            "step": 1,
+            "verification": "uv run python -c \"from unstructured.documents.elements import Text; help(Text)\""
+          },
+          {
+            "action": "create_poc",
+            "description": "Create proof-of-concept implementation in document.py with feature flag",
+            "step": 2,
+            "verification": "grep -A 10 'contextual.*chunk' src/utils/document.py"
+          },
+          {
+            "action": "implement_ab_testing",
+            "description": "Implement A/B testing framework to compare chunking strategies",
+            "step": 3,
+            "verification": "uv run python -c \"from src.utils.document import load_documents_unstructured; print('Feature flag working')\""
+          },
+          {
+            "action": "performance_metrics",
+            "description": "Create metrics to compare retrieval performance (baseline vs contextual)",
+            "step": 4,
+            "verification": "uv run pytest tests/integration/test_pipeline_integration.py::test_rag_performance -v"
+          },
+          {
+            "action": "document_findings",
+            "description": "Document configuration recommendations and performance results",
+            "step": 5,
+            "verification": "test -f docs/research/contextual-chunking-evaluation.md"
+          },
+          {
+            "action": "feature_flag_implementation",
+            "description": "Implement production-ready feature flag for gradual rollout",
+            "step": 6,
+            "verification": "grep -A 5 'use_contextual_chunking' src/models/core.py"
+          }
+        ],
+        "pr_id": "DOC-003",
+        "priority": 3,
+        "risk_level": "LOW",
+        "rollback_plan": "Disable contextual chunking via feature flag if no measurable improvement in retrieval accuracy",
+        "success_criteria": [
+          "Contextual chunking API successfully integrated",
+          "A/B testing framework operational",
+          "Performance metrics demonstrate improvement or neutral impact",
+          "Feature flag enables safe production testing"
+        ],
+        "title": "research: explore unstructured contextual chunking for RAG improvements"
+      }
+    ],
+    "risk_assessment": {
+      "operational_risks": [
+        {
+          "impact": "MEDIUM",
+          "mitigation": "atomic_pr_structure_enables_incremental_deployment",
+          "probability": "LOW",
+          "risk": "deployment_window_constraints"
+        }
+      ],
+      "overall_risk": "LOW",
+      "technical_risks": [
+        {
+          "impact": "MEDIUM",
+          "mitigation": "comprehensive_staging_testing_with_rollback_plan",
+          "probability": "LOW",
+          "risk": "pillow_upgrade_breaks_existing_functionality"
+        },
+        {
+          "impact": "LOW",
+          "mitigation": "thorough_mock_replacement_and_validation",
+          "probability": "LOW",
+          "risk": "test_suite_regression_after_moviepy_removal"
+        },
+        {
+          "impact": "LOW",
+          "mitigation": "feature_flag_enables_immediate_rollback",
+          "probability": "MEDIUM",
+          "risk": "contextual_chunking_performance_degradation"
+        }
+      ]
+    },
+    "risk_level": "LOW",
+    "rollback_procedures": {
+      "emergency_rollback": "git reset --hard <last_known_good_commit> && uv lock",
+      "pr_level_rollback": {
+        "DOC-001": "git revert <commit> && uv add moviepy==2.2.1 && uv lock",
+        "DOC-002": "git revert <commit> && uv add 'pillow~=10.4.0' && uv lock",
+        "DOC-003": "git revert <commit> (feature flag ensures safe rollback)"
+      },
+      "validation_after_rollback": "uv run pytest tests/ -v --tb=short"
+    },
+    "success_criteria": {
+      "bundle_optimization": {
+        "current_packages": 331,
+        "size_reduction_mb": 129,
+        "target_packages": 265,
+        "target_reduction": "15-20% fewer packages"
+      },
+      "performance_requirements": {
+        "cache_efficiency": ">80%",
+        "max_regression": "5%",
+        "processing_throughput": "maintain_current_levels"
+      },
+      "quality_gates": {
+        "documentation": "all_changes_documented",
+        "linting": "all_ruff_checks_pass",
+        "test_coverage": "no_regression",
+        "type_checking": "all_mypy_checks_pass"
+      },
+      "security_improvements": {
+        "dependency_freshness": "all_dependencies_within_6_months",
+        "pillow_vulnerabilities": "zero_known_vulnerabilities"
+      }
+    },
+    "target_branch": "feat/llama-index-multi-agent-langgraph",
+    "timeline": {
+      "week_1": {
+        "days_1_2": "DOC-001 implementation and testing",
+        "days_3_4": "DOC-002 testing and staging deployment",
+        "days_5_7": "DOC-003 research and proof-of-concept"
+      },
+      "week_2": {
+        "days_1_3": "Performance validation and monitoring setup",
+        "days_4_5": "Documentation updates and team knowledge transfer",
+        "days_6_7": "Future sprint planning and optimization roadmap"
+      }
+    },
+    "total_effort_days": 7,
+    "verification_strategy": {
+      "automated_tests": {
+        "full_suite": "uv run pytest tests/ -v --tb=short",
+        "integration_tests": "uv run pytest tests/integration/ -v --tb=short",
+        "performance_tests": "uv run pytest tests/performance/ -v --benchmark",
+        "unit_tests": "uv run pytest tests/unit/ -v --tb=short"
+      },
+      "manual_verification": {
+        "bundle_size": "uv export --format requirements-txt | wc -l",
+        "dependency_check": "uv tree | grep -E '(moviepy|pillow|psutil)'",
+        "import_validation": "uv run python -c \"from src.utils.document import load_documents_unstructured; print('Imports working')\""
+      },
+      "performance_benchmarks": {
+        "cache_performance": "uv run python -c \"from src.utils.document import get_cache_stats; print(get_cache_stats())\"",
+        "document_loading": "time uv run python -c \"from src.utils.document import load_documents_unstructured; load_documents_unstructured('sample.pdf')\"",
+        "image_processing": "uv run python -c \"from PIL import Image; import time; start=time.time(); Image.new('RGB', (1000,1000)); print(f'{time.time()-start:.3f}s')\""
+      }
+    }
+  }
+}

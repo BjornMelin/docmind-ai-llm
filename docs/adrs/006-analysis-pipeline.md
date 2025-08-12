@@ -1,4 +1,12 @@
-# ADR 006: Document Analysis Pipeline
+# ADR-006: Analysis Pipeline
+
+## Title
+
+Multi-Stage Query and Analysis Pipeline
+
+## Version/Date
+
+2.0 / July 25, 2025
 
 ## Status
 
@@ -6,28 +14,43 @@ Accepted
 
 ## Context
 
-The analysis pipeline must generate structured outputs (summaries, insights, actions, questions) with customizable prompts and handle large documents.
+Multi-stage for efficient querying (retrieve → rerank → synthesize), async/parallel for speed, caching for reuse.
+
+## Related Requirements
+
+- Phase 3.3: Multi-stage/routing/caching.
+- Integrate hybrid/retrievers/agents.
+
+## Alternatives
+
+- Custom loops: Error-prone.
+- Sequential: Slow.
 
 ## Decision
 
-- Use **LangChain LLMChain** with **PydanticOutputParser** for structured output (AnalysisOutput model).
-- Support customizable prompts, tones, instructions, and length via `prompts.py`.
-- Handle large documents via chunking (RecursiveCharacterTextSplitter) or map-reduce summarization (`load_summarize_chain`).
-- Implement in `utils.py:analyze_documents()` with error handling and raw output fallback.
+Use QueryPipeline (chain=[retriever, ColbertRerank, synthesizer], async_mode=True, parallel=True) with diskcache for caching. Route complexity via LangGraph.
 
-## Rationale
+## Related Decisions
 
-- LLMChain simplifies prompt management and execution.
-- Pydantic ensures consistent, structured outputs.
-- Chunking/map-reduce scales to large documents.
-- Fallbacks improve reliability.
+- ADR-013 (RRF in retriever stage).
+- ADR-001 (Core pipeline).
 
-## Alternatives Considered
+## Design
 
-- Custom parsing: Error-prone, less maintainable.
-- No chunking: Fails for large docs.
+- **Pipeline**: In utils.py: from llama_index.core.query_pipeline import QueryPipeline; qp = QueryPipeline(chain=[HybridFusionRetriever(...), ColbertRerank(...), synthesizer], async_mode=True, parallel=True).
+- **Caching**: Wrap qp components with diskcache.memoize.
+- **Integration**: qp.as_query_engine() in tools. For agents, agent.chat(qp.run("query")).
+- **Implementation Notes**: Add routing (e.g., if complexity=="complex": use KG retriever). Error handling: Try/except in chain.
+- **Testing**: tests/test_performance_integration.py: def test_pipeline_multi_stage(): results = qp.run("query"); assert len(results) > 0; measure latency < 2s with async/parallel; def test_caching(): time1 = measure(qp.run("query")); time2 = measure(qp.run("query")); assert time2 < time1 / 2.
 
 ## Consequences
 
-- Pros: Structured, scalable, user-configurable.
-- Cons: Complex prompt logic; simplified via predefined options.
+- Efficient/modular (async/parallel chaining, caching reuse).
+- Scalable (route via complexity).
+
+- Complexity (manage chain errors).
+- Deps: diskcache==5.6.3.
+
+**Changelog:**  
+
+- 2.0 (July 25, 2025): Switched to QueryPipeline for multi-stage/async/parallel/caching; Integrated with hybrid/rerank/agents; Enhanced testing for dev.

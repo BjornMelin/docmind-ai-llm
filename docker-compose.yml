@@ -7,25 +7,65 @@ services:
       - "8501:8501"
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
       - BACKEND=ollama
-      - CONTEXT_SIZE=4096
+      - CONTEXT_SIZE=32768
       - QDRANT_URL=http://qdrant:6333
-      - DEFAULT_EMBEDDING_MODEL=jinaai/jina-embeddings-v4
-      - DEFAULT_RERANKER_MODEL=jinaai/jina-reranker-v2-base-multilingual
+      # GPU Configuration
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - VLLM_TORCH_BACKEND=cu128
+      - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - FASTEMBED_CACHE_PATH=/tmp/fastembed_cache
+      - ONNXRUNTIME_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider
     volumes:
       - .:/app
+      - ./models:/models
+      - gpu_cache:/tmp/fastembed_cache
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+    ipc: host
+    shm_size: '2gb'
 
   qdrant:
-    image: qdrant/qdrant
+    image: qdrant/qdrant:gpu-nvidia-latest
     ports:
       - "6333:6333"
+      - "6334:6334"
+    environment:
+      - QDRANT__GPU__INDEXING=1
+      - QDRANT__GPU__FORCE_HALF_PRECISION=true
+      - QDRANT__GPU__GROUPS_COUNT=512
+      - QDRANT__GPU__PARALLEL_INDEXES=1
+      - QDRANT__GPU__DEVICE_FILTER=nvidia
+      - QDRANT__GPU__ALLOW_INTEGRATED=false
     volumes:
-      - qdrant_data:/qdrant/storage
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:6333"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
 
 volumes:
-  qdrant_data:
+  qdrant_storage:
+  gpu_cache:

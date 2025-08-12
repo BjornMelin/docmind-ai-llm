@@ -1,0 +1,608 @@
+{
+  "current_state": {
+    "implemented": [
+      "qdrant_client_1.15.1_installed",
+      "fastembed_integration_functional",
+      "basic_hybrid_search_support"
+    ],
+    "key_files": [
+      "src/utils/embedding.py",
+      "src/utils/database.py",
+      "src/models/core.py",
+      "pyproject.toml"
+    ],
+    "missing": [
+      "native_bm25_utilization",
+      "quantization_optimizations",
+      "multi_gpu_acceleration",
+      "provider_consolidation"
+    ]
+  },
+  "dependency_updates": {
+    "evaluation_for_removal": [
+      "llama-index-embeddings-huggingface",
+      "llama-index-embeddings-jinaai"
+    ],
+    "optional_packages": [
+      "fastembed-gpu>=0.7.0",
+      "cuda-toolkit",
+      "llama-index-embeddings-openai"
+    ],
+    "required_packages": [
+      "qdrant-client==1.15.1",
+      "fastembed>=0.3.0",
+      "llama-index-vector-stores-qdrant",
+      "llama-index-embeddings-fastembed"
+    ]
+  },
+  "expected_outcomes": {
+    "cost_reductions": [
+      "eliminated_embedding_api_costs",
+      "reduced_infrastructure_requirements",
+      "simplified_maintenance_overhead"
+    ],
+    "development_benefits": [
+      "reduced_dependency_complexity",
+      "improved_library_first_maintainability",
+      "faster_local_inference_iterations",
+      "comprehensive_performance_monitoring"
+    ],
+    "performance_improvements": {
+      "memory_reduction_percent": 70,
+      "precision_improvement_percent": 8,
+      "search_speed_multiplier": 40,
+      "throughput_multiplier": 1.84
+    }
+  },
+  "integration_plan": {
+    "cluster_name": "embedding_vectorstore",
+    "deployment_strategy": "progressive_rollout_with_ab_testing",
+    "estimated_timeline_weeks": 3,
+    "objective": "Transform embedding and vector storage through library-first optimizations",
+    "target_branch": "feat/embedding-vectorstore-optimization"
+  },
+  "phases": [
+    {
+      "phase": "1_foundation",
+      "priority": "P0",
+      "pull_requests": [
+        {
+          "effort_days": 3,
+          "files_to_modify": [
+            "src/utils/database.py",
+            "src/utils/embedding.py",
+            "src/models/core.py"
+          ],
+          "impact": "high",
+          "implementation_steps": [
+            {
+              "code_changes": {
+                "add_sparse_config": {
+                  "sparse_vectors_config": {
+                    "text-sparse": "SparseVectorParams(modifier=Modifier.IDF, index=SparseIndexParams(on_disk=False))"
+                  }
+                }
+              },
+              "description": "Update Qdrant collection configuration with native BM25",
+              "file": "src/utils/database.py",
+              "function": "setup_hybrid_collection_async",
+              "step": 1
+            },
+            {
+              "code_changes": {
+                "update_vector_store_config": {
+                  "batch_size": 20,
+                  "enable_hybrid": true,
+                  "fastembed_sparse_model": "Qdrant/bm25"
+                }
+              },
+              "description": "Enable native BM25 in QdrantVectorStore",
+              "file": "src/utils/database.py",
+              "step": 2
+            },
+            {
+              "code_changes": {
+                "add_settings": [
+                  "enable_native_bm25: bool = Field(default=True, env='ENABLE_NATIVE_BM25')",
+                  "rrf_k_param: int = Field(default=60, env='RRF_K_PARAM')"
+                ]
+              },
+              "description": "Add native BM25 settings to configuration",
+              "file": "src/models/core.py",
+              "step": 3
+            },
+            {
+              "code_changes": {
+                "simplify_function": "Return 'Qdrant/bm25' for native BM25 or None"
+              },
+              "description": "Simplify sparse embedding creation",
+              "file": "src/utils/embedding.py",
+              "function": "create_sparse_embedding",
+              "step": 4
+            }
+          ],
+          "objective": "Replace custom sparse embeddings with Qdrant native BM25 + IDF",
+          "pr_id": "1.1",
+          "risk": "low",
+          "title": "Qdrant Native BM25 Integration",
+          "verification_commands": [
+            {
+              "command": "uv run python -c \"from src.utils.database import setup_hybrid_collection; from qdrant_client import QdrantClient; client = QdrantClient(url='http://localhost:6333'); vector_store = setup_hybrid_collection(client, 'test_native_bm25'); print(f'Native BM25 enabled: {vector_store.enable_hybrid}')\"",
+              "purpose": "test_native_bm25_functionality"
+            },
+            {
+              "command": "uv run python -c \"from src.utils.database import get_collection_info; info = get_collection_info('test_native_bm25'); print(f'Sparse vectors config: {info.get(\\\"sparse_vectors_config\\\")}')\"",
+              "purpose": "verify_collection_configuration"
+            }
+          ]
+        },
+        {
+          "effort_days": 5,
+          "files_to_modify": [
+            "src/utils/database.py",
+            "src/models/core.py"
+          ],
+          "impact": "high",
+          "implementation_steps": [
+            {
+              "code_changes": {
+                "add_class": "QuantizationConfig",
+                "add_to_settings": "quantization: QuantizationConfig = Field(default_factory=QuantizationConfig)",
+                "fields": [
+                  "enabled: bool = Field(default=True)",
+                  "type: str = Field(default='asymmetric')",
+                  "bits_storage: int = Field(default=2)",
+                  "bits_query: int = Field(default=8)",
+                  "oversampling: float = Field(default=1.5)"
+                ]
+              },
+              "description": "Add quantization configuration model",
+              "file": "src/models/core.py",
+              "step": 1
+            },
+            {
+              "code_changes": {
+                "add_imports": [
+                  "from qdrant_client.http.models import QuantizationConfig as QdrantQuantizationConfig",
+                  "ScalarQuantization",
+                  "ScalarType"
+                ],
+                "add_quantization_config": "Support for scalar/binary/asymmetric quantization types",
+                "update_vector_params": "Add quantization_config to VectorParams"
+              },
+              "description": "Update collection creation with quantization support",
+              "file": "src/utils/database.py",
+              "function": "setup_hybrid_collection_async",
+              "step": 2
+            },
+            {
+              "code_changes": {
+                "add_function": "get_quantization_stats",
+                "functionality": "Track quantization status, memory usage, and compression ratios"
+              },
+              "description": "Add quantization monitoring and statistics",
+              "file": "src/utils/database.py",
+              "step": 3
+            }
+          ],
+          "objective": "Implement binary/asymmetric quantization for memory and speed optimization",
+          "pr_id": "1.2",
+          "risk": "medium",
+          "title": "Binary Quantization Implementation",
+          "verification_commands": [
+            {
+              "command": "uv run python -c \"from src.utils.database import setup_hybrid_collection, get_quantization_stats; from qdrant_client import QdrantClient; client = QdrantClient(url='http://localhost:6333'); vector_store = setup_hybrid_collection(client, 'test_quantized', recreate=True); stats = get_quantization_stats('test_quantized'); print(f'Quantization stats: {stats}')\"",
+              "purpose": "test_quantization_setup"
+            },
+            {
+              "command": "uv run python -c \"import psutil; from src.utils.database import get_collection_info; before = psutil.virtual_memory().used; info = get_collection_info('test_quantized'); after = psutil.virtual_memory().used; print(f'Memory usage: {(after - before) / 1024 / 1024:.2f}MB')\"",
+              "purpose": "monitor_memory_usage"
+            }
+          ]
+        },
+        {
+          "effort_days": 2,
+          "files_to_modify": [
+            "src/utils/embedding.py",
+            "src/models/core.py",
+            "pyproject.toml"
+          ],
+          "impact": "medium",
+          "implementation_steps": [
+            {
+              "code_changes": {
+                "update_defaults": {
+                  "dense_embedding_model": "BAAI/bge-small-en-v1.5",
+                  "preferred_embedding_provider": "fastembed"
+                }
+              },
+              "description": "Update default embedding configuration for FastEmbed",
+              "file": "src/models/core.py",
+              "step": 1
+            },
+            {
+              "code_changes": {
+                "streamline_function": "Direct FastEmbed creation with error handling for missing dependencies"
+              },
+              "description": "Simplify embedding model creation",
+              "file": "src/utils/embedding.py",
+              "function": "get_embed_model",
+              "step": 2
+            },
+            {
+              "code_changes": {
+                "add_function": "get_embedding_with_fallback",
+                "error_handling": "Graceful degradation with provider-specific error messages",
+                "fallback_order": [
+                  "fastembed",
+                  "openai",
+                  "huggingface"
+                ]
+              },
+              "description": "Add provider fallback hierarchy",
+              "file": "src/utils/embedding.py",
+              "step": 3
+            },
+            {
+              "code_changes": {
+                "evaluate_removal": [
+                  "llama-index-embeddings-huggingface",
+                  "llama-index-embeddings-jinaai"
+                ],
+                "keep_fallback": "llama-index-embeddings-openai",
+                "keep_primary": "llama-index-embeddings-fastembed"
+              },
+              "description": "Evaluate dependency removal",
+              "file": "pyproject.toml",
+              "step": 4
+            }
+          ],
+          "objective": "Consolidate on FastEmbed as primary embedding provider",
+          "pr_id": "1.3",
+          "risk": "low",
+          "title": "FastEmbed Provider Consolidation",
+          "verification_commands": [
+            {
+              "command": "uv run python -c \"from src.utils.embedding import get_embed_model, get_embedding_info; model = get_embed_model(); info = get_embedding_info(); print(f'Primary provider: FastEmbed'); print(f'Model: {info[\\\"dense_model\\\"]}'); print(f'Dimensions: {info[\\\"dimensions\\\"]}')\"",
+              "purpose": "test_fastembed_primary_provider"
+            },
+            {
+              "command": "uv run python -c \"import time, asyncio; from src.utils.embedding import generate_dense_embeddings_async; async def test(): texts = ['test'] * 100; start = time.perf_counter(); embeddings = await generate_dense_embeddings_async(texts); duration = time.perf_counter() - start; print(f'FastEmbed: {len(embeddings)} embeddings in {duration:.2f}s'); asyncio.run(test())\"",
+              "purpose": "performance_comparison"
+            }
+          ]
+        }
+      ],
+      "timeline": "week_1"
+    },
+    {
+      "phase": "2_acceleration",
+      "priority": "P1",
+      "pull_requests": [
+        {
+          "effort_days": 4,
+          "files_to_modify": [
+            "src/utils/embedding.py",
+            "src/models/core.py",
+            "pyproject.toml"
+          ],
+          "impact": "high",
+          "implementation_steps": [
+            {
+              "code_changes": {
+                "add_class": "GPUConfig",
+                "add_to_settings": "gpu_config: GPUConfig = Field(default_factory=GPUConfig)",
+                "fields": [
+                  "enabled: bool = Field(default=True)",
+                  "device_ids: list[int] = Field(default=[0])",
+                  "multi_gpu: bool = Field(default=False)",
+                  "batch_size_per_gpu: int = Field(default=512)",
+                  "providers: list[str] = Field(default=['CUDAExecutionProvider', 'CPUExecutionProvider'])"
+                ]
+              },
+              "description": "Add GPU configuration settings",
+              "file": "src/models/core.py",
+              "step": 1
+            },
+            {
+              "code_changes": {
+                "add_function": "create_dense_embedding_multi_gpu",
+                "features": [
+                  "Multi-GPU device specification",
+                  "Lazy loading for memory efficiency",
+                  "Fallback to single GPU on failure",
+                  "CUDA availability checks"
+                ]
+              },
+              "description": "Implement multi-GPU FastEmbed creation",
+              "file": "src/utils/embedding.py",
+              "step": 2
+            },
+            {
+              "code_changes": {
+                "add_function": "generate_embeddings_multi_gpu",
+                "features": [
+                  "Text distribution across GPUs",
+                  "Concurrent batch processing",
+                  "Optimal batch sizes per GPU",
+                  "Result aggregation and ordering"
+                ]
+              },
+              "description": "Optimize batch processing for multi-GPU",
+              "file": "src/utils/embedding.py",
+              "step": 3
+            },
+            {
+              "code_changes": {
+                "add_function": "get_gpu_stats",
+                "metrics": [
+                  "CUDA availability",
+                  "Device count and names",
+                  "Memory allocation and usage",
+                  "Utilization statistics"
+                ]
+              },
+              "description": "Add GPU monitoring and statistics",
+              "file": "src/utils/embedding.py",
+              "step": 4
+            }
+          ],
+          "objective": "Enable multi-GPU acceleration for FastEmbed processing",
+          "pr_id": "2.1",
+          "risk": "medium",
+          "title": "Multi-GPU FastEmbed Acceleration",
+          "verification_commands": [
+            {
+              "command": "uv run python -c \"from src.utils.embedding import get_gpu_stats, create_dense_embedding_multi_gpu; stats = get_gpu_stats(); print(f'GPU stats: {stats}'); if stats['cuda_available'] and stats['device_count'] > 1: model = create_dense_embedding_multi_gpu(device_ids=[0, 1]); print('Multi-GPU model created successfully')\"",
+              "purpose": "test_multi_gpu_setup"
+            },
+            {
+              "command": "uv run python -c \"import asyncio, time; from src.utils.embedding import generate_embeddings_multi_gpu; import torch; async def benchmark(): texts = ['test text ' * 50] * 1000; start = time.perf_counter(); embeddings = await generate_embeddings_multi_gpu(texts, device_ids=[0, 1]); duration = time.perf_counter() - start; throughput = len(embeddings) / duration; print(f'Multi-GPU throughput: {throughput:.1f} embeddings/s'); if torch.cuda.device_count() > 1: asyncio.run(benchmark())\"",
+              "purpose": "benchmark_multi_gpu_performance"
+            }
+          ]
+        },
+        {
+          "effort_days": 3,
+          "files_to_modify": [
+            "src/utils/embedding.py",
+            "src/utils/database.py",
+            "src/models/core.py"
+          ],
+          "impact": "medium",
+          "implementation_steps": [
+            {
+              "code_changes": {
+                "add_class": "BatchProcessingConfig",
+                "add_to_settings": "batch_config: BatchProcessingConfig = Field(default_factory=BatchProcessingConfig)",
+                "fields": [
+                  "gpu_batch_size: int = Field(default=1024)",
+                  "cpu_batch_size: int = Field(default=64)",
+                  "qdrant_batch_size: int = Field(default=16)",
+                  "max_workers: int = Field(default=4)",
+                  "enable_hnsw_healing: bool = Field(default=True)"
+                ]
+              },
+              "description": "Add batch processing configuration",
+              "file": "src/models/core.py",
+              "step": 1
+            },
+            {
+              "code_changes": {
+                "add_function": "process_documents_batch_optimized",
+                "features": [
+                  "Hardware-aware batch sizing",
+                  "Concurrent embedding generation",
+                  "Parallel Qdrant ingestion",
+                  "Progress tracking and error handling",
+                  "Performance metrics collection"
+                ]
+              },
+              "description": "Implement optimized batch document processing",
+              "file": "src/utils/embedding.py",
+              "step": 2
+            },
+            {
+              "code_changes": {
+                "add_function": "setup_collection_with_healing",
+                "features": [
+                  "Incremental HNSW updates",
+                  "Optimized segment sizes",
+                  "Configurable optimization threads"
+                ],
+                "imports": [
+                  "from qdrant_client.http.models import OptimizersConfigDiff"
+                ]
+              },
+              "description": "Add HNSW healing configuration",
+              "file": "src/utils/database.py",
+              "step": 3
+            }
+          ],
+          "objective": "Optimize batch processing for large dataset ingestion",
+          "pr_id": "2.2",
+          "risk": "low",
+          "title": "Batch Processing Optimization",
+          "verification_commands": [
+            {
+              "command": "uv run python -c \"import asyncio; from src.utils.embedding import process_documents_batch_optimized; from llama_index.core import Document; async def test(): docs = [Document(text=f'Test document {i}') for i in range(100)]; results = await process_documents_batch_optimized(docs, use_gpu=True); print(f'Batch processing results: {results[\\\"stats\\\"]}'); asyncio.run(test())\"",
+              "purpose": "test_batch_processing"
+            },
+            {
+              "command": "uv run python -c \"from src.utils.embedding import get_embedding_info; from src.models.core import settings; info = get_embedding_info(); print(f'Batch configuration:'); print(f'  GPU batch size: {settings.batch_config.gpu_batch_size}'); print(f'  Qdrant batch size: {settings.batch_config.qdrant_batch_size}'); print(f'  Max workers: {settings.batch_config.max_workers}')\"",
+              "purpose": "monitor_batch_configuration"
+            }
+          ]
+        },
+        {
+          "effort_days": 2,
+          "files_to_modify": [
+            "src/utils/embedding.py",
+            "src/utils/database.py"
+          ],
+          "impact": "medium",
+          "implementation_steps": [
+            {
+              "code_changes": {
+                "add_function": "create_optimized_hybrid_retriever",
+                "features": [
+                  "Verified hybrid support checks",
+                  "Dense and sparse retriever configuration",
+                  "RRF fusion with configurable k parameter",
+                  "Async operation support"
+                ]
+              },
+              "description": "Enhanced hybrid retriever with native RRF",
+              "file": "src/utils/embedding.py",
+              "step": 1
+            },
+            {
+              "code_changes": {
+                "add_function": "create_optimized_index_async",
+                "features": [
+                  "Native feature utilization",
+                  "Async Qdrant client integration",
+                  "Optimized embedding model selection",
+                  "Comprehensive configuration tracking"
+                ]
+              },
+              "description": "Async index operations enhancement",
+              "file": "src/utils/embedding.py",
+              "step": 2
+            },
+            {
+              "code_changes": {
+                "add_function": "benchmark_retrieval_performance",
+                "metrics": [
+                  "Average query latency",
+                  "Throughput (queries per second)",
+                  "Result count consistency",
+                  "Error rate tracking"
+                ]
+              },
+              "description": "Retrieval performance monitoring",
+              "file": "src/utils/embedding.py",
+              "step": 3
+            }
+          ],
+          "objective": "Optimize LlamaIndex integration with native Qdrant hybrid features",
+          "pr_id": "2.3",
+          "risk": "low",
+          "title": "LlamaIndex Hybrid Integration Enhancement",
+          "verification_commands": [
+            {
+              "command": "uv run python -c \"import asyncio; from src.utils.embedding import create_optimized_index_async, benchmark_retrieval_performance; from llama_index.core import Document; async def test(): docs = [Document(text=f'AI and machine learning topic {i}') for i in range(50)]; result = await create_optimized_index_async(docs, use_native_features=True); print(f'Index config: {result[\\\"config\\\"]}'); test_queries = ['machine learning', 'artificial intelligence']; perf = await benchmark_retrieval_performance(result['retriever'], test_queries); print(f'Performance: {perf}'); asyncio.run(test())\"",
+              "purpose": "test_optimized_hybrid_retrieval"
+            },
+            {
+              "command": "uv run python -c \"from src.utils.embedding import create_optimized_hybrid_retriever; from src.utils.database import create_vector_store; from llama_index.core import VectorStoreIndex, Document; docs = [Document(text='hybrid search test')]; vector_store = create_vector_store('test_rrf', enable_hybrid=True); index = VectorStoreIndex.from_documents(docs, vector_store=vector_store); retriever = create_optimized_hybrid_retriever(index, rrf_k=60); results = retriever.retrieve('hybrid search test'); print(f'RRF results: {len(results)} documents found')\"",
+              "purpose": "verify_rrf_fusion"
+            }
+          ]
+        }
+      ],
+      "timeline": "week_2_3"
+    },
+    {
+      "phase": "3_advanced_optimization",
+      "priority": "P2",
+      "pull_requests": [
+        {
+          "effort_days": 5,
+          "features": [
+            "dynamic_quantization_parameter_selection",
+            "automated_ab_testing_for_quantization",
+            "recall_degradation_monitoring",
+            "custom_calibration_dataset_generation"
+          ],
+          "impact": "high",
+          "objective": "Fine-tune asymmetric quantization parameters for optimal compression/accuracy trade-off",
+          "pr_id": "3.1",
+          "risk": "medium",
+          "status": "planned",
+          "title": "Advanced Asymmetric Quantization Tuning"
+        },
+        {
+          "effort_days": 7,
+          "features": [
+            "training_data_preparation_pipeline",
+            "domain_specific_fine_tuning_workflows",
+            "custom_model_evaluation_validation",
+            "integration_with_existing_pipeline"
+          ],
+          "impact": "high",
+          "objective": "Implement domain-specific model fine-tuning with FastEmbed",
+          "pr_id": "3.2",
+          "risk": "high",
+          "status": "planned",
+          "title": "Custom Model Fine-tuning Pipeline"
+        }
+      ],
+      "timeline": "future"
+    }
+  ],
+  "risk_management": {
+    "alert_conditions": {
+      "error_rate_threshold_percent": 5,
+      "recall_degradation_threshold_percent": 80,
+      "search_latency_threshold_ms": 200,
+      "unexpected_memory_increase": true
+    },
+    "high_risk_mitigations": [
+      "automated_rollback_scripts",
+      "backup_collection_maintenance",
+      "progressive_single_node_deployment",
+      "performance_degradation_guards"
+    ],
+    "low_risk_mitigations": [
+      "gradual_rollout_staging_first",
+      "ab_testing_performance_comparison",
+      "feature_flags_configuration_control",
+      "comprehensive_metrics_monitoring"
+    ],
+    "monitoring_metrics": {
+      "error_rate_target_percent": 1,
+      "memory_reduction_target_percent": 70,
+      "recall_at_10_target_percent": 85,
+      "search_latency_target_ms": 100,
+      "throughput_target_tokens_per_second": 9000
+    }
+  },
+  "success_criteria": {
+    "phase_1": [
+      "native_bm25_hybrid_search_operational",
+      "single_primary_embedding_provider_active",
+      "binary_quantization_enabled_with_maintained_recall"
+    ],
+    "phase_2": [
+      "multi_gpu_acceleration_operational",
+      "batch_processing_optimized_for_throughput",
+      "llamaindex_hybrid_search_integrated"
+    ],
+    "phase_3": [
+      "optimal_quantization_parameters_identified",
+      "model_performance_comprehensively_benchmarked",
+      "monitoring_alerting_systems_operational"
+    ]
+  },
+  "validation_strategy": {
+    "integration_tests": [
+      "test_hybrid_search_end_to_end",
+      "test_performance_benchmarks",
+      "test_memory_usage_optimization",
+      "test_error_handling_fallbacks"
+    ],
+    "performance_tests": [
+      "benchmark_search_latency_improvements",
+      "benchmark_throughput_multi_gpu",
+      "benchmark_memory_usage_reduction",
+      "benchmark_recall_precision_metrics"
+    ],
+    "unit_tests": [
+      "test_native_bm25_configuration",
+      "test_quantization_settings",
+      "test_multi_gpu_embedding_generation",
+      "test_batch_processing_optimization"
+    ]
+  }
+}

@@ -3,7 +3,9 @@
 ## Prerequisites
 
 - Ollama installed (download from [ollama.com](https://ollama.com/)).
+
 - Python 3.9+.
+
 - Optional: Docker, NVIDIA GPU drivers.
 
 ## Installation
@@ -32,7 +34,7 @@
 - Locally:
 
   ```bash
-  streamlit run app.py
+  streamlit run src/app.py
   ```
 
 - Docker:

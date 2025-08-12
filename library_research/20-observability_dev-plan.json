@@ -1,0 +1,548 @@
+{
+  "atomic_changes": [
+    {
+      "change_id": 1,
+      "dependencies_to_add": [
+        "arize-phoenix>=11.13.0",
+        "openinference-instrumentation-llama-index>=4.3.0"
+      ],
+      "dependencies_to_remove": [
+        "openinference-instrumentation-llama-index==4.3.2",
+        "arize-phoenix==11.13.2"
+      ],
+      "description": "Move observability libraries from main dependencies to dev group",
+      "estimated_time_minutes": 30,
+      "files": [
+        "pyproject.toml"
+      ],
+      "prerequisites": [],
+      "risk": "LOW",
+      "rollback_procedure": "git checkout HEAD~1 pyproject.toml && uv pip install .",
+      "target_location": "dependency-groups.dev",
+      "title": "pyproject.toml Dependency Migration",
+      "type": "dependency-migration",
+      "verification_commands": [
+        "uv pip install .",
+        "python -c \"import streamlit; print('✅ Production install works')\"",
+        "uv pip install --group dev .",
+        "python -c \"import phoenix; print('✅ Dev install works')\""
+      ]
+    },
+    {
+      "change_id": 2,
+      "class_design": {
+        "DocMindObservability": {
+          "attributes": [
+            "enabled: bool",
+            "project_name: str",
+            "session: Any | None",
+            "tracer_provider: Any | None",
+            "_instrumented: bool"
+          ],
+          "methods": [
+            "__init__(enabled: bool, project_name: str)",
+            "setup() -> None",
+            "get_dashboard_url() -> str | None",
+            "is_available() -> bool",
+            "cleanup() -> None",
+            "observability_context() -> Generator[Any, None, None]"
+          ]
+        }
+      },
+      "description": "Create conditional observability integration with graceful degradation",
+      "estimated_time_minutes": 120,
+      "files": [
+        "src/utils/observability.py"
+      ],
+      "key_features": [
+        "conditional_imports_with_availability_tracking",
+        "graceful_degradation_when_dependencies_missing",
+        "enhanced_error_messages_and_logging",
+        "context_manager_for_resource_lifecycle",
+        "backward_compatibility_functions"
+      ],
+      "prerequisites": [],
+      "risk": "LOW",
+      "title": "Create Observability Utility Module",
+      "type": "new-module",
+      "verification_commands": [
+        "python -c \"from src.utils.observability import DocMindObservability; obs = DocMindObservability(enabled=True); print('✅ Graceful degradation works')\"",
+        "uv pip install --group dev . && python -c \"from src.utils.observability import setup_observability; obs = setup_observability(enabled=True); print('✅ Phoenix integration works')\""
+      ]
+    },
+    {
+      "change_id": 3,
+      "code_changes": {
+        "imports_to_add": [
+          "from .utils.observability import DocMindObservability, is_observability_available"
+        ],
+        "imports_to_remove": [
+          "import phoenix as px",
+          "from llama_index.core import set_global_handler"
+        ],
+        "ui_enhancements": [
+          "observability_expander_with_dependency_status",
+          "installation_instructions_when_missing",
+          "enhanced_dashboard_link_integration"
+        ]
+      },
+      "description": "Replace direct imports with conditional observability integration",
+      "estimated_time_minutes": 90,
+      "files": [
+        "src/app.py"
+      ],
+      "prerequisites": [
+        2
+      ],
+      "risk": "LOW",
+      "title": "Enhanced App Integration",
+      "type": "refactor",
+      "ui_improvements": {
+        "observability_section": {
+          "features": [
+            "dependency_availability_check",
+            "installation_instructions_display",
+            "project_name_configuration",
+            "dashboard_url_display"
+          ],
+          "location": "st.sidebar.expander('🔍 Observability (Dev)')"
+        }
+      },
+      "verification_commands": [
+        "streamlit run src/app.py --server.headless true & sleep 5 && curl -f http://localhost:8501 && echo '✅ App runs without observability'",
+        "uv pip install --group dev . && streamlit run src/app.py --server.headless true & sleep 5 && curl -f http://localhost:8501 && echo '✅ App runs with observability'"
+      ]
+    },
+    {
+      "change_id": 4,
+      "description": "Add observability settings to core configuration model",
+      "estimated_time_minutes": 30,
+      "files": [
+        "src/models/core.py"
+      ],
+      "prerequisites": [],
+      "risk": "LOW",
+      "settings_to_add": [
+        {
+          "default": false,
+          "description": "Enable Phoenix observability features",
+          "name": "enable_observability",
+          "type": "bool"
+        },
+        {
+          "default": "docmind-ai",
+          "description": "Project name for Phoenix tracing",
+          "name": "phoenix_project_name",
+          "type": "str"
+        },
+        {
+          "default": "http://127.0.0.1:6006/v1/traces",
+          "description": "Phoenix OTLP endpoint URL",
+          "name": "phoenix_endpoint",
+          "type": "str"
+        }
+      ],
+      "title": "Configuration Enhancement",
+      "type": "config-extension",
+      "verification_commands": [
+        "DOCMIND_ENABLE_OBSERVABILITY=true python -c \"from src.models.core import settings; print(f'✅ Config loaded: {settings.enable_observability}')\""
+      ]
+    },
+    {
+      "change_id": 5,
+      "description": "Comprehensive test suite for conditional observability patterns",
+      "estimated_time_minutes": 90,
+      "files": [
+        "tests/unit/test_observability.py"
+      ],
+      "prerequisites": [
+        2
+      ],
+      "risk": "LOW",
+      "test_classes": [
+        {
+          "description": "Test graceful degradation and availability detection",
+          "name": "TestConditionalObservability",
+          "test_methods": [
+            "test_observability_availability_detection",
+            "test_graceful_degradation_without_dependencies",
+            "test_setup_with_dependencies_available",
+            "test_context_manager_pattern"
+          ]
+        },
+        {
+          "description": "Integration tests when dependencies available",
+          "name": "TestObservabilityIntegration",
+          "skip_condition": "not OBSERVABILITY_AVAILABLE",
+          "test_methods": [
+            "test_phoenix_integration_when_available"
+          ]
+        }
+      ],
+      "test_scenarios": [
+        "availability_detection_accuracy",
+        "graceful_degradation_without_deps",
+        "successful_setup_with_deps",
+        "context_manager_lifecycle",
+        "resource_cleanup_handling"
+      ],
+      "title": "Unit Tests for Conditional Imports",
+      "type": "new-test",
+      "verification_commands": [
+        "pytest tests/unit/test_observability.py::TestConditionalObservability -v",
+        "uv pip install --group dev . && pytest tests/unit/test_observability.py -v"
+      ]
+    },
+    {
+      "change_id": 6,
+      "ci_jobs": [
+        {
+          "description": "Test production scenario without observability dependencies",
+          "install_command": "uv pip install .",
+          "name": "test-without-observability",
+          "test_commands": [
+            "pytest tests/unit/test_observability.py::TestConditionalObservability -v",
+            "python -c \"from src.utils.observability import is_observability_available; assert not is_observability_available()\""
+          ]
+        },
+        {
+          "description": "Test development scenario with observability dependencies",
+          "install_command": "uv pip install --group dev .",
+          "name": "test-with-observability",
+          "test_commands": [
+            "pytest tests/unit/test_observability.py -v",
+            "python -c \"from src.utils.observability import is_observability_available; assert is_observability_available()\""
+          ]
+        }
+      ],
+      "description": "Add test matrix for both dependency scenarios",
+      "estimated_time_minutes": 45,
+      "files": [
+        ".github/workflows/test.yml"
+      ],
+      "prerequisites": [
+        5
+      ],
+      "risk": "LOW",
+      "title": "CI/CD Test Matrix Enhancement",
+      "type": "ci-enhancement",
+      "verification_commands": [
+        "uv pip install . && pytest tests/unit/test_observability.py::TestConditionalObservability",
+        "uv pip install --group dev . && pytest tests/unit/test_observability.py"
+      ]
+    }
+  ],
+  "current_state_analysis": {
+    "current_issues": [
+      "Direct Phoenix import at module level prevents conditional loading",
+      "Basic integration using outdated global handler pattern",
+      "No graceful degradation when dependencies missing",
+      "35+ extra packages for development-only feature"
+    ],
+    "dependencies_to_move": [
+      {
+        "current_version": "11.13.2",
+        "name": "arize-phoenix",
+        "new_constraint": ">=11.13.0",
+        "transitive_packages": 30
+      },
+      {
+        "current_version": "4.3.2",
+        "name": "openinference-instrumentation-llama-index",
+        "new_constraint": ">=4.3.0",
+        "transitive_packages": 5
+      }
+    ],
+    "files_affected": [
+      "pyproject.toml",
+      "src/app.py",
+      "src/models/core.py"
+    ]
+  },
+  "documentation_updates": {
+    "files_to_update": [
+      {
+        "file": "README.md",
+        "sections": [
+          "installation_matrix",
+          "observability_features_overview",
+          "development_setup_instructions"
+        ]
+      },
+      {
+        "file": "docs/developers/setup.md",
+        "sections": [
+          "dependency_group_installation",
+          "observability_configuration_guide",
+          "troubleshooting_missing_dependencies"
+        ]
+      }
+    ],
+    "new_content": [
+      "optional_dependency_installation_guide",
+      "observability_configuration_reference",
+      "phoenix_dashboard_usage_instructions",
+      "performance_optimization_tips"
+    ]
+  },
+  "future_roadmap": {
+    "long_term_6_plus_months": [
+      "custom_observability_solutions_for_production",
+      "integration_with_external_monitoring_platforms",
+      "automated_observability_testing_and_benchmarking"
+    ],
+    "medium_term_2_3_months": [
+      "evaluate_pep_735_dependency_groups_migration",
+      "consider_lightweight_observability_alternatives_for_production",
+      "enhance_phoenix_integration_with_advanced_features"
+    ],
+    "short_term_next_sprint": [
+      "monitor_adoption_of_new_installation_patterns",
+      "collect_developer_feedback_on_observability_ui",
+      "performance_benchmarking_in_real_world_usage"
+    ]
+  },
+  "implementation_timeline": {
+    "total_estimated_hours": 10,
+    "total_estimated_minutes": 600,
+    "week_1": {
+      "day_5": [
+        {
+          "activity": "final_validation_and_pr_preparation",
+          "duration_minutes": 60
+        }
+      ],
+      "days_1_2": [
+        {
+          "change_id": 1,
+          "duration_minutes": 30
+        },
+        {
+          "change_id": 2,
+          "duration_minutes": 120
+        },
+        {
+          "change_id": 3,
+          "duration_minutes": 90
+        },
+        {
+          "change_id": 4,
+          "duration_minutes": 30
+        }
+      ],
+      "days_3_4": [
+        {
+          "change_id": 5,
+          "duration_minutes": 90
+        },
+        {
+          "change_id": 6,
+          "duration_minutes": 45
+        },
+        {
+          "activity": "documentation_updates",
+          "duration_minutes": 60
+        },
+        {
+          "activity": "integration_testing",
+          "duration_minutes": 60
+        }
+      ]
+    }
+  },
+  "installation_workflows": {
+    "development": {
+      "benefits": [
+        "phoenix_observability_features",
+        "llamaindex_instrumentation",
+        "development_debugging_tools",
+        "performance_monitoring"
+      ],
+      "command": "uv pip install --group dev docmind-ai-llm",
+      "name": "Development Installation (With Observability)",
+      "package_count": "~345 packages (full feature set)"
+    },
+    "observability_only": {
+      "command": "uv pip install arize-phoenix>=11.13.0 openinference-instrumentation-llama-index>=4.3.0",
+      "name": "Add Observability to Existing Install",
+      "use_case": "selective_feature_addition"
+    },
+    "production": {
+      "benefits": [
+        "faster_installation",
+        "smaller_container_images",
+        "reduced_security_surface_area",
+        "minimal_resource_usage"
+      ],
+      "command": "uv pip install docmind-ai-llm",
+      "name": "Production Installation (No Observability)",
+      "package_count": "~310 packages (down from 345)"
+    }
+  },
+  "integration_plan": {
+    "breaking_changes": "ZERO",
+    "cluster_name": "observability_dev",
+    "date_created": "2025-08-12",
+    "estimated_duration": "8-10 hours",
+    "implementation_weeks": 1,
+    "integration_engineer": "@lib-integration-observability_dev",
+    "plan_version": "2.0",
+    "risk_level": "LOW"
+  },
+  "objectives": {
+    "primary": [
+      "Move 2 observability libraries to dev dependency group",
+      "Reduce main dependencies by ~35 packages (10.1% reduction)",
+      "Implement conditional import patterns with graceful degradation",
+      "Maintain zero breaking changes to existing functionality",
+      "Create PR-sized atomic changes for safe deployment"
+    ],
+    "secondary": [
+      "Enhance developer experience with clear installation instructions",
+      "Improve application startup performance when observability disabled",
+      "Establish foundation for future observability enhancements"
+    ]
+  },
+  "risk_assessment": {
+    "operational_risks": [
+      {
+        "impact": "low",
+        "mitigation": "clear_documentation_and_error_messages",
+        "probability": "medium",
+        "risk": "developer_confusion"
+      },
+      {
+        "impact": "medium",
+        "mitigation": "phased_rollout_with_rollback_plan",
+        "probability": "low",
+        "risk": "deployment_issues"
+      }
+    ],
+    "rollback_plan": {
+      "data_loss_risk": "none",
+      "emergency_procedure": "git checkout HEAD~1 pyproject.toml && uv pip install .",
+      "recovery_time": "< 5 minutes"
+    },
+    "technical_risks": [
+      {
+        "impact": "medium",
+        "mitigation": "comprehensive_conditional_import_testing",
+        "probability": "low",
+        "risk": "import_failures"
+      },
+      {
+        "impact": "medium",
+        "mitigation": "before_after_benchmarking",
+        "probability": "low",
+        "risk": "performance_regression"
+      },
+      {
+        "impact": "low",
+        "mitigation": "test_matrix_covers_both_scenarios",
+        "probability": "low",
+        "risk": "ci_cd_pipeline_failures"
+      }
+    ]
+  },
+  "success_metrics": {
+    "qualitative": {
+      "developer_experience": [
+        "clear_installation_instructions",
+        "helpful_error_messages_when_deps_missing",
+        "intuitive_ui_integration",
+        "comprehensive_troubleshooting_docs"
+      ],
+      "flexibility": [
+        "production_and_development_scenarios_supported",
+        "graceful_degradation_when_deps_missing",
+        "configurable_observability_settings"
+      ],
+      "maintainability": [
+        "clean_separation_of_concerns",
+        "conditional_import_patterns",
+        "proper_resource_management",
+        "comprehensive_test_coverage"
+      ]
+    },
+    "quantitative": {
+      "compatibility": {
+        "backward_compatibility": "100%",
+        "breaking_changes": 0
+      },
+      "dependency_reduction": {
+        "measurement": "package_count_comparison",
+        "packages_removed": 35,
+        "percentage_reduction": "10.1%"
+      },
+      "performance_improvements": {
+        "install_time_improvement": "15-20%",
+        "memory_usage_reduction": "50MB when observability disabled",
+        "startup_time_improvement": "200ms when observability disabled"
+      }
+    }
+  },
+  "validation_matrix": {
+    "post_migration_checks": [
+      {
+        "check": "app_starts_without_dev_dependencies",
+        "commands": [
+          "uv pip install .",
+          "streamlit run src/app.py --server.headless true & sleep 5 && curl -f http://localhost:8501"
+        ],
+        "expected_result": "success"
+      },
+      {
+        "check": "warning_shown_when_observability_missing",
+        "expected_result": "warning displayed with installation instructions",
+        "method": "ui_inspection"
+      },
+      {
+        "check": "phoenix_works_with_dev_dependencies",
+        "commands": [
+          "uv pip install --group dev .",
+          "python -c \"from src.utils.observability import setup_observability; obs = setup_observability(enabled=True); print('success')\""
+        ],
+        "expected_result": "success"
+      },
+      {
+        "check": "zero_breaking_changes",
+        "expected_result": "all_existing_features_preserved",
+        "method": "functionality_comparison"
+      },
+      {
+        "check": "tests_pass_both_scenarios",
+        "commands": [
+          "uv pip install . && pytest tests/unit/test_observability.py::TestConditionalObservability -v",
+          "uv pip install --group dev . && pytest tests/unit/test_observability.py -v"
+        ],
+        "expected_result": "all_tests_pass"
+      },
+      {
+        "check": "performance_improvements_verified",
+        "method": "benchmarking",
+        "metrics": [
+          "startup_time_improvement_200ms_when_disabled",
+          "memory_usage_reduction_50mb_when_disabled",
+          "install_time_improvement_15_20_percent"
+        ]
+      }
+    ],
+    "pre_migration_checks": [
+      {
+        "check": "current_app_runs_with_phoenix_enabled",
+        "command": "streamlit run src/app.py & sleep 5 && curl -f http://localhost:8501",
+        "expected_result": "success"
+      },
+      {
+        "check": "observability_checkbox_functionality",
+        "expected_result": "checkbox toggles phoenix correctly",
+        "method": "manual_ui_testing"
+      },
+      {
+        "check": "all_tests_pass_with_current_dependencies",
+        "command": "pytest tests/ -v",
+        "expected_result": "all_tests_pass"
+      }
+    ]
+  }
+}

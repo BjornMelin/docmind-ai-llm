@@ -1,0 +1,38 @@
+[MASTER]
+py-version=3.12
+suggestion-mode=yes
+jobs=0
+
+[MESSAGES CONTROL]
+disable=
+    too-few-public-methods,
+    too-many-instance-attributes,
+    too-many-arguments,
+    too-many-locals,
+    import-outside-toplevel,
+    fixme
+
+[FORMAT]
+max-line-length=100
+indent-string='    '
+
+[BASIC]
+good-names=i,j,k,ex,Run,_,df,id,kg,llm,qa
+
+[DESIGN]
+max-args=10
+max-attributes=20
+max-bool-expr=5
+max-branches=15
+max-locals=20
+max-parents=7
+max-public-methods=30
+max-returns=6
+max-statements=50
+min-public-methods=1
+
+[IMPORTS]
+known-third-party=llama_index,fastembed,qdrant_client,torch,streamlit,pydantic
+
+[TYPECHECK]
+generated-members=torch.*,st.*

@@ -1,43 +1,77 @@
 [project]
-name = "docmind-ai"
+name = "docmind_ai_llm"
 version = "0.1.0"
 description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
-license = { file = "LICENSE" }
+license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10,<3.13"
+keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
-    "streamlit>=1.47.0",
-    "langchain>=0.3.26",
-    "langchain-community==0.3.27",
-    "langchain-openai>=0.3.28",
-    "ollama>=0.5.0",
-    "llama-cpp-python>=0.3.14",
+    "streamlit==1.48.0",
+    "ollama==0.5.1",
+    "llama-cpp-python>=0.2.32,<0.3.0",
     "pydantic==2.11.7",
-    "pydantic-settings>=2.10.1",
-    "pymupdf>=1.26.0",
-    "python-docx>=1.2.0",
-    "polars>=1.31.0",
-    "extract-msg>=0.54.0",
-    "python-dotenv>=1.1.1",
-    "ruff>=0.12.4",
-    "qdrant-client==1.15.0",
-    "langchain-qdrant>=0.2.0",
-    "sentence-transformers==5.0.0",
+    "pydantic-settings==2.10.1",
+    "pymupdf==1.26.3",
+    "python-docx==1.2.0",
+    "polars==1.31.0",
+    "python-dotenv==1.1.1",
+    "qdrant-client==1.15.1",
     "tiktoken==0.9.0",
-    "transformers==4.53.3",
+    "transformers==4.54.1",
     "torch==2.7.1",
-    "peft==0.16.0",
-    "torchvision==0.19.0",
-    "pillow==11.3.0",
-    "nltk==3.9.1",
+    "torchvision==0.22.1",
+    "pillow~=10.4.0",
     "spacy==3.8.7",
-    "fastembed==0.7.1",
+    "llama-index-core>=0.10.0,<0.12.0",
+    "llama-index-vector-stores-qdrant",
+    "langgraph==0.5.4",
+    "moviepy==2.2.1",
+    "openai>=1.98.0,<2.0.0",
+    "openai-whisper==20250625",
+    "numba==0.61.2",
+    "openinference-instrumentation-llama-index==4.3.2",
+    "arize-phoenix==11.13.2",
+    "llama-index-llms-openai",
+    "llama-index-llms-ollama",
+    "llama-index-llms-llama-cpp",
+    "llama-index-embeddings-openai",
+    "llama-index-embeddings-huggingface",
+    "llama-index-embeddings-jinaai",
+    "llama-index-embeddings-fastembed",
+    "llama-index-postprocessor-colbert-rerank",
+    "llama-index-agent-openai",
+    "llama-index-program-openai",
+    "llama-index-readers-file",
+    "llama-index-multi-modal-llms-openai",
+    "llama-index-question-gen-openai",
+    "unstructured[all-docs]>=0.18.11",
+    "diskcache==5.6.3",
+    "tenacity>=8.0.0",
+    "loguru>=0.7.0",
+    "pyarrow<21.0.0",
+    "fastembed>=0.3.0",
 ]
 
 [project.optional-dependencies]
 test = ["pytest==8.3.1"]
-gpu = ["fastembed-gpu==0.7.1"]
+gpu = ["fastembed-gpu==0.7.1", "llama-cpp-python[cuda]"]
+
+# Note: spaCy models are not PyPI packages and must be installed separately:
+# uv run python -m spacy download en_core_web_sm
+
+[project.urls]
+Repository = "https://github.com/BjornMelin/docmind-ai"
 
 [tool.ruff]
 line-length = 88
@@ -46,15 +80,17 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
 ignore = [
-    # Docstring formatting conflicts (Google style)
     "D203",  # 1 blank line required before class docstring (conflicts with D211)
     "D213",  # Multi-line docstring summary should start at the second line (conflicts with Google style)
-    
-    # Security - reasonable exceptions for local development tools
     "S301",  # pickle usage (acceptable for local session persistence)
     "S603",  # subprocess call (acceptable for hardware detection)
     "S607",  # partial executable path (acceptable for well-known system commands)
     "S108",  # hardcoded temp file path (will be replaced with tempfile)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",  # assert usage (standard practice in pytest tests)
 ]
 
 [tool.ruff.lint.isort]
@@ -62,3 +98,38 @@ known-first-party = ["docmind_ai"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "-ra",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "performance: marks tests as performance tests",
+    "requires_gpu: marks tests that require GPU",
+    "requires_network: marks tests that require network access",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[dependency-groups]
+dev = [
+    "ruff==0.12.8",
+    "pytest-cov>=6.0.0",
+    "hypothesis>=6.137.1",
+    "pytest>=8.3.1",
+    "pytest-asyncio>=0.23.0",
+    "pytest-benchmark>=4.0.0",
+]
+gpu = [
+    "fastembed-gpu>=0.7.0",
+    "llama-cpp-python[cuda]>=0.2.32,<0.3.0",
+]
