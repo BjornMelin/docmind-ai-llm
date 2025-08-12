@@ -83,10 +83,7 @@ def get_main_python_files() -> list[Path]:
     if src_dir.exists():
         python_files.extend(src_dir.rglob("*.py"))
 
-    # Get files from utils/ directory
-    utils_dir = PROJECT_ROOT / "utils"
-    if utils_dir.exists():
-        python_files.extend(utils_dir.rglob("*.py"))
+    # No separate utils/ directory - all utilities are in src/utils
 
     return python_files
 

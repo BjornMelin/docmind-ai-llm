@@ -71,8 +71,7 @@ dependencies = [
     "llama-index-multi-modal-llms-openai",
     "llama-index-question-gen-openai",
     
-    # Agent framework
-    "langgraph==0.5.4",
+    # Agent framework (using pure LlamaIndex ReActAgent)
 ]
 
 [project.optional-dependencies]
@@ -116,6 +115,7 @@ convention = "google"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = [
@@ -123,6 +123,7 @@ addopts = [
     "--strict-config",
     "--tb=short",
     "-ra",
+    "--import-mode=importlib",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

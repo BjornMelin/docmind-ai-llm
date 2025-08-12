@@ -43,7 +43,7 @@ def detect_hardware() -> dict[str, Any]:
             vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
-    except Exception as e:
+    except (RuntimeError, OSError, AttributeError) as e:
         logger.warning(f"Hardware detection failed: {e}")
 
     return hardware_info

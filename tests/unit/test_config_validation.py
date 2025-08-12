@@ -5,17 +5,13 @@ RRF weight validation, embedding dimension validation, model compatibility
 checks, and startup configuration validation.
 """
 
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
 
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from models import AppSettings
-from utils.utils import validate_startup_configuration
+from src.models.core import Settings
+from src.utils.core import validate_startup_configuration
 
 
 class TestRRFWeightValidation:
@@ -23,16 +19,14 @@ class TestRRFWeightValidation:
 
     def test_rrf_weights_sum_validation_success(self):
         """Test RRF weights that correctly sum to 1.0."""
-        settings = AppSettings(
-            rrf_fusion_weight_dense=0.7, rrf_fusion_weight_sparse=0.3
-        )
+        settings = Settings(rrf_fusion_weight_dense=0.7, rrf_fusion_weight_sparse=0.3)
         assert settings.rrf_fusion_weight_dense == 0.7
         assert settings.rrf_fusion_weight_sparse == 0.3
 
     def test_rrf_weights_sum_validation_failure(self):
         """Test RRF weights must sum to 1.0."""
         with pytest.raises(ValidationError, match="RRF weights must sum to 1.0"):
-            AppSettings(
+            Settings(
                 rrf_fusion_weight_dense=0.6,
                 rrf_fusion_weight_sparse=0.3,  # Sum = 0.9, not 1.0
             )
@@ -40,7 +34,7 @@ class TestRRFWeightValidation:
     def test_rrf_weights_sum_validation_edge_case(self):
         """Test RRF weights with floating point precision."""
         with pytest.raises(ValidationError, match="RRF weights must sum to 1.0"):
-            AppSettings(
+            Settings(
                 rrf_fusion_weight_dense=0.7001,  # Sum = 1.0001, outside tolerance
                 rrf_fusion_weight_sparse=0.3,
             )
@@ -48,13 +42,13 @@ class TestRRFWeightValidation:
     def test_rrf_weights_range_validation_dense(self):
         """Test RRF dense weight must be in [0, 1] range."""
         with pytest.raises(ValidationError, match="RRF weight must be between 0 and 1"):
-            AppSettings(
+            Settings(
                 rrf_fusion_weight_dense=1.5,  # Invalid: > 1
                 rrf_fusion_weight_sparse=0.3,
             )
 
         with pytest.raises(ValidationError, match="RRF weight must be between 0 and 1"):
-            AppSettings(
+            Settings(
                 rrf_fusion_weight_dense=-0.1,  # Invalid: < 0
                 rrf_fusion_weight_sparse=0.3,
             )
@@ -62,13 +56,13 @@ class TestRRFWeightValidation:
     def test_rrf_weights_range_validation_sparse(self):
         """Test RRF sparse weight must be in [0, 1] range."""
         with pytest.raises(ValidationError, match="RRF weight must be between 0 and 1"):
-            AppSettings(
+            Settings(
                 rrf_fusion_weight_dense=0.7,
                 rrf_fusion_weight_sparse=1.2,  # Invalid: > 1
             )
 
         with pytest.raises(ValidationError, match="RRF weight must be between 0 and 1"):
-            AppSettings(
+            Settings(
                 rrf_fusion_weight_dense=0.7,
                 rrf_fusion_weight_sparse=-0.5,  # Invalid: < 0
             )
@@ -76,16 +70,12 @@ class TestRRFWeightValidation:
     def test_rrf_weights_boundary_values(self):
         """Test RRF weights at boundary values."""
         # Test boundary case: all weight on dense
-        settings = AppSettings(
-            rrf_fusion_weight_dense=1.0, rrf_fusion_weight_sparse=0.0
-        )
+        settings = Settings(rrf_fusion_weight_dense=1.0, rrf_fusion_weight_sparse=0.0)
         assert settings.rrf_fusion_weight_dense == 1.0
         assert settings.rrf_fusion_weight_sparse == 0.0
 
         # Test boundary case: all weight on sparse
-        settings = AppSettings(
-            rrf_fusion_weight_dense=0.0, rrf_fusion_weight_sparse=1.0
-        )
+        settings = Settings(rrf_fusion_weight_dense=0.0, rrf_fusion_weight_sparse=1.0)
         assert settings.rrf_fusion_weight_dense == 0.0
         assert settings.rrf_fusion_weight_sparse == 1.0
 
@@ -94,7 +84,7 @@ class TestRRFWeightValidation:
         valid_combinations = [(0.6, 0.4), (0.5, 0.5), (0.8, 0.2), (0.25, 0.75)]
 
         for dense, sparse in valid_combinations:
-            settings = AppSettings(
+            settings = Settings(
                 rrf_fusion_weight_dense=dense, rrf_fusion_weight_sparse=sparse
             )
             assert settings.rrf_fusion_weight_dense == dense
@@ -109,26 +99,26 @@ class TestEmbeddingDimensionValidation:
         with pytest.raises(
             ValidationError, match="Embedding dimension must be positive"
         ):
-            AppSettings(dense_embedding_dimension=-100)
+            Settings(dense_embedding_dimension=-100)
 
         with pytest.raises(
             ValidationError, match="Embedding dimension must be positive"
         ):
-            AppSettings(dense_embedding_dimension=0)
+            Settings(dense_embedding_dimension=0)
 
     def test_embedding_dimension_validation_reasonable_size(self):
         """Test embedding dimension must be reasonable size."""
         with pytest.raises(
             ValidationError, match="Embedding dimension seems too large"
         ):
-            AppSettings(dense_embedding_dimension=15000)  # > 10000
+            Settings(dense_embedding_dimension=15000)  # > 10000
 
     def test_embedding_dimension_validation_valid_sizes(self):
         """Test valid embedding dimension sizes."""
         valid_dimensions = [512, 768, 1024, 1536, 3072, 4096]
 
         for dim in valid_dimensions:
-            settings = AppSettings(dense_embedding_dimension=dim)
+            settings = Settings(dense_embedding_dimension=dim)
             assert settings.dense_embedding_dimension == dim
 
 
@@ -137,7 +127,7 @@ class TestModelCompatibilityValidation:
 
     def test_bge_large_dimension_validation_correct(self):
         """Test BGE-Large model with correct dimension."""
-        settings = AppSettings(
+        settings = Settings(
             dense_embedding_model="BAAI/bge-large-en-v1.5",
             dense_embedding_dimension=1024,
         )
@@ -149,25 +139,25 @@ class TestModelCompatibilityValidation:
         with pytest.raises(
             ValidationError, match="BGE-Large model requires 1024 dimensions"
         ):
-            AppSettings(
+            Settings(
                 dense_embedding_model="BAAI/bge-large-en-v1.5",
                 dense_embedding_dimension=768,  # Wrong dimension for BGE-Large
             )
 
     def test_splade_model_validation_correct(self):
         """Test SPLADE++ model with correct name."""
-        settings = AppSettings(sparse_embedding_model="prithivida/Splade_PP_en_v1")
+        settings = Settings(sparse_embedding_model="prithivida/Splade_PP_en_v1")
         assert settings.sparse_embedding_model == "prithivida/Splade_PP_en_v1"
 
     def test_splade_model_validation_incorrect(self):
         """Test SPLADE++ model with incorrect name."""
         with pytest.raises(ValidationError, match="Invalid SPLADE\\+\\+ model name"):
-            AppSettings(sparse_embedding_model="wrong/splade-model")
+            Settings(sparse_embedding_model="wrong/splade-model")
 
     def test_splade_model_validation_none(self):
         """Test SPLADE++ model validation with None value."""
         # Should not validate when model is None or empty
-        settings = AppSettings(sparse_embedding_model=None)
+        settings = Settings(sparse_embedding_model=None)
         assert settings.sparse_embedding_model is None
 
 
@@ -176,27 +166,27 @@ class TestChunkConfigurationValidation:
 
     def test_chunk_size_overlap_validation_valid(self):
         """Test valid chunk size and overlap configuration."""
-        settings = AppSettings(chunk_size=1024, chunk_overlap=200)
+        settings = Settings(chunk_size=1024, chunk_overlap=200)
         assert settings.chunk_size == 1024
         assert settings.chunk_overlap == 200
 
     def test_chunk_size_overlap_validation_invalid(self):
         """Test chunk size must be larger than overlap."""
         with pytest.raises(ValidationError, match="Chunk size .* must be larger"):
-            AppSettings(
+            Settings(
                 chunk_size=500,
                 chunk_overlap=600,  # Overlap > chunk_size
             )
 
         with pytest.raises(ValidationError, match="Chunk size .* must be larger"):
-            AppSettings(
+            Settings(
                 chunk_size=1000,
                 chunk_overlap=1000,  # Overlap == chunk_size
             )
 
     def test_chunk_size_overlap_boundary(self):
         """Test boundary case where chunk_size is just larger than overlap."""
-        settings = AppSettings(
+        settings = Settings(
             chunk_size=501,
             chunk_overlap=500,  # Just valid
         )
@@ -215,7 +205,7 @@ class TestStartupConfigurationValidation:
         mock_qdrant_client.return_value = mock_client
         mock_client.get_collections.return_value = []
 
-        settings = AppSettings()
+        settings = Settings()
         result = validate_startup_configuration(settings)
 
         assert result["valid"] is True
@@ -228,7 +218,7 @@ class TestStartupConfigurationValidation:
         # Mock Qdrant connection failure
         mock_qdrant_client.side_effect = Exception("Connection failed")
 
-        settings = AppSettings()
+        settings = Settings()
 
         with pytest.raises(RuntimeError, match="Critical configuration errors"):
             validate_startup_configuration(settings)
@@ -247,7 +237,7 @@ class TestStartupConfigurationValidation:
         # Mock no GPU available
         mock_cuda_available.return_value = False
 
-        settings = AppSettings(gpu_acceleration=True)
+        settings = Settings(gpu_acceleration=True)
         result = validate_startup_configuration(settings)
 
         assert result["valid"] is True
@@ -264,7 +254,7 @@ class TestStartupConfigurationValidation:
         mock_qdrant_client.return_value = mock_client
         mock_client.get_collections.return_value = []
 
-        settings = AppSettings(
+        settings = Settings(
             dense_embedding_model="BAAI/bge-large-en-v1.5",
             dense_embedding_dimension=768,  # Wrong dimension triggers warning
         )
@@ -282,7 +272,7 @@ class TestStartupConfigurationValidation:
         mock_qdrant_client.return_value = mock_client
         mock_client.get_collections.return_value = []
 
-        settings = AppSettings(
+        settings = Settings(
             enable_sparse_embeddings=True,
             rrf_fusion_alpha=5,  # Outside typical range
         )
@@ -301,7 +291,7 @@ class TestValidationIntegration:
     def test_multiple_validation_errors(self):
         """Test that multiple validation errors are caught."""
         with pytest.raises(ValidationError) as exc_info:
-            AppSettings(
+            Settings(
                 rrf_fusion_weight_dense=0.6,  # Wrong sum
                 rrf_fusion_weight_sparse=0.5,  # Wrong sum
                 dense_embedding_dimension=-1,  # Invalid dimension
@@ -315,7 +305,7 @@ class TestValidationIntegration:
 
     def test_default_configuration_valid(self):
         """Test that default configuration passes all validations."""
-        settings = AppSettings()
+        settings = Settings()
 
         # Should not raise any validation errors
         assert settings.rrf_fusion_weight_dense == 0.7
@@ -338,7 +328,7 @@ class TestValidationIntegration:
             ),
             pytest.raises(ValidationError, match="RRF weights must sum to 1.0"),
         ):
-            AppSettings()
+            Settings()
 
     @patch("qdrant_client.QdrantClient")
     def test_full_startup_validation_integration(self, mock_qdrant_client):
@@ -349,7 +339,7 @@ class TestValidationIntegration:
         mock_client.get_collections.return_value = []
 
         # Create valid configuration
-        settings = AppSettings(
+        settings = Settings(
             rrf_fusion_weight_dense=0.6,
             rrf_fusion_weight_sparse=0.4,
             dense_embedding_dimension=1024,

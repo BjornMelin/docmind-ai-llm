@@ -6,7 +6,7 @@ High-Level Architecture for DocMind AI
 
 ## Version/Date
 
-3.0 / July 25, 2025
+4.0 / August 12, 2025
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Context
 
-DocMind AI is a local, offline RAG application for document analysis, emphasizing high-performance retrieval, multimodal support, agentic workflows, and efficiency without API keys or internet. The architecture uses LlamaIndex for RAG pipelines, Unstructured for parsing, LangGraph for agents. Local multi-process supported via SQLite WAL/diskcache locks (no distributed scaling for MVP—reassess later if needed). Key needs: hybrid search (dense/sparse), KG for relations, multimodal (text/images/tables), multi-agent coordination, and caching/persistence for sessions.
+DocMind AI is a local, offline RAG application for document analysis, emphasizing high-performance retrieval, multimodal support, agentic workflows, and efficiency without API keys or internet. The architecture uses pure LlamaIndex for RAG pipelines and single ReAct agent implementation, Unstructured for parsing. Local multi-process supported via SQLite WAL/diskcache locks (no distributed scaling for MVP—reassess later if needed). Key needs: hybrid search (dense/sparse), KG for relations, multimodal (text/images/tables), single intelligent agent with reasoning capabilities, and caching/persistence for sessions.
 
 ## Related Requirements
 
@@ -24,7 +24,7 @@ DocMind AI is a local, offline RAG application for document analysis, emphasizin
 
 - Multimodal parsing (PDFs with images/tables via Unstructured).
 
-- Agentic RAG with LangGraph supervisor (handoffs, human-in-loop).
+- Agentic RAG with single LlamaIndex ReActAgent (reasoning, tool selection, query decomposition).
 
 - Efficient chunking (1024/200 overlap via SentenceSplitter).
 
@@ -38,23 +38,27 @@ DocMind AI is a local, offline RAG application for document analysis, emphasizin
 
 - LangChain: Heavier, less offline (deprecated).
 
+- LangGraph Multi-Agent: Over-engineered for document Q&A (deprecated for complexity).
+
 - Custom: High maintenance.
 
 - Distributed with Redis: Overengineering for local/single-user (optional later).
 
 ## Decision
 
-LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModalVectorStoreIndex/Jina v4, KGIndex/spaCy, QueryPipeline multi-stage). LangGraph for agents (supervisor/create_react_agent with local Ollama, checkpointer=MemorySaver, interrupts/human-in-loop, handoffs/Send API). Unstructured for parsing (hi_res). SentenceSplitter in IngestionPipeline for chunking. SQLite/diskcache for persistence (StorageContext).
+LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModalVectorStoreIndex/Jina v4, KGIndex/spaCy, QueryPipeline multi-stage). Single ReActAgent.from_tools() for intelligent query processing with local Ollama, ChatMemoryBuffer for session persistence. Unstructured for parsing (hi_res). SentenceSplitter in IngestionPipeline for chunking. SQLite/diskcache for persistence (StorageContext).
 
 ## Related Decisions
 
 - ADR-015 (LlamaIndex migration).
 
-- ADR-011 (LangGraph agents).
+- ADR-011 (Single ReAct agent architecture).
 
 - ADR-016 (Multimodal Jina v4/Unstructured).
 
 - ADR-008 (Persistence with SQLite/diskcache).
+
+- ADR-020 (LlamaIndex native Settings for configuration management).
 
 ## Design
 
@@ -64,7 +68,7 @@ LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModal
 
 - **Querying**: QueryPipeline(chain=[retriever, ColbertRerank, synthesizer], async_mode=True, parallel=True).
 
-- **Agents**: LangGraph StateGraph with supervisor (routing via analyze_query_complexity), create_react_agent workers (local Ollama LLM/LlamaIndex tools), checkpointer=MemorySaver for persistence, interrupts for human-in-loop, handoffs via Send API.
+- **Agent**: Single ReActAgent.from_tools() with QueryEngineTool from indices, ChatMemoryBuffer(token_limit=8192) for session persistence, system_prompt for reasoning guidance, max_iterations=3 for controlled execution. Tools dynamically created from VectorStoreIndex query engines.
 
 - **Caching/Persistence**: StorageContext with SQLite backend (kv_store=SimpleKVStore.from_sqlite(AppSettings.cache_db_path)); Wrap embeds with diskcache.
 
@@ -81,14 +85,14 @@ graph TD
     C --> D["Chunk/Extract<br/>IngestionPipeline: SentenceSplitter<br/>chunk_size/overlap + MetadataExtractor → nodes"]
     D --> E["Index/Embed<br/>HybridFusionRetriever dense/sparse<br/>MultiModalVectorStoreIndex Jina v4 512D<br/>KGIndex spaCy"]
     E --> F["Query<br/>QueryPipeline: chain=retriever<br/>ColbertRerank, synthesizer<br/>async/parallel"]
-    F --> G["Agents<br/>LangGraph supervisor/create_react_agent<br/>local Ollama LLM/tools<br/>checkpointer=MemorySaver<br/>interrupts/human-in-loop<br/>handoffs/Send API"]
+    F --> G["Agent<br/>ReActAgent.from_tools()<br/>QueryEngineTool from indices<br/>ChatMemoryBuffer persistence<br/>local Ollama LLM<br/>reasoning + tool selection"]
     G --> A
     H["SQLite/Diskcache<br/>StorageContext for stores<br/>@memoize for embeds<br/>WAL/locks for local multi-process"] <--> E
     H <--> F
     H <--> G
 ```
 
-- **Implementation Notes**: If heavy load, use multiprocessing.Pool(map=embed, chunks)—SQLite WAL enables concurrent writes. No Redis (overengineering—local sufficient).
+- **Implementation Notes**: Single agent factory (77 lines) creates ReActAgent with all necessary tools. If heavy load, use multiprocessing.Pool(map=embed, chunks)—SQLite WAL enables concurrent writes. No Redis (overengineering—local sufficient).
 
 - **Testing**: tests/test_performance_integration.py: def test_local_multi_process(): with multiprocessing.Pool(): results = pool.map(query, queries); assert no locks/errors; latency < threshold.
 
@@ -105,6 +109,8 @@ graph TD
 - Future: Expand Pool usage if benchmarks show gains.
 
 **Changelog:**  
+
+- 4.0 (August 12, 2025): Replaced LangGraph multi-agent supervisor with single LlamaIndex ReActAgent. Updated architecture diagram to reflect simplified agent system. 85% code reduction while preserving all agentic capabilities. Pure LlamaIndex ecosystem alignment (~17 fewer dependencies).
 
 - 3.0 (July 25, 2025): Removed distributed_mode/Redis (overengineering); Emphasized local multi-process with SQLite WAL/diskcache locks; Enhanced integrations/diagram/testing for dev.
 

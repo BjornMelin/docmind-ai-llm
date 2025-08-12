@@ -33,11 +33,11 @@ class TestAppStartup:
 
         try:
             # Test basic import
-            import app
+            import src.app
 
-            assert app is not None
+            assert src.app is not None
             # Test that key components are accessible
-            assert hasattr(app, "settings")
+            assert hasattr(src.app, "settings")
 
         except ImportError as e:
             # Skip if missing dependencies rather than failing
@@ -54,7 +54,7 @@ class TestAppStartup:
             sys.path.insert(0, src_path)
 
         try:
-            from models.core import settings
+            from src.models.core import settings
 
             # Test that settings object exists and has expected attributes
             assert settings is not None
@@ -88,10 +88,10 @@ class TestAppStartup:
             sys.path.insert(0, src_path)
 
         components_to_test = [
-            ("agents.agent_factory", "get_agent_system"),
-            ("utils.document", "load_documents_llama"),
-            ("utils.embedding", "create_index_async"),
-            ("utils.core", "detect_hardware"),
+            ("src.agents.agent_factory", "get_agent_system"),
+            ("src.utils.document", "load_documents_llama"),
+            ("src.utils.embedding", "create_index_async"),
+            ("src.utils.core", "detect_hardware"),
         ]
 
         failed_components = []
@@ -162,11 +162,11 @@ class TestStreamlitUIComponents:
             mock_session_state.__contains__ = MagicMock(return_value=False)
 
             # Import the app module
-            import app
+            import src.app
 
             # Verify that key functions exist
             # (Note: We can't actually run the Streamlit app, just test imports)
-            assert hasattr(app, "settings")
+            assert hasattr(src.app, "settings")
 
         except ImportError as e:
             pytest.skip(f"App UI initialization failed (missing deps): {e}")
@@ -186,7 +186,7 @@ class TestAsyncFunctionality:
             sys.path.insert(0, src_path)
 
         try:
-            from utils.embedding import create_index_async
+            from src.utils.embedding import create_index_async
 
             # Verify async function (might fail due to missing data)
             assert asyncio.iscoroutinefunction(create_index_async)
@@ -204,7 +204,7 @@ class TestAsyncFunctionality:
             sys.path.insert(0, src_path)
 
         try:
-            from agents.agent_factory import process_query_with_agent_system
+            from src.agents.agent_factory import process_query_with_agent_system
 
             # Test that agent function exists and is callable
             assert callable(process_query_with_agent_system)
@@ -229,7 +229,7 @@ class TestGracefulDegradation:
             sys.path.insert(0, src_path)
 
         try:
-            from utils.core import detect_hardware
+            from src.utils.core import detect_hardware
 
             # Should not raise exceptions, even if some hardware detection fails
             try:
@@ -253,7 +253,7 @@ class TestGracefulDegradation:
             sys.path.insert(0, src_path)
 
         try:
-            from utils.core import validate_startup_configuration
+            from src.utils.core import validate_startup_configuration
 
             # Should not raise exceptions due to missing optional packages
             try:
@@ -277,27 +277,27 @@ class TestGracefulDegradation:
             sys.path.insert(0, src_path)
 
         try:
-            # Test that embedding factories can handle missing providers
-            from utils.embedding_factory import EmbeddingFactory
+            # Test that embedding utilities can handle missing providers gracefully
+            from src.utils.embedding import get_embed_model, get_embedding_info
 
-            factory = EmbeddingFactory()
-            assert factory is not None
-
-            # Test that it can report available providers without crashing
+            # Test that embedding model creation has proper fallback
             try:
-                if hasattr(factory, "list_available_providers"):
-                    providers = factory.list_available_providers()
-                    print(f"Available embedding providers: {providers}")
-                elif hasattr(factory, "get_available_providers"):
-                    providers = factory.get_available_providers()
-                    print(f"Available embedding providers: {providers}")
-                else:
-                    print("Embedding factory exists but provider listing not available")
+                model = get_embed_model()
+                assert model is not None
+                print("Embedding model creation successful")
+
+                # Test embedding info gathering
+                embedding_info = get_embedding_info()
+                assert isinstance(embedding_info, dict)
+                print(f"Embedding info available: {list(embedding_info.keys())}")
+
             except Exception as e:
-                print(f"Provider listing failed gracefully: {e}")
+                print(f"Embedding operations failed gracefully: {e}")
+                # In test environment, this might fail due to missing models
+                # but should not crash the app
 
         except ImportError as e:
-            pytest.skip(f"Embedding factory not available (missing deps): {e}")
+            pytest.skip(f"Embedding utilities not available: {e}")
         finally:
             if src_path in sys.path:
                 sys.path.remove(src_path)
@@ -313,7 +313,7 @@ class TestCoreIntegration:
             sys.path.insert(0, src_path)
 
         try:
-            from models.core import settings
+            from src.models.core import settings
 
             # Test that settings can be used
             assert settings is not None

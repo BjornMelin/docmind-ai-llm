@@ -8,7 +8,8 @@ valid configuration loading, data validation, and error handling.
 import pytest
 from pydantic import ValidationError
 
-from models import AnalysisOutput, AppSettings
+from src.models.core import AnalysisOutput
+from src.models.core import Settings as AppSettings
 
 
 class TestAnalysisOutputValidation:
@@ -130,7 +131,7 @@ class TestAppSettingsConfiguration:
 
         # Critical settings should have defaults
         assert settings.qdrant_url is not None
-        assert settings.default_model is not None
+        assert settings.llm_model is not None
         assert settings.chunk_size > 0
         assert settings.chunk_overlap >= 0
         assert settings.similarity_top_k > 0
@@ -193,14 +194,8 @@ class TestAppSettingsConfiguration:
         settings = AppSettings()
 
         # Should have sensible model defaults
-        assert settings.default_model is not None
-        assert len(settings.default_model) > 0
-
-        # Context size should be reasonable for modern LLMs
-        assert settings.context_size >= 4096  # Minimum for reasonable operation
-
-        # Temperature should be valid for LLM generation
-        assert 0.0 <= settings.temperature <= 2.0
+        assert settings.llm_model is not None
+        assert len(settings.llm_model) > 0
 
     def test_app_settings_embedding_configuration(self):
         """Embedding settings should support hybrid search capabilities."""
@@ -219,23 +214,14 @@ class TestAppSettingsConfiguration:
         settings = AppSettings()
 
         # GPU settings should be boolean
-        assert isinstance(settings.use_gpu, bool)
-
-        # Hardware detection should work
-        if hasattr(settings, "device"):
-            assert settings.device in ["cpu", "cuda", "mps"]
+        assert isinstance(settings.gpu_enabled, bool)
 
     def test_app_settings_debug_and_logging(self):
         """Debug and logging settings should be properly configured."""
         settings = AppSettings()
 
-        # Debug mode should be boolean
-        assert isinstance(settings.debug, bool)
-
-        # Log level should be valid
-        if hasattr(settings, "log_level"):
-            valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-            assert settings.log_level.upper() in valid_levels
+        # Cache should be boolean
+        assert isinstance(settings.cache_enabled, bool)
 
 
 class TestRealWorldConfigurationScenarios:
@@ -244,31 +230,26 @@ class TestRealWorldConfigurationScenarios:
     def test_production_like_configuration(self):
         """Test configuration that would be used in production."""
         production_settings = AppSettings(
-            debug=False,
             chunk_size=1024,
             chunk_overlap=128,
             similarity_top_k=10,
-            use_gpu=True,
-            temperature=0.1,  # Low temperature for consistent responses
+            gpu_enabled=True,
         )
 
         # Production settings should be conservative
-        assert production_settings.debug is False
-        assert production_settings.temperature <= 0.2  # Conservative for production
+        assert production_settings.gpu_enabled is True
         assert production_settings.chunk_overlap < production_settings.chunk_size
 
     def test_development_configuration(self):
         """Test configuration suitable for development."""
         dev_settings = AppSettings(
-            debug=True,
             chunk_size=512,  # Smaller for faster testing
             similarity_top_k=3,  # Fewer results for testing
-            use_gpu=False,  # May not be available in dev
+            gpu_enabled=False,  # May not be available in dev
         )
 
-        assert dev_settings.debug is True
         assert dev_settings.chunk_size <= 1000  # Reasonable for dev
-        assert dev_settings.use_gpu is False
+        assert dev_settings.gpu_enabled is False
 
     def test_memory_constrained_configuration(self):
         """Test configuration for memory-constrained environments."""
@@ -276,7 +257,7 @@ class TestRealWorldConfigurationScenarios:
             chunk_size=256,  # Smaller chunks
             embedding_batch_size=10,  # Smaller batches
             similarity_top_k=3,  # Fewer results
-            use_gpu=False,  # CPU-only for memory efficiency
+            gpu_enabled=False,  # CPU-only for memory efficiency
         )
 
         assert memory_efficient_settings.chunk_size <= 512
@@ -289,12 +270,12 @@ class TestRealWorldConfigurationScenarios:
             chunk_size=2048,  # Larger chunks for more context
             embedding_batch_size=50,  # Larger batches
             similarity_top_k=20,  # More comprehensive results
-            use_gpu=True,  # GPU acceleration
+            gpu_enabled=True,  # GPU acceleration
         )
 
         assert high_perf_settings.chunk_size >= 1000
         assert high_perf_settings.embedding_batch_size >= 30
-        assert high_perf_settings.use_gpu is True
+        assert high_perf_settings.gpu_enabled is True
 
 
 class TestConfigurationValidationEdgeCases:
@@ -325,15 +306,15 @@ class TestConfigurationValidationEdgeCases:
         large_k_settings = AppSettings(similarity_top_k=100)
         assert large_k_settings.similarity_top_k == 100
 
-    def test_temperature_boundary_values(self):
-        """Temperature boundary values should be handled correctly."""
-        # Minimum temperature (deterministic)
-        min_temp_settings = AppSettings(temperature=0.0)
-        assert min_temp_settings.temperature == 0.0
+    def test_gpu_settings_boundary_values(self):
+        """GPU settings boundary values should be handled correctly."""
+        # GPU disabled
+        gpu_off_settings = AppSettings(gpu_enabled=False)
+        assert gpu_off_settings.gpu_enabled is False
 
-        # High temperature (creative but valid)
-        high_temp_settings = AppSettings(temperature=1.5)
-        assert high_temp_settings.temperature == 1.5
+        # GPU enabled
+        gpu_on_settings = AppSettings(gpu_enabled=True)
+        assert gpu_on_settings.gpu_enabled is True
 
     def test_url_format_variations(self):
         """Different URL formats should be handled appropriately."""

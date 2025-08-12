@@ -89,13 +89,13 @@ git checkout -b feat/03-agent-single-react
 
 Use these specialized agents in this sequence:
 
-1. **implementation-executor**: Remove multi-agent code
+1. **@agent-implementation-executor**: Remove multi-agent code
    - Delete src/agents/multi_agent_system.py (450+ lines)
    - Delete src/agents/supervisor.py
    - Delete src/agents/routing.py
    - Delete src/agents/coordination.py
 
-2. **implementation-executor**: Implement single ReActAgent
+2. **@agent-implementation-executor**: Implement single ReActAgent
    ```python
    from llama_index.core.agent import ReActAgent
    from llama_index.core.tools import QueryEngineTool
@@ -125,13 +125,13 @@ Use these specialized agents in this sequence:
        return agent
    ```
 
-3. **pytest-test-generator**: Generate comprehensive tests
+3. **@agent-pytest-test-generator**: Generate comprehensive tests
    - Test ReActAgent functionality
    - Test tool calling
    - Verify <2s response time
    - Validate 82.5% accuracy
 
-4. **pytest-qa-agent**: Run QA validation
+4. **@agent-pytest-qa-agent**: Run QA validation
    - Execute all tests
    - Verify performance benchmarks
    - Check code coverage
@@ -141,7 +141,7 @@ Use these specialized agents in this sequence:
    - Check DRY principle adherence
    - Validate library-first approach
 
-6. **merge-ready-pr-reviewer**: Final validation
+6. **@agent-merge-ready-pr-reviewer**: Final validation
    - Confirm all tests passing
    - Verify no breaking changes
    - Check performance requirements met
@@ -233,11 +233,11 @@ git checkout -b feat/04-search-qdrant-hybrid
 
 Use these specialized agents in this sequence:
 
-1. **implementation-executor**: Remove custom hybrid search
+1. **@agent-implementation-executor**: Remove custom hybrid search
    - Delete src/search/hybrid_fusion.py (200+ lines)
    - Delete src/search/custom_retriever.py (100+ lines)
 
-2. **implementation-executor**: Implement Qdrant native hybrid
+2. **@agent-implementation-executor**: Implement Qdrant native hybrid
    ```python
    from llama_index.core.retrievers import QueryFusionRetriever
    from llama_index.vector_stores.qdrant import QdrantVectorStore
@@ -283,18 +283,18 @@ Use these specialized agents in this sequence:
    - Set up indexing parameters
    - Optimize for <2s latency
 
-4. **pytest-test-generator**: Generate search tests
+4. **@agent-pytest-test-generator**: Generate search tests
    - Test dense, sparse, and hybrid modes
    - Validate RRF fusion accuracy
    - Benchmark query latency
    - Test ColBERT reranking quality
 
-5. **pytest-qa-agent**: Run performance validation
+5. **@agent-pytest-qa-agent**: Run performance validation
    - Verify <2s query latency
    - Test with various query types
    - Validate accuracy improvements
 
-6. **merge-ready-pr-reviewer**: Final validation
+6. **@agent-merge-ready-pr-reviewer**: Final validation
    - Check all search functionality preserved
    - Verify performance improvements
    - Confirm code reduction achieved
@@ -394,7 +394,7 @@ git checkout -b feat/05-kg-native-integration
 
 Use these specialized agents in this sequence:
 
-1. **implementation-executor**: Simplify KG implementation
+1. **@agent-implementation-executor**: Simplify KG implementation
    ```python
    from llama_index.core import KnowledgeGraphIndex
    from llama_index.core.node_parser import SentenceSplitter
@@ -434,12 +434,12 @@ Use these specialized agents in this sequence:
        return triplets
    ```
 
-2. **pytest-test-generator**: Generate KG tests
+2. **@agent-pytest-test-generator**: Generate KG tests
    - Test entity extraction accuracy
    - Validate relationship discovery
    - Benchmark query performance
 
-3. **pytest-qa-agent**: Validate integration
+3. **@agent-pytest-qa-agent**: Validate integration
    - Test with existing spaCy manager
    - Verify memory optimization
    - Check performance metrics
@@ -449,7 +449,7 @@ Use these specialized agents in this sequence:
    - Check integration with PR #1 infrastructure
    - Validate library-first approach
 
-5. **merge-ready-pr-reviewer**: Final validation
+5. **@agent-merge-ready-pr-reviewer**: Final validation
 
 ### Key Requirements
 
@@ -528,7 +528,7 @@ git checkout -b feat/06-perf-production
 
 Use these specialized agents in parallel where possible:
 
-1. **implementation-executor**: Add monitoring
+1. **@agent-implementation-executor**: Add monitoring
    ```python
    from contextlib import asynccontextmanager
    import time
@@ -551,7 +551,7 @@ Use these specialized agents in parallel where possible:
                raise
    ```
 
-2. **implementation-executor**: Add resilience patterns
+2. **@agent-implementation-executor**: Add resilience patterns
    ```python
    from tenacity import retry, stop_after_attempt, wait_exponential
    import stamina
@@ -565,7 +565,7 @@ Use these specialized agents in parallel where possible:
        return await agent.aquery(query)
    ```
 
-3. **implementation-executor**: Optimize caching
+3. **@agent-implementation-executor**: Optimize caching
    ```python
    from functools import lru_cache
    import redis
@@ -600,17 +600,17 @@ Use these specialized agents in parallel where possible:
        return result
    ```
 
-4. **pytest-test-generator**: Generate e2e tests
+4. **@agent-pytest-test-generator**: Generate e2e tests
    - Complete user journey tests
    - Performance regression tests
    - Load testing for production readiness
 
-5. **pytest-qa-agent**: Run comprehensive validation
+5. **@agent-pytest-qa-agent**: Run comprehensive validation
    - Verify <2s query latency
    - Test memory usage <300MB
    - Validate 100 concurrent queries
 
-6. **merge-ready-pr-reviewer**: Final production check
+6. **@agent-merge-ready-pr-reviewer**: Final production check
    - All performance targets met
    - Monitoring working correctly
    - Resilience patterns effective
@@ -687,21 +687,21 @@ For ALL PRs, follow this subagent coordination pattern:
 ```
 Run in parallel:
 
-- implementation-executor (main implementation)
+- @agent-implementation-executor (main implementation)
 
-- pytest-test-generator (test creation)
+- @agent-pytest-test-generator (test creation)
 
 - debug-architect-specialist (if issues arise)
 ```
 
 ### Sequential Execution (When Dependencies Exist)
 ```
-1. implementation-executor (remove old code)
-2. implementation-executor (add new code)
-3. pytest-test-generator (create tests)
-4. pytest-qa-agent (run tests)
+1. @agent-implementation-executor (remove old code)
+2. @agent-implementation-executor (add new code)
+3. @agent-pytest-test-generator (create tests)
+4. @agent-pytest-qa-agent (run tests)
 5. python-code-review-workflow (code review)
-6. merge-ready-pr-reviewer (final check)
+6. @agent-merge-ready-pr-reviewer (final check)
 ```
 
 ### Quality Gates

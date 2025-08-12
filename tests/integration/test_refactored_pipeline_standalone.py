@@ -3,14 +3,13 @@
 This module validates all critical refactored features and performance requirements:
 - Document processing performance (<30s for 50 pages)
 - Query latency (<5s for complex queries)
-- GPU speedup verification (2-3x improvement)
-- Hybrid search recall improvement (15-20% better)
-- Multimodal capabilities preservation
-- Feature parity with previous implementation
+- Agent system functionality (simplified ReActAgent)
+- Embedding and indexing operations
+- Feature parity with simplified implementation
 
-Tests follow library-first patterns with proper fixtures, async handling,
-and performance benchmarking using pytest-benchmark. Uses mocking to avoid
-dependency issues while still validating core functionality.
+Tests follow library-first patterns with proper fixtures and performance
+benchmarking using pytest-benchmark. Uses mocking to avoid dependency
+issues while validating core functionality.
 """
 
 import asyncio
@@ -516,26 +515,31 @@ class TestRefactoredPipelineIntegration:
 
     @pytest.mark.integration
     @pytest.mark.performance
-    def test_cache_hit_rates_simulation(self):
-        """Test cache performance patterns.
+    def test_document_cache_functionality(self):
+        """Test document cache functionality.
 
         Validates:
-        - Cache effectiveness metrics
-        - Hit ratio calculations
-        - Performance impact analysis
+        - Cache functionality exists
+        - Cache statistics available
+        - Cache operations work
         """
-        # Simulate cache statistics
-        cache_stats = {"hits": 85, "misses": 15, "total_requests": 100}
+        try:
+            from src.utils.document import clear_document_cache, get_cache_stats
 
-        hit_rate = cache_stats["hits"] / cache_stats["total_requests"] * 100
-        miss_rate = cache_stats["misses"] / cache_stats["total_requests"] * 100
+            # Test cache stats functionality
+            cache_stats = get_cache_stats()
 
-        # Validate cache effectiveness (target >80% hit rate)
-        assert hit_rate >= 80.0, f"Cache hit rate {hit_rate:.1f}% is below 80% target"
-        assert miss_rate <= 20.0, f"Cache miss rate {miss_rate:.1f}% is above 20% limit"
+            assert isinstance(cache_stats, dict)
+            assert "cache_size" in cache_stats or "error" in cache_stats
 
-        print(f"Cache hit rate: {hit_rate:.1f}%")
-        print(f"Cache miss rate: {miss_rate:.1f}%")
+            # Test cache clearing
+            cleared_count = clear_document_cache()
+            assert isinstance(cleared_count, int)
+
+            print(f"Document cache functionality verified: {cache_stats}")
+
+        except ImportError:
+            pytest.skip("Document cache functionality not available")
 
     @pytest.mark.integration
     def test_feature_parity_validation_simulation(self):

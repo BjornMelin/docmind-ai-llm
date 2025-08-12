@@ -11,7 +11,8 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from models import AnalysisOutput, AppSettings
+from src.models.core import AnalysisOutput
+from src.models.core import Settings as AppSettings
 
 
 def test_analysis_output_creation():
@@ -63,9 +64,7 @@ def test_settings_default_values():
 
     # Core LLM Configuration
     assert settings.llm_model == "gpt-4"
-    assert (
-        settings.embedding_model == "BAAI/bge-large-en-v1.5"
-    )  # Actual value from model
+    assert settings.embedding_model == "text-embedding-3-small"
 
     # Search and Retrieval
     assert settings.similarity_top_k == 10
@@ -144,7 +143,7 @@ def test_qdrant_url_configuration():
     """Test Qdrant URL configuration."""
     settings = AppSettings()
 
-    assert settings.qdrant_url == "http://localhost:7000"  # Actual default value
+    assert settings.qdrant_url == "http://localhost:6333"  # Actual default value
 
     # Test environment override
     with patch.dict(os.environ, {"QDRANT_URL": "http://qdrant:6333"}):
