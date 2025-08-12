@@ -785,17 +785,10 @@ gpu = [
     { name = "fastembed-gpu" },
     { name = "llama-cpp-python" },
 ]
-test = [
-    { name = "moviepy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-]
 
 [package.dev-dependencies]
 dev = [
     { name = "hypothesis" },
-    { name = "moviepy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-benchmark" },
@@ -804,6 +797,12 @@ dev = [
 ]
 performance = [
     { name = "numba" },
+]
+test = [
+    { name = "moviepy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
 ]
 
 [package.metadata]
@@ -829,7 +828,6 @@ requires-dist = [
     { name = "llama-index-readers-file" },
     { name = "llama-index-vector-stores-qdrant" },
     { name = "loguru", specifier = ">=0.7.0" },
-    { name = "moviepy", marker = "extra == 'test'", specifier = "==2.2.1" },
     { name = "ollama", specifier = "==0.5.1" },
     { name = "openai", specifier = ">=1.98.0,<2.0.0" },
     { name = "openai-whisper", specifier = "==20250625" },
@@ -838,9 +836,6 @@ requires-dist = [
     { name = "pydantic", specifier = "==2.11.7" },
     { name = "pydantic-settings", specifier = "==2.10.1" },
     { name = "pymupdf", specifier = "==1.26.3" },
-    { name = "pytest", marker = "extra == 'test'", specifier = "==8.3.1" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23.0" },
-    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=6.0.0" },
     { name = "python-docx", specifier = "==1.2.0" },
     { name = "python-dotenv", specifier = "==1.1.1" },
     { name = "qdrant-client", specifier = "==1.15.1" },
@@ -852,12 +847,11 @@ requires-dist = [
     { name = "transformers", specifier = "==4.54.1" },
     { name = "unstructured", extras = ["all-docs"], specifier = ">=0.18.11" },
 ]
-provides-extras = ["test", "gpu"]
+provides-extras = ["gpu"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "hypothesis", specifier = ">=6.137.1" },
-    { name = "moviepy", specifier = "==2.2.1" },
     { name = "pytest", specifier = ">=8.3.1" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "pytest-benchmark", specifier = ">=4.0.0" },
@@ -865,6 +859,12 @@ dev = [
     { name = "ruff", specifier = "==0.12.8" },
 ]
 performance = [{ name = "numba", specifier = ">=0.61.0" }]
+test = [
+    { name = "moviepy", specifier = "==2.2.1" },
+    { name = "pytest", specifier = "==8.3.1" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pytest-cov", specifier = ">=6.0.0" },
+]
 
 [[package]]
 name = "effdet"
