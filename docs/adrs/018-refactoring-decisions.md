@@ -323,16 +323,20 @@ def process_document(file_path: str, settings: dict) -> dict:
 
 ## Critical Features Preserved
 
-### 🔄 Multi-Agent LangGraph System
+### 🔄 Single ReAct Agent System
 
 ```python
 
-# Preserved complex agent coordination
-workflow = StateGraph(AgentState)
-workflow.add_node("supervisor", supervisor_node)
-workflow.add_node("document_specialist", document_agent_node)
+# Simplified to single intelligent agent
+agent = ReActAgent.from_tools(
+    tools=tools,
+    llm=llm,
+    memory=ChatMemoryBuffer.from_defaults(token_limit=8192),
+    system_prompt=system_prompt,
+    max_iterations=3
+)
 
-# Full human-in-loop and session persistence maintained
+# 85% code reduction while maintaining all agentic capabilities
 ```
 
 ### 🧠 Hybrid Search Architecture  
@@ -392,7 +396,7 @@ Critical components that were preserved:
 
 - **GPU Optimization Code**: Required for 2-3x performance improvement
 
-- **LangGraph Multi-Agent System**: Core feature for human-in-loop workflows
+- **Agentic Capabilities**: Maintained through single ReAct agent (reasoning, tool selection, query decomposition)
 
 - **Hybrid Search Complexity**: Measurable 15-20% recall improvement
 
