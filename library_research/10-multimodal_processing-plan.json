@@ -1,0 +1,381 @@
+{
+  "cluster": "multimodal_processing",
+  "implementation_phases": [
+    {
+      "dependencies": [],
+      "duration": "1 week",
+      "name": "Memory Optimization Foundation",
+      "phase": 1,
+      "success_criteria": [
+        "Memory usage reduced by 20-30% in document processing",
+        "Automatic tensor cleanup verified in multimodal operations",
+        "ChatMemoryBuffer integrated with existing agent workflows"
+      ],
+      "tasks": [
+        {
+          "description": "Add spaCy memory_zone() context managers to document processing",
+          "estimated_hours": 8,
+          "files": [
+            "src/utils/document.py",
+            "utils/index_builder.py"
+          ],
+          "id": "implement_memory_zone"
+        },
+        {
+          "description": "Add doc_cleaner pipeline component for tensor cleanup",
+          "estimated_hours": 6,
+          "files": [
+            "src/utils/document.py",
+            "utils/embedding_factory.py"
+          ],
+          "id": "integrate_doc_cleaner"
+        },
+        {
+          "description": "Implement ChatMemoryBuffer for LlamaIndex operations",
+          "estimated_hours": 10,
+          "files": [
+            "src/agents/agent_factory.py",
+            "utils/index_builder.py"
+          ],
+          "id": "llamaindex_memory_buffer"
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "phase_1"
+      ],
+      "duration": "1 week",
+      "name": "Performance Optimization Integration",
+      "phase": 2,
+      "success_criteria": [
+        "Processing speed improved by 50-100% with torch.compile()",
+        "Flash attention 2.0 working for multimodal models",
+        "Single transformer backend serving both spaCy and embeddings"
+      ],
+      "tasks": [
+        {
+          "description": "Apply torch.compile() to multimodal models",
+          "estimated_hours": 12,
+          "files": [
+            "utils/embedding_factory.py",
+            "utils/model_manager.py"
+          ],
+          "id": "torch_compile_integration"
+        },
+        {
+          "description": "Enable flash attention 2.0 for vision transformers",
+          "estimated_hours": 8,
+          "files": [
+            "utils/embedding_factory.py",
+            "utils/index_builder.py"
+          ],
+          "id": "flash_attention_setup"
+        },
+        {
+          "description": "Implement shared transformer backend between spaCy and embeddings",
+          "estimated_hours": 16,
+          "files": [
+            "src/utils/document.py",
+            "utils/embedding_factory.py"
+          ],
+          "id": "unified_transformer_backend"
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "phase_2"
+      ],
+      "duration": "1 week",
+      "name": "Pipeline Consolidation",
+      "phase": 3,
+      "success_criteria": [
+        "Redundant processing operations eliminated",
+        "Single model loading pattern implemented",
+        "Pipeline processing time reduced by 30-50%"
+      ],
+      "tasks": [
+        {
+          "description": "Remove duplicate tokenization between libraries",
+          "estimated_hours": 12,
+          "files": [
+            "src/utils/document.py",
+            "utils/embedding_factory.py"
+          ],
+          "id": "eliminate_tokenization_redundancy"
+        },
+        {
+          "description": "Merge redundant NLP processing operations",
+          "estimated_hours": 14,
+          "files": [
+            "src/utils/document.py",
+            "src/agents/agent_utils.py"
+          ],
+          "id": "consolidate_nlp_operations"
+        },
+        {
+          "description": "Create singleton pattern for model loading",
+          "estimated_hours": 10,
+          "files": [
+            "utils/model_manager.py",
+            "utils/embedding_factory.py"
+          ],
+          "id": "implement_shared_model_loading"
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "phase_3"
+      ],
+      "duration": "1 week",
+      "name": "Validation and Optimization",
+      "phase": 4,
+      "success_criteria": [
+        "Overall memory usage reduced by 40-60%",
+        "Processing speed improved by 2-3x",
+        "Multimodal accuracy maintained or improved",
+        "All integration tests passing"
+      ],
+      "tasks": [
+        {
+          "description": "Benchmark memory usage and processing speed improvements",
+          "estimated_hours": 8,
+          "files": [
+            "tests/performance/test_performance.py"
+          ],
+          "id": "performance_benchmarking"
+        },
+        {
+          "description": "Validate multimodal processing accuracy maintained",
+          "estimated_hours": 10,
+          "files": [
+            "tests/integration/test_multimodal.py"
+          ],
+          "id": "accuracy_validation"
+        },
+        {
+          "description": "Fine-tune parameters based on benchmark results",
+          "estimated_hours": 12,
+          "files": [
+            "utils/embedding_factory.py",
+            "utils/index_builder.py"
+          ],
+          "id": "optimization_fine_tuning"
+        }
+      ]
+    }
+  ],
+  "libraries": [
+    {
+      "name": "transformers",
+      "optimization_priority": "high",
+      "status": "current",
+      "version": "4.54.1"
+    },
+    {
+      "name": "spacy",
+      "optimization_priority": "critical",
+      "status": "current",
+      "version": "3.8.7"
+    },
+    {
+      "name": "llama-index-multi-modal-llms-openai",
+      "optimization_priority": "high",
+      "status": "current",
+      "version": "current"
+    }
+  ],
+  "optimization_opportunities": [
+    {
+      "description": "Implement spaCy memory_zone() and doc_cleaner for automatic transformer tensor cleanup",
+      "effort": "medium",
+      "id": "memory_management_integration",
+      "impact": "40-60% memory reduction",
+      "implementation": {
+        "code_examples": {
+          "doc_cleaner_integration": "nlp.add_pipe(\"doc_cleaner\", config={\"attrs\": {\"tensor\": None}})",
+          "memory_zone_pattern": "with nlp.memory_zone():\\n    processed_docs = list(nlp.pipe(texts, batch_size=32))\\n    # Automatic cleanup of Doc objects and tensors"
+        },
+        "files_to_modify": [
+          "src/utils/document.py",
+          "utils/embedding_factory.py",
+          "utils/index_builder.py"
+        ],
+        "key_changes": [
+          "Add nlp.memory_zone() context managers around document processing",
+          "Integrate doc_cleaner pipeline component to clear transformer tensors",
+          "Implement ChatMemoryBuffer for LlamaIndex memory management"
+        ]
+      },
+      "priority": "critical"
+    },
+    {
+      "description": "Integrate torch.compile() with multimodal models for performance optimization",
+      "effort": "medium",
+      "id": "torch_compile_optimization",
+      "impact": "2-3x processing speed improvement",
+      "implementation": {
+        "code_examples": {
+          "flash_attention": "attn_implementation=\"flash_attention_2\"",
+          "torch_compile_pattern": "model = torch.compile(\\n    embed_model,\\n    mode=\"reduce-overhead\",\\n    dynamic=True,\\n    fullgraph=False\\n)"
+        },
+        "files_to_modify": [
+          "utils/embedding_factory.py",
+          "utils/model_manager.py"
+        ],
+        "key_changes": [
+          "Apply torch.compile() to transformer models with reduce-overhead mode",
+          "Enable flash attention 2.0 for vision transformers",
+          "Implement dynamic batching for variable input sizes"
+        ]
+      },
+      "priority": "high"
+    },
+    {
+      "description": "Unify spaCy and transformers pipelines to eliminate redundant tokenization and processing",
+      "effort": "high",
+      "id": "pipeline_integration",
+      "impact": "50% reduction in redundant processing",
+      "implementation": {
+        "code_examples": {
+          "shared_embeddings": "embed_model = HuggingFaceEmbedding(\\n    model_name=\"jinaai/jina-embeddings-v3\",\\n    model_kwargs={\"torch_dtype\": torch.float16}\\n)",
+          "unified_pipeline": "nlp = spacy.load(\"en_core_web_trf\")  # Uses transformers backend\\nnlp.add_pipe(\"doc_cleaner\", config={\"attrs\": {\"tensor\": None}})"
+        },
+        "files_to_modify": [
+          "src/utils/document.py",
+          "utils/embedding_factory.py",
+          "src/agents/agent_utils.py"
+        ],
+        "key_changes": [
+          "Use spacy-transformers for unified processing backend",
+          "Eliminate duplicate tokenization between spaCy and HuggingFace",
+          "Implement shared transformer model loading"
+        ]
+      },
+      "priority": "high"
+    },
+    {
+      "description": "Implement LlamaIndex composable memory patterns for better multimodal context management",
+      "effort": "medium",
+      "id": "llamaindex_memory_patterns",
+      "impact": "Enhanced memory efficiency and conversation context",
+      "implementation": {
+        "code_examples": {
+          "composable_memory": "composable_memory = SimpleComposableMemory.from_defaults(\\n    primary_memory=ChatMemoryBuffer.from_defaults(),\\n    secondary_memory_sources=[vector_memory]\\n)",
+          "pipeline_memory": "pipeline_memory = ChatMemoryBuffer.from_defaults(token_limit=8000)"
+        },
+        "files_to_modify": [
+          "src/agents/agent_factory.py",
+          "src/agents/agent_utils.py",
+          "utils/index_builder.py"
+        ],
+        "key_changes": [
+          "Implement VectorMemory and ChatMemoryBuffer integration",
+          "Add SimpleComposableMemory for multimodal contexts",
+          "Integrate memory-aware pipeline execution"
+        ]
+      },
+      "priority": "medium"
+    },
+    {
+      "description": "Remove redundant NLP processing operations and duplicate model loading",
+      "effort": "high",
+      "id": "redundancy_elimination",
+      "impact": "30-40% code reduction, improved maintainability",
+      "implementation": {
+        "code_examples": {
+          "consolidated_processing": "def process_multimodal_efficiently(texts, images=None):\\n    with nlp.memory_zone():\\n        docs = list(nlp.pipe(texts, batch_size=32))\\n        return [{\"tokens\": [t.text for t in doc], \"entities\": [(e.text, e.label_) for e in doc.ents]} for doc in docs]"
+        },
+        "files_to_modify": [
+          "src/utils/document.py",
+          "utils/model_manager.py",
+          "utils/spacy_utils.py"
+        ],
+        "key_changes": [
+          "Consolidate entity extraction operations",
+          "Implement singleton pattern for model loading",
+          "Remove duplicate tokenization and processing steps"
+        ]
+      },
+      "priority": "medium"
+    }
+  ],
+  "risk_assessment": [
+    {
+      "impact": "medium",
+      "mitigation": "Implement incremental changes with thorough testing at each step",
+      "probability": "medium",
+      "risk": "Memory management complexity"
+    },
+    {
+      "impact": "high",
+      "mitigation": "Comprehensive benchmarking and rollback plan for each optimization",
+      "probability": "low",
+      "risk": "Performance regression in edge cases"
+    },
+    {
+      "impact": "medium",
+      "mitigation": "Pin library versions and test compatibility matrix",
+      "probability": "low",
+      "risk": "Library version compatibility issues"
+    }
+  ],
+  "rollback_plan": {
+    "actions": [
+      "Revert to previous library versions",
+      "Disable problematic optimizations",
+      "Fallback to original processing patterns",
+      "Emergency hotfix deployment"
+    ],
+    "triggers": [
+      "Memory usage increase > 10%",
+      "Processing speed decrease > 20%",
+      "Accuracy loss > 5%",
+      "Integration test failures"
+    ]
+  },
+  "success_metrics": [
+    {
+      "measurement": "Memory profiling during document processing",
+      "metric": "Memory Usage Reduction",
+      "target": "40-60% reduction in peak memory usage"
+    },
+    {
+      "measurement": "Benchmark execution time for standard document set",
+      "metric": "Processing Speed Improvement",
+      "target": "2-3x faster multimodal processing"
+    },
+    {
+      "measurement": "GPU memory and compute utilization monitoring",
+      "metric": "GPU Utilization Improvement",
+      "target": "30-50% better GPU utilization"
+    },
+    {
+      "measurement": "Static code analysis and line count comparison",
+      "metric": "Code Maintainability",
+      "target": "30-40% reduction in redundant code"
+    }
+  ],
+  "validation_plan": {
+    "integration_tests": [
+      "End-to-end multimodal processing tests",
+      "Memory usage integration tests",
+      "Performance benchmark tests",
+      "Accuracy preservation tests"
+    ],
+    "performance_tests": [
+      "Memory usage profiling",
+      "Processing speed benchmarks",
+      "GPU utilization measurements",
+      "Concurrent processing stress tests"
+    ],
+    "unit_tests": [
+      "Memory cleanup verification tests",
+      "torch.compile functionality tests",
+      "Pipeline integration tests",
+      "Model loading efficiency tests"
+    ]
+  }
+}

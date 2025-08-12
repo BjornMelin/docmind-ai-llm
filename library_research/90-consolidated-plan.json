@@ -1,0 +1,261 @@
+{
+  "dependency_changes": {
+    "add": [
+      "psutil>=6.0.0",
+      "langgraph-supervisor-py"
+    ],
+    "evaluate": [
+      "moviepy"
+    ],
+    "move_to_dev": [
+      "arize-phoenix",
+      "openinference-instrumentation-llama-index"
+    ],
+    "remove": [
+      "torchvision",
+      "polars",
+      "ragatouille"
+    ]
+  },
+  "execution_phases": [
+    {
+      "duration": "3 days",
+      "name": "Foundation & Critical Fixes",
+      "parallel_groups": [
+        {
+          "group": "1A",
+          "prs": [
+            {
+              "commands": [
+                "uv remove torchvision polars ragatouille"
+              ],
+              "description": "Dependency cleanup",
+              "id": "PR-DEP-001",
+              "impact": "HIGH",
+              "risk": "LOW"
+            },
+            {
+              "commands": [
+                "uv add 'psutil>=6.0.0'"
+              ],
+              "description": "Add explicit psutil",
+              "id": "PR-INF-001",
+              "impact": "MEDIUM",
+              "risk": "LOW"
+            },
+            {
+              "commands": [
+                "uv remove arize-phoenix openinference-instrumentation-llama-index"
+              ],
+              "description": "Move observability to dev",
+              "id": "PR-OBS-001",
+              "impact": "MEDIUM",
+              "risk": "LOW"
+            }
+          ]
+        },
+        {
+          "group": "1B",
+          "prs": [
+            {
+              "commands": [
+                "CMAKE_ARGS='-DGGML_CUDA=on -DCUDA_ARCHITECTURES=89' uv add 'llama-cpp-python[cuda]>=0.2.32,<0.3.0'"
+              ],
+              "description": "CUDA optimization",
+              "id": "PR-LLM-001",
+              "impact": "HIGH",
+              "risk": "MEDIUM"
+            },
+            {
+              "description": "Qdrant native BM25",
+              "id": "PR-EMB-001",
+              "impact": "HIGH",
+              "risk": "MEDIUM"
+            },
+            {
+              "description": "LlamaIndex Settings migration",
+              "id": "PR-LLAMA-001",
+              "impact": "HIGH",
+              "risk": "LOW"
+            }
+          ]
+        }
+      ],
+      "phase": 1
+    },
+    {
+      "duration": "4 days",
+      "name": "Core Optimizations",
+      "parallel_groups": [
+        {
+          "group": "2A",
+          "prs": [
+            {
+              "description": "Structured JSON logging",
+              "id": "PR-INF-002"
+            },
+            {
+              "description": "spaCy memory_zone()",
+              "id": "PR-MULTI-001"
+            },
+            {
+              "description": "LangGraph StateGraph",
+              "id": "PR-LANG-001"
+            }
+          ]
+        },
+        {
+          "group": "2B",
+          "prs": [
+            {
+              "description": "FastEmbed consolidation",
+              "id": "PR-EMB-002"
+            },
+            {
+              "description": "Native caching with Redis",
+              "id": "PR-LLAMA-002"
+            },
+            {
+              "description": "MoviePy evaluation",
+              "id": "PR-DOC-001"
+            }
+          ]
+        }
+      ],
+      "phase": 2
+    },
+    {
+      "duration": "4 days",
+      "name": "Advanced Features",
+      "parallel_groups": [
+        {
+          "group": "3A",
+          "prs": [
+            {
+              "description": "Streamlit fragments",
+              "id": "PR-INF-003"
+            },
+            {
+              "description": "torch.compile()",
+              "id": "PR-MULTI-002"
+            },
+            {
+              "description": "Supervisor pattern",
+              "id": "PR-LANG-002"
+            }
+          ]
+        },
+        {
+          "group": "3B",
+          "prs": [
+            {
+              "description": "ColBERT batch processing",
+              "id": "PR-RAG-001"
+            },
+            {
+              "description": "QueryPipeline integration",
+              "id": "PR-LLAMA-003"
+            },
+            {
+              "description": "Pillow upgrade",
+              "id": "PR-DOC-002"
+            }
+          ]
+        }
+      ],
+      "phase": 3
+    },
+    {
+      "duration": "3 days",
+      "name": "Production Readiness",
+      "phase": 4,
+      "prs": [
+        {
+          "description": "Comprehensive pytest suite",
+          "id": "PR-TEST-001"
+        },
+        {
+          "description": "Performance benchmarking",
+          "id": "PR-PERF-001"
+        },
+        {
+          "description": "Documentation updates",
+          "id": "PR-DOCS-001"
+        }
+      ],
+      "sequential": true
+    }
+  ],
+  "risk_matrix": [
+    {
+      "change": "Dependency Removal",
+      "impact": "HIGH",
+      "mitigation": "Comprehensive testing before removal",
+      "risk": "LOW"
+    },
+    {
+      "change": "CUDA Optimization",
+      "impact": "HIGH",
+      "mitigation": "Fallback to CPU mode",
+      "risk": "MEDIUM"
+    },
+    {
+      "change": "Settings Migration",
+      "impact": "HIGH",
+      "mitigation": "Feature flags for gradual rollout",
+      "risk": "LOW"
+    },
+    {
+      "change": "Memory Optimization",
+      "impact": "HIGH",
+      "mitigation": "Progressive fallback strategies",
+      "risk": "MEDIUM"
+    },
+    {
+      "change": "Quantization",
+      "impact": "HIGH",
+      "mitigation": "A/B testing with quality metrics",
+      "risk": "MEDIUM"
+    },
+    {
+      "change": "LangGraph Migration",
+      "impact": "HIGH",
+      "mitigation": "Parallel implementation with existing",
+      "risk": "MEDIUM"
+    }
+  ],
+  "success_criteria": {
+    "operational": {
+      "bundle_size_reduction_percent": 30,
+      "installation_time_reduction_percent": 50,
+      "monitoring_enabled": true,
+      "zero_downtime": true
+    },
+    "performance": {
+      "gpu_memory_gb": 8,
+      "gpu_utilization_percent": 90,
+      "rag_quality_regression": 0,
+      "search_latency_ms": 100
+    },
+    "quality": {
+      "benchmarks_improved": true,
+      "breaking_changes": 0,
+      "integration_tests_passing": true,
+      "test_coverage_percent": 90
+    }
+  },
+  "summary": {
+    "code_reduction_percent": 76,
+    "confidence_level": 0.92,
+    "dependency_reduction": 23,
+    "performance_improvement": "40x search, 60% memory reduction",
+    "timeline_weeks": 4,
+    "total_effort_hours": 12
+  },
+  "verification_commands": {
+    "benchmarks": "uv run pytest tests/performance/ --benchmark-only",
+    "dependency_check": "uv tree | wc -l",
+    "pip_health": "uv pip check",
+    "test_suite": "uv run pytest tests/ -v --cov=src --cov-report=term-missing"
+  }
+}

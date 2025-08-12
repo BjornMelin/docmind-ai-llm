@@ -1,0 +1,240 @@
+{
+  "clusters": {
+    "document_ingestion": {
+      "complexity_estimate": "moderate",
+      "dependencies_on": [],
+      "description": "Document loading, parsing, preprocessing, and NLP processing",
+      "libraries": [
+        "unstructured[all-docs]",
+        "pymupdf",
+        "python-docx",
+        "spacy",
+        "pyarrow",
+        "psutil"
+      ],
+      "optimization_opportunities": [
+        "Document parsing strategy optimization",
+        "spaCy model selection and performance",
+        "Unstructured document type coverage",
+        "Memory usage monitoring with psutil",
+        "Chunking and preprocessing strategies"
+      ],
+      "research_priority": "high"
+    },
+    "embedding_vectorstore": {
+      "complexity_estimate": "complex",
+      "dependencies_on": [
+        "llm_runtime_core",
+        "llamaindex_ecosystem"
+      ],
+      "description": "Embedding models, vector databases, and similarity search",
+      "libraries": [
+        "llama-index-embeddings-openai",
+        "llama-index-embeddings-huggingface",
+        "llama-index-embeddings-jinaai",
+        "llama-index-embeddings-fastembed",
+        "llama-index-vector-stores-qdrant",
+        "qdrant-client",
+        "fastembed",
+        "diskcache"
+      ],
+      "optimization_opportunities": [
+        "Embedding model comparison and selection",
+        "Vector similarity search optimization",
+        "Qdrant collection configuration",
+        "Embedding caching strategies with diskcache"
+      ],
+      "research_priority": "high"
+    },
+    "infrastructure_core": {
+      "complexity_estimate": "simple",
+      "dependencies_on": [],
+      "description": "Core application infrastructure, configuration, and logging",
+      "libraries": [
+        "streamlit",
+        "pydantic",
+        "pydantic-settings",
+        "python-dotenv",
+        "loguru"
+      ],
+      "optimization_opportunities": [
+        "Streamlit performance optimization",
+        "Pydantic model validation efficiency",
+        "Configuration management strategies",
+        "Structured logging patterns with loguru"
+      ],
+      "research_priority": "high"
+    },
+    "llamaindex_ecosystem": {
+      "complexity_estimate": "complex",
+      "dependencies_on": [
+        "llm_runtime_core"
+      ],
+      "description": "Core LlamaIndex architecture and LLM provider integrations",
+      "libraries": [
+        "llama-index-core",
+        "llama-index-llms-openai",
+        "llama-index-llms-ollama",
+        "llama-index-llms-llama-cpp",
+        "llama-index-agent-openai",
+        "llama-index-program-openai",
+        "llama-index-readers-file",
+        "llama-index-multi-modal-llms-openai",
+        "llama-index-question-gen-openai"
+      ],
+      "optimization_opportunities": [
+        "Service context optimization",
+        "Index construction strategies",
+        "Multi-modal integration patterns",
+        "Agent workflow optimization"
+      ],
+      "research_priority": "high"
+    },
+    "llm_runtime_core": {
+      "complexity_estimate": "moderate",
+      "dependencies_on": [],
+      "description": "Core LLM inference engines, token management, and runtime optimization",
+      "libraries": [
+        "ollama",
+        "llama-cpp-python",
+        "transformers",
+        "torch",
+        "tiktoken",
+        "tenacity",
+        "openai"
+      ],
+      "optimization_opportunities": [
+        "CUDA optimization for llama-cpp-python",
+        "Memory management for transformers models",
+        "Token counting efficiency with tiktoken",
+        "Retry strategies with tenacity"
+      ],
+      "research_priority": "high"
+    },
+    "multimodal_processing": {
+      "complexity_estimate": "moderate",
+      "dependencies_on": [
+        "llm_runtime_core"
+      ],
+      "description": "Image, audio, and video processing capabilities",
+      "libraries": [
+        "pillow",
+        "torchvision",
+        "moviepy",
+        "openai-whisper",
+        "numba"
+      ],
+      "optimization_opportunities": [
+        "Evaluate torchvision necessity for image processing",
+        "Assess moviepy requirement for video processing",
+        "Whisper model optimization and performance",
+        "Image preprocessing pipeline efficiency",
+        "GPU acceleration for vision tasks"
+      ],
+      "research_priority": "medium"
+    },
+    "observability_dev": {
+      "complexity_estimate": "simple",
+      "dependencies_on": [
+        "llamaindex_ecosystem"
+      ],
+      "description": "Development observability and instrumentation tools",
+      "libraries": [
+        "arize-phoenix",
+        "openinference-instrumentation-llama-index"
+      ],
+      "optimization_opportunities": [
+        "Phoenix dashboard configuration",
+        "LlamaIndex trace optimization",
+        "Development workflow integration",
+        "Performance monitoring strategies"
+      ],
+      "research_priority": "low"
+    },
+    "orchestration_agents": {
+      "complexity_estimate": "complex",
+      "dependencies_on": [
+        "llamaindex_ecosystem",
+        "rag_reranking"
+      ],
+      "description": "Multi-agent workflows and orchestration patterns",
+      "libraries": [
+        "langgraph"
+      ],
+      "optimization_opportunities": [
+        "LangGraph workflow optimization",
+        "Agent communication patterns",
+        "State management strategies",
+        "Multi-agent coordination efficiency"
+      ],
+      "research_priority": "medium"
+    },
+    "rag_reranking": {
+      "complexity_estimate": "moderate",
+      "dependencies_on": [
+        "embedding_vectorstore",
+        "llamaindex_ecosystem"
+      ],
+      "description": "RAG pipeline optimization and reranking strategies",
+      "libraries": [
+        "llama-index-postprocessor-colbert-rerank"
+      ],
+      "optimization_opportunities": [
+        "ColBERT reranking parameter tuning",
+        "Hybrid search combining vector + keyword",
+        "Reranking performance optimization",
+        "Integration with RRF (Reciprocal Rank Fusion)"
+      ],
+      "research_priority": "medium"
+    }
+  },
+  "dependency_audit_integration": {
+    "libraries_to_add": [
+      "psutil>=6.0.0"
+    ],
+    "libraries_to_evaluate": {
+      "moviepy": "Evaluate requirement for video processing capabilities",
+      "torchvision": "Assess necessity for image processing features"
+    },
+    "libraries_to_move_to_dev": [
+      "arize-phoenix",
+      "openinference-instrumentation-llama-index"
+    ],
+    "libraries_to_remove": [
+      "polars",
+      "ragatouille"
+    ],
+    "total_libraries_after_optimization": "~64 main dependencies (down from 66)"
+  },
+  "execution_order": [
+    {
+      "parallel_group_1": [
+        "llm_runtime_core",
+        "document_ingestion",
+        "infrastructure_core"
+      ]
+    },
+    {
+      "parallel_group_2": [
+        "llamaindex_ecosystem",
+        "multimodal_processing"
+      ]
+    },
+    {
+      "parallel_group_3": [
+        "embedding_vectorstore",
+        "observability_dev"
+      ]
+    },
+    {
+      "parallel_group_4": [
+        "rag_reranking"
+      ]
+    },
+    {
+      "parallel_group_5": [
+        "orchestration_agents"
+      ]
+    }
+  ]
+}

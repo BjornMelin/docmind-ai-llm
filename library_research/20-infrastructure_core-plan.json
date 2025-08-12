@@ -1,0 +1,663 @@
+{
+  "completion_checklist": [
+    "All 7 pull requests merged successfully",
+    "Performance benchmarks established and met",
+    "Comprehensive test coverage implemented",
+    "Monitoring and observability fully operational",
+    "Documentation updated and comprehensive",
+    "Team training completed on new patterns",
+    "Rollback procedures tested and documented",
+    "Production deployment successful",
+    "Post-implementation validation completed"
+  ],
+  "dependencies": {
+    "dependency_source": "01-dependency_actions.json",
+    "explicit_additions": [
+      {
+        "name": "psutil",
+        "priority": "critical",
+        "reason": "System and process monitoring - currently transitive but directly used",
+        "risk_level": "low",
+        "version": ">=6.0.0"
+      }
+    ],
+    "validation_required": true
+  },
+  "documentation_requirements": [
+    {
+      "content": "Step-by-step implementation instructions for each optimization",
+      "target_phases": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "type": "implementation_guide"
+    },
+    {
+      "content": "Updated configuration options and best practices",
+      "target_phases": [
+        1,
+        3
+      ],
+      "type": "configuration_reference"
+    },
+    {
+      "content": "Migration instructions for existing code patterns",
+      "target_phases": [
+        2,
+        3,
+        4
+      ],
+      "type": "migration_guide"
+    },
+    {
+      "content": "Common issues and resolution steps",
+      "target_phases": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "type": "troubleshooting_guide"
+    },
+    {
+      "content": "Before/after performance metrics and analysis",
+      "target_phases": [
+        2,
+        3,
+        4
+      ],
+      "type": "performance_benchmarks"
+    }
+  ],
+  "implementation_phases": [
+    {
+      "description": "Address dependency risks and improve observability with minimal complexity",
+      "duration": "Week 1",
+      "name": "Critical Dependencies",
+      "phase": 1,
+      "priority": "immediate",
+      "pull_requests": [
+        {
+          "changes": [
+            "Add psutil>=6.0.0 to dependencies section",
+            "Update uv.lock file",
+            "Verify existing functionality"
+          ],
+          "estimated_effort_hours": 0.5,
+          "files_modified": [
+            "/home/bjorn/repos/agents/docmind-ai-llm/pyproject.toml",
+            "/home/bjorn/repos/agents/docmind-ai-llm/uv.lock"
+          ],
+          "pr_number": 1,
+          "priority": "critical",
+          "risk_level": "low",
+          "success_criteria": [
+            "psutil>=6.0.0 explicitly declared in pyproject.toml",
+            "uv.lock updated without conflicts",
+            "All existing psutil usage continues working",
+            "No test failures introduced"
+          ],
+          "title": "Add Explicit Psutil Dependency",
+          "verification_commands": [
+            "uv lock",
+            "uv run python -c \"import psutil; print(f'psutil version: {psutil.__version__}')\"",
+            "uv run python -c \"from src.utils.monitoring import get_memory_usage; print(get_memory_usage())\""
+          ]
+        },
+        {
+          "estimated_effort_hours": 24,
+          "files_modified": [
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/utils/monitoring.py",
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/models/core.py"
+          ],
+          "implementation_steps": [
+            "Add JSON formatter configuration to monitoring.py",
+            "Implement context injection utilities",
+            "Add logging configuration to Settings model",
+            "Add request context management"
+          ],
+          "new_features": [
+            "JSON logging for production environments",
+            "Request context propagation",
+            "Structured error logging",
+            "Environment-based logging configuration"
+          ],
+          "pr_number": 2,
+          "priority": "high",
+          "risk_level": "low",
+          "success_criteria": [
+            "JSON logging available via environment variable",
+            "Request context propagation working",
+            "Backwards compatibility maintained",
+            "No performance regression in logging",
+            "All existing tests pass"
+          ],
+          "title": "Implement Structured JSON Logging"
+        }
+      ]
+    },
+    {
+      "description": "High-impact UI performance improvements with moderate implementation effort",
+      "duration": "Weeks 2-3",
+      "name": "Performance Optimizations",
+      "phase": 2,
+      "priority": "high",
+      "pull_requests": [
+        {
+          "estimated_effort_hours": 24,
+          "expected_performance_gain": "40-60% UI render time reduction",
+          "files_modified": [
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/app.py"
+          ],
+          "implementation_strategy": [
+            "Identify expensive UI sections in app.py",
+            "Implement @st.fragment decorators",
+            "Add performance monitoring for fragments",
+            "Test fragment isolation"
+          ],
+          "pr_number": 3,
+          "priority": "high",
+          "risk_level": "medium",
+          "success_criteria": [
+            "UI sections wrapped in @st.fragment decorators",
+            "Performance monitoring integrated",
+            "40-60% reduction in UI render times for fragment sections",
+            "No functional regressions in UI behavior",
+            "Fragment isolation working correctly"
+          ],
+          "target_sections": [
+            "Model configuration panel",
+            "Document upload and processing section",
+            "Analysis results display",
+            "Chat interface components"
+          ],
+          "title": "Implement Streamlit Fragment Optimization"
+        },
+        {
+          "cache_strategy": {
+            "cache_data": [
+              "Document processing results (TTL: 1 hour)",
+              "Embedding generation (TTL: 30 minutes)",
+              "Session-specific data operations"
+            ],
+            "cache_resource": [
+              "ML models and embedding models",
+              "LLM instances",
+              "Persistent resources across sessions"
+            ]
+          },
+          "estimated_effort_hours": 24,
+          "expected_performance_gain": "20-30% cache efficiency improvement",
+          "files_modified": [
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/app.py",
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/utils/embedding.py",
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/utils/document.py"
+          ],
+          "pr_number": 4,
+          "priority": "high",
+          "risk_level": "medium",
+          "success_criteria": [
+            "ML models cached with @st.cache_resource",
+            "Data operations cached with @st.cache_data + TTL",
+            "Cache performance monitoring implemented",
+            "20-30% improvement in cache efficiency",
+            "No cache-related bugs introduced"
+          ],
+          "title": "Advanced Streamlit Caching Strategy"
+        }
+      ]
+    },
+    {
+      "description": "Improve data integrity and system resilience with careful testing",
+      "duration": "Weeks 4-5",
+      "name": "Validation & Resilience Enhancements",
+      "phase": 3,
+      "priority": "medium",
+      "pull_requests": [
+        {
+          "estimated_effort_hours": 24,
+          "expected_performance_gain": "15-25% validation performance improvement",
+          "files_modified": [
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/models/core.py"
+          ],
+          "implementation_strategy": [
+            "Add strict mode configuration to ConfigDict",
+            "Add field-level strict validation for critical fields",
+            "Implement model validators for cross-field validation",
+            "Add validation error logging with context"
+          ],
+          "pr_number": 5,
+          "priority": "medium",
+          "risk_level": "medium",
+          "strict_validation_fields": [
+            "llm_model",
+            "retrieval_top_k",
+            "hybrid_alpha",
+            "dense_embedding_dimension"
+          ],
+          "success_criteria": [
+            "Strict mode enabled for Settings model",
+            "Field-level strict validation on critical fields",
+            "Model validators for cross-field validation",
+            "Validation errors logged with context",
+            "15-25% improvement in validation performance",
+            "No breaking changes to valid configurations"
+          ],
+          "title": "Pydantic Strict Mode Implementation"
+        },
+        {
+          "circuit_breaker_config": {
+            "failure_threshold": 5,
+            "monitoring_enabled": true,
+            "recovery_timeout_seconds": 60
+          },
+          "estimated_effort_hours": 32,
+          "expected_performance_gain": "30-50% reduction in cascade failures",
+          "files_modified": [
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/utils/core.py",
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/agents/tool_factory.py",
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/utils/embedding.py"
+          ],
+          "pr_number": 6,
+          "priority": "medium",
+          "retry_patterns": [
+            "Smart retry decorator with exponential backoff and jitter",
+            "HTTP-aware retry respecting Retry-After headers",
+            "Circuit breaker integration",
+            "Contextual retry logic with structured logging"
+          ],
+          "risk_level": "medium",
+          "success_criteria": [
+            "Smart retry decorators implemented",
+            "HTTP-aware retry with Retry-After support",
+            "Circuit breaker integration working",
+            "Retry attempts logged with context",
+            "30-50% reduction in cascade failures",
+            "No infinite retry loops"
+          ],
+          "title": "Advanced Tenacity Retry Patterns"
+        }
+      ]
+    },
+    {
+      "description": "Additional performance gains with minimal risk",
+      "duration": "Week 6",
+      "name": "Incremental Optimizations",
+      "phase": 4,
+      "priority": "low",
+      "pull_requests": [
+        {
+          "cache_configuration": {
+            "cache_directory": "cache/llm_responses",
+            "default_ttl_seconds": 3600,
+            "eviction_policy": "least-recently-used",
+            "size_limit_gb": 1
+          },
+          "cache_features": [
+            "Intelligent cache key generation for LLM responses",
+            "Cache performance monitoring and metrics",
+            "Configurable TTL and eviction policies",
+            "Cache statistics and hit/miss tracking"
+          ],
+          "estimated_effort_hours": 16,
+          "expected_performance_gain": "10-20% cache hit rate improvement",
+          "files_modified": [
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/agents/tool_factory.py",
+            "/home/bjorn/repos/agents/docmind-ai-llm/src/utils/core.py"
+          ],
+          "pr_number": 7,
+          "priority": "low",
+          "risk_level": "low",
+          "success_criteria": [
+            "Intelligent cache key generation implemented",
+            "LLM responses cached with appropriate TTL",
+            "Cache performance monitoring in place",
+            "10-20% improvement in cache hit rates",
+            "Eviction policies working correctly",
+            "No cache-related memory leaks"
+          ],
+          "title": "Diskcache LLM Response Optimization"
+        }
+      ]
+    }
+  ],
+  "integration_patterns": [
+    {
+      "benefits": [
+        "Request tracking across UI interactions",
+        "Fragment performance monitoring",
+        "System resource tracking during UI operations"
+      ],
+      "description": "Combine Streamlit performance monitoring with loguru structured logging",
+      "implementation": "Add performance metrics logging to Streamlit app lifecycle",
+      "libraries": [
+        "streamlit",
+        "loguru",
+        "psutil"
+      ],
+      "pattern_name": "streamlit_monitoring_integration",
+      "phases": [
+        2,
+        1
+      ]
+    },
+    {
+      "benefits": [
+        "Detailed validation error context",
+        "Configuration troubleshooting improvements",
+        "Structured error reporting"
+      ],
+      "description": "Log validation errors and context with structured logging",
+      "implementation": "Integrate validation error context into structured logs",
+      "libraries": [
+        "pydantic",
+        "loguru"
+      ],
+      "pattern_name": "pydantic_logging_integration",
+      "phases": [
+        3,
+        1
+      ]
+    },
+    {
+      "benefits": [
+        "Retry pattern effectiveness tracking",
+        "Circuit breaker state monitoring",
+        "System resource impact of retry operations"
+      ],
+      "description": "Log retry attempts with context and performance metrics",
+      "implementation": "Add retry attempt logging with system context",
+      "libraries": [
+        "tenacity",
+        "loguru",
+        "psutil"
+      ],
+      "pattern_name": "tenacity_monitoring_integration",
+      "phases": [
+        3,
+        1
+      ]
+    },
+    {
+      "benefits": [
+        "Resilient LLM operations",
+        "Efficient response caching",
+        "Comprehensive performance tracking"
+      ],
+      "description": "Full integration of retry, caching, and monitoring for LLM calls",
+      "implementation": "Decorator stack combining retry, caching, and performance monitoring",
+      "libraries": [
+        "tenacity",
+        "diskcache",
+        "loguru"
+      ],
+      "pattern_name": "complete_llm_integration",
+      "phases": [
+        3,
+        4,
+        1
+      ]
+    }
+  ],
+  "integration_plan": {
+    "cluster_name": "infrastructure_core",
+    "created_date": "2025-08-12",
+    "estimated_completion": "2025-09-16",
+    "lead": "@lib-integration-infrastructure_core",
+    "phase": "integration_planning",
+    "total_duration_weeks": 5
+  },
+  "monitoring_and_observability": {
+    "key_performance_indicators": [
+      {
+        "category": "ui_performance",
+        "metrics": [
+          {
+            "monitoring_method": "Built-in Streamlit timing + loguru",
+            "name": "fragment_render_time",
+            "target": "40-60% reduction"
+          },
+          {
+            "monitoring_method": "Streamlit cache statistics + metrics logging",
+            "name": "cache_hit_rate",
+            "target": "10-20% improvement"
+          }
+        ]
+      },
+      {
+        "category": "system_reliability",
+        "metrics": [
+          {
+            "monitoring_method": "Custom timing decorators",
+            "name": "validation_performance",
+            "target": "15-25% improvement"
+          },
+          {
+            "monitoring_method": "Tenacity callbacks + structured logging",
+            "name": "retry_success_rate",
+            "target": "30-50% failure reduction"
+          }
+        ]
+      },
+      {
+        "category": "operational_efficiency",
+        "metrics": [
+          {
+            "monitoring_method": "Structured logging analysis",
+            "name": "debugging_efficiency",
+            "target": "50-70% improvement"
+          },
+          {
+            "monitoring_method": "Psutil integration with monitoring",
+            "name": "system_resource_usage",
+            "target": "Stable or improved"
+          }
+        ]
+      }
+    ],
+    "monitoring_commands": [
+      {
+        "command": "grep \"streamlit_fragment\" logs/docmind_*.log | jq '.duration_seconds'",
+        "purpose": "Monitor UI performance"
+      },
+      {
+        "command": "grep \"cache_hit_rate\" logs/docmind_*.log | tail -10",
+        "purpose": "Track cache performance"
+      },
+      {
+        "command": "grep \"retry_attempt\" logs/docmind_*.log | jq '.attempt_number'",
+        "purpose": "Monitor retry patterns"
+      },
+      {
+        "command": "grep \"system_resource_usage\" logs/docmind_*.log | jq '.memory_percent, .cpu_percent'",
+        "purpose": "System resource tracking"
+      }
+    ]
+  },
+  "risk_management": {
+    "phase_1_risks": [
+      {
+        "impact": "medium",
+        "mitigation": "Version range testing, careful uv.lock review",
+        "probability": "low",
+        "risk": "Dependency conflicts with psutil",
+        "rollback": "Remove explicit dependency, rely on transitive"
+      }
+    ],
+    "phase_2_risks": [
+      {
+        "impact": "high",
+        "mitigation": "Comprehensive testing, gradual fragment adoption",
+        "probability": "medium",
+        "risk": "Fragment isolation breaks UI functionality",
+        "rollback": "Remove @st.fragment decorators, revert to standard components"
+      },
+      {
+        "impact": "medium",
+        "mitigation": "A/B testing with feature flags, cache validation",
+        "probability": "medium",
+        "risk": "Cache strategy changes break functionality",
+        "rollback": "Revert to @st.cache_data, remove cache configuration"
+      }
+    ],
+    "phase_3_risks": [
+      {
+        "impact": "high",
+        "mitigation": "Gradual rollout, extensive validation testing",
+        "probability": "medium",
+        "risk": "Strict mode breaks existing configurations",
+        "rollback": "Disable strict mode in ConfigDict, revert field configurations"
+      },
+      {
+        "impact": "high",
+        "mitigation": "Circuit breaker integration, retry limit testing",
+        "probability": "low",
+        "risk": "Retry patterns cause infinite loops",
+        "rollback": "Revert to simple retry decorators, remove circuit breaker"
+      }
+    ],
+    "phase_4_risks": [
+      {
+        "impact": "medium",
+        "mitigation": "Memory usage monitoring, cache size limits",
+        "probability": "low",
+        "risk": "Cache-related memory leaks",
+        "rollback": "Disable LLM response caching, remove cache utilities"
+      }
+    ]
+  },
+  "success_criteria": {
+    "immediate_indicators": [
+      "All dependencies explicitly declared",
+      "JSON logging working in production mode",
+      "No test failures or regressions",
+      "Performance baseline established"
+    ],
+    "operational_indicators": [
+      "50-70% debugging efficiency improvement",
+      "60-80% faster error diagnosis",
+      "Reduced configuration complexity",
+      "Team adoption of new patterns"
+    ],
+    "performance_indicators": [
+      "40-60% UI render time reduction with fragments",
+      "20-30% cache efficiency improvement",
+      "Monitoring dashboards showing improvements",
+      "User experience improvements measurable"
+    ],
+    "resilience_indicators": [
+      "15-25% validation performance improvement",
+      "30-50% reduction in cascade failures",
+      "Enhanced error context in logs",
+      "System reliability improvements visible"
+    ]
+  },
+  "team_assignments": [
+    {
+      "phases": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "responsibilities": [
+        "Phase coordination and architecture decisions",
+        "Code review oversight for all PRs",
+        "Risk assessment and mitigation planning",
+        "Integration pattern design and validation"
+      ],
+      "role": "lead_developer"
+    },
+    {
+      "phases": [
+        2
+      ],
+      "responsibilities": [
+        "Streamlit fragment implementation",
+        "UI performance monitoring setup",
+        "Cache strategy implementation",
+        "User experience validation"
+      ],
+      "role": "frontend_specialist"
+    },
+    {
+      "phases": [
+        3,
+        4
+      ],
+      "responsibilities": [
+        "Pydantic strict mode implementation",
+        "Tenacity retry patterns development",
+        "System integration and validation",
+        "Performance optimization implementation"
+      ],
+      "role": "backend_specialist"
+    },
+    {
+      "phases": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "responsibilities": [
+        "Monitoring and observability setup",
+        "Deployment coordination and validation",
+        "Performance tracking and alerting",
+        "Infrastructure optimization support"
+      ],
+      "role": "devops_engineer"
+    }
+  ],
+  "testing_strategy": {
+    "integration_tests": {
+      "coverage_target": "85%",
+      "focus_areas": [
+        "Streamlit + caching integration",
+        "Pydantic + logging integration",
+        "Tenacity + monitoring integration",
+        "Cross-library interaction validation"
+      ]
+    },
+    "performance_tests": {
+      "benchmarks": [
+        "UI render time measurements",
+        "Validation speed benchmarks",
+        "Cache hit rate tracking",
+        "System resource monitoring"
+      ],
+      "performance_targets": {
+        "cache_efficiency": "20-30%",
+        "failure_reduction": "30-50%",
+        "ui_render_reduction": "40-60%",
+        "validation_improvement": "15-25%"
+      }
+    },
+    "regression_tests": {
+      "focus_areas": [
+        "Existing UI functionality preservation",
+        "Data validation behavior consistency",
+        "Error handling pattern maintenance"
+      ]
+    },
+    "unit_tests": {
+      "coverage_target": "90%",
+      "focus_areas": [
+        "Fragment rendering isolation",
+        "Strict validation behavior",
+        "Retry pattern effectiveness",
+        "Cache performance metrics",
+        "JSON logging format validation"
+      ],
+      "new_test_files": [
+        "test_monitoring_json_logging.py",
+        "test_streamlit_fragments.py",
+        "test_cache_strategies.py",
+        "test_retry_patterns.py",
+        "test_strict_validation.py"
+      ]
+    }
+  }
+}
