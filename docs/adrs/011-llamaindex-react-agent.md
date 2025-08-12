@@ -100,10 +100,14 @@ Previous multi-agent LangGraph supervisor architecture violated core engineering
 
 **Key Decision Factors:**
 
-1. **Simplicity**: 85% code reduction while maintaining all capabilities  
+1. **Simplicity**: 85% code reduction while maintaining all capabilities
+
 2. **Library-First**: Pure LlamaIndex ecosystem alignment with proven patterns
+
 3. **Maintenance**: Single agent system significantly easier to debug and extend
+
 4. **Development Efficiency**: 74% faster implementation (10-15h vs 44-57h)
+
 5. **Architecture Alignment**: Research confirmed single-agent suitability for document Q&A workflows
 
 **Implementation Approach:**

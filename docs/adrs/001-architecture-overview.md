@@ -58,6 +58,8 @@ LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModal
 
 - ADR-008 (Persistence with SQLite/diskcache).
 
+- ADR-020 (LlamaIndex native Settings for configuration management).
+
 ## Design
 
 - **Ingestion**: UnstructuredReader.load_data(file_path, strategy="hi_res") → IngestionPipeline([SentenceSplitter(AppSettings.chunk_size/overlap), MetadataExtractor()]) → nodes.

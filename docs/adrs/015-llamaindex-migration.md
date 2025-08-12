@@ -48,6 +48,8 @@ Complete migration to pure LlamaIndex stack (indexing/retrieval/pipelines/multim
 
 - ADR-011 (Single ReAct agent implementation)
 
+- ADR-020 (LlamaIndex native Settings adoption completes ecosystem migration)
+
 ## Design
 
 - **Migration Steps**: Replace chains with QueryPipeline, loaders with UnstructuredReader, multi-agent system with single ReActAgent.from_tools()
