@@ -23,7 +23,7 @@ class TestColBERTReranking:
         Args:
             mock_reranker: Mock reranker fixture for testing.
         """
-        with patch("utils.ColBERTReranker", return_value=mock_reranker):
+        with patch("src.utils.reranking.ColBERTReranker", return_value=mock_reranker):
             reranker = mock_reranker
             assert reranker is not None
 
@@ -171,7 +171,7 @@ class TestRerankingIntegration:
             mock_qdrant_client: Mock Qdrant client.
             sample_query_responses: Sample query-response pairs.
         """
-        with patch("utils.QdrantClient", return_value=mock_qdrant_client):
+        with patch("src.utils.reranking.QdrantClient", return_value=mock_qdrant_client):
             # Setup search results
             mock_search_results = [
                 MagicMock(id=i, score=0.8 - i * 0.1, payload={"text": f"Document {i}"})

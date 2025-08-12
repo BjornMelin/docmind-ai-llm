@@ -57,7 +57,8 @@ def main():
         "utils.core",
         "utils.database",
         "utils.embedding",
-        "agents.agent_factory",
+        "utils.monitoring",
+        "agents.agent_utils",
     ]
 
     print("\n=== Import Time Analysis ===")

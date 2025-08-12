@@ -211,12 +211,11 @@ class TestRunner:
             "run",
             "pytest",
             "tests/test_models.py",
-            "tests/test_utils.py",
             "tests/test_agent_utils.py",
             "-v",
             "--tb=short",
             "--cov=models",
-            "--cov=utils",
+            "--cov=src.utils",
             "--cov-report=term-missing",
             "--durations=10",
             "-m",
@@ -237,7 +236,7 @@ class TestRunner:
             "-v",
             "--tb=short",
             "--cov=agent_factory",
-            "--cov=utils",
+            "--cov=src.utils",
             "--cov-report=term-missing",
             "--durations=10",
             "-m",
@@ -330,8 +329,8 @@ import sys
 import importlib
 
 modules = [
-    'models', 'utils.utils', 'utils.document_loader',
-    'utils.index_builder', 'utils.model_manager',
+    'models', 'src.utils.core', 'src.utils.document',
+    'src.utils.embedding', 'src.utils.database', 'src.utils.monitoring',
     'agents.agent_utils', 'agent_factory'
 ]
 
@@ -409,9 +408,9 @@ else:
             # Identify critical files
             critical_files = [
                 "models.py",
-                "utils/utils.py",
-                "utils/document_loader.py",
-                "utils/index_builder.py",
+                "src/utils/core.py",
+                "src/utils/document.py",
+                "src/utils/embedding.py",
                 "agent_factory.py",
                 "agents/agent_utils.py",
             ]
