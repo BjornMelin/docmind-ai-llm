@@ -5,22 +5,44 @@ This script runs all tests related to PR #2 dependency cleanup validation
 and provides a comprehensive report on the status of the dependency cleanup.
 """
 
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
+# Determine package manager to use
+PACKAGE_MANAGER = os.environ.get("PACKAGE_MANAGER", "uv").lower()
+
+
+def get_test_command(test_path: str) -> list[str]:
+    """Build the test command based on the selected package manager."""
+    if PACKAGE_MANAGER == "uv":
+        return ["uv", "run", "pytest", test_path, "-v", "--tb=short"]
+    elif PACKAGE_MANAGER == "poetry":
+        if shutil.which("poetry"):
+            return ["poetry", "run", "pytest", test_path, "-v", "--tb=short"]
+        else:
+            raise RuntimeError("Poetry is not installed or not in PATH")
+    elif PACKAGE_MANAGER == "pip":
+        # Assume pytest is installed in the current environment
+        return [sys.executable, "-m", "pytest", test_path, "-v", "--tb=short"]
+    else:
+        raise RuntimeError(f"Unsupported package manager: {PACKAGE_MANAGER}")
+
 
 def run_test_suite(test_path: str, description: str) -> tuple[bool, str]:
     """Run a test suite and return success status and output."""
     print(f"\n{'=' * 60}")
-    print(f"Running {description}")
+    print(f"Running {description} (using {PACKAGE_MANAGER})")
     print(f"{'=' * 60}")
 
     try:
+        cmd = get_test_command(test_path)
         result = subprocess.run(
-            ["uv", "run", "pytest", test_path, "-v", "--tb=short"],
+            cmd,
             capture_output=True,
             text=True,
             cwd=PROJECT_ROOT,

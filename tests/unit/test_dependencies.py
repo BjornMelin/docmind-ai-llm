@@ -105,12 +105,11 @@ class TestDependencyCleanup:
             direct_imports, from_imports = extract_imports_from_file(file_path)
 
             # Check for old-style llama_index imports (without submodules)
-            for direct_import in direct_imports:
-                if direct_import == "llama_index":
-                    violations.append(
-                        f"{file_path}: Old-style import 'import llama_index' found. "
-                        "Use modular imports instead."
-                    )
+            if "llama_index" in direct_imports:
+                violations.append(
+                    f"{file_path}: Old-style import 'import llama_index' found. "
+                    "Use modular imports instead."
+                )
 
             # Collect modular imports found
             for from_import in from_imports:

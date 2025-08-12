@@ -41,7 +41,8 @@ try:
 
     LLAMACPP_AVAILABLE = True
 except (ImportError, ModuleNotFoundError) as e:
-    logger.warning(f"LlamaCPP not available: {e}")
+    logger.warning("LlamaCPP not available. Running without LlamaCPP support.")
+    logger.debug(f"LlamaCPP import failed: {e}")
     LlamaCPP = None
     LLAMACPP_AVAILABLE = False
 
@@ -136,6 +137,12 @@ st.sidebar.info(
     f"Suggested: {suggested_model}{quant_suffix} with {suggested_context} context"
 )
 
+
+def is_llamacpp_available() -> bool:
+    """Check if LlamaCPP backend is available."""
+    return LLAMACPP_AVAILABLE
+
+
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
@@ -164,7 +171,7 @@ st.sidebar.header("Model and Backend")
 with st.sidebar.expander("Advanced Settings"):
     # Show backend availability status
     backend_options = ["ollama", "lmstudio"]
-    if LLAMACPP_AVAILABLE:
+    if is_llamacpp_available():
         backend_options.insert(1, "llamacpp")
     else:
         st.sidebar.warning("LlamaCPP backend unavailable (BLAS library issue)")
@@ -204,7 +211,7 @@ try:
     if backend == "ollama":
         llm = Ollama(base_url=ollama_url, model=model_name, request_timeout=60.0)
     elif backend == "llamacpp":
-        if not LLAMACPP_AVAILABLE:
+        if not is_llamacpp_available():
             st.error(
                 "LlamaCPP backend is not available. Please check the installation "
                 "or use a different backend (Ollama or LM Studio)."
