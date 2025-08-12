@@ -82,6 +82,10 @@
     - [🗂️ Choosing Analysis Mode](#️-choosing-analysis-mode)
     - [🧠 Analyzing Documents](#-analyzing-documents)
     - [💬 Interacting with the LLM](#-interacting-with-the-llm)
+  - [🔧 API Usage Examples](#-api-usage-examples)
+    - [Programmatic Document Analysis](#programmatic-document-analysis)
+    - [Custom Configuration](#custom-configuration)
+    - [Batch Document Processing](#batch-document-processing)
   - [🏗️ Architecture](#️-architecture)
   - [🛠️ Implementation Details](#️-implementation-details)
     - [Document Processing Pipeline](#document-processing-pipeline)
@@ -98,8 +102,21 @@
     - [Hybrid Search Performance](#hybrid-search-performance)
     - [System Resource Usage](#system-resource-usage)
     - [Scalability Benchmarks](#scalability-benchmarks)
+  - [🔧 Offline Operation](#-offline-operation)
+    - [Prerequisites for Offline Use](#prerequisites-for-offline-use)
+    - [Model Requirements](#model-requirements)
+  - [🛠️ Troubleshooting](#️-troubleshooting)
+    - [Common Issues](#common-issues)
+      - [1. Ollama Connection Errors](#1-ollama-connection-errors)
+      - [2. GPU Not Detected](#2-gpu-not-detected)
+      - [3. Model Download Issues](#3-model-download-issues)
+      - [4. Memory Issues](#4-memory-issues)
+      - [5. Document Processing Errors](#5-document-processing-errors)
+    - [Performance Optimization](#performance-optimization)
+    - [Getting Help](#getting-help)
   - [📖 How to Cite](#-how-to-cite)
   - [🙌 Contributing](#-contributing)
+    - [Development Guidelines](#development-guidelines)
   - [📃 License](#-license)
 
 ## 🚀 Getting Started with DocMind AI
@@ -193,6 +210,7 @@ Access the app at `http://localhost:8501`.
 ### 🎛️ Selecting a Model
 
 1. **Start Ollama service** (if not already running):
+
    ```bash
    ollama serve
    ```
@@ -200,6 +218,7 @@ Access the app at `http://localhost:8501`.
 2. **Enter the Ollama Base URL** (default: `http://localhost:11434`).
 
 3. **Select an Ollama Model Name** (e.g., `qwen2:7b`). If the model isn't installed:
+
    ```bash
    ollama pull qwen2:7b
    ```
@@ -318,8 +337,8 @@ Use the chat interface to ask follow-up questions. The LLM leverages hybrid sear
 import asyncio
 from pathlib import Path
 from models import AppSettings
-from utils.document_loader import load_documents_llama
-from utils.index_builder import create_index_async
+from src.utils.document import load_documents_unstructured
+from src.utils.embedding import create_index_async
 from agent_factory import get_agent_system
 
 async def analyze_document(file_path: str, query: str):
@@ -327,7 +346,7 @@ async def analyze_document(file_path: str, query: str):
     settings = AppSettings()
     
     # Load and process document
-    documents = await load_documents_llama([Path(file_path)], settings)
+    documents = await load_documents_unstructured([Path(file_path)], settings)
     index = await create_index_async(documents, settings)
     
     # Create agent system
@@ -370,8 +389,8 @@ print(f"GPU enabled: {settings.gpu_acceleration}")
 import asyncio
 from pathlib import Path
 from models import AppSettings
-from utils.document_loader import load_documents_llama
-from utils.index_builder import create_index_async
+from src.utils.document import load_documents_unstructured
+from src.utils.embedding import create_index_async
 
 async def process_document_folder(folder_path: str):
     """Process all supported documents in a folder."""
@@ -392,7 +411,7 @@ async def process_document_folder(folder_path: str):
     print(f"Processing {len(documents_paths)} documents...")
     
     # Load and index all documents
-    documents = await load_documents_llama(documents_paths, settings)
+    documents = await load_documents_unstructured(documents_paths, settings)
     index = await create_index_async(documents, settings)
     
     print("Documents processed and indexed successfully!")
@@ -480,7 +499,7 @@ graph TD
 
 - **Supervisor Pattern:** LangGraph coordinator analyzes query complexity and routes to appropriate specialist agents
 
-- **Agent Types:** 
+- **Agent Types:**
   - **Document Agent:** Text retrieval and analysis using hybrid search
   - **Knowledge Graph Agent:** Entity-relationship queries and graph traversal
   - **Multimodal Agent:** Image and table analysis with vision embeddings
@@ -640,18 +659,21 @@ DocMind AI is designed for complete offline operation:
 ### Prerequisites for Offline Use
 
 1. **Install Ollama locally:**
+
    ```bash
    # Download from https://ollama.com/download
    ollama serve  # Start the service
    ```
 
 2. **Pull required models:**
+
    ```bash
    ollama pull qwen2:7b  # Recommended lightweight model
    ollama pull llama3.2  # Alternative option
    ```
 
 3. **Verify GPU setup (optional):**
+
    ```bash
    nvidia-smi  # Check GPU availability
    python scripts/gpu_validation.py  # Validate CUDA setup
@@ -759,18 +781,22 @@ Contributions are welcome! Please follow these steps:
 
 1. **Fork the repository** and create a feature branch
 2. **Set up development environment:**
+
    ```bash
    git clone https://github.com/your-username/docmind-ai-llm.git
    cd docmind-ai-llm
    uv sync --group dev
    ```
+
 3. **Make your changes** following the established patterns
 4. **Run tests and linting:**
+
    ```bash
    ruff check . --fix
    ruff format .
    pytest tests/
    ```
+
 5. **Submit a pull request** with clear description of changes
 
 ### Development Guidelines
