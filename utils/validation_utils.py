@@ -15,8 +15,11 @@ Key features:
 Example:
     Basic configuration validation::
 
-        from utils.validation_utils import verify_rrf_configuration, validate_startup_configuration
-        from models import AppSettings
+        from utils.validation_utils import (
+    verify_rrf_configuration,
+    validate_startup_configuration
+)
+        from src.models import AppSettings
 
         settings = AppSettings()
 
@@ -38,9 +41,9 @@ import torch
 from loguru import logger
 from qdrant_client import QdrantClient
 
-from models import AppSettings
+from src.core.infrastructure.hardware_utils import detect_hardware
+from src.models import AppSettings
 
-from .hardware_utils import detect_hardware
 from .logging_utils import log_error_with_context
 
 
@@ -76,7 +79,7 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
         This value is used by LlamaIndex for hybrid query processing.
 
     Example:
-        >>> from models import AppSettings
+        >>> from src.models import AppSettings
         >>> settings = AppSettings()
         >>> verification = verify_rrf_configuration(settings)
         >>> if verification['issues']:
@@ -173,9 +176,7 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
     try:
         hardware_info = detect_hardware()
         results["hardware_summary"] = hardware_info
-        results["info"].append(
-            f"Hardware detected: {hardware_info['gpu_name'] if hardware_info['cuda_available'] else 'CPU-only'}"
-        )
+        results["info"].append(f"Hardware: {hardware_info.get('gpu_name', 'CPU')}")
     except Exception as e:
         results["warnings"].append(f"Hardware detection failed: {e}")
 
@@ -207,7 +208,7 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
                 # Check if GPU has sufficient memory for selected models
                 if gpu_memory < 2.0:  # Less than 2GB VRAM
                     results["warnings"].append(
-                        f"Low GPU memory ({gpu_memory:.1f}GB) may limit model performance"
+                        f"Low GPU memory: {gpu_memory:.1f}GB - limited perf"
                     )
             except Exception as e:
                 results["warnings"].append(f"GPU detection issue: {e}")
@@ -245,7 +246,7 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
         # Check alpha parameter
         if not 10 <= settings.rrf_fusion_alpha <= 100:
             results["warnings"].append(
-                f"RRF alpha {settings.rrf_fusion_alpha} is outside typical range [10, 100]"
+                f"RRF alpha {settings.rrf_fusion_alpha} - outside recommended range"
             )
 
         # Verify RRF configuration
@@ -253,7 +254,7 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
         if verification["issues"]:
             results["warnings"].extend(verification["issues"])
             results["info"].append(
-                f"RRF hybrid alpha computed: {verification['computed_hybrid_alpha']:.3f}"
+                f"RRF hybrid alpha: {verification['computed_hybrid_alpha']:.3f}"
             )
 
     # Check chunk configuration
@@ -287,7 +288,7 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
                     1024**3
                 )
                 results["info"].append(
-                    f"Llama.cpp model loaded: {os.path.basename(settings.llamacpp_model_path)} "
+                    f"Llama.cpp: {os.path.basename(settings.llamacpp_model_path)} "
                     f"({model_size_gb:.1f}GB)"
                 )
             except Exception as e:
@@ -389,7 +390,7 @@ def validate_model_compatibility(
                 # Model requires GPU but none available
                 if min_vram > 0:
                     compatibility["issues"].append(
-                        f"Model requires GPU with {min_vram}GB VRAM but no GPU available"
+                        f"Model requires {min_vram}GB VRAM - no GPU available"
                     )
                     compatibility["hardware_sufficient"] = False
 
@@ -397,7 +398,7 @@ def validate_model_compatibility(
         known_providers = ["BAAI", "jinaai", "sentence-transformers", "nomic-ai"]
         if not any(provider in model_name for provider in known_providers):
             compatibility["recommendations"].append(
-                f"Model {model_name} is not from a known provider - verify compatibility"
+                f"Unknown model provider: {model_name}"
             )
 
         # Validate expected dimensions if provided
@@ -405,7 +406,7 @@ def validate_model_compatibility(
             known_dimensions = [384, 512, 768, 1024, 1536]
             if expected_dimension not in known_dimensions:
                 compatibility["recommendations"].append(
-                    f"Unusual embedding dimension {expected_dimension} - verify model specs"
+                    f"Unusual embedding dimension: {expected_dimension}"
                 )
 
         compatibility["compatible"] = (
@@ -444,17 +445,20 @@ def validate_search_configuration(settings: AppSettings) -> dict[str, Any]:
             search_validation["valid"] = False
         elif settings.similarity_top_k > 100:
             search_validation["recommendations"].append(
-                f"High similarity_top_k ({settings.similarity_top_k}) may impact performance"
+                "High similarity_top_k - potential performance impact"
             )
 
     # Check reranking configuration
-    if hasattr(settings, "enable_reranking") and settings.enable_reranking:
-        if hasattr(settings, "rerank_top_n"):
-            if settings.rerank_top_n > settings.similarity_top_k:
-                search_validation["recommendations"].append(
-                    f"rerank_top_n ({settings.rerank_top_n}) should not exceed "
-                    f"similarity_top_k ({settings.similarity_top_k})"
-                )
+    if (
+        hasattr(settings, "enable_reranking")
+        and settings.enable_reranking
+        and hasattr(settings, "rerank_top_n")
+        and settings.rerank_top_n > settings.similarity_top_k
+    ):
+        search_validation["recommendations"].append(
+            f"rerank_top_n ({settings.rerank_top_n}) should not exceed "
+            f"similarity_top_k ({settings.similarity_top_k})"
+        )
 
     # Check embedding model settings
     if settings.dense_embedding_dimension <= 0:
@@ -512,14 +516,14 @@ def get_configuration_health_score(settings: AppSettings) -> dict[str, Any]:
             hardware_score += 10  # Consistent CPU-only configuration
 
         # Check if batch sizes are reasonable for hardware
-        from .hardware_utils import get_recommended_batch_size
+        from src.core.infrastructure.hardware_utils import get_recommended_batch_size
 
         recommended_batch = get_recommended_batch_size("embedding")
         if abs(settings.embedding_batch_size - recommended_batch) <= 16:
             hardware_score += 10  # Reasonable batch size
         else:
             health_score["recommendations"].append(
-                f"Consider adjusting embedding batch size to {recommended_batch} for your hardware"
+                f"Adjust embedding batch to {recommended_batch} for optimal performance"
             )
 
         health_score["category_scores"]["hardware"] = hardware_score
@@ -568,12 +572,20 @@ def get_configuration_health_score(settings: AppSettings) -> dict[str, Any]:
 
         # Security configuration
         security_score = 0
-        if hasattr(settings, "openai_api_key") and settings.openai_api_key:
-            if len(settings.openai_api_key) > 20:
-                security_score += 5
-        if hasattr(settings, "llamaparse_api_key") and settings.llamaparse_api_key:
-            if len(settings.llamaparse_api_key) > 20:
-                security_score += 5
+        if (
+            hasattr(settings, "openai_api_key")
+            and settings.openai_api_key
+            and len(settings.openai_api_key) > 20
+        ):
+            security_score += 5
+
+        if (
+            hasattr(settings, "llamaparse_api_key")
+            and settings.llamaparse_api_key
+            and len(settings.llamaparse_api_key) > 20
+        ):
+            security_score += 5
+
         health_score["category_scores"]["security"] = security_score
 
         # Calculate overall score

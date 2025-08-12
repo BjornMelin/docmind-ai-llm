@@ -1,7 +1,7 @@
 """Simplified document loading utilities for DocMind AI.
 
-This module provides core offline document processing using LlamaIndex UnstructuredReader
-with high-resolution parsing strategy for multimodal content extraction.
+Provides offline document processing with LlamaIndex UnstructuredReader,
+enabling high-resolution multimodal content extraction.
 
 ADR-004 Compliance: Offline document loading with Unstructured hi_res strategy.
 
@@ -29,6 +29,7 @@ Example:
 """
 
 import hashlib
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -37,9 +38,41 @@ from llama_index.core import Document
 from llama_index.readers.file import UnstructuredReader
 from loguru import logger
 
-from models.core import settings
-from utils.exceptions import DocumentLoadingError, handle_document_error
-from utils.retry_utils import document_retry
+from src.models.core import settings
+
+
+# Simple exception classes for document loading
+class DocumentLoadingError(Exception):
+    """Exception raised when document loading fails."""
+
+    pass
+
+
+# Simple retry decorator
+def document_retry(func):
+    """Simple retry decorator for document operations."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if attempt == max_retries - 1:  # Last attempt
+                    raise
+                logger.warning(f"Attempt {attempt + 1} failed: {e}, retrying...")
+        return func(*args, **kwargs)  # This should never be reached
+
+    return wrapper
+
+
+def handle_document_error(
+    error: Exception, operation: str, file_path: str = None
+) -> Exception:
+    """Simple error handler that returns a DocumentLoadingError."""
+    return DocumentLoadingError(f"Error in {operation}: {str(error)}")
+
 
 # Simple document cache using diskcache
 _document_cache = diskcache.Cache("./cache/documents")

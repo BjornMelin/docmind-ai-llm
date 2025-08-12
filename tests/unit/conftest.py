@@ -17,7 +17,7 @@ from PIL import Image
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from models import AppSettings
+from src.models import AppSettings
 
 
 @pytest.fixture
@@ -59,10 +59,10 @@ endobj
 endobj
 xref
 0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
 trailer
 <<
 /Size 4
