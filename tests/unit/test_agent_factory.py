@@ -133,7 +133,11 @@ class TestReActAgentCreation:
     @patch("src.agents.agent_factory.ChatMemoryBuffer")
     @patch("src.agents.agent_factory.logger")
     def test_create_agentic_rag_system_empty_tools(
-        self, mock_logger, mock_memory_class, mock_react_agent_class, mock_llm
+        self,
+        mock_logger,
+        mock_memory_class,
+        mock_react_agent_class,
+        mock_llm,  # noqa: ARG002
     ):
         """Test agent creation with empty tools list."""
         mock_agent_instance = MagicMock()

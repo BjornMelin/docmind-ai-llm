@@ -139,12 +139,14 @@ def test_app_chat_functionality(mock_process_query, mock_get_agent, app_test):
 
 
 @patch("pathlib.Path.exists", return_value=False)
-def test_app_session_persistence(mock_exists, app_test):
+def test_app_session_persistence(app_test):
     """Test session save and load functionality.
 
     Args:
-        mock_exists: Mock file existence check.
         app_test: Streamlit app test fixture.
+
+    Note:
+        pathlib.Path.exists is mocked to return False for testing.
     """
     app = app_test.run()
 

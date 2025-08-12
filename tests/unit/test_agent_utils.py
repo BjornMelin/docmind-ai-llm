@@ -221,7 +221,10 @@ class TestAnalyzeDocumentsAgentic:
     @patch("src.agents.agent_utils.ReActAgent")
     @patch("src.agents.agent_utils.Ollama")
     def test_analyze_documents_without_agent(
-        self, mock_ollama, mock_react_agent, mock_index_data_complete
+        self,
+        mock_ollama,
+        mock_react_agent,
+        mock_index_data_complete,  # noqa: ARG002
     ):
         """Test document analysis without provided agent - creates fallback."""
         mock_agent_instance = MagicMock()
@@ -234,7 +237,7 @@ class TestAnalyzeDocumentsAgentic:
 
         assert "Fallback analysis" in result
 
-    def test_analyze_documents_fallback_on_failure(self, mock_index_data_complete):
+    def test_analyze_documents_fallback_on_failure(self):
         """Test analysis fallback on failure."""
         # Should use fallback decorator
         result = analyze_documents_agentic(None, {}, "summary")
