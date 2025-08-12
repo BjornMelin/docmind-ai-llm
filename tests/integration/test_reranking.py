@@ -1,7 +1,9 @@
-"""Tests for ColBERT reranking and performance monitoring.
+"""Tests for search and retrieval functionality.
 
-This module tests ColBERT reranking functionality, performance characteristics,
-and integration with the hybrid search pipeline following 2025 best practices.
+This module tests basic search functionality, retriever creation,
+and integration with the simplified search pipeline following 2025 best practices.
+
+Note: Complex ColBERT reranking has been simplified in the current architecture.
 """
 
 import sys
@@ -14,21 +16,27 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-class TestColBERTReranking:
-    """Test ColBERT reranking functionality."""
+class TestSearchRetrieval:
+    """Test search and retrieval functionality."""
 
-    def test_reranker_initialization(self, mock_reranker):
-        """Test ColBERT reranker initialization and configuration.
+    def test_basic_retriever_creation(self):
+        """Test basic retriever creation from vector index."""
+        # Mock VectorStoreIndex
+        mock_index = MagicMock()
 
-        Args:
-            mock_reranker: Mock reranker fixture for testing.
-        """
-        with patch("src.utils.reranking.ColBERTReranker", return_value=mock_reranker):
-            reranker = mock_reranker
-            assert reranker is not None
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            mock_retriever_class.return_value = mock_retriever
 
-            # Test reranker configuration
-            assert hasattr(reranker, "rerank")
+            from src.utils.embedding import create_basic_retriever
+
+            retriever = create_basic_retriever(mock_index)
+            assert retriever is not None
+
+            # Verify retriever was created with correct parameters
+            mock_retriever_class.assert_called_once()
+            call_args = mock_retriever_class.call_args[1]
+            assert call_args["index"] == mock_index
 
     @pytest.mark.parametrize(
         ("top_k", "query_type"),
@@ -39,211 +47,242 @@ class TestColBERTReranking:
             (3, "simple"),
         ],
     )
-    def test_reranking_with_different_parameters(
-        self, top_k, query_type, mock_reranker, sample_documents
+    def test_retrieval_with_different_parameters(
+        self, top_k, query_type, sample_documents
     ):
-        """Test reranking with different top_k values and query types.
+        """Test retrieval with different top_k values and query types.
 
         Args:
             top_k: Number of top results to return.
             query_type: Type of query being tested.
-            mock_reranker: Mock reranker fixture.
             sample_documents: Sample documents fixture.
         """
-        # Mock reranking results
-        mock_results = [
-            {"index": i, "score": 0.9 - i * 0.1}
-            for i in range(min(top_k, len(sample_documents)))
-        ]
-        mock_reranker.rerank.return_value = mock_results
+        # Mock vector index and retriever
+        mock_index = MagicMock()
 
-        query = f"This is a {query_type} query about embeddings"
-        documents = [doc.text for doc in sample_documents[:top_k]]
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Mock retrieval results
+            mock_results = [
+                MagicMock(text=doc.text, score=0.9 - i * 0.1)
+                for i, doc in enumerate(sample_documents[:top_k])
+            ]
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-        results = mock_reranker.rerank(query=query, documents=documents, top_k=top_k)
+            from src.utils.embedding import create_basic_retriever
 
-        assert len(results) <= top_k
-        assert len(results) <= len(documents)
+            retriever = create_basic_retriever(mock_index, similarity_top_k=top_k)
 
-        # Verify results are sorted by score (descending)
-        scores = [result["score"] for result in results]
-        assert scores == sorted(scores, reverse=True)
+            query = f"This is a {query_type} query about embeddings"
+            results = retriever.retrieve(query)
 
-    def test_reranking_score_validation(self, mock_reranker):
-        """Test that reranking scores are properly normalized and valid.
+            assert len(results) <= top_k
+            assert len(results) <= len(sample_documents)
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Configure mock to return specific scores
-        mock_reranker.rerank.return_value = [
-            {"index": 0, "score": 0.95},
-            {"index": 1, "score": 0.87},
-            {"index": 2, "score": 0.72},
-        ]
+            # Verify results exist
+            assert results is not None
 
-        query = "Test query"
-        documents = ["Document 1", "Document 2", "Document 3"]
+    def test_retrieval_score_validation(self):
+        """Test that retrieval scores are properly handled."""
+        mock_index = MagicMock()
 
-        results = mock_reranker.rerank(query=query, documents=documents, top_k=3)
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Configure mock to return specific scores
+            mock_results = [
+                MagicMock(text="Document 1", score=0.95),
+                MagicMock(text="Document 2", score=0.87),
+                MagicMock(text="Document 3", score=0.72),
+            ]
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-        for result in results:
-            # Scores should be between 0 and 1
-            assert 0 <= result["score"] <= 1
-            # Index should be valid
-            assert 0 <= result["index"] < len(documents)
+            from src.utils.embedding import create_basic_retriever
 
-    def test_reranking_with_empty_input(self, mock_reranker):
-        """Test reranking behavior with empty or invalid input.
+            retriever = create_basic_retriever(mock_index)
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Test with empty documents
-        mock_reranker.rerank.return_value = []
+            query = "Test query"
+            results = retriever.retrieve(query)
 
-        results = mock_reranker.rerank(query="Test query", documents=[], top_k=5)
-        assert len(results) == 0
+            for result in results:
+                # Scores should be between 0 and 1
+                assert 0 <= result.score <= 1
+                # Text should exist
+                assert result.text is not None
 
-        # Test with empty query
-        results = mock_reranker.rerank(query="", documents=["Doc 1"], top_k=5)
-        # Should handle gracefully (implementation dependent)
-        assert isinstance(results, list)
+    def test_retrieval_with_empty_input(self):
+        """Test retrieval behavior with edge cases."""
+        mock_index = MagicMock()
+
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Test with empty results
+            mock_retriever.retrieve.return_value = []
+            mock_retriever_class.return_value = mock_retriever
+
+            from src.utils.embedding import create_basic_retriever
+
+            retriever = create_basic_retriever(mock_index)
+
+            # Test with empty query
+            results = retriever.retrieve("")
+            assert isinstance(results, list)
+
+            # Test with normal query returning empty results
+            results = retriever.retrieve("Test query")
+            assert len(results) == 0
 
     @pytest.mark.performance
-    def test_reranking_performance(self, benchmark, mock_reranker):
-        """Test ColBERT reranking performance with batch processing.
+    def test_retrieval_performance(self, benchmark):
+        """Test basic retrieval performance.
 
         Args:
             benchmark: Pytest benchmark fixture.
-            mock_reranker: Mock reranker fixture.
         """
-        # Mock reranking for performance test
-        mock_reranker.rerank.return_value = [
-            {"index": i, "score": 0.9 - i * 0.01} for i in range(50)
-        ]
+        mock_index = MagicMock()
 
-        query = "Performance test query"
-        documents = [f"Document {i} with content" for i in range(100)]
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Mock retrieval for performance test
+            mock_results = [
+                MagicMock(text=f"Document {i}", score=0.9 - i * 0.01) for i in range(50)
+            ]
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-        def rerank_operation():
-            return mock_reranker.rerank(query=query, documents=documents, top_k=50)
+            from src.utils.embedding import create_basic_retriever
 
-        result = benchmark(rerank_operation)
-        assert len(result) == 50
+            retriever = create_basic_retriever(mock_index, similarity_top_k=50)
 
-    def test_reranking_consistency(self, mock_reranker):
-        """Test that reranking produces consistent results for same input.
+            query = "Performance test query"
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Configure consistent mock results
-        consistent_results = [
-            {"index": 0, "score": 0.95},
-            {"index": 2, "score": 0.85},
-            {"index": 1, "score": 0.75},
-        ]
-        mock_reranker.rerank.return_value = consistent_results
+            def retrieval_operation():
+                return retriever.retrieve(query)
 
-        query = "Consistent test query"
-        documents = ["Doc A", "Doc B", "Doc C"]
+            result = benchmark(retrieval_operation)
+            assert len(result) == 50
 
-        # Run reranking multiple times
-        results1 = mock_reranker.rerank(query=query, documents=documents, top_k=3)
-        results2 = mock_reranker.rerank(query=query, documents=documents, top_k=3)
+    def test_retrieval_consistency(self):
+        """Test that retrieval produces consistent results for same input."""
+        mock_index = MagicMock()
 
-        # Results should be identical
-        assert results1 == results2
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Configure consistent mock results
+            consistent_results = [
+                MagicMock(text="Doc A", score=0.95),
+                MagicMock(text="Doc C", score=0.85),
+                MagicMock(text="Doc B", score=0.75),
+            ]
+            mock_retriever.retrieve.return_value = consistent_results
+            mock_retriever_class.return_value = mock_retriever
+
+            from src.utils.embedding import create_basic_retriever
+
+            retriever = create_basic_retriever(mock_index)
+
+            query = "Consistent test query"
+
+            # Run retrieval multiple times
+            results1 = retriever.retrieve(query)
+            results2 = retriever.retrieve(query)
+
+            # Results should be the same mock objects
+            assert results1 == results2
 
 
-class TestRerankingIntegration:
-    """Test reranking integration with search pipeline."""
+class TestRetrievalIntegration:
+    """Test retrieval integration with search pipeline."""
 
     @pytest.mark.integration
-    def test_reranking_in_search_pipeline(
-        self, mock_reranker, mock_qdrant_client, sample_query_responses
+    def test_retrieval_in_search_pipeline(
+        self, mock_qdrant_client, sample_query_responses
     ):
-        """Test reranking integration within complete search pipeline.
+        """Test retrieval integration within simplified search pipeline.
 
         Args:
-            mock_reranker: Mock reranker fixture.
             mock_qdrant_client: Mock Qdrant client.
             sample_query_responses: Sample query-response pairs.
         """
-        with patch("src.utils.reranking.QdrantClient", return_value=mock_qdrant_client):
-            # Setup search results
-            mock_search_results = [
-                MagicMock(id=i, score=0.8 - i * 0.1, payload={"text": f"Document {i}"})
-                for i in range(5)
-            ]
-            mock_qdrant_client.search.return_value = mock_search_results
+        # Setup search results
+        mock_search_results = [
+            MagicMock(id=i, score=0.8 - i * 0.1, payload={"text": f"Document {i}"})
+            for i in range(5)
+        ]
+        mock_qdrant_client.search.return_value = mock_search_results
 
-            # Setup reranking results
-            mock_reranker.rerank.return_value = [
-                {"index": 2, "score": 0.95},  # Document 2 ranked highest
-                {"index": 0, "score": 0.88},  # Document 0 ranked second
-                {"index": 1, "score": 0.82},  # Document 1 ranked third
-            ]
+        # Mock vector index creation
+        mock_index = MagicMock()
 
-            # Simulate search + reranking pipeline
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Simulate retrieval results
+            mock_retrieval_results = [
+                MagicMock(text="Document 0", score=0.95),
+                MagicMock(text="Document 1", score=0.88),
+                MagicMock(text="Document 2", score=0.82),
+            ]
+            mock_retriever.retrieve.return_value = mock_retrieval_results
+            mock_retriever_class.return_value = mock_retriever
+
+            from src.utils.embedding import create_basic_retriever
+
+            # Create retriever
+            retriever = create_basic_retriever(mock_index)
+
+            # Simulate search pipeline
             query = sample_query_responses[0]["query"]
 
-            # 1. Initial search
-            search_results = mock_qdrant_client.search(
-                collection_name="test", query_vector=[0.1] * 1024, limit=10
-            )
-
-            # 2. Extract documents for reranking
-            documents = [result.payload["text"] for result in search_results]
-
-            # 3. Rerank results
-            reranked = mock_reranker.rerank(query=query, documents=documents, top_k=3)
+            # Execute retrieval
+            results = retriever.retrieve(query)
 
             # Verify pipeline execution
-            assert len(search_results) == 5
-            assert len(reranked) == 3
-            assert reranked[0]["score"] > reranked[1]["score"]  # Properly sorted
+            assert len(results) == 3
+            assert results[0].score >= results[1].score  # Should be sorted by score
 
-    def test_reranking_score_fusion(self, mock_reranker):
-        """Test score fusion between initial retrieval and reranking scores.
+    def test_hybrid_retriever_creation(self):
+        """Test hybrid retriever creation and fallback logic."""
+        mock_index = MagicMock()
+
+        # Test successful hybrid retriever creation
+        with patch(
+            "src.utils.embedding.QueryFusionRetriever"
+        ) as mock_fusion_retriever_class:
+            mock_fusion_retriever = MagicMock()
+            mock_fusion_retriever_class.return_value = mock_fusion_retriever
+
+            # Mock the index to support hybrid search
+            mock_index.vector_store = MagicMock()
+            mock_index.vector_store.enable_hybrid = True
+
+            from src.utils.embedding import create_hybrid_retriever
+
+            retriever = create_hybrid_retriever(mock_index)
+
+            # Should return the fusion retriever or basic retriever
+            assert retriever is not None
+
+        # Test fallback to basic retriever when hybrid not supported
+        with patch(
+            "src.utils.embedding.create_basic_retriever"
+        ) as mock_basic_retriever_func:
+            mock_basic_retriever = MagicMock()
+            mock_basic_retriever_func.return_value = mock_basic_retriever
+
+            # Mock index without hybrid support
+            mock_index_no_hybrid = MagicMock()
+            del mock_index_no_hybrid.vector_store  # Remove hybrid support
+
+            retriever = create_hybrid_retriever(mock_index_no_hybrid)
+
+            # Should fallback to basic retriever
+            mock_basic_retriever_func.assert_called_once_with(mock_index_no_hybrid)
+
+    def test_retrieval_with_filtering_logic(self, sample_documents):
+        """Test retrieval with document filtering patterns.
 
         Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Initial retrieval scores
-        retrieval_scores = [0.9, 0.8, 0.7, 0.6, 0.5]
-
-        # Reranking scores
-        mock_reranker.rerank.return_value = [
-            {"index": 2, "score": 0.95},  # Document 2: retrieval=0.7, rerank=0.95
-            {"index": 0, "score": 0.85},  # Document 0: retrieval=0.9, rerank=0.85
-            {"index": 4, "score": 0.80},  # Document 4: retrieval=0.5, rerank=0.80
-        ]
-
-        query = "Test fusion query"
-        documents = [f"Document {i}" for i in range(5)]
-
-        reranked = mock_reranker.rerank(query=query, documents=documents, top_k=3)
-
-        # Test score fusion logic (implementation dependent)
-        def fuse_scores(retrieval_score, rerank_score, alpha=0.7):
-            """Simple score fusion for testing."""
-            return alpha * rerank_score + (1 - alpha) * retrieval_score
-
-        for result in reranked:
-            index = result["index"]
-            retrieval_score = retrieval_scores[index]
-            rerank_score = result["score"]
-
-            fused_score = fuse_scores(retrieval_score, rerank_score)
-            assert 0 <= fused_score <= 1
-
-    def test_reranking_with_metadata_filtering(self, mock_reranker, sample_documents):
-        """Test reranking with metadata-based filtering.
-
-        Args:
-            mock_reranker: Mock reranker fixture.
             sample_documents: Sample documents fixture.
         """
         # Filter documents by metadata (e.g., source)
@@ -253,223 +292,272 @@ class TestRerankingIntegration:
             if doc.metadata.get("source", "").endswith(".pdf")
         ]
 
-        # Mock reranking for filtered documents
-        mock_reranker.rerank.return_value = [
-            {"index": i, "score": 0.9 - i * 0.1} for i in range(len(filtered_docs))
-        ]
+        mock_index = MagicMock()
 
-        query = "Test metadata filtering"
-        documents = [doc.text for doc in filtered_docs]
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Mock retrieval results based on filtered documents
+            mock_results = [
+                MagicMock(text=doc.text, score=0.9 - i * 0.1)
+                for i, doc in enumerate(filtered_docs)
+            ]
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-        results = mock_reranker.rerank(query=query, documents=documents, top_k=5)
+            from src.utils.embedding import create_basic_retriever
 
-        # Verify results correspond to filtered set
-        assert len(results) <= len(filtered_docs)
-        assert len(results) <= 5
+            retriever = create_basic_retriever(mock_index)
+
+            query = "Test metadata filtering"
+            results = retriever.retrieve(query)
+
+            # Verify results correspond to filtered set
+            assert len(results) <= len(filtered_docs)
+            assert all(hasattr(result, "text") for result in results)
 
 
-class TestRerankingPerformanceMonitoring:
-    """Test performance monitoring for reranking operations."""
+class TestRetrievalPerformanceMonitoring:
+    """Test performance monitoring for retrieval operations."""
 
-    def test_reranking_latency_measurement(self, mock_reranker):
-        """Test measurement of reranking latency.
-
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
+    def test_retrieval_latency_measurement(self):
+        """Test measurement of retrieval latency."""
         import time
 
-        # Add artificial delay to mock
-        def slow_rerank(*args, **kwargs):
-            time.sleep(0.01)  # 10ms delay
-            return [{"index": 0, "score": 0.9}]
+        mock_index = MagicMock()
 
-        mock_reranker.rerank.side_effect = slow_rerank
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
 
-        query = "Latency test query"
-        documents = ["Test document"]
+            # Add artificial delay to mock
+            def slow_retrieve(*args, **kwargs):
+                time.sleep(0.01)  # 10ms delay
+                return [MagicMock(text="Test document", score=0.9)]
 
-        start_time = time.perf_counter()
-        results = mock_reranker.rerank(query=query, documents=documents, top_k=1)
-        end_time = time.perf_counter()
+            mock_retriever.retrieve.side_effect = slow_retrieve
+            mock_retriever_class.return_value = mock_retriever
 
-        latency = end_time - start_time
+            from src.utils.embedding import create_basic_retriever
 
-        assert len(results) == 1
-        assert latency >= 0.01  # Should include the artificial delay
+            retriever = create_basic_retriever(mock_index)
+
+            query = "Latency test query"
+
+            start_time = time.perf_counter()
+            results = retriever.retrieve(query)
+            end_time = time.perf_counter()
+
+            latency = end_time - start_time
+
+            assert len(results) == 1
+            assert latency >= 0.01  # Should include the artificial delay
 
     @pytest.mark.performance
-    def test_reranking_throughput(self, benchmark, mock_reranker):
-        """Test reranking throughput with multiple queries.
+    def test_retrieval_throughput(self, benchmark):
+        """Test retrieval throughput with multiple queries.
 
         Args:
             benchmark: Pytest benchmark fixture.
-            mock_reranker: Mock reranker fixture.
         """
-        # Configure mock for throughput testing
-        mock_reranker.rerank.return_value = [
-            {"index": 0, "score": 0.9},
-            {"index": 1, "score": 0.8},
-        ]
+        mock_index = MagicMock()
 
-        queries = [f"Query {i}" for i in range(10)]
-        documents = [f"Document {i}" for i in range(20)]
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Configure mock for throughput testing
+            mock_retriever.retrieve.return_value = [
+                MagicMock(text="Document 1", score=0.9),
+                MagicMock(text="Document 2", score=0.8),
+            ]
+            mock_retriever_class.return_value = mock_retriever
 
-        def batch_rerank():
-            results = []
-            for query in queries:
-                rerank_result = mock_reranker.rerank(
-                    query=query, documents=documents, top_k=2
-                )
-                results.extend(rerank_result)
-            return results
+            from src.utils.embedding import create_basic_retriever
 
-        result = benchmark(batch_rerank)
-        assert len(result) == 20  # 10 queries * 2 results each
+            retriever = create_basic_retriever(mock_index, similarity_top_k=2)
 
-    def test_reranking_memory_efficiency(self, mock_reranker):
-        """Test memory efficiency of reranking operations.
+            queries = [f"Query {i}" for i in range(10)]
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Test with large document set
-        large_doc_set = [f"Document {i} with content" for i in range(1000)]
+            def batch_retrieve():
+                results = []
+                for query in queries:
+                    retrieval_result = retriever.retrieve(query)
+                    results.extend(retrieval_result)
+                return results
 
-        mock_reranker.rerank.return_value = [
-            {"index": i, "score": 0.9 - i * 0.001} for i in range(10)
-        ]
+            result = benchmark(batch_retrieve)
+            assert len(result) == 20  # 10 queries * 2 results each
 
-        query = "Memory efficiency test"
+    def test_retrieval_memory_efficiency(self):
+        """Test memory efficiency of retrieval operations."""
+        mock_index = MagicMock()
 
-        # Should handle large document sets without issues
-        results = mock_reranker.rerank(query=query, documents=large_doc_set, top_k=10)
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Test with large result set simulation
+            mock_results = [
+                MagicMock(text=f"Document {i}", score=0.9 - i * 0.001)
+                for i in range(10)
+            ]
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-        assert len(results) == 10
-        # Verify indices are within valid range
-        for result in results:
-            assert 0 <= result["index"] < len(large_doc_set)
+            from src.utils.embedding import create_basic_retriever
 
-    def test_reranking_error_recovery(self, mock_reranker):
-        """Test error recovery and fallback mechanisms in reranking.
+            retriever = create_basic_retriever(mock_index, similarity_top_k=10)
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Test with reranker that fails
-        mock_reranker.rerank.side_effect = Exception("Reranking failed")
+            query = "Memory efficiency test"
 
-        query = "Error recovery test"
-        documents = ["Doc 1", "Doc 2", "Doc 3"]
+            # Should handle retrieval without issues
+            results = retriever.retrieve(query)
 
-        # Should handle reranking failure gracefully
-        with pytest.raises(Exception, match="Reranking.*failed|unavailable"):
-            mock_reranker.rerank(query=query, documents=documents, top_k=3)
+            assert len(results) == 10
+            # Verify all results have required attributes
+            for result in results:
+                assert hasattr(result, "text")
+                assert hasattr(result, "score")
+
+    def test_retrieval_error_recovery(self):
+        """Test error recovery and fallback mechanisms in retrieval."""
+        mock_index = MagicMock()
+
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Test with retriever that fails
+            mock_retriever.retrieve.side_effect = Exception("Retrieval failed")
+            mock_retriever_class.return_value = mock_retriever
+
+            from src.utils.embedding import create_basic_retriever
+
+            retriever = create_basic_retriever(mock_index)
+
+            query = "Error recovery test"
+
+            # Should handle retrieval failure by raising exception
+            with pytest.raises(Exception, match="Retrieval.*failed"):
+                retriever.retrieve(query)
 
     @pytest.mark.slow
-    def test_reranking_scalability(self, mock_reranker):
-        """Test reranking scalability with varying document set sizes.
+    def test_retrieval_scalability(self):
+        """Test retrieval scalability with varying top_k sizes."""
+        mock_index = MagicMock()
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Test with different document set sizes
-        test_sizes = [10, 50, 100, 500]
+        # Test with different top_k values
+        test_sizes = [10, 50, 100]
 
         for size in test_sizes:
-            documents = [f"Document {i}" for i in range(size)]
-            expected_results = [
-                {"index": i, "score": 0.9 - i * 0.001} for i in range(min(10, size))
+            with patch(
+                "src.utils.embedding.VectorIndexRetriever"
+            ) as mock_retriever_class:
+                mock_retriever = MagicMock()
+                expected_results = [
+                    MagicMock(text=f"Document {i}", score=0.9 - i * 0.001)
+                    for i in range(size)
+                ]
+                mock_retriever.retrieve.return_value = expected_results
+                mock_retriever_class.return_value = mock_retriever
+
+                from src.utils.embedding import create_basic_retriever
+
+                retriever = create_basic_retriever(mock_index, similarity_top_k=size)
+
+                query = f"Scalability test with top_k={size}"
+
+                results = retriever.retrieve(query)
+
+                assert len(results) == size
+                # Performance should remain reasonable (this is just a mock test)
+                assert all(result.score > 0 for result in results)
+
+
+class TestRetrievalEdgeCases:
+    """Test edge cases and error conditions in retrieval."""
+
+    def test_retrieval_with_duplicate_handling(self):
+        """Test retrieval behavior with duplicate-like scenarios."""
+        mock_index = MagicMock()
+
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Simulate results that might include similar content
+            mock_results = [
+                MagicMock(text="Document A", score=0.9),
+                MagicMock(text="Document A variant", score=0.85),
+                MagicMock(text="Document B", score=0.8),
             ]
-            mock_reranker.rerank.return_value = expected_results
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-            query = f"Scalability test with {size} documents"
+            from src.utils.embedding import create_basic_retriever
 
-            results = mock_reranker.rerank(query=query, documents=documents, top_k=10)
+            retriever = create_basic_retriever(mock_index)
 
-            assert len(results) == min(10, size)
-            # Performance should remain reasonable (this is just a mock test)
-            assert all(result["score"] > 0 for result in results)
+            query = "Test duplicate handling"
 
+            results = retriever.retrieve(query)
 
-class TestRerankingEdgeCases:
-    """Test edge cases and error conditions in reranking."""
+            # Should handle results appropriately
+            assert len(results) == 3
+            for result in results:
+                assert hasattr(result, "text")
+                assert hasattr(result, "score")
 
-    def test_reranking_with_duplicate_documents(self, mock_reranker):
-        """Test reranking behavior with duplicate documents.
+    def test_retrieval_with_long_content(self):
+        """Test retrieval with long document content scenarios."""
+        mock_index = MagicMock()
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Documents with duplicates
-        documents = ["Document A", "Document B", "Document A", "Document C"]
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Create mock results representing long documents
+            mock_results = [
+                MagicMock(text="C" * 1000, score=0.9),  # Simulate long content
+                MagicMock(text="A" * 500, score=0.8),
+                MagicMock(text="B" * 750, score=0.7),
+            ]
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-        mock_reranker.rerank.return_value = [
-            {"index": 0, "score": 0.9},  # First occurrence of "Document A"
-            {"index": 2, "score": 0.85},  # Second occurrence of "Document A"
-            {"index": 1, "score": 0.8},  # "Document B"
-        ]
+            from src.utils.embedding import create_basic_retriever
 
-        query = "Test duplicate handling"
+            retriever = create_basic_retriever(mock_index)
 
-        results = mock_reranker.rerank(query=query, documents=documents, top_k=3)
+            query = "Test long content"
 
-        # Should handle duplicates appropriately
-        assert len(results) == 3
-        for result in results:
-            assert 0 <= result["index"] < len(documents)
+            results = retriever.retrieve(query)
 
-    def test_reranking_with_very_long_documents(self, mock_reranker):
-        """Test reranking with very long documents.
+            assert len(results) == 3
+            # Should handle long content without issues
+            assert all(result.score > 0 for result in results)
+            assert all(len(result.text) > 0 for result in results)
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Create very long documents
-        long_documents = [
-            "A" * 10000,  # 10k characters
-            "B" * 5000,  # 5k characters
-            "C" * 15000,  # 15k characters
-        ]
+    def test_retrieval_with_special_characters(self):
+        """Test retrieval with documents containing special characters."""
+        mock_index = MagicMock()
 
-        mock_reranker.rerank.return_value = [
-            {"index": 2, "score": 0.9},  # Longest document ranked highest
-            {"index": 0, "score": 0.8},
-            {"index": 1, "score": 0.7},
-        ]
+        with patch("src.utils.embedding.VectorIndexRetriever") as mock_retriever_class:
+            mock_retriever = MagicMock()
+            # Documents with special characters
+            special_texts = [
+                "Document with émojis 🚀 and ñ characters",
+                "Document with <HTML> tags & symbols",
+                "Document with unicode: α β γ δ ε",
+                "Document with punctuation!!! ???",
+            ]
 
-        query = "Test very long documents"
+            mock_results = [
+                MagicMock(text=text, score=0.9 - i * 0.1)
+                for i, text in enumerate(special_texts)
+            ]
+            mock_retriever.retrieve.return_value = mock_results
+            mock_retriever_class.return_value = mock_retriever
 
-        results = mock_reranker.rerank(query=query, documents=long_documents, top_k=3)
+            from src.utils.embedding import create_basic_retriever
 
-        assert len(results) == 3
-        # Should handle long documents without truncation issues
-        assert all(result["score"] > 0 for result in results)
+            retriever = create_basic_retriever(mock_index)
 
-    def test_reranking_with_special_characters(self, mock_reranker):
-        """Test reranking with documents containing special characters.
+            query = "Special characters test"
 
-        Args:
-            mock_reranker: Mock reranker fixture.
-        """
-        # Documents with special characters
-        special_docs = [
-            "Document with émojis 🚀 and ñ characters",
-            "Document with <HTML> tags & symbols",
-            "Document with unicode: α β γ δ ε",
-            "Document with punctuation!!! ???",
-        ]
+            results = retriever.retrieve(query)
 
-        mock_reranker.rerank.return_value = [
-            {"index": i, "score": 0.9 - i * 0.1} for i in range(len(special_docs))
-        ]
-
-        query = "Special characters test"
-
-        results = mock_reranker.rerank(query=query, documents=special_docs, top_k=4)
-
-        assert len(results) == 4
-        # Should handle special characters properly
-        for result in results:
-            assert 0 <= result["index"] < len(special_docs)
-            assert result["score"] > 0
+            assert len(results) == 4
+            # Should handle special characters properly
+            for i, result in enumerate(results):
+                assert result.text == special_texts[i]
+                assert result.score > 0

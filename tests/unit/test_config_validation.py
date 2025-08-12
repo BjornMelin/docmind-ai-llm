@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from src.models.core import Settings
 from src.utils.core import validate_startup_configuration
 
 

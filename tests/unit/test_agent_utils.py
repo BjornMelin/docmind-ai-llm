@@ -267,7 +267,7 @@ class TestChatWithAgent:
         memory = ChatMemoryBuffer.from_defaults()
 
         with pytest.raises(RuntimeError):
-            async for chunk in chat_with_agent(mock_agent, "", memory):
+            async for _chunk in chat_with_agent(mock_agent, "", memory):
                 pass
 
     @pytest.mark.asyncio

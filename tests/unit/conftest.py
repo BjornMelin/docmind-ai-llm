@@ -17,7 +17,7 @@ from PIL import Image
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.models import AppSettings
+from src.models.core import AppSettings
 
 
 @pytest.fixture
