@@ -210,12 +210,10 @@ class TestRunner:
             "uv",
             "run",
             "pytest",
-            "tests/test_models.py",
-            "tests/test_agent_utils.py",
+            "tests/unit/",
             "-v",
             "--tb=short",
-            "--cov=models",
-            "--cov=src.utils",
+            "--cov=src",
             "--cov-report=term-missing",
             "--durations=10",
             "-m",
@@ -229,14 +227,10 @@ class TestRunner:
             "uv",
             "run",
             "pytest",
-            "tests/test_integration.py",
-            "tests/test_document_loader.py",
-            "tests/test_index_builder.py",
-            "tests/test_hybrid_search.py",
+            "tests/integration/",
             "-v",
             "--tb=short",
-            "--cov=agent_factory",
-            "--cov=src.utils",
+            "--cov=src",
             "--cov-report=term-missing",
             "--durations=10",
             "-m",
@@ -250,13 +244,9 @@ class TestRunner:
             "uv",
             "run",
             "pytest",
-            "tests/test_performance.py",
-            "tests/test_performance_integration.py",
+            "tests/performance/",
             "-v",
             "--tb=short",
-            "--benchmark-only",
-            "--benchmark-columns=min,max,mean,stddev,rounds,iterations",
-            "--benchmark-sort=mean",
             "--durations=10",
             "-m",
             "performance",
@@ -269,9 +259,7 @@ class TestRunner:
             "uv",
             "run",
             "pytest",
-            "tests/test_embeddings.py",
-            "tests/test_gpu_optimization.py",
-            "tests/test_multimodal.py",
+            "tests/",
             "-v",
             "--tb=short",
             "--cov-report=term-missing",
@@ -308,12 +296,13 @@ class TestRunner:
             "uv",
             "run",
             "pytest",
-            "tests/test_models.py::test_app_settings_clean_defaults",
-            "tests/test_agent_utils.py::test_agent_creation_with_default_settings",
+            "tests/unit/test_models.py",
+            "tests/unit/test_agent_factory.py",
             "-v",
             "--tb=line",
             "-m",
             "not slow",
+            "--maxfail=3",  # Stop after 3 failures for smoke tests
         ]
         return self.run_command(command, "Smoke Tests")
 
@@ -329,9 +318,9 @@ import sys
 import importlib
 
 modules = [
-    'models', 'src.utils.core', 'src.utils.document',
+    'src.models.core', 'src.utils.core', 'src.utils.document',
     'src.utils.embedding', 'src.utils.database', 'src.utils.monitoring',
-    'agents.agent_utils', 'agent_factory'
+    'src.agents.agent_utils', 'src.agents.agent_factory', 'src.agents.tool_factory'
 ]
 
 failed = []
@@ -407,12 +396,14 @@ else:
 
             # Identify critical files
             critical_files = [
-                "models.py",
+                "src/models/core.py",
                 "src/utils/core.py",
                 "src/utils/document.py",
                 "src/utils/embedding.py",
-                "agent_factory.py",
-                "agents/agent_utils.py",
+                "src/agents/agent_factory.py",
+                "src/agents/agent_utils.py",
+                "src/agents/tool_factory.py",
+                "src/app.py",
             ]
 
             print("\n🎯 CRITICAL FILE COVERAGE:")
@@ -521,7 +512,7 @@ def main():
 
     args = parser.parse_args()
 
-    project_root = Path(__file__).parent
+    project_root = Path(__file__).parent.parent  # Go up to project root from scripts/
     runner = TestRunner(project_root)
 
     print("🧪 DocMind AI Test Suite")
