@@ -5,12 +5,12 @@ local large language models. It handles user interface components, model
 selection and configuration, document upload and processing, analysis with
 customizable prompts, and interactive chat functionality with multimodal
 and hybrid search support, enhanced by Agentic RAG, optimizations,
-Phoenix for local observability, ColBERT for late-interaction, and auto-quantization.
+ColBERT for late-interaction, and auto-quantization.
 
 The application supports multiple backends (Ollama, LlamaCpp, LM Studio),
 various document formats including basic video/audio, and provides features like session
 persistence, theming, hardware detection, agentic workflows, async operations,
-auto-model download, and Phoenix dashboard link.
+auto-model download, and performance monitoring with custom metrics.
 
 Example:
     Run the application using Streamlit::
@@ -29,25 +29,33 @@ import time
 from typing import Any
 
 import ollama
-import phoenix as px
 import streamlit as st
-from llama_index.core import set_global_handler
 from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.llms.llama_cpp import LlamaCPP
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.openai import OpenAI
 from loguru import logger
 
-from .agents.agent_factory import (
+# Conditional import for LlamaCPP to handle BLAS library issues
+try:
+    from llama_index.llms.llama_cpp import LlamaCPP
+
+    LLAMACPP_AVAILABLE = True
+except (ImportError, ModuleNotFoundError) as e:
+    logger.warning("LlamaCPP not available. Running without LlamaCPP support.")
+    logger.debug(f"LlamaCPP import failed: {e}")
+    LlamaCPP = None
+    LLAMACPP_AVAILABLE = False
+
+from agents.agent_factory import (
     get_agent_system,
     process_query_with_agent_system,
 )
-from .agents.agent_utils import create_tools_from_index
-from .models.core import settings
-from .prompts import PREDEFINED_PROMPTS
-from .utils.core import detect_hardware, validate_startup_configuration
-from .utils.document import load_documents_llama
-from .utils.embedding import create_index_async
+from agents.agent_utils import create_tools_from_index
+from models.core import settings
+from prompts import PREDEFINED_PROMPTS
+from utils.core import detect_hardware, validate_startup_configuration
+from utils.document import load_documents_llama
+from utils.embedding import create_index_async
 
 # settings is now imported from models.core
 
@@ -129,6 +137,12 @@ st.sidebar.info(
     f"Suggested: {suggested_model}{quant_suffix} with {suggested_context} context"
 )
 
+
+def is_llamacpp_available() -> bool:
+    """Check if LlamaCPP backend is available."""
+    return LLAMACPP_AVAILABLE
+
+
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
@@ -151,15 +165,18 @@ if enable_multi_agent:
         "🤖 Multi-agent mode: Document, Knowledge Graph, and Multimodal specialists"
     )
 
-use_phoenix: bool = st.sidebar.checkbox("Enable Phoenix Observability", value=False)
-if use_phoenix:
-    px.launch_app()
-    set_global_handler("arize_phoenix")
 
 # Model and Backend Selection with Auto-Download
 st.sidebar.header("Model and Backend")
 with st.sidebar.expander("Advanced Settings"):
-    backend: str = st.selectbox("Backend", ["ollama", "llamacpp", "lmstudio"], index=0)
+    # Show backend availability status
+    backend_options = ["ollama", "lmstudio"]
+    if is_llamacpp_available():
+        backend_options.insert(1, "llamacpp")
+    else:
+        st.sidebar.warning("LlamaCPP backend unavailable (BLAS library issue)")
+
+    backend: str = st.selectbox("Backend", backend_options, index=0)
     context_size: int = st.selectbox(
         "Context Size", [8192, 32768, 65536, 131072], index=1
     )
@@ -194,12 +211,18 @@ try:
     if backend == "ollama":
         llm = Ollama(base_url=ollama_url, model=model_name, request_timeout=60.0)
     elif backend == "llamacpp":
-        n_gpu_layers = -1 if use_gpu else 0
-        llm = LlamaCPP(
-            model_path=settings.llamacpp_model_path,
-            context_window=context_size,
-            n_gpu_layers=n_gpu_layers,
-        )
+        if not is_llamacpp_available():
+            st.error(
+                "LlamaCPP backend is not available. Please check the installation "
+                "or use a different backend (Ollama or LM Studio)."
+            )
+        else:
+            n_gpu_layers = -1 if use_gpu else 0
+            llm = LlamaCPP(
+                model_path=settings.llamacpp_model_path,
+                context_window=context_size,
+                n_gpu_layers=n_gpu_layers,
+            )
     elif backend == "lmstudio":
         llm = OpenAI(
             base_url=settings.lmstudio_base_url,
@@ -401,9 +424,3 @@ if st.button("Load Session"):
     except Exception as e:
         st.error(f"Load failed: {str(e)}")
         logger.error(f"Load error: {str(e)}")
-
-# Phoenix Dashboard Link if enabled
-if use_phoenix:
-    st.sidebar.link_button(
-        "View Phoenix Dashboard", "http://localhost:6006"
-    )  # Default local URL

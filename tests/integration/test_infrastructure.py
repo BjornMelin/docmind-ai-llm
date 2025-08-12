@@ -481,7 +481,7 @@ class TestInfrastructureStressTests:
             start_time = time.time()
 
             # Run 50 rapid monitoring cycles
-            for i in range(50):
+            for _i in range(50):
                 async with gpu_performance_monitor() as metrics:
                     assert metrics is not None
                     assert metrics.device_name == "Stress Test GPU"
