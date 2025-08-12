@@ -53,9 +53,9 @@ from agents.agent_factory import (
 from agents.agent_utils import create_tools_from_index
 from models.core import settings
 from prompts import PREDEFINED_PROMPTS
-from utils.core import detect_hardware, validate_startup_configuration
-from utils.document import load_documents_llama
-from utils.embedding import create_index_async
+from src.utils.core import detect_hardware, validate_startup_configuration
+from src.utils.document import load_documents_llama
+from src.utils.embedding import create_index_async
 
 # settings is now imported from models.core
 
