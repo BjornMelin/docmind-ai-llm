@@ -19,8 +19,8 @@ import pytest
 from llama_index.core.tools import QueryEngineTool
 
 # Import the module under test
-from agents.tool_factory import ToolFactory
-from models import AppSettings
+from src.agents.tool_factory import ToolFactory
+from src.models.core import Settings as AppSettings
 
 
 class TestToolFactoryBasicMethods:

@@ -120,11 +120,13 @@ class TestGracefulErrorHandling:
     def test_app_startup_without_optional_deps(self):
         """Test that app can start without optional dependencies."""
         try:
+            from src.models.core import settings
             from src.utils.core import validate_startup_configuration
 
             # Should not crash even if some dependencies are missing
-            validate_startup_configuration()
-            # Function should return something or None, not crash
+            result = validate_startup_configuration(settings)
+            # Function should return a dict, not crash
+            assert isinstance(result, dict)
 
         except ImportError:
             pytest.skip("Core utilities not available")
