@@ -154,16 +154,7 @@ enable_multimodal: bool = st.sidebar.checkbox(
     help="Extract and process images from PDFs using local Jina CLIP models",
 )
 
-# LIBRARY-FIRST: LangGraph Multi-Agent Toggle
-enable_multi_agent: bool = st.sidebar.checkbox(
-    "Enable Multi-Agent Mode",
-    value=False,
-    help="Use LangGraph supervisor system for complex queries with specialized agents",
-)
-if enable_multi_agent:
-    st.sidebar.info(
-        "🤖 Multi-agent mode: Document, Knowledge Graph, and Multimodal specialists"
-    )
+# Single ReActAgent (simplified architecture)
 
 
 # Model and Backend Selection with Auto-Download
@@ -297,10 +288,7 @@ prompt_type: str = st.selectbox("Prompt", list(PREDEFINED_PROMPTS.keys()))
 async def run_analysis() -> None:
     """Async function to run document analysis with multi-agent support."""
     if st.session_state.index:
-        with st.spinner(
-            "Running analysis..."
-            + (" (Multi-Agent Mode)" if enable_multi_agent else "")
-        ):
+        with st.spinner("Running analysis..."):
             try:
                 # Create tools from index
                 tools = create_tools_from_index(st.session_state.index)
@@ -309,7 +297,6 @@ async def run_analysis() -> None:
                 agent_system, mode = get_agent_system(
                     tools=tools,
                     llm=llm,
-                    enable_multi_agent=enable_multi_agent,
                     memory=st.session_state.memory,
                 )
 
@@ -358,15 +345,12 @@ if user_input:
                     get_agent_system(
                         tools=tools,
                         llm=llm,
-                        enable_multi_agent=enable_multi_agent,
                         memory=st.session_state.memory,
                     )
                 )
 
             if st.session_state.agent_system:
-                # Show which mode is being used
-                if st.session_state.agent_mode == "multi":
-                    st.info("🤖 Using multi-agent system")
+                # Using single ReActAgent for all queries
 
                 # Process query with appropriate agent system using streaming
                 def stream_response():

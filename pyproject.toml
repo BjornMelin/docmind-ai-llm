@@ -71,8 +71,7 @@ dependencies = [
     "llama-index-multi-modal-llms-openai",
     "llama-index-question-gen-openai",
     
-    # Agent framework
-    "langgraph==0.5.4",
+    # Agent framework (using pure LlamaIndex ReActAgent)
 ]
 
 [project.optional-dependencies]
