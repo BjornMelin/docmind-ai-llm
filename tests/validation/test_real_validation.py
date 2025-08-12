@@ -6,11 +6,6 @@ that the system works correctly in real scenarios. Tests that require
 external services are marked with appropriate pytest marks.
 """
 
-import sys
-from pathlib import Path
-
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import logging
 
 import pytest

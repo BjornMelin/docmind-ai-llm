@@ -9,11 +9,6 @@ This module tests:
 Following PyTestQA-Agent standards for comprehensive testing.
 """
 
-import sys
-from pathlib import Path
-
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import subprocess
 from unittest.mock import MagicMock, patch
 

@@ -9,13 +9,8 @@ Note: Many utils modules were removed during cleanup. Only testing existing modu
 Following PyTestQA-Agent standards for comprehensive testing.
 """
 
-import sys
-from pathlib import Path
-
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 import importlib
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -121,7 +116,7 @@ class TestImportValidation:
             # Result should be a dict with validation results
             assert isinstance(result, dict)
             assert "valid" in result
-        except Exception as e:
+        except (ImportError, AttributeError, TypeError, ValueError) as e:
             pytest.fail(f"validate_startup_configuration failed: {e}")
 
     def test_spacy_model_function_exists(self):
