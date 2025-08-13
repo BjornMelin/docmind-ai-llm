@@ -60,6 +60,10 @@ SQLite for structured stores (KV/chat/KG via StorageContext with WAL), native In
 
 - ADR-023 (PyTorch Optimization Strategy - TorchAO quantization with session state management)
 
+- ADR-004 (Document Loading - IngestionCache is used in the loading pipeline)
+
+- ADR-006 (Analysis Pipeline - IngestionCache is a core component of the pipeline)
+
 ## Design
 
 - **Stores with GPU Optimization**: In utils.py: from llama_index.core.storage import StorageContext; context = StorageContext.from_defaults(kv_store=SimpleKVStore.from_sqlite(AppSettings.cache_db_path or "docmind.db", wal=True)); index = VectorStoreIndex(..., storage_context=context, llm=Settings.llm). Settings.llm with Qwen3-4B-Thinking provides optimized session performance.

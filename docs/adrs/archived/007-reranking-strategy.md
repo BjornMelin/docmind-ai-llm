@@ -10,7 +10,7 @@ Native ColBERT Reranking with QueryPipeline Integration
 
 ## Status
 
-Accepted
+Superseded by ADR-014 (ColBERT Reranking)
 
 ## Description
 

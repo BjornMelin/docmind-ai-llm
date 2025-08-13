@@ -188,14 +188,9 @@ embeddings_cache/
 qdrant_storage/
 .archived/
 
-docs/adrs/archived/
-REFACTORING_TASKS.md
-docs/planning/
-PR_IMPLEMENTATION_PROMPTS.md
-FEATURE_BRANCH_PR_STRATEGY.md
-IMPLEMENTATION_PLAN.md
-P0_REFACTOR_TASKS.md
+# docs/adrs/archived/
 TODO-COMPLETED.md
+TODO.md
 
 # Document processing cache
 cache/

@@ -10,7 +10,7 @@ High-Level Architecture for DocMind AI
 
 ## Status
 
-Accepted
+Superseded by ADR-021 (LlamaIndex Native Architecture Consolidation)
 
 ## Description
 
