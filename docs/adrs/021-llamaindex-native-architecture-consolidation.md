@@ -14,15 +14,15 @@ Accepted
 
 ## Context
 
-Following comprehensive architectural research across 7 parallel subagent investigations, significant opportunities have been identified for revolutionary simplification through LlamaIndex native architecture consolidation. Current DocMind AI implementation relies on 27 external packages with complex abstraction layers that violate KISS > DRY > YAGNI principles.
+Following comprehensive architectural research across 7 parallel subagent investigations, significant opportunities have been identified for substantial simplification through LlamaIndex native architecture consolidation. Current DocMind AI implementation relies on 40 external packages with complex abstraction layers that violate KISS > DRY > YAGNI principles.
 
 **Strategic Consolidation Opportunity:**
 
-- Current: 27 external packages with complex integration requirements
+- Current: 40 external packages with complex integration requirements
 
-- Target: 5 native LlamaIndex packages (95% dependency reduction)
+- Target: 15-20 core packages (60-65% dependency reduction)
 
-- Approach: Strategic external library adoption (Tenacity, Streamlit) for production gaps
+- Approach: Strategic external library adoption (Tenacity, Streamlit) for production gaps while maintaining essential core dependencies (Pydantic, asyncio ecosystem, etc.)
 
 ## Related Requirements
 
@@ -45,7 +45,7 @@ Following comprehensive architectural research across 7 parallel subagent invest
 1. **Native-First**: Replace external dependencies with LlamaIndex native components
 2. **Multi-Backend Strategy**: Unified `Settings.llm` configuration for Ollama, LlamaCPP, vLLM  
 3. **Strategic External**: Maintain Tenacity (resilience) and Streamlit (UI) where gaps exist
-4. **Revolutionary Simplification**: 95% dependency reduction with enhanced capabilities
+4. **Substantial Simplification**: 60-65% dependency reduction with enhanced capabilities
 
 ## Related Decisions
 
@@ -71,7 +71,7 @@ Following comprehensive architectural research across 7 parallel subagent invest
 
 - **UI Framework**: No native LlamaIndex UI → Streamlit optimization maintained
 
-- **Core Components**: Complete native ecosystem → 95% dependency replacement
+- **Core Components**: Extensive native ecosystem → 60-65% dependency replacement while preserving essential core dependencies
 
 **Implementation Strategy:**
 
@@ -81,20 +81,37 @@ Following comprehensive architectural research across 7 parallel subagent invest
 
 - Phase 3: Performance validation across all backends (13-15+ tokens/sec)
 
-### Unified Dependencies (95% Reduction)
+### Unified Dependencies (60-65% Reduction)
 
 ```toml
 [project]
 dependencies = [
+    # LlamaIndex Core Ecosystem
     "llama-index>=0.12.0",                    # Core framework
     "llama-index-llms-ollama>=0.2.0",         # Native Ollama
     "llama-index-llms-llama-cpp>=0.2.0",      # Native LlamaCPP  
     "llama-index-llms-vllm>=0.2.0",           # Native vLLM
-    "streamlit>=1.48.0"                       # UI framework
+    "llama-index-vector-stores-qdrant",       # Vector store
+    "llama-index-readers-file",               # Document readers
+    
+    # Essential Core Dependencies
+    "pydantic>=2.0.0",                        # Data validation
+    "asyncio-extras",                          # Async utilities
+    "httpx>=0.24.0",                          # HTTP client
+    "pandas",                                  # Data processing
+    "numpy",                                   # Numerical computing
+    
+    # UI Framework
+    "streamlit>=1.48.0",                      # UI framework
+    
+    # Production Essentials
+    "tenacity>=9.1.2",                        # Resilience
+    "python-dotenv",                          # Environment management
+    "loguru",                                  # Logging
 ]
 
 [project.optional-dependencies]
-resilience = ["tenacity>=9.1.2"]             # Strategic resilience
+dev = ["pytest", "ruff", "mypy"]              # Development tools
 ```
 
 ## Architecture Diagram
@@ -159,9 +176,9 @@ graph TB
 
 ### Positive Outcomes
 
-- **95% dependency reduction**: 27 → 5 packages with enhanced multi-backend support
+- **60-65% dependency reduction**: 40 → 15-20 packages with enhanced multi-backend support
 
-- **Revolutionary simplification**: 150+ → 3 lines for backend configuration  
+- **Revolutionary factory pattern simplification**: 150+ → 3 lines for backend configuration  
 
 - **87% configuration simplification**: Native Settings singleton
 
@@ -181,7 +198,7 @@ graph TB
 
 - **Operational Excellence**: Optimized RTX 4090 usage across all components
 
-- **Maintenance Efficiency**: 85% reduction in external integration points
+- **Maintenance Efficiency**: 60% reduction in external integration points while preserving essential dependencies
 
 ### Ongoing Considerations
 
@@ -193,11 +210,15 @@ graph TB
 
 - Assess strategic external library needs as ecosystem evolves
 
+- Acknowledge practical limitations: Core dependencies (Pydantic, asyncio, HTTP clients) cannot be eliminated without compromising functionality
+
+- Balance between dependency reduction and maintaining robust, production-ready capabilities
+
 ## Success Metrics
 
 ### Technical Metrics
 
-- **Dependency Reduction**: 95% achieved (27 → 5 packages)
+- **Dependency Reduction**: 60-65% achieved (40 → 15-20 packages)
 
 - **Code Complexity**: 70% reduction in core architecture
 
@@ -217,7 +238,7 @@ graph TB
 
 ## Conclusion
 
-This LlamaIndex Native Architecture Consolidation represents a revolutionary simplification of the DocMind AI system, achieving 95% dependency reduction while enhancing capabilities through unified multi-backend support. The strategy successfully balances maximum simplification (KISS compliance) with production readiness through strategic external library integration.
+This LlamaIndex Native Architecture Consolidation represents a substantial simplification of the DocMind AI system, achieving 60-65% dependency reduction while enhancing capabilities through unified multi-backend support. The strategy successfully balances significant simplification (KISS compliance) with production readiness through strategic external library integration, acknowledging that certain core dependencies are essential for robust functionality.
 
 This foundation establishes DocMind AI as a model of architectural elegance, combining simplicity with comprehensive functionality while maintaining flexibility for future evolution within the LlamaIndex ecosystem.
 
@@ -227,4 +248,4 @@ This foundation establishes DocMind AI as a model of architectural elegance, com
 
 **Risk Level**: Medium (comprehensive migration with phased approach)  
 
-**Business Impact**: Transformational (95% dependency reduction + enhanced capabilities)
+**Business Impact**: Transformational (60-65% dependency reduction + enhanced capabilities)
