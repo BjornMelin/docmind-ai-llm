@@ -12,6 +12,10 @@ Multimodal Embeddings with CLIP ViT-B/32 and Unstructured Parsing
 
 Accepted
 
+## Description
+
+Integrates CLIP ViT-B/32 for 512D multimodal embeddings with 60% VRAM reduction and UnstructuredReader for comprehensive text, image, and table extraction from documents.
+
 ## Context
 
 Offline multimodal embeddings for PDFs (text/image/table). CLIP ViT-B/32 512D with 60% VRAM reduction vs jina-v4, Unstructured local parsing (hi_res for elements).

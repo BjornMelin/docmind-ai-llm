@@ -8,6 +8,10 @@ v3.0 / August 13, 2025 (GPU Management Simplification with PyTorch Optimization)
 
 Accepted
 
+## Description
+
+Implements GPU optimization through device_map="auto" and TorchAO quantization for ~1000 tokens/sec performance with 90% code complexity reduction across all backends.
+
 ## Context
 
 Following GPU optimization research and ADR-023's PyTorch Optimization Strategy, DocMind AI implements GPU management simplification through native LlamaIndex Settings.llm patterns. **90% code complexity reduction** (183 lines → ~20 lines) via `device_map="auto"` eliminates custom GPU monitoring while achieving **~1000 tokens/sec** performance targets with TorchAO quantization integration across all backends.

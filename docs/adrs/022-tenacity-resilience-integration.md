@@ -12,6 +12,10 @@ Tenacity Integration for Production-Grade Resilience
 
 Accepted
 
+## Description
+
+Integrates Tenacity for production-grade resilience covering 95% of failure scenarios, complementing LlamaIndex native retry mechanisms with advanced error handling patterns.
+
 ## Context
 
 LlamaIndex native retry mechanisms cover only 25-30% of potential failure points (query-level evaluation retry, basic LLM API retry). Missing infrastructure resilience for vector stores, document processing, embeddings. Current implementation has zero comprehensive retry logic, leaving users vulnerable to transient failures.

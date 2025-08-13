@@ -12,6 +12,10 @@ High-Level Architecture for DocMind AI
 
 Accepted
 
+## Description
+
+Establishes a pure LlamaIndex architecture with single ReActAgent, hybrid search, and native component integration for offline document analysis with ~1000 tokens/sec performance capability.
+
 ## Context
 
 DocMind AI is a local, offline RAG application for document analysis, emphasizing high-performance retrieval, multimodal support, agentic workflows, and efficiency without API keys or internet. The architecture uses pure LlamaIndex for RAG pipelines and single ReAct agent implementation, Unstructured for parsing. Local multi-process supported via SQLite WAL/diskcache locks (no distributed scaling for MVP—reassess later if needed). Key needs: hybrid search (dense/sparse), KG for relations, multimodal (text/images/tables), single intelligent agent with reasoning capabilities, and caching/persistence for sessions.

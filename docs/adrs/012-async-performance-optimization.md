@@ -12,6 +12,10 @@ Async and Parallel Processing Strategy
 
 Accepted
 
+## Description
+
+Implements LlamaIndex QueryPipeline.parallel_run() async patterns with PyTorch optimization integration for maximum throughput, enabling concurrent query processing and ~1000 tokens/sec performance.
+
 ## Context
 
 Following ADR-003's GPU optimization and ADR-023's PyTorch optimization strategy, DocMind AI requires async patterns to complement ~1000 tokens/sec performance capabilities. Implementation includes QueryPipeline.parallel_run(), async ingestion workflows, and PyTorch optimization integration for maximum throughput with non-blocking UI operations.

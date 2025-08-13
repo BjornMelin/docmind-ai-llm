@@ -12,6 +12,10 @@ Multi-Backend Local LLM Support with Native LlamaIndex Settings for Ollama, Llam
 
 Accepted
 
+## Description
+
+Enables unified multi-backend LLM support through Settings.llm configuration, reducing factory pattern complexity by 98% (150+ lines → 3 lines) across Ollama, LlamaCPP, and vLLM.
+
 ## Context
 
 DocMind AI requires multi-backend LLM support using native LlamaIndex Settings.llm configuration rather than complex factory patterns. LlamaIndex provides unified Settings.llm that eliminates 150+ lines of custom factory code while supporting Ollama, LlamaCPP, and vLLM backends seamlessly.

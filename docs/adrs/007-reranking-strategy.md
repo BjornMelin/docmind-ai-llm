@@ -12,6 +12,10 @@ Native ColBERT Reranking with QueryPipeline Integration
 
 Accepted
 
+## Description
+
+Implements ColbertRerank postprocessor within QueryPipeline for token-level relevance scoring with local processing, selecting top-5 documents from retrieval pool.
+
 ## Context
 
 Following ADR-021's Native Architecture Consolidation, document reranking uses native LlamaIndex ColbertRerank postprocessor integrated within QueryPipeline for precision improvement. ColBERT late-interaction provides token-level relevance scoring with efficient local processing, selecting top_n=5 documents from initial retrieval pool for superior relevance vs speed optimization.

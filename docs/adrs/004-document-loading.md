@@ -12,6 +12,10 @@ Offline Multimodal Document Loading with Native UnstructuredReader Integration
 
 Accepted
 
+## Description
+
+Adopts LlamaIndex UnstructuredReader with hi_res strategy for comprehensive multimodal document parsing, integrated with IngestionPipeline for 80-95% re-processing reduction through intelligent caching.
+
 ## Context
 
 Following ADR-021's Native Architecture Consolidation, document loading uses native LlamaIndex UnstructuredReader with optimized "hi_res" strategy for comprehensive offline parsing. Integration with IngestionPipeline and IngestionCache provides 80-95% re-processing reduction while maintaining full multimodal capabilities (text, images, tables) through YOLOX object detection and Tesseract OCR.

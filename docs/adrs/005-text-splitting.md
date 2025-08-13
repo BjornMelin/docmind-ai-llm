@@ -12,6 +12,10 @@ Semantic Chunking Strategy with Native IngestionPipeline Integration
 
 Accepted
 
+## Description
+
+Utilizes LlamaIndex SentenceSplitter within IngestionPipeline for semantic-aware chunking with 1024 token chunks and 200 token overlap, optimized for embedding dimensions.
+
 ## Context
 
 Following ADR-021's Native Architecture Consolidation, chunking uses native LlamaIndex SentenceSplitter within IngestionPipeline for optimal semantic-aware text splitting. Research confirms 1024 token chunks with 200 token overlap provide optimal context/recall balance while fitting embedding dimensions for CLIP ViT-B/32 (512D) and BGE-large (1024D) models.

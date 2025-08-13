@@ -12,6 +12,10 @@ Multi-Stage Query and Analysis Pipeline with Native LlamaIndex Caching
 
 Accepted
 
+## Description
+
+Establishes LlamaIndex QueryPipeline with native IngestionCache for multi-stage query processing (retrieve → rerank → synthesize) with 80-95% re-processing reduction.
+
 ## Context
 
 Following ADR-021's Native Architecture Consolidation, the multi-stage query pipeline uses native LlamaIndex IngestionCache and async patterns for efficient querying (retrieve → rerank → synthesize). Single ReAct agent eliminates complex routing logic while maintaining intelligent query processing through built-in reasoning capabilities, replacing custom caching with native IngestionCache for 80-95% re-processing reduction.

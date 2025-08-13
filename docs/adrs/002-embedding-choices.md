@@ -12,6 +12,10 @@ Selection of Embedding Models for Semantic Search and Multimodal Processing
 
 Accepted
 
+## Description
+
+Defines BGE-large-en-v1.5 (1024D) for dense text embeddings, SPLADE++ for sparse retrieval, and CLIP ViT-B/32 (512D) for multimodal processing with 60% VRAM reduction.
+
 ## Context
 
 Embeddings drive retrieval accuracy/efficiency. Offline: Local HuggingFace/FastEmbed models. Optimal dims: 1024D for dense text (balance accuracy/speed), sparse no fixed dim (vocab-based), 512D for multimodal/images (VRAM savings). Research: BGE-Large 1024D MTEB leader for text; sparse SPLADE++ for term expansion; CLIP ViT-B/32 for multimodal with 60% VRAM reduction vs jina-v4.
