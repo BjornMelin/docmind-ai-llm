@@ -6,7 +6,7 @@ High-Level Architecture for DocMind AI
 
 ## Version/Date
 
-4.0 / August 12, 2025
+5.0 / August 13, 2025
 
 ## Status
 
@@ -20,7 +20,7 @@ DocMind AI is a local, offline RAG application for document analysis, emphasizin
 
 - Offline/local operation (no cloud APIs like LlamaParse).
 
-- Hybrid retrieval with SPLADE++/BGE-Large/Jina v4.
+- Hybrid retrieval with SPLADE++/BGE-Large/CLIP ViT-B/32.
 
 - Multimodal parsing (PDFs with images/tables via Unstructured).
 
@@ -70,7 +70,7 @@ LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModal
 
 - ADR-011 (Single ReAct agent architecture).
 
-- ADR-016 (Multimodal Jina v4/Unstructured).
+- ADR-016 (Multimodal CLIP ViT-B/32/Unstructured).
 
 - ADR-008 (Persistence with SQLite/diskcache).
 
@@ -80,7 +80,7 @@ LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModal
 
 - **Ingestion**: UnstructuredReader.load_data(file_path, strategy="hi_res") → IngestionPipeline([SentenceSplitter(AppSettings.chunk_size/overlap), MetadataExtractor()]) → nodes.
 
-- **Indexing/Retrieval**: HybridFusionRetriever (dense=FastEmbedEmbedding(AppSettings.dense_embedding_model), sparse=SparseTextEmbedding(AppSettings.sparse_embedding_model), alpha=AppSettings.rrf_fusion_alpha) with QdrantVectorStore. MultiModalVectorStoreIndex (image_embed_model=HuggingFaceEmbedding("jinaai/jina-embeddings-v4")). KGIndex.from_documents(nodes, extractor=spaCy).
+- **Indexing/Retrieval**: HybridFusionRetriever (dense=FastEmbedEmbedding(AppSettings.dense_embedding_model), sparse=SparseTextEmbedding(AppSettings.sparse_embedding_model), alpha=AppSettings.rrf_fusion_alpha) with QdrantVectorStore. MultiModalVectorStoreIndex (image_embed_model=ClipEmbedding("ViT-B/32")). KGIndex.from_documents(nodes, extractor=spaCy).
 
 - **Querying**: QueryPipeline(chain=[retriever, ColbertRerank, synthesizer], async_mode=True, parallel=True).
 
@@ -99,7 +99,7 @@ graph TD
     A["Streamlit UI<br/>Toggles: AppSettings"] --> B["Upload<br/>async upload_section<br/>st.status/progress/error"]
     B --> C["Parse<br/>UnstructuredReader hi_res → docs"]
     C --> D["Chunk/Extract<br/>IngestionPipeline: SentenceSplitter<br/>chunk_size/overlap + MetadataExtractor → nodes"]
-    D --> E["Index/Embed<br/>HybridFusionRetriever dense/sparse<br/>MultiModalVectorStoreIndex Jina v4 512D<br/>KGIndex spaCy"]
+    D --> E["Index/Embed<br/>HybridFusionRetriever dense/sparse<br/>MultiModalVectorStoreIndex CLIP ViT-B/32 512D<br/>KGIndex spaCy"]
     E --> F["Query<br/>QueryPipeline: chain=retriever<br/>ColbertRerank, synthesizer<br/>async/parallel"]
     F --> G["Agent<br/>ReActAgent.from_tools()<br/>QueryEngineTool from indices<br/>ChatMemoryBuffer persistence<br/>local Ollama LLM<br/>reasoning + tool selection"]
     G --> A
@@ -149,6 +149,8 @@ graph TD
 - **Dependency management**: Monitor ecosystem changes and compatibility
 
 **Changelog:**  
+
+- 5.0 (August 13, 2025): Updated multimodal embeddings from Jina v4 to CLIP ViT-B/32 for 60% VRAM reduction and native LlamaIndex integration. Aligned with ADR-021's Native Architecture Consolidation.
 
 - 4.0 (August 12, 2025): Replaced LangGraph multi-agent supervisor with single LlamaIndex ReActAgent. Updated architecture diagram to reflect simplified agent system. 85% code reduction while preserving all agentic capabilities. Pure LlamaIndex ecosystem alignment (~17 fewer dependencies).
 
