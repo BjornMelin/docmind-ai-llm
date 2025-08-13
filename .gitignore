@@ -187,6 +187,8 @@ embeddings_cache/
 # models/
 qdrant_storage/
 .archived/
+
+docs/adrs/archived/
 REFACTORING_TASKS.md
 docs/planning/
 PR_IMPLEMENTATION_PROMPTS.md
