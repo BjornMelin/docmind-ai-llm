@@ -2,7 +2,7 @@
 
 ## Version/Date
 
-v1.1 / July 25, 2025 (Updated with async performance enhancements)
+v2.0 / August 13, 2025 (Enhanced with multi-backend GPU optimization)
 
 ## Status
 
@@ -10,7 +10,7 @@ Accepted - Enhanced
 
 ## Context
 
-Performance critical for large docs/models; leverage NVIDIA GPUs without mandating them. Combined with async operations, GPU acceleration provides significant performance improvements for document processing and embedding generation.
+Following ADR-019's Multi-Backend LLM Architecture and ADR-021's Native Architecture Consolidation, GPU optimization must support RTX 4090 16GB across all backends (Ollama, LlamaCPP, vLLM) with unified native Settings configuration. Performance critical for large docs/models with 13-15+ tokens/sec targets across backends.
 
 ## Related Requirements
 
@@ -19,6 +19,10 @@ Performance critical for large docs/models; leverage NVIDIA GPUs without mandati
 - Efficient embedding generation
 
 - Hardware flexibility (GPU optional, CPU fallback)
+
+- Multi-backend GPU optimization (Ollama, LlamaCPP, vLLM)
+
+- RTX 4090 16GB optimization for 8B models
 
 - Integration with async performance optimizations
 
@@ -32,35 +36,41 @@ Performance critical for large docs/models; leverage NVIDIA GPUs without mandati
 
 ## Decision
 
-- **Detection:** Parse nvidia-smi for VRAM/model suggestions (e.g., 72B for 16GB+).
+- **Multi-Backend GPU Support:** Native LlamaIndex Settings.llm configuration for Ollama, LlamaCPP, vLLM with RTX 4090 optimization
 
-- **Offload:** Full (n_gpu_layers=-1) for LlamaCpp; device='cuda' for embeddings/reranking.
+- **Detection:** Parse nvidia-smi for VRAM/model suggestions optimized for each backend
 
-- **Toggles:** UI checkbox; auto-config.
+- **Unified Configuration:** Settings.llm handles GPU offloading across all backends automatically
 
-- **Efficiency:** PEFT for parameter-efficient loading.
+- **RTX 4090 Optimization:** 13-15+ tokens/sec performance targets for 8B models across all backends
 
-- **Async Integration:** Combined with AsyncQdrantClient for up to 4-5x total performance improvement.
+- **Native GPU Acceleration:** Backend-specific optimizations (LlamaCPP n_gpu_layers=35, vLLM gpu_memory_utilization=0.8)
+
+- **Async Integration:** Combined with AsyncQdrantClient for up to 4-5x total performance improvement
 
 ## Related Decisions
 
-- ADR 012: AsyncQdrantClient Performance Optimization (provides async enhancements)
+- ADR-019: Multi-Backend LLM Strategy (GPU optimization across Ollama, LlamaCPP, vLLM)
 
-- ADR 002: Embedding Choices (benefits from combined GPU + async optimizations)
+- ADR-021: Native Architecture Consolidation (unified Settings.llm GPU configuration)
 
-- ADR 001: Architecture (GPU support integrated into overall design)
+- ADR-012: AsyncQdrantClient Performance Optimization (provides async enhancements)
+
+- ADR-002: Embedding Choices (benefits from combined GPU + async optimizations)
 
 ## Design
 
-- Hardware detection and auto-configuration
+- **Multi-Backend GPU Configuration**: Native Settings.llm handles GPU optimization automatically for each backend
 
-- GPU toggle controls in UI
+- **RTX 4090 Optimization Matrix**: Backend-specific configurations for optimal 13-15+ tokens/sec performance
 
-- Graceful fallback to CPU operations
+- **Hardware detection and auto-configuration**: VRAM-aware model suggestions per backend
 
-- Combined GPU + async setup for maximum performance
+- **GPU toggle controls in UI**: Runtime backend switching with GPU optimization preserved
 
-- Real-time performance monitoring
+- **Graceful fallback to CPU operations**: Per-backend fallback strategies
+
+- **Combined GPU + async setup**: Maximum performance with AsyncQdrantClient integration
 
 ```mermaid
 graph TD

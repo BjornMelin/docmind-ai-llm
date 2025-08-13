@@ -2,11 +2,11 @@
 
 ## Title
 
-Hardware-Adaptive Default Model Selection with Gemma 3n and Nvidia Nemotron
+Multi-Backend Hardware-Adaptive Model Selection with Unified Settings Configuration
 
 ## Version/Date
 
-1.0 / July 29, 2025
+2.0 / August 13, 2025
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Context
 
-DocMind AI requires intelligent default model selection that automatically adapts to user hardware capabilities. The application should provide optimal performance across different VRAM configurations while maintaining consistent user experience. The selected models must support the application's core features: document analysis, multi-agent coordination, and local processing.
+Following ADR-019's Multi-Backend LLM Architecture and ADR-021's Native Architecture Consolidation, DocMind AI requires intelligent model selection across Ollama, LlamaCPP, and vLLM backends using unified Settings.llm configuration. Hardware-adaptive selection must optimize performance for RTX 4090 16GB systems while supporting diverse VRAM configurations with backend-appropriate model recommendations.
 
 ## Related Requirements
 
@@ -24,9 +24,11 @@ DocMind AI requires intelligent default model selection that automatically adapt
 
 - Context size optimization for document processing
 
-- Support for multi-agent workflows via LangGraph
+- Multi-backend model compatibility (Ollama, LlamaCPP, vLLM)
 
-- Local processing with Ollama backend compatibility
+- Unified Settings.llm configuration across backends
+
+- RTX 4090 optimization with 13-15+ tokens/sec targets
 
 ## Alternatives
 
@@ -40,33 +42,43 @@ DocMind AI requires intelligent default model selection that automatically adapt
 
 ## Decision
 
-Implement tiered hardware-adaptive model selection with Google Gemma 3n as the base model and Nvidia OpenReasoning Nemotron for high-VRAM configurations:
+Implement unified multi-backend hardware-adaptive model selection using native Settings.llm configuration across Ollama, LlamaCPP, and vLLM with standardized model recommendations:
 
-**Model Hierarchy:**
+**Multi-Backend Model Strategy:**
 
-- **≥16GB VRAM**: `nvidia/OpenReasoning-Nemotron-32B-Q4_K_M` (65536 context)
+- **Default**: Llama 3.2 8B Instruct for balanced performance across backends
 
-- **≥8GB VRAM**: `nvidia/OpenReasoning-Nemotron-14B-Q8_0` (32768 context)  
+- **Fast Mode**: Llama 3.2 3B Instruct for quick responses  
 
-- **<8GB VRAM**: `google/gemma-3n-E4B-it-Q4_K_S` (8192 context)
+- **Technical Mode**: Qwen 2.5 7B Coder for technical documents
 
-- **Default fallback**: `google/gemma-3n-E4B-it` (8192 context)
+- **Reasoning Mode**: Mistral Nemo 12B for complex analysis
 
-**Automatic Quantization:**
+**Backend-Specific Configurations:**
 
-- Q4_K_M for 32B models (optimal quality/memory trade-off)
+- **Ollama**: Direct model names (llama3.2:8b, qwen2.5:7b-coder)
 
-- Q8_0 for 14B models (higher precision with sufficient VRAM)
+- **LlamaCPP**: GGUF file paths with RTX 4090 optimization (n_gpu_layers=35)
 
-- Q4_K_S for minimal VRAM scenarios (maximum compression)
+- **vLLM**: Native model support with GPU memory optimization (0.8 utilization)
+
+**Hardware Adaptive Selection:**
+
+- **≥16GB VRAM**: All model tiers supported across backends
+
+- **≥8GB VRAM**: 8B models optimized for performance  
+
+- **<8GB VRAM**: 3B models with efficient quantization
 
 ## Related Decisions
 
-- ADR-001 (Architecture foundation with local processing)
+- ADR-019 (Multi-Backend LLM Strategy - provides unified backend architecture)
+
+- ADR-021 (Native Architecture Consolidation - enables Settings.llm configuration)
 
 - ADR-003 (GPU optimization and hardware detection)
 
-- ADR-011 (Multi-agent coordination requirements)
+- ADR-001 (Architecture foundation with local processing)
 
 ## Design
 

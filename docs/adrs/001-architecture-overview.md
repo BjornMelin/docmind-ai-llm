@@ -36,13 +36,29 @@ DocMind AI is a local, offline RAG application for document analysis, emphasizin
 
 ## Alternatives
 
-- LangChain: Heavier, less offline (deprecated).
+### 1. LangChain-Based Architecture
 
-- LangGraph Multi-Agent: Over-engineered for document Q&A (deprecated for complexity).
+- **Issues**: Heavier framework, less optimized for offline operation
 
-- Custom: High maintenance.
+- **Status**: Deprecated due to poor offline support
 
-- Distributed with Redis: Overengineering for local/single-user (optional later).
+### 2. LangGraph Multi-Agent System
+
+- **Issues**: Over-engineered for document Q&A workflows
+
+- **Status**: Deprecated due to excessive complexity
+
+### 3. Custom Implementation
+
+- **Issues**: High maintenance burden, reinventing proven patterns
+
+- **Status**: Rejected - violates library-first principle
+
+### 4. Distributed Architecture with Redis
+
+- **Issues**: Over-engineering for local/single-user deployment
+
+- **Status**: Deferred - may reassess for future scaling needs
 
 ## Decision
 
@@ -58,7 +74,7 @@ LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModal
 
 - ADR-008 (Persistence with SQLite/diskcache).
 
-- ADR-020 (LlamaIndex native Settings for configuration management).
+- ADR-021 (LlamaIndex Native Architecture Consolidation - 95% dependency reduction with multi-backend support).
 
 ## Design
 
@@ -98,15 +114,39 @@ graph TD
 
 ## Consequences
 
-- Offline/local focus (SQLite/diskcache for all).
+### Positive Outcomes
 
-- Scalable locally (multi-process via WAL/locks).
+- **Offline/local focus**: Complete operation without internet dependency
 
-- Maintainable (no distributed complexity for MVP).
+- **Local scalability**: Multi-process capability via SQLite WAL/locks
 
-- If distributed needed later: Reassess with new ADR.
+- **Maintainable architecture**: No distributed complexity for MVP
 
-- Future: Expand Pool usage if benchmarks show gains.
+- **Performance optimization**: Efficient chunking and multi-stage querying
+
+- **Comprehensive capabilities**: Hybrid search, multimodal support, knowledge graphs
+
+- **Session persistence**: Reliable caching and memory management
+
+### Ongoing Maintenance Requirements
+
+- Monitor LlamaIndex ecosystem updates and compatibility
+
+- Maintain performance benchmarks for local processing
+
+- Update Unstructured parsing capabilities as needed
+
+- Optimize SQLite WAL configuration for concurrent access
+
+### Risks
+
+- **Local resource constraints**: Performance limited by single-machine capabilities
+
+- **Storage scaling**: SQLite may require optimization for large document collections
+
+- **Future distributed needs**: May require architectural reassessment
+
+- **Dependency management**: Monitor ecosystem changes and compatibility
 
 **Changelog:**  
 
