@@ -38,6 +38,10 @@ Use ClipEmbedding("ViT-B/32", embed_batch_size=10, normalize=True) for multimoda
 
 - ADR-002 (Embeddings: CLIP ViT-B/32).
 
+- ADR-020 (LlamaIndex Settings Migration - unified embedding configuration).
+
+- ADR-022 (Tenacity Resilience Integration - robust multimodal processing with retry patterns).
+
 ## Design
 
 - **Parsing/Embedding**: In utils.py: from llama_index.readers.unstructured import UnstructuredReader; from llama_index.embeddings.clip import ClipEmbedding; embed_model = ClipEmbedding(model_name="ViT-B/32", embed_batch_size=10, normalize=True); elements = UnstructuredReader().load_data(file_path, strategy="hi_res"); docs = [Document.from_element(e) for e in elements]; multimodal_index = MultiModalVectorStoreIndex.from_documents(docs, image_embed_model=embed_model).

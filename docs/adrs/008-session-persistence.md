@@ -42,6 +42,10 @@ SQLite for structured stores (KV/chat/KG via StorageContext with WAL), native In
 
 - ADR-001 (Integrates across components).
 
+- ADR-020 (LlamaIndex Settings Migration - unified configuration for storage and caching).
+
+- ADR-022 (Tenacity Resilience Integration - robust database operations with retry patterns).
+
 ## Design
 
 - **Stores**: In utils.py: from llama_index.core.storage import StorageContext; context = StorageContext.from_defaults(kv_store=SimpleKVStore.from_sqlite(AppSettings.cache_db_path or "docmind.db", wal=True)); index = VectorStoreIndex(..., storage_context=context).

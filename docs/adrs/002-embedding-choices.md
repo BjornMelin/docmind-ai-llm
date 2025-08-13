@@ -42,7 +42,11 @@ Dense: FastEmbedEmbedding("BAAI/bge-large-en-v1.5", dim=1024 for text). Sparse: 
 
 - ADR-001 (Integrates with retrieval foundation).
 
-- ADR-016 (Multimodal with Jina v4).
+- ADR-016 (Multimodal with CLIP ViT-B/32).
+
+- ADR-020 (LlamaIndex Settings Migration - unified embedding configuration).
+
+- ADR-022 (Tenacity Resilience Integration - robust embedding operations with retry patterns).
 
 ## Design
 

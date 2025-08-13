@@ -130,6 +130,10 @@ Previous multi-agent LangGraph supervisor architecture violated core engineering
 
 - **ADR-018**: Refactoring decisions (KISS > DRY > YAGNI principle application)
 
+- **ADR-020**: LlamaIndex Settings Migration (unified configuration for agent LLM and components)
+
+- **ADR-022**: Tenacity Resilience Integration (robust agent tool execution with retry patterns)
+
 ## Design
 
 **Implementation**: Single ReActAgent.from_tools() with dynamic tool creation from VectorStoreIndex.
