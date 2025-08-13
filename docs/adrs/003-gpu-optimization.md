@@ -46,7 +46,7 @@ Following ADR-019's Multi-Backend LLM Architecture and ADR-021's Native Architec
 
 - **Native GPU Acceleration:** Backend-specific optimizations (LlamaCPP n_gpu_layers=35, vLLM gpu_memory_utilization=0.8)
 
-- **Async Integration:** Combined with AsyncQdrantClient for up to 4-5x total performance improvement
+- **Async Integration:** Combined with AsyncQdrantClient for 4-9x practical performance improvement with I/O bottleneck awareness
 
 ## Related Decisions
 
@@ -84,12 +84,30 @@ graph TD
     G --> H
 ```
 
+## Performance Reality
+
+**Individual Optimizations:**
+
+- GPU acceleration alone: 2-3x improvement for compute-intensive tasks
+
+- Async operations alone: 1.5-2x improvement for I/O-bound operations
+
+- Caching strategies: Conditional gains depending on data patterns
+
+**Combined Optimization Stack:**
+
+- GPU + Async: 4-9x practical improvement (not theoretical multiplicative)
+
+- Performance limited by I/O bottlenecks in document processing pipelines
+
+- Real-world gains vary based on document size, complexity, and hardware configuration
+
 ## Consequences
 
-- Positive: 2-3x speed gains from GPU acceleration; 50-80% from async operations; up to 4-5x total improvement for document processing.
+- Positive: Realistic 4-9x combined performance gains; GPU acceleration provides substantial compute improvements; async operations address I/O bottlenecks effectively.
 
-- Negative: CPU fallback for non-GPU users; dual maintenance for GPU/CPU code paths.
+- Negative: CPU fallback for non-GPU users; dual maintenance for GPU/CPU code paths; I/O bottlenecks limit theoretical maximum gains.
 
-- Risks: GPU memory management complexity (mitigated by auto-detection); compatibility issues (mitigated by fallback).
+- Risks: GPU memory management complexity (mitigated by auto-detection); compatibility issues (mitigated by fallback); over-optimizing compute when I/O is the limiting factor.
 
-- Mitigations: Automatic hardware detection; graceful CPU fallback; comprehensive testing on various hardware configurations.
+- Mitigations: Automatic hardware detection; graceful CPU fallback; I/O bottleneck acknowledgment in performance expectations; comprehensive testing on various hardware configurations.

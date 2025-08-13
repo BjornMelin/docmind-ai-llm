@@ -14,15 +14,15 @@ Accepted
 
 ## Context
 
-Following ADR-021's LlamaIndex Native Architecture Consolidation, the migration from LangChain to LlamaIndex achieves revolutionary dependency reduction (95% reduction: 27→5 packages) while enabling complete ecosystem adoption. LlamaIndex provides superior offline RAG capabilities with native component integration eliminating external dependency complexity.
+Following ADR-021's LlamaIndex Native Architecture Consolidation, the migration from LangChain to LlamaIndex achieves significant dependency reduction (62% reduction: 40→15-20 packages) while enabling complete ecosystem adoption. LlamaIndex provides superior offline RAG capabilities with native component integration eliminating external dependency complexity.
 
 **Dependency Analysis:**
 
-- **BEFORE**: 27 external packages with complex integration layers
+- **BEFORE**: 40 external packages with complex integration layers
 
-- **AFTER**: 5 native LlamaIndex packages with unified ecosystem  
+- **AFTER**: 15-20 native LlamaIndex packages with unified ecosystem  
 
-- **Reduction**: 95% dependency simplification with enhanced capabilities
+- **Reduction**: 62% dependency simplification with enhanced capabilities
 
 The complete transition to single ReActAgent architecture eliminates multi-agent coordination complexity while maintaining all agentic capabilities through pure LlamaIndex native implementation. This represents the ultimate library-first architecture - maximum ecosystem leverage with minimal external dependencies.
 
@@ -70,17 +70,38 @@ Complete migration to pure LlamaIndex stack (indexing/retrieval/pipelines/multim
 
 - ADR-011 (Single ReAct agent implementation)
 
-- ADR-021 (LlamaIndex Native Architecture Consolidation - completes pure ecosystem migration with 95% dependency reduction)
+- ADR-021 (LlamaIndex Native Architecture Consolidation - completes pure ecosystem migration with 62% dependency reduction)
 
 ## Design
 
-- **Dependency Reduction**: 95% reduction (27 → 5 packages) through native LlamaIndex component replacement
+- **Dependency Reduction**: 62% reduction (40 → 15-20 packages) through native LlamaIndex component replacement
 
 - **Migration Steps**: Replace chains with QueryPipeline, loaders with UnstructuredReader, multi-agent system with single ReActAgent.from_tools()
 
 - **Integration**: src/agents/agent_factory.py (77 → 25 lines) creates ReActAgent with QueryEngineTool from LlamaIndex indices. Pure LlamaIndex ecosystem - no LangGraph coordination packages.
 
 - **Native Components**: IngestionPipeline for document processing, native QdrantVectorStore, Settings.llm configuration
+
+- **Settings Pattern Extension Roadmap**:
+
+  ```python
+  # Current implementation
+  Settings.llm = Ollama(model="llama3.1:8b")
+  Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
+  
+  # Future extension opportunities
+  Settings.embed_model = FastEmbedEmbedding(...)
+  Settings.vector_store = QdrantVectorStore(...)
+  Settings.reranker = ColbertRerank(...)
+  Settings.node_parser = SentenceSplitter(...)
+  Settings.transformations = [SentenceWindowNodeParser(), ...]
+  ```
+
+- **Native Component Adoption Timeline**:
+  - **Phase 1** (Complete): Core LLM/embedding via Settings
+  - **Phase 2** (Q3 2025): Native retrieval components (rerankers, hybrid search)
+  - **Phase 3** (Q4 2025): Advanced parsing (multimodal, structured extraction)
+  - **Phase 4** (Q1 2026): Full pipeline optimization (caching, streaming)
 
 - **Implementation Notes**: Single agent factory pattern. Ensure offline (local Ollama in LlamaIndex LLM). No LangChain or LangGraph imports. Strategic external libraries (Tenacity, Streamlit) for production gaps.
 
@@ -90,7 +111,7 @@ Complete migration to pure LlamaIndex stack (indexing/retrieval/pipelines/multim
 
 ### Positive Outcomes
 
-- **Revolutionary dependency reduction**: 95% reduction (27 → 5 packages) with enhanced capabilities
+- **Significant dependency reduction**: 62% reduction (40 → 15-20 packages) with enhanced capabilities
 
 - **Native ecosystem integration**: Complete LlamaIndex component replacement eliminating external abstractions
 
@@ -126,7 +147,7 @@ Complete migration to pure LlamaIndex stack (indexing/retrieval/pipelines/multim
 
 **Changelog:**  
 
-- 4.0 (August 13, 2025): Enhanced with comprehensive dependency reduction strategy (95% reduction: 27→5 packages) and native component replacement details. Includes complete LlamaIndex ecosystem architecture with IngestionPipeline and native Settings integration.
+- 4.0 (August 13, 2025): Enhanced with realistic dependency reduction strategy (62% reduction: 40→15-20 packages), Settings pattern extension roadmap, and native component adoption timeline. Includes complete LlamaIndex ecosystem architecture with IngestionPipeline and native Settings integration.
 
 - 3.0 (August 12, 2025): Complete migration to pure LlamaIndex stack including single ReActAgent replacement of LangGraph multi-agent system. 85% agent code reduction, ~17 dependency package reduction, full library-first compliance.
 
