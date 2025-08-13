@@ -6,7 +6,7 @@ Multi-Backend Local LLM Support with Native LlamaIndex Settings for Ollama, Llam
 
 ## Version/Date
 
-3.0 / August 13, 2025
+3.1 / August 13, 2025
 
 ## Status
 
@@ -24,7 +24,7 @@ Current implementation is constrained to primarily Ollama-based inference, but u
 
 - Unified interface through LlamaIndex abstractions  
 
-- Performance superiority: ~1000 tokens/sec across all backends for Qwen3-4B-Thinking
+- Performance: ~1000 tokens/sec across all backends for Qwen3-4B-Thinking
 
 - RTX 4090 optimization with <80% VRAM utilization
 
@@ -50,15 +50,15 @@ Current implementation is constrained to primarily Ollama-based inference, but u
 
 - Architecture Score: 8.7/10
 
-- Revolutionary simplification: 150+ lines → 3 lines (98% reduction)
+- Code simplification: 150+ lines → 3 lines (98% reduction)
 
 - Maximum flexibility with minimal complexity
 
 ## Decision
 
-**Implement Multi-Backend LLM Architecture** using LlamaIndex native Settings.llm configuration for revolutionary simplification from factory patterns to 3-line backend switching.
+**Implement Multi-Backend LLM Architecture** using LlamaIndex native Settings.llm configuration for simplification from factory patterns to 3-line backend switching.
 
-**Revolutionary Backend Simplification:**
+**Backend Simplification:**
 
 ```python
 
@@ -77,10 +77,10 @@ agent = ReActAgent.from_tools(tools, llm=Settings.llm)
 
 **Key Decision Factors:**
 
-1. Revolutionary Simplification: 150+ lines → 3 lines (98% reduction)
+1. Code Simplification: 150+ lines → 3 lines (98% reduction)
 2. Native Ecosystem Integration: Pure LlamaIndex Settings.llm configuration
 3. Backend Switching: Single-line runtime backend changes
-4. Performance Superiority: ~1000 tokens/sec across all backends
+4. Performance: ~1000 tokens/sec across all backends
 5. KISS Compliance: Maximum architectural simplification
 
 ## Related Decisions
@@ -90,6 +90,10 @@ agent = ReActAgent.from_tools(tools, llm=Settings.llm)
 - ADR-003: GPU optimization (preserved with backend-specific optimizations)
 
 - ADR-018: Refactoring decisions (aligned with library-first approach)
+
+- ADR-003: GPU Optimization (provides RTX 4090 optimization and hardware detection across backends)
+
+- ADR-023: PyTorch Optimization Strategy (provides quantization and performance enhancement across all backends)
 
 ## Design
 
@@ -101,7 +105,7 @@ from llama_index.llms.ollama import Ollama
 from llama_index.llms.llama_cpp import LlamaCPP
 from llama_index.llms.vllm import vLLM
 
-# Backend configurations for RTX 4090 16GB with Qwen3-4B-Thinking
+# Backend configurations for RTX 4090 16GB with Qwen3-4B-Thinking (integrates ADR-003 GPU optimization)
 native_backends = {
     "ollama": Ollama(model="qwen3:4b-thinking", request_timeout=120.0),
     "llamacpp": LlamaCPP(
@@ -144,11 +148,11 @@ dependencies = [
 
 ### Positive Outcomes
 
-- **Revolutionary Simplification**: 98% code reduction (150+ → 3 lines) for backend configuration
+- **Code Simplification**: 98% code reduction (150+ → 3 lines) for backend configuration
 
 - **Native Ecosystem Integration**: Pure LlamaIndex Settings.llm eliminates custom abstractions
 
-- **Performance Superiority**: ~1000 tokens/sec across Ollama, LlamaCPP, vLLM for Qwen3-4B-Thinking
+- **Performance**: ~1000 tokens/sec across Ollama, LlamaCPP, vLLM for Qwen3-4B-Thinking
 
 - **Backend Switching**: Single-line runtime backend changes via Settings.llm assignment
 
@@ -160,7 +164,7 @@ dependencies = [
 
 - Keep backend configurations updated with ecosystem changes
 
-- Monitor performance superiority across backends with Qwen3-4B-Thinking
+- Monitor performance across backends with Qwen3-4B-Thinking
 
 - Maintain backend-specific optimizations and documentation
 
@@ -168,8 +172,10 @@ dependencies = [
 
 ---
 
-*This ADR establishes native multi-backend LLM strategy achieving revolutionary simplification while supporting unified Qwen3-4B-Thinking deployment across all backends for superior reasoning performance.*
+*This ADR establishes native multi-backend LLM strategy achieving code simplification while supporting unified Qwen3-4B-Thinking deployment across all backends for improved reasoning performance.*
 
-**Changelog:**
+## Changelog
 
-- 3.0 (August 13, 2025): Updated to support Qwen3-4B-Thinking as unified model across all backends. Enhanced performance targets (~1000 tokens/sec) and optimized VRAM usage (2.5GB vs 5-10GB). Aligned with ADR-021's Native Architecture Consolidation.
+- 3.1 (August 13, 2025): Added cross-references to GPU optimization (ADR-003) for hardware-aware backend configuration.
+
+- 3.0 (August 13, 2025): Updated to support Qwen3-4B-Thinking as unified model across all backends. Updated performance targets (~1000 tokens/sec) and optimized VRAM usage (2.5GB vs 5-10GB). Aligned with ADR-021's Native Architecture Consolidation.

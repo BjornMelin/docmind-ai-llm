@@ -16,7 +16,7 @@ Accepted
 
 Following ADR-021's LlamaIndex Native Architecture Consolidation, DocMind AI requires migration from dual configuration systems (Pydantic + LlamaIndex Settings) to unified native Settings singleton. Current implementation uses 223 lines in `/src/models/core.py` with complex abstraction layers that violate KISS principles.
 
-LlamaIndex native Settings provides revolutionary simplification - 87% configuration reduction (150 lines → 20 lines) while eliminating the dual-system complexity that creates maintenance burden and architectural inconsistency. The Settings singleton pattern ensures global configuration consistency across all LlamaIndex components.
+LlamaIndex native Settings provides simplification - 87% configuration reduction (150 lines → 20 lines) while eliminating the dual-system complexity that creates maintenance burden and architectural inconsistency. The Settings singleton pattern ensures global configuration consistency across all LlamaIndex components.
 
 ## Related Requirements
 
@@ -40,7 +40,7 @@ LlamaIndex native Settings provides revolutionary simplification - 87% configura
 
 **Complete migration to LlamaIndex native Settings singleton** for unified configuration management, eliminating pydantic-settings dependency and dual-system complexity. Achieve 87% configuration simplification through native ecosystem integration while maintaining global Settings propagation across all components.
 
-**Revolutionary Configuration Simplification:**
+**Configuration Simplification:**
 
 - **87% code reduction**: 150 lines → 20 lines of configuration code
 
@@ -58,9 +58,11 @@ LlamaIndex native Settings provides revolutionary simplification - 87% configura
 
 - ADR-018 (Library-First Refactoring): Continues simplification pattern
 
+- ADR-023 (PyTorch Optimization Strategy): Provides PyTorch optimization integration with unified Settings patterns
+
 ## Design
 
-### Unified Settings Architecture
+### Settings Architecture
 
 **Complete Migration Implementation:**
 
@@ -97,7 +99,7 @@ def configure_settings(backend="ollama"):
     
     # Multi-backend LLM configuration
     backends = {
-        "ollama": Ollama(model="llama3.2:8b", request_timeout=120.0),
+        "ollama": Ollama(model="qwen3:4b-thinking", request_timeout=120.0),
         "llamacpp": LlamaCPP(
             model_path="./models/llama-3.2-8b-instruct-q4_k_m.gguf",
             n_gpu_layers=35,
@@ -105,7 +107,7 @@ def configure_settings(backend="ollama"):
             temperature=0.1
         ),
         "vllm": vLLM(
-            model="llama3.2:8b",
+            model="qwen3:4b-thinking",
             tensor_parallel_size=1,
             gpu_memory_utilization=0.8
         )
@@ -118,7 +120,7 @@ def configure_settings(backend="ollama"):
     Settings.chunk_overlap = 20
 ```
 
-### Global Settings Propagation
+### Settings Propagation
 
 **Automatic Component Integration:**
 
@@ -150,7 +152,7 @@ def load_from_environment():
     """Load configuration from environment with sensible defaults."""
     
     backend = os.getenv("LLM_BACKEND", "ollama")
-    model_name = os.getenv("MODEL_NAME", "llama3.2:8b")
+    model_name = os.getenv("MODEL_NAME", "qwen3:4b-thinking")
     embed_model = os.getenv("EMBED_MODEL", "BAAI/bge-large-en-v1.5")
     
     configure_settings(backend=backend)
@@ -170,7 +172,7 @@ def load_from_environment():
 
 - **Eliminated dual-system complexity**: Single Settings.llm instead of Pydantic + LlamaIndex layers
 
-- **Global Settings propagation**: All LlamaIndex components automatically use Settings values
+- **Settings propagation**: All LlamaIndex components automatically use Settings values
 
 - **Multi-backend support**: Native Settings.llm works seamlessly with Ollama, LlamaCPP, vLLM
 
@@ -180,7 +182,7 @@ def load_from_environment():
 
 - **Reduced maintenance burden**: Single configuration system vs complex dual management
 
-- **Enhanced consistency**: Settings singleton ensures global configuration alignment
+- **Configuration consistency**: Settings singleton ensures global configuration alignment
 
 ### Strategic Benefits
 
@@ -228,7 +230,7 @@ def load_from_environment():
 
 - Update environment variable documentation and examples
 
-- Validate global Settings propagation across all LlamaIndex components
+- Validate Settings propagation across all LlamaIndex components
 
 - Monitor system behavior and performance in production-like scenarios
 
@@ -248,6 +250,6 @@ def load_from_environment():
 
 ## Changelog
 
-**2.0 (August 13, 2025)**: Enhanced migration strategy with comprehensive multi-backend Settings integration. Includes global Settings propagation examples and strategic benefits analysis. Aligned with ADR-021 native architecture consolidation.
+**2.0 (August 13, 2025)**: Updated migration strategy with multi-backend Settings integration. Includes Settings propagation examples and strategic benefits analysis. Aligned with ADR-021 native architecture consolidation.
 
 **1.0 (August 12, 2025)**: Initial migration decision based on research showing 87% code reduction opportunity. Aligns with ADR-018 library-first refactoring success and completes pure LlamaIndex ecosystem adoption from ADR-015.

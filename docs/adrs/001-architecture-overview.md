@@ -6,7 +6,7 @@ High-Level Architecture for DocMind AI
 
 ## Version/Date
 
-5.0 / August 13, 2025
+5.1 / August 13, 2025
 
 ## Status
 
@@ -74,7 +74,13 @@ LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModal
 
 - ADR-008 (Persistence with SQLite/diskcache).
 
-- ADR-021 (LlamaIndex Native Architecture Consolidation - 95% dependency reduction with multi-backend support).
+- ADR-021 (LlamaIndex Native Architecture Consolidation - 95% dependency reduction with multi-backend support)
+
+- ADR-003 (GPU Optimization - provides RTX 4090 optimization and 90% code complexity reduction)
+
+- ADR-012 (Async Performance Optimization - enables ~1000 tokens/sec performance with QueryPipeline.parallel_run())
+
+- ADR-023 (PyTorch Optimization Strategy - provides 1.89x speedup with TorchAO quantization)
 
 ## Design
 
@@ -150,10 +156,12 @@ graph TD
 
 **Changelog:**  
 
+- 5.1 (August 13, 2025): Added cross-references to performance optimization ADRs (ADR-003 GPU optimization, ADR-012 async patterns, ADR-023 PyTorch optimization) for integrated architecture clarity.
+
 - 5.0 (August 13, 2025): Updated multimodal embeddings from Jina v4 to CLIP ViT-B/32 for 60% VRAM reduction and native LlamaIndex integration. Aligned with ADR-021's Native Architecture Consolidation.
 
 - 4.0 (August 12, 2025): Replaced LangGraph multi-agent supervisor with single LlamaIndex ReActAgent. Updated architecture diagram to reflect simplified agent system. 85% code reduction while preserving all agentic capabilities. Pure LlamaIndex ecosystem alignment (~17 fewer dependencies).
 
-- 3.0 (July 25, 2025): Removed distributed_mode/Redis (overengineering); Emphasized local multi-process with SQLite WAL/diskcache locks; Enhanced integrations/diagram/testing for dev.
+- 3.0 (July 25, 2025): Removed distributed_mode/Redis (overengineering); Emphasized local multi-process with SQLite WAL/diskcache locks; integrations/diagram/testing for dev.
 
 - 2.0: Previous updates for Unstructured/Jina/pipelines.

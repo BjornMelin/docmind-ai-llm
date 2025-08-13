@@ -2,7 +2,7 @@
 
 ## Title
 
-Advanced PyTorch Optimization with TorchAO Quantization and Mixed Precision
+PyTorch Optimization with TorchAO Quantization and Mixed Precision
 
 ## Version/Date
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Context
 
-Following ADR-003's GPU optimization simplification and comprehensive research into modern PyTorch optimization capabilities, DocMind AI requires strategic implementation of PyTorch-native optimization strategies to achieve 1.89x faster inference with 58% memory reduction on RTX 4090 hardware. Research reveals significant performance opportunities through TorchAO quantization, mixed precision training, and advanced kernel optimization that complement the native LlamaIndex Settings.llm architecture.
+Following ADR-003's GPU optimization simplification and research into modern PyTorch optimization capabilities, DocMind AI requires implementation of PyTorch-native optimization strategies to achieve 1.89x faster inference with 58% memory reduction on RTX 4090 hardware. Research reveals performance opportunities through TorchAO quantization, mixed precision training, and kernel optimization that complement the native LlamaIndex Settings.llm architecture.
 
 **Performance Opportunity:**
 
@@ -62,7 +62,7 @@ Implement **TorchAO int4 quantization** for LLM inference, **mixed precision tra
 
 - **Secondary**: Mixed precision (FP16) for embedding generation and fine-tuning
 
-- **Advanced**: Liger Kernel evaluation for memory-constrained scenarios
+- **Additional**: Liger Kernel evaluation for memory-constrained scenarios
 
 - **Integration**: Native torch.compile optimization for production deployment
 
@@ -114,7 +114,7 @@ def setup_quantized_llm_backend(backend_name: str, model_config: dict):
     
     return model_config
 
-# Enhanced backend configuration with quantization
+# Backend configuration with quantization
 quantized_backends = {
     "ollama": Ollama(
         model="qwen3:4b-thinking", 
@@ -234,13 +234,13 @@ def create_memory_optimized_backend(backend_type: str):
 Settings.llm = create_memory_optimized_backend("vllm")
 ```
 
-### Advanced Kernel Optimization
+### Kernel Optimization
 
 **Liger Kernel Integration for Memory Reduction:**
 
 ```python
 
-# In utils.py: Advanced kernel optimization
+# In utils.py: Kernel optimization
 def setup_liger_kernel_optimization():
     """Configure Liger Kernel for 47% memory reduction."""
     
@@ -264,12 +264,12 @@ def setup_liger_kernel_optimization():
 
 # Conditional Liger Kernel integration
 def create_kernel_optimized_backend():
-    """Create backend with advanced kernel optimization."""
+    """Create backend with kernel optimization."""
     
     liger_config = setup_liger_kernel_optimization()
     
     if liger_config:
-        # Enhanced memory efficiency for large batch processing
+        # Improved memory efficiency for large batch processing
         return vLLM(
             model="Qwen/Qwen3-4B-Thinking-2507",
             tensor_parallel_size=1,
@@ -386,13 +386,13 @@ pytorch_monitor = PyTorchOptimizationMonitor()
 
 - **Compilation**: torch.compile for production inference optimization
 
-- **Monitoring**: Comprehensive performance tracking for optimization validation
+- **Monitoring**: Performance tracking for optimization validation
 
 ### Testing Strategy
 
 ```python
 
-# In tests/test_pytorch_optimization.py: Comprehensive optimization validation
+# In tests/test_pytorch_optimization.py: Optimization validation
 async def test_torchao_quantization_performance():
     """Test TorchAO int4 quantization performance and quality."""
     
@@ -476,7 +476,7 @@ async def test_multi_backend_optimization_consistency(backend_type):
 
 ### Positive Outcomes
 
-- **Significant Performance Gains**: 1.89x faster inference with TorchAO int4 quantization vs FP16 baseline
+- **Performance Gains**: 1.89x faster inference with TorchAO int4 quantization vs FP16 baseline
 
 - **Memory Efficiency**: 58% memory reduction enables larger models on RTX 4090 16GB configuration
 
@@ -516,10 +516,10 @@ async def test_multi_backend_optimization_consistency(backend_type):
 
 - **Flash Attention**: flash-attn>=2.0.0 for memory-efficient attention computation
 
-- **Advanced**: liger-kernel (optional) for 47% memory reduction capabilities
+- **Optional**: liger-kernel for 47% memory reduction capabilities
 
 - **Integration**: Native PyTorch compilation support in torch>=2.0
 
 **Changelog:**
 
-- 1.0 (August 13, 2025): Initial PyTorch optimization strategy with TorchAO int4 quantization, mixed precision training, Flash Attention 2 integration, and advanced kernel optimization support. Designed for 1.89x inference speedup and 58% memory reduction on RTX 4090 hardware. Seamless integration with ADR-003 Settings.llm architecture and multi-backend quantization strategies. Aligned with ADR-017's Qwen3-4B-Thinking model strategy and ADR-020's unified Settings patterns.
+- 1.0 (August 13, 2025): Initial PyTorch optimization strategy with TorchAO int4 quantization, mixed precision training, Flash Attention 2 integration, and kernel optimization support. Designed for 1.89x inference speedup and 58% memory reduction on RTX 4090 hardware. Integration with ADR-003 Settings.llm architecture and multi-backend quantization strategies. Aligned with ADR-017's Qwen3-4B-Thinking model strategy and ADR-020's unified Settings patterns.

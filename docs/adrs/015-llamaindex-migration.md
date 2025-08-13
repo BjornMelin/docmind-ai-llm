@@ -86,7 +86,7 @@ Complete migration to pure LlamaIndex stack (indexing/retrieval/pipelines/multim
 
   ```python
   # Current implementation
-  Settings.llm = Ollama(model="llama3.1:8b")
+  Settings.llm = Ollama(model="qwen3:4b-thinking")
   Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
   
   # Future extension opportunities
@@ -119,7 +119,7 @@ Complete migration to pure LlamaIndex stack (indexing/retrieval/pipelines/multim
 
 - **Library-first compliance**: Ultimate KISS principle adherence through native components
 
-- **Enhanced maintainability**: Single LlamaIndex ecosystem easier to debug, extend, and update
+- **Improved maintainability**: Single LlamaIndex ecosystem easier to debug, extend, and update
 
 - **Unified Settings integration**: Global Settings.llm configuration across all components
 
@@ -147,7 +147,7 @@ Complete migration to pure LlamaIndex stack (indexing/retrieval/pipelines/multim
 
 **Changelog:**  
 
-- 4.0 (August 13, 2025): Enhanced with realistic dependency reduction strategy (62% reduction: 40→15-20 packages), Settings pattern extension roadmap, and native component adoption timeline. Includes complete LlamaIndex ecosystem architecture with IngestionPipeline and native Settings integration.
+- 4.0 (August 13, 2025): Updated with realistic dependency reduction strategy (62% reduction: 40→15-20 packages), Settings pattern extension roadmap, and native component adoption timeline. Includes complete LlamaIndex ecosystem architecture with IngestionPipeline and native Settings integration.
 
 - 3.0 (August 12, 2025): Complete migration to pure LlamaIndex stack including single ReActAgent replacement of LangGraph multi-agent system. 85% agent code reduction, ~17 dependency package reduction, full library-first compliance.
 

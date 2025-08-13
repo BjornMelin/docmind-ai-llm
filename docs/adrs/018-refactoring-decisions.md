@@ -85,7 +85,7 @@ class LLMBackendFactory:
 
 # AFTER: 3 lines of native configuration
 from llama_index.llms.ollama import Ollama
-Settings.llm = Ollama(model="llama3.2:8b", request_timeout=120.0)
+Settings.llm = Ollama(model="qwen3:4b-thinking", request_timeout=120.0)
 agent = ReActAgent.from_tools(tools, llm=Settings.llm)
 ```
 

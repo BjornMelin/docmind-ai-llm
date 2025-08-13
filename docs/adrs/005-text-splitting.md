@@ -6,7 +6,7 @@ Semantic Chunking Strategy with Native IngestionPipeline Integration
 
 ## Version/Date
 
-3.0 / August 13, 2025
+3.1 / August 13, 2025
 
 ## Status
 
@@ -42,7 +42,7 @@ Following ADR-021's Native Architecture Consolidation, chunking uses native Llam
 
 Use native SentenceSplitter within IngestionPipeline with IngestionCache for intelligent semantic chunking and comprehensive caching benefits.
 
-**Revolutionary Integration Simplification:**
+**Integration Simplification:**
 
 - **BEFORE**: Custom chunking logic with separate caching
 
@@ -62,6 +62,8 @@ Use native SentenceSplitter within IngestionPipeline with IngestionCache for int
 
 - ADR-002 (Embedding Choices - chunks optimized for CLIP ViT-B/32 512D and BGE-large 1024D)
 
+- ADR-023 (PyTorch Optimization Strategy - provides mixed precision optimization for chunking operations)
+
 ## Design
 
 **Native IngestionPipeline with Caching:**
@@ -73,7 +75,7 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.ingestion import IngestionPipeline, IngestionCache
 from llama_index.core.extractors import MetadataExtractor
 
-# Revolutionary simplification: Integrated chunking + caching
+# Native simplification: Integrated chunking + caching
 cache = IngestionCache()
 splitter = SentenceSplitter(
     chunk_size=AppSettings.chunk_size,  # 1024 tokens
@@ -201,7 +203,7 @@ async def test_adaptive_chunking_configs(config):
 
 ### Positive Outcomes
 
-- **Superior Semantic Quality**: Sentence-aware splitting preserves context vs token boundaries
+- **Improved Semantic Quality**: Sentence-aware splitting preserves context vs token boundaries
 
 - **Native Caching Benefits**: IngestionCache provides 80-95% re-processing reduction automatically
 
@@ -231,6 +233,8 @@ async def test_adaptive_chunking_configs(config):
 
 **Changelog:**  
 
-- 3.0 (August 13, 2025): Revolutionary integration with native IngestionCache and multi-modal chunk optimization. Aligned with CLIP ViT-B/32 (512D) and BGE-large (1024D) embedding dimensions. Enhanced async processing with pipeline.arun(). Aligned with ADR-021's Native Architecture Consolidation.
+- 3.1 (August 13, 2025): Added cross-references to PyTorch optimization (ADR-023) for mixed precision chunking operations. Removed marketing language for technical precision.
+
+- 3.0 (August 13, 2025): Native integration with IngestionCache and multi-modal chunk optimization. Aligned with CLIP ViT-B/32 (512D) and BGE-large (1024D) embedding dimensions. Updated async processing with pipeline.arun(). Aligned with ADR-021's Native Architecture Consolidation.
 
 - 2.0 (July 25, 2025): Switched to SentenceSplitter in IngestionPipeline; Added AppSettings configs/integration post-Unstructured; Enhanced testing with param for dev.

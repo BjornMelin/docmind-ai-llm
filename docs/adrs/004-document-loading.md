@@ -6,7 +6,7 @@ Offline Multimodal Document Loading with Native UnstructuredReader Integration
 
 ## Version/Date
 
-3.0 / August 13, 2025
+3.1 / August 13, 2025
 
 ## Status
 
@@ -44,7 +44,7 @@ Following ADR-021's Native Architecture Consolidation, document loading uses nat
 
 Use native LlamaIndex UnstructuredReader with IngestionPipeline integration for comprehensive offline document processing with intelligent caching.
 
-**Revolutionary Integration Simplification:**
+**Integration Simplification:**
 
 - **BEFORE**: Custom document loaders with separate processing pipelines
 
@@ -66,6 +66,8 @@ Use native LlamaIndex UnstructuredReader with IngestionPipeline integration for 
 
 - ADR-002 (Embedding Choices - optimized for CLIP ViT-B/32 multimodal processing)
 
+- ADR-012 (Async Performance Optimization - provides async document loading and processing patterns)
+
 ## Design
 
 **Native UnstructuredReader with IngestionPipeline Integration:**
@@ -77,7 +79,7 @@ from llama_index.readers.unstructured import UnstructuredReader
 from llama_index.core.ingestion import IngestionPipeline, IngestionCache
 from llama_index.core.node_parser import SentenceSplitter
 
-# Revolutionary simplification: Native reader + pipeline + cache
+# Native simplification: Native reader + pipeline + cache
 reader = UnstructuredReader()
 cache = IngestionCache()
 
@@ -288,11 +290,11 @@ async def test_adaptive_parsing_strategies(strategy):
 
 ### Positive Outcomes
 
-- **Revolutionary Integration**: Native UnstructuredReader → IngestionPipeline → IngestionCache (zero custom parsing code)
+- **Native Integration**: Native UnstructuredReader → IngestionPipeline → IngestionCache (zero custom parsing code)
 
-- **Comprehensive Multimodal**: Full text, images, and tables extraction through YOLOX + Tesseract OCR
+- **Multimodal Support**: Full text, images, and tables extraction through YOLOX + Tesseract OCR
 
-- **Superior Caching**: 80-95% re-processing reduction through native IngestionCache integration
+- **Improved Caching**: 80-95% re-processing reduction through native IngestionCache integration
 
 - **Adaptive Processing**: Strategy-based parsing optimization for different document types and sizes
 
@@ -324,6 +326,8 @@ async def test_adaptive_parsing_strategies(strategy):
 
 **Changelog:**  
 
-- 3.0 (August 13, 2025): Revolutionary native integration with IngestionPipeline and IngestionCache for 80-95% re-processing reduction. Enhanced multimodal processing optimized for CLIP ViT-B/32. Added adaptive parsing strategies and robust fallback mechanisms. Aligned with ADR-021's Native Architecture Consolidation.
+- 3.1 (August 13, 2025): Added cross-references to async performance patterns (ADR-012) for document loading optimization. Removed marketing language for technical precision.
+
+- 3.0 (August 13, 2025): Native integration with IngestionPipeline and IngestionCache for 80-95% re-processing reduction. Updated multimodal processing optimized for CLIP ViT-B/32. Added adaptive parsing strategies and robust fallback mechanisms. Aligned with ADR-021's Native Architecture Consolidation.
 
 - 2.0 (July 25, 2025): Switched to Unstructured for offline/full parsing (added Docker deps/strategy toggle/integration with pipeline/multimodal; Enhanced testing for dev.

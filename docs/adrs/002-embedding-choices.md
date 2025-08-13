@@ -6,7 +6,7 @@ Selection of Embedding Models for Semantic Search and Multimodal Processing
 
 ## Version/Date
 
-3.0 / August 13, 2025
+3.1 / August 13, 2025
 
 ## Status
 
@@ -46,7 +46,11 @@ Dense: FastEmbedEmbedding("BAAI/bge-large-en-v1.5", dim=1024 for text). Sparse: 
 
 - ADR-020 (LlamaIndex Settings Migration - unified embedding configuration).
 
-- ADR-022 (Tenacity Resilience Integration - robust embedding operations with retry patterns).
+- ADR-022 (Tenacity Resilience Integration - robust embedding operations with retry patterns)
+
+- ADR-003 (GPU Optimization - provides RTX 4090 optimization for embedding generation)
+
+- ADR-023 (PyTorch Optimization Strategy - enables mixed precision and quantization for embedding models)
 
 ## Design
 
@@ -71,6 +75,8 @@ Dense: FastEmbedEmbedding("BAAI/bge-large-en-v1.5", dim=1024 for text). Sparse: 
 - Deps: transformers for quant/HuggingFace (pinned).
 
 **Changelog:**  
+
+- 3.1 (August 13, 2025): Added cross-references to GPU optimization (ADR-003) and PyTorch optimization (ADR-023) for integrated embedding performance.
 
 - 3.0 (August 13, 2025): Replaced Jina v4 with CLIP ViT-B/32 for 60% VRAM reduction (1.4GB vs 3.4GB) and native LlamaIndex integration; Simplified quantization approach; Aligned with simplified architecture decisions.
 

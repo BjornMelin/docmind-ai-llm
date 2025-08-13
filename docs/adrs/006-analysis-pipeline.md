@@ -6,7 +6,7 @@ Multi-Stage Query and Analysis Pipeline with Native LlamaIndex Caching
 
 ## Version/Date
 
-4.0 / August 13, 2025
+4.1 / August 13, 2025
 
 ## Status
 
@@ -62,7 +62,11 @@ Use QueryPipeline with native IngestionCache for comprehensive caching and pipel
 
 - ADR-008 (Session Persistence - native caching strategy)
 
-- ADR-012 (Async Performance Optimization - native async patterns)
+- ADR-012 (Async Performance Optimization - provides QueryPipeline.parallel_run() and async processing patterns)
+
+- ADR-003 (GPU Optimization - enables GPU acceleration for pipeline operations)
+
+- ADR-023 (PyTorch Optimization Strategy - provides quantization and mixed precision for pipeline performance)
 
 ## Design
 
@@ -74,7 +78,7 @@ Use QueryPipeline with native IngestionCache for comprehensive caching and pipel
 from llama_index.core.ingestion import IngestionPipeline, IngestionCache
 from llama_index.core.query_pipeline import QueryPipeline
 
-# Revolutionary simplification: Zero custom caching code
+# Native simplification: Zero custom caching code
 cache = IngestionCache()
 pipeline = IngestionPipeline(
     transformations=[SentenceSplitter(), MetadataExtractor()],
@@ -165,9 +169,9 @@ async def test_async_query_pipeline():
 
 ### Positive Outcomes
 
-- **Revolutionary Simplification**: Zero custom caching code (100% native IngestionCache)
+- **Native Simplification**: Zero custom caching code (100% native IngestionCache)
 
-- **Superior Performance**: 80-95% re-processing reduction through intelligent caching
+- **Improved Performance**: 80-95% re-processing reduction through intelligent caching
 
 - **Native Async**: pipeline.arun() eliminates custom async complexity
 
@@ -195,7 +199,9 @@ async def test_async_query_pipeline():
 
 **Changelog:**  
 
-- 4.0 (August 13, 2025): Revolutionary simplification through native IngestionCache (replaced diskcache) and pipeline.arun() async patterns. Zero custom caching code with 80-95% re-processing reduction. Aligned with ADR-021's Native Architecture Consolidation.
+- 4.1 (August 13, 2025): Added comprehensive cross-references to performance optimization ADRs (ADR-003, ADR-012, ADR-023) for integrated pipeline performance. Removed marketing language for technical precision.
+
+- 4.0 (August 13, 2025): Native simplification through IngestionCache (replaced diskcache) and pipeline.arun() async patterns. Zero custom caching code with 80-95% re-processing reduction. Aligned with ADR-021's Native Architecture Consolidation.
 
 - 3.0 (August 12, 2025): Updated pipeline integration to use single ReActAgent for intelligent query routing vs external multi-agent coordination. Simplified complexity routing through agent reasoning capabilities.
 

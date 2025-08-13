@@ -6,7 +6,7 @@ Native ColBERT Reranking with QueryPipeline Integration
 
 ## Version/Date
 
-3.0 / August 13, 2025
+3.1 / August 13, 2025
 
 ## Status
 
@@ -42,7 +42,7 @@ Following ADR-021's Native Architecture Consolidation, document reranking uses n
 
 Use native LlamaIndex ColbertRerank postprocessor integrated within QueryPipeline for optimal precision-performance balance with local processing.
 
-**Revolutionary Simplification:**
+**Integration Simplification:**
 
 - **BEFORE**: Custom reranking implementations with separate pipeline integration
 
@@ -62,6 +62,8 @@ Use native LlamaIndex ColbertRerank postprocessor integrated within QueryPipelin
 
 - ADR-001 (Architecture Overview - post-hybrid retrieval precision improvement)
 
+- ADR-003 (GPU Optimization - provides GPU acceleration for ColBERT reranking operations)
+
 ## Design
 
 **Native ColbertRerank Integration:**
@@ -72,7 +74,7 @@ Use native LlamaIndex ColbertRerank postprocessor integrated within QueryPipelin
 from llama_index.postprocessor.colbert_rerank import ColbertRerank
 from llama_index.core.query_pipeline import QueryPipeline
 
-# Revolutionary simplification: Native postprocessor integration
+# Native simplification: Native postprocessor integration
 reranker = ColbertRerank(
     model="colbert-ir/colbertv2.0",  # FastEmbed local model
     top_n=AppSettings.reranking_top_k or 5,
@@ -275,7 +277,7 @@ async def test_configurable_reranking_parameters(top_k):
 
 ### Positive Outcomes
 
-- **Superior Precision**: ColBERT late-interaction provides token-level relevance matching vs simple similarity
+- **Improved Precision**: ColBERT late-interaction provides token-level relevance matching vs simple similarity
 
 - **Native Integration**: Zero custom reranking code through LlamaIndex postprocessor architecture
 
@@ -311,6 +313,8 @@ async def test_configurable_reranking_parameters(top_k):
 
 **Changelog:**  
 
-- 3.0 (August 13, 2025): Revolutionary native postprocessor integration with LlamaIndex ColbertRerank. Enhanced multimodal support, performance optimization with batching, and comprehensive score fusion configuration. Zero custom reranking code through native architecture. Aligned with ADR-021's Native Architecture Consolidation.
+- 3.1 (August 13, 2025): Added cross-references to GPU optimization (ADR-003) for ColBERT reranking acceleration. Removed marketing language for technical precision.
+
+- 3.0 (August 13, 2025): Native postprocessor integration with LlamaIndex ColbertRerank. Updated multimodal support, performance optimization with batching, and score fusion configuration. Zero custom reranking code through native architecture. Aligned with ADR-021's Native Architecture Consolidation.
 
 - 2.0 (July 25, 2025): Integrated with QueryPipeline; Added toggle/score fusion; Enhanced testing for dev.

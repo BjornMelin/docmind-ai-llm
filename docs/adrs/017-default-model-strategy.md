@@ -6,7 +6,7 @@ Multi-Backend Hardware-Adaptive Model Selection with Unified Settings Configurat
 
 ## Version/Date
 
-3.0 / August 13, 2025
+3.1 / August 13, 2025
 
 ## Status
 
@@ -96,6 +96,10 @@ Multi-backend testing confirms ~1000 tokens/sec performance on RTX 4090 with Qwe
 
 - ADR-001 (Architecture foundation with local processing)
 
+- ADR-003 (GPU Optimization - provides RTX 4090 optimization and ~1000 tokens/sec performance)
+
+- ADR-023 (PyTorch Optimization Strategy - enables quantization and mixed precision for model optimization)
+
 ## Design
 
 ### Multi-Backend Hardware Detection and Model Selection
@@ -159,7 +163,7 @@ def detect_hardware() -> dict[str, Any]:
 if backend == "ollama" and "qwen3:4b-thinking" not in model_options:
     with st.sidebar.status("Downloading Qwen3-4B-Thinking..."):
         ollama.pull("qwen3:4b-thinking")
-        st.sidebar.success("Qwen3-4B-Thinking ready for superior reasoning!")
+        st.sidebar.success("Qwen3-4B-Thinking ready for agentic reasoning!")
 ```
 
 ## Implementation Notes
@@ -212,7 +216,7 @@ def test_qwen3_performance_superiority():
 
 ### Positive
 
-- **Superior Reasoning**: Qwen3-4B-Thinking provides 71.2% BFCL-v3 agentic performance
+- **Improved Reasoning**: Qwen3-4B-Thinking provides 71.2% BFCL-v3 agentic performance
 
 - **Unified Experience**: Single model strategy eliminates configuration complexity
 
@@ -220,7 +224,7 @@ def test_qwen3_performance_superiority():
 
 - **Document Coverage**: 65K context handles 95% of documents without truncation
 
-- **Performance Excellence**: ~1000 tokens/sec provides responsive user experience
+- **Performance Optimization**: ~1000 tokens/sec provides responsive user experience
 
 ### Considerations
 
@@ -236,7 +240,7 @@ def test_qwen3_performance_superiority():
 
 - **65K Context**: Comprehensive document analysis without truncation
 
-- **Tool Use**: Superior function calling and multi-step planning capabilities
+- **Tool Use**: Advanced function calling and multi-step planning capabilities
 
 - **Agentic Performance**: Leading benchmarks for ReAct agent workflows
 
@@ -248,6 +252,12 @@ def test_qwen3_performance_superiority():
 4. **Phase 4**: Validate superior reasoning performance (~1000 tokens/sec)
 5. **Phase 5**: Deploy comprehensive agentic testing with BFCL-v3 validation
 
+## Changelog
+
+- 3.1 (August 13, 2025): Added cross-references to GPU optimization (ADR-003) and PyTorch optimization (ADR-023) for integrated model performance. Removed marketing language for technical precision.
+
+- 3.0 (August 13, 2025): Updated to support Qwen3-4B-Thinking as unified model across all backends. Updated performance targets (~1000 tokens/sec) and optimized VRAM usage (2.5GB vs 5-10GB). Aligned with ADR-021's Native Architecture Consolidation.
+
 ---
 
-*This ADR establishes Qwen3-4B-Thinking as the unified LLM choice that maximizes agentic reasoning, document coverage, and performance efficiency while maintaining DocMind AI's privacy-first local processing architecture. Aligned with ADR-021's Native Architecture Consolidation for optimal user experience.*
+*This ADR establishes Qwen3-4B-Thinking as the unified LLM choice that optimizes agentic reasoning, document coverage, and performance efficiency while maintaining DocMind AI's privacy-first local processing architecture. Aligned with ADR-021's Native Architecture Consolidation.*
