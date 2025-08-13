@@ -6,11 +6,15 @@ Single LlamaIndex ReAct Agent for Document Q&A System
 
 ## Version/Date
 
-4.0 / August 12, 2025
+4.1 / August 13, 2025
 
 ## Status
 
 Accepted
+
+## Description
+
+Replaces multi-agent LangGraph architecture with single LlamaIndex ReActAgent.from_tools() achieving 85% code reduction while preserving all agentic capabilities for document Q&A workflows.
 
 ## Context
 
@@ -130,6 +134,16 @@ Previous multi-agent LangGraph supervisor architecture violated core engineering
 
 - **ADR-018**: Refactoring decisions (KISS > DRY > YAGNI principle application)
 
+- **ADR-020**: LlamaIndex Settings Migration (unified configuration for agent LLM and components)
+
+- **ADR-022**: Tenacity Resilience Integration (robust agent tool execution with retry patterns)
+
+- **ADR-003**: GPU Optimization (provides RTX 4090 optimization for agent operations)
+
+- **ADR-012**: Async Performance Optimization (enables async agent processing and QueryPipeline.parallel_run() integration)
+
+- **ADR-023**: PyTorch Optimization Strategy (provides quantization and performance optimization for agent model operations)
+
 ## Design
 
 **Implementation**: Single ReActAgent.from_tools() with dynamic tool creation from VectorStoreIndex.
@@ -175,6 +189,8 @@ All agentic capabilities maintained: chain-of-thought reasoning, dynamic tool se
 - Simpler learning curve compared to multi-agent coordination patterns
 
 ## Changelog
+
+**4.1 (August 13, 2025)**: Added comprehensive cross-references to performance optimization ADRs (ADR-003, ADR-012, ADR-023) for integrated agent performance capabilities.
 
 **4.0 (August 12, 2025)**: Complete replacement of LangGraph multi-agent with single LlamaIndex ReActAgent. 85% code reduction while preserving all agentic capabilities. KISS compliance improved from 0.4/1.0 to 0.9/1.0. Pure LlamaIndex stack achieving 8.6/10 architecture score. Integration with completed infrastructure (PyTorch GPU monitoring, spaCy optimization). Streamlined dependencies removing ~17 packages.
 

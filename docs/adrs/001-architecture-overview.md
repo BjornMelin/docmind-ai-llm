@@ -6,11 +6,15 @@ High-Level Architecture for DocMind AI
 
 ## Version/Date
 
-4.0 / August 12, 2025
+5.1 / August 13, 2025
 
 ## Status
 
 Accepted
+
+## Description
+
+Establishes a pure LlamaIndex architecture with single ReActAgent, hybrid search, and native component integration for offline document analysis with ~1000 tokens/sec performance capability.
 
 ## Context
 
@@ -20,7 +24,7 @@ DocMind AI is a local, offline RAG application for document analysis, emphasizin
 
 - Offline/local operation (no cloud APIs like LlamaParse).
 
-- Hybrid retrieval with SPLADE++/BGE-Large/Jina v4.
+- Hybrid retrieval with SPLADE++/BGE-Large/CLIP ViT-B/32.
 
 - Multimodal parsing (PDFs with images/tables via Unstructured).
 
@@ -36,13 +40,29 @@ DocMind AI is a local, offline RAG application for document analysis, emphasizin
 
 ## Alternatives
 
-- LangChain: Heavier, less offline (deprecated).
+### 1. LangChain-Based Architecture
 
-- LangGraph Multi-Agent: Over-engineered for document Q&A (deprecated for complexity).
+- **Issues**: Heavier framework, less optimized for offline operation
 
-- Custom: High maintenance.
+- **Status**: Deprecated due to poor offline support
 
-- Distributed with Redis: Overengineering for local/single-user (optional later).
+### 2. LangGraph Multi-Agent System
+
+- **Issues**: Over-engineered for document Q&A workflows
+
+- **Status**: Deprecated due to excessive complexity
+
+### 3. Custom Implementation
+
+- **Issues**: High maintenance burden, reinventing proven patterns
+
+- **Status**: Rejected - violates library-first principle
+
+### 4. Distributed Architecture with Redis
+
+- **Issues**: Over-engineering for local/single-user deployment
+
+- **Status**: Deferred - may reassess for future scaling needs
 
 ## Decision
 
@@ -54,17 +74,23 @@ LlamaIndex for indexing/retrieval/pipelines (VectorStoreIndex/Qdrant, MultiModal
 
 - ADR-011 (Single ReAct agent architecture).
 
-- ADR-016 (Multimodal Jina v4/Unstructured).
+- ADR-016 (Multimodal CLIP ViT-B/32/Unstructured).
 
 - ADR-008 (Persistence with SQLite/diskcache).
 
-- ADR-020 (LlamaIndex native Settings for configuration management).
+- ADR-021 (LlamaIndex Native Architecture Consolidation - 95% dependency reduction with multi-backend support)
+
+- ADR-003 (GPU Optimization - provides RTX 4090 optimization and 90% code complexity reduction)
+
+- ADR-012 (Async Performance Optimization - enables ~1000 tokens/sec performance with QueryPipeline.parallel_run())
+
+- ADR-023 (PyTorch Optimization Strategy - provides 1.89x speedup with TorchAO quantization)
 
 ## Design
 
 - **Ingestion**: UnstructuredReader.load_data(file_path, strategy="hi_res") → IngestionPipeline([SentenceSplitter(AppSettings.chunk_size/overlap), MetadataExtractor()]) → nodes.
 
-- **Indexing/Retrieval**: HybridFusionRetriever (dense=FastEmbedEmbedding(AppSettings.dense_embedding_model), sparse=SparseTextEmbedding(AppSettings.sparse_embedding_model), alpha=AppSettings.rrf_fusion_alpha) with QdrantVectorStore. MultiModalVectorStoreIndex (image_embed_model=HuggingFaceEmbedding("jinaai/jina-embeddings-v4")). KGIndex.from_documents(nodes, extractor=spaCy).
+- **Indexing/Retrieval**: HybridFusionRetriever (dense=FastEmbedEmbedding(AppSettings.dense_embedding_model), sparse=SparseTextEmbedding(AppSettings.sparse_embedding_model), alpha=AppSettings.rrf_fusion_alpha) with QdrantVectorStore. MultiModalVectorStoreIndex (image_embed_model=ClipEmbedding("ViT-B/32")). KGIndex.from_documents(nodes, extractor=spaCy).
 
 - **Querying**: QueryPipeline(chain=[retriever, ColbertRerank, synthesizer], async_mode=True, parallel=True).
 
@@ -83,7 +109,7 @@ graph TD
     A["Streamlit UI<br/>Toggles: AppSettings"] --> B["Upload<br/>async upload_section<br/>st.status/progress/error"]
     B --> C["Parse<br/>UnstructuredReader hi_res → docs"]
     C --> D["Chunk/Extract<br/>IngestionPipeline: SentenceSplitter<br/>chunk_size/overlap + MetadataExtractor → nodes"]
-    D --> E["Index/Embed<br/>HybridFusionRetriever dense/sparse<br/>MultiModalVectorStoreIndex Jina v4 512D<br/>KGIndex spaCy"]
+    D --> E["Index/Embed<br/>HybridFusionRetriever dense/sparse<br/>MultiModalVectorStoreIndex CLIP ViT-B/32 512D<br/>KGIndex spaCy"]
     E --> F["Query<br/>QueryPipeline: chain=retriever<br/>ColbertRerank, synthesizer<br/>async/parallel"]
     F --> G["Agent<br/>ReActAgent.from_tools()<br/>QueryEngineTool from indices<br/>ChatMemoryBuffer persistence<br/>local Ollama LLM<br/>reasoning + tool selection"]
     G --> A
@@ -98,20 +124,48 @@ graph TD
 
 ## Consequences
 
-- Offline/local focus (SQLite/diskcache for all).
+### Positive Outcomes
 
-- Scalable locally (multi-process via WAL/locks).
+- **Offline/local focus**: Complete operation without internet dependency
 
-- Maintainable (no distributed complexity for MVP).
+- **Local scalability**: Multi-process capability via SQLite WAL/locks
 
-- If distributed needed later: Reassess with new ADR.
+- **Maintainable architecture**: No distributed complexity for MVP
 
-- Future: Expand Pool usage if benchmarks show gains.
+- **Performance optimization**: Efficient chunking and multi-stage querying
+
+- **Comprehensive capabilities**: Hybrid search, multimodal support, knowledge graphs
+
+- **Session persistence**: Reliable caching and memory management
+
+### Ongoing Maintenance Requirements
+
+- Monitor LlamaIndex ecosystem updates and compatibility
+
+- Maintain performance benchmarks for local processing
+
+- Update Unstructured parsing capabilities as needed
+
+- Optimize SQLite WAL configuration for concurrent access
+
+### Risks
+
+- **Local resource constraints**: Performance limited by single-machine capabilities
+
+- **Storage scaling**: SQLite may require optimization for large document collections
+
+- **Future distributed needs**: May require architectural reassessment
+
+- **Dependency management**: Monitor ecosystem changes and compatibility
 
 **Changelog:**  
 
+- 5.1 (August 13, 2025): Added cross-references to performance optimization ADRs (ADR-003 GPU optimization, ADR-012 async patterns, ADR-023 PyTorch optimization) for integrated architecture clarity.
+
+- 5.0 (August 13, 2025): Updated multimodal embeddings from Jina v4 to CLIP ViT-B/32 for 60% VRAM reduction and native LlamaIndex integration. Aligned with ADR-021's Native Architecture Consolidation.
+
 - 4.0 (August 12, 2025): Replaced LangGraph multi-agent supervisor with single LlamaIndex ReActAgent. Updated architecture diagram to reflect simplified agent system. 85% code reduction while preserving all agentic capabilities. Pure LlamaIndex ecosystem alignment (~17 fewer dependencies).
 
-- 3.0 (July 25, 2025): Removed distributed_mode/Redis (overengineering); Emphasized local multi-process with SQLite WAL/diskcache locks; Enhanced integrations/diagram/testing for dev.
+- 3.0 (July 25, 2025): Removed distributed_mode/Redis (overengineering); Emphasized local multi-process with SQLite WAL/diskcache locks; integrations/diagram/testing for dev.
 
 - 2.0: Previous updates for Unstructured/Jina/pipelines.

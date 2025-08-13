@@ -12,6 +12,10 @@ User Interface Framework Selection
 
 Accepted
 
+## Description
+
+Selects Streamlit as the UI framework for rapid development with async support, progress indicators, and configuration toggles for local document analysis interface.
+
 ## Context
 
 Simple/local UI for uploads/analysis/chat (Streamlit fast/low-maintenance, supports async/fragments).
