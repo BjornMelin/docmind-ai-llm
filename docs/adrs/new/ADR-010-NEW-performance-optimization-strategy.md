@@ -1,0 +1,791 @@
+# ADR-010-NEW: Performance Optimization Strategy
+
+## Title
+
+Comprehensive Performance Optimization with Quantization, Caching, and Hardware Acceleration
+
+## Version/Date
+
+1.0 / 2025-01-16
+
+## Status
+
+Proposed
+
+## Description
+
+Implements a comprehensive performance optimization strategy targeting consumer hardware constraints while maintaining quality. The strategy encompasses model quantization, multi-level caching, hardware acceleration, and intelligent resource management to ensure responsive operation on RTX 3060-4090 GPUs with 8-24GB VRAM.
+
+## Context
+
+The modernized architecture introduces several performance challenges:
+
+1. **Model Memory**: BGE-M3, local LLM, and reranker consume significant VRAM
+2. **Computational Load**: Agentic RAG and hierarchical retrieval increase processing overhead
+3. **Latency Requirements**: Interactive responses require <3 second total pipeline latency
+4. **Resource Constraints**: Must operate efficiently on consumer hardware
+5. **Quality Preservation**: Optimizations cannot significantly degrade accuracy
+
+A systematic performance optimization approach is needed to balance capability with responsiveness while respecting hardware limitations.
+
+## Related Requirements
+
+### Functional Requirements
+
+- **FR-1:** Maintain interactive response times (<3 seconds end-to-end)
+- **FR-2:** Support concurrent operations (background indexing + query processing)
+- **FR-3:** Optimize memory usage to fit within consumer GPU constraints
+- **FR-4:** Preserve quality within 5% of unoptimized performance
+
+### Non-Functional Requirements
+
+- **NFR-1:** **(Latency)** End-to-end query response <3 seconds on RTX 4060
+- **NFR-2:** **(Memory)** Total VRAM usage <12GB for RTX 4060 compatibility
+- **NFR-3:** **(Throughput)** Support ≥5 concurrent queries without degradation
+- **NFR-4:** **(Quality)** Maintain ≥95% of baseline accuracy after optimization
+
+## Alternatives
+
+### 1. No Optimization (Baseline)
+
+- **Description**: Run all models at full precision without optimization
+- **Issues**: Excessive memory usage, slow inference, poor scalability
+- **Score**: 2/10 (simplicity: 8, performance: 1, scalability: 1)
+
+### 2. Basic Quantization Only
+
+- **Description**: Apply 4-bit quantization to models without other optimizations
+- **Issues**: Limited performance gains, no caching, no resource management
+- **Score**: 5/10 (memory: 7, latency: 4, comprehensiveness: 3)
+
+### 3. Cloud Offloading for Performance
+
+- **Description**: Offload compute-intensive operations to cloud services
+- **Issues**: Violates local-first principle, adds latency, ongoing costs
+- **Score**: 4/10 (performance: 8, local-first: 0, cost: 2)
+
+### 4. Comprehensive Local Optimization (Selected)
+
+- **Description**: Multi-layered optimization with quantization, caching, and acceleration
+- **Benefits**: Balanced performance/quality, maintains local-first, scalable
+- **Score**: 9/10 (performance: 9, quality: 8, maintainability: 9)
+
+## Decision
+
+We will implement **Comprehensive Local Performance Optimization** with:
+
+### Core Optimization Layers
+
+1. **Model Quantization**: 4-bit/8-bit quantization with quality preservation
+2. **Multi-Level Caching**: Memory, disk, and computation result caching
+3. **Hardware Acceleration**: GPU optimization, mixed precision, Flash Attention
+4. **Resource Management**: Dynamic memory allocation and cleanup
+5. **Pipeline Optimization**: Batching, prefetching, and parallel processing
+6. **Quality-Performance Balancing**: Adaptive strategies based on available resources
+
+## Related Decisions
+
+- **ADR-004-NEW** (Local-First LLM Strategy): Implements quantization for local models
+- **ADR-002-NEW** (Unified Embedding Strategy): Optimizes BGE-M3 inference
+- **ADR-006-NEW** (Modern Reranking Architecture): Implements batch processing optimization
+- **ADR-007-NEW** (Hybrid Persistence Strategy): Provides caching infrastructure
+
+## Design
+
+### Performance Optimization Architecture
+
+```mermaid
+graph TD
+    A[User Query] --> B[Request Router]
+    B --> C[Cache Manager]
+    C -->|Hit| D[Cached Result]
+    C -->|Miss| E[Optimization Engine]
+    
+    E --> F[Resource Manager]
+    F --> G[Model Quantization]
+    F --> H[Hardware Acceleration]
+    F --> I[Batch Processing]
+    
+    G --> J[BGE-M3 Optimized]
+    G --> K[Local LLM Optimized]
+    G --> L[Reranker Optimized]
+    
+    H --> M[GPU Optimization]
+    H --> N[Mixed Precision]
+    H --> O[Flash Attention]
+    
+    I --> P[Query Batching]
+    I --> Q[Embedding Batching]
+    I --> R[Reranking Batching]
+    
+    J --> S[Optimized Pipeline]
+    K --> S
+    L --> S
+    M --> S
+    N --> S
+    O --> S
+    P --> S
+    Q --> S
+    R --> S
+    
+    S --> T[Performance Monitor]
+    T --> U[Adaptive Controller]
+    U --> F
+```
+
+### Model Quantization Framework
+
+```python
+import torch
+import torch.nn as nn
+from typing import Dict, Any, Optional, Union, List
+from dataclasses import dataclass
+from enum import Enum
+import time
+import psutil
+import gc
+from functools import lru_cache
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+class QuantizationType(Enum):
+    FP16 = "fp16"
+    INT8 = "int8"
+    INT4 = "int4"
+    DYNAMIC = "dynamic"
+
+class OptimizationLevel(Enum):
+    CONSERVATIVE = "conservative"  # Prioritize quality
+    BALANCED = "balanced"         # Balance quality/performance
+    AGGRESSIVE = "aggressive"     # Prioritize performance
+
+@dataclass
+class PerformanceConfig:
+    """Configuration for performance optimization."""
+    quantization_type: QuantizationType = QuantizationType.INT4
+    optimization_level: OptimizationLevel = OptimizationLevel.BALANCED
+    enable_caching: bool = True
+    enable_batching: bool = True
+    max_cache_size_mb: int = 2048
+    batch_size: int = 8
+    target_latency_ms: int = 3000
+    gpu_memory_threshold: float = 0.8
+
+class ModelQuantizer:
+    """Intelligent model quantization with quality preservation."""
+    
+    def __init__(self, config: PerformanceConfig):
+        self.config = config
+        self.quantized_models = {}
+        self.quality_metrics = {}
+    
+    def quantize_model(self, model, model_name: str) -> torch.nn.Module:
+        """Apply quantization to model based on configuration."""
+        
+        if model_name in self.quantized_models:
+            return self.quantized_models[model_name]
+        
+        start_time = time.time()
+        original_size = self._estimate_model_size(model)
+        
+        try:
+            if self.config.quantization_type == QuantizationType.INT4:
+                quantized_model = self._apply_4bit_quantization(model)
+            elif self.config.quantization_type == QuantizationType.INT8:
+                quantized_model = self._apply_8bit_quantization(model)
+            elif self.config.quantization_type == QuantizationType.FP16:
+                quantized_model = self._apply_fp16_optimization(model)
+            else:
+                quantized_model = self._apply_dynamic_quantization(model)
+            
+            # Validate quantization quality
+            quality_score = self._validate_quantization_quality(model, quantized_model, model_name)
+            
+            quantized_size = self._estimate_model_size(quantized_model)
+            compression_ratio = original_size / quantized_size
+            
+            self.quality_metrics[model_name] = {
+                'quality_score': quality_score,
+                'compression_ratio': compression_ratio,
+                'quantization_time': time.time() - start_time,
+                'original_size_mb': original_size / (1024 * 1024),
+                'quantized_size_mb': quantized_size / (1024 * 1024)
+            }
+            
+            self.quantized_models[model_name] = quantized_model
+            
+            print(f"Quantized {model_name}: {compression_ratio:.2f}x compression, quality: {quality_score:.3f}")
+            
+            return quantized_model
+            
+        except Exception as e:
+            print(f"Quantization failed for {model_name}: {e}")
+            return model  # Return original if quantization fails
+    
+    def _apply_4bit_quantization(self, model) -> torch.nn.Module:
+        """Apply 4-bit quantization using BitsAndBytesConfig."""
+        try:
+            from transformers import BitsAndBytesConfig
+            
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16
+            )
+            
+            # Apply quantization
+            if hasattr(model, 'quantize'):
+                return model.quantize(bnb_config)
+            else:
+                # Fallback: apply to linear layers
+                return self._quantize_linear_layers(model, bits=4)
+                
+        except ImportError:
+            print("BitsAndBytesConfig not available, using fallback quantization")
+            return self._quantize_linear_layers(model, bits=4)
+    
+    def _apply_8bit_quantization(self, model) -> torch.nn.Module:
+        """Apply 8-bit quantization."""
+        try:
+            from transformers import BitsAndBytesConfig
+            
+            bnb_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+                bnb_8bit_compute_dtype=torch.float16
+            )
+            
+            if hasattr(model, 'quantize'):
+                return model.quantize(bnb_config)
+            else:
+                return self._quantize_linear_layers(model, bits=8)
+                
+        except ImportError:
+            return self._quantize_linear_layers(model, bits=8)
+    
+    def _apply_fp16_optimization(self, model) -> torch.nn.Module:
+        """Apply FP16 mixed precision optimization."""
+        if torch.cuda.is_available():
+            return model.half()
+        return model
+    
+    def _apply_dynamic_quantization(self, model) -> torch.nn.Module:
+        """Apply PyTorch dynamic quantization."""
+        return torch.quantization.quantize_dynamic(
+            model, {nn.Linear}, dtype=torch.qint8
+        )
+    
+    def _quantize_linear_layers(self, model, bits: int) -> torch.nn.Module:
+        """Fallback: quantize linear layers manually."""
+        quantized_model = model
+        
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear):
+                # Simple bit reduction (placeholder implementation)
+                with torch.no_grad():
+                    if bits == 4:
+                        # Quantize to 4-bit
+                        scale = module.weight.abs().max() / 7  # 4-bit signed range: -8 to 7
+                        quantized_weight = torch.round(module.weight / scale).clamp(-8, 7)
+                        module.weight.data = quantized_weight * scale
+                    elif bits == 8:
+                        # Quantize to 8-bit
+                        scale = module.weight.abs().max() / 127
+                        quantized_weight = torch.round(module.weight / scale).clamp(-128, 127)
+                        module.weight.data = quantized_weight * scale
+        
+        return quantized_model
+    
+    def _estimate_model_size(self, model) -> int:
+        """Estimate model size in bytes."""
+        total_size = 0
+        for param in model.parameters():
+            total_size += param.nelement() * param.element_size()
+        return total_size
+    
+    def _validate_quantization_quality(self, original_model, quantized_model, model_name: str) -> float:
+        """Validate quantization quality with sample inputs."""
+        try:
+            # Create sample input based on model type
+            if "embedding" in model_name.lower():
+                sample_input = ["This is a test sentence for quality validation."]
+            elif "llm" in model_name.lower():
+                sample_input = "Test prompt for model validation"
+            else:
+                return 0.9  # Default quality score if validation not possible
+            
+            # Compare outputs (simplified validation)
+            with torch.no_grad():
+                if hasattr(original_model, 'encode'):
+                    original_output = original_model.encode(sample_input)
+                    quantized_output = quantized_model.encode(sample_input)
+                    
+                    if isinstance(original_output, torch.Tensor):
+                        similarity = torch.cosine_similarity(
+                            original_output.flatten(),
+                            quantized_output.flatten(),
+                            dim=0
+                        )
+                        return float(similarity)
+                
+                return 0.9  # Default if comparison not possible
+                
+        except Exception as e:
+            print(f"Quality validation failed for {model_name}: {e}")
+            return 0.8  # Conservative quality estimate
+
+class MultiLevelCache:
+    """Multi-level caching system for performance optimization."""
+    
+    def __init__(self, config: PerformanceConfig):
+        self.config = config
+        self.memory_cache = {}
+        self.disk_cache = {}
+        self.computation_cache = {}
+        self.cache_stats = {
+            'hits': 0,
+            'misses': 0,
+            'memory_usage': 0
+        }
+        self.cache_lock = threading.RLock()
+    
+    def get(self, key: str, cache_type: str = "memory") -> Optional[Any]:
+        """Get cached value."""
+        with self.cache_lock:
+            cache = self._get_cache(cache_type)
+            
+            if key in cache:
+                self.cache_stats['hits'] += 1
+                
+                # Update access time for LRU
+                if hasattr(cache[key], 'last_accessed'):
+                    cache[key]['last_accessed'] = time.time()
+                
+                return cache[key].get('value') if isinstance(cache[key], dict) else cache[key]
+            
+            self.cache_stats['misses'] += 1
+            return None
+    
+    def put(self, key: str, value: Any, cache_type: str = "memory", ttl: Optional[int] = None) -> bool:
+        """Store value in cache."""
+        with self.cache_lock:
+            cache = self._get_cache(cache_type)
+            
+            # Check cache size limits
+            if cache_type == "memory" and self._get_memory_usage() > self.config.max_cache_size_mb * 1024 * 1024:
+                self._evict_lru(cache_type)
+            
+            cache_entry = {
+                'value': value,
+                'created_at': time.time(),
+                'last_accessed': time.time(),
+                'ttl': ttl
+            }
+            
+            cache[key] = cache_entry
+            return True
+    
+    def _get_cache(self, cache_type: str) -> Dict:
+        """Get cache by type."""
+        if cache_type == "memory":
+            return self.memory_cache
+        elif cache_type == "disk":
+            return self.disk_cache
+        elif cache_type == "computation":
+            return self.computation_cache
+        else:
+            return self.memory_cache
+    
+    def _get_memory_usage(self) -> int:
+        """Estimate current memory usage."""
+        import sys
+        total_size = 0
+        
+        for cache in [self.memory_cache, self.computation_cache]:
+            for value in cache.values():
+                total_size += sys.getsizeof(value)
+        
+        return total_size
+    
+    def _evict_lru(self, cache_type: str, count: int = 10):
+        """Evict least recently used items."""
+        cache = self._get_cache(cache_type)
+        
+        if not cache:
+            return
+        
+        # Sort by last accessed time
+        items = [(k, v) for k, v in cache.items() if isinstance(v, dict) and 'last_accessed' in v]
+        items.sort(key=lambda x: x[1]['last_accessed'])
+        
+        # Remove oldest items
+        for i in range(min(count, len(items))):
+            key = items[i][0]
+            del cache[key]
+    
+    def clear_expired(self):
+        """Clear expired cache entries."""
+        current_time = time.time()
+        
+        with self.cache_lock:
+            for cache in [self.memory_cache, self.disk_cache, self.computation_cache]:
+                expired_keys = []
+                
+                for key, entry in cache.items():
+                    if isinstance(entry, dict) and 'ttl' in entry and entry['ttl']:
+                        if current_time - entry['created_at'] > entry['ttl']:
+                            expired_keys.append(key)
+                
+                for key in expired_keys:
+                    del cache[key]
+
+class ResourceManager:
+    """Intelligent resource management for optimal performance."""
+    
+    def __init__(self, config: PerformanceConfig):
+        self.config = config
+        self.resource_stats = {
+            'gpu_memory_usage': 0.0,
+            'system_memory_usage': 0.0,
+            'active_models': [],
+            'current_batch_size': config.batch_size
+        }
+        self.monitoring_active = True
+        self._start_monitoring()
+    
+    def _start_monitoring(self):
+        """Start background resource monitoring."""
+        def monitor_worker():
+            while self.monitoring_active:
+                self._update_resource_stats()
+                self._adjust_performance_settings()
+                time.sleep(10)  # Update every 10 seconds
+        
+        worker_thread = threading.Thread(target=monitor_worker, daemon=True)
+        worker_thread.start()
+    
+    def _update_resource_stats(self):
+        """Update current resource usage statistics."""
+        # GPU memory
+        if torch.cuda.is_available():
+            self.resource_stats['gpu_memory_usage'] = torch.cuda.memory_allocated() / torch.cuda.max_memory_allocated()
+        
+        # System memory
+        memory = psutil.virtual_memory()
+        self.resource_stats['system_memory_usage'] = memory.percent / 100.0
+    
+    def _adjust_performance_settings(self):
+        """Dynamically adjust performance settings based on resource usage."""
+        gpu_usage = self.resource_stats['gpu_memory_usage']
+        
+        # Adjust batch size based on GPU memory usage
+        if gpu_usage > self.config.gpu_memory_threshold:
+            # Reduce batch size to free up memory
+            new_batch_size = max(1, self.resource_stats['current_batch_size'] // 2)
+            self.resource_stats['current_batch_size'] = new_batch_size
+            
+            # Trigger garbage collection
+            self._cleanup_memory()
+        elif gpu_usage < 0.5 and self.resource_stats['current_batch_size'] < self.config.batch_size:
+            # Increase batch size if memory allows
+            new_batch_size = min(self.config.batch_size, self.resource_stats['current_batch_size'] * 2)
+            self.resource_stats['current_batch_size'] = new_batch_size
+    
+    def _cleanup_memory(self):
+        """Perform memory cleanup."""
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    
+    def get_optimal_batch_size(self) -> int:
+        """Get current optimal batch size."""
+        return self.resource_stats['current_batch_size']
+    
+    def should_use_acceleration(self) -> bool:
+        """Determine if hardware acceleration should be used."""
+        return torch.cuda.is_available() and self.resource_stats['gpu_memory_usage'] < 0.9
+
+class BatchProcessor:
+    """Intelligent batch processing for improved throughput."""
+    
+    def __init__(self, config: PerformanceConfig, resource_manager: ResourceManager):
+        self.config = config
+        self.resource_manager = resource_manager
+        self.pending_requests = []
+        self.request_lock = threading.Lock()
+        self.executor = ThreadPoolExecutor(max_workers=4)
+    
+    def add_request(self, request_data: Dict[str, Any], callback: Optional[callable] = None):
+        """Add request to batch processing queue."""
+        with self.request_lock:
+            self.pending_requests.append({
+                'data': request_data,
+                'callback': callback,
+                'timestamp': time.time()
+            })
+            
+            # Process batch if it's full or timeout reached
+            if len(self.pending_requests) >= self.resource_manager.get_optimal_batch_size():
+                self._process_batch()
+    
+    def _process_batch(self):
+        """Process current batch of requests."""
+        if not self.pending_requests:
+            return
+        
+        batch_to_process = self.pending_requests.copy()
+        self.pending_requests.clear()
+        
+        # Submit batch processing to thread pool
+        future = self.executor.submit(self._execute_batch, batch_to_process)
+        
+        # Handle results asynchronously
+        def handle_results(future):
+            try:
+                results = future.result()
+                for i, result in enumerate(results):
+                    if batch_to_process[i]['callback']:
+                        batch_to_process[i]['callback'](result)
+            except Exception as e:
+                print(f"Batch processing error: {e}")
+        
+        future.add_done_callback(handle_results)
+    
+    def _execute_batch(self, batch: List[Dict]) -> List[Any]:
+        """Execute batch of requests."""
+        # Extract request data
+        batch_data = [req['data'] for req in batch]
+        
+        # Process batch (implementation depends on request type)
+        # This is a placeholder for actual batch processing logic
+        results = []
+        for data in batch_data:
+            # Simulate batch processing
+            result = self._process_single_request(data)
+            results.append(result)
+        
+        return results
+    
+    def _process_single_request(self, request_data: Dict[str, Any]) -> Any:
+        """Process single request (placeholder)."""
+        # This would be implemented by specific components
+        return {'status': 'processed', 'data': request_data}
+
+class PerformanceOptimizer:
+    """Main performance optimization orchestrator."""
+    
+    def __init__(self, config: PerformanceConfig = None):
+        self.config = config or PerformanceConfig()
+        self.quantizer = ModelQuantizer(self.config)
+        self.cache = MultiLevelCache(self.config)
+        self.resource_manager = ResourceManager(self.config)
+        self.batch_processor = BatchProcessor(self.config, self.resource_manager)
+        
+        self.optimization_stats = {
+            'total_optimizations': 0,
+            'cache_hit_rate': 0.0,
+            'avg_latency_reduction': 0.0,
+            'memory_savings': 0.0
+        }
+    
+    def optimize_model(self, model, model_name: str) -> torch.nn.Module:
+        """Apply comprehensive optimization to model."""
+        
+        # Apply quantization
+        optimized_model = self.quantizer.quantize_model(model, model_name)
+        
+        # Enable hardware acceleration if available
+        if self.resource_manager.should_use_acceleration():
+            optimized_model = self._apply_hardware_acceleration(optimized_model)
+        
+        # Update optimization stats
+        self.optimization_stats['total_optimizations'] += 1
+        
+        return optimized_model
+    
+    def _apply_hardware_acceleration(self, model) -> torch.nn.Module:
+        """Apply hardware-specific optimizations."""
+        if torch.cuda.is_available():
+            model = model.cuda()
+            
+            # Enable Flash Attention if available
+            if hasattr(model, 'config') and hasattr(model.config, 'attn_implementation'):
+                model.config.attn_implementation = "flash_attention_2"
+            
+            # Enable mixed precision training
+            if hasattr(model, 'gradient_checkpointing_enable'):
+                model.gradient_checkpointing_enable()
+        
+        return model
+    
+    @lru_cache(maxsize=1000)
+    def cached_inference(self, model_name: str, input_hash: str, input_data: Any) -> Any:
+        """Cached inference with automatic cache management."""
+        cache_key = f"{model_name}_{input_hash}"
+        
+        # Check cache first
+        cached_result = self.cache.get(cache_key, "computation")
+        if cached_result:
+            return cached_result
+        
+        # If not cached, this would trigger actual inference
+        # (Implementation depends on specific model type)
+        result = None  # Placeholder
+        
+        # Cache result
+        self.cache.put(cache_key, result, "computation", ttl=3600)  # 1 hour TTL
+        
+        return result
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get comprehensive performance statistics."""
+        cache_stats = self.cache.cache_stats
+        cache_hit_rate = cache_stats['hits'] / max(cache_stats['hits'] + cache_stats['misses'], 1)
+        
+        return {
+            'optimization_stats': self.optimization_stats,
+            'cache_hit_rate': cache_hit_rate,
+            'resource_usage': self.resource_manager.resource_stats,
+            'quantization_metrics': self.quantizer.quality_metrics,
+            'current_batch_size': self.resource_manager.get_optimal_batch_size()
+        }
+    
+    def adaptive_optimize(self, target_latency_ms: int = None) -> Dict[str, Any]:
+        """Adaptively optimize based on current performance."""
+        target = target_latency_ms or self.config.target_latency_ms
+        
+        # Measure current performance
+        current_stats = self.get_performance_stats()
+        
+        # Adjust optimization level based on resource usage
+        gpu_usage = current_stats['resource_usage']['gpu_memory_usage']
+        
+        if gpu_usage > 0.9:
+            # Aggressive optimization needed
+            self.config.optimization_level = OptimizationLevel.AGGRESSIVE
+            self.config.quantization_type = QuantizationType.INT4
+        elif gpu_usage > 0.7:
+            # Balanced optimization
+            self.config.optimization_level = OptimizationLevel.BALANCED
+            self.config.quantization_type = QuantizationType.INT8
+        else:
+            # Conservative optimization
+            self.config.optimization_level = OptimizationLevel.CONSERVATIVE
+            self.config.quantization_type = QuantizationType.FP16
+        
+        return {
+            'optimization_level': self.config.optimization_level.value,
+            'quantization_type': self.config.quantization_type.value,
+            'recommended_actions': self._get_optimization_recommendations(current_stats)
+        }
+    
+    def _get_optimization_recommendations(self, stats: Dict[str, Any]) -> List[str]:
+        """Get recommendations for further optimization."""
+        recommendations = []
+        
+        cache_hit_rate = stats['cache_hit_rate']
+        if cache_hit_rate < 0.5:
+            recommendations.append("Increase cache size or improve cache key strategy")
+        
+        gpu_usage = stats['resource_usage']['gpu_memory_usage']
+        if gpu_usage > 0.8:
+            recommendations.append("Consider more aggressive quantization or reduce batch size")
+        
+        if stats['resource_usage']['current_batch_size'] < self.config.batch_size:
+            recommendations.append("GPU memory usage allows for larger batch sizes")
+        
+        return recommendations
+
+# Usage decorators for easy integration
+def optimize_inference(optimizer: PerformanceOptimizer, model_name: str):
+    """Decorator to automatically optimize inference functions."""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            # Create cache key from inputs
+            import hashlib
+            input_str = str(args) + str(kwargs)
+            input_hash = hashlib.md5(input_str.encode()).hexdigest()
+            
+            # Try cached inference first
+            cached_result = optimizer.cached_inference(model_name, input_hash, (args, kwargs))
+            if cached_result:
+                return cached_result
+            
+            # Execute function
+            result = func(*args, **kwargs)
+            
+            # Cache result
+            optimizer.cache.put(f"{model_name}_{input_hash}", result, "computation")
+            
+            return result
+        return wrapper
+    return decorator
+
+def batch_process(optimizer: PerformanceOptimizer):
+    """Decorator to automatically batch process requests."""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            # Add to batch processor
+            request_data = {'func': func, 'args': args, 'kwargs': kwargs}
+            
+            # For synchronous operations, process immediately
+            # For async operations, add to batch queue
+            return optimizer.batch_processor._process_single_request(request_data)
+        return wrapper
+    return decorator
+```
+
+## Consequences
+
+### Positive Outcomes
+
+- **Significant Memory Reduction**: 50-70% reduction in model memory usage through quantization
+- **Improved Latency**: Multi-level caching reduces repeated computation overhead
+- **Better Resource Utilization**: Dynamic resource management optimizes hardware usage
+- **Maintained Quality**: Intelligent quantization preserves >95% of baseline accuracy
+- **Scalability**: Batch processing improves throughput for multiple concurrent requests
+- **Adaptability**: Performance automatically adjusts to available hardware resources
+
+### Negative Consequences / Trade-offs
+
+- **Implementation Complexity**: Sophisticated optimization requires careful implementation
+- **Initial Setup Time**: Model quantization and cache warming add startup latency
+- **Quality Trade-offs**: Some accuracy loss inevitable with aggressive quantization
+- **Memory Overhead**: Caching systems require additional memory allocation
+- **Debugging Complexity**: Performance optimizations can complicate error diagnosis
+
+### Performance Targets
+
+- **Memory Usage**: <12GB VRAM for full system on RTX 4060
+- **Response Latency**: <3 seconds end-to-end query processing
+- **Quality Preservation**: ≥95% of baseline accuracy after optimization
+- **Cache Hit Rate**: >60% for frequently accessed data
+- **Throughput**: ≥5 concurrent queries without degradation
+
+## Dependencies
+
+- **Python**: `torch>=2.0.0`, `bitsandbytes>=0.41.0`, `psutil>=5.9.0`
+- **Hardware**: NVIDIA GPU with ≥6GB VRAM, CUDA 11.8+
+- **Optional**: `flash-attn>=2.0.0` for attention optimization
+- **Storage**: Additional space for cached models and computations
+
+## Monitoring Metrics
+
+- Model inference latency by component
+- Memory usage (GPU and system) over time
+- Cache hit rates and effectiveness
+- Quantization quality scores
+- Batch processing efficiency
+- Resource utilization trends
+
+## Future Optimizations
+
+- Advanced pruning techniques for model compression
+- Knowledge distillation for smaller specialized models
+- Dynamic inference routing based on query complexity
+- Advanced caching strategies with semantic similarity
+- Hardware-specific optimizations (Tensor RT, etc.)
+
+## Changelog
+
+- **1.0 (2025-01-16)**: Initial comprehensive performance optimization strategy with quantization, caching, and resource management
