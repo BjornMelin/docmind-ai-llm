@@ -6,7 +6,7 @@ Tenacity Integration for Production-Grade Resilience
 
 ## Version/Date
 
-1.0 / August 13, 2025
+2.0 / 2025-01-16
 
 ## Status
 
@@ -14,154 +14,133 @@ Accepted
 
 ## Description
 
-Integrates Tenacity for production-grade resilience covering 95% of failure scenarios, complementing LlamaIndex native retry mechanisms with advanced error handling patterns.
+Implements the `Tenacity` library to provide production-grade resilience for critical infrastructure operations. This strategy complements the native LlamaIndex retry mechanisms by adding robust error handling, with exponential backoff, for operations like database connections, file I/O, and initial model downloads.
 
 ## Context
 
-LlamaIndex native retry mechanisms cover only 25-30% of potential failure points (query-level evaluation retry, basic LLM API retry). Missing infrastructure resilience for vector stores, document processing, embeddings. Current implementation has zero comprehensive retry logic, leaving users vulnerable to transient failures.
-
-Production deployment requires 95%+ failure scenario coverage across all system components. While LlamaIndex provides excellent query evaluation and LLM API retry capabilities, infrastructure components like vector search, document processing, and embedding operations lack comprehensive error handling. This gap creates reliability issues in production environments where transient failures are common.
+An offline-first application is not immune to transient failures. File systems can have temporary read/write errors, a local vector database might be slow to start, or the initial, one-time download of models from HuggingFace can be interrupted by a flaky network connection. The native retry mechanisms within LlamaIndex are primarily focused on LLM API calls and are not designed to cover these infrastructure-level failure points. A dedicated, robust retry mechanism is required to make the application production-ready.
 
 ## Related Requirements
 
-- Production readiness with comprehensive error handling
+### Non-Functional Requirements
 
-- Complement (not replace) LlamaIndex native capabilities  
+- **NFR-1:** **(Resilience)** The system must automatically recover from transient infrastructure failures (e.g., file I/O errors, temporary database unavailability).
+- **NFR-2:** **(Maintainability)** The resilience logic must be implemented using a standard, well-maintained library, not custom code.
 
-- Advanced resilience patterns (exponential backoff, circuit breakers)
+### Integration Requirements
 
-- Minimal performance overhead (<5%)
-
-- Infrastructure coverage for all failure points
+- **IR-1:** The solution must complement, not conflict with, the existing retry logic within LlamaIndex.
 
 ## Alternatives
 
-### 1. LlamaIndex Native Only
+### 1. LlamaIndex Native Retries Only
 
-- **Score**: 4.2/10
-
-- **Coverage**: 25-30% of failure scenarios
-
-- **Issues**: Insufficient for production, significant gaps in infrastructure resilience
-
-- **Status**: Rejected - inadequate coverage
+- **Description**: Rely solely on the built-in retry mechanisms within LlamaIndex.
+- **Issues**: This provides insufficient coverage. LlamaIndex's retries are scoped to specific components (like LLM calls) and do not cover infrastructure operations like database connections or file reads.
+- **Status**: Rejected.
 
 ### 2. Custom Retry Implementation
 
-- **Score**: 5.5/10
-
-- **Approach**: Build custom retry logic for infrastructure components
-
-- **Issues**: Violates library-first principle, reinventing proven patterns
-
-- **Status**: Rejected - unnecessary complexity
-
-### 3. Tenacity Integration (Selected)
-
-- **Score**: 8.1/10
-
-- **Coverage**: 95% of failure scenarios
-
-- **Benefits**: Production-tested patterns, complementary to native capabilities
-
-- **Status**: Selected - optimal solution for comprehensive resilience
+- **Description**: Write custom `try...except` loops with `time.sleep()` to handle retries.
+- **Issues**: This is a classic violation of the library-first principle. It leads to boilerplate code and lacks sophisticated strategies like exponential backoff or jitter.
+- **Status**: Rejected.
 
 ## Decision
 
-**Implement Tenacity as strategic external library** complementing LlamaIndex native resilience. Provides production-grade error handling for infrastructure components while preserving native query evaluation and LLM API retry mechanisms.
+We will adopt the **`Tenacity`** library as the standard for implementing resilience for all critical infrastructure operations. We will use its decorator-based approach to wrap functions that interact with the file system, the vector database, and the initial model download process. This creates a "Hybrid Resilience" model where LlamaIndex handles application-level retries and `Tenacity` handles infrastructure-level retries.
 
 ## Related Decisions
 
-- ADR-021 (LlamaIndex Native Architecture): Strategic external library as identified gap
-
-- ADR-018 (Refactoring Decisions): Continues library-first approach
-
-- ADR-001 (Architecture Overview): Enhanced system reliability
+- **ADR-021** (LlamaIndex Native Architecture Consolidation): This decision to use a strategic external library fills an identified gap in the native LlamaIndex ecosystem.
+- **ADR-018** (Refactoring Decisions): Continues the library-first approach by adopting a best-in-class library for a specific problem.
+- **ADR-004** (Document Loading): The `Tenacity` resilience pattern is applied to the document parsing and loading workflow.
+- **ADR-013** (RRF Hybrid Search): The `Tenacity` resilience pattern is applied to the core vector store retrieval operations.
+- **ADR-002** (Embedding Choices): The `Tenacity` resilience pattern is applied to the initial, one-time download of the embedding models from online hubs.
 
 ## Design
 
-**Hybrid Resilience Architecture:**
+### Architecture Overview: Hybrid Resilience
 
-- **Layer 1**: LlamaIndex native retry (query evaluation, LLM API) - preserved
+The system employs a two-layer approach to resilience.
 
-- **Layer 2**: Tenacity infrastructure retry (vector stores, document processing, embeddings) - added
-
-**Implementation:**
-
-```python
-from tenacity import retry, stop_after_attempt, wait_exponential
-
-class ResilienceManager:
-    @staticmethod
-    @retry(
-        stop=stop_after_attempt(4),
-        wait=wait_exponential(multiplier=1, min=2, max=16),
-        retry=retry_if_exception_type((ConnectionError, TimeoutError))
-    )
-    async def robust_vector_search(query_engine, query: str):
-        return await query_engine.aquery(query)
-    
-    @staticmethod
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=8),
-        retry=retry_if_exception_type((FileNotFoundError, PermissionError))
-    )
-    def robust_document_processing(file_path: str):
-        return SimpleDirectoryReader(input_files=[file_path]).load_data()
-
-# Circuit breaker for cascade failure prevention
-vector_circuit_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=30)
+```mermaid
+graph TD
+    A[User Action] --> B[Application Logic];
+    B --> C{Interaction Type?};
+    C -->|Infrastructure<br/>(DB Query, File Read)| D["Tenacity Retry Decorator<br/>(Exponential Backoff)"];
+    C -->|LlamaIndex Core<br/>(LLM Call)| E["Native LlamaIndex Retry<br/>(Fixed Retries)"];
+    D --> F[External System];
+    E --> F;
 ```
 
-**Coverage Expansion:**
+### Implementation Details
 
-| Component | Native | Tenacity | Combined |
-|-----------|--------|----------|----------|
-| Query Engines | ✅ Basic retry | Advanced patterns | Enhanced |
-| LLM Completion | ✅ OpenAI retry | All providers | Enhanced |
-| Vector Search | ❌ None | 4 attempts | New 100% |
-| Document Processing | ❌ None | 3 attempts | New 100% |
-| Infrastructure | ❌ None | Circuit breakers | New 100% |
+**Example 1: Resilient Document Loading (from `ADR-004`)**
 
-**Testing**: Validate hybrid architecture preserves native capabilities while adding infrastructure resilience. Comprehensive failure simulation testing.
+```python
+# In document_processor.py
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    retry=retry_if_exception_type((IOError, OSError))
+)
+async def load_and_process_document(file_path: str):
+    # ... document loading logic ...
+    pass
+```
+
+**Example 2: Resilient Vector Search (from `ADR-013`)**
+
+```python
+# In retriever_factory.py
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+# Assume DBConnectionError is a specific exception from the DB client
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10)
+    # retry=retry_if_exception_type(DBConnectionError)
+)
+async def resilient_retrieve(query_text: str):
+    # ... hybrid_retriever.aretrieve(query_text) logic ...
+    pass
+```
+
+**Example 3: Resilient Model Download (from `ADR-002`)**
+
+```python
+# In application_setup.py
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=30)
+)
+def configure_embedding_models():
+    # ... Settings.embed_model = HuggingFaceEmbedding(...) logic ...
+    pass
+```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- **95% failure scenario coverage** (vs 25-30% native only)
+- **Improved Reliability**: The application can now automatically recover from the most common transient infrastructure failures, leading to a more stable user experience.
+- **Production Readiness**: Implementing a robust resilience strategy is a key step in making the application suitable for production use.
+- **Clean Code**: Using decorators keeps the resilience logic separate from the core business logic, making the code easier to read and maintain.
 
-- **60-80% reduction** in user-facing transient failures
+### Negative Consequences / Trade-offs
 
-- **Advanced patterns**: circuit breakers, exponential backoff, conditional retry
+- **Added Dependency**: Introduces a new dependency on the `tenacity` library. This is a well-justified trade-off for the significant gain in reliability.
+- **Masked Failures**: If not configured carefully, a retry mechanism can mask a persistent underlying problem. The logging within the retry functions is critical for monitoring.
 
-- **Complementary architecture** preserves native capabilities
+### Dependencies
 
-- **Production readiness** with comprehensive error handling
+- **Python**: `tenacity>=8.2.0`
 
-- **Minimal overhead**: <5% performance impact during normal operations
+## Changelog
 
-### Ongoing Maintenance Requirements
-
-- Monitor Tenacity library updates and compatibility
-
-- Maintain retry configurations as system evolves
-
-- Validate failure scenario coverage with testing
-
-- Balance retry aggressiveness with user experience
-
-### Risks
-
-- **Additional dependency**: Justified by production requirements
-
-- **Configuration complexity**: Mitigated by sensible defaults
-
-- **Performance overhead**: <5% during normal operations, higher during failures
-
-- **Integration complexity**: Careful coordination with native retry mechanisms required
-
-**Changelog:**
-
-- 1.0 (August 13, 2025): Initial implementation of Tenacity resilience integration complementing LlamaIndex native capabilities.
+- **2.0 (2025-01-16)**: Finalized as the definitive resilience strategy. Aligned all code examples with the final architecture and explicitly defined the "Hybrid Resilience" model.
+- **1.0 (2025-01-13)**: Initial implementation of Tenacity resilience integration.

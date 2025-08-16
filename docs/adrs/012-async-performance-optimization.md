@@ -2,11 +2,11 @@
 
 ## Title
 
-Async and Parallel Processing Strategy
+Asynchronous Processing Strategy
 
 ## Version/Date
 
-4.0 / August 13, 2025
+5.0 / 2025-01-16
 
 ## Status
 
@@ -14,463 +14,144 @@ Accepted
 
 ## Description
 
-Implements LlamaIndex QueryPipeline.parallel_run() async patterns with PyTorch optimization integration for maximum throughput, enabling concurrent query processing and ~1000 tokens/sec performance.
+Implements an "async-first" processing strategy for all I/O-bound and long-running operations. This is achieved by exclusively using the native asynchronous methods provided by LlamaIndex components (e.g., `arun`, `achat`, `aretrieve`) to ensure a responsive, non-blocking user interface.
 
 ## Context
 
-Following ADR-003's GPU optimization and ADR-023's PyTorch optimization strategy, DocMind AI requires async patterns to complement ~1000 tokens/sec performance capabilities. Implementation includes QueryPipeline.parallel_run(), async ingestion workflows, and PyTorch optimization integration for maximum throughput with non-blocking UI operations.
+Many core operations in the application, such as document ingestion, embedding generation, and LLM queries, are I/O-bound and can take several seconds to complete. In a synchronous application, these operations would block the main thread, causing the user interface to freeze and become unresponsive. To provide a fluid user experience, it is mandatory that these tasks are executed asynchronously, allowing the UI to remain active while work is being done in the background.
 
 ## Related Requirements
 
-- Async patterns with QueryPipeline.parallel_run() for parallel query processing
+### Non-Functional Requirements
 
-- Async ingestion workflows for large document processing pipelines
+- **NFR-1:** **(Usability)** The user interface must remain responsive at all times, even during document ingestion or complex queries.
+- **NFR-2:** **(Performance)** The system must leverage asynchronous I/O to maximize throughput for operations like querying a vector database or making LLM calls.
 
-- Non-blocking UI operations during indexing/loading/querying
+### Integration Requirements
 
-- Integration with PyTorch optimization (TorchAO quantization, mixed precision)
-
-- ~1000 tokens/sec performance alignment with GPU optimization strategies
-
-- Parallel processing across multiple GPU streams and async operations
+- **IR-1:** The asynchronous strategy must use the native `async/await` patterns provided by the LlamaIndex framework.
+- **IR-2:** The chosen UI framework (Streamlit) must be compatible with invoking and managing these asynchronous backend tasks.
 
 ## Alternatives
 
-- Sync: UI blocking.
+### 1. Synchronous Execution
 
-- Threading: GIL limits for Python.
+- **Description**: Run all operations synchronously on the main thread.
+- **Issues**: This would result in a completely unusable application, as the UI would freeze for the duration of any significant backend task.
+- **Status**: Rejected.
+
+### 2. Custom Threading Model
+
+- **Description**: Use Python's `threading` or `multiprocessing` libraries to manually offload long-running tasks from the main thread.
+- **Issues**: This adds significant complexity and state management challenges. It is also less efficient for I/O-bound tasks than a native `asyncio` approach due to the Global Interpreter Lock (GIL). LlamaIndex provides native async support, making a custom solution unnecessary.
+- **Status**: Rejected.
 
 ## Decision
 
-**Implement Async Architecture** with QueryPipeline.parallel_run(), async ingestion capabilities, and PyTorch optimization integration. Achieve ~1000 tokens/sec performance alignment through async patterns complementing GPU optimization strategies from ADR-003 and PyTorch optimization from ADR-023.
-
-**Strategic Implementation:**
-
-- **Async Patterns**: QueryPipeline.parallel_run() for concurrent query processing
-
-- **Async Ingestion Workflows**: Large document processing with async/await patterns
-
-- **PyTorch Async Integration**: Mixed precision and quantization in async contexts
-
-- **GPU Stream Coordination**: CUDA streams with async functions for maximum throughput
-
-- **Performance Alignment**: ~1000 tokens/sec capability through optimized async patterns
+We will adopt a **native async-first strategy**. All interactions with LlamaIndex components that support asynchronous execution will be performed using their `async` methods (e.g., `QueryPipeline.arun()` instead of `run()`, `ReActAgent.achat()` instead of `chat()`). The Streamlit UI will be responsible for invoking these `async` functions within an `asyncio` event loop.
 
 ## Related Decisions
 
-- ADR-003 (GPU optimization - provides ~1000 tokens/sec foundation for async enhancement)
+This decision is a cross-cutting concern that impacts nearly every other component in the system:
 
-- ADR-006 (Async in pipeline - updated with additional patterns)
-
-- ADR-023 (PyTorch Optimization Strategy - provides quantization and mixed precision async integration)
+- **ADR-009** (UI Framework): The UI is the primary initiator of these asynchronous tasks.
+- **ADR-004** (Document Loading): The `IngestionPipeline` is executed asynchronously via `arun()`.
+- **ADR-006** (Analysis Pipeline): The `QueryPipeline` is executed asynchronously via `arun()`.
+- **ADR-011** (LlamaIndex ReAct Agent Architecture): All user interactions with the agent are handled by its `achat()` method.
+- **ADR-013** (RRF Hybrid Search): The retriever's `aretrieve()` method is called within the async pipeline.
 
 ## Design
 
-### Async Patterns Architecture
+### Architecture Overview
 
-**QueryPipeline.parallel_run() Implementation:**
+The architecture is simple: the UI (running in its own thread) calls `asyncio.run()` to execute the top-level asynchronous function in the backend. This function then uses `await` to call the native async methods of the LlamaIndex components in a non-blocking manner.
 
-```python
-from llama_index.core.query_pipeline import QueryPipeline
-from llama_index.core import Settings
-import asyncio
-from typing import List, Dict, Any
+```mermaid
+graph TD
+    subgraph "UI Thread (Streamlit)"
+        A["User Clicks 'Process'"] --> B["Call asyncio.run(process_documents)"];
+        B -- Returns Immediately --> C["UI Remains Responsive"];
+    end
 
-class AsyncProcessor:
-    """Async processing with parallel query capabilities."""
-    
-    def __init__(self):
-        self.query_pipeline = QueryPipeline()
-        self.max_concurrent_queries = 10
-    
-    async def parallel_query_processing(self, queries: List[str]) -> List[Dict[str, Any]]:
-        """Process multiple queries concurrently with QueryPipeline.parallel_run()."""
-        
-        # Async pattern: parallel query execution
-        async def process_single_query(query: str) -> Dict[str, Any]:
-            async with self.query_pipeline.async_context():
-                result = await self.query_pipeline.arun(query)
-                return {
-                    "query": query,
-                    "result": result,
-                    "timestamp": asyncio.get_event_loop().time()
-                }
-        
-        # Concurrent execution with controlled parallelism
-        semaphore = asyncio.Semaphore(self.max_concurrent_queries)
-        
-        async def controlled_query(query: str):
-            async with semaphore:
-                return await process_single_query(query)
-        
-        # Execute all queries concurrently
-        tasks = [controlled_query(query) for query in queries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        return [r for r in results if not isinstance(r, Exception)]
-    
-    async def parallel_run_implementation(self, pipeline_configs: List[Dict]) -> List[Any]:
-        """Implement QueryPipeline.parallel_run() for maximum throughput."""
-        
-        # Create multiple pipeline instances for parallel execution
-        pipelines = [QueryPipeline(**config) for config in pipeline_configs]
-        
-        async def run_pipeline(pipeline: QueryPipeline, query_data: Dict):
-            """Run individual pipeline with error handling."""
-            try:
-                return await pipeline.arun(**query_data)
-            except Exception as e:
-                return {"error": str(e), "pipeline_config": pipeline.to_dict()}
-        
-        # Execute all pipelines concurrently
-        tasks = [
-            run_pipeline(pipeline, query_data) 
-            for pipeline, query_data in zip(pipelines, pipeline_configs)
-        ]
-        
-        return await asyncio.gather(*tasks)
+    subgraph "Async Event Loop (Backend)"
+        D["process_documents()"] -- await --> E["IngestionPipeline.arun()"];
+        E -- await --> F["(Internal) embed_model.aget_text_embedding()"];
+        F -- await --> G["(Internal) vector_store.aadd()"];
+        G --> H["Task Completes"];
+    end
 ```
 
-### Async Ingestion Workflows
+### Implementation Details
 
-**Large Document Processing with Async Patterns:**
+#### **Example 1: Asynchronous Document Ingestion**
 
 ```python
-from llama_index.core import VectorStoreIndex, Document
+# In app.py (Streamlit UI)
+import streamlit as st
+import asyncio
+from your_project.ingestion import process_new_documents # This is an async function
+
+if uploaded_files:
+    with st.status("Processing documents..."):
+        try:
+            # Run the top-level async function from the synchronous Streamlit script
+            asyncio.run(process_new_documents(uploaded_files))
+            st.success("Processing complete!")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
+# In your_project/ingestion.py (Backend)
 from llama_index.core.ingestion import IngestionPipeline
-import aiofiles
-from pathlib import Path
-from typing import AsyncGenerator
 
-class AsyncIngestionProcessor:
-    """Async ingestion for large document processing."""
+async def process_new_documents(files):
+    # ... logic to load files into LlamaIndex Document objects ...
     
-    def __init__(self):
-        self.ingestion_pipeline = IngestionPipeline()
-        self.batch_size = 50
-        self.max_concurrent_files = 20
+    # Get the globally configured ingestion pipeline
+    ingestion_pipeline = get_ingestion_pipeline() # Returns a configured IngestionPipeline
     
-    async def async_document_loading(self, file_paths: List[Path]) -> AsyncGenerator[Document, None]:
-        """Async document loading with streaming capabilities."""
-        
-        async def load_single_document(file_path: Path) -> Document:
-            """Load individual document asynchronously."""
-            async with aiofiles.open(file_path, 'r', encoding='utf-8') as file:
-                content = await file.read()
-                return Document(
-                    text=content,
-                    metadata={
-                        "file_path": str(file_path),
-                        "file_size": file_path.stat().st_size,
-                        "processed_at": asyncio.get_event_loop().time()
-                    }
-                )
-        
-        # Controlled concurrent document loading
-        semaphore = asyncio.Semaphore(self.max_concurrent_files)
-        
-        async def controlled_load(file_path: Path):
-            async with semaphore:
-                return await load_single_document(file_path)
-        
-        # Process files in batches to manage memory
-        for i in range(0, len(file_paths), self.batch_size):
-            batch = file_paths[i:i + self.batch_size]
-            tasks = [controlled_load(path) for path in batch]
-            documents = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            for doc in documents:
-                if not isinstance(doc, Exception):
-                    yield doc
-    
-    async def async_index_creation(self, documents: List[Document]) -> VectorStoreIndex:
-        """Create vector index with async processing and PyTorch optimization."""
-        
-        # PyTorch optimization integration from ADR-023
-        from torchao.quantization import quantize_, int4_weight_only
-        
-        # Async embedding generation with mixed precision
-        async def optimized_embedding_batch(doc_batch: List[Document]):
-            """Generate embeddings with PyTorch optimization."""
-            
-            # Mixed precision context for 1.5x speedup
-            with torch.cuda.amp.autocast() if torch.cuda.is_available() else nullcontext():
-                texts = [doc.text for doc in doc_batch]
-                embeddings = await Settings.embed_model.aget_text_embedding_batch(texts)
-                return embeddings
-        
-        # Process documents in async batches
-        index_nodes = []
-        for i in range(0, len(documents), self.batch_size):
-            batch = documents[i:i + self.batch_size]
-            
-            # Async embedding generation
-            embeddings = await optimized_embedding_batch(batch)
-            
-            # Create nodes with embeddings
-            for doc, embedding in zip(batch, embeddings):
-                node = doc.to_node()
-                node.embedding = embedding
-                index_nodes.append(node)
-        
-        # Create index with optimized nodes
-        return VectorStoreIndex(index_nodes)
+    # Use the native async method to run the pipeline
+    await ingestion_pipeline.arun(documents=loaded_documents)
 ```
 
-### PyTorch Optimization Async Integration
-
-**Mixed Precision and Quantization in Async Contexts:**
+#### **Example 2: Asynchronous Agent Chat**
 
 ```python
-import torch
-from torch.cuda.amp import GradScaler, autocast
-from contextlib import asynccontextmanager, nullcontext
-from llama_index.core import Settings
+# In app.py (Streamlit UI)
+if prompt := st.chat_input("Ask a question..."):
+    # ... display user message ...
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            # Run the async agent chat function
+            response = asyncio.run(get_agent_response(prompt))
+            st.markdown(response)
 
-class PyTorchAsyncOptimizer:
-    """Integrate PyTorch optimization with async patterns."""
-    
-    def __init__(self):
-        self.scaler = GradScaler() if torch.cuda.is_available() else None
-        self.quantization_enabled = torch.cuda.is_available()
-    
-    @asynccontextmanager
-    async def mixed_precision_async_context(self):
-        """Async context manager for mixed precision operations."""
-        if self.scaler:
-            with autocast():
-                yield
-        else:
-            yield
-    
-    async def async_quantized_inference(self, queries: List[str]) -> List[str]:
-        """Perform quantized inference in async context."""
-        
-        # TorchAO quantization for 1.89x speedup
-        if self.quantization_enabled and hasattr(Settings.llm, 'model'):
-            from torchao.quantization import quantize_, int4_weight_only
-            quantize_(Settings.llm.model, int4_weight_only())
-        
-        # Async inference with mixed precision
-        async def process_single_query(query: str) -> str:
-            async with self.mixed_precision_async_context():
-                response = await Settings.llm.acomplete(query)
-                return response.text
-        
-        # Concurrent query processing
-        tasks = [process_single_query(query) for query in queries]
-        return await asyncio.gather(*tasks)
-    
-    async def async_embedding_optimization(self, texts: List[str]) -> List[List[float]]:
-        """Optimized async embedding generation."""
-        
-        async with self.mixed_precision_async_context():
-            # Batch processing for efficiency
-            embeddings = await Settings.embed_model.aget_text_embedding_batch(texts)
-            return embeddings
-```
+# In your_project/agent.py (Backend)
+from llama_index.core.agent import ReActAgent
 
-### GPU Stream Coordination
-
-**CUDA Streams with Async Functions:**
-
-```python
-import torch
-import asyncio
-from contextlib import asynccontextmanager
-
-class AsyncGPUStreamManager:
-    """Coordinate CUDA streams with async operations."""
+async def get_agent_response(prompt: str) -> str:
+    # Get the globally configured agent instance
+    agent = get_docmind_agent() # Returns the configured ReActAgent
     
-    def __init__(self, num_streams: int = 4):
-        if torch.cuda.is_available():
-            self.streams = [torch.cuda.Stream() for _ in range(num_streams)]
-            self.stream_semaphore = asyncio.Semaphore(num_streams)
-        else:
-            self.streams = []
-            self.stream_semaphore = None
-    
-    @asynccontextmanager
-    async def async_stream_context(self):
-        """Async context manager for GPU stream allocation."""
-        if not self.streams:
-            yield None
-            return
-        
-        async with self.stream_semaphore:
-            stream = self.streams[0]  # Simple allocation
-            try:
-                with torch.cuda.stream(stream):
-                    yield stream
-            finally:
-                torch.cuda.synchronize(stream)
-    
-    async def parallel_gpu_operations(self, operations: List[callable]) -> List[Any]:
-        """Execute GPU operations in parallel across streams."""
-        
-        async def run_with_stream(operation: callable):
-            async with self.async_stream_context() as stream:
-                # Run operation in allocated stream
-                return await asyncio.to_thread(operation)
-        
-        # Execute all operations concurrently
-        tasks = [run_with_stream(op) for op in operations]
-        return await asyncio.gather(*tasks)
-```
-
-### Performance Monitoring and Testing
-
-**Async Performance Validation:**
-
-```python
-
-# In tests/test_async_performance_integration.py
-
-@pytest.mark.asyncio
-async def test_async_patterns():
-    """Test async patterns for ~1000 tokens/sec alignment."""
-    
-    processor = AsyncProcessor()
-    
-    # Test parallel query processing
-    queries = [f"Test query {i}" for i in range(20)]
-    
-    start_time = asyncio.get_event_loop().time()
-    results = await processor.parallel_query_processing(queries)
-    end_time = asyncio.get_event_loop().time()
-    
-    # Validate performance improvement
-    processing_time = end_time - start_time
-    queries_per_second = len(queries) / processing_time
-    
-    assert len(results) == len(queries)
-    assert queries_per_second > 5  # Parallel processing efficiency
-    assert all("result" in result for result in results)
-
-@pytest.mark.asyncio
-async def test_async_ingestion_workflows():
-    """Test async ingestion with large document processing."""
-    
-    ingestion_processor = AsyncIngestionProcessor()
-    
-    # Create test documents
-    test_files = [Path(f"test_doc_{i}.txt") for i in range(100)]
-    
-    # Test async document loading
-    documents = []
-    async for doc in ingestion_processor.async_document_loading(test_files[:10]):
-        documents.append(doc)
-    
-    assert len(documents) <= 10  # Respects file availability
-    assert all(isinstance(doc, Document) for doc in documents)
-
-@pytest.mark.gpu
-@pytest.mark.asyncio
-async def test_pytorch_async_integration():
-    """Test PyTorch optimization in async contexts."""
-    
-    if not torch.cuda.is_available():
-        pytest.skip("GPU required for PyTorch async testing")
-    
-    optimizer = PyTorchAsyncOptimizer()
-    
-    # Test async quantized inference
-    test_queries = ["Explain machine learning", "What is artificial intelligence?"]
-    
-    start_time = time.time()
-    responses = await optimizer.async_quantized_inference(test_queries)
-    end_time = time.time()
-    
-    # Validate quantization performance
-    inference_time = end_time - start_time
-    tokens_per_second = sum(len(r.split()) for r in responses) / inference_time
-    
-    assert len(responses) == len(test_queries)
-    assert all(len(response) > 0 for response in responses)
-    # Target performance alignment with GPU optimization
-    assert tokens_per_second > 100  # Improved performance with optimization
-
-@pytest.mark.asyncio
-async def test_gpu_stream_coordination():
-    """Test GPU stream coordination with async operations."""
-    
-    if not torch.cuda.is_available():
-        pytest.skip("GPU required for stream testing")
-    
-    stream_manager = AsyncGPUStreamManager()
-    
-    # Test parallel GPU operations
-    operations = [lambda: torch.randn(1000, 1000).cuda() for _ in range(4)]
-    
-    start_time = time.time()
-    results = await stream_manager.parallel_gpu_operations(operations)
-    end_time = time.time()
-    
-    assert len(results) == len(operations)
-    assert all(isinstance(result, torch.Tensor) for result in results)
-    assert (end_time - start_time) < 2.0  # Parallel execution efficiency
+    # Use the native async chat method
+    response = await agent.achat(prompt)
+    return str(response)
 ```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- **Async Capabilities**: QueryPipeline.parallel_run() enables concurrent query processing for maximum throughput
+- **Responsive User Interface**: The primary benefit is a fluid, non-blocking UI, which is critical for a good user experience.
+- **Increased Throughput**: Asynchronous execution allows the application to handle multiple I/O operations concurrently (e.g., making multiple calls to a local LLM server), improving overall throughput.
+- **Simplified Code**: By using the framework's native async methods, we avoid the complexity of managing our own threads or subprocesses.
 
-- **Performance Alignment**: ~1000 tokens/sec capability through optimized async patterns complementing GPU optimization
+### Negative Consequences / Trade-offs
 
-- **PyTorch Integration**: Async integration with TorchAO quantization and mixed precision from ADR-023
+- **Increased Complexity**: Writing and debugging asynchronous code can be more complex than synchronous code. This is a necessary trade-off for achieving a responsive application.
 
-- **Responsive UI**: Non-blocking operations during large document processing and complex query workflows
+## Changelog
 
-- **Scalable Architecture**: Parallel processing across multi-core/GPU with controlled concurrency patterns
-
-- **Async Ingestion Workflows**: Large document processing with streaming capabilities and memory optimization
-
-- **GPU Stream Coordination**: CUDA stream management with async function integration
-
-### Strategic Benefits
-
-- **Library-First Compliance**: Native asyncio patterns with LlamaIndex async capabilities
-
-- **Performance Enhancement**: Async patterns amplify GPU optimization gains from ADR-003
-
-- **Ecosystem Integration**: PyTorch optimization strategies seamlessly integrated in async contexts
-
-- **Memory Efficiency**: Controlled concurrent processing prevents memory overflow during large operations
-
-### Implementation Advantages
-
-- **Performance Testing**: Async performance validation ensures ~1000 tokens/sec target alignment
-
-- **Error Handling**: Robust exception handling in concurrent async operations
-
-- **Resource Management**: Semaphore-controlled concurrency prevents resource exhaustion
-
-- **Monitoring Integration**: Performance metrics tracking for continuous optimization validation
-
-### Ongoing Considerations
-
-- **Monitor Async Performance**: Ensure ~1000 tokens/sec capability maintained across async operations
-
-- **PyTorch Integration Updates**: Keep async optimization patterns aligned with ADR-023 improvements
-
-- **Concurrency Tuning**: Optimize semaphore limits and batch sizes based on hardware capabilities
-
-- **Memory Management**: Monitor async operation memory patterns for large document processing
-
-**Dependencies:**
-
-- **Core**: asyncio (built-in), aiofiles for async file operations
-
-- **LlamaIndex**: Native async capabilities in QueryPipeline and embedding models
-
-- **PyTorch**: torch.cuda.amp for mixed precision async contexts
-
-- **Integration**: TorchAO quantization in async inference workflows
-
-**Changelog:**
-
-- 4.0 (August 13, 2025): Updated with QueryPipeline.parallel_run(), async ingestion workflows, and PyTorch optimization integration. Performance alignment with ~1000 tokens/sec capability from ADR-003 GPU optimization. Async patterns with GPU stream coordination and mixed precision integration from ADR-023.
-
-- 2.0 (July 25, 2025): Added QueryPipeline async/parallel; Integrated with GPU streams; Added testing for development.
+- **5.0 (2025-01-16)**: Finalized as the definitive async strategy. Aligned all code examples with the final native LlamaIndex architecture and its `arun`/`achat` methods.
+- **4.0 (2025-01-13)**: Updated with `QueryPipeline.parallel_run()` and PyTorch optimization integration.
+- **3.0 (2025-01-13)**: Aligned with ADR-003 GPU optimization.
+- **2.0 (2025-07-25)**: Added `QueryPipeline` async/parallel; Integrated with GPU streams.

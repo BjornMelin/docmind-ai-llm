@@ -1,8 +1,12 @@
-# ADR 003: GPU Optimization and Hardware Detection
+# ADR-003: GPU Optimization
+
+## Title
+
+GPU Optimization and Hardware Detection
 
 ## Version/Date
 
-v3.0 / August 13, 2025 (GPU Management Simplification with PyTorch Optimization)
+4.0 / 2025-01-16
 
 ## Status
 
@@ -10,212 +14,134 @@ Accepted
 
 ## Description
 
-Implements GPU optimization through device_map="auto" and TorchAO quantization for ~1000 tokens/sec performance with 90% code complexity reduction across all backends.
+Standardizes the system's GPU management strategy on the native `device_map="auto"` pattern provided by the underlying libraries (PyTorch, HuggingFace Transformers). This approach simplifies the architecture by eliminating over 180 lines of custom GPU monitoring code and enables the system to achieve its target performance of ~1000 tokens/second on supported hardware.
 
 ## Context
 
-Following GPU optimization research and ADR-023's PyTorch Optimization Strategy, DocMind AI implements GPU management simplification through native LlamaIndex Settings.llm patterns. **90% code complexity reduction** (183 lines → ~20 lines) via `device_map="auto"` eliminates custom GPU monitoring while achieving **~1000 tokens/sec** performance targets with TorchAO quantization integration across all backends.
+High-performance document analysis requires leveraging available GPU hardware for compute-intensive tasks like LLM inference and embedding generation. An initial architectural approach involved a complex, custom-built `GPUManager` class to detect hardware and manually configure memory and layer offloading. This was found to be brittle, hard to maintain, and redundant, as modern libraries provide robust, automatic device management. The goal is to achieve optimal GPU utilization with minimal configuration and code complexity.
 
 ## Related Requirements
 
-- Fast document processing for large files
+### Non-Functional Requirements
 
-- Efficient embedding generation
+- **NFR-1:** **(Maintainability)** The solution must reduce code complexity by at least 90% compared to the custom management approach.
+- **NFR-2:** **(Usability)** The system must automatically detect and use available GPU hardware without requiring manual user configuration.
+- **NFR-3:** **(Flexibility)** The system must gracefully fall back to CPU-only operation if no compatible GPU is detected.
 
-- Hardware flexibility (GPU optional, CPU fallback)
+### Performance Requirements
 
-- Multi-backend GPU optimization (Ollama, LlamaCPP, vLLM)
+- **PR-1:** The system must achieve ~1000 tokens/second for LLM inference on target hardware (e.g., RTX 4090).
+- **PR-2:** The solution must efficiently utilize GPU VRAM, enabling large models to run on consumer hardware.
 
-- RTX 4090 16GB optimization for 8B models with TorchAO quantization (1.89x speedup, 58% memory reduction)
+### Integration Requirements
 
-- GPU management simplification (90% code complexity reduction)
+- **IR-1:** The GPU management strategy must be compatible with all supported LLM backends (Ollama, LlamaCPP, vLLM).
+- **IR-2:** The strategy must integrate with PyTorch-level optimizations like quantization and mixed precision.
 
-- Integration with async performance optimizations and PyTorch optimization strategies
+## Alternatives
 
-## Alternatives Considered
+### 1. Custom GPU Management Class
 
-- No GPU: Slower performance; rejected for poor user experience with large documents.
+- **Description**: A 180+ line Python class to parse `nvidia-smi` output, estimate VRAM, and manually set parameters like `n_gpu_layers`.
+- **Issues**: Brittle (breaks with driver updates), complex, and reinvents functionality already provided by the core libraries.
+- **Status**: Rejected.
 
-- TensorRT-LLM: Complex setup and integration; use if needed in future but too heavy for current needs.
+### 2. TensorRT-LLM
 
-- CPU-only optimization: Insufficient performance gains for compute-intensive tasks.
+- **Description**: A highly optimized inference library from NVIDIA.
+- **Issues**: Adds significant build complexity and is less flexible for the rapid model switching required by the project. Overkill for the current scope.
+- **Status**: Rejected.
 
 ## Decision
 
-- **Multi-Backend GPU Support:** Native LlamaIndex Settings.llm configuration for Ollama, LlamaCPP, vLLM with RTX 4090 optimization
-
-- **Detection:** Parse nvidia-smi for VRAM/model suggestions optimized for each backend
-
-- **Unified Configuration:** Settings.llm handles GPU offloading across all backends automatically
-
-- **GPU Management:** `device_map="auto"` eliminates 183 lines of custom GPU monitoring code
-
-- **RTX 4090 Optimization:** ~1000 tokens/sec performance capability with TorchAO int4 quantization
-
-- **PyTorch Integration:** 1.89x faster inference, 58% memory reduction via ADR-023 optimization strategies
-
-- **Native GPU Acceleration:** Backend-specific optimizations with unified Settings.llm configuration
-
-- **Async Integration:** Combined with AsyncQdrantClient for 4-9x practical performance improvement with I/O bottleneck awareness
+We will adopt the **`device_map="auto"`** pattern as the sole mechanism for GPU device management. This parameter, supported by the underlying HuggingFace Transformers and PyTorch libraries, automatically handles device detection, layer offloading, and memory balancing. This decision eliminates all custom GPU management code and is the simplest, most robust path to achieving high-performance inference.
 
 ## Related Decisions
 
-- ADR-019: Multi-Backend LLM Strategy (GPU optimization across Ollama, LlamaCPP, vLLM)
-
-- ADR-021: Native Architecture Consolidation (unified Settings.llm GPU configuration)
-
-- ADR-012: AsyncQdrantClient Performance Optimization (provides async enhancements)
-
-- ADR-002: Embedding Choices (benefits from combined GPU + async optimizations)
-
-- ADR-023: PyTorch Optimization Strategy (provides TorchAO quantization and performance enhancement)
+- **ADR-021** (LlamaIndex Native Architecture Consolidation): This simplified GPU strategy is a key enabler of the clean, native architecture.
+- **ADR-019** (Multi-Backend LLM Strategy): The `device_map="auto"` pattern is applied consistently across the configurations for all supported backends.
+- **ADR-023** (PyTorch Optimization Strategy): This strategy is a prerequisite. Optimizations like int4 quantization are what make it feasible to automatically fit large models onto consumer GPUs.
+- **ADR-017** (Default Model Strategy): The hardware-adaptive model selection relies on this automatic placement to function correctly.
 
 ## Design
 
-### GPU Management Simplification
+### Architecture Overview
 
-**90% Code Complexity Reduction through Native Patterns:**
-
-```python
-
-# BEFORE: 183 lines of custom GPU monitoring and configuration
-class GPUManager:
-    def __init__(self):
-        self.gpu_available = self._detect_gpu()
-        self.vram_info = self._get_vram_info()
-        self.optimization_config = self._configure_gpu_optimization()
-        # ... extensive custom GPU management code
-    
-    def _detect_gpu(self):
-        # Complex GPU detection logic
-        pass
-    
-    def _configure_gpu_optimization(self):
-        # Manual GPU configuration
-        pass
-
-# AFTER: ~20 lines with device_map="auto" and Settings.llm
-from llama_index.core import Settings
-from llama_index.llms.vllm import vLLM
-
-# Simplification via native patterns
-Settings.llm = vLLM(
-    model="Qwen/Qwen3-4B-Thinking-2507",
-    tensor_parallel_size=1,
-    gpu_memory_utilization=0.6,
-    device_map="auto",  # Automatic GPU optimization
-    torch_dtype="float16"
-)
-
-# PyTorch optimization integration from ADR-023
-from torchao.quantization import quantize_, int4_weight_only
-if torch.cuda.is_available():
-    # 1.89x speedup, 58% memory reduction
-    quantize_(Settings.llm.model, int4_weight_only())
-```
-
-**Strategic Design Elements:**
-
-- **Simplification**: Native `device_map="auto"` replaces complex custom GPU monitoring
-
-- **PyTorch Optimization Integration**: TorchAO int4 quantization for 1.89x inference speedup
-
-- **Multi-Backend GPU Configuration**: Unified Settings.llm handles optimization across all backends
-
-- **RTX 4090 Optimization Matrix**: Backend-specific configurations for ~1000 tokens/sec performance
-
-- **Hardware detection and auto-configuration**: VRAM-aware model suggestions per backend
-
-- **GPU toggle controls in UI**: Runtime backend switching with optimization preserved
-
-- **Graceful fallback to CPU operations**: Per-backend fallback strategies
-
-- **Combined GPU + async setup**: Maximum performance with AsyncQdrantClient integration
+The design removes the custom management layer entirely. The application's setup process simply passes the `device_map="auto"` parameter during the initialization of GPU-accelerated components (LLMs, embeddings, rerankers).
 
 ```mermaid
 graph TD
-    A[System Start] --> B[Detect GPU]
-    B --> C{GPU Available?}
-    C -->|Yes| D[Configure GPU Acceleration]
-    C -->|No| E[Configure CPU Fallback]
-    D --> F[Async + GPU Processing]
-    E --> G[Async + CPU Processing]
-    F --> H[Performance Monitoring]
-    G --> H
+    subgraph "Before: Custom Management"
+        A["Application"] --> B["Custom GPUManager Class"];
+        B -- Parses nvidia-smi --> C["Detect VRAM"];
+        C --> D["Calculate n_gpu_layers"];
+        D --> E["Manually Configure Model"];
+    end
+
+    subgraph "After: Native Pattern"
+        F["Application"] -- Sets device_map='auto' --> G["Library (PyTorch/HF)"];
+        G -- Automatically --> H["Detect Hardware"];
+        H -- Automatically --> I["Balance Layers on GPU/CPU"];
+        I -- Automatically --> J["Instantiate Optimized Model"];
+    end
 ```
 
-## Performance Metrics
+### Implementation Details
 
-**Performance Enhancement:**
+#### **The 90% Code Reduction: Before vs. After**
 
-- **PyTorch Optimization**: 1.89x faster inference with 58% memory reduction via TorchAO int4 quantization
+**In `gpu_manager.py` (BEFORE - Now Deleted):**
 
-- **Native GPU Management**: ~1000 tokens/sec capability vs 13-15+ tokens/sec baseline
+```python
+# BEFORE: 183 lines of brittle, custom GPU monitoring code
+class GPUManager:
+    def __init__(self):
+        # ... extensive custom logic to run subprocesses, parse XML, ...
+        # ... calculate memory, and guess at optimal layer counts ...
+        pass
+```
 
-- **Code Complexity Reduction**: 90% reduction (183 → ~20 lines) while achieving improved performance
+**In `application_setup.py` (AFTER):**
 
-**Individual Optimizations:**
+```python
+# AFTER: A single, declarative parameter in the component's configuration.
+from llama_index.core import Settings
+from llama_index.llms.vllm import vLLM
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
-- GPU acceleration with quantization: 2-4x improvement for compute-intensive tasks
+# Example for the vLLM backend
+Settings.llm = vLLM(
+    model="Qwen/Qwen3-4B-Thinking-2507",
+    device_map="auto", # The library handles all GPU logic
+    torch_dtype="float16"
+)
 
-- Async operations: 1.5-2x improvement for I/O-bound operations
-
-- TorchAO quantization: 1.89x speedup with maintained model quality
-
-- Mixed precision training: 1.5x additional speedup for embedding generation
-
-**Combined Optimization Stack:**
-
-- GPU + Async + PyTorch: 6-12x practical improvement with quantization integration
-
-- Performance enhanced by PyTorch optimization strategies from ADR-023
-
-- ~1000 tokens/sec achievable on RTX 4090 with optimized configurations
-
-- Real-world gains amplified by native pattern adoption and complexity reduction
+# Example for the embedding model
+Settings.embed_model = HuggingFaceEmbedding(
+    model_name="BAAI/bge-large-en-v1.5",
+    device_map="auto" # The library handles all GPU logic
+)
+```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- **Code Simplification**: 90% code complexity reduction (183 → ~20 lines) via `device_map="auto"` and native patterns
+- **Code Simplification**: Eliminated over 180 lines of complex, custom code, a >90% reduction in GPU management complexity.
+- **Improved Robustness**: The native library implementation is more stable and reliable than a custom script.
+- **High Performance**: This approach, combined with PyTorch optimizations from `ADR-023`, enables the ~1000 tokens/second performance target.
+- **Enhanced Maintainability**: The solution is declarative and easy to understand. There is no custom logic to maintain.
 
-- **Performance**: ~1000 tokens/sec capability with TorchAO int4 quantization (1.89x speedup, 58% memory reduction)
+### Negative Consequences / Trade-offs
 
-- **Library-First Compliance**: Native LlamaIndex Settings.llm eliminates custom GPU monitoring implementations
+- **Less Granular Control**: The `auto` setting cedes fine-grained control over layer placement to the library. This is an acceptable trade-off, as the library's heuristics are generally excellent and sufficient for this project.
 
-- **PyTorch Integration**: Integration with ADR-023 optimization strategies for additional performance gains
+### Dependencies
 
-- **Multi-Backend Optimization**: Unified GPU acceleration across Ollama, LlamaCPP, vLLM via Settings.llm
+- **Python**: `torch`, `transformers`, `accelerate` (as a dependency of transformers for `device_map`).
 
-- **Maintenance Reduction**: Eliminates complex custom GPU management code while achieving improved performance
+## Changelog
 
-- **Decision Framework Validation**: 0.9175/1.0 score confirms Library-First (35%), Performance (30%), Complexity Reduction (25%), and Multi-Backend Flexibility (10%) optimization
-
-### Strategic Benefits
-
-- **Architecture Consistency**: Aligns with ADR-020's Settings migration and ADR-021's native consolidation
-
-- **Future-Proofing**: Native patterns evolve with LlamaIndex ecosystem improvements
-
-- **Developer Experience**: Familiar PyTorch optimization patterns via ADR-023 integration
-
-### Ongoing Considerations
-
-- **Monitor PyTorch Ecosystem**: TorchAO quantization improvements and kernel optimization updates
-
-- **Validate Performance Targets**: Ensure ~1000 tokens/sec capability maintained across hardware configurations
-
-- **Quality Assurance**: Continuous validation of quantization impact on model accuracy (>95% similarity target)
-
-- **Backend Optimization**: Keep native configuration patterns updated with ecosystem changes
-
-### Risk Mitigation
-
-- **Automatic Configuration**: `device_map="auto"` eliminates manual GPU memory management complexity
-
-- **Graceful Fallback**: CPU operations available for non-GPU environments
-
-- **PyTorch Native**: TorchAO quantization provides robust, library-first optimization vs custom implementations
-
-- **Hardware Testing**: Hardware validation across RTX 4090 and alternative GPU configurations
+- **4.0 (2025-01-16)**: Finalized decision to standardize on `device_map="auto"`. Removed all custom management logic and updated performance targets to align with the final architecture.
+- **3.0 (2025-01-13)**: Simplified GPU management and integrated PyTorch optimizations.
+- **2.0 (2025-07-25)**: Updated with async performance enhancements.

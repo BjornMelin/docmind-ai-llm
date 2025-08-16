@@ -6,7 +6,7 @@ Semantic Chunking Strategy with Native IngestionPipeline Integration
 
 ## Version/Date
 
-3.1 / August 13, 2025
+4.0 / August 14, 2025
 
 ## Status
 
@@ -14,231 +14,113 @@ Accepted
 
 ## Description
 
-Utilizes LlamaIndex SentenceSplitter within IngestionPipeline for semantic-aware chunking with 1024 token chunks and 200 token overlap, optimized for embedding dimensions.
+Utilizes the native LlamaIndex `SentenceSplitter` within the `IngestionPipeline` for semantic-aware chunking. The configuration, defaulting to 1024-token chunks with a 200-token overlap, is managed globally via the `Settings` singleton to optimize for the chosen embedding models.
 
 ## Context
 
-Following ADR-021's Native Architecture Consolidation, chunking uses native LlamaIndex SentenceSplitter within IngestionPipeline for optimal semantic-aware text splitting. Research confirms 1024 token chunks with 200 token overlap provide optimal context/recall balance while fitting embedding dimensions for CLIP ViT-B/32 (512D) and BGE-large (1024D) models.
+Effective Retrieval-Augmented Generation (RAG) depends on splitting documents into meaningful chunks that fit within an embedding model's context window while preserving semantic coherence. Simple character or token counting can break sentences and destroy context. A semantic chunking strategy that respects sentence boundaries is required. This process must be integrated directly into the main document processing pipeline to benefit from caching and a unified workflow.
 
 ## Related Requirements
 
-- Native IngestionPipeline integration with IngestionCache for 80-95% re-processing reduction
-
-- Configurable chunking (AppSettings.chunk_size=1024, chunk_overlap=200)
-
-- Post-parsing integration (after UnstructuredReader processing)
-
-- Semantic-aware splitting for superior RAG quality vs token-based approaches
-
-- Multi-modal document support (text, images, tables) with adaptive chunking
+- **Native IngestionPipeline Integration**: Chunking must be a standard transformation step within the pipeline.
+- **Configurable Chunking**: Chunk size and overlap must be configurable globally.
+- **Semantic Awareness**: The splitting strategy must prioritize keeping whole sentences together.
+- **Embedding Model Optimization**: Chunk sizes must be optimized for the dimensions of the project's embedding models (e.g., BGE-large).
 
 ## Alternatives
 
-- **TokenTextSplitter**: Basic token counting, no semantic awareness (lower recall)
-
-- **Custom splitting logic**: Maintenance-heavy, violates library-first principle
-
-- **Fixed-size splitting**: Breaks semantic boundaries, poor context preservation
-
-- **No overlap**: Reduced context continuity between chunks
+- **TokenTextSplitter**: A basic splitter that counts tokens. Rejected because it is not semantically aware and can easily split sentences mid-thought.
+- **Custom Splitting Logic**: Would require writing and maintaining complex regex or NLP-based splitting rules. Rejected for violating the library-first principle.
+- **Fixed-Size Splitting**: The simplest method, but the least effective as it has no regard for content structure. Rejected for producing low-quality chunks.
 
 ## Decision
 
-Use native SentenceSplitter within IngestionPipeline with IngestionCache for intelligent semantic chunking and comprehensive caching benefits.
-
-**Integration Simplification:**
-
-- **BEFORE**: Custom chunking logic with separate caching
-
-- **AFTER**: Native IngestionPipeline with integrated SentenceSplitter and IngestionCache
+Use the native LlamaIndex **`SentenceSplitter`** as the standard text splitting component. It will be integrated as a transformation within the main **`IngestionPipeline`**. All configuration parameters, such as `chunk_size` and `chunk_overlap`, will be managed globally and accessed via the **`llama_index.core.Settings`** singleton.
 
 ## Related Decisions
 
-- ADR-021 (LlamaIndex Native Architecture Consolidation - enables IngestionPipeline)
-
-- ADR-020 (LlamaIndex Settings Migration - unified chunking configuration)
-
-- ADR-022 (Tenacity Resilience Integration - robust chunking with retry patterns)
-
-- ADR-006 (Analysis Pipeline - IngestionCache integration)
-
-- ADR-004 (Document Loading - post-UnstructuredReader processing)
-
-- ADR-002 (Embedding Choices - chunks optimized for CLIP ViT-B/32 512D and BGE-large 1024D)
-
-- ADR-023 (PyTorch Optimization Strategy - provides mixed precision optimization for chunking operations)
+- `ADR-021` (LlamaIndex Native Architecture Consolidation): This decision is a core part of the native ingestion workflow.
+- `ADR-020` (LlamaIndex Native Settings Migration): Provides the `Settings` singleton used for configuring the splitter.
+- `ADR-004` (Document Loading): Text splitting is the transformation step that immediately follows document parsing in the `IngestionPipeline`.
+- `ADR-008` (Session Persistence): The output of the chunking process is cached by the `IngestionCache` within the pipeline.
+- `ADR-002` (Embedding Choices): The default chunk size of 1024 is chosen to align with the `BGE-large-en-v1.5` embedding model's optimal input size.
 
 ## Design
 
-**Native IngestionPipeline with Caching:**
+### Global Configuration via Settings
+
+The chunking parameters are set once on the global `Settings` object.
 
 ```python
+# In settings_setup.py
+from llama_index.core import Settings
 
-# In utils.py: Native semantic chunking with caching
-from llama_index.core.node_parser import SentenceSplitter
+def configure_global_settings():
+    """Sets up all global configuration for LlamaIndex."""
+    # ... other settings ...
+    Settings.chunk_size = 1024
+    Settings.chunk_overlap = 200
+    # ... other settings ...
+```
+
+### Integration into IngestionPipeline
+
+The `SentenceSplitter` is instantiated using the global `Settings` and placed into the pipeline.
+
+```python
+# In pipeline_factory.py
 from llama_index.core.ingestion import IngestionPipeline, IngestionCache
-from llama_index.core.extractors import MetadataExtractor
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import Settings
 
-# Native simplification: Integrated chunking + caching
-cache = IngestionCache()
-splitter = SentenceSplitter(
-    chunk_size=AppSettings.chunk_size,  # 1024 tokens
-    chunk_overlap=AppSettings.chunk_overlap,  # 200 tokens
-    separator=" "  # Semantic boundary preservation
+# The splitter automatically uses the globally configured chunk_size and chunk_overlap
+splitter = SentenceSplitter.from_defaults()
+
+# The splitter is a key transformation in the pipeline
+ingestion_pipeline = IngestionPipeline(
+    transformations=[
+        splitter,
+        # Other transformations like an embedding model would follow
+    ],
+    cache=IngestionCache() # The results of the splitting are cached
+)
+```
+
+### Dynamic Configuration for Multimodal Content
+
+While the default is 1024, the chunk size can be dynamically adjusted for different content types if needed, for instance, for smaller text chunks associated with images.
+
+```python
+# Example of dynamically creating a splitter for a specific use case
+from llama_index.core.node_parser import SentenceSplitter
+
+# This splitter is optimized for the CLIP model's context
+multimodal_splitter = SentenceSplitter(
+    chunk_size=512,
+    chunk_overlap=100
 )
 
-pipeline = IngestionPipeline(
-    transformations=[splitter, MetadataExtractor()],
-    cache=cache  # Native 80-95% re-processing reduction
-)
-```
-
-**Optimized Chunk Sizing for Multi-Modal:**
-
-```python
-
-# Embedding-optimized chunk configurations
-CHUNK_CONFIGS = {
-    "text_dense": {"chunk_size": 1024, "overlap": 200},  # BGE-large 1024D
-    "multimodal": {"chunk_size": 512, "overlap": 100},   # CLIP ViT-B/32 512D
-    "long_context": {"chunk_size": 2048, "overlap": 400} # Large document analysis
-}
-
-# Dynamic configuration based on content type
-chunk_config = CHUNK_CONFIGS.get(content_type, CHUNK_CONFIGS["text_dense"])
-splitter = SentenceSplitter(**chunk_config)
-```
-
-**Integration with Document Processing:**
-
-```python
-
-# In utils.py: Post-UnstructuredReader pipeline
-async def process_documents(documents: List[Document]) -> List[Node]:
-    """Process documents through native chunking pipeline."""
-    
-    # Native async processing with caching
-    nodes = await pipeline.arun(documents=documents)
-    
-    # Automatic validation and error handling
-    for node in nodes:
-        if len(node.text) > AppSettings.chunk_size * 1.2:
-            logger.warning(f"Oversized chunk detected: {len(node.text)} chars")
-    
-    return nodes
-```
-
-**Advanced Configuration Management:**
-
-```python
-
-# In models.py: Enhanced AppSettings for chunking
-
-# Integrates with ADR-020's Settings migration for unified configuration
-class ChunkingSettings(BaseModel):
-    chunk_size: int = Field(default=1024, description="Optimal for BGE-large 1024D embeddings")
-    chunk_overlap: int = Field(default=200, description="20% overlap for context continuity")
-    content_type: str = Field(default="text_dense", description="Chunking strategy")
-    
-    @validator("chunk_overlap")
-    def validate_overlap(cls, v, values):
-        chunk_size = values.get("chunk_size", 1024)
-        if v >= chunk_size:
-            raise ValueError(f"Overlap {v} must be less than chunk_size {chunk_size}")
-        return v
-
-# Unified with LlamaIndex Settings (ADR-020)
-def configure_chunking_settings():
-    """Configure chunking via unified Settings pattern."""
-    from llama_index.core import Settings
-    Settings.chunk_size = 1024  # Aligned with BGE-large 1024D
-    Settings.chunk_overlap = 200  # 20% overlap for continuity
-```
-
-**Implementation Notes:**
-
-- **Semantic Preservation**: SentenceSplitter respects sentence boundaries vs token counting
-
-- **Caching Integration**: IngestionCache automatically handles chunk reuse across sessions
-
-- **Multi-Modal Optimization**: Different chunk sizes for text vs image/table content
-
-- **Error Handling**: Native pipeline validation with automatic fallback strategies
-
-- **Performance**: ~10% semantic processing overhead vs token splitting (worth it for quality)
-
-**Testing Strategy:**
-
-```python
-
-# In tests/test_chunking.py: Enhanced semantic chunking tests
-async def test_native_chunking_with_cache():
-    """Test native IngestionPipeline chunking performance."""
-    cache = IngestionCache()
-    pipeline = IngestionPipeline(transformations=[splitter], cache=cache)
-    
-    # Test semantic boundary preservation
-    nodes = await pipeline.arun(documents=[long_document])
-    assert len(nodes) > 1
-    assert all(len(node.text) <= AppSettings.chunk_size * 1.2 for node in nodes)
-    
-    # Test overlap continuity
-    for i in range(len(nodes) - 1):
-        current_end = nodes[i].text[-AppSettings.chunk_overlap:]
-        next_start = nodes[i+1].text[:AppSettings.chunk_overlap]
-        assert overlap_similarity(current_end, next_start) > 0.8
-
-@pytest.mark.parametrize("config", [
-    {"chunk_size": 512, "overlap": 100},   # Multimodal
-    {"chunk_size": 1024, "overlap": 200},  # Text dense  
-    {"chunk_size": 2048, "overlap": 400}   # Long context
-])
-async def test_adaptive_chunking_configs(config):
-    """Test different chunking configurations for various content types."""
-    splitter = SentenceSplitter(**config)
-    pipeline = IngestionPipeline(transformations=[splitter])
-    
-    nodes = await pipeline.arun(documents=[test_document])
-    avg_chunk_size = sum(len(node.text) for node in nodes) / len(nodes)
-    assert abs(avg_chunk_size - config["chunk_size"]) < config["chunk_size"] * 0.3
+# This could be used in a separate pipeline for image-specific text
+multimodal_pipeline = IngestionPipeline(transformations=[multimodal_splitter])
 ```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- **Improved Semantic Quality**: Sentence-aware splitting preserves context vs token boundaries
-
-- **Native Caching Benefits**: IngestionCache provides 80-95% re-processing reduction automatically
-
-- **Multi-Modal Optimization**: Adaptive chunk sizing for text (1024) vs multimodal (512) content
-
-- **Library-First Architecture**: Zero custom chunking logic, pure LlamaIndex native features
-
-- **Performance Balance**: ~10% semantic overhead justified by significant quality improvements
-
-- **Embedding Optimization**: Chunk sizes aligned with CLIP ViT-B/32 (512D) and BGE-large (1024D)
+- **Improved Semantic Quality**: `SentenceSplitter` respects natural language structure, leading to higher-quality chunks and better RAG performance.
+- **Native Caching Benefits**: As part of the `IngestionPipeline`, all chunking results are automatically cached by `IngestionCache`, saving significant processing time.
+- **Simplified Architecture**: Using a native component and the `Settings` singleton eliminates custom logic and keeps the codebase clean and maintainable.
+- **Embedding Optimization**: The chunk sizes are aligned with the chosen embedding models, ensuring optimal performance.
 
 ### Ongoing Considerations
 
-- **Monitor Chunk Quality**: Track semantic boundary preservation and overlap effectiveness
+- **Language Specificity**: `SentenceSplitter` is optimized for English and other common languages. If support for less common languages is required, its behavior will need to be tested.
+- **Configuration Tuning**: The optimal `chunk_size` and `chunk_overlap` may vary slightly between different embedding models. These values in the `Settings` should be reviewed if the embedding model is changed.
 
-- **Optimize Configurations**: Tune chunk sizes based on embedding model performance
+## Changelog
 
-- **Cache Performance**: Monitor IngestionCache hit rates and memory usage
-
-- **Content Adaptation**: Evaluate optimal chunk sizes for different document types
-
-### Dependencies
-
-- **Native**: llama-index>=0.12.0 (SentenceSplitter and IngestionPipeline)
-
-- **Enhanced**: Native IngestionCache integration (replaces custom caching)
-
-**Changelog:**  
-
-- 3.1 (August 13, 2025): Added cross-references to PyTorch optimization (ADR-023) for mixed precision chunking operations. Removed marketing language for technical precision.
-
-- 3.0 (August 13, 2025): Native integration with IngestionCache and multi-modal chunk optimization. Aligned with CLIP ViT-B/32 (512D) and BGE-large (1024D) embedding dimensions. Updated async processing with pipeline.arun(). Aligned with ADR-021's Native Architecture Consolidation.
-
-- 2.0 (July 25, 2025): Switched to SentenceSplitter in IngestionPipeline; Added AppSettings configs/integration post-Unstructured; Enhanced testing with param for dev.
+- **4.0 (August 14, 2025)**: Rewritten to align with final architecture. Replaced all `AppSettings` references with the native `Settings` singleton. Clarified integration within the `IngestionPipeline`.
+- **3.1 (August 13, 2025)**: Added cross-references to PyTorch optimization (`ADR-023`).
+- **3.0 (August 13, 2025)**: Native integration with `IngestionCache` and multi-modal chunk optimization. Aligned with CLIP and BGE embedding dimensions.
+- **2.0 (July 25, 2025)**: Switched to `SentenceSplitter` in `IngestionPipeline`; Added `AppSettings` configs; Enhanced testing.

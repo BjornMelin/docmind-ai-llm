@@ -163,8 +163,7 @@ graph TD
 * **Dense Embeddings**: BAAI/bge-large-en-v1.5 (1024D)
 * **Sparse Embeddings**: prithvida/Splade_PP_en_v1
 * **Multimodal**: openai/clip-vit-base-patch32 (ViT-B/32)
-* **Reranking (Primary)**: BAAI/bge-reranker-v2-m3
-* **Reranking (Fallback)**: colbert-ir/colbertv2.0
+* **Reranking**: BAAI/bge-reranker-v2-m3
 * **NER Model**: en_core_web_sm (spaCy)
 
 ## 8. Success Criteria
