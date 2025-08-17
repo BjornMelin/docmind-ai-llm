@@ -1,20 +1,51 @@
-# ADR-017-NEW: Component Library and Theming Architecture
+# ADR-017-DELETED: Component Library and Theming
 
 ## Title
 
-Streamlit Component Integration with Premium Theming and Accessibility
+DELETED - Unnecessary Complexity for Local App
 
 ## Version/Date
 
-1.0 / 2025-08-17
+2.0 / 2025-08-17
 
 ## Status
 
-Proposed
+DELETED (YAGNI)
 
-## Description
+## Decision
 
-Implements a comprehensive component library strategy for the DocMind AI Streamlit interface, featuring best-in-class third-party components (AgGrid, Plotly, Option Menu), custom theme architecture with dark/light modes, and full accessibility compliance. The system provides a cohesive, professional user experience while maintaining performance and extensibility.
+**DELETE THIS ADR** - Custom theming and component libraries are unnecessary for a local RAG app.
+
+## Rationale for Deletion
+
+The proposed component library includes:
+
+- streamlit-aggrid for tables (st.dataframe works fine)
+- Custom theming system (default Streamlit theme is clean)
+- Dark/light mode switching (not needed for desktop app)
+- WCAG compliance framework (over-engineered for single user)
+- Icon libraries and custom CSS (unnecessary complexity)
+
+## What to Use Instead
+
+```python
+# Use native Streamlit components
+import streamlit as st
+
+# Native table display
+st.dataframe(df, use_container_width=True)
+
+# Native charts
+st.line_chart(data)
+st.bar_chart(data)
+
+# Native navigation
+tab1, tab2, tab3 = st.tabs(["Chat", "Documents", "Settings"])
+
+# That's it! Clean, simple, maintainable
+```
+
+Streamlit's default theme is professional and clean. No custom theming needed.
 
 ## Context
 

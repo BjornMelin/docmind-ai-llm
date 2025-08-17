@@ -1,0 +1,231 @@
+# ADR-012-NEW: Evaluation with DeepEval
+
+## Title
+
+Leverage DeepEval for All Quality Assurance
+
+## Version/Date
+
+3.0 / 2025-08-17
+
+## Status
+
+Accepted
+
+## Description
+
+Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation.
+
+## Context
+
+The original ADR-012 had 1000+ lines of custom evaluation code including:
+
+- Custom retrieval evaluators
+- Custom generation evaluators  
+- Custom metrics calculations
+- Custom quality tracking
+
+This is massive over-engineering when DeepEval already provides all these features with simple function calls.
+
+## Decision
+
+We will use **DeepEval directly** for all evaluation:
+
+### Simple Evaluation Setup
+
+```python
+from deepeval import evaluate
+from deepeval.metrics import (
+    AnswerRelevancyMetric,
+    FaithfulnessMetric,
+    ContextualPrecisionMetric,
+    ContextualRecallMetric,
+    ContextualRelevancyMetric,
+    HallucinationMetric,
+    ToxicityMetric,
+    BiasMetric,
+    LatencyMetric
+)
+from deepeval.test_case import LLMTestCase
+
+class DocMindEvaluator:
+    """Simple wrapper around DeepEval for DocMind evaluation."""
+    
+    def __init__(self):
+        # Initialize metrics with local LLM (Qwen3-14B-Instruct)
+        self.metrics = [
+            AnswerRelevancyMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
+            FaithfulnessMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
+            ContextualPrecisionMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
+            ContextualRecallMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
+            HallucinationMetric(threshold=0.1, model="Qwen/Qwen3-14B-Instruct"),
+            LatencyMetric(max_latency=3.0),
+        ]
+    
+    def evaluate_response(self, query: str, response: str, contexts: List[str], latency: float):
+        """Evaluate a single RAG response."""
+        
+        # Create test case
+        test_case = LLMTestCase(
+            input=query,
+            actual_output=response,
+            retrieval_context=contexts,
+            latency=latency
+        )
+        
+        # Run evaluation
+        results = evaluate(
+            test_cases=[test_case],
+            metrics=self.metrics,
+            print_results=False,
+            use_cache=True
+        )
+        
+        return {
+            'passed': results.test_passed,
+            'scores': results.scores,
+            'reasons': results.reasons
+        }
+    
+    def batch_evaluate(self, test_cases: List[Dict]):
+        """Evaluate multiple responses."""
+        
+        cases = [
+            LLMTestCase(
+                input=tc['query'],
+                actual_output=tc['response'],
+                retrieval_context=tc['contexts'],
+                latency=tc.get('latency', 0)
+            )
+            for tc in test_cases
+        ]
+        
+        return evaluate(
+            test_cases=cases,
+            metrics=self.metrics,
+            print_results=True
+        )
+
+# Usage in Streamlit
+evaluator = DocMindEvaluator()
+
+# After generating response
+result = evaluator.evaluate_response(
+    query=user_query,
+    response=generated_answer,
+    contexts=retrieved_docs,
+    latency=response_time
+)
+
+# Display in UI
+if result['passed']:
+    st.success(f"✅ Quality Check Passed (Score: {result['scores']['average']:.2f})")
+else:
+    st.warning(f"⚠️ Quality Issues Detected: {result['reasons']}")
+```
+
+### Continuous Monitoring with DeepEval
+
+```python
+from deepeval import track
+
+# Track metrics over time
+@track(metrics=["answer_relevancy", "faithfulness", "latency"])
+def generate_response(query: str) -> str:
+    # Your RAG pipeline here
+    response = rag_pipeline.query(query)
+    return response
+
+# DeepEval automatically tracks and stores metrics
+```
+
+### Testing with DeepEval + Pytest
+
+```python
+import pytest
+from deepeval import assert_test
+from deepeval.metrics import AnswerRelevancyMetric
+
+def test_rag_quality():
+    """Test RAG response quality."""
+    
+    metric = AnswerRelevancyMetric(threshold=0.7)
+    test_case = LLMTestCase(
+        input="What is the capital of France?",
+        actual_output="The capital of France is Paris.",
+        retrieval_context=["France is a country in Europe. Its capital is Paris."]
+    )
+    
+    assert_test(test_case, [metric])
+```
+
+## What DeepEval Provides Out-of-the-Box
+
+1. **RAG Metrics**: All standard RAG evaluation metrics pre-implemented
+2. **Local LLM Support**: Works with Ollama, LlamaCpp, any local model
+3. **Caching**: Automatic caching of evaluation results
+4. **Visualization**: Built-in dashboard and reporting
+5. **CI/CD Integration**: Works with pytest, GitHub Actions
+6. **Benchmarking**: Compare against standard datasets
+7. **Synthetic Data**: Generate test cases automatically
+8. **Observability**: Integration with LangSmith, Weights & Biases
+
+## Benefits of Using DeepEval
+
+- **Zero Custom Code**: All evaluation logic is in the library
+- **Battle-Tested**: Used by 100+ companies in production
+- **Maintained**: Active development and community
+- **Comprehensive**: Covers all aspects of RAG evaluation
+- **Fast Setup**: 5 minutes to full evaluation suite
+
+## What We Removed
+
+- ❌ 1000+ lines of custom evaluation code
+- ❌ Custom metric calculations
+- ❌ Custom quality tracking database
+- ❌ Custom dashboard code
+- ❌ Custom test harnesses
+
+## Alternative: RAGAS
+
+If DeepEval doesn't meet needs, RAGAS is another excellent choice:
+
+```python
+from ragas import evaluate
+from ragas.metrics import (
+    faithfulness,
+    answer_relevancy,
+    context_recall,
+    context_precision
+)
+
+result = evaluate(
+    dataset=your_dataset,
+    metrics=[faithfulness, answer_relevancy, context_recall, context_precision]
+)
+```
+
+## Dependencies
+
+```toml
+[project.dependencies]
+deepeval = "^1.0.0"
+# or
+ragas = "^0.2.0"
+```
+
+## Monitoring Metrics
+
+DeepEval automatically tracks:
+
+- Response relevancy and faithfulness
+- Retrieval precision and recall
+- Hallucination rates
+- Latency percentiles
+- Error rates and types
+
+## Changelog
+
+- **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B-Instruct model selection, accepted status
+- **2.0 (2025-08-17)**: SIMPLIFIED - Use DeepEval library instead of custom code
+- **1.0 (2025-01-16)**: Original version with 1000+ lines of custom evaluation

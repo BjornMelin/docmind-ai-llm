@@ -6,15 +6,15 @@ Premium Streamlit-Based Multipage UI with Modern Navigation and Component Integr
 
 ## Version/Date
 
-2.0 / 2025-08-17
+3.0 / 2025-08-17
 
 ## Status
 
-Proposed
+Accepted
 
 ## Description
 
-Implements a premium, production-ready user interface using Streamlit's modern multipage architecture with programmatic navigation, advanced component integration, and intelligent state management. The UI seamlessly integrates with all DocMind AI capabilities while maintaining exceptional performance and user experience through sophisticated caching strategies and real-time updates.
+Implements a simple, clean user interface using native Streamlit components without unnecessary complexity. The UI provides all essential functionality using Streamlit's built-in features, avoiding external component libraries and custom state management that add complexity without value for a single-user desktop application.
 
 ## Context
 
@@ -75,22 +75,23 @@ The interface must provide a premium user experience that showcases the system's
 
 ## Decision
 
-We will implement a **Premium Streamlit UI** with modern multipage architecture and advanced component integration:
+We will use **Native Streamlit Components** without unnecessary libraries:
 
-### Core Architecture
+### Library-First UI Approach with Streaming
 
-1. **Programmatic Navigation**: st.Page and st.navigation for flexible page management
-2. **Component Integration**: streamlit-aggrid, plotly, option-menu for enhanced UX  
-3. **Advanced State Management**: Multi-level session state with persistence
-4. **Performance Optimization**: Strategic caching with st.cache_data/st.cache_resource
-5. **Real-time Updates**: Fragment-based updates and background processing
+1. **Native Navigation**: Use st.sidebar.selectbox or st.tabs for navigation
+2. **Native Components**: st.dataframe, st.plotly_chart, st.columns
+3. **Native State**: st.session_state directly
+4. **Native Caching**: st.cache_data and st.cache_resource
+5. **Native Streaming**: st.write_stream() for real-time LLM responses
+6. **Native Updates**: st.fragment for partial updates
 
 ### Page Structure
 
-1. **Chat Page**: Agentic conversation interface with streaming and source attribution
-2. **Documents Page**: AgGrid-powered document management with batch operations
-3. **Analytics Page**: Performance metrics, quality dashboards, hardware monitoring
-4. **Settings Page**: Model configuration, hardware profiles, feature management
+1. **Chat Page**: Agentic conversation with native streaming via st.write_stream()
+2. **Documents Page**: Native st.dataframe with sorting and filtering
+3. **Analytics Page**: Performance metrics with st.plotly_chart
+4. **Settings Page**: Model configuration with st.form
 
 ## Related Decisions
 
@@ -138,6 +139,105 @@ graph TD
 ```
 
 ### Modern Streamlit Implementation
+
+#### Streaming Implementation
+
+```python
+import streamlit as st
+import asyncio
+from typing import AsyncGenerator, Iterator
+import time
+
+# Native Streaming with st.write_stream (Streamlit 1.40+)
+def stream_llm_response(query: str) -> Iterator[str]:
+    """Stream LLM response tokens."""
+    # This would connect to your LLM
+    response = llm.stream_complete(query)
+    
+    for token in response:
+        yield token
+        time.sleep(0.01)  # Small delay for visual effect
+
+# Usage in Chat Interface
+def render_chat_interface():
+    """Chat interface with native streaming."""
+    
+    if prompt := st.chat_input("Ask a question"):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Display chat history
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+        
+        # Stream assistant response
+        with st.chat_message("assistant"):
+            # Use native streaming
+            response = st.write_stream(stream_llm_response(prompt))
+            
+            # Save complete response
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response
+            })
+
+# Async Streaming for Complex Pipelines
+async def stream_rag_response(
+    query: str,
+    retriever,
+    generator
+) -> AsyncGenerator[str, None]:
+    """Stream RAG pipeline with retrieval + generation."""
+    
+    # Retrieve documents
+    with st.status("Retrieving documents..."):
+        docs = await retriever.aretrieve(query)
+        st.write(f"Found {len(docs)} relevant documents")
+    
+    # Stream generation
+    async for token in generator.astream(query, docs):
+        yield token
+
+# Streaming with Source Display
+def stream_with_sources():
+    """Stream response with source citations."""
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Stream main response
+        response_placeholder = st.empty()
+        full_response = ""
+        
+        for chunk in stream_llm_response(st.session_state.query):
+            full_response += chunk
+            response_placeholder.markdown(full_response)
+    
+    with col2:
+        # Display sources
+        st.subheader("Sources")
+        for doc in st.session_state.retrieved_docs:
+            with st.expander(doc.metadata["title"]):
+                st.write(doc.content[:200] + "...")
+                st.caption(f"Score: {doc.score:.2f}")
+
+# Progress Indicators for Long Operations
+def process_with_progress():
+    """Show progress during long operations."""
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i in range(100):
+        # Update progress
+        progress_bar.progress(i + 1)
+        status_text.text(f"Processing... {i+1}%")
+        
+        # Do actual work
+        time.sleep(0.01)
+    
+    status_text.text("Complete!")
 
 #### Entry Point (app.py)
 

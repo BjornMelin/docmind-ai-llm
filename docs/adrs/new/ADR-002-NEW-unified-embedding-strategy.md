@@ -6,11 +6,11 @@ BGE-M3 Unified Dense/Sparse Embedding with CLIP Multimodal Support
 
 ## Version/Date
 
-1.0 / 2025-01-16
+2.0 / 2025-08-17
 
 ## Status
 
-Proposed
+Accepted
 
 ## Description
 
@@ -52,25 +52,52 @@ BGE-M3 represents a significant advancement by unifying dense and sparse retriev
 
 ### 2. BGE-M3 + CLIP (Selected)
 
-- **Models**: BGE-M3 unified + CLIP (2 models, ~3.6GB total)
-- **Benefits**: Unified training, reduced complexity, extended context, multilingual
-- **Score**: 9/10 (quality: 9, simplicity: 8, performance: 9)
+- **Models**: BGE-M3 unified + CLIP (2 models, fully local)
+- **Benefits**: Unified dense/sparse, 8K context, 100% local operation
+- **Score**: 9/10 (quality: 9, simplicity: 9, performance: 9)
 
-### 3. Single Multimodal Model (Jina v4)
+### 2b. Nomic-Embed-Text-v2 + CLIP (Alternative)
 
-- **Models**: One model for text + images (~3.4GB)
-- **Issues**: Less specialized performance, limited local options, integration complexity
-- **Score**: 6/10 (quality: 6, simplicity: 9, performance: 5)
+- **Models**: Nomic-Embed-Text-v2-MoE + CLIP (2 models, ~3.5GB total)
+- **Benefits**: MoE architecture, 305M active params, excellent multilingual
+- **Score**: 8/10 (quality: 8, simplicity: 8, performance: 9)
+
+### 3. Arctic-Embed-L-v2 + CLIP (High Performance)
+
+- **Models**: Snowflake Arctic-Embed-L-v2 + CLIP (2 models, ~4GB total)
+- **Benefits**: SOTA performance, 568M params, strong multilingual support
+- **Score**: 8.5/10 (quality: 9, simplicity: 8, performance: 8)
+
+### 4. Single Multimodal Model (Jina-CLIP)
+
+- **Models**: Jina-CLIP-v1 for unified text + images (~2.5GB)
+- **Benefits**: Single model simplicity, supports 8K context
+- **Issues**: Less specialized performance than separate models
+- **Score**: 7/10 (quality: 7, simplicity: 10, performance: 6)
+
+### 5. Voyage-3 (Not Viable - API Only)
+
+- **Models**: Voyage-3 API service (requires internet)
+- **Issues**: Violates local-only requirement, requires API key, costs money
+- **Score**: 0/10 (not viable for local-first architecture)
 
 ## Decision
 
-We will adopt **BGE-M3 + CLIP strategy** with the following models:
+We will adopt **BGE-M3 + CLIP strategy** for 100% local operation:
 
-1. **Text Embeddings**: `BAAI/bge-m3` (569M params, 2.27GB)
+1. **Primary Text Embeddings**: `BAAI/bge-m3` (1024 dimensions)
    - Dense embeddings: 1024 dimensions
-   - Sparse embeddings: Built-in via linear layer + ReLU
-   - Context length: 8192 tokens (16x improvement)
-   - Multilingual: 100+ languages
+   - Sparse embeddings: Integrated SPLADE-style sparse vectors
+   - Context length: 8,192 tokens (16x improvement over original)
+   - Performance: 70.0 NDCG@10 on MIRACL (best local model)
+   - Multilingual: 100+ languages supported
+   - Multi-granular: Handles both short queries and long documents
+   - 100% local: No API dependencies, runs offline
+
+   **Alternative Options for Consideration**:
+   - `nomic-ai/nomic-embed-text-v2-moe`: MoE architecture, 305M active params
+   - `Snowflake/arctic-embed-l-v2`: 568M params, excellent performance
+   - `jinaai/jina-embeddings-v3`: 570M params, 8K context support
 
 2. **Image Embeddings**: `openai/clip-vit-base-patch32` (512 dimensions)
    - Proven performance for multimodal search
@@ -86,25 +113,44 @@ We will adopt **BGE-M3 + CLIP strategy** with the following models:
 
 ## Design
 
-### BGE-M3 Integration
+### BGE-M3 Integration (Primary)
 
 ```python
 from llama_index.core import Settings
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.embeddings.clip import ClipEmbedding
+from sentence_transformers import SentenceTransformer
 import torch
 
 class UnifiedEmbeddingConfig:
-    """Configuration for BGE-M3 unified embedding model."""
+    """Configuration for local embedding models with BGE-M3 as primary."""
     
-    def __init__(self):
-        self.text_model = HuggingFaceEmbedding(
-            model_name="BAAI/bge-m3",
-            max_length=8192,  # Extended context
-            device_map="auto",
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            trust_remote_code=True
-        )
+    def __init__(self, model_choice="bge-m3"):
+        if model_choice == "bge-m3":
+            # BGE-M3 for unified dense/sparse embeddings
+            self.text_model = HuggingFaceEmbedding(
+                model_name="BAAI/bge-m3",
+                max_length=8192,
+                device_map="auto",
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                trust_remote_code=True
+            )
+        elif model_choice == "nomic":
+            # Nomic-Embed-Text-v2 MoE alternative
+            self.text_model = HuggingFaceEmbedding(
+                model_name="nomic-ai/nomic-embed-text-v2-moe",
+                max_length=512,
+                device_map="auto",
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+            )
+        elif model_choice == "arctic":
+            # Snowflake Arctic-Embed-L-v2 for high performance
+            self.text_model = HuggingFaceEmbedding(
+                model_name="Snowflake/snowflake-arctic-embed-l-v2.0",
+                max_length=512,
+                device_map="auto",
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+            )
         
         self.image_model = ClipEmbedding(
             model_name="openai/clip-vit-base-patch32"
@@ -296,4 +342,6 @@ class OptimizedBGE_M3:
 
 ## Changelog
 
+- **3.0 (2025-08-17)**: CRITICAL FIX - Removed Voyage-3 (API-only, violates local-first requirement). Set BGE-M3 as PRIMARY model for 100% local operation. Added Nomic-Embed-v2-MoE and Arctic-Embed-L-v2 as strong local alternatives.
+- **2.0 (2025-08-17)**: [INVALID - Incorrectly selected API-only Voyage-3]
 - **1.0 (2025-01-16)**: Initial design for BGE-M3 unified embedding strategy with CLIP multimodal support

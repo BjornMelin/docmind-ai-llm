@@ -6,15 +6,17 @@ Multi-Backend Persistence with SQLite, DuckDB, and Vector Storage Optimization
 
 ## Version/Date
 
-1.0 / 2025-01-16
+2.0 / 2025-08-17
 
 ## Status
 
-Proposed
+Accepted (with simplification note)
 
 ## Description
 
-Implements a hybrid persistence strategy that moves beyond SQLite-only storage to include DuckDB for analytics, optimized vector storage, and intelligent data partitioning. The system maintains local-first operation while providing better performance for different data types and access patterns, supporting both operational queries and analytical workloads.
+**SIMPLIFICATION NOTE**: For MVP, consider using SQLite + Qdrant only. Add DuckDB for analytics later if needed. The multi-backend approach described here may be over-engineering for initial release.
+
+Original description: Implements a hybrid persistence strategy that moves beyond SQLite-only storage to include DuckDB for analytics, optimized vector storage, and intelligent data partitioning. The system maintains local-first operation while providing better performance for different data types and access patterns, supporting both operational queries and analytical workloads.
 
 ## Context
 
@@ -73,21 +75,43 @@ A hybrid approach allows each data type to use the most appropriate storage back
 
 ## Decision
 
-We will implement a **Hybrid Multi-Backend Persistence Strategy**:
+We will use **SQLite + Qdrant only** for MVP simplicity:
 
-### Storage Backends
+### Library-First Persistence (No Custom Code)
 
-1. **SQLite**: Operational data (sessions, settings, metadata)
-2. **DuckDB**: Analytics and aggregations (metrics, performance data)
-3. **Optimized Vector Storage**: Custom format for embeddings with FAISS/hnswlib
-4. **Compressed Document Storage**: LZ4-compressed JSON for large text content
-5. **Memory Cache**: Redis-compatible in-memory cache for hot data
+```python
+# Simple persistence with SQLModel + Qdrant
+from sqlmodel import SQLModel, Field, create_engine, Session
+from qdrant_client import QdrantClient
+from llama_index.vector_stores.qdrant import QdrantVectorStore
 
-### Data Partitioning
+# SQLite for metadata (using SQLModel)
+class Document(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    title: str
+    content: str
+    created_at: datetime
 
-- **Hot Data**: Frequently accessed (in-memory cache)
-- **Warm Data**: Regular access (SQLite/DuckDB)
-- **Cold Data**: Archival storage (compressed files)
+engine = create_engine("sqlite:///data/docmind.db")
+SQLModel.metadata.create_all(engine)
+
+# Qdrant for vectors (using client directly)
+client = QdrantClient(path="./data/qdrant")
+vector_store = QdrantVectorStore(
+    client=client,
+    collection_name="documents"
+)
+
+# That's it! No custom storage layers needed
+```
+
+### What NOT to Build
+
+- ❌ Custom vector storage format
+- ❌ Custom compression layers
+- ❌ Redis cache (use st.cache_data)
+- ❌ DuckDB analytics (add later if needed)
+- ❌ Complex data partitioning
 
 ## Related Decisions
 

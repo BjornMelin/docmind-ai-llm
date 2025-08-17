@@ -6,11 +6,11 @@ Comprehensive Performance Optimization with Quantization, Caching, and Hardware 
 
 ## Version/Date
 
-2.0 / 2025-08-16
+3.0 / 2025-08-17
 
 ## Status
 
-Proposed
+Accepted
 
 ## Description
 
@@ -72,16 +72,16 @@ A systematic performance optimization approach is needed to balance capability w
 
 ## Decision
 
-We will implement **Comprehensive Local Performance Optimization** with:
+We will use **GPTCache for semantic caching** with library-first optimizations:
 
-### Core Optimization Layers
+### Library-First Performance Approach
 
-1. **Model Quantization**: 4-bit/8-bit quantization with quality preservation
-2. **Multi-Level Caching**: Memory, disk, and computation result caching
-3. **Hardware Acceleration**: GPU optimization, mixed precision, Flash Attention
-4. **Resource Management**: Dynamic memory allocation and cleanup
-5. **Pipeline Optimization**: Batching, prefetching, and parallel processing
-6. **Quality-Performance Balancing**: Adaptive strategies based on available resources
+1. **Semantic Caching**: GPTCache for intelligent query/response caching
+2. **Streamlit Caching**: Use `st.cache_data` and `st.cache_resource` 
+3. **LlamaIndex Caching**: Built-in `EmbeddingCache` and query result caching
+4. **Model Quantization**: Use pre-quantized GGUF models directly
+5. **No Custom Code**: Leverage existing optimizations in libraries
+6. **Simple Configuration**: Environment variables for memory limits
 
 ## Related Decisions
 
@@ -133,20 +133,155 @@ graph TD
     U --> F
 ```
 
-### Model Quantization Framework
+### Semantic Caching with GPTCache
 
 ```python
-import torch
-import torch.nn as nn
-from typing import Dict, Any, Optional, Union, List
-from dataclasses import dataclass
-from enum import Enum
-import time
-import psutil
-import gc
-from functools import lru_cache
-import threading
-from concurrent.futures import ThreadPoolExecutor
+from gptcache import Cache
+from gptcache.adapter import openai
+from gptcache.embedding import Onnx
+from gptcache.manager import CacheBase, VectorBase, get_data_manager
+from gptcache.similarity_evaluation.distance import SearchDistanceEvaluation
+import hashlib
+import json
+from typing import Optional, Dict, Any
+
+class SemanticCacheManager:
+    """Semantic caching using GPTCache library."""
+    
+    def __init__(
+        self,
+        cache_dir: str = "./cache/semantic",
+        similarity_threshold: float = 0.9
+    ):
+        self.cache = Cache()
+        self.similarity_threshold = similarity_threshold
+        
+        # Initialize GPTCache with BGE-M3 embeddings
+        self.cache.init(
+            pre_embedding_func=self._get_query_key,
+            embedding_func=Onnx(),  # Use ONNX for speed
+            data_manager=get_data_manager(
+                CacheBase("sqlite", sql_url=f"sqlite:///{cache_dir}/cache.db"),
+                VectorBase("faiss", dimension=1024)  # BGE-M3 dimensions
+            ),
+            similarity_evaluation=SearchDistanceEvaluation(
+                max_distance=1 - similarity_threshold
+            )
+        )
+    
+    def _get_query_key(self, query_data: Dict) -> str:
+        """Generate cache key from query and context."""
+        # Include query, retrieved doc IDs, and model version
+        key_parts = [
+            query_data.get("query", ""),
+            json.dumps(sorted(query_data.get("doc_ids", []))),
+            query_data.get("model", "qwen3:14b")
+        ]
+        
+        # Create deterministic hash
+        key_str = "|".join(key_parts)
+        return hashlib.sha256(key_str.encode()).hexdigest()
+    
+    def get(
+        self,
+        query: str,
+        doc_ids: List[str],
+        model: str = "qwen3:14b"
+    ) -> Optional[str]:
+        """Retrieve cached response if exists."""
+        
+        query_data = {
+            "query": query,
+            "doc_ids": doc_ids,
+            "model": model
+        }
+        
+        # GPTCache handles similarity search automatically
+        result = self.cache.get(query_data)
+        
+        if result and result.get("hit"):
+            return result["response"]
+        
+        return None
+    
+    def set(
+        self,
+        query: str,
+        doc_ids: List[str],
+        response: str,
+        model: str = "qwen3:14b"
+    ):
+        """Cache a query-response pair."""
+        
+        query_data = {
+            "query": query,
+            "doc_ids": doc_ids,
+            "model": model,
+            "response": response
+        }
+        
+        self.cache.set(query_data)
+    
+    def invalidate_by_docs(self, doc_ids: List[str]):
+        """Invalidate cache entries using specific documents."""
+        # This ensures cache correctness when documents are updated
+        # GPTCache doesn't have direct invalidation, so we track separately
+        
+        # Store invalidation timestamps
+        invalidation_key = f"invalidated_{hashlib.sha256(json.dumps(sorted(doc_ids)).encode()).hexdigest()}"
+        self.cache.set({"type": "invalidation", "key": invalidation_key, "timestamp": time.time()})
+
+# Integration with RAG Pipeline
+class CachedRAGPipeline:
+    """RAG pipeline with semantic caching."""
+    
+    def __init__(self, base_pipeline, cache_manager: SemanticCacheManager):
+        self.base_pipeline = base_pipeline
+        self.cache = cache_manager
+    
+    async def query(
+        self,
+        query: str,
+        use_cache: bool = True
+    ) -> str:
+        """Query with semantic caching."""
+        
+        if not use_cache:
+            return await self.base_pipeline.query(query)
+        
+        # Retrieve documents first
+        docs = await self.base_pipeline.retrieve(query)
+        doc_ids = [doc.id for doc in docs]
+        
+        # Check cache
+        cached_response = self.cache.get(query, doc_ids)
+        if cached_response:
+            return cached_response
+        
+        # Generate response
+        response = await self.base_pipeline.generate(query, docs)
+        
+        # Cache for future
+        self.cache.set(query, doc_ids, response)
+        
+        return response
+
+# Streamlit Integration
+import streamlit as st
+
+@st.cache_resource
+def get_semantic_cache():
+    """Initialize semantic cache (singleton)."""
+    return SemanticCacheManager(
+        cache_dir="./cache/semantic",
+        similarity_threshold=0.9
+    )
+
+@st.cache_data(ttl=3600)
+def cached_embedding(text: str) -> np.ndarray:
+    """Cache embeddings with 1-hour TTL."""
+    # This would use your embedding model
+    return embed_model.encode(text)
 
 class QuantizationType(Enum):
     FP16 = "fp16"

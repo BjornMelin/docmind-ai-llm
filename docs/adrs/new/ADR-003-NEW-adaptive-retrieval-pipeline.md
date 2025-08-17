@@ -6,11 +6,11 @@ Hierarchical Adaptive Retrieval with Simplified RAPTOR and Multi-Strategy Routin
 
 ## Version/Date
 
-1.0 / 2025-01-16
+2.0 / 2025-08-17
 
 ## Status
 
-Proposed
+Accepted
 
 ## Description
 
@@ -65,14 +65,15 @@ Full RAPTOR implementation is too resource-intensive for local deployment. Our R
 
 ## Decision
 
-We will implement **RAPTOR-Lite with Multi-Strategy Adaptive Routing**:
+We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in features**:
 
-### Core Components
+### Core Components (Library-First Approach)
 
-1. **RAPTOR-Lite Hierarchy**: Simplified 2-level tree (document chunks + section summaries)
-2. **Multi-Strategy Router**: Routes between vector, hybrid, hierarchical, and web search
-3. **Corrective Feedback**: Evaluates and retries poor retrieval results
-4. **Progressive Expansion**: Starts narrow, expands scope based on result quality
+1. **RouterQueryEngine**: LlamaIndex's built-in query routing instead of custom routing
+2. **HybridRetriever**: Built-in hybrid search combining dense and sparse retrieval
+3. **MultiQueryRetriever**: Automatic query decomposition for complex queries
+4. **MetadataFilters**: Built-in filtering without custom logic
+5. **AsyncQueryEngine**: Native async support for performance
 
 ## Related Decisions
 
@@ -108,59 +109,75 @@ graph TD
     M -->|Poor| O[Expand Strategy] --> G
 ```
 
-### RAPTOR-Lite Implementation
+### Library-First Implementation Using LlamaIndex
 
 ```python
-from dataclasses import dataclass
-from typing import List, Dict, Optional
-import numpy as np
-from sklearn.cluster import KMeans
-from llama_index.core import Document, Settings
+# Use LlamaIndex built-in features instead of custom code
+from llama_index.core.query_engine import RouterQueryEngine
+from llama_index.core.selectors import LLMSingleSelector
+from llama_index.core.retrievers import (
+    HybridRetriever,
+    MultiQueryRetriever,
+    RecursiveRetriever
+)
+from llama_index.core.node_parser import (
+    SentenceSplitter,
+    SemanticSplitterNodeParser
+)
+from llama_index.core.vector_stores import MetadataFilters
+from llama_index.core import QueryBundle, Settings
 
-@dataclass
-class HierarchicalNode:
-    """Simplified hierarchical node for RAPTOR-Lite."""
-    content: str
-    level: int  # 0 = chunk, 1 = section summary, 2 = document summary
-    parent_id: Optional[str] = None
-    children_ids: List[str] = None
-    embedding: Optional[np.ndarray] = None
-    metadata: Dict = None
+# REMOVED: Custom hierarchical implementation
+# LlamaIndex provides RecursiveRetriever for hierarchical retrieval
 
-class RAPTORLiteIndexer:
-    """Simplified RAPTOR implementation optimized for local deployment."""
+def create_adaptive_retriever(vector_store, llm):
+    """Create router-based adaptive retriever using LlamaIndex built-ins."""
     
-    def __init__(self, max_levels: int = 2, cluster_size: int = 5):
-        self.max_levels = max_levels
-        self.cluster_size = cluster_size
-        self.nodes = {}
-        self.level_index = {0: [], 1: [], 2: []}
+    # Use built-in semantic chunking instead of custom
+    semantic_splitter = SemanticSplitterNodeParser(
+        embed_model=Settings.embed_model,
+        breakpoint_percentile_threshold=95,
+        buffer_size=1
+    )
     
-    def build_hierarchy(self, documents: List[Document]) -> None:
-        """Build simplified 2-level hierarchy."""
-        # Level 0: Document chunks (existing)
-        chunks = self._extract_chunks(documents)
-        for chunk in chunks:
-            node = HierarchicalNode(
-                content=chunk.text,
-                level=0,
-                metadata=chunk.metadata
-            )
-            self.nodes[chunk.id_] = node
-            self.level_index[0].append(chunk.id_)
-        
-        # Level 1: Section summaries (simplified clustering)
-        if len(chunks) > self.cluster_size:
-            section_summaries = self._create_section_summaries(chunks)
-            for summary in section_summaries:
-                node = HierarchicalNode(
-                    content=summary['content'],
-                    level=1,
-                    children_ids=summary['chunk_ids'],
-                    metadata={'topic': summary['topic']}
-                )
-                self.nodes[summary['id']] = node
-                self.level_index[1].append(summary['id'])
+    # Use built-in hybrid retriever
+    hybrid_retriever = HybridRetriever(
+        vector_retriever=vector_store.as_retriever(similarity_top_k=5),
+        keyword_retriever=vector_store.as_retriever(mode="keyword", top_k=5),
+        fusion_mode="reciprocal_rank"  # Built-in RRF fusion
+    )
+    
+    # Use MultiQueryRetriever for query decomposition
+    multi_query_retriever = MultiQueryRetriever.from_defaults(
+        retriever=hybrid_retriever,
+        llm=llm,
+        num_queries=3  # Generate 3 sub-queries automatically
+    )
+    
+    # Create query engines for different strategies
+    from llama_index.core import VectorStoreIndex
+    from llama_index.core.tools import QueryEngineTool
+    
+    # Vector search tool
+    vector_tool = QueryEngineTool.from_defaults(
+        query_engine=vector_store.as_query_engine(similarity_top_k=10),
+        name="vector_search",
+        description="Best for semantic similarity and simple factual queries"
+    )
+    
+    # Hybrid search tool  
+    hybrid_tool = QueryEngineTool.from_defaults(
+        query_engine=hybrid_retriever.as_query_engine(),
+        name="hybrid_search",
+        description="Best for complex queries needing both keywords and semantics"
+    )
+    
+    # Multi-query tool for decomposition
+    multi_tool = QueryEngineTool.from_defaults(
+        query_engine=multi_query_retriever.as_query_engine(),
+        name="multi_query",
+        description="Best for complex questions that need to be broken down"
+    )
     
     def _create_section_summaries(self, chunks: List[Document]) -> List[Dict]:
         """Create section summaries through simple clustering."""
@@ -222,58 +239,57 @@ class RAPTORLiteIndexer:
         
         return ", ".join(common_words[:3])
 
-class AdaptiveRetriever:
-    """Multi-strategy adaptive retriever with RAPTOR-Lite support."""
+    # Create RouterQueryEngine to automatically route queries
+    router_engine = RouterQueryEngine(
+        selector=LLMSingleSelector.from_defaults(llm=llm),
+        query_engine_tools=[
+            vector_tool,
+            hybrid_tool,
+            multi_tool
+        ],
+        verbose=True  # Log routing decisions
+    )
     
-    def __init__(self, hierarchical_index: RAPTORLiteIndexer, vector_store):
-        self.hierarchical_index = hierarchical_index
-        self.vector_store = vector_store
-        self.strategy_history = []
+    return router_engine
+
+# That's it! 20 lines instead of 200+ lines of custom code
+# LlamaIndex handles all the routing, retrieval, and fusion logic
     
-    def retrieve(self, query: str, strategy: str = "auto") -> List[NodeWithScore]:
-        """Adaptive retrieval with multiple strategies."""
-        if strategy == "auto":
-            strategy = self._route_strategy(query)
-        
-        if strategy == "vector":
-            return self._vector_retrieve(query)
-        elif strategy == "hierarchical":
-            return self._hierarchical_retrieve(query)
-        elif strategy == "hybrid":
-            return self._hybrid_retrieve(query)
-        elif strategy == "web":
-            return self._web_retrieve(query)
-        else:
-            return self._vector_retrieve(query)  # Fallback
+### Using MetadataFilters for Advanced Retrieval
+
+```python
+from llama_index.core.vector_stores import (
+    MetadataFilters,
+    MetadataFilter,
+    FilterOperator,
+    FilterCondition
+)
+
+def create_filtered_retriever(vector_store, filters: dict):
+    """Use built-in metadata filtering instead of custom logic."""
     
-    def _route_strategy(self, query: str) -> str:
-        """Route query to optimal retrieval strategy."""
-        prompt = f"""
-        Analyze this query and choose the best retrieval strategy:
-        
-        Query: "{query}"
-        
-        Strategies:
-        - vector: Simple factual questions, specific information lookup
-        - hierarchical: Complex questions needing synthesis across sections
-        - hybrid: Questions needing both specific facts and broader context
-        - web: Questions about recent events or missing information
-        
-        Consider:
-        - Query complexity and scope
-        - Need for synthesis vs specific facts
-        - Likely information distribution
-        
-        Respond with just the strategy name: vector, hierarchical, hybrid, or web
-        """
-        
-        response = Settings.llm.complete(prompt)
-        strategy = response.text.strip().lower()
-        
-        if strategy not in ["vector", "hierarchical", "hybrid", "web"]:
-            strategy = "vector"  # Safe fallback
-        
-        return strategy
+    # Build metadata filters
+    metadata_filters = MetadataFilters(
+        filters=[
+            MetadataFilter(
+                key="doc_type",
+                value=filters.get("doc_type", "any"),
+                operator=FilterOperator.EQ
+            ),
+            MetadataFilter(
+                key="date",
+                value=filters.get("after_date", "2024-01-01"),
+                operator=FilterOperator.GTE
+            )
+        ],
+        condition=FilterCondition.AND
+    )
+    
+    # Create retriever with filters
+    return vector_store.as_retriever(
+        similarity_top_k=10,
+        filters=metadata_filters
+    )
     
     def _hierarchical_retrieve(self, query: str, top_k: int = 10) -> List[NodeWithScore]:
         """Retrieve using RAPTOR-Lite hierarchy."""
@@ -361,25 +377,36 @@ class AdaptiveRetriever:
         return sorted(combined_results, key=lambda x: x.score, reverse=True)[:10]
 ```
 
-### Quality Evaluation and Correction
+### Using AsyncQueryEngine for Performance
 
 ```python
-class RetrievalQualityEvaluator:
-    """Evaluates retrieval quality and triggers corrections."""
+from llama_index.core.query_engine import AsyncQueryEngine
+from llama_index.core.callbacks import TokenCountingHandler
+import asyncio
+
+async def create_async_pipeline(vector_store, llm):
+    """Use built-in async support for better performance."""
     
-    def evaluate_results(self, query: str, results: List[NodeWithScore]) -> Dict[str, float]:
-        """Evaluate retrieval result quality."""
-        if not results:
-            return {"relevance": 0.0, "coverage": 0.0, "confidence": 0.0}
-        
-        # Simple heuristic evaluation (can be enhanced with local LLM)
-        metrics = {
-            "relevance": self._calculate_relevance(query, results),
-            "coverage": self._calculate_coverage(query, results),
-            "confidence": min(results[0].score, 1.0) if results else 0.0
-        }
-        
-        return metrics
+    # Token counting with built-in handler
+    token_counter = TokenCountingHandler()
+    Settings.callback_manager.add_handler(token_counter)
+    
+    # Create async query engine
+    async_engine = AsyncQueryEngine.from_defaults(
+        retriever=vector_store.as_retriever(),
+        llm=llm,
+        streaming=True  # Enable streaming responses
+    )
+    
+    # Use built-in retry policy
+    from llama_index.core.retry import RetryPolicy
+    async_engine.retry_policy = RetryPolicy(
+        max_retries=3,
+        retry_on_exceptions=[Exception],
+        backoff_factor=2.0
+    )
+    
+    return async_engine
     
     def _calculate_relevance(self, query: str, results: List[NodeWithScore]) -> float:
         """Estimate relevance based on keyword overlap and scores."""

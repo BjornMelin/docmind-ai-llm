@@ -73,15 +73,38 @@ Modern RAG evaluation requires specialized metrics like faithfulness, relevance,
 
 ## Decision
 
-We will implement **DeepEval-based testing framework** with comprehensive RAG evaluation:
+We will use **pytest + DeepEval only** without custom test frameworks:
 
-### Core Components
+### Library-First Testing (100 Lines Total)
 
-1. **DeepEval Metrics**: Faithfulness, relevance, coherence, hallucination detection
-2. **Pytest Integration**: Standard test discovery, parametrization, and reporting
-3. **Performance Benchmarking**: Latency, throughput, and resource utilization testing
-4. **Golden Dataset**: Curated test cases for regression testing
-5. **CI/CD Pipeline**: Automated testing with quality gates
+```python
+# Complete test suite in minimal code
+import pytest
+from deepeval import evaluate
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
+from deepeval.test_case import LLMTestCase
+
+@pytest.fixture
+def evaluator():
+    """Setup DeepEval metrics."""
+    return [
+        AnswerRelevancyMetric(threshold=0.7),
+        FaithfulnessMetric(threshold=0.7)
+    ]
+
+def test_rag_quality(evaluator):
+    """Test RAG response quality."""
+    test_case = LLMTestCase(
+        input="What is BGE-M3?",
+        actual_output="BGE-M3 is an embedding model...",
+        retrieval_context=["BGE-M3 documentation..."]
+    )
+    
+    results = evaluate([test_case], evaluator)
+    assert results.test_passed
+
+# That's it! No custom frameworks needed
+```
 
 ## Related Decisions
 

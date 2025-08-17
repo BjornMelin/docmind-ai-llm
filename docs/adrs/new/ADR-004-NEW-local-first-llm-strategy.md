@@ -6,11 +6,11 @@ Local LLM Selection and Optimization for Consumer Hardware
 
 ## Version/Date
 
-3.0 / 2025-08-16
+4.0 / 2025-08-17
 
 ## Status
 
-Proposed
+Accepted
 
 ## Description
 
@@ -118,35 +118,131 @@ We will adopt **Qwen3-14B-Instruct as primary with native 128K context**:
 
 ## Design
 
-### Hardware-Adaptive Model Selection
+### Library-First LLM Setup with Structured Outputs
 
 ```python
-import torch
-import psutil
-from typing import Optional, Dict, Any
-from dataclasses import dataclass
+# Simple setup with Ollama + Instructor for structured outputs
+from llama_index.llms.ollama import Ollama
+from llama_index.core import Settings
+from instructor import patch
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-@dataclass
-class ModelConfig:
-    """Configuration for local LLM deployment."""
-    name: str
-    parameters: str
-    memory_gb: float
-    context_length: int
-    quantization: str
-    capabilities: List[str]
-
-class HardwareAdaptiveModelSelector:
-    """Selects optimal model based on available hardware."""
+# Option 1: Ollama with Instructor (recommended)
+def setup_llm_with_structured_outputs():
+    """Setup local LLM with structured output support."""
     
-    MODEL_CONFIGS = {
+    # Basic Ollama setup
+    base_llm = Ollama(
+        model="qwen3:14b",  # Pre-quantized GGUF model
+        request_timeout=120.0,
+        context_window=131072,  # 128K native context
+        temperature=0.7
+    )
+    
+    # Patch with Instructor for structured outputs
+    structured_llm = patch(base_llm)
+    
+    Settings.llm = base_llm  # Use base for general queries
+    return base_llm, structured_llm  # Return both for flexibility
+
+# Option 2: llama.cpp with Instructor
+def setup_llm_llamacpp_structured():
+    """Use llama.cpp with structured output support."""
+    from llama_index.llms.llama_cpp import LlamaCPP
+    from instructor import patch
+    
+    base_llm = LlamaCPP(
+        model_path="./models/qwen3-14b-instruct-q4_k_m.gguf",
+        context_window=131072,
+        n_gpu_layers=-1,  # Use all GPU layers
+        n_ctx=131072,  # 128K context
+        verbose=False
+    )
+    
+    # Add structured output support
+    structured_llm = patch(base_llm)
+    
+    Settings.llm = base_llm
+    return base_llm, structured_llm
+
+# Structured Output Models for RAG
+class QueryAnalysis(BaseModel):
+    """Structured query analysis output."""
+    intent: str = Field(description="User intent: search, question, comparison, etc.")
+    complexity: str = Field(description="Query complexity: simple, moderate, complex")
+    entities: List[str] = Field(description="Key entities mentioned")
+    requires_multi_hop: bool = Field(description="Needs multiple retrieval steps")
+    
+class RAGResponse(BaseModel):
+    """Structured RAG response with citations."""
+    answer: str = Field(description="The main answer to the query")
+    confidence: float = Field(ge=0, le=1, description="Confidence score")
+    sources: List[str] = Field(description="Source document IDs used")
+    reasoning_steps: List[str] = Field(description="Steps taken to answer")
+    needs_clarification: Optional[str] = Field(default=None, description="Clarification needed")
+
+class DocumentRelevance(BaseModel):
+    """Structured document relevance assessment."""
+    document_id: str
+    relevance_score: float = Field(ge=0, le=1)
+    relevant_sections: List[str]
+    reasoning: str
+
+# Example usage with structured outputs
+async def analyze_query_structured(query: str, structured_llm):
+    """Analyze query with guaranteed structured output."""
+    
+    response = await structured_llm.create(
+        model="qwen3:14b",
+        messages=[
+            {"role": "system", "content": "Analyze the user query."},
+            {"role": "user", "content": query}
+        ],
+        response_model=QueryAnalysis,
+        max_retries=2  # Automatic retry on validation failure
+    )
+    
+    return response  # Guaranteed to be QueryAnalysis instance
+
+# No custom parsing needed! Instructor handles everything
+
+# Streaming with Structured Outputs
+def setup_streaming_with_structure():
+    """Configure streaming responses with structured metadata."""
+    from instructor import patch, Mode
+    
+    # For streaming + structured outputs
+    streaming_llm = patch(
+        Ollama(model="qwen3:14b", stream=True),
+        mode=Mode.MD_JSON  # Markdown with embedded JSON
+    )
+    
+    return streaming_llm
+
+# Advanced: Constrained Generation with Outlines
+def setup_constrained_generation():
+    """Use Outlines for guaranteed format compliance."""
+    from outlines import models, generate
+    
+    model = models.llamacpp("./models/qwen3-14b-instruct-q4_k_m.gguf")
+    
+    # Generate JSON matching exact schema
+    generator = generate.json(model, QueryAnalysis)
+    
+    # Generate with guaranteed structure
+    result = generator("Analyze: What is the main theme?")
+    return result  # Always valid QueryAnalysis
+
+    # Model configurations
+    models = {
         "qwen3-14b": ModelConfig(
             name="Qwen/Qwen3-14B-Instruct",
             parameters="14.8B",
             memory_gb=8.0,
-            context_length=131072,  # 128K native context
+            context_length=131072,  # 128K native
             quantization="q4_k_m",
-            capabilities=["function_calling", "reasoning", "multilingual", "native_128k", "thinking_mode"]
+            capabilities=["function_calling", "reasoning", "structured_output", "native_128k"]
         ),
         "qwen3-7b": ModelConfig(
             name="Qwen/Qwen3-7B-Instruct", 

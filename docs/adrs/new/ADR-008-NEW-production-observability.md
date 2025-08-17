@@ -1,20 +1,44 @@
-# ADR-008-NEW: Production Observability
+# ADR-008-DELETED: Production Observability
 
 ## Title
 
-Comprehensive Observability with Metrics, Logging, and Performance Monitoring
+DELETED - Over-Engineered for Local App
 
 ## Version/Date
 
-1.0 / 2025-01-16
+2.0 / 2025-08-17
 
 ## Status
 
-Proposed
+DELETED (Over-Engineering)
 
-## Description
+## Decision
 
-Implements a comprehensive observability system for production deployment, including structured logging, performance metrics, health monitoring, and user analytics. The system provides real-time insights into system performance, user behavior, and potential issues while maintaining local-first operation and user privacy.
+**DELETE THIS ADR** - Production observability is over-engineered for a local Streamlit app.
+
+## Rationale for Deletion
+
+DocMind AI is a single-user desktop application, not a cloud service. The proposed observability stack includes:
+
+- OpenTelemetry integration
+- Prometheus metrics
+- Grafana dashboards
+- Distributed tracing
+- User analytics
+
+This is massive over-engineering. Instead, use:
+
+```python
+# Simple Python logging is sufficient
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+logger.info("Query processed", extra={"query": query, "latency": latency})
+```
+
+That's it. No need for complex observability infrastructure.
 
 ## Context
 

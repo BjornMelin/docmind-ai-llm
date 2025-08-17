@@ -6,11 +6,11 @@ Lightweight Multi-Agent RAG with Adaptive Routing and Self-Correction
 
 ## Version/Date
 
-3.0 / 2025-08-16
+4.0 / 2025-08-17
 
 ## Status
 
-Proposed
+Accepted
 
 ## Description
 
@@ -224,8 +224,6 @@ response = result["messages"][-1]["content"]
 - Automatic error handling and agent coordination
 - Proven patterns reduce bugs and edge cases
 - Much simpler to understand, test, and maintain
-
-```
 
 ## Consequences
 
