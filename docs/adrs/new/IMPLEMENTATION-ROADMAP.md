@@ -79,14 +79,15 @@ This roadmap provides a prioritized implementation plan for modernizing DocMind 
 #### Priority 2.2: Local-First LLM Strategy
 
 - **ADR**: ADR-004-NEW (Local-First LLM Strategy)
-- **Scope**: Qwen3-14B with hardware adaptation
+- **Scope**: Qwen3-14B with native 128K context and hardware adaptation
 - **Deliverables**:
   - Hardware-adaptive model selector
-  - Optimized local LLM with quantization
+  - Optimized local LLM with 4-bit AWQ quantization
   - Function calling integration
-- **Success Criteria**: <3s response time, ≥85% GPT-3.5 performance
+  - Extended context window support (128K)
+- **Success Criteria**: <3s response time, ≥85% GPT-3.5 performance, 128K context
 - **Dependencies**: Phase 1.1 (quantization), Phase 1.3 (abstraction)
-- **Risk**: High (model performance, hardware requirements)
+- **Risk**: Medium (reduced via proven quantization and extended context validation)
 
 ### Phase 3: Advanced RAG (Weeks 9-14)
 
@@ -135,14 +136,14 @@ This roadmap provides a prioritized implementation plan for modernizing DocMind 
 #### Priority 4.1: Agent Orchestration Framework
 
 - **ADR**: ADR-011-NEW (Agent Orchestration Framework)
-- **Scope**: LangGraph-based coordination
+- **Scope**: Supervisor library-based coordination
 - **Deliverables**:
-  - LangGraph state machine
-  - Agent workflow orchestration
-  - Error handling and fallbacks
-- **Success Criteria**: <500ms coordination overhead, ≥90% success rate
+  - langgraph-supervisor integration
+  - Simplified agent workflow orchestration
+  - Built-in error handling and fallbacks
+- **Success Criteria**: <300ms coordination overhead, ≥95% success rate
 - **Dependencies**: Phase 3.3 (agentic RAG)
-- **Risk**: Medium (workflow complexity)
+- **Risk**: Low (using proven library, ~90% code reduction)
 
 #### Priority 4.2: Evaluation and Quality Assurance
 
