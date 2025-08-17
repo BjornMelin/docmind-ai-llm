@@ -95,7 +95,7 @@ A modern observability system enables proactive issue resolution, performance op
 - **Benefits**: Local-first, privacy-preserving, tailored to RAG workloads
 - **Score**: 9/10 (capability: 8, simplicity: 9, privacy: 10)
 
-## Decision
+## Decision - DELETED
 
 We will implement an **Embedded Observability System** with:
 

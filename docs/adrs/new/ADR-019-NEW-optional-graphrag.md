@@ -2,11 +2,11 @@
 
 ## Title
 
-Microsoft GraphRAG as Optional Enhancement for Multi-Hop Reasoning
+LlamaIndex PropertyGraphIndex for Optional Graph-Enhanced Retrieval
 
 ## Version/Date
 
-1.0 / 2025-08-17
+2.0 / 2025-08-17
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted (Optional Module)
 
 ## Description
 
-Implements Microsoft's GraphRAG as an optional module for enhanced multi-hop reasoning, relationship extraction, and thematic analysis. This module is disabled by default and can be enabled for specific use cases requiring graph-based retrieval and reasoning. GraphRAG provides superior performance for complex queries involving relationships, themes, and multi-document synthesis.
+Implements LlamaIndex's native PropertyGraphIndex as an optional module for enhanced multi-hop reasoning, relationship extraction, and thematic analysis. This lightweight approach requires ZERO additional infrastructure - using SimplePropertyGraphStore (in-memory) for graph storage while reusing our existing Qdrant vector store for embeddings. The module is disabled by default and can be enabled for specific use cases requiring graph-based retrieval and reasoning.
 
 ## Context
 
@@ -26,12 +26,13 @@ Traditional RAG systems struggle with:
 - "What are the main themes?" type questions
 - Complex relationship queries
 
-Microsoft's GraphRAG addresses these limitations through:
+LlamaIndex PropertyGraphIndex addresses these limitations through:
 
-- Hierarchical graph construction
-- Community detection and summarization
-- Entity and relationship extraction
-- Graph-based retrieval and reasoning
+- Native integration with existing LlamaIndex pipeline
+- Automatic entity and relationship extraction via LLM
+- Reuses existing Qdrant vector store for embeddings
+- Multiple retrieval strategies (vector, graph traversal, hybrid)
+- ZERO additional infrastructure with SimplePropertyGraphStore
 
 ## Related Requirements
 
@@ -58,17 +59,17 @@ Microsoft's GraphRAG addresses these limitations through:
 - **Issues**: Poor at multi-hop reasoning and relationships
 - **Score**: 6/10 (simplicity: 10, capability: 4, relationships: 2)
 
-### 2. Microsoft GraphRAG (Selected for Optional)
+### 2. LlamaIndex PropertyGraphIndex (Selected)
 
-- **Description**: Full GraphRAG implementation as optional module
-- **Benefits**: Excellent for relationships, themes, multi-hop
-- **Score**: 8/10 (capability: 10, complexity: 6, optional: 10)
+- **Description**: Native LlamaIndex graph index with in-memory storage
+- **Benefits**: Zero infrastructure, reuses Qdrant, minimal code
+- **Score**: 9/10 (capability: 8, simplicity: 10, integration: 10)
 
-### 3. LlamaIndex Knowledge Graph
+### 3. Microsoft GraphRAG
 
-- **Description**: Simpler KG implementation in LlamaIndex
-- **Issues**: Less sophisticated than GraphRAG
-- **Score**: 7/10 (capability: 7, simplicity: 8, integration: 8)
+- **Description**: Full GraphRAG implementation with hierarchical clustering
+- **Issues**: Heavy dependencies, complex setup, requires separate graph DB
+- **Score**: 6/10 (capability: 10, complexity: 4, maintenance: 4)
 
 ### 4. Neo4j with Custom Implementation
 
@@ -78,13 +79,13 @@ Microsoft's GraphRAG addresses these limitations through:
 
 ## Decision
 
-We will implement **Microsoft GraphRAG as an optional module** with:
+We will implement **LlamaIndex PropertyGraphIndex as an optional module** with:
 
 1. **Feature Flag**: Disabled by default, enabled via config
-2. **Lightweight Integration**: Minimal impact when disabled
-3. **Hybrid Approach**: Complements vector RAG, doesn't replace
-4. **Selective Usage**: Only for queries requiring graph reasoning
-5. **Background Processing**: Graph construction happens async
+2. **Zero Infrastructure**: Uses in-memory SimplePropertyGraphStore
+3. **Qdrant Reuse**: Leverages existing vector store for embeddings
+4. **Native Integration**: Works seamlessly with LlamaIndex pipeline
+5. **Minimal Code**: <100 lines of integration code required
 
 ## Related Decisions
 
@@ -95,44 +96,47 @@ We will implement **Microsoft GraphRAG as an optional module** with:
 
 ## Design
 
-### GraphRAG Integration Architecture
+### PropertyGraphIndex Integration Architecture
 
 ```python
-from graphrag import GraphRAGPipeline, GraphRAGConfig
-from graphrag.index import create_knowledge_graph
-from graphrag.query import GraphRAGQueryEngine
+from llama_index.core import PropertyGraphIndex, VectorStoreIndex
+from llama_index.core.indices.property_graph import (
+    SimpleLLMPathExtractor,
+    ImplicitPathExtractor
+)
+from llama_index.core.graph_stores import SimplePropertyGraphStore
+from llama_index.vector_stores.qdrant import QdrantVectorStore
 from typing import Optional, List, Dict, Any
-import asyncio
+import pickle
 from pathlib import Path
 
 class OptionalGraphRAG:
-    """Optional GraphRAG module for enhanced reasoning."""
+    """Optional PropertyGraphIndex for enhanced reasoning."""
     
     def __init__(
         self, 
         enabled: bool = False,
-        config_path: str = "config/graphrag.yaml"
+        vector_store: Optional[QdrantVectorStore] = None,
+        persist_dir: Optional[str] = "data/graph_store"
     ):
         self.enabled = enabled
-        self.pipeline = None
-        self.query_engine = None
+        self.graph_index = None
         self.graph_store = None
+        self.vector_store = vector_store  # Reuse existing Qdrant
         
         if enabled:
-            self._initialize_graphrag(config_path)
+            self._initialize_graph_index(persist_dir)
     
-    def _initialize_graphrag(self, config_path: str):
-        """Initialize GraphRAG components."""
-        config = GraphRAGConfig.from_yaml(config_path)
+    def _initialize_graph_index(self, persist_dir: str):
+        """Initialize PropertyGraphIndex with minimal setup."""
+        # Use in-memory graph store (can persist to disk)
+        self.graph_store = SimplePropertyGraphStore()
         
-        # Configure for local operation
-        config.llm.type = "ollama"
-        config.llm.model = "qwen3:14b"
-        config.embeddings.type = "local"
-        config.embeddings.model = "BAAI/bge-m3"
-        
-        self.pipeline = GraphRAGPipeline(config)
-        self.query_engine = GraphRAGQueryEngine(config)
+        # Try to load existing graph if available
+        graph_path = Path(persist_dir) / "graph_store.pkl"
+        if graph_path.exists():
+            with open(graph_path, "rb") as f:
+                self.graph_store = pickle.load(f)
     
     def is_graph_query(self, query: str) -> bool:
         """Determine if query benefits from graph reasoning."""
@@ -151,51 +155,90 @@ class OptionalGraphRAG:
         query_lower = query.lower()
         return any(indicator in query_lower for indicator in graph_indicators)
     
-    async def build_graph(
+    def build_graph(
         self, 
         documents: List[Document],
+        llm,  # Local LLM instance
+        embed_model,  # BGE-M3 embedding model
         force_rebuild: bool = False
     ):
-        """Build knowledge graph from documents."""
+        """Build property graph from documents."""
         if not self.enabled:
             return
         
-        # Check if graph exists and skip if not forcing
-        if self._graph_exists() and not force_rebuild:
+        # Skip if graph exists and not forcing rebuild
+        if self.graph_index and not force_rebuild:
             return
         
-        # Run graph construction in background
-        await self.pipeline.create_index_async(
-            documents=documents,
-            chunk_size=1200,
-            chunk_overlap=100,
-            enable_community_detection=True,
-            max_community_level=3
+        # Create extractors - minimal setup
+        kg_extractors = [
+            SimpleLLMPathExtractor(
+                llm=llm,
+                max_paths_per_chunk=10,  # Limit for efficiency
+                num_workers=1  # Single worker for local
+            ),
+            ImplicitPathExtractor()  # Extract implicit relationships
+        ]
+        
+        # Build index reusing existing Qdrant vector store
+        self.graph_index = PropertyGraphIndex.from_documents(
+            documents,
+            kg_extractors=kg_extractors,
+            property_graph_store=self.graph_store,
+            vector_store=self.vector_store,  # Reuse existing!
+            embed_model=embed_model,  # BGE-M3
+            show_progress=True
         )
+        
+        # Persist graph to disk
+        self._save_graph()
     
     def query(
         self, 
         query: str,
-        query_type: str = "global"
+        mode: str = "hybrid"
     ) -> Optional[Dict[str, Any]]:
-        """Query the knowledge graph."""
-        if not self.enabled:
+        """Query the property graph."""
+        if not self.enabled or not self.graph_index:
             return None
         
-        # GraphRAG query types
-        if query_type == "global":
-            # For themes, patterns, summaries
-            result = self.query_engine.query_global(query)
-        else:
-            # For specific entity/relationship queries
-            result = self.query_engine.query_local(query)
+        # Create retriever with specified mode
+        if mode == "vector":
+            # Pure vector similarity from graph nodes
+            retriever = self.graph_index.as_retriever(
+                similarity_top_k=5,
+                include_text=True
+            )
+        elif mode == "graph":
+            # Pure graph traversal
+            retriever = self.graph_index.as_retriever(
+                retriever_mode="keyword",
+                include_text=True
+            )
+        else:  # hybrid (default)
+            # Combine vector and graph retrieval
+            retriever = self.graph_index.as_retriever(
+                similarity_top_k=3,
+                path_depth=2,
+                include_text=True
+            )
+        
+        # Retrieve relevant nodes
+        nodes = retriever.retrieve(query)
         
         return {
-            "answer": result.answer,
-            "context": result.context,
-            "communities": result.communities,
-            "confidence": result.confidence
+            "nodes": nodes,
+            "num_results": len(nodes),
+            "mode": mode
         }
+    
+    def _save_graph(self):
+        """Persist graph store to disk."""
+        if self.graph_store:
+            persist_dir = Path("data/graph_store")
+            persist_dir.mkdir(parents=True, exist_ok=True)
+            with open(persist_dir / "graph_store.pkl", "wb") as f:
+                pickle.dump(self.graph_store, f)
 ```
 
 ### Hybrid RAG Router
@@ -282,59 +325,44 @@ class HybridRAGRouter:
             )
 ```
 
-### GraphRAG Configuration
+### PropertyGraphIndex Configuration
 
 ```yaml
 # config/graphrag.yaml
 graphrag:
   enabled: false  # Disabled by default
   
-  # LLM Configuration
-  llm:
-    type: "ollama"
-    model: "qwen3:14b"
-    temperature: 0.3
-    max_tokens: 2000
-  
-  # Embedding Configuration  
-  embeddings:
-    type: "local"
-    model: "BAAI/bge-m3"
-    batch_size: 16
-  
-  # Graph Construction
-  index:
-    chunk_size: 1200
-    chunk_overlap: 100
-    entity_extraction:
-      enabled: true
-      types: ["person", "organization", "location", "concept", "technology"]
-    relationship_extraction:
-      enabled: true
-      max_relationships_per_chunk: 20
-    community_detection:
-      enabled: true
-      algorithm: "leiden"
-      max_level: 3
-      min_community_size: 5
+  # Graph Extraction
+  extraction:
+    max_paths_per_chunk: 10  # Limit for local efficiency
+    num_workers: 1  # Single worker for local processing
+    include_implicit: true  # Extract implicit relationships
   
   # Storage
   storage:
-    type: "sqlite"
-    path: "data/graphrag.db"
-    cache_enabled: true
-    cache_ttl: 3600
+    type: "simple"  # In-memory SimplePropertyGraphStore
+    persist_dir: "data/graph_store"
+    persist_on_build: true
   
-  # Query Configuration
-  query:
-    global:
-      map_reduce_prompts: true
-      community_summaries: true
-      max_tokens: 3000
-    local:
-      include_community_context: true
-      max_hops: 2
-      context_window: 5000
+  # Retrieval Configuration
+  retrieval:
+    default_mode: "hybrid"  # vector, graph, or hybrid
+    vector_top_k: 5
+    graph_depth: 2
+    include_text: true  # Include source text with results
+  
+  # Query Routing
+  routing:
+    graph_indicators:  # Keywords that trigger graph retrieval
+      - "relationship"
+      - "related"
+      - "connection"
+      - "theme"
+      - "pattern"
+      - "compare"
+      - "between"
+      - "how does"
+      - "main points"
 ```
 
 ### Integration with Main Pipeline
@@ -351,11 +379,12 @@ class DocMindRAGPipeline:
         self.vector_index = self._build_vector_index(config)
         self.vector_retriever = self.vector_index.as_retriever()
         
-        # GraphRAG (optional)
+        # PropertyGraphIndex (optional)
         graph_enabled = config.get("graphrag", {}).get("enabled", False)
         self.graph_rag = OptionalGraphRAG(
             enabled=graph_enabled,
-            config_path=config.get("graphrag_config", "config/graphrag.yaml")
+            vector_store=self.vector_store,  # Reuse existing Qdrant!
+            persist_dir=config.get("graphrag", {}).get("storage", {}).get("persist_dir", "data/graph_store")
         )
         
         # Hybrid router
@@ -367,17 +396,21 @@ class DocMindRAGPipeline:
         
         # Build graph if enabled
         if graph_enabled:
-            asyncio.create_task(self._build_graph_index())
+            self._build_graph_index()
     
-    async def _build_graph_index(self):
-        """Build graph index in background."""
+    def _build_graph_index(self):
+        """Build property graph index."""
         if not self.graph_rag.enabled:
             return
         
-        print("Building GraphRAG index in background...")
+        print("Building PropertyGraphIndex...")
         documents = self._load_all_documents()
-        await self.graph_rag.build_graph(documents)
-        print("GraphRAG index ready")
+        self.graph_rag.build_graph(
+            documents,
+            llm=self.llm,  # Local Qwen3-14B
+            embed_model=self.embed_model  # BGE-M3
+        )
+        print("PropertyGraphIndex ready")
     
     def query(
         self, 
@@ -490,10 +523,10 @@ class GraphRAGMonitor:
 
 ## Dependencies
 
-- **Python**: `graphrag>=0.1.0`
-- **Optional**: `networkx>=3.0`, `leiden-algorithm`
-- **Storage**: SQLite or PostgreSQL for graph data
-- **Models**: Local LLM for entity extraction
+- **Core**: Already included in `llama-index-core>=0.10.53`
+- **No Additional**: Uses existing LlamaIndex, Qdrant, BGE-M3
+- **Storage**: In-memory with optional pickle persistence
+- **Models**: Reuses existing local LLM and embeddings
 
 ## Monitoring Metrics
 
