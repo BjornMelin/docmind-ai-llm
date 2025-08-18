@@ -1,4 +1,4 @@
-# ADR-003-NEW: Adaptive Retrieval Pipeline with RAPTOR-Lite
+# ADR-003: Adaptive Retrieval Pipeline with RAPTOR-Lite
 
 ## Title
 
@@ -86,13 +86,13 @@ We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in fe
 
 ## Related Decisions
 
-- **ADR-002-NEW** (Unified Embedding Strategy): Provides BGE-M3 embeddings for hierarchical indexing
-- **ADR-006-NEW** (Modern Reranking Architecture): Reranks hierarchical retrieval results using BGE-reranker-v2-m3
-- **ADR-007-NEW** (Hybrid Persistence Strategy): Accesses Qdrant vector storage for similarity search operations
-- **ADR-001-NEW** (Modern Agentic RAG): Uses adaptive retrieval for intelligent routing
-- **ADR-011-NEW** (Agent Orchestration Framework): Orchestrates adaptive retrieval decisions
-- **ADR-018-NEW** (DSPy Prompt Optimization): Provides automatic query optimization for improved retrieval
-- **ADR-019-NEW** (Optional GraphRAG): Adds graph-based retrieval capabilities for complex relationship queries
+- **ADR-002** (Unified Embedding Strategy): Provides BGE-M3 embeddings for hierarchical indexing
+- **ADR-006** (Modern Reranking Architecture): Reranks hierarchical retrieval results using BGE-reranker-v2-m3
+- **ADR-007** (Hybrid Persistence Strategy): Accesses Qdrant vector storage for similarity search operations
+- **ADR-001** (Modern Agentic RAG): Uses adaptive retrieval for intelligent routing
+- **ADR-011** (Agent Orchestration Framework): Orchestrates adaptive retrieval decisions
+- **ADR-018** (DSPy Prompt Optimization): Provides automatic query optimization for improved retrieval
+- **ADR-019** (Optional GraphRAG): Adds graph-based retrieval capabilities for complex relationship queries
 
 ## Design
 

@@ -1,4 +1,4 @@
-# ADR-016-NEW: Streamlit Native State Management
+# ADR-016: Streamlit Native State Management
 
 ## Title
 
@@ -368,10 +368,10 @@ if prompt := st.chat_input("Ask a question"):
 
 ## Related Decisions
 
-- **ADR-001-NEW** (Modern Agentic RAG Architecture): Provides UI for the 5-agent system interactions
-- **ADR-010-NEW** (Performance Optimization Strategy): Cache integration affects UI responsiveness
-- **ADR-011-NEW** (Agent Orchestration Framework): Manages state for 5-agent coordination in the UI
-- **ADR-004-NEW** (Local-First LLM Strategy): Configures Qwen3-14B settings in the UI
+- **ADR-001** (Modern Agentic RAG Architecture): Provides UI for the 5-agent system interactions
+- **ADR-010** (Performance Optimization Strategy): Cache integration affects UI responsiveness
+- **ADR-011** (Agent Orchestration Framework): Manages state for 5-agent coordination in the UI
+- **ADR-004** (Local-First LLM Strategy): Configures Qwen3-14B settings in the UI
 
 ## Performance Tips
 

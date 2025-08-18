@@ -1,4 +1,4 @@
-# ADR-001-NEW: Modern Agentic RAG Architecture
+# ADR-001: Modern Agentic RAG Architecture
 
 ## Title
 
@@ -87,15 +87,15 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 
 ## Related Decisions
 
-- **ADR-004-NEW** (Local-First LLM Strategy): Provides the local LLM for agent decision-making
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
-- **ADR-010-NEW** (Performance Optimization Strategy): Provides dual-cache architecture for efficient multi-agent coordination
-- **ADR-011-NEW** (Agent Orchestration Framework): Details the supervisor library implementation with 5-agent architecture
-- **ADR-012-NEW** (Evaluation and Quality Assurance): Provides the quality metrics for response validation
-- **ADR-015-NEW** (Deployment Strategy): Defines Docker deployment for the complete 5-agent system
-- **ADR-016-NEW** (UI State Management): Manages state for multi-agent interactions in Streamlit UI
-- **ADR-018-NEW** (DSPy Prompt Optimization): Enhances query processing and agent prompts with automatic optimization
-- **ADR-019-NEW** (Optional GraphRAG): Provides advanced multi-hop reasoning capabilities when enabled
+- **ADR-004** (Local-First LLM Strategy): Provides the local LLM for agent decision-making
+- **ADR-003** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
+- **ADR-010** (Performance Optimization Strategy): Provides dual-cache architecture for efficient multi-agent coordination
+- **ADR-011** (Agent Orchestration Framework): Details the supervisor library implementation with 5-agent architecture
+- **ADR-012** (Evaluation and Quality Assurance): Provides the quality metrics for response validation
+- **ADR-015** (Deployment Strategy): Defines Docker deployment for the complete 5-agent system
+- **ADR-016** (UI State Management): Manages state for multi-agent interactions in Streamlit UI
+- **ADR-018** (DSPy Prompt Optimization): Enhances query processing and agent prompts with automatic optimization
+- **ADR-019** (Optional GraphRAG): Provides advanced multi-hop reasoning capabilities when enabled
 
 ## Design
 
@@ -216,7 +216,7 @@ from langgraph_supervisor import create_supervisor
 from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import tool
 
-# Create specialized agent tools (same as in ADR-011-NEW)
+# Create specialized agent tools (same as in ADR-011)
 @tool
 def route_query(query: str) -> Dict[str, str]:
     """Route query to optimal retrieval strategy."""

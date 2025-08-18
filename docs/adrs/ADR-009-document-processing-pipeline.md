@@ -1,4 +1,4 @@
-# ADR-009-NEW: Document Processing Pipeline
+# ADR-009: Document Processing Pipeline
 
 ## Title
 
@@ -75,10 +75,10 @@ We will use **Unstructured.io library exclusively** for all document processing:
 
 ## Related Decisions
 
-- **ADR-002-NEW** (Unified Embedding Strategy): Uses BGE-M3 embeddings for processed document chunks
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Consumes intelligently chunked documents for retrieval
-- **ADR-007-NEW** (Hybrid Persistence Strategy): Stores processed documents and metadata efficiently
-- **ADR-019-NEW** (Optional GraphRAG): Uses processed documents for PropertyGraphIndex construction
+- **ADR-002** (Unified Embedding Strategy): Uses BGE-M3 embeddings for processed document chunks
+- **ADR-003** (Adaptive Retrieval Pipeline): Consumes intelligently chunked documents for retrieval
+- **ADR-007** (Hybrid Persistence Strategy): Stores processed documents and metadata efficiently
+- **ADR-019** (Optional GraphRAG): Uses processed documents for PropertyGraphIndex construction
 
 ### Why Unstructured.io?
 

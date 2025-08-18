@@ -1,4 +1,4 @@
-# ADR-002-NEW: Unified Embedding Strategy with BGE-M3
+# ADR-002: Unified Embedding Strategy with BGE-M3
 
 ## Title
 
@@ -108,11 +108,11 @@ We will adopt **BGE-M3 + CLIP strategy** for 100% local operation:
 
 ## Related Decisions
 
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Uses unified embeddings for hybrid search
-- **ADR-006-NEW** (Modern Reranking Architecture): Works with BGE-M3 outputs
-- **ADR-007-NEW** (Hybrid Persistence Strategy): Stores unified embedding vectors in Qdrant
-- **ADR-009-NEW** (Document Processing Pipeline): Provides processed document chunks for BGE-M3 embedding generation
-- **ADR-001-NEW** (Modern Agentic RAG): Benefits from improved embedding quality
+- **ADR-003** (Adaptive Retrieval Pipeline): Uses unified embeddings for hybrid search
+- **ADR-006** (Modern Reranking Architecture): Works with BGE-M3 outputs
+- **ADR-007** (Hybrid Persistence Strategy): Stores unified embedding vectors in Qdrant
+- **ADR-009** (Document Processing Pipeline): Provides processed document chunks for BGE-M3 embedding generation
+- **ADR-001** (Modern Agentic RAG): Benefits from improved embedding quality
 
 ## Design
 

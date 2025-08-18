@@ -1,4 +1,4 @@
-# ADR-014-NEW: Testing and Quality Validation Framework
+# ADR-014: Testing and Quality Validation Framework
 
 ## Title
 
@@ -108,10 +108,10 @@ def test_rag_quality(evaluator):
 
 ## Related Decisions
 
-- **ADR-012-NEW** (Evaluation and Quality Assurance): Complements production monitoring
-- **ADR-008-NEW** (Production Observability): Provides metrics for testing validation
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Tests retrieval strategy effectiveness
-- **ADR-001-NEW** (Modern Agentic RAG): Validates agent decision quality
+- **ADR-012** (Evaluation and Quality Assurance): Complements production monitoring
+- **ADR-008** (Production Observability): Provides metrics for testing validation
+- **ADR-003** (Adaptive Retrieval Pipeline): Tests retrieval strategy effectiveness
+- **ADR-001** (Modern Agentic RAG): Validates agent decision quality
 
 ## Design
 

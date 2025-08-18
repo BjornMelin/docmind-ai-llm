@@ -1,4 +1,4 @@
-# ADR-004-NEW: Local-First LLM Strategy
+# ADR-004: Local-First LLM Strategy
 
 ## Title
 
@@ -147,11 +147,11 @@ yarn_config = {
 
 ## Related Decisions
 
-- **ADR-001-NEW** (Modern Agentic RAG): Provides LLM for agent decision-making
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Uses LLM for query routing and evaluation, leverages 32K native context with intelligent chunking
-- **ADR-010-NEW** (Performance Optimization Strategy): Implements quantization and caching
-- **ADR-011-NEW** (Agent Orchestration Framework): Integrates function calling capabilities
-- **ADR-012-NEW** (Evaluation Strategy): Uses Qwen3-14B for evaluation and quality assessment tasks
+- **ADR-001** (Modern Agentic RAG): Provides LLM for agent decision-making
+- **ADR-003** (Adaptive Retrieval Pipeline): Uses LLM for query routing and evaluation, leverages 32K native context with intelligent chunking
+- **ADR-010** (Performance Optimization Strategy): Implements quantization and caching
+- **ADR-011** (Agent Orchestration Framework): Integrates function calling capabilities
+- **ADR-012** (Evaluation Strategy): Uses Qwen3-14B for evaluation and quality assessment tasks
 
 ## Design
 

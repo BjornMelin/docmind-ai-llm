@@ -1,4 +1,4 @@
-# ADR-015-NEW: Docker-First Local Deployment
+# ADR-015: Docker-First Local Deployment
 
 ## Title
 
@@ -105,14 +105,20 @@ services:
               capabilities: [gpu]
 ```
 
-### Simple .env.example
+### Complete Configuration Reference (.env.example)
 
 ```bash
 # Copy to .env and adjust as needed
+# NOTE: This is the COMPLETE configuration reference for DocMind AI
+# Centralized configuration was deliberately rejected (see archived ADR-024)
 
-# Model settings
+# ========================================
+# Core Model Settings
+# ========================================
 DOCMIND_MODEL=Qwen/Qwen3-14B
 DOCMIND_CONTEXT_LENGTH=131072  # 128K native context
+DOCMIND_ENABLE_YARN=true       # YaRN context extension
+DOCMIND_QUANTIZATION=Q5_K_M    # Model quantization level
 
 # LLM Provider (auto, ollama, llamacpp, vllm)
 DOCMIND_LLM_PROVIDER=auto  # Automatic selection based on hardware
@@ -121,7 +127,31 @@ DOCMIND_LLM_PROVIDER=auto  # Automatic selection based on hardware
 DOCMIND_DEVICE=cuda
 CUDA_VISIBLE_DEVICES=0
 
-# Provider-specific optimizations
+# ========================================
+# Database & Storage
+# ========================================
+DATABASE_URL=sqlite:///data/docmind.db
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=documents
+
+# ========================================
+# Feature Flags (Experimental)
+# ========================================
+ENABLE_DSPY=false        # DSPy prompt optimization (ADR-018)
+ENABLE_GRAPHRAG=false    # GraphRAG functionality (ADR-019)
+ENABLE_MULTIMODAL=true   # Multimodal document processing
+
+# ========================================
+# Performance Settings
+# ========================================
+MAX_WORKERS=4                    # Thread pool size
+CACHE_SIZE_LIMIT_MB=1000        # Cache size limit
+MEMORY_LIMIT_MB=8192            # Memory usage limit
+BATCH_SIZE=32                   # Embedding batch size
+
+# ========================================
+# Provider-Specific Optimizations
+# ========================================
 # Ollama
 OLLAMA_FLASH_ATTENTION=1
 OLLAMA_KV_CACHE_TYPE=q8_0
@@ -133,6 +163,31 @@ LLAMA_FLASH_ATTN=1
 # vLLM (for multi-GPU)
 # VLLM_ATTENTION_BACKEND=FLASH_ATTN
 # CUDA_VISIBLE_DEVICES=0,1
+
+# ========================================
+# Document Processing
+# ========================================
+CHUNK_SIZE=1024                 # Text chunk size in tokens
+CHUNK_OVERLAP=200              # Chunk overlap in tokens
+MAX_FILE_SIZE_MB=100           # Maximum file size
+SUPPORTED_EXTENSIONS=".pdf,.docx,.txt,.md,.json,.xml,.rtf,.csv,.msg,.pptx,.odt,.epub"
+
+# ========================================
+# Retrieval Settings
+# ========================================
+SIMILARITY_TOP_K=10            # Number of documents to retrieve
+SIMILARITY_CUTOFF=0.7          # Similarity threshold
+ENABLE_HYBRID_SEARCH=true      # Dense + sparse retrieval
+ENABLE_RERANKING=true          # ColBERT reranking
+RRF_ALPHA=0.7                 # RRF fusion weight
+
+# ========================================
+# Security & Logging
+# ========================================
+LOG_LEVEL=INFO                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
+ENABLE_AUTH=false              # User authentication
+SECRET_KEY=your-secret-key-change-this
+RATE_LIMIT_PER_MINUTE=60       # API rate limiting
 ```
 
 ### One-Line Setup
@@ -200,11 +255,26 @@ docker-compose --profile vllm up
 
 ## Related Decisions
 
-- **ADR-001-NEW** (Modern Agentic RAG Architecture): Deploys the complete 5-agent system architecture
-- **ADR-010-NEW** (Performance Optimization Strategy): Cache configuration affects Docker deployment requirements
-- **ADR-011-NEW** (Agent Orchestration Framework): Deploys the langgraph-supervisor 5-agent orchestration
-- **ADR-004-NEW** (Local-First LLM Strategy): Configures Qwen3-14B with 128K context support
-- **ADR-016-NEW** (UI State Management): Deploys Streamlit UI with proper state management
+- **ADR-001** (Modern Agentic RAG Architecture): Deploys the complete 5-agent system architecture
+- **ADR-010** (Performance Optimization Strategy): Cache configuration affects Docker deployment requirements
+- **ADR-011** (Agent Orchestration Framework): Deploys the langgraph-supervisor 5-agent orchestration
+- **ADR-004** (Local-First LLM Strategy): Configures Qwen3-14B with 128K context support
+- **ADR-016** (UI State Management): Deploys Streamlit UI with proper state management
+
+## Configuration Philosophy
+
+DocMind AI uses **distributed, simple configuration by design**:
+
+- **Environment Variables**: All runtime configuration through simple `.env` file
+- **Streamlit Native Config**: UI configuration via `.streamlit/config.toml` (ADR-013)
+- **Library Defaults**: Most components use sensible library defaults
+- **No Centralization**: Centralized configuration was considered and rejected as over-engineering (see archived ADR-024)
+
+This approach aligns with the project's core principles:
+
+- **KISS over DRY**: Simple environment variables over complex abstractions
+- **Library-first**: Use native approaches, avoid unnecessary wrappers
+- **Local-first**: Optimized for single-user desktop application, not enterprise deployment
 
 ## Benefits of Simplification
 

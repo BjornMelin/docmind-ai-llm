@@ -1,4 +1,4 @@
-# ADR-018-NEW: Automatic Prompt Optimization with DSPy
+# ADR-018: Automatic Prompt Optimization with DSPy
 
 ## Title
 
@@ -81,10 +81,10 @@ We will implement **DSPy-based automatic prompt optimization** with:
 
 ## Related Decisions
 
-- **ADR-003-NEW** (Adaptive Retrieval): Benefits from optimized queries
-- **ADR-004-NEW** (Local LLM): Provides model for DSPy optimization
-- **ADR-011-NEW** (Agent Orchestration): Query agent uses DSPy
-- **ADR-012-NEW** (Evaluation): Provides metrics for optimization
+- **ADR-003** (Adaptive Retrieval): Benefits from optimized queries
+- **ADR-004** (Local LLM): Provides model for DSPy optimization
+- **ADR-011** (Agent Orchestration): Query agent uses DSPy
+- **ADR-012** (Evaluation): Provides metrics for optimization
 
 ## Design
 

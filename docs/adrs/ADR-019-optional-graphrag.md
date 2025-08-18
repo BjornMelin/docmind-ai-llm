@@ -1,4 +1,4 @@
-# ADR-019-NEW: Optional GraphRAG Module
+# ADR-019: Optional GraphRAG Module
 
 ## Title
 
@@ -89,10 +89,10 @@ We will implement **LlamaIndex PropertyGraphIndex as an optional module** with:
 
 ## Related Decisions
 
-- **ADR-003-NEW** (Adaptive Retrieval): Routes to GraphRAG for complex queries
-- **ADR-009-NEW** (Document Processing): Provides input for graph construction
-- **ADR-011-NEW** (Agent Orchestration): Planning agent can invoke GraphRAG
-- **ADR-007-NEW** (Persistence): Stores graph data alongside vectors
+- **ADR-003** (Adaptive Retrieval): Routes to GraphRAG for complex queries
+- **ADR-009** (Document Processing): Provides input for graph construction
+- **ADR-011** (Agent Orchestration): Planning agent can invoke GraphRAG
+- **ADR-007** (Persistence): Stores graph data alongside vectors
 
 ## Design
 

@@ -1,4 +1,4 @@
-# ADR-012-NEW: Evaluation with DeepEval
+# ADR-012: Evaluation with DeepEval
 
 ## Title
 
@@ -247,9 +247,9 @@ ragas = "^0.2.0"
 
 ## Related Decisions
 
-- **ADR-001-NEW** (Modern Agentic RAG Architecture): Provides the 5-agent system architecture being evaluated
-- **ADR-010-NEW** (Performance Optimization Strategy): Performance metrics complement DeepEval quality metrics
-- **ADR-011-NEW** (Agent Orchestration Framework): Defines the 5-agent coordination patterns requiring evaluation
+- **ADR-001** (Modern Agentic RAG Architecture): Provides the 5-agent system architecture being evaluated
+- **ADR-010** (Performance Optimization Strategy): Performance metrics complement DeepEval quality metrics
+- **ADR-011** (Agent Orchestration Framework): Defines the 5-agent coordination patterns requiring evaluation
 
 ## Monitoring Metrics
 

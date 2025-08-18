@@ -1,4 +1,4 @@
-# ADR-007-NEW: Hybrid Persistence Strategy
+# ADR-007: Hybrid Persistence Strategy
 
 ## Title
 
@@ -164,11 +164,11 @@ vector_store = QdrantVectorStore(
 
 ## Related Decisions
 
-- **ADR-002-NEW** (Unified Embedding Strategy): Stores BGE-M3 unified embeddings efficiently
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Benefits from optimized vector storage
-- **ADR-008-NEW** (Production Observability): Uses DuckDB for analytics storage
-- **ADR-010-NEW** (Performance Optimization Strategy): Implements caching layer
-- **ADR-019-NEW** (Optional GraphRAG): Reuses existing Qdrant infrastructure for PropertyGraphIndex storage
+- **ADR-002** (Unified Embedding Strategy): Stores BGE-M3 unified embeddings efficiently
+- **ADR-003** (Adaptive Retrieval Pipeline): Benefits from optimized vector storage
+- **ADR-008** (Production Observability): Uses DuckDB for analytics storage
+- **ADR-010** (Performance Optimization Strategy): Implements caching layer
+- **ADR-019** (Optional GraphRAG): Reuses existing Qdrant infrastructure for PropertyGraphIndex storage
 
 ## Design
 

@@ -1,4 +1,4 @@
-# ADR-006-NEW: Modern Reranking Architecture
+# ADR-006: Modern Reranking Architecture
 
 ## Title
 
@@ -92,10 +92,10 @@ scores = model.predict(pairs)  # pairs = [(query, doc1), (query, doc2), ...]
 
 ## Related Decisions
 
-- **ADR-002-NEW** (Unified Embedding Strategy): Uses BGE-M3 embeddings for enhanced relevance
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Reranks hierarchical retrieval results
-- **ADR-001-NEW** (Modern Agentic RAG): Provides reranking quality for agent decisions
-- **ADR-010-NEW** (Performance Optimization Strategy): Implements caching and quantization
+- **ADR-002** (Unified Embedding Strategy): Uses BGE-M3 embeddings for enhanced relevance
+- **ADR-003** (Adaptive Retrieval Pipeline): Reranks hierarchical retrieval results
+- **ADR-001** (Modern Agentic RAG): Provides reranking quality for agent decisions
+- **ADR-010** (Performance Optimization Strategy): Implements caching and quantization
 
 ## Design
 

@@ -1,4 +1,4 @@
-# ADR-013-NEW: User Interface Architecture
+# ADR-013: User Interface Architecture
 
 ## Title
 
@@ -95,12 +95,12 @@ We will use **Native Streamlit Components** without unnecessary libraries:
 
 ## Related Decisions
 
-- **ADR-001-NEW** (Modern Agentic RAG): UI visualizes agent routing, correction, validation
-- **ADR-007-NEW** (Hybrid Persistence): Integrates SQLite + Redis session management  
-- **ADR-008-NEW** (Production Observability): Real-time metrics and monitoring dashboard
-- **ADR-009-NEW** (Document Processing): Multimodal document upload and processing UI
-- **ADR-016-NEW** (UI State Management): Session state schema and caching strategy
-- **ADR-017-NEW** (Component Library): Streamlit component selection and theming
+- **ADR-001** (Modern Agentic RAG): UI visualizes agent routing, correction, validation
+- **ADR-007** (Hybrid Persistence): Integrates SQLite + Redis session management  
+- **ADR-008** (Production Observability): Real-time metrics and monitoring dashboard
+- **ADR-009** (Document Processing): Multimodal document upload and processing UI
+- **ADR-016** (UI State Management): Session state schema and caching strategy
+- **ADR-017** (Component Library): Streamlit component selection and theming
 
 ## Design
 
