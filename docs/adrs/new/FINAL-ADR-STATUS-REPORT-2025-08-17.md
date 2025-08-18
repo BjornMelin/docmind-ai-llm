@@ -219,9 +219,9 @@ All ADRs have been reviewed and validated. The architecture is coherent, depende
 
 ### ❌ ADRs to Delete
 
-- [ ] Delete ADR-005 (Framework Abstraction)
-- [ ] Delete/Defer ADR-008 (Production Observability)
-- [ ] Already deleted ADR-017 (Component Library)
+- [x] Delete ADR-005 (Framework Abstraction)
+- [x] Delete/Defer ADR-008 (Production Observability)
+- [x] Already deleted ADR-017 (Component Library)
 
 ### ⚠️ Minor Considerations
 

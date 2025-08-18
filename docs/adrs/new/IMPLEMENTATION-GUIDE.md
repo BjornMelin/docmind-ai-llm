@@ -212,19 +212,19 @@ memory = ChatMemoryBuffer.from_defaults(token_limit=4000)
 
 ### Week 1: Foundation + Critical Features
 
-**Days 1-2: Core Setup**
+#### **Days 1-2: Core Setup**
 
 - BGE-M3 embedding pipeline (unified dense+sparse)
 - Qdrant with hybrid search support
 - Qwen3-14B with Instructor for structured outputs
 
-**Days 3-4: DSPy Integration**
+#### **Days 3-4: DSPy Integration**
 
 - Query rewriting and optimization
 - Bootstrap with initial examples
 - Feature flag for experimental rollout
 
-**Days 5-7: 5-Agent System**
+#### **Days 5-7: 5-Agent System**
 
 - Implement all 5 agents with langgraph-supervisor
 - Planning agent for query decomposition
@@ -232,19 +232,19 @@ memory = ChatMemoryBuffer.from_defaults(token_limit=4000)
 
 ### Week 2: Memory, Streaming, Caching
 
-**Days 8-9: Memory Integration**
+#### **Days 8-9: Memory Integration**
 
 - LangGraph InMemoryStore setup
 - LlamaIndex ChatMemoryBuffer
 - Optional Redis backend preparation
 
-**Days 10-11: Streaming Implementation**
+#### **Days 10-11: Streaming Implementation**
 
 - Streamlit st.write_stream() integration
 - Async streaming pipeline
 - Progress indicators for long operations
 
-**Days 12-14: Semantic Caching**
+#### **Days 12-14: Semantic Caching**
 
 - GPTCache integration
 - Cache key strategy with doc IDs
@@ -252,19 +252,19 @@ memory = ChatMemoryBuffer.from_defaults(token_limit=4000)
 
 ### Week 3: Optional Features + Polish
 
-**Days 15-16: GraphRAG (Optional)**
+#### **Days 15-16: GraphRAG (Optional)**
 
 - Microsoft GraphRAG as feature flag
 - Basic entity/relationship extraction
 - Hybrid routing logic
 
-**Days 17-18: Evaluation & Testing**
+#### **Days 17-18: Evaluation & Testing**
 
 - DeepEval + Ragas metrics
 - End-to-end testing with pytest
 - Performance benchmarking
 
-**Days 19-21: Deployment & Documentation**
+#### **Days 19-21: Deployment & Documentation**
 
 - Single Docker container
 - Environment configuration
