@@ -32,6 +32,8 @@ Current retrieval is limited to flat vector similarity search with basic reranki
 
 Full RAPTOR implementation is too resource-intensive for local deployment. Our RAPTOR-Lite approach maintains hierarchical benefits while optimizing for local-first constraints.
 
+**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-007), applies adaptive routing strategies, and uses BGE-reranker-v2-m3 (ADR-006) to refine results before returning them to the agentic RAG system.
+
 ## Related Requirements
 
 ### Functional Requirements
@@ -84,9 +86,10 @@ We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in fe
 
 ## Related Decisions
 
-- **ADR-002-NEW** (Unified Embedding Strategy): Provides embeddings for hierarchical indexing
+- **ADR-002-NEW** (Unified Embedding Strategy): Provides BGE-M3 embeddings for hierarchical indexing
+- **ADR-006-NEW** (Modern Reranking Architecture): Reranks hierarchical retrieval results using BGE-reranker-v2-m3
+- **ADR-007-NEW** (Hybrid Persistence Strategy): Accesses Qdrant vector storage for similarity search operations
 - **ADR-001-NEW** (Modern Agentic RAG): Uses adaptive retrieval for intelligent routing
-- **ADR-006-NEW** (Modern Reranking Architecture): Reranks hierarchical retrieval results
 - **ADR-011-NEW** (Agent Orchestration Framework): Orchestrates adaptive retrieval decisions
 - **ADR-018-NEW** (DSPy Prompt Optimization): Provides automatic query optimization for improved retrieval
 - **ADR-019-NEW** (Optional GraphRAG): Adds graph-based retrieval capabilities for complex relationship queries
@@ -186,19 +189,6 @@ def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graph
         description="Best for semantic similarity and simple factual queries"
     )
     
-    # Optional GraphRAG tool (ADR-019)
-    tools = [vector_tool, hybrid_tool, multi_tool]
-    if enable_graphrag:
-        from src.graphrag_integration import OptionalGraphRAG
-        graph_rag = OptionalGraphRAG(enabled=True, vector_store=vector_store)
-        
-        graphrag_tool = QueryEngineTool.from_defaults(
-            query_engine=graph_rag.as_query_engine(),
-            name="graph_search",
-            description="Best for relationship queries, multi-hop reasoning, and thematic analysis"
-        )
-        tools.append(graphrag_tool)
-    
     # Hybrid search tool  
     hybrid_tool = QueryEngineTool.from_defaults(
         query_engine=hybrid_retriever.as_query_engine(),
@@ -213,65 +203,20 @@ def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graph
         description="Best for complex questions that need to be broken down"
     )
     
-    def _create_section_summaries(self, chunks: List[Document]) -> List[Dict]:
-        """Create section summaries through simple clustering."""
-        # Get embeddings for all chunks
-        chunk_embeddings = []
-        for chunk in chunks:
-            embedding = Settings.embed_model.get_text_embedding(chunk.text)
-            chunk_embeddings.append(embedding)
-        
-        # Simple k-means clustering
-        n_clusters = max(2, len(chunks) // self.cluster_size)
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-        cluster_labels = kmeans.fit_predict(chunk_embeddings)
-        
-        # Generate summaries for each cluster
-        summaries = []
-        for cluster_id in range(n_clusters):
-            cluster_chunks = [chunks[i] for i, label in enumerate(cluster_labels) if label == cluster_id]
-            
-            if len(cluster_chunks) > 1:
-                summary_content = self._summarize_cluster(cluster_chunks)
-                summaries.append({
-                    'id': f"section_{cluster_id}",
-                    'content': summary_content,
-                    'chunk_ids': [chunk.id_ for chunk in cluster_chunks],
-                    'topic': self._extract_topic(cluster_chunks)
-                })
-        
-        return summaries
+    # Create base tools list
+    tools = [vector_tool, hybrid_tool, multi_tool]
     
-    def _summarize_cluster(self, chunks: List[Document]) -> str:
-        """Generate summary for chunk cluster."""
-        combined_text = "\n\n".join([chunk.text for chunk in chunks])
+    # Optional GraphRAG tool (ADR-019)
+    if enable_graphrag:
+        from src.graphrag_integration import OptionalGraphRAG
+        graph_rag = OptionalGraphRAG(enabled=True, vector_store=vector_store)
         
-        prompt = f"""
-        Summarize the following related content sections in 2-3 sentences.
-        Focus on the main themes and key information.
-        
-        Content:
-        {combined_text[:4000]}  # Limit for local LLM
-        
-        Summary:
-        """
-        
-        # Use local LLM for summarization
-        response = Settings.llm.complete(prompt)
-        return response.text.strip()
-    
-    def _extract_topic(self, chunks: List[Document]) -> str:
-        """Extract main topic from cluster."""
-        combined_text = " ".join([chunk.text for chunk in chunks])
-        words = combined_text.lower().split()
-        
-        # Simple keyword extraction (can be enhanced)
-        from collections import Counter
-        word_counts = Counter(words)
-        common_words = [word for word, count in word_counts.most_common(5) 
-                       if len(word) > 4 and word.isalpha()]
-        
-        return ", ".join(common_words[:3])
+        graphrag_tool = QueryEngineTool.from_defaults(
+            query_engine=graph_rag.as_query_engine(),
+            name="graph_search",
+            description="Best for relationship queries, multi-hop reasoning, and thematic analysis"
+        )
+        tools.append(graphrag_tool)
 
     # Create RouterQueryEngine to automatically route queries
     router_engine = RouterQueryEngine(
@@ -284,7 +229,8 @@ def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graph
 
 # That's it! 20 lines instead of 200+ lines of custom code
 # LlamaIndex handles all the routing, retrieval, and fusion logic
-    
+```
+
 ### Using MetadataFilters for Advanced Retrieval
 
 ```python
@@ -437,6 +383,75 @@ async def create_async_pipeline(vector_store, llm):
     )
     
     return async_engine
+
+# Essential RAPTOR-Lite Functions for Hierarchical Document Processing
+def _create_section_summaries(documents: List[Document], llm) -> Dict[str, str]:
+    """Create section summaries for hierarchical indexing."""
+    summaries = {}
+    
+    # Group documents by section (based on metadata or content patterns)
+    sections = _group_documents_by_section(documents)
+    
+    for section_id, section_docs in sections.items():
+        # Combine section content
+        section_content = "\n\n".join([doc.text for doc in section_docs])
+        
+        # Generate summary using local LLM
+        summary_prompt = f"""
+        Summarize the following section concisely, focusing on key concepts and themes:
+        
+        {section_content[:4000]}  # Limit for context window
+        
+        Summary:"""
+        
+        summary = llm.complete(summary_prompt).text.strip()
+        summaries[section_id] = summary
+    
+    return summaries
+
+def _summarize_cluster(cluster_docs: List[Document], llm) -> str:
+    """Summarize a cluster of related documents."""
+    if not cluster_docs:
+        return ""
+    
+    # Combine cluster content
+    cluster_content = "\n\n".join([doc.text[:1000] for doc in cluster_docs])  # Limit per doc
+    
+    summary_prompt = f"""
+    Create a brief summary that captures the main themes of these related documents:
+    
+    {cluster_content[:3000]}
+    
+    Key themes and concepts:"""
+    
+    return llm.complete(summary_prompt).text.strip()
+
+def _extract_topic(text: str, llm) -> str:
+    """Extract the main topic or theme from text."""
+    topic_prompt = f"""
+    Identify the main topic or theme of this text in 2-4 words:
+    
+    {text[:1000]}
+    
+    Main topic:"""
+    
+    return llm.complete(topic_prompt).text.strip()
+
+def _group_documents_by_section(documents: List[Document]) -> Dict[str, List[Document]]:
+    """Group documents by logical sections for hierarchical organization."""
+    sections = {}
+    
+    for doc in documents:
+        # Simple section grouping based on document metadata or content patterns
+        section_id = doc.metadata.get("section", "general")
+        if section_id not in sections:
+            sections[section_id] = []
+        sections[section_id].append(doc)
+    
+    return sections
+
+class QualityMetrics:
+    """Helper class for retrieval quality assessment."""
     
     def _calculate_relevance(self, query: str, results: List[NodeWithScore]) -> float:
         """Estimate relevance based on keyword overlap and scores."""
