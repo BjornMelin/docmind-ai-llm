@@ -109,12 +109,25 @@ services:
 DOCMIND_MODEL=Qwen/Qwen3-14B-Instruct
 DOCMIND_CONTEXT_LENGTH=131072  # 128K native context
 
-# Hardware (cpu or cuda)
-DOCMIND_DEVICE=cpu
+# LLM Provider (auto, ollama, llamacpp, vllm)
+DOCMIND_LLM_PROVIDER=auto  # Automatic selection based on hardware
 
-# Optional: For GPU users
-# DOCMIND_DEVICE=cuda
-# CUDA_VISIBLE_DEVICES=0
+# Hardware (cpu or cuda)
+DOCMIND_DEVICE=cuda
+CUDA_VISIBLE_DEVICES=0
+
+# Provider-specific optimizations
+# Ollama
+OLLAMA_FLASH_ATTENTION=1
+OLLAMA_KV_CACHE_TYPE=q8_0
+
+# llama.cpp
+LLAMA_CUBLAS=1
+LLAMA_FLASH_ATTN=1
+
+# vLLM (for multi-GPU)
+# VLLM_ATTENTION_BACKEND=FLASH_ATTN
+# CUDA_VISIBLE_DEVICES=0,1
 ```
 
 ### One-Line Setup
@@ -125,6 +138,58 @@ git clone https://github.com/user/docmind-ai
 cd docmind-ai
 cp .env.example .env
 docker-compose up
+```
+
+### Multi-Provider Docker Profiles
+
+For users who want specific LLM providers, we offer optional Docker profiles:
+
+```yaml
+# docker-compose.providers.yml
+version: '3.8'
+
+services:
+  # Profile for llama.cpp users
+  docmind-llamacpp:
+    profiles: ["llamacpp"]
+    extends:
+      file: docker-compose.yml
+      service: docmind
+    environment:
+      - DOCMIND_LLM_PROVIDER=llamacpp
+      - LLAMA_CUBLAS=1
+      - LLAMA_FLASH_ATTN=1
+    volumes:
+      - ./models:/app/models  # For GGUF models
+      
+  # Profile for vLLM users (multi-GPU)
+  docmind-vllm:
+    profiles: ["vllm"]
+    extends:
+      file: docker-compose.yml
+      service: docmind
+    environment:
+      - DOCMIND_LLM_PROVIDER=vllm
+      - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all  # Use all available GPUs
+              capabilities: [gpu]
+```
+
+Usage:
+```bash
+# Use default (auto-select provider)
+docker-compose up
+
+# Use llama.cpp specifically
+docker-compose --profile llamacpp up
+
+# Use vLLM for multi-GPU
+docker-compose --profile vllm up
 ```
 
 ## Benefits of Simplification

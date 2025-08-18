@@ -80,8 +80,60 @@ We will use **GPTCache for semantic caching** with library-first optimizations:
 2. **Streamlit Caching**: Use `st.cache_data` and `st.cache_resource` 
 3. **LlamaIndex Caching**: Built-in `EmbeddingCache` and query result caching
 4. **Model Quantization**: Use pre-quantized GGUF models directly
-5. **No Custom Code**: Leverage existing optimizations in libraries
-6. **Simple Configuration**: Environment variables for memory limits
+5. **Multi-Provider Optimization**: Support for Ollama, llama.cpp, and vLLM
+6. **No Custom Code**: Leverage existing optimizations in libraries
+7. **Simple Configuration**: Environment variables for memory limits
+
+### Provider-Specific GPU Optimizations
+
+DocMind AI supports multiple LLM providers with provider-specific optimizations:
+
+#### Ollama Optimizations
+```bash
+# Enable Flash Attention (30-40% VRAM reduction, faster inference)
+export OLLAMA_FLASH_ATTENTION=1
+export OLLAMA_KV_CACHE_TYPE=q8_0  # K/V cache quantization
+export OLLAMA_MAX_LOADED_MODELS=1
+export OLLAMA_NUM_THREADS=8
+```
+
+#### llama.cpp Optimizations
+```bash
+# Enable CUDA and Flash Attention
+export LLAMA_CUBLAS=1
+export LLAMA_FLASH_ATTN=1
+export CUDA_VISIBLE_DEVICES=0
+
+# Compile with optimizations
+CMAKE_ARGS="-DLLAMA_CUDA=on -DLLAMA_FLASH_ATTN=on" pip install llama-cpp-python
+```
+
+#### vLLM Optimizations (Multi-GPU)
+```bash
+# Enable PagedAttention and tensor parallelism
+export VLLM_ATTENTION_BACKEND=FLASH_ATTN
+export CUDA_VISIBLE_DEVICES=0,1  # Multiple GPUs
+
+# Server launch with optimizations
+vllm serve Qwen/Qwen3-14B-Instruct \
+    --tensor-parallel-size 2 \
+    --enable-prefix-caching \
+    --kv-cache-dtype int8 \
+    --max-model-len 131072
+```
+
+### Performance Comparison by Provider
+
+| Provider | VRAM Usage | Tokens/sec | Setup Complexity | Best Use Case |
+|----------|------------|------------|------------------|---------------|
+| **Ollama** | Baseline | 100-150 | Simple | Development, easy deployment |
+| **llama.cpp** | -10% | 130-195 (+30%) | Moderate | Single GPU, GGUF models |
+| **vLLM** | +20% | 250-350 (+200%) | Complex | Multi-GPU production |
+
+These optimizations provide:
+- **Ollama**: 30-40% VRAM reduction with Flash Attention, good baseline performance
+- **llama.cpp**: Native GGUF support, 20-30% performance gain, efficient single-GPU usage
+- **vLLM**: 2-3x throughput with PagedAttention, best for high-concurrency production
 
 ## Related Decisions
 

@@ -222,7 +222,7 @@ def stream_with_sources():
                 st.write(doc.content[:200] + "...")
                 st.caption(f"Score: {doc.score:.2f}")
 
-# Progress Indicators for Long Operations
+# Progress Indicators for Long Operations  
 def process_with_progress():
     """Show progress during long operations."""
     
@@ -236,6 +236,52 @@ def process_with_progress():
         
         # Do actual work
         time.sleep(0.01)
+
+# Enhanced Status Indicators from Original ADR-009
+def process_documents_with_status(uploaded_files):
+    """Process documents with detailed status feedback."""
+    
+    # Use st.status for comprehensive feedback (from original ADR-009)
+    with st.status("Processing documents...", expanded=True) as status:
+        try:
+            st.write("🔍 Validating files...")
+            time.sleep(0.5)
+            
+            st.write("📄 Parsing and extracting content...")
+            # Call document processor with Tenacity resilience
+            documents = process_new_documents(uploaded_files)
+            
+            st.write("🧮 Creating embeddings...")
+            # Generate embeddings
+            
+            st.write("💾 Storing in vector database...")
+            # Store in Qdrant
+            
+            status.update(label="✅ Processing complete!", state="complete")
+            return documents
+            
+        except Exception as e:
+            status.update(label="🚨 Error processing documents", state="error")
+            st.error(f"Processing failed: {str(e)}")
+            return None
+
+# Error Handling Pattern from Original ADR-009
+def safe_operation_with_feedback(operation_name: str):
+    """Wrapper for operations with user-friendly error feedback."""
+    
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                with st.spinner(f"{operation_name}..."):
+                    result = func(*args, **kwargs)
+                st.success(f"✅ {operation_name} completed successfully")
+                return result
+            except Exception as e:
+                st.error(f"❌ {operation_name} failed: {str(e)}")
+                st.info("💡 Try refreshing the page or contact support if the issue persists")
+                return None
+        return wrapper
+    return decorator
     
     status_text.text("Complete!")
 

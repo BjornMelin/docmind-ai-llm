@@ -77,32 +77,56 @@ A hybrid approach allows each data type to use the most appropriate storage back
 
 We will use **SQLite + Qdrant only** for MVP simplicity:
 
-### Library-First Persistence (No Custom Code)
+### Library-First Persistence with Selective Resilience
 
 ```python
-# Simple persistence with SQLModel + Qdrant
+# Simple persistence with SQLModel + Qdrant + Tenacity for connections
 from sqlmodel import SQLModel, Field, create_engine, Session
 from qdrant_client import QdrantClient
 from llama_index.vector_stores.qdrant import QdrantVectorStore
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from datetime import datetime
 
-# SQLite for metadata (using SQLModel)
+# SQLite for metadata (using SQLModel with WAL mode for concurrency)
 class Document(SQLModel, table=True):
     id: str = Field(primary_key=True)
     title: str
     content: str
     created_at: datetime
 
-engine = create_engine("sqlite:///data/docmind.db")
+# Enable WAL mode for concurrent access
+engine = create_engine(
+    "sqlite:///data/docmind.db",
+    connect_args={"check_same_thread": False},
+    pool_pre_ping=True
+)
+# Enable WAL mode for better concurrency
+with engine.begin() as conn:
+    conn.execute("PRAGMA journal_mode=WAL")
+
 SQLModel.metadata.create_all(engine)
 
-# Qdrant for vectors (using client directly)
-client = QdrantClient(path="./data/qdrant")
+# Resilient Qdrant connection with Tenacity
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type((ConnectionError, TimeoutError))
+)
+def create_qdrant_client():
+    """Create Qdrant client with retry logic."""
+    client = QdrantClient(path="./data/qdrant")
+    # Verify connection
+    client.get_collections()
+    return client
+
+# Initialize with resilience
+client = create_qdrant_client()
 vector_store = QdrantVectorStore(
     client=client,
     collection_name="documents"
 )
 
-# That's it! No custom storage layers needed
+# That's it! Minimal Tenacity only where needed
 ```
 
 ### What NOT to Build

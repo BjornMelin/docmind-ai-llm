@@ -78,35 +78,65 @@ We will use **Unstructured.io library exclusively** for all document processing:
 5. **Production Ready**: Used by major companies, battle-tested
 6. **Local Operation**: Runs completely offline, no API needed
 
-## Complete Processing Pipeline in 50 Lines
+## Complete Processing Pipeline with Resilience (60 Lines)
 
 ```python
 from unstructured.partition.auto import partition
 from unstructured.chunking.title import chunk_by_title
 from llama_index.core import Document
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from typing import List
 import json
 
-class SimpleDocumentProcessor:
-    """Complete document processing in minimal code."""
+class ResilientDocumentProcessor:
+    """Document processing with selective Tenacity resilience for critical operations."""
     
-    def process(self, file_path: str) -> List[Document]:
-        """Process any document format."""
-        
-        # Step 1: Extract everything (1 line!)
+    # Selective Tenacity: Only for file I/O and Unstructured operations
+    # LlamaIndex and LangGraph already have their own retry mechanisms
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception_type((IOError, OSError, FileNotFoundError))
+    )
+    def _read_file(self, file_path: str) -> bool:
+        """Resilient file validation with Tenacity."""
+        # Verify file exists and is readable
+        with open(file_path, 'rb') as f:
+            # Read first bytes to ensure file is accessible
+            f.read(1024)
+        return True
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((RuntimeError, ValueError))
+    )
+    def _extract_with_unstructured(self, file_path: str):
+        """Resilient document extraction with Tenacity for Unstructured.io."""
+        # Unstructured.io doesn't have built-in retries, so we add them
         elements = partition(
             filename=file_path,
             strategy="hi_res",
             include_metadata=True
         )
+        return elements
+    
+    def process(self, file_path: str) -> List[Document]:
+        """Process any document format with resilience."""
         
-        # Step 2: Chunk intelligently (1 line!)
+        # Step 1: Validate file access with retry
+        self._read_file(file_path)
+        
+        # Step 2: Extract with retry protection
+        elements = self._extract_with_unstructured(file_path)
+        
+        # Step 3: Chunk intelligently (no retry needed - pure computation)
         chunks = chunk_by_title(
             elements,
             max_characters=1500
         )
         
-        # Step 3: Convert to LlamaIndex documents
+        # Step 4: Convert to LlamaIndex documents (no retry needed)
         documents = []
         for chunk in chunks:
             doc = Document(
@@ -123,8 +153,8 @@ class SimpleDocumentProcessor:
         return documents
 
 # Usage:
-processor = SimpleDocumentProcessor()
-docs = processor.process("any_file.pdf")  # Works with ANY format!
+processor = ResilientDocumentProcessor()
+docs = processor.process("any_file.pdf")  # Works with ANY format, with resilience!
 ```
 
 ## Why This is 95% Better
