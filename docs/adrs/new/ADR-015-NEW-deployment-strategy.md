@@ -181,6 +181,7 @@ services:
 ```
 
 Usage:
+
 ```bash
 # Use default (auto-select provider)
 docker-compose up

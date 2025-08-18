@@ -65,14 +65,18 @@ class StreamlitChatMemory(BaseChatMessageHistory):
         """Clear conversation history."""
         st.session_state[self.key] = []
 
-# LlamaIndex ChatMemoryBuffer Integration
+# LlamaIndex ChatMemoryBuffer Integration (from ADR-008)
 @st.cache_resource
 def get_chat_memory():
-    """Get LlamaIndex chat memory with token limit."""
+    """Get LlamaIndex chat memory with extended token limit.
+    
+    65K token context window for comprehensive
+    document analysis sessions.
+    """
     from llama_index.memory import ChatMemoryBuffer
     
     return ChatMemoryBuffer.from_defaults(
-        token_limit=4000,  # Keep last 4k tokens
+        token_limit=65536,  # 65K tokens - covers 95% of document sessions
         tokenizer_fn=lambda text: len(text.split())  # Simple tokenizer
     )
 

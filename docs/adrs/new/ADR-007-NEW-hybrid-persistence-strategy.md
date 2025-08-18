@@ -80,10 +80,12 @@ We will use **SQLite + Qdrant only** for MVP simplicity:
 ### Library-First Persistence with Selective Resilience
 
 ```python
-# Simple persistence with SQLModel + Qdrant + Tenacity for connections
+# Simple persistence with SQLModel + Qdrant + IngestionCache + Tenacity for connections
 from sqlmodel import SQLModel, Field, create_engine, Session
 from qdrant_client import QdrantClient
 from llama_index.vector_stores.qdrant import QdrantVectorStore
+from llama_index.core.ingestion import IngestionCache
+from llama_index.core.storage.kvstore import SimpleKVStore
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from datetime import datetime
 
@@ -105,6 +107,14 @@ with engine.begin() as conn:
     conn.execute("PRAGMA journal_mode=WAL")
 
 SQLModel.metadata.create_all(engine)
+
+# Native IngestionCache for 80-95% re-processing reduction
+ingestion_cache = IngestionCache(
+    cache=SimpleKVStore.from_sqlite_path(
+        "./data/ingestion_cache.db",
+        wal=True  # WAL mode for cache too
+    )
+)
 
 # Resilient Qdrant connection with Tenacity
 @retry(
@@ -132,10 +142,20 @@ vector_store = QdrantVectorStore(
 ### What NOT to Build
 
 - ❌ Custom vector storage format
-- ❌ Custom compression layers
-- ❌ Redis cache (use st.cache_data)
+- ❌ Custom compression layers  
+- ❌ Redis cache (use st.cache_data and IngestionCache)
 - ❌ DuckDB analytics (add later if needed)
 - ❌ Complex data partitioning
+- ❌ Custom caching logic (use native IngestionCache)
+
+### Integrated Patterns from Archived ADRs
+
+**From ADR-008-Original (Session Persistence)**:
+
+- SQLite with WAL mode for concurrent access
+- Native IngestionCache for document processing (80-95% reduction)
+- ChatMemoryBuffer with 65K token limit
+- No complex checkpointers - keep it simple
 
 ## Related Decisions
 

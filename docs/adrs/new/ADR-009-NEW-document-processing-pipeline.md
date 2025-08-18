@@ -84,12 +84,37 @@ We will use **Unstructured.io library exclusively** for all document processing:
 from unstructured.partition.auto import partition
 from unstructured.chunking.title import chunk_by_title
 from llama_index.core import Document
+from llama_index.core.ingestion import IngestionPipeline, IngestionCache
+from llama_index.readers.unstructured import UnstructuredReader
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from typing import List
 import json
 
 class ResilientDocumentProcessor:
-    """Document processing with selective Tenacity resilience for critical operations."""
+    """Document processing with selective Tenacity resilience and native caching.
+    
+    Integrates patterns from archived ADR-004:
+    - UnstructuredReader with hi_res strategy
+    - IngestionCache for 80-95% re-processing reduction
+    - Adaptive strategy selection based on document type
+    """
+    
+    def __init__(self):
+        # Native UnstructuredReader (from ADR-004)
+        self.reader = UnstructuredReader()
+        
+        # Native IngestionCache for 80-95% re-processing reduction
+        self.cache = IngestionCache()
+        
+        # Adaptive strategy based on document type (from ADR-004)
+        self.strategy_map = {
+            '.pdf': 'hi_res',      # Full multimodal extraction
+            '.docx': 'hi_res',     # Tables and images
+            '.html': 'fast',       # Quick text extraction
+            '.txt': 'fast',        # Simple text
+            '.jpg': 'ocr_only',    # Image-focused
+            '.png': 'ocr_only'     # Image-focused
+        }
     
     # Selective Tenacity: Only for file I/O and Unstructured operations
     # LlamaIndex and LangGraph already have their own retry mechanisms
