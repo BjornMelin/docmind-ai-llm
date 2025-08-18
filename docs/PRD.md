@@ -116,9 +116,9 @@ graph TD
     end
     
     subgraph "Core Configuration & Optimization"
-        R["LlamaIndex Settings Singleton<br/>Unified Config (ADR-020)"]
-        S["PyTorch Optimization<br/>TorchAO Quantization (ADR-023)"]
-        T["GPU Management<br/>device_map='auto' (ADR-003)"]
+        R["Simple Configuration<br/>Environment Variables + Streamlit Config"]
+        S["PyTorch Optimization<br/>TorchAO Quantization"]
+        T["GPU Management<br/>device_map='auto'"]
     end
 
     subgraph "Persistence & Resilience"
@@ -162,12 +162,20 @@ graph TD
 
 ### Model Dependencies
 
-* **Default LLM**: Qwen/Qwen3-4B-Thinking-2507
-* **Dense Embeddings**: BAAI/bge-large-en-v1.5 (1024D)
-* **Sparse Embeddings**: prithvida/Splade_PP_en_v1
+* **Default LLM**: Qwen/Qwen3-14B (32K native context, Q5_K_M quantization)
+* **Unified Embeddings**: BAAI/bge-m3 (1024D dense + sparse unified)
 * **Multimodal**: openai/clip-vit-base-patch32 (ViT-B/32)
 * **Reranking**: BAAI/bge-reranker-v2-m3
 * **NER Model**: en_core_web_sm (spaCy)
+
+### Configuration Approach
+
+DocMind AI uses **distributed, simple configuration** following KISS principles:
+
+* **Environment Variables** (`.env`): Runtime settings, model paths, feature flags
+* **Streamlit Native Config** (`.streamlit/config.toml`): UI theme, upload limits
+* **Library Defaults**: Components use sensible library defaults (LlamaIndex, Qdrant)
+* **Feature Flags**: Boolean environment variables for experimental features (DSPy, GraphRAG)
 
 ## 8. Success Criteria
 

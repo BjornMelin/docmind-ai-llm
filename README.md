@@ -61,7 +61,7 @@
 
 - **Structured Logging:** Contextual logging with automatic rotation and JSON output.
 
-- **Type-Safe Configuration:** Validated configuration management with environment variable support.
+- **Simple Configuration:** Environment variables and Streamlit native config for easy setup.
 
 ## 📖 Table of Contents
 
@@ -527,23 +527,16 @@ graph TD
 
 ## ⚙️ Configuration
 
-DocMind AI uses Pydantic BaseSettings for type-safe configuration management with environment variable support.
+DocMind AI uses a simple, distributed configuration approach optimized for local desktop applications:
 
-### Basic Configuration
+- **Environment Variables**: Runtime configuration via `.env` file
+- **Streamlit Native Config**: UI settings via `.streamlit/config.toml`
+- **Library Defaults**: Sensible defaults from LlamaIndex, Qdrant, etc.
+- **Feature Flags**: Boolean environment variables for experimental features
 
-```python
-from pydantic_settings import BaseSettings
+### Configuration Philosophy
 
-class Settings(BaseSettings):
-    llm_model: str = "ollama/llama3"
-    embedding_model: str = "BAAI/bge-large-en-v1.5"
-    similarity_top_k: int = 10
-    hybrid_alpha: float = 0.7
-    gpu_enabled: bool = True
-    
-    class Config:
-        env_file = ".env"
-```
+Following KISS principles, configuration is intentionally simple and distributed rather than centralized, avoiding over-engineering for a single-user local application.
 
 ### Environment Variables
 
@@ -556,32 +549,45 @@ cp .env.example .env
 Key configuration options in `.env`:
 
 ```bash
-
-# Backend Services
+# Model & Backend Services
+DOCMIND_MODEL=Qwen/Qwen3-14B
+DOCMIND_DEVICE=cuda
+DOCMIND_CONTEXT_LENGTH=32768
 OLLAMA_BASE_URL=http://localhost:11434
-LMSTUDIO_BASE_URL=http://localhost:1234/v1
-QDRANT_URL=http://localhost:6333
 
-# Model Configuration
-DEFAULT_MODEL=qwen2:7b
-EMBEDDING_MODEL=BAAI/bge-large-en-v1.5
+# Embedding Models (BGE-M3 unified)
+EMBEDDING_MODEL=BAAI/bge-m3
+RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 
-# Search & Performance
-RRF_FUSION_ALPHA=0.7
-GPU_ACCELERATION=true
-ENABLE_COLBERT_RERANKING=true
+# Feature Flags
+ENABLE_DSPY_OPTIMIZATION=true
+ENABLE_GRAPHRAG=false
+ENABLE_GPU_ACCELERATION=true
+
+# Performance Tuning
+RETRIEVAL_TOP_K=10
+RERANK_TOP_K=5
+CACHE_SIZE_LIMIT=1073741824  # 1GB
 ```
 
 See the complete [.env.example](.env.example) file for all available configuration options.
 
-### Cache Configuration
+### Additional Configuration
 
-Configure document processing cache settings:
+**Streamlit UI Configuration** (`.streamlit/config.toml`):
+```toml
+[theme]
+base = "light"
+primaryColor = "#FF4B4B"
 
-```python
-cache_dir = './cache/documents'
-cache_size_limit = 1e9  # 1GB
+[server]
+maxUploadSize = 200
 ```
+
+**Cache Configuration** (automatic via LlamaIndex):
+- Document processing cache: `./cache/documents` (1GB limit)
+- Embedding cache: In-memory with LRU eviction
+- Model cache: Automatic via Hugging Face transformers
 
 ## 📊 Performance Benchmarks
 
