@@ -6,7 +6,7 @@ Modernized Document Ingestion with Multimodal Support and Intelligent Chunking
 
 ## Version/Date
 
-1.0 / 2025-01-16
+1.1 / 2025-08-18
 
 ## Status
 
@@ -15,6 +15,10 @@ Proposed
 ## Description
 
 Implements a modernized document processing pipeline that handles diverse file formats, extracts multimodal content (text, images, tables), and applies intelligent chunking strategies. The pipeline integrates with the unified embedding strategy and hierarchical indexing while maintaining high throughput and quality for local processing.
+
+**Enhanced Integration:**
+
+- **GraphRAG Support** (ADR-019): Processed documents provide input for PropertyGraphIndex construction and entity/relationship extraction
 
 ## Context
 
@@ -68,6 +72,13 @@ Modern document processing requires handling diverse formats (PDF, DOCX, HTML, i
 ## Decision
 
 We will use **Unstructured.io library exclusively** for all document processing:
+
+## Related Decisions
+
+- **ADR-002-NEW** (Unified Embedding Strategy): Uses BGE-M3 embeddings for processed document chunks
+- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Consumes intelligently chunked documents for retrieval
+- **ADR-007-NEW** (Hybrid Persistence Strategy): Stores processed documents and metadata efficiently
+- **ADR-019-NEW** (Optional GraphRAG): Uses processed documents for PropertyGraphIndex construction
 
 ### Why Unstructured.io?
 
@@ -1017,6 +1028,7 @@ class DocumentProcessor:
 - **Quality Assurance**: Automatic validation and scoring of extraction quality
 - **Rich Metadata**: Detailed structural and contextual information for better retrieval
 - **Performance Optimization**: Efficient processing suitable for consumer hardware
+- **GraphRAG Integration**: Provides structured input for PropertyGraphIndex entity/relationship extraction
 
 ### Negative Consequences / Trade-offs
 
@@ -1058,4 +1070,5 @@ class DocumentProcessor:
 
 ## Changelog
 
+- **1.1 (2025-08-18)**: Added GraphRAG input processing support for PropertyGraphIndex construction and entity/relationship extraction from processed documents
 - **1.0 (2025-01-16)**: Initial modernized document processing pipeline with multimodal support and intelligent chunking

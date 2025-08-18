@@ -6,7 +6,7 @@ Hierarchical Adaptive Retrieval with Simplified RAPTOR and Multi-Strategy Routin
 
 ## Version/Date
 
-2.0 / 2025-08-17
+2.1 / 2025-08-18
 
 ## Status
 
@@ -15,6 +15,11 @@ Accepted
 ## Description
 
 Implements an adaptive retrieval pipeline that combines simplified hierarchical retrieval (RAPTOR-Lite), multi-strategy routing, and corrective mechanisms. The system automatically selects optimal retrieval approaches based on query characteristics while maintaining hierarchical document organization for complex information synthesis without the full complexity of RAPTOR.
+
+**Enhanced Capabilities:**
+
+- **DSPy Query Optimization** (ADR-018): Automatic query rewriting and expansion for improved retrieval quality
+- **Optional GraphRAG Integration** (ADR-019): PropertyGraphIndex for relationship-based and multi-hop retrieval when enabled
 
 ## Context
 
@@ -74,6 +79,8 @@ We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in fe
 3. **MultiQueryRetriever**: Automatic query decomposition for complex queries
 4. **MetadataFilters**: Built-in filtering without custom logic
 5. **AsyncQueryEngine**: Native async support for performance
+6. **DSPy Query Optimization**: Automatic query rewriting and expansion (ADR-018)
+7. **Optional PropertyGraphIndex**: Graph-based retrieval for relationship queries (ADR-019)
 
 ## Related Decisions
 
@@ -81,6 +88,8 @@ We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in fe
 - **ADR-001-NEW** (Modern Agentic RAG): Uses adaptive retrieval for intelligent routing
 - **ADR-006-NEW** (Modern Reranking Architecture): Reranks hierarchical retrieval results
 - **ADR-011-NEW** (Agent Orchestration Framework): Orchestrates adaptive retrieval decisions
+- **ADR-018-NEW** (DSPy Prompt Optimization): Provides automatic query optimization for improved retrieval
+- **ADR-019-NEW** (Optional GraphRAG): Adds graph-based retrieval capabilities for complex relationship queries
 
 ## Design
 
@@ -98,11 +107,13 @@ graph TD
     G -->|Complex| I[Hierarchical Search]
     G -->|Hybrid| J[Multi-Level Search]
     G -->|Recent| K[Web Search]
+    G -->|Relationships| O[GraphRAG Search]
     
     H --> L[Results]
     I --> L
     J --> L
     K --> L
+    O --> L
     
     L --> M{Quality Check}
     M -->|Good| N[Return Results]
@@ -130,8 +141,8 @@ from llama_index.core import QueryBundle, Settings
 # REMOVED: Custom hierarchical implementation
 # LlamaIndex provides RecursiveRetriever for hierarchical retrieval
 
-def create_adaptive_retriever(vector_store, llm):
-    """Create router-based adaptive retriever using LlamaIndex built-ins."""
+def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graphrag=False):
+    """Create router-based adaptive retriever using LlamaIndex built-ins with DSPy and GraphRAG integration."""
     
     # Use built-in semantic chunking instead of custom
     semantic_splitter = SemanticSplitterNodeParser(
@@ -139,6 +150,16 @@ def create_adaptive_retriever(vector_store, llm):
         breakpoint_percentile_threshold=95,
         buffer_size=1
     )
+    
+    # Initialize DSPy optimization if enabled (ADR-018)
+    if enable_dspy:
+        from src.dspy_integration import DSPyLlamaIndexRetriever
+        base_retriever = DSPyLlamaIndexRetriever(
+            index=vector_store,
+            enable_dspy=True
+        )
+    else:
+        base_retriever = vector_store.as_retriever(similarity_top_k=10)
     
     # Use built-in hybrid retriever
     hybrid_retriever = HybridRetriever(
@@ -158,12 +179,25 @@ def create_adaptive_retriever(vector_store, llm):
     from llama_index.core import VectorStoreIndex
     from llama_index.core.tools import QueryEngineTool
     
-    # Vector search tool
+    # Vector search tool with optional DSPy optimization
     vector_tool = QueryEngineTool.from_defaults(
-        query_engine=vector_store.as_query_engine(similarity_top_k=10),
+        query_engine=base_retriever.as_query_engine() if enable_dspy else vector_store.as_query_engine(similarity_top_k=10),
         name="vector_search",
         description="Best for semantic similarity and simple factual queries"
     )
+    
+    # Optional GraphRAG tool (ADR-019)
+    tools = [vector_tool, hybrid_tool, multi_tool]
+    if enable_graphrag:
+        from src.graphrag_integration import OptionalGraphRAG
+        graph_rag = OptionalGraphRAG(enabled=True, vector_store=vector_store)
+        
+        graphrag_tool = QueryEngineTool.from_defaults(
+            query_engine=graph_rag.as_query_engine(),
+            name="graph_search",
+            description="Best for relationship queries, multi-hop reasoning, and thematic analysis"
+        )
+        tools.append(graphrag_tool)
     
     # Hybrid search tool  
     hybrid_tool = QueryEngineTool.from_defaults(
@@ -242,11 +276,7 @@ def create_adaptive_retriever(vector_store, llm):
     # Create RouterQueryEngine to automatically route queries
     router_engine = RouterQueryEngine(
         selector=LLMSingleSelector.from_defaults(llm=llm),
-        query_engine_tools=[
-            vector_tool,
-            hybrid_tool,
-            multi_tool
-        ],
+        query_engine_tools=tools,
         verbose=True  # Log routing decisions
     )
     
@@ -493,4 +523,6 @@ async def create_async_pipeline(vector_store, llm):
 
 ## Changelog
 
+- **2.1 (2025-08-18)**: Added DSPy query optimization and PropertyGraphIndex as retrieval strategy for enhanced query processing and relationship-based retrieval
+- **2.0 (2025-08-17)**: Major enhancement with multi-strategy routing and DSPy integration
 - **1.0 (2025-01-16)**: Initial design for adaptive retrieval pipeline with RAPTOR-Lite hierarchical indexing

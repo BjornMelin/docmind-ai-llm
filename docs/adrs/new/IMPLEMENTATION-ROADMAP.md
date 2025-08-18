@@ -42,7 +42,7 @@ This roadmap provides a prioritized implementation plan for modernizing DocMind 
 - **Scope**: SQLite + DuckDB + Vector storage + Document compression
 - **Deliverables**:
   - Multi-backend storage manager
-  - Vector storage with FAISS/hnswlib
+  - Vector storage with Qdrant (unified with main system)
   - Automated backup system
 - **Success Criteria**: 40% storage reduction, <50ms vector queries
 - **Dependencies**: None

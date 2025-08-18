@@ -6,7 +6,7 @@ Lightweight Multi-Agent RAG with Adaptive Routing and Self-Correction
 
 ## Version/Date
 
-4.0 / 2025-08-17
+4.1 / 2025-08-18
 
 ## Status
 
@@ -15,6 +15,11 @@ Accepted
 ## Description
 
 Implements a simplified agentic RAG architecture using the `langgraph-supervisor` library for orchestration, incorporating Adaptive RAG (routing), Corrective RAG (fallback), and Self-RAG (quality control) patterns. The system leverages proven supervisor patterns to dramatically reduce implementation complexity while maintaining local-first operation and intelligent query processing.
+
+**Enhanced Capabilities:**
+
+- **DSPy Prompt Optimization** (ADR-018): Automatic query rewriting and prompt optimization for improved retrieval quality
+- **Optional GraphRAG** (ADR-019): LlamaIndex PropertyGraphIndex for multi-hop reasoning and relationship extraction when enabled
 
 ## Context
 
@@ -83,6 +88,8 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 - **ADR-003-NEW** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
 - **ADR-011-NEW** (Agent Orchestration Framework): Details the supervisor library implementation
 - **ADR-012-NEW** (Evaluation and Quality Assurance): Provides the quality metrics for self-correction
+- **ADR-018-NEW** (DSPy Prompt Optimization): Enhances query processing and agent prompts with automatic optimization
+- **ADR-019-NEW** (Optional GraphRAG): Provides advanced multi-hop reasoning capabilities when enabled
 
 ## Design
 
@@ -234,6 +241,8 @@ response = result["messages"][-1]["content"]
 - **Maintainable Complexity**: Simple three-agent pattern avoids over-engineering
 - **Local Operation**: No external dependencies while gaining agentic capabilities
 - **Performance**: Lightweight decisions add minimal overhead to response time
+- **Advanced Optimization**: DSPy provides automatic prompt optimization for 20-30% improvement in retrieval quality
+- **Multi-hop Reasoning**: Optional GraphRAG enables complex relationship queries and thematic analysis
 
 ### Negative Consequences / Trade-offs
 
@@ -272,6 +281,8 @@ response = result["messages"][-1]["content"]
 
 ## Changelog
 
+- **4.1 (2025-08-18)**: Added DSPy prompt optimization (20-30% quality improvement) and GraphRAG multi-hop reasoning capabilities
+- **4.0 (2025-08-17)**: Updated with library-first supervisor approach and simplified agent implementation
 - **3.0 (2025-08-16)**: **MODEL UPDATE** - Updated to use Qwen3-14B-Instruct with native 128K context (latest generation, April 2025). Maintains all langgraph-supervisor simplifications.
 - **2.0 (2025-01-16)**: **SIMPLIFIED IMPLEMENTATION** - Switched to langgraph-supervisor library for agent coordination. Updated to use Qwen2.5-14B with 128K context. Eliminated custom state management and conditional routing.
 - **1.0 (2025-01-16)**: Initial architecture design for lightweight agentic RAG with LangGraph implementation

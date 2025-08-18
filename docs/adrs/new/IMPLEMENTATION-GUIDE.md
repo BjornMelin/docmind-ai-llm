@@ -170,7 +170,7 @@ from gptcache.manager import get_data_manager
 cache = Cache()
 cache.init(
     embedding_func=lambda x: embed_model.encode(x),
-    data_manager=get_data_manager("sqlite", "faiss"),
+    data_manager=get_data_manager("sqlite", "qdrant"),
     similarity_evaluation=SearchDistanceEvaluation()
 )
 

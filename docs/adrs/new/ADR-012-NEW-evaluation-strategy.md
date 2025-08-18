@@ -6,7 +6,7 @@ Leverage DeepEval for All Quality Assurance
 
 ## Version/Date
 
-3.0 / 2025-08-17
+3.1 / 2025-08-18
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation.
+Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation, including metrics for DSPy optimization effectiveness and GraphRAG quality assessment.
 
 ## Context
 
@@ -26,6 +26,11 @@ The original ADR-012 had 1000+ lines of custom evaluation code including:
 - Custom quality tracking
 
 This is massive over-engineering when DeepEval already provides all these features with simple function calls.
+
+**Enhanced Requirements:**
+
+- **DSPy Evaluation** (ADR-018): Measure prompt optimization effectiveness and query rewriting quality
+- **GraphRAG Assessment** (ADR-019): Evaluate PropertyGraphIndex performance for relationship queries
 
 ## Decision
 
@@ -61,6 +66,20 @@ class DocMindEvaluator:
             HallucinationMetric(threshold=0.1, model="Qwen/Qwen3-14B-Instruct"),
             LatencyMetric(max_latency=3.0),
         ]
+        
+        # DSPy-specific evaluation metrics (ADR-018)
+        self.dspy_metrics = {
+            "query_optimization_improvement": 0.0,  # Before/after retrieval quality
+            "optimization_time": 0.0,  # Time to optimize queries
+            "cache_hit_rate": 0.0,  # Optimized query cache hits
+        }
+        
+        # GraphRAG-specific evaluation metrics (ADR-019)
+        self.graphrag_metrics = {
+            "relationship_extraction_quality": 0.0,  # Entity/relationship accuracy
+            "multi_hop_reasoning_success": 0.0,  # Complex query success rate
+            "graph_construction_time": 0.0,  # Time to build PropertyGraphIndex
+        }
     
     def evaluate_response(self, query: str, response: str, contexts: List[str], latency: float):
         """Evaluate a single RAG response."""
@@ -226,6 +245,7 @@ DeepEval automatically tracks:
 
 ## Changelog
 
+- **3.1 (2025-08-18)**: Added DSPy-specific evaluation metrics for query optimization effectiveness and GraphRAG evaluation criteria for relationship extraction quality and multi-hop reasoning assessment
 - **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B-Instruct model selection, accepted status
 - **2.0 (2025-08-17)**: SIMPLIFIED - Use DeepEval library instead of custom code
 - **1.0 (2025-01-16)**: Original version with 1000+ lines of custom evaluation

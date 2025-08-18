@@ -6,7 +6,7 @@ Multi-Backend Persistence with SQLite, DuckDB, and Vector Storage Optimization
 
 ## Version/Date
 
-2.0 / 2025-08-17
+2.1 / 2025-08-18
 
 ## Status
 
@@ -136,6 +136,10 @@ vector_store = QdrantVectorStore(
     collection_name="documents"
 )
 
+# GraphRAG integration (ADR-019) - reuses same Qdrant client
+# PropertyGraphIndex can use the same vector store for embeddings
+# while maintaining separate graph data in SimplePropertyGraphStore
+
 # That's it! Minimal Tenacity only where needed
 ```
 
@@ -147,6 +151,7 @@ vector_store = QdrantVectorStore(
 - ❌ DuckDB analytics (add later if needed)
 - ❌ Complex data partitioning
 - ❌ Custom caching logic (use native IngestionCache)
+- ❌ Separate graph database (PropertyGraphIndex reuses Qdrant for embeddings)
 
 ### Integrated Patterns from Archived ADRs
 
@@ -163,6 +168,7 @@ vector_store = QdrantVectorStore(
 - **ADR-003-NEW** (Adaptive Retrieval Pipeline): Benefits from optimized vector storage
 - **ADR-008-NEW** (Production Observability): Uses DuckDB for analytics storage
 - **ADR-010-NEW** (Performance Optimization Strategy): Implements caching layer
+- **ADR-019-NEW** (Optional GraphRAG): Reuses existing Qdrant infrastructure for PropertyGraphIndex storage
 
 ## Design
 
@@ -758,6 +764,7 @@ class BackupManager:
 - **Scalability**: Vector storage scales better for large document collections
 - **Data Safety**: Automated backups and redundancy protect against data loss
 - **Flexibility**: Easy to optimize individual backends without affecting others
+- **GraphRAG Integration**: Qdrant infrastructure supports PropertyGraphIndex without additional databases
 
 ### Negative Consequences / Trade-offs
 
@@ -799,4 +806,6 @@ class BackupManager:
 
 ## Changelog
 
+- **2.1 (2025-08-18)**: Added GraphRAG vector storage support using existing Qdrant infrastructure for PropertyGraphIndex integration
+- **2.0 (2025-08-17)**: Major simplification to SQLite + Qdrant for MVP, enhanced with resilience patterns
 - **1.0 (2025-01-16)**: Initial hybrid persistence design with SQLite, DuckDB, vector storage, and automated backup system
