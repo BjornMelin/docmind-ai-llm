@@ -6,7 +6,7 @@ Simple Docker Deployment for Local Streamlit App
 
 ## Version/Date
 
-3.0 / 2025-08-17
+3.2 / 2025-08-18
 
 ## Status
 
@@ -55,7 +55,7 @@ RUN mkdir -p /app/data/{models,documents,cache}
 
 # Environment variables with sensible defaults
 ENV PYTHONPATH=/app
-ENV DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-14B-Instruct}
+ENV DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-14B}
 ENV DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-32768}
 ENV DOCMIND_DEVICE=${DOCMIND_DEVICE:-cpu}
 ENV STREAMLIT_SERVER_PORT=8501
@@ -85,7 +85,7 @@ services:
       - ./data:/app/data
       - ./models:/app/models
     environment:
-      - DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-14B-Instruct}
+      - DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-14B}
       - DOCMIND_DEVICE=${DOCMIND_DEVICE:-cpu}
       - DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-32768}
     restart: unless-stopped
@@ -106,7 +106,7 @@ services:
 # Copy to .env and adjust as needed
 
 # Model settings
-DOCMIND_MODEL=Qwen/Qwen3-14B-Instruct
+DOCMIND_MODEL=Qwen/Qwen3-14B
 DOCMIND_CONTEXT_LENGTH=131072  # 128K native context
 
 # LLM Provider (auto, ollama, llamacpp, vllm)
@@ -193,6 +193,14 @@ docker-compose --profile llamacpp up
 docker-compose --profile vllm up
 ```
 
+## Related Decisions
+
+- **ADR-001-NEW** (Modern Agentic RAG Architecture): Deploys the complete 5-agent system architecture
+- **ADR-010-NEW** (Performance Optimization Strategy): Cache configuration affects Docker deployment requirements
+- **ADR-011-NEW** (Agent Orchestration Framework): Deploys the langgraph-supervisor 5-agent orchestration
+- **ADR-004-NEW** (Local-First LLM Strategy): Configures Qwen3-14B with 128K context support
+- **ADR-016-NEW** (UI State Management): Deploys Streamlit UI with proper state management
+
 ## Benefits of Simplification
 
 - **User-Friendly**: One command to start, no complex setup
@@ -224,6 +232,8 @@ docker-compose --profile vllm up
 
 ## Changelog
 
-- **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B-Instruct and 128K context, accepted status
+- **3.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
+- **3.1 (2025-08-18)**: Enhanced deployment configuration to support 5-agent system with DSPy optimization and optional GraphRAG capabilities while maintaining single Docker image simplicity
+- **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B and 128K context, accepted status
 - **2.0 (2025-08-17)**: SIMPLIFIED - Removed all complexity, single image deployment
 - **1.0 (2025-01-16)**: Original over-engineered version with profiles and detection

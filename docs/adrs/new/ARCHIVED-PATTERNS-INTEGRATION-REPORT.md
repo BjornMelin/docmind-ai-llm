@@ -89,7 +89,7 @@ results = await asyncio.gather(*[
 # Before: 183 lines of custom GPU management
 # After: Single parameter
 Settings.llm = vLLM(
-    model="Qwen/Qwen3-14B-Instruct",
+    model="Qwen/Qwen3-14B",
     device_map="auto",  # Library handles everything
     torch_dtype=torch.float16
 )

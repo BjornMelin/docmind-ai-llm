@@ -152,7 +152,7 @@ async def robust_document_loading(file_path: str):
 ```python
 # GPU optimization pattern from original ADR-003
 Settings.llm = vLLM(
-    model="Qwen/Qwen3-14B-Instruct",
+    model="Qwen/Qwen3-14B",
     device_map="auto",  # Automatic GPU detection and utilization
     torch_dtype="float16"
 )
@@ -279,7 +279,7 @@ Settings.llm = vLLM(
 ```python
 # Automatic GPU optimization
 Settings.llm = vLLM(
-    model="Qwen/Qwen3-14B-Instruct",
+    model="Qwen/Qwen3-14B",
     device_map="auto",  # 90% complexity reduction vs custom GPU management
     torch_dtype="float16"
 )

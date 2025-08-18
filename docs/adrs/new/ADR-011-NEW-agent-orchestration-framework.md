@@ -93,10 +93,12 @@ We will implement **LangGraph Supervisor-Based Orchestration** using the `langgr
 
 ## Related Decisions
 
-- **ADR-001-NEW** (Modern Agentic RAG): Implements the agent patterns orchestrated by this framework
+- **ADR-001-NEW** (Modern Agentic RAG): Defines the core 5-agent architecture patterns orchestrated by this framework
 - **ADR-004-NEW** (Local-First LLM Strategy): Provides the LLM for agent decision-making
-- **ADR-008-NEW** (Production Observability): Monitors agent performance and decisions
-- **ADR-005-NEW** (Framework Abstraction Layer): Integrates with abstracted components
+- **ADR-010-NEW** (Performance Optimization Strategy): Provides cache coordination between the 5 agents
+- **ADR-012-NEW** (Evaluation Strategy): Evaluates the effectiveness of multi-agent coordination
+- **ADR-015-NEW** (Deployment Strategy): Deploys the 5-agent orchestration system
+- **ADR-016-NEW** (UI State Management): Manages state for multi-agent interactions
 - **ADR-018-NEW** (DSPy Prompt Optimization): Retrieval agent leverages automatic query optimization
 - **ADR-019-NEW** (Optional GraphRAG): Agents can route to PropertyGraphIndex for relationship queries
 

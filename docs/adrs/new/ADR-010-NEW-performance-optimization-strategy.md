@@ -93,10 +93,13 @@ We will adopt **dual-layer caching with IngestionCache + GPTCache** configured f
 
 ## Related Decisions
 
+- **ADR-001-NEW** (Modern Agentic RAG Architecture): Implements the 5-agent system requiring performance optimization
 - **ADR-007-NEW** (Hybrid Persistence Strategy): Defines Qdrant as primary vector database - semantic cache aligns with this choice
 - **ADR-011-NEW** (Agent Orchestration Framework): Defines the 5-agent architecture requiring cache coordination
-- **ADR-004-NEW** (Local-First LLM Strategy): Specifies Qwen3-14B requiring KV cache optimization
+- **ADR-004-NEW** (Local-First LLM Strategy): Specifies Qwen3-14B requiring KV cache optimization for 128K context
 - **ADR-002-NEW** (Unified Embedding Strategy): BGE-M3 embeddings cached by IngestionCache
+- **ADR-015-NEW** (Deployment Strategy): Cache configuration affects Docker deployment requirements
+- **ADR-016-NEW** (UI State Management): Cache performance impacts Streamlit UI responsiveness
 - **ADR-018-NEW** (DSPy Prompt Optimization): Query rewriting operations benefit from caching
 - **ADR-019-NEW** (Optional GraphRAG): PropertyGraphIndex graph construction and query results cached
 

@@ -802,7 +802,7 @@ def model_config_panel():
                 value=SettingsState.selected_model,
                 on_change=SettingsState.set_selected_model,
                 options=[
-                    {"label": "Qwen3-14B-Instruct (Recommended)", "value": "qwen3-14b"},
+                    {"label": "Qwen3-14B (Recommended)", "value": "qwen3-14b"},
                     {"label": "Qwen2.5-14B-Instruct", "value": "qwen2.5-14b"},
                     {"label": "Custom Model", "value": "custom"}
                 ]

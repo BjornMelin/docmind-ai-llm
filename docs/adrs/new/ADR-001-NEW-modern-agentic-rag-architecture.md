@@ -6,7 +6,7 @@ Lightweight Multi-Agent RAG with Adaptive Routing and Self-Correction
 
 ## Version/Date
 
-4.1 / 2025-08-18
+4.3 / 2025-08-18
 
 ## Status
 
@@ -30,7 +30,7 @@ Traditional RAG systems suffer from fixed retrieval patterns that cannot adapt t
 3. **Self-Correction**: Validating and improving generated responses
 4. **Local Operation**: All processing occurs on consumer hardware without API dependencies
 
-Research validates that supervisor-based agentic patterns can run efficiently on local models (Qwen3-14B with native 128K context) while providing significant quality improvements over basic RAG with dramatically reduced implementation complexity.
+Research validates that supervisor-based agentic patterns can run efficiently on local models (Qwen3-14B with native 32K context, extensible to 128K with YaRN) while providing significant quality improvements over basic RAG with dramatically reduced implementation complexity.
 
 ## Related Requirements
 
@@ -63,22 +63,24 @@ Research validates that supervisor-based agentic patterns can run efficiently on
 
 ### 3. Lightweight Agentic RAG (Selected)
 
-- **Description**: Three-pattern system: routing, correction, validation with minimal overhead
+- **Description**: Five-agent system: routing, planning, retrieval, synthesis, validation with minimal overhead
 - **Benefits**: Balanced capability/complexity, proven local operation, maintainable
 - **Score**: 8/10 (capability: 7, simplicity: 7, performance: 8)
 
 ## Decision
 
-We will implement a **supervisor-based agentic RAG architecture** using `langgraph-supervisor` with three core patterns:
+We will implement a **supervisor-based agentic RAG architecture** using `langgraph-supervisor` with five specialized agents:
 
-1. **Adaptive Routing Agent**: Routes queries between vector search, hybrid search, and web search fallback
-2. **Corrective Retrieval Agent**: Evaluates retrieval quality and triggers re-retrieval with query refinement
-3. **Self-Correction Agent**: Validates response quality and triggers regeneration when needed
+1. **Query Routing Agent** (`query_router`): Analyzes queries and determines optimal retrieval strategy
+2. **Planning Agent** (`query_planner`): Decomposes complex queries into manageable sub-tasks  
+3. **Retrieval Agent** (`retrieval_expert`): Executes retrieval with DSPy optimization and optional GraphRAG
+4. **Synthesis Agent** (`result_synthesizer`): Combines and reconciles results from multiple sources
+5. **Response Validation Agent** (`response_validator`): Ensures accuracy and quality of final response
 
 **Implementation Strategy:**
 
 - Use `create_supervisor()` from langgraph-supervisor library
-- Local LLM for all agent decisions (Qwen3-14B with native 128K context)
+- Local LLM for all agent decisions (Qwen3-14B with native 32K context, extensible to 128K with YaRN)
 - Supervisor handles state management and agent coordination automatically
 - Built-in error handling and fallback mechanisms
 
@@ -86,8 +88,11 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 
 - **ADR-004-NEW** (Local-First LLM Strategy): Provides the local LLM for agent decision-making
 - **ADR-003-NEW** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
-- **ADR-011-NEW** (Agent Orchestration Framework): Details the supervisor library implementation
-- **ADR-012-NEW** (Evaluation and Quality Assurance): Provides the quality metrics for self-correction
+- **ADR-010-NEW** (Performance Optimization Strategy): Provides dual-cache architecture for efficient multi-agent coordination
+- **ADR-011-NEW** (Agent Orchestration Framework): Details the supervisor library implementation with 5-agent architecture
+- **ADR-012-NEW** (Evaluation and Quality Assurance): Provides the quality metrics for response validation
+- **ADR-015-NEW** (Deployment Strategy): Defines Docker deployment for the complete 5-agent system
+- **ADR-016-NEW** (UI State Management): Manages state for multi-agent interactions in Streamlit UI
 - **ADR-018-NEW** (DSPy Prompt Optimization): Enhances query processing and agent prompts with automatic optimization
 - **ADR-019-NEW** (Optional GraphRAG): Provides advanced multi-hop reasoning capabilities when enabled
 
@@ -97,72 +102,108 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 
 ```mermaid
 graph TD
-    A[User Query] --> B{Routing Agent}
-    B -->|Simple| C[Vector Search]
-    B -->|Complex| D[Hybrid Search]
-    B -->|Recent| E[Web Search]
+    A[User Query] --> B[Supervisor Agent]
+    B --> C[Query Router]
+    C -->|Complex Query| D[Query Planner]
+    C -->|Simple Query| E[Retrieval Expert]
     
-    C --> F{Correction Agent}
-    D --> F
-    E --> F
+    D -->|Sub-tasks| E
+    E -->|DSPy Optimization| F[Optimized Retrieval]
+    E -->|GraphRAG Option| G[Relationship Extraction]
     
-    F -->|Good Results| G[Generate Response]
-    F -->|Poor Results| H[Refine Query] --> B
+    F --> H[Result Synthesizer]
+    G --> H
     
-    G --> I{Validation Agent}
+    H -->|Combined Results| I[Response Validator]
     I -->|Valid| J[Return Response]
-    I -->|Invalid| K[Regenerate] --> G
-    I -->|Unsupported| H
+    I -->|Invalid| K[Regenerate] --> E
+    I -->|Needs Refinement| D
+    
+    B -.->|Coordinates| C
+    B -.->|Coordinates| D
+    B -.->|Coordinates| E
+    B -.->|Coordinates| H
+    B -.->|Coordinates| I
 ```
 
 ### Core Agent Functions
 
 ```python
-# Routing Agent - decides retrieval strategy
-def route_query(query: str, context: Dict) -> str:
-    """Routes query to optimal retrieval strategy."""
+# Query Router - analyzes and routes queries
+def route_query(query: str, context: Dict) -> Dict[str, Any]:
+    """Analyzes query complexity and determines routing strategy."""
     prompt = """
-    Analyze this query and choose the best retrieval approach:
+    Analyze this query and determine:
+    1. Complexity level (simple, complex, multi-hop)
+    2. Best retrieval strategy (vector, hybrid, graphrag)
+    3. Whether planning is needed
     
     Query: {query}
     
-    Options:
-    - vector: For semantic similarity searches
-    - hybrid: For complex queries needing keyword + semantic
-    - web: For recent events or missing knowledge
-    
-    Respond with just: vector, hybrid, or web
+    Return as JSON: {{"complexity": "...", "strategy": "...", "needs_planning": boolean}}
     """
     return llm.invoke(prompt.format(query=query))
 
-# Correction Agent - evaluates retrieval quality  
-def evaluate_retrieval(query: str, documents: List[Document]) -> str:
-    """Evaluates if retrieved documents can answer the query."""
+# Query Planner - decomposes complex queries
+def plan_query(query: str, complexity: str) -> List[str]:
+    """Decomposes complex queries into manageable sub-tasks."""
+    if complexity != "complex":
+        return [query]
+    
     prompt = """
+    Break down this complex query into 2-3 focused sub-tasks:
+    
     Query: {query}
-    Documents: {docs}
     
-    Can these documents adequately answer the query?
-    Consider relevance, completeness, and recency.
-    
-    Respond with: good, poor, or missing
+    Return as list of specific, searchable questions.
     """
-    return llm.invoke(prompt.format(query=query, docs=documents))
+    return llm.invoke(prompt.format(query=query))
 
-# Validation Agent - checks response quality
-def validate_response(query: str, response: str, sources: List[Document]) -> str:
-    """Validates generated response against sources."""
+# Retrieval Expert - executes optimized retrieval
+def retrieve_documents(query: str, strategy: str, use_dspy: bool = True) -> List[Document]:
+    """Executes retrieval with DSPy optimization and optional GraphRAG."""
+    # Apply DSPy query optimization if enabled
+    if use_dspy:
+        optimized_query = dspy_optimizer.optimize(query)
+    else:
+        optimized_query = query
+    
+    # Execute retrieval based on strategy
+    if strategy == "graphrag":
+        return graphrag_retriever.retrieve(optimized_query)
+    elif strategy == "hybrid":
+        return hybrid_retriever.retrieve(optimized_query)
+    else:
+        return vector_retriever.retrieve(optimized_query)
+
+# Result Synthesizer - combines multi-source results
+def synthesize_results(sub_results: List[List[Document]], query: str) -> List[Document]:
+    """Combines and deduplicates results from multiple retrieval passes."""
+    # Deduplicate and rank by relevance
+    unique_docs = []
+    seen_content = set()
+    
+    for result_set in sub_results:
+        for doc in result_set:
+            if doc.get_content() not in seen_content:
+                seen_content.add(doc.get_content())
+                unique_docs.append(doc)
+    
+    return sorted(unique_docs, key=lambda x: x.score, reverse=True)[:10]
+
+# Response Validator - validates final response
+def validate_response(query: str, response: str, sources: List[Document]) -> Dict[str, Any]:
+    """Validates generated response quality and accuracy."""
     prompt = """
+    Evaluate this response:
+    
     Query: {query}
     Response: {response}
     Sources: {sources}
     
-    Evaluate the response:
-    1. Relevant to query?
-    2. Supported by sources?
-    3. Complete answer?
+    Check: relevance, accuracy, completeness, source support
     
-    Respond with: valid, invalid, or unsupported
+    Return as JSON: {{"valid": boolean, "confidence": float, "issues": [...]}}
     """
     return llm.invoke(prompt.format(query=query, response=response, sources=sources))
 ```
@@ -193,30 +234,42 @@ def generate_and_validate(query: str, documents: List[Dict]) -> str:
     # Combined generation and validation logic
     return "Generated and validated response..."
 
-# Create agents
+# Create 5 specialized agents
 routing_agent = create_react_agent(
-    model=llm, tools=[route_query], name="router",
-    prompt="You route queries to optimal retrieval strategies."
+    model=llm, tools=[route_query], name="query_router",
+    prompt="You analyze queries to determine optimal retrieval strategies."
+)
+
+planning_agent = create_react_agent(
+    model=llm, tools=[plan_query], name="query_planner",
+    prompt="You decompose complex queries into manageable sub-tasks."
 )
 
 retrieval_agent = create_react_agent(
-    model=llm, tools=[retrieve_and_evaluate], name="retriever", 
-    prompt="You retrieve and evaluate document quality."
+    model=llm, tools=[retrieve_documents], name="retrieval_expert", 
+    prompt="You execute retrieval with DSPy optimization and GraphRAG when appropriate."
 )
 
-generation_agent = create_react_agent(
-    model=llm, tools=[generate_and_validate], name="generator",
-    prompt="You generate and validate responses."
+synthesis_agent = create_react_agent(
+    model=llm, tools=[synthesize_results], name="result_synthesizer",
+    prompt="You combine results from multiple retrieval passes."
 )
 
-# Create supervisor workflow
+validation_agent = create_react_agent(
+    model=llm, tools=[validate_response], name="response_validator",
+    prompt="You validate and ensure quality of final responses."
+)
+
+# Create supervisor workflow with 5 agents
 workflow = create_supervisor(
-    agents=[routing_agent, retrieval_agent, generation_agent],
+    agents=[routing_agent, planning_agent, retrieval_agent, synthesis_agent, validation_agent],
     model=llm,
-    prompt="""You coordinate a RAG system:
-    1. Use router to analyze the query
-    2. Use retriever to get and evaluate documents  
-    3. Use generator to create and validate the response"""
+    prompt="""You coordinate an advanced 5-agent RAG system:
+    1. Use query_router to analyze complexity and determine strategy
+    2. For complex queries, use query_planner to decompose into sub-tasks
+    3. Use retrieval_expert to get documents with DSPy and GraphRAG optimization
+    4. For multi-source results, use result_synthesizer to combine findings
+    5. Use response_validator to ensure quality and accuracy"""
 )
 
 # Compile and use
@@ -238,7 +291,7 @@ response = result["messages"][-1]["content"]
 
 - **Adaptive Intelligence**: System can handle diverse query types and quality issues intelligently
 - **Quality Assurance**: Built-in validation prevents poor responses from reaching users
-- **Maintainable Complexity**: Simple three-agent pattern avoids over-engineering
+- **Maintainable Complexity**: Simple five-agent pattern avoids over-engineering
 - **Local Operation**: No external dependencies while gaining agentic capabilities
 - **Performance**: Lightweight decisions add minimal overhead to response time
 - **Advanced Optimization**: DSPy provides automatic prompt optimization for 20-30% improvement in retrieval quality
@@ -261,7 +314,7 @@ response = result["messages"][-1]["content"]
 ## Dependencies
 
 - **Python**: `langgraph-supervisor>=0.0.29`, `langgraph>=0.2.0`, `langchain-core>=0.3.0`
-- **Local LLM**: Qwen3-14B-Instruct with native 128K context and function calling support
+- **Local LLM**: Qwen3-14B with native 32K context (extensible to 128K with YaRN) and function calling support
 - **Framework**: LlamaIndex integration for retrieval components
 
 ## Performance Targets
@@ -281,8 +334,10 @@ response = result["messages"][-1]["content"]
 
 ## Changelog
 
+- **4.3 (2025-08-18)**: CORRECTED - Fixed context length specifications: Qwen3-14B has native 32K context, extensible to 128K with YaRN (not native 128K)
+- **4.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
 - **4.1 (2025-08-18)**: Added DSPy prompt optimization (20-30% quality improvement) and GraphRAG multi-hop reasoning capabilities
 - **4.0 (2025-08-17)**: Updated with library-first supervisor approach and simplified agent implementation
-- **3.0 (2025-08-16)**: **MODEL UPDATE** - Updated to use Qwen3-14B-Instruct with native 128K context (latest generation, April 2025). Maintains all langgraph-supervisor simplifications.
-- **2.0 (2025-01-16)**: **SIMPLIFIED IMPLEMENTATION** - Switched to langgraph-supervisor library for agent coordination. Updated to use Qwen2.5-14B with 128K context. Eliminated custom state management and conditional routing.
+- **3.0 (2025-08-16)**: **MODEL UPDATE** - Updated to use Qwen3-14B with native 32K context, extensible to 128K with YaRN (latest generation, April 2025). Maintains all langgraph-supervisor simplifications.
+- **2.0 (2025-01-16)**: **SIMPLIFIED IMPLEMENTATION** - Switched to langgraph-supervisor library for agent coordination. Updated to use Qwen3-14B with extended context support. Eliminated custom state management and conditional routing.
 - **1.0 (2025-01-16)**: Initial architecture design for lightweight agentic RAG with LangGraph implementation

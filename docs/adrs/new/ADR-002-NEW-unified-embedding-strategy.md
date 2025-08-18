@@ -6,7 +6,7 @@ BGE-M3 Unified Dense/Sparse Embedding with CLIP Multimodal Support
 
 ## Version/Date
 
-2.0 / 2025-08-17
+3.1 / 2025-08-18
 
 ## Status
 
@@ -25,6 +25,8 @@ The current architecture uses three separate embedding models:
 - `openai/clip-vit-base-patch32` (512d) for image embeddings
 
 BGE-M3 represents a significant advancement by unifying dense and sparse retrieval in a single model with multi-functionality, multi-linguality, and multi-granularity support. Research shows BGE-M3 achieves superior performance compared to separate dense/sparse models while reducing resource requirements.
+
+**Integration Flow**: Processed document chunks from ADR-009 (Unstructured.io pipeline) are fed into BGE-M3 to generate 1024-dimensional unified embeddings, which are then stored in Qdrant collections (ADR-007) for retrieval by the adaptive pipeline (ADR-003).
 
 ## Related Requirements
 
@@ -108,7 +110,8 @@ We will adopt **BGE-M3 + CLIP strategy** for 100% local operation:
 
 - **ADR-003-NEW** (Adaptive Retrieval Pipeline): Uses unified embeddings for hybrid search
 - **ADR-006-NEW** (Modern Reranking Architecture): Works with BGE-M3 outputs
-- **ADR-007-NEW** (Hybrid Persistence Strategy): Stores unified embedding vectors
+- **ADR-007-NEW** (Hybrid Persistence Strategy): Stores unified embedding vectors in Qdrant
+- **ADR-009-NEW** (Document Processing Pipeline): Provides processed document chunks for BGE-M3 embedding generation
 - **ADR-001-NEW** (Modern Agentic RAG): Benefits from improved embedding quality
 
 ## Design
@@ -342,6 +345,7 @@ class OptimizedBGE_M3:
 
 ## Changelog
 
+- **3.1 (2025-08-18)**: Enhanced integration with DSPy query optimization for automatic embedding quality improvement and added BGE-M3 compatibility with PropertyGraphIndex for multi-modal retrieval scenarios
 - **3.0 (2025-08-17)**: CRITICAL FIX - Removed Voyage-3 (API-only, violates local-first requirement). Set BGE-M3 as PRIMARY model for 100% local operation. Added Nomic-Embed-v2-MoE and Arctic-Embed-L-v2 as strong local alternatives.
 - **2.0 (2025-08-17)**: [INVALID - Incorrectly selected API-only Voyage-3]
 - **1.0 (2025-01-16)**: Initial design for BGE-M3 unified embedding strategy with CLIP multimodal support

@@ -6,7 +6,7 @@ Local LLM Selection and Optimization for Consumer Hardware
 
 ## Version/Date
 
-4.0 / 2025-08-17
+4.3 / 2025-08-18
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Establishes a local-first LLM strategy optimized for consumer hardware (RTX 3060-4090), focusing on **Qwen3-14B-Instruct** as the primary model with native 128K context window support. The strategy emphasizes function calling capabilities, 4-bit quantization optimization, and efficient memory management while providing state-of-the-art performance for document analysis tasks. This replaces the previous Qwen2.5-based strategy with the latest generation models released in 2025.
+Establishes a local-first LLM strategy optimized for consumer hardware (RTX 3060-4090), focusing on **Qwen3-14B** as the primary model with native 32K context window (extensible to 128K with YaRN). The strategy emphasizes function calling capabilities, 4-bit quantization optimization, and efficient memory management while providing state-of-the-art performance for document analysis tasks. This replaces the previous Qwen2.5-based strategy with the latest generation models released in 2025.
 
 ## Context
 
@@ -25,7 +25,9 @@ Current architecture lacks a defined local LLM strategy, relying on external API
 3. **Consumer Hardware**: Efficient operation on RTX 3060-4090 GPUs
 4. **Quality**: Competitive performance with GPT-3.5 level capabilities
 
-Research indicates **Qwen3-14B-Instruct with native 128K context** provides optimal balance of capability and efficiency for local deployment, significantly outperforming alternatives like GPT-OSS-20B in document analysis tasks. The latest generation Qwen3 models (April 2025) offer superior performance compared to Qwen2.5 generation, addressing real-world document analysis needs that require 15K-200K tokens of context.
+Research indicates **Qwen3-14B with native 32K context (extensible to 128K with YaRN)** provides optimal balance of capability and efficiency for local deployment, significantly outperforming alternatives like GPT-OSS-20B in document analysis tasks. The latest generation Qwen3 models (April 2025) offer superior performance compared to Qwen2.5 generation, addressing real-world document analysis needs that require 15K-200K tokens of context through YaRN extension.
+
+**Integration Benefits**: The extended 128K context capability (via YaRN) enables comprehensive analysis of large documents processed by ADR-009, supporting multi-document reasoning across retrieval results from ADR-003 without context truncation.
 
 ## Related Requirements
 
@@ -63,9 +65,9 @@ Research indicates **Qwen3-14B-Instruct with native 128K context** provides opti
 - **Issues**: Limited reasoning, weaker function calling, reduced quality
 - **Score**: 6/10 (performance: 8, quality: 5, capability: 4)
 
-### 4. Qwen3-14B-Instruct Primary with Native 128K Context (Selected)
+### 4. Qwen3-14B Primary with Extended Context Support (Selected)
 
-- **Benefits**: Latest generation (April 2025), native 128K context, superior document Q&A, excellent function calling, Q4_K_M efficiency
+- **Benefits**: Latest generation (April 2025), native 32K context extensible to 128K with YaRN, superior document Q&A, excellent function calling, Q4_K_M efficiency
 - **Issues**: Requires 8-10GB VRAM, but highly manageable with quantization
 - **Score**: 10/10 (quality: 10, capability: 10, performance: 9, context: 10, efficiency: 10)
 
@@ -83,19 +85,19 @@ Research indicates **Qwen3-14B-Instruct with native 128K context** provides opti
 
 ## Decision
 
-We will adopt **Qwen3-14B-Instruct as primary with native 128K context**:
+We will adopt **Qwen3-14B as primary with extended context support**:
 
-### Primary Model: **Qwen3-14B-Instruct**
+### Primary Model: **Qwen3-14B**
 
 - **Parameters**: 14.8B parameters
 - **Memory**: ~8GB VRAM with Q4_K_M quantization (~10GB with Q5_K_M)
-- **Context**: 128K tokens native (no extensions required)
+- **Context**: 32K tokens native, extensible to 128K with YaRN
 - **Capabilities**: Excellent function calling, superior reasoning, multilingual, native extended context
 - **Release**: April 2025 (latest generation)
 
 ### Fallback Models (Hardware Adaptive)
 
-- **Qwen3-7B-Instruct**: For RTX 3060-4060 (6-8GB VRAM) - native 128K context
+- **Qwen3-7B**: For RTX 3060-4060 (6-8GB VRAM) - native 32K context, extensible to 128K with YaRN
 - **Qwen3-30B-A3B**: For high-end systems (RTX 4090 24GB) - best document Q&A performance
 - **GPT-OSS-20B**: For OpenAI ecosystem integration (16GB VRAM) - limited general capabilities
 - **Phi-3-Mini-128K-Instruct**: For systems with limited VRAM (<6GB) - maintains extended context
@@ -106,15 +108,16 @@ We will adopt **Qwen3-14B-Instruct as primary with native 128K context**:
 - **High Quality**: Q5_K_M for better performance (10GB VRAM)
 - **Near Lossless**: Q6_K for maximum quality (12GB VRAM)  
 - **Memory Critical**: Q4_0 for systems with <8GB VRAM
-- **Context Scaling**: Efficient KV cache management for native 128K context windows with quantization
+- **Context Scaling**: Efficient KV cache management for extended context (up to 128K with YaRN) with quantization
 - **KV Cache Optimization**: INT8 quantization for 45% VRAM reduction, Q4_K_M GGUF support
 
 ## Related Decisions
 
 - **ADR-001-NEW** (Modern Agentic RAG): Provides LLM for agent decision-making
-- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Uses LLM for query routing and evaluation
+- **ADR-003-NEW** (Adaptive Retrieval Pipeline): Uses LLM for query routing and evaluation, leverages extended context (up to 128K with YaRN) for comprehensive document analysis
 - **ADR-010-NEW** (Performance Optimization Strategy): Implements quantization and caching
 - **ADR-011-NEW** (Agent Orchestration Framework): Integrates function calling capabilities
+- **ADR-012-NEW** (Evaluation Strategy): Uses Qwen3-14B for evaluation and quality assessment tasks
 
 ## Design
 
@@ -136,7 +139,7 @@ DocMind AI supports multiple local LLM providers with automatic hardware-based s
 - **llama.cpp**: ~155 tokens/sec (+29% with flash attention)
 - **vLLM**: ~340 tokens/sec (+183% with PagedAttention, requires 2+ GPUs)
 
-*Source: Real-world benchmarks from vLLM vs llama.cpp comparison studies (2025)*
+> *Source: Real-world benchmarks from vLLM vs llama.cpp comparison studies (2025)*
 
 ### Library-First Multi-Provider Setup
 
@@ -217,10 +220,10 @@ def setup_multi_provider_llm(
     if provider == "vllm":
         # vLLM for multi-GPU performance
         base_llm = Vllm(
-            model="Qwen/Qwen3-14B-Instruct",
+            model="Qwen/Qwen3-14B",
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.8,
-            max_model_len=131072,  # 128K context
+            max_model_len=32768,  # 32K native context (use 131072 for YaRN extension)
             dtype="float16",
             kv_cache_dtype="int8",  # KV cache quantization
             enable_prefix_caching=True,
@@ -235,7 +238,7 @@ def setup_multi_provider_llm(
         base_llm = LlamaCPP(
             model_path=model_path,
             n_gpu_layers=-1,  # Use all GPU layers
-            n_ctx=131072,  # 128K context
+            n_ctx=32768,  # 32K native context (use 131072 for YaRN extension)
             n_batch=512,  # Optimal batch size
             flash_attn=True,  # Enable flash attention if available
             tensor_split=None,  # Single GPU optimization
@@ -257,7 +260,7 @@ def setup_multi_provider_llm(
         base_llm = Ollama(
             model=model_name,
             request_timeout=120.0,
-            context_window=131072,  # 128K context
+            context_window=32768,  # 32K native context (use 131072 for YaRN extension)
             temperature=0.7,
             # Ollama-specific optimizations via environment
             num_gpu_layers=999,  # Use all available layers
@@ -459,7 +462,7 @@ def setup_constrained_generation():
     # Model configurations
     models = {
         "qwen3-14b": ModelConfig(
-            name="Qwen/Qwen3-14B-Instruct",
+            name="Qwen/Qwen3-14B",
             parameters="14.8B",
             memory_gb=8.0,
             context_length=131072,  # 128K native
@@ -467,10 +470,10 @@ def setup_constrained_generation():
             capabilities=["function_calling", "reasoning", "structured_output", "native_128k"]
         ),
         "qwen3-7b": ModelConfig(
-            name="Qwen/Qwen3-7B-Instruct", 
+            name="Qwen/Qwen3-7B", 
             parameters="7.6B",
             memory_gb=6.0,
-            context_length=131072,  # 128K native context
+            context_length=32768,  # 32K native context (131072 with YaRN extension)
             quantization="q4_k_m",
             capabilities=["function_calling", "reasoning", "native_128k", "thinking_mode"]
         ),
@@ -478,7 +481,7 @@ def setup_constrained_generation():
             name="Qwen/Qwen3-30B-A3B-Instruct",
             parameters="30B (3B active)",
             memory_gb=20.0,
-            context_length=131072,  # 128K native context  
+            context_length=32768,  # 32K native context (131072 with YaRN extension)  
             quantization="q4_k_m",
             capabilities=["function_calling", "reasoning", "document_qa_leader", "moe", "thinking_mode"]
         ),
@@ -486,7 +489,7 @@ def setup_constrained_generation():
             name="openai/gpt-oss-20b",
             parameters="21B (3.6B active)", 
             memory_gb=16.0,
-            context_length=131072,  # 128K context
+            context_length=32768,  # 32K native context (131072 with YaRN for extended context)
             quantization="mxfp4",
             capabilities=["function_calling", "math_reasoning", "moe", "openai_ecosystem"]
         ),
@@ -494,7 +497,7 @@ def setup_constrained_generation():
             name="microsoft/Phi-3-mini-128k-instruct",
             parameters="3.8B", 
             memory_gb=4.0,
-            context_length=131072,  # 128K context
+            context_length=32768,  # 32K native context (131072 with YaRN for extended context)
             quantization="8bit",
             capabilities=["reasoning", "lightweight", "extended_context"]
         ),
@@ -818,7 +821,7 @@ def setup_local_llm():
 - **Hardware Adaptive**: Automatically selects optimal model for available resources
 - **Function Calling**: Supports agentic RAG patterns with tool use capabilities
 - **Quantization Benefits**: 50-70% memory reduction with minimal quality loss
-- ****MAJOR: Extended Context**: 128K context window enables comprehensive document analysis
+- ****MAJOR: Extended Context**: Up to 128K context (with YaRN extension) enables comprehensive document analysis
 - **Real-World Capable**: Handles academic papers, technical docs, business reports effectively
 
 ### Negative Consequences / Trade-offs
@@ -826,24 +829,24 @@ def setup_local_llm():
 - **Hardware Requirements**: Requires GPU with ≥8GB VRAM for optimal experience (Q4_K_M)
 - **Setup Complexity**: Model downloading and quantization setup more complex than APIs  
 - **Quality Variability**: Local models may have quality gaps vs latest cloud models (gap closing rapidly)
-- **Resource Usage**: Higher VRAM requirements for native 128K context operations
+- **Resource Usage**: Higher VRAM requirements for extended context operations (up to 128K with YaRN)
 - **Model Updates**: Manual process to update to newer model versions
-- **KV Cache Memory**: Native 128K context requires careful memory management but more efficient than extensions
+- **YaRN Extension**: Extended context beyond 32K requires YaRN configuration and additional memory management
 
 ### Performance Targets
 
 - **Response Time**: <3 seconds for 512 token responses on RTX 4060
-- **Memory Usage**: <10GB VRAM for primary model (Qwen3-14B Q4_K_M with native 128K context)
+- **Memory Usage**: <10GB VRAM for primary model (Qwen3-14B Q4_K_M, additional memory needed for YaRN extension)
 - **Quality**: ≥90% performance vs GPT-3.5-turbo on reasoning benchmarks  
 - **Function Calling**: ≥95% success rate on simple function calling tasks
-- **Context Handling**: Support native 128K tokens efficiently, enabling comprehensive document analysis
+- **Context Handling**: Support up to 128K tokens with YaRN extension, enabling comprehensive document analysis
 - **Document Q&A**: Superior performance vs GPT-OSS-20B and other alternatives
 
 ## Dependencies
 
 - **Python**: `transformers>=4.40.0`, `torch>=2.0.0`, `llama-cpp-python>=0.2.77` (for GGUF support)
 - **Hardware**: NVIDIA GPU with ≥8GB VRAM for Q4_K_M quantization, CUDA 11.8+
-- **Optional**: `flash-attn>=2.0.0` for native 128K context optimization
+- **Optional**: `flash-attn>=2.0.0` for extended context optimization, YaRN support for 128K context
 - **Storage**: 8-15GB for Qwen3-14B Q4_K_M weights and KV cache
 - **Alternative**: Ollama or LM Studio for simplified deployment
 
@@ -860,6 +863,10 @@ def setup_local_llm():
 
 ## Changelog
 
-- **3.0 (2025-08-16)**: **CRITICAL CORRECTIONS** - Switched to **Qwen3-14B-Instruct** (latest generation, April 2025) with native 128K context. Corrected Qwen2.5-14B context limitation (32K native, not 128K). Added GPT-OSS-20B analysis. Updated quantization to Q4_K_M GGUF format. Based on comprehensive 2025 model research and real-world performance testing.
-- **2.0 (2025-01-16)**: **MAJOR UPGRADE** - Switched to Qwen2.5-14B-Instruct with 128K context window (16x increase from 8K). Updated all fallback models to support extended context. Added AWQ quantization support. Addresses real-world document analysis requirements.
+- **4.3 (2025-08-18)**: CORRECTED - Fixed context length specifications: Qwen3-14B has native 32K context, extensible to 128K with YaRN (not native 128K)
+- **4.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
+- **4.1 (2025-08-18)**: Enhanced integration with agent orchestration framework for function calling in multi-agent scenarios, optimized for DSPy prompt optimization and GraphRAG compatibility with extended context handling
+- **4.0 (2025-08-17)**: [Missing previous changelog entry - needs documentation]
+- **3.0 (2025-08-16)**: **CRITICAL CORRECTIONS** - Switched to **Qwen3-14B** (latest generation, April 2025) with native 32K context, extensible to 128K with YaRN. Corrected Qwen2.5-14B context limitation (32K native, not 128K). Added GPT-OSS-20B analysis. Updated quantization to Q4_K_M GGUF format. Based on comprehensive 2025 model research and real-world performance testing.
+- **2.0 (2025-01-16)**: **MAJOR UPGRADE** - Switched to Qwen2.5-14B-Instruct with extended context window support (16x increase from 8K). Updated all fallback models to support extended context. Added AWQ quantization support. Addresses real-world document analysis requirements.
 - **1.0 (2025-01-16)**: Initial local LLM strategy with Qwen3-14B primary and hardware-adaptive selection

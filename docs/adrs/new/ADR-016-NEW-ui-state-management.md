@@ -6,7 +6,7 @@ Streamlit Native State with LangGraph Memory Integration
 
 ## Version/Date
 
-4.0 / 2025-08-17
+4.2 / 2025-08-18
 
 ## Status
 
@@ -197,7 +197,7 @@ def search_documents(query: str, filters: Dict):
 @st.cache_resource
 def get_llm_model():
     """Cache LLM model instance."""
-    return load_model("Qwen/Qwen3-14B-Instruct")
+    return load_model("Qwen/Qwen3-14B")
 
 @st.cache_resource
 def get_vector_db():
@@ -284,7 +284,7 @@ def load_settings():
         with open(SETTINGS_FILE) as f:
             return json.load(f)
     return {
-        "model": "Qwen/Qwen3-14B-Instruct",
+        "model": "Qwen/Qwen3-14B",
         "context_length": 131072,  # 128K native context
         "temperature": 0.7,
         "top_k": 10
@@ -308,7 +308,7 @@ def show_settings():
     
     settings['model'] = st.selectbox(
         "Model",
-        ["Qwen/Qwen3-14B-Instruct", "Qwen/Qwen3-7B-Instruct", "mistralai/Mistral-7B-Instruct"],
+        ["Qwen/Qwen3-14B", "Qwen/Qwen3-7B", "mistralai/Mistral-7B-Instruct"],
         index=0 if settings['model'].startswith("Qwen3-14B") else (1 if settings['model'].startswith("Qwen3-7B") else 2)
     )
     
@@ -366,6 +366,13 @@ if prompt := st.chat_input("Ask a question"):
 - ❌ Performance monitoring (Streamlit provides this)
 - ❌ 500+ lines of state management code
 
+## Related Decisions
+
+- **ADR-001-NEW** (Modern Agentic RAG Architecture): Provides UI for the 5-agent system interactions
+- **ADR-010-NEW** (Performance Optimization Strategy): Cache integration affects UI responsiveness
+- **ADR-011-NEW** (Agent Orchestration Framework): Manages state for 5-agent coordination in the UI
+- **ADR-004-NEW** (Local-First LLM Strategy): Configures Qwen3-14B settings in the UI
+
 ## Performance Tips
 
 1. **Use `st.cache_data` for data**: Automatically handles serialization
@@ -392,6 +399,9 @@ Streamlit provides built-in monitoring:
 
 ## Changelog
 
+- **4.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
+- **4.1 (2025-08-18)**: Enhanced state management for 5-agent workflow coordination, supporting DSPy optimization state and optional GraphRAG session persistence while maintaining Streamlit native simplicity
+- **4.0 (2025-08-17)**: [Missing previous changelog entry - needs documentation]
 - **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3 models and 128K context, accepted status
 - **2.0 (2025-08-17)**: SIMPLIFIED - Use native Streamlit features only
 - **1.0 (2025-08-17)**: Original over-engineered custom state management

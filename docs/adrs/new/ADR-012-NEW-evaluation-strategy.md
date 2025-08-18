@@ -6,7 +6,7 @@ Leverage DeepEval for All Quality Assurance
 
 ## Version/Date
 
-3.1 / 2025-08-18
+3.2 / 2025-08-18
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation, including metrics for DSPy optimization effectiveness and GraphRAG quality assessment.
+Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation, including metrics for the 5-agent system (query_router, query_planner, retrieval_expert, result_synthesizer, response_validator), DSPy optimization effectiveness, and GraphRAG quality assessment.
 
 ## Context
 
@@ -29,8 +29,10 @@ This is massive over-engineering when DeepEval already provides all these featur
 
 **Enhanced Requirements:**
 
+- **Multi-Agent Evaluation** (ADR-011): Assess the effectiveness of the 5-agent coordination system
 - **DSPy Evaluation** (ADR-018): Measure prompt optimization effectiveness and query rewriting quality
 - **GraphRAG Assessment** (ADR-019): Evaluate PropertyGraphIndex performance for relationship queries
+- **Performance Metrics** (ADR-010): Evaluate cache effectiveness and overall system performance
 
 ## Decision
 
@@ -57,13 +59,13 @@ class DocMindEvaluator:
     """Simple wrapper around DeepEval for DocMind evaluation."""
     
     def __init__(self):
-        # Initialize metrics with local LLM (Qwen3-14B-Instruct)
+        # Initialize metrics with local LLM (Qwen3-14B)
         self.metrics = [
-            AnswerRelevancyMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
-            FaithfulnessMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
-            ContextualPrecisionMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
-            ContextualRecallMetric(threshold=0.7, model="Qwen/Qwen3-14B-Instruct"),
-            HallucinationMetric(threshold=0.1, model="Qwen/Qwen3-14B-Instruct"),
+            AnswerRelevancyMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
+            FaithfulnessMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
+            ContextualPrecisionMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
+            ContextualRecallMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
+            HallucinationMetric(threshold=0.1, model="Qwen/Qwen3-14B"),
             LatencyMetric(max_latency=3.0),
         ]
         
@@ -79,6 +81,16 @@ class DocMindEvaluator:
             "relationship_extraction_quality": 0.0,  # Entity/relationship accuracy
             "multi_hop_reasoning_success": 0.0,  # Complex query success rate
             "graph_construction_time": 0.0,  # Time to build PropertyGraphIndex
+        }
+        
+        # Multi-agent coordination metrics (ADR-011)
+        self.agent_metrics = {
+            "query_router_accuracy": 0.0,  # Routing decision effectiveness
+            "query_planner_success": 0.0,  # Planning decomposition quality
+            "retrieval_expert_performance": 0.0,  # Retrieval quality with optimizations
+            "result_synthesizer_coherence": 0.0,  # Multi-source combination quality
+            "response_validator_precision": 0.0,  # Validation accuracy
+            "agent_coordination_latency": 0.0,  # Overall orchestration overhead
         }
     
     def evaluate_response(self, query: str, response: str, contexts: List[str], latency: float):
@@ -233,6 +245,12 @@ deepeval = "^1.0.0"
 ragas = "^0.2.0"
 ```
 
+## Related Decisions
+
+- **ADR-001-NEW** (Modern Agentic RAG Architecture): Provides the 5-agent system architecture being evaluated
+- **ADR-010-NEW** (Performance Optimization Strategy): Performance metrics complement DeepEval quality metrics
+- **ADR-011-NEW** (Agent Orchestration Framework): Defines the 5-agent coordination patterns requiring evaluation
+
 ## Monitoring Metrics
 
 DeepEval automatically tracks:
@@ -245,7 +263,8 @@ DeepEval automatically tracks:
 
 ## Changelog
 
+- **3.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
 - **3.1 (2025-08-18)**: Added DSPy-specific evaluation metrics for query optimization effectiveness and GraphRAG evaluation criteria for relationship extraction quality and multi-hop reasoning assessment
-- **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B-Instruct model selection, accepted status
+- **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B model selection, accepted status
 - **2.0 (2025-08-17)**: SIMPLIFIED - Use DeepEval library instead of custom code
 - **1.0 (2025-01-16)**: Original version with 1000+ lines of custom evaluation

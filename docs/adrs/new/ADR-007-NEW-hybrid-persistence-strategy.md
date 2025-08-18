@@ -187,7 +187,7 @@ graph TD
     C --> H[Redis-compatible Memory]
     D --> I[User Sessions, Settings]
     E --> J[Metrics, Performance Data]
-    F --> K[FAISS/hnswlib Indices]
+    F --> K[Qdrant Vector Storage]
     G --> L[LZ4 Compressed JSON]
     
     M[Backup System] --> D
@@ -496,7 +496,7 @@ class DuckDBBackend:
             return []
 
 class VectorBackend:
-    """Optimized vector storage using FAISS/hnswlib."""
+    """Optimized vector storage using Qdrant."""
     
     def __init__(self, config: StorageConfig):
         self.config = config
@@ -506,43 +506,44 @@ class VectorBackend:
         self._setup_vector_storage()
     
     def _setup_vector_storage(self):
-        """Initialize vector indices."""
+        """Initialize Qdrant client."""
         try:
-            if self.config.vector_index_type == "hnsw":
-                import hnswlib
-                self.index_class = hnswlib.Index
-            else:
-                import faiss
-                self.index_class = faiss.IndexIVFFlat
+            from qdrant_client import QdrantClient
+            from qdrant_client.models import Distance, VectorParams
+            
+            self.client = QdrantClient(host="localhost", port=6333)
+            print("Connected to Qdrant")
         except ImportError:
-            print("Vector backend libraries not available, using fallback")
-            self.index_class = None
+            print("Qdrant client not available, using fallback")
+            self.client = None
     
     def store_vectors(self, collection_name: str, vectors: np.ndarray, metadata: List[Dict]) -> bool:
-        """Store vector collection with metadata."""
+        """Store vector collection with metadata in Qdrant."""
         try:
-            collection_path = self.vector_path / collection_name
-            collection_path.mkdir(exist_ok=True)
+            if not self.client:
+                return False
             
-            # Save vectors
-            np.save(collection_path / "vectors.npy", vectors)
+            from qdrant_client.models import Distance, VectorParams, PointStruct
             
-            # Save metadata
-            with open(collection_path / "metadata.json", 'w') as f:
-                json.dump(metadata, f)
+            # Create collection if it doesn't exist
+            collections = self.client.get_collections().collections
+            if not any(c.name == collection_name for c in collections):
+                self.client.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=VectorParams(size=vectors.shape[1], distance=Distance.COSINE)
+                )
             
-            # Create/update index
-            if self.index_class and self.config.vector_index_type == "hnsw":
-                import hnswlib
-                
-                dim = vectors.shape[1]
-                index = hnswlib.Index(space='cosine', dim=dim)
-                index.init_index(max_elements=vectors.shape[0] * 2, ef_construction=200, M=16)
-                index.add_items(vectors, list(range(len(vectors))))
-                index.save_index(str(collection_path / "index.bin"))
-                
-                self.indices[collection_name] = index
+            # Prepare points for insertion
+            points = []
+            for i, (vector, meta) in enumerate(zip(vectors, metadata)):
+                points.append(PointStruct(
+                    id=i,
+                    vector=vector.tolist(),
+                    payload=meta
+                ))
             
+            # Insert vectors
+            self.client.upsert(collection_name=collection_name, points=points)
             return True
         except Exception as e:
             print(f"Vector store error: {e}")
@@ -792,7 +793,7 @@ class BackupManager:
 ## Dependencies
 
 - **Python**: `sqlite3` (built-in), `duckdb>=0.9.0`, `lz4>=4.0.0`
-- **Vector Libraries**: `hnswlib>=0.7.0` or `faiss-cpu>=1.7.0`
+- **Vector Database**: `qdrant-client>=1.7.0`
 - **Storage**: Local filesystem with sufficient space for document collection
 
 ## Monitoring Metrics

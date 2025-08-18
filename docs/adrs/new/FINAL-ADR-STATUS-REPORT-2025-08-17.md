@@ -52,7 +52,7 @@ All ADRs have been reviewed and validated. The architecture is coherent, depende
 
 **Status**: Ready to implement
 
-- Qwen3-14B-Instruct with 128K context confirmed
+- Qwen3-14B with 128K context confirmed
 - Function calling support validated
 - Q4_K_M quantization for <10GB VRAM
 - Correctly references Qwen3 (not Qwen2.5)

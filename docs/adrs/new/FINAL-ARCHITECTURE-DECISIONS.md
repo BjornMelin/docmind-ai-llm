@@ -6,12 +6,12 @@
 
 ### Language Model (LLM)
 
-- **Primary**: Qwen3-14B-Instruct (Q4_K_M GGUF format)
+- **Primary**: Qwen3-14B (Q4_K_M GGUF format)
   - 128K native context window
   - 8-10GB VRAM requirement
   - **Structured Outputs**: Instructor library integration
   - Deployment: Ollama/llama.cpp with Instructor patch
-- **Fallback**: Qwen3-7B-Instruct for lower-end hardware (4-6GB VRAM)
+- **Fallback**: Qwen3-7B for lower-end hardware (4-6GB VRAM)
 
 ### Embedding Model
 

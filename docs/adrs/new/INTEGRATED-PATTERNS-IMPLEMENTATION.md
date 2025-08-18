@@ -97,7 +97,7 @@ import torch
 
 # Automatic GPU management - replaces 180+ lines of custom code
 Settings.llm = vLLM(
-    model="Qwen/Qwen3-14B-Instruct",
+    model="Qwen/Qwen3-14B",
     device_map="auto",  # Library handles all GPU logic
     torch_dtype=torch.float16
 )
