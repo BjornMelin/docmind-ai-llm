@@ -6,7 +6,7 @@ LangGraph-Based Agent Orchestration with Local-First Agentic Patterns
 
 ## Version/Date
 
-4.1 / 2025-08-18
+4.2 / 2025-08-18
 
 ## Status
 
@@ -22,11 +22,11 @@ The modernized architecture introduces multiple agentic components that need coo
 
 1. **Query Routing Agent**: Determines optimal retrieval strategy
 2. **Planning Agent**: Decomposes complex queries into sub-tasks
-3. **Retrieval Agent**: Executes retrieval with query optimization
+3. **Retrieval Agent**: Executes multi-stage retrieval optimized for 32K context windows
 4. **Synthesis Agent**: Combines results from multiple retrieval passes
 5. **Response Validation Agent**: Ensures response quality and accuracy
 
-These agents need orchestration to work together effectively while avoiding over-complexity and maintaining local-first constraints. The `langgraph-supervisor` library provides the optimal solution with proven supervisor patterns, automatic state management, and conditional execution - eliminating the need for custom orchestration code.
+These agents need orchestration to work together effectively while maintaining context efficiency and local-first constraints. The `langgraph-supervisor` library provides the optimal solution with proven supervisor patterns, automatic state management, and conditional execution - eliminating the need for custom orchestration code while optimizing for 32K native context windows.
 
 ## Related Requirements
 

@@ -6,7 +6,7 @@ Multi-Backend Persistence with SQLite, DuckDB, and Vector Storage Optimization
 
 ## Version/Date
 
-2.1 / 2025-08-18
+2.2 / 2025-08-18
 
 ## Status
 
@@ -22,11 +22,11 @@ Original description: Implements a hybrid persistence strategy that moves beyond
 
 Current persistence relies solely on SQLite for all data storage needs. While SQLite works well for basic operations, the modernized architecture has diverse storage requirements:
 
-1. **Vector Data**: Embeddings and similarity indices need optimized storage
-2. **Analytical Queries**: RAPTOR-Lite hierarchy and performance metrics need OLAP capabilities  
+1. **Vector Data**: Embeddings and similarity indices need optimized storage for multi-stage retrieval
+2. **Hybrid Search**: Critical Stage 1 component (50 candidates) requires both dense and sparse indexing
 3. **Operational Data**: User sessions, settings, and metadata need ACID compliance
-4. **Document Content**: Large text content needs efficient compression and retrieval
-5. **Cache Management**: Temporary data needs fast access with automatic cleanup
+4. **Document Content**: Optimized storage for 32K context-aware chunking and retrieval
+5. **Cache Management**: Multi-stage pipeline caching for 50→20→10 filtering performance
 
 A hybrid approach allows each data type to use the most appropriate storage backend while maintaining simplicity and local-first operation.
 

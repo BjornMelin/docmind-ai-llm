@@ -6,7 +6,7 @@ Leverage DeepEval for All Quality Assurance
 
 ## Version/Date
 
-3.2 / 2025-08-18
+3.4 / 2025-08-18
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation, including metrics for the 5-agent system (query_router, query_planner, retrieval_expert, result_synthesizer, response_validator), DSPy optimization effectiveness, and GraphRAG quality assessment.
+Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation, including metrics for the 5-agent system with 32K context optimization, multi-stage retrieval quality (50→20→10 pipeline), DSPy optimization effectiveness, and intelligent retrieval performance vs brute-force large context approaches.
 
 ## Context
 
@@ -263,6 +263,7 @@ DeepEval automatically tracks:
 
 ## Changelog
 
+- **3.3 (2025-08-18)**: **REVERTED** - Confirmed Qwen3-14B as evaluation model after rejecting impractical 30B MoE model
 - **3.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
 - **3.1 (2025-08-18)**: Added DSPy-specific evaluation metrics for query optimization effectiveness and GraphRAG evaluation criteria for relationship extraction quality and multi-hop reasoning assessment
 - **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B model selection, accepted status

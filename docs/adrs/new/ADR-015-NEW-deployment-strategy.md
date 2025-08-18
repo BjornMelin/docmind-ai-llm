@@ -6,7 +6,7 @@ Simple Docker Deployment for Local Streamlit App
 
 ## Version/Date
 
-3.2 / 2025-08-18
+4.1 / 2025-08-18
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Single Docker image deployment with docker-compose for easy local setup. Users run `docker-compose up` and the app starts. No complex profiles, no hardware detection scripts, just environment variables for configuration.
+Single Docker image deployment with docker-compose for easy local setup optimized for 32K native context and intelligent retrieval. Users run `docker-compose up` and the app starts with optimized memory configuration. No complex profiles, no hardware detection scripts, just environment variables for 32K context configuration.
 
 ## Context
 
@@ -53,11 +53,13 @@ COPY . .
 # Create data directories
 RUN mkdir -p /app/data/{models,documents,cache}
 
-# Environment variables with sensible defaults
+# Environment variables with RTX 4090 Laptop optimized defaults
 ENV PYTHONPATH=/app
 ENV DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-14B}
-ENV DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-32768}
-ENV DOCMIND_DEVICE=${DOCMIND_DEVICE:-cpu}
+ENV DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-131072}
+ENV DOCMIND_ENABLE_YARN=${DOCMIND_ENABLE_YARN:-true}
+ENV DOCMIND_QUANTIZATION=${DOCMIND_QUANTIZATION:-Q5_K_M}
+ENV DOCMIND_DEVICE=${DOCMIND_DEVICE:-cuda}
 ENV STREAMLIT_SERVER_PORT=8501
 
 EXPOSE 8501
@@ -86,18 +88,21 @@ services:
       - ./models:/app/models
     environment:
       - DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-14B}
-      - DOCMIND_DEVICE=${DOCMIND_DEVICE:-cpu}
-      - DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-32768}
+      - DOCMIND_DEVICE=${DOCMIND_DEVICE:-cuda}
+      - DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-131072}
+      - DOCMIND_ENABLE_YARN=${DOCMIND_ENABLE_YARN:-true}
+      - DOCMIND_QUANTIZATION=${DOCMIND_QUANTIZATION:-Q5_K_M}
+      - CUDA_VISIBLE_DEVICES=0
     restart: unless-stopped
     
-    # Optional: GPU support (uncomment if needed)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    # GPU support for RTX 4090 Laptop (16GB VRAM)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 ```
 
 ### Simple .env.example
@@ -224,14 +229,16 @@ docker-compose --profile vllm up
 - Docker Compose
 - (Optional) NVIDIA Container Toolkit for GPU
 
-## Performance Targets
+## Performance Targets (RTX 4090 Laptop)
 
-- **Startup Time**: <2 minutes with cached models
+- **Startup Time**: <1 minute with cached models
 - **Image Size**: <2GB (using python:3.11-slim base)
-- **Memory Usage**: Depends on model (8GB for small, 16GB for large)
+- **Memory Usage**: 14GB VRAM for Qwen3-14B with 128K context
+- **Model Loading**: <30 seconds for Q5_K_M quantization from SSD
 
 ## Changelog
 
+- **4.0 (2025-08-18)**: **MAJOR HARDWARE UPGRADE** - Enhanced for RTX 4090 Laptop GPU (16GB VRAM). Updated Docker configuration with YaRN context scaling defaults (128K), Q5_K_M quantization, and CUDA as default device. Added proper GPU deployment configuration. Updated performance targets for high-end hardware.
 - **3.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
 - **3.1 (2025-08-18)**: Enhanced deployment configuration to support 5-agent system with DSPy optimization and optional GraphRAG capabilities while maintaining single Docker image simplicity
 - **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B and 128K context, accepted status

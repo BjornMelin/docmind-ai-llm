@@ -6,7 +6,7 @@ BGE-M3 Unified Dense/Sparse Embedding with CLIP Multimodal Support
 
 ## Version/Date
 
-3.1 / 2025-08-18
+4.0 / 2025-08-18
 
 ## Status
 
@@ -325,7 +325,7 @@ class OptimizedBGE_M3:
 
 - **Memory Usage**: <3.6GB total for both embedding models
 - **Indexing Speed**: <2 seconds per document with unified embeddings
-- **Query Speed**: <100ms for embedding generation on RTX 4060
+- **Query Speed**: <50ms for embedding generation on RTX 4090 Laptop
 - **Retrieval Quality**: ≥5% improvement in NDCG@10 vs current approach
 - **Context Support**: Full 8192 token documents without truncation
 
@@ -345,6 +345,7 @@ class OptimizedBGE_M3:
 
 ## Changelog
 
+- **4.0 (2025-08-18)**: **HARDWARE UPGRADE** - Updated performance targets for RTX 4090 Laptop: <50ms embedding generation. BGE-M3 benefits from faster GPU with larger batch processing capabilities.
 - **3.1 (2025-08-18)**: Enhanced integration with DSPy query optimization for automatic embedding quality improvement and added BGE-M3 compatibility with PropertyGraphIndex for multi-modal retrieval scenarios
 - **3.0 (2025-08-17)**: CRITICAL FIX - Removed Voyage-3 (API-only, violates local-first requirement). Set BGE-M3 as PRIMARY model for 100% local operation. Added Nomic-Embed-v2-MoE and Arctic-Embed-L-v2 as strong local alternatives.
 - **2.0 (2025-08-17)**: [INVALID - Incorrectly selected API-only Voyage-3]

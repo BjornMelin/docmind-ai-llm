@@ -6,7 +6,7 @@ Simplified Reranking with BGE-reranker-v2-m3 Direct Usage
 
 ## Version/Date
 
-2.0 / 2025-08-17
+3.1 / 2025-08-18
 
 ## Status
 
@@ -16,17 +16,17 @@ Accepted
 
 **SIMPLIFICATION NOTE**: While this ADR describes advanced multi-stage reranking, for most use cases we recommend using BGE-reranker-v2-m3 directly via sentence-transformers CrossEncoder without custom wrappers. Only implement the full multi-stage approach if you have specific performance requirements that simple reranking doesn't meet.
 
-Original description: Enhances the current BGE-reranker-v2-m3 strategy with multi-stage filtering, adaptive batch processing, and integration with the unified embedding pipeline. The architecture optimizes reranking performance for hierarchical retrieval while maintaining compatibility with agentic RAG patterns and providing fallback mechanisms for diverse query types.
+Original description: Enhances the current BGE-reranker-v2-m3 strategy with multi-stage filtering (Stage 2 of the 50→20→10 pipeline), adaptive batch processing, and integration with the unified embedding pipeline. The architecture provides critical context optimization for 32K native windows, filtering 50 initial candidates to 20 highly relevant results before final relevance filtering.
 
 ## Context
 
 Current reranking uses BGE-reranker-v2-m3 in a basic configuration. The modernized architecture needs:
 
-1. **Hierarchical Integration**: Reranking results from RAPTOR-Lite multi-level retrieval
-2. **Adaptive Processing**: Different reranking strategies for different query types
+1. **Context Optimization**: Critical Stage 2 filtering in 50→20→10 multi-stage pipeline
+2. **Quality Enhancement**: BGE-reranker-v2-m3 provides superior relevance scoring vs similarity
 3. **Performance Optimization**: Batch processing and caching for efficiency
-4. **Quality Assurance**: Multi-stage filtering to improve result relevance
-5. **Agent Integration**: Support for agentic RAG decision-making
+4. **Context Efficiency**: Optimizes content selection for 32K native context windows
+5. **Agent Integration**: Support for agentic RAG decision-making with intelligent retrieval
 
 Research shows reranking effectiveness increases significantly with query-adaptive strategies and multi-stage filtering approaches.
 
@@ -41,7 +41,7 @@ Research shows reranking effectiveness increases significantly with query-adapti
 
 ### Non-Functional Requirements
 
-- **NFR-1:** **(Performance)** Reranking latency <200ms for 20 documents on RTX 4060
+- **NFR-1:** **(Performance)** Reranking latency <100ms for 20 documents on RTX 4090 Laptop
 - **NFR-2:** **(Quality)** ≥10% improvement in NDCG@5 vs current basic reranking
 - **NFR-3:** **(Memory)** Memory overhead <1GB for reranking operations
 - **NFR-4:** **(Scalability)** Support up to 100 documents per reranking batch
@@ -594,7 +594,7 @@ class EnhancedBGEReranker(RerankerInterface):
 
 ### Performance Targets
 
-- **Latency**: <200ms for reranking 20 documents on RTX 4060
+- **Latency**: <100ms for reranking 20 documents on RTX 4090 Laptop
 - **Quality**: ≥10% improvement in NDCG@5 vs basic BGE reranking
 - **Cache Hit Rate**: >40% for repeated or similar queries
 - **Memory Usage**: <1GB additional memory for enhanced features
@@ -616,5 +616,6 @@ class EnhancedBGEReranker(RerankerInterface):
 
 ## Changelog
 
+- **3.0 (2025-08-18)**: **HARDWARE UPGRADE** - Updated performance targets for RTX 4090 Laptop: <100ms reranking latency for 20 documents (50% improvement).
 - **2.0 (2025-08-17)**: SIMPLIFIED - Recommend using BGE-reranker directly via sentence-transformers without complex wrappers. Multi-stage filtering is over-engineering for most use cases.
 - **1.0 (2025-01-16)**: Initial enhanced reranking design with adaptive multi-stage processing and quality evaluation
