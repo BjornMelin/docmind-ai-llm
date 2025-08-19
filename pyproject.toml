@@ -20,19 +20,15 @@ dependencies = [
     # Core application framework
     "streamlit==1.48.0",
     "python-dotenv==1.1.1",
-    "pydantic==2.11.7",
-    "pydantic-settings==2.10.1",
     "loguru>=0.7.0",
     "tenacity>=8.0.0",
     "diskcache==5.6.3",
-    
     # Document processing
     "pymupdf==1.26.3",
     "python-docx==1.2.0",
     "pillow~=10.4.0",
     "unstructured[all-docs]>=0.18.11",
     "pyarrow<21.0.0",
-    
     # AI/ML core
     "transformers==4.54.1",
     "torch==2.7.1",
@@ -40,29 +36,23 @@ dependencies = [
     "openai>=1.98.0,<2.0.0",
     "openai-whisper==20250625",
     "spacy==3.8.7",
-    
     # LLM backends
     "ollama==0.5.1",
     "llama-cpp-python>=0.2.32,<0.3.0",
-    
     # Vector database
     "qdrant-client==1.15.1",
-    
     # LlamaIndex ecosystem - core
     "llama-index-core>=0.10.0,<0.12.0",
     "llama-index-vector-stores-qdrant",
-    
     # LlamaIndex ecosystem - LLMs
     "llama-index-llms-openai",
     "llama-index-llms-ollama",
     "llama-index-llms-llama-cpp",
-    
     # LlamaIndex ecosystem - embeddings
     "llama-index-embeddings-openai",
     "llama-index-embeddings-huggingface",
     "llama-index-embeddings-jinaai",
     "llama-index-embeddings-fastembed",
-    
     # LlamaIndex ecosystem - tools
     "llama-index-postprocessor-colbert-rerank",
     "llama-index-agent-openai",
@@ -70,8 +60,15 @@ dependencies = [
     "llama-index-readers-file",
     "llama-index-multi-modal-llms-openai",
     "llama-index-question-gen-openai",
-    
-    # Agent framework (using pure LlamaIndex ReActAgent)
+    # Agent framework - LangGraph for multi-agent orchestration
+    "langgraph>=0.2.74",
+    "langgraph-supervisor>=0.0.29",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.2.0",
+    # DSPy for prompt optimization
+    "dspy-ai>=2.5.0",
+    "pydantic==2.11.7",
+    "pydantic-settings==2.10.1",
 ]
 
 [project.optional-dependencies]

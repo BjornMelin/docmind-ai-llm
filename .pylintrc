@@ -1,5 +1,5 @@
 [MASTER]
-py-version=3.12
+py-version=3.11
 suggestion-mode=yes
 jobs=0
 
@@ -10,14 +10,15 @@ disable=
     too-many-arguments,
     too-many-locals,
     import-outside-toplevel,
-    fixme
+    fixme,
+    import-error
 
 [FORMAT]
 max-line-length=100
 indent-string='    '
 
 [BASIC]
-good-names=i,j,k,ex,Run,_,df,id,kg,llm,qa
+good-names=i,j,k,ex,Run,_,df,id,kg,llm,qa,bg_color,text_color,suggested_model,quant_suffix,suggested_context,n_gpu_layers
 
 [DESIGN]
 max-args=10
@@ -32,7 +33,7 @@ max-statements=50
 min-public-methods=1
 
 [IMPORTS]
-known-third-party=llama_index,fastembed,qdrant_client,torch,streamlit,pydantic
+known-third-party=llama_index,fastembed,qdrant_client,torch,streamlit,pydantic,dotenv,loguru,langgraph,langchain_core,ollama,tiktoken,tenacity,diskcache
 
 [TYPECHECK]
 generated-members=torch.*,st.*
