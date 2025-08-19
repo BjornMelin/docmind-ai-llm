@@ -56,7 +56,7 @@ from src.utils.monitoring import log_error_with_context, log_performance
 T = TypeVar("T")
 
 
-def with_fallback(
+def with_fallback[T](
     fallback_func: Callable[..., T],
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Decorator to provide fallback value on function failure."""
