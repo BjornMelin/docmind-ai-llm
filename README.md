@@ -11,7 +11,7 @@
 [![GitHub](https://img.shields.io/badge/GitHub-BjornMelin-181717?logo=github)](https://github.com/BjornMelin)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Bjorn%20Melin-0077B5?logo=linkedin)](https://www.linkedin.com/in/bjorn-melin/)
 
-**DocMind AI** transforms how you analyze documents locally with zero cloud dependency. This system combines hybrid search (dense + sparse embeddings), knowledge graph extraction, and a sophisticated 5-agent coordination system to extract and analyze information from your PDFs, Office docs, and multimedia content. Built on LlamaIndex pipelines with LangGraph supervisor orchestration, it delivers production-ready document intelligence that runs entirely on your hardware—with GPU acceleration for 2-3x performance improvements and specialized agent coordination for enhanced query quality.
+**DocMind AI** transforms how you analyze documents locally with zero cloud dependency. This system combines hybrid search (dense + sparse embeddings), knowledge graph extraction, and a sophisticated 5-agent coordination system to extract and analyze information from your PDFs, Office docs, and multimedia content. Built on LlamaIndex pipelines with LangGraph supervisor orchestration and Qwen3-4B-Instruct-2507's FULL 262K context capability through INT8 KV cache optimization, it delivers production-ready document intelligence that runs entirely on your hardware—with GPU acceleration for enhanced performance and specialized agent coordination for improved query quality.
 
 **Why DocMind AI?** Traditional document analysis tools either send your data to the cloud (privacy risk) or provide basic keyword search (limited intelligence). DocMind AI gives you the best of both worlds: AI reasoning with complete data privacy. Process complex queries that require multiple reasoning strategies, extract entities and relationships, and get contextual answers—all while your sensitive documents never leave your machine.
 
@@ -129,7 +129,7 @@
 
 - (Optional) Docker and Docker Compose for containerized deployment.
 
-- (Optional) NVIDIA GPU (e.g., RTX 4090) with at least 16GB VRAM for larger models and accelerated performance.
+- (Optional) NVIDIA GPU (e.g., RTX 4090 Laptop) with at least 16GB VRAM for 262K context capability and accelerated performance.
 
 ### ⚙️ Installation
 
@@ -217,10 +217,10 @@ Access the app at `http://localhost:8501`.
 
 2. **Enter the Ollama Base URL** (default: `http://localhost:11434`).
 
-3. **Select an Ollama Model Name** (e.g., `qwen2:7b`). If the model isn't installed:
+3. **Select an Ollama Model Name** (e.g., `qwen3-4b-instruct-2507` for 262K context). If the model isn't installed:
 
    ```bash
-   ollama pull qwen2:7b
+   ollama pull qwen3-4b-instruct-2507
    ```
 
 4. **Toggle "Use GPU if available"** for accelerated processing (recommended for NVIDIA GPUs with 4GB+ VRAM).
@@ -229,6 +229,7 @@ Access the app at `http://localhost:8501`.
    - **2048**: Small models, limited VRAM
    - **4096**: Standard setting for most use cases  
    - **8192+**: Large models with sufficient resources
+   - **262144**: FULL 262K context with INT8 KV cache (Qwen3-4B-Instruct-2507 + 16GB VRAM)
 
 ### 📁 Uploading Documents
 
@@ -550,10 +551,10 @@ Key configuration options in `.env`:
 
 ```bash
 # Model & Backend Services
-DOCMIND_MODEL=Qwen/Qwen3-14B
+DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-AWQ
 DOCMIND_DEVICE=cuda
-DOCMIND_CONTEXT_LENGTH=32768
-OLLAMA_BASE_URL=http://localhost:11434
+DOCMIND_CONTEXT_LENGTH=262144
+LMDEPLOY_HOST=http://localhost:23333
 
 # Embedding Models (BGE-M3 unified)
 EMBEDDING_MODEL=BAAI/bge-m3
@@ -563,6 +564,7 @@ RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 ENABLE_DSPY_OPTIMIZATION=true
 ENABLE_GRAPHRAG=false
 ENABLE_GPU_ACCELERATION=true
+LMDEPLOY_QUANT_POLICY=8  # INT8 KV cache
 
 # Performance Tuning
 RETRIEVAL_TOP_K=10
@@ -599,11 +601,12 @@ maxUploadSize = 200
 | **Document Processing (Warm)** | ~2-5 seconds | DiskCache + index caching |
 | **Query Response** | 1-3 seconds | Hybrid retrieval + ColBERT reranking |
 | **5-Agent System Response** | 3-8 seconds | LangGraph supervisor coordination with <300ms overhead |
+| **262K Context Processing** | 1.5-3 seconds | FULL 262K context with INT8 KV cache |
 | **Vector Search** | <500ms | Qdrant in-memory with GPU embeddings |
 | **Test Suite (99 tests)** | ~40 seconds | Comprehensive coverage |
 | **Memory Usage (Idle)** | 400-500MB | Base application |
 | **Memory Usage (Processing)** | 1.2-2.1GB | During document analysis |
-| **GPU Memory Usage** | 4-8GB | Model + embedding cache |
+| **GPU Memory Usage** | ~12.2GB | Model + 262K context + embedding cache |
 
 ### Caching Performance
 
@@ -678,8 +681,8 @@ DocMind AI is designed for complete offline operation:
 2. **Pull required models:**
 
    ```bash
-   ollama pull qwen2:7b  # Recommended lightweight model
-   ollama pull llama3.2  # Alternative option
+   ollama pull qwen3-4b-instruct-2507  # Recommended for 262K context
+   ollama pull qwen2:7b  # Alternative lightweight model
    ```
 
 3. **Verify GPU setup (optional):**
@@ -691,11 +694,11 @@ DocMind AI is designed for complete offline operation:
 
 ### Model Requirements
 
-| Model Size | RAM Required | GPU VRAM | Performance |
-|------------|-------------|----------|-------------|
-| 7B (e.g., qwen2:7b) | 8GB+ | 4GB+ | Good |
-| 13B | 16GB+ | 8GB+ | Better |
-| 70B+ | 32GB+ | 16GB+ | Best |
+| Model Size | RAM Required | GPU VRAM | Performance | Context |
+|------------|-------------|----------|-------------|---------|
+| 4B (qwen3-4b-instruct-2507) | 16GB+ | 16GB+ | Best | 262K |
+| 7B (e.g., qwen2:7b) | 8GB+ | 4GB+ | Good | 32K |
+| 13B | 16GB+ | 8GB+ | Better | 32K |
 
 ## 🛠️ Troubleshooting
 
@@ -729,15 +732,16 @@ python -c "import torch; print(torch.cuda.is_available())"
 ```bash
 
 # Pull models manually
-ollama pull qwen2:7b
+ollama pull qwen3-4b-instruct-2507  # For 262K context
+ollama pull qwen2:7b  # Alternative
 ollama list  # Verify installation
 ```
 
 #### 4. Memory Issues
 
-- Reduce context size in UI (4096 → 2048)
+- Reduce context size in UI (262144 → 32768 → 4096)
 
-- Use smaller models (7B instead of 13B+)
+- Use smaller models (7B instead of 4B for lower VRAM)
 
 - Enable document chunking for large files
 
