@@ -1,8 +1,10 @@
 # DocMind AI - Product Requirements Document
 
+> **Architecture Update (2025-08-18):** This PRD has been updated to reflect the final 5-agent LangGraph supervisor system as defined in ADR-011-NEW, replacing previous single-agent approaches with enhanced multi-agent coordination for improved quality and reliability.
+
 ## 1. Executive Summary
 
-DocMind AI is an offline-first document analysis system architected for exceptional performance, privacy, and maintainability. It leverages a pure **LlamaIndex** stack to combine hybrid vector search, knowledge graphs, and a powerful **single ReAct agent** for intelligent document processing. By eliminating external APIs and prioritizing local computation, it provides a secure, high-throughput environment for users to analyze their documents.
+DocMind AI is an offline-first document analysis system architected for exceptional performance, privacy, and maintainability. It leverages a pure **LlamaIndex** stack to combine hybrid vector search, knowledge graphs, and a **5-agent LangGraph supervisor system** for intelligent document processing. By eliminating external APIs and prioritizing local computation, it provides a secure, high-throughput environment for users to analyze their documents.
 
 ## 2. Problem Statement & Opportunity
 
@@ -22,8 +24,8 @@ This section groups the system's requirements into high-level, user-centric feat
   * **Description:** Provides the core search functionality, allowing users to find the most relevant information using a combination of semantic and keyword search.
   * **Requirements:** FR-3, FR-4, FR-5, FR-6, FR-7, NFR-2
 
-* **Epic 3: Agentic Q&A and Reasoning**
-  * **Description:** The primary user interface for interacting with documents. A single, intelligent agent answers questions, performs analysis, and reasons over the indexed content.
+* **Epic 3: Multi-Agent Coordination & Reasoning**
+  * **Description:** The primary user interface for interacting with documents. A LangGraph supervisor coordinates 5 specialized agents to answer questions, perform analysis, and reason over the indexed content with enhanced quality and reliability.
   * **Requirements:** FR-8, FR-9, FR-10, NFR-1, AR-6
 
 * **Epic 4: High-Performance Infrastructure**
@@ -43,7 +45,7 @@ The following requirements are derived directly from the architectural decisions
 * **FR-5: Sparse Embeddings**: The system must generate sparse embeddings (e.g., SPLADE++) to enable effective keyword-based retrieval and term expansion. **(ADR-002)**
 * **FR-6: Multimodal Embeddings**: The system must generate distinct embeddings for images (e.g., using CLIP ViT-B/32) to enable multimodal search capabilities. **(ADR-016)**
 * **FR-7: High-Relevance Reranking**: The system must include a post-retrieval reranking step to refine the order of retrieved documents and improve the final context quality. **(ADR-014)**
-* **FR-8: Single Agent Interface**: All user queries and interactions must be handled by a single, powerful ReAct Agent capable of reasoning, planning, and dynamic tool selection. **(ADR-011)**
+* **FR-8: Multi-Agent Coordination**: All user queries and interactions must be handled by a LangGraph supervisor system coordinating 5 specialized agents (query router, query planner, retrieval expert, result synthesizer, response validator) for enhanced quality and reliability. **(ADR-011)**
 * **FR-9: Multi-Backend LLM Support**: The system must be capable of using multiple local LLM backends (Ollama, LlamaCPP, vLLM) interchangeably. **(ADR-019)**
 * **FR-10: Session Persistence**: The system must persist chat history and agent state across sessions to provide a continuous user experience. **(ADR-008)**
 * **FR-11: Data Caching**: The system must cache the results of expensive processing steps (like document parsing and chunking) to avoid re-computation for unchanged files. **(ADR-008, ADR-006)**
@@ -68,7 +70,7 @@ The following requirements are derived directly from the architectural decisions
 * **AR-3: Unified Configuration**: All global configurations (LLM, embedding model, chunk size, etc.) must be managed through the native LlamaIndex `Settings` singleton, eliminating dual-configuration systems. **(ADR-020)**
 * **AR-4: Simplified GPU Management**: GPU device allocation and management must be handled via the native `device_map="auto"` pattern, eliminating the need for complex custom monitoring scripts. **(ADR-003)**
 * **AR-5: Native Component Integration**: The system must use native LlamaIndex components for core tasks, such as `UnstructuredReader` for parsing, `IngestionPipeline` for processing, and `IngestionCache` for caching. **(ADR-004, ADR-006)**
-* **AR-6: Standardized Model**: The default reasoning LLM shall be `Qwen3-4B-Thinking` due to its superior agentic capabilities and performance with quantization. **(ADR-017)**
+* **AR-6: Multi-Agent Coordination**: The system shall use LangGraph supervisor patterns to coordinate 5 specialized agents (query router, planner, retrieval expert, synthesizer, validator) for enhanced query processing quality and reliability. **(ADR-011-NEW)**
 
 ## 5. Out of Scope (for v1.0)
 
@@ -83,7 +85,7 @@ To ensure a focused and timely initial release, the following features and funct
 
 ## 6. System Architecture
 
-The system is built on a pure LlamaIndex stack, emphasizing native component integration, performance, and simplicity. The architecture avoids complex coordination layers in favor of a powerful, single agent and streamlined processing pipelines.
+The system is built on a pure LlamaIndex stack, emphasizing native component integration, performance, and simplicity. The architecture leverages a proven LangGraph supervisor pattern to coordinate 5 specialized agents, providing enhanced query processing quality, better error recovery, and improved reliability through agent specialization while maintaining streamlined performance.
 
 ```mermaid
 graph TD
@@ -103,44 +105,45 @@ graph TD
         E --> H["Knowledge Graph<br/>KGIndex (spaCy)"]
     end
 
-    subgraph "Query & Agentic System"
-        I["User Query"] --> J{Single ReAct Agent<br/>LLM: Qwen3-4B-Thinking}
-        J --> K["QueryPipeline<br/>Async & Parallel Execution"]
-        K --> L["1. Retrieve<br/>HybridFusionRetriever"]
-        L --> M["2. Rerank<br/>BGE-reranker-v2-m3"]
-        M --> N["3. Synthesize<br/>Response Generation"]
-        N --> O["Final Response<br/>w/ Sources"]
+    subgraph "Query & Multi-Agent System"
+        I["User Query"] --> J["LangGraph Supervisor<br/>Agent Coordination"]
+        J --> K["5 Specialized Agents:<br/>Router → Planner → Retrieval → Synthesizer → Validator"]
+        K --> L["QueryPipeline<br/>Async & Parallel Execution"]
+        L --> M["1. Retrieve<br/>HybridFusionRetriever"]
+        M --> N["2. Rerank<br/>BGE-reranker-v2-m3"]
+        N --> O["3. Synthesize<br/>Response Generation"]
+        O --> P["Final Response<br/>w/ Sources & Validation"]
     end
     
     subgraph "Core Configuration & Optimization"
-        P["LlamaIndex Settings Singleton<br/>Unified Config (ADR-020)"]
-        Q["PyTorch Optimization<br/>TorchAO Quantization (ADR-023)"]
-        R["GPU Management<br/>device_map='auto' (ADR-003)"]
+        R["Simple Configuration<br/>Environment Variables + Streamlit Config"]
+        S["PyTorch Optimization<br/>TorchAO Quantization"]
+        T["GPU Management<br/>device_map='auto'"]
     end
 
     subgraph "Persistence & Resilience"
-        S["SQLite (WAL)<br/>Structured Data/KV Store"]
-        T["Tenacity<br/>Resilience & Retries (ADR-022)"]
+        U["SQLite (WAL)<br/>Structured Data/KV Store"]
+        V["Tenacity<br/>Resilience & Retries (ADR-022)"]
     end
 
     %% Connections
     A --> B
     I --> J
-    J --> O --> A
+    J --> P --> A
     
-    G --> L
-    H --> L
+    G --> M
+    H --> M
 
-    J -- Uses Tools Derived From --> K
-    J -- Manages --> U[ChatMemoryBuffer<br/>65K Context]
+    K -- Uses Tools Derived From --> L
+    J -- Manages --> Q[ChatMemoryBuffer<br/>65K Context]
 
     %% Link to Core Systems
-    J -- Configured by --> P
-    F -- Accelerated by --> Q & R
-    N -- Accelerated by --> Q & R
-    D -- Uses --> S
-    U -- Persisted in --> S
-    K -- Resilience via --> T
+    J -- Configured by --> R
+    F -- Accelerated by --> S & T
+    O -- Accelerated by --> S & T
+    D -- Uses --> U
+    Q -- Persisted in --> U
+    L -- Resilience via --> V
 ```
 
 ## 7. Technology Stack Dependencies
@@ -159,13 +162,20 @@ graph TD
 
 ### Model Dependencies
 
-* **Default LLM**: Qwen/Qwen3-4B-Thinking-2507
-* **Dense Embeddings**: BAAI/bge-large-en-v1.5 (1024D)
-* **Sparse Embeddings**: prithvida/Splade_PP_en_v1
+* **Default LLM**: Qwen/Qwen3-14B (32K native context, Q5_K_M quantization)
+* **Unified Embeddings**: BAAI/bge-m3 (1024D dense + sparse unified)
 * **Multimodal**: openai/clip-vit-base-patch32 (ViT-B/32)
-* **Reranking (Primary)**: BAAI/bge-reranker-v2-m3
-* **Reranking (Fallback)**: colbert-ir/colbertv2.0
+* **Reranking**: BAAI/bge-reranker-v2-m3
 * **NER Model**: en_core_web_sm (spaCy)
+
+### Configuration Approach
+
+DocMind AI uses **distributed, simple configuration** following KISS principles:
+
+* **Environment Variables** (`.env`): Runtime settings, model paths, feature flags
+* **Streamlit Native Config** (`.streamlit/config.toml`): UI theme, upload limits
+* **Library Defaults**: Components use sensible library defaults (LlamaIndex, Qdrant)
+* **Feature Flags**: Boolean environment variables for experimental features (DSPy, GraphRAG)
 
 ## 8. Success Criteria
 
@@ -173,7 +183,7 @@ graph TD
 
 * [ ] Documents upload and parse without errors (PDF, DOCX, TXT, etc.)
 * [ ] Hybrid search returns relevant results with source attribution.
-* [ ] The single ReAct agent intelligently uses tools to answer complex queries.
+* [ ] The 5-agent supervisor system intelligently coordinates specialized agents to answer complex queries with enhanced quality.
 * [ ] GPU acceleration provides measurable, order-of-magnitude performance improvements.
 * [ ] System operates completely offline without API dependencies.
 * [ ] Session persistence maintains context across restarts.
@@ -183,7 +193,7 @@ graph TD
 * [ ] Query latency <2 seconds for 95th percentile.
 * [ ] Document processing throughput >50 pages/second with GPU and caching.
 * [ ] System memory usage <4GB for typical workloads.
-* [ ] Agentic reasoning overhead is negligible due to high-performance LLM.
+* [ ] Multi-agent coordination overhead remains under 300ms due to efficient LangGraph supervisor patterns.
 * [ ] Retrieval accuracy >80% relevance on domain-specific queries.
 
 ### Quality Requirements
@@ -217,14 +227,14 @@ graph TD
 * **Target Audience**: 100 knowledge workers across all three personas
 * **Distribution**: Open beta signup with screening questionnaire
 * **Goals**:
-  * Validate single agent system effectiveness
+  * Validate 5-agent supervisor system effectiveness and coordination quality
   * Test GPU acceleration and performance optimizations
   * Refine UI/UX based on broader user feedback
 * **Success Criteria**:
   * >4.2 average user satisfaction rating
   * <3% user churn rate during beta period
-  * 90%+ feature adoption for the core agentic chat
-* **Key Features**: Full single-agent system, GPU acceleration, knowledge graph
+  * 90%+ feature adoption for the core multi-agent coordination system
+* **Key Features**: Full 5-agent supervisor system with DSPy optimization, GPU acceleration, optional GraphRAG
 
 #### Phase 3: Public Launch (Week 13+)
 
@@ -405,30 +415,28 @@ This section details how the Success Metrics will be tracked. As a privacy-first
 
 ### Architecture Decisions
 
-* **ADR-021**: The capstone decision for LlamaIndex Native Architecture Consolidation.
-* **ADR-015**: The final migration from LangChain to a pure LlamaIndex ecosystem.
-* **ADR-011**: The pivotal decision to replace the multi-agent system with a single, powerful ReAct Agent.
+* **ADR-001-NEW**: Modern Agentic RAG Architecture defining the core 5-agent coordination patterns.
+* **ADR-011-NEW**: LangGraph-based agent orchestration framework consolidating multi-agent coordination.
+* **ADR-011-NEW**: The pivotal decision implementing the LangGraph supervisor system with 5 specialized agents for enhanced coordination and quality.
 * **ADR-018**: The guiding "Library-First" refactoring philosophy.
 
 ### Retrieval & Search
 
-* **ADR-002**: Selection of BGE-Large, SPLADE++, and CLIP embedding models.
-* **ADR-013**: RRF hybrid search implementation using `HybridFusionRetriever`.
-* **ADR-014**: Optimized reranking strategy using `BGE-reranker-v2-m3`.
+* **ADR-002-NEW**: Unified embedding strategy with BGE-M3, SPLADE++, and multimodal support.
+* **ADR-003-NEW**: Adaptive retrieval pipeline with hybrid search and RRF fusion.
+* **ADR-006-NEW**: Reranking architecture using BGE-reranker-v2-m3 for quality optimization.
 
 ### Document Processing
 
-* **ADR-004**: Use of `UnstructuredReader` within a native `IngestionPipeline`.
-* **ADR-005**: Semantic chunking using `SentenceSplitter` in the pipeline.
-* **ADR-016**: Adoption of CLIP ViT-B/32 for efficient multimodal embeddings.
+* **ADR-009-NEW**: Document processing pipeline with Unstructured integration and intelligent chunking.
+* **ADR-018-NEW**: DSPy prompt optimization for automatic query rewriting and quality improvement.
+* **ADR-019-NEW**: Optional GraphRAG integration for relationship-based queries and multi-hop reasoning.
 
 ### Infrastructure & Performance
 
-* **ADR-003**: GPU optimization simplified to `device_map="auto"`, targeting ~1000 t/s.
-* **ADR-023**: Core PyTorch optimization strategy using TorchAO for quantization.
-* **ADR-012**: Async and parallel processing strategy using `QueryPipeline.parallel_run()`.
-* **ADR-008**: Simplified persistence using SQLite and native `IngestionCache`.
-* **ADR-019**: Multi-backend LLM support (Ollama, LlamaCPP, vLLM) via the `Settings` singleton.
-* **ADR-020**: Migration to the native LlamaIndex `Settings` singleton for unified configuration.
-* **ADR-022**: Integration of `Tenacity` for production-grade system resilience.
-* **ADR-017**: Standardization on `Qwen3-4B-Thinking` as the default LLM.
+* **ADR-010-NEW**: Performance optimization strategy including GPU acceleration, caching, and quantization.
+* **ADR-004-NEW**: Local-first LLM strategy with multi-backend support (Ollama, LlamaCPP, vLLM).
+* **ADR-007-NEW**: Hybrid persistence strategy using SQLite WAL for concurrent access and reliability.
+* **ADR-014-NEW**: Testing and quality validation framework for system reliability.
+* **ADR-015-NEW**: Deployment strategy for containerized and local installation patterns.
+* **ADR-016-NEW**: UI state management coordinating multi-agent interactions and session persistence.
