@@ -28,7 +28,7 @@ import time
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
-from langgraph.graph import InjectedState
+from langgraph.prebuilt import InjectedState
 from llama_index.core import Document
 from loguru import logger
 

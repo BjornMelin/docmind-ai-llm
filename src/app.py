@@ -66,9 +66,9 @@ async def get_ollama_models():
     return ollama.list()
 
 
-async def pull_ollama_model(model_name: str):
+async def pull_ollama_model(ollama_model_name: str):
     """Pull an Ollama model."""
-    return ollama.pull(model_name)
+    return ollama.pull(ollama_model_name)
 
 
 # Validate configuration at startup
@@ -291,11 +291,11 @@ async def run_analysis() -> None:
         with st.spinner("Running analysis..."):
             try:
                 # Create tools from index
-                tools = create_tools_from_index(st.session_state.index)
+                agent_tools = create_tools_from_index(st.session_state.index)
 
                 # Get appropriate agent system
                 agent_system, mode = get_agent_system(
-                    tools=tools,
+                    tools=agent_tools,
                     llm=llm,
                     memory=st.session_state.memory,
                 )

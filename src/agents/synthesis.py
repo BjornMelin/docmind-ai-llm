@@ -101,9 +101,9 @@ class SynthesisAgent:
         self,
         sub_results: list[dict[str, Any]],
         original_query: str,
-        context: ChatMemoryBuffer | None = None,
+        _context: ChatMemoryBuffer | None = None,
         max_documents: int = 10,
-        **kwargs,
+        **_kwargs,
     ) -> SynthesisResult:
         """Combine and synthesize results from multiple retrieval operations.
 
@@ -181,7 +181,7 @@ class SynthesisAgent:
 
             return synthesis_result
 
-        except Exception as e:
+        except (ValueError, TypeError, RuntimeError, KeyError) as e:
             logger.error(f"Result synthesis failed: {e}")
 
             # Fallback synthesis

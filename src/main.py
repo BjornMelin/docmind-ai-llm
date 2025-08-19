@@ -101,7 +101,7 @@ class DocMindApplication:
 
             return response
 
-        except Exception as e:
+        except (ValueError, TypeError, RuntimeError, OSError) as e:
             logger.error(f"Error processing query: {e}")
             # Return error response
             return AgentResponse(
@@ -115,13 +115,13 @@ class DocMindApplication:
     async def _process_basic_rag(
         self,
         query: str,
-        context: dict[str, Any] | None = None,
+        _context: dict[str, Any] | None = None,
     ) -> AgentResponse:
         """Process query through basic RAG pipeline.
 
         Args:
             query: User query.
-            context: Optional context.
+            _context: Optional context (unused in basic implementation).
 
         Returns:
             Basic RAG response.
@@ -147,13 +147,13 @@ class DocMindApplication:
 
     def _generate_basic_response(
         self,
-        query: str,
+        _query: str,
         results: list[Any],
     ) -> str:
         """Generate basic response from retrieval results.
 
         Args:
-            query: Original query.
+            _query: Original query (unused in basic implementation).
             results: Retrieved documents.
 
         Returns:
@@ -197,7 +197,7 @@ class DocMindApplication:
             logger.info(f"Document ingested successfully: {file_path}")
             return result
 
-        except Exception as e:
+        except (ValueError, TypeError, OSError, FileNotFoundError) as e:
             logger.error(f"Error ingesting document {file_path}: {e}")
             return {"error": str(e), "status": "failed"}
 
