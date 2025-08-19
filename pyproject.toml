@@ -71,7 +71,14 @@ dependencies = [
     "llama-index-multi-modal-llms-openai",
     "llama-index-question-gen-openai",
     
-    # Agent framework (using pure LlamaIndex ReActAgent)
+    # Agent framework - LangGraph for multi-agent orchestration
+    "langgraph>=0.2.74",
+    "langgraph-supervisor>=0.0.29",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.2.0",
+    
+    # DSPy for prompt optimization
+    "dspy-ai>=2.5.0",
 ]
 
 [project.optional-dependencies]
