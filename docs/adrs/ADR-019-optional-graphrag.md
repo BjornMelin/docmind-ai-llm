@@ -6,7 +6,7 @@ LlamaIndex PropertyGraphIndex for Optional Graph-Enhanced Retrieval
 
 ## Version/Date
 
-2.0 / 2025-08-17
+3.0 / 2025-08-19
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted (Optional Module)
 
 ## Description
 
-Implements LlamaIndex's native PropertyGraphIndex as an optional module for enhanced multi-hop reasoning, relationship extraction, and thematic analysis. This lightweight approach requires ZERO additional infrastructure - using SimplePropertyGraphStore (in-memory) for graph storage while reusing our existing Qdrant vector store for embeddings. The module is disabled by default and can be enabled for specific use cases requiring graph-based retrieval and reasoning.
+Implements LlamaIndex's native PropertyGraphIndex as an optional module leveraging Qwen3-4B-Instruct-2507's 262K context capability for entity and relationship extraction within large context windows. This approach enables processing entire document collections for graph construction without chunking limitations. The module requires ZERO additional infrastructure - using SimplePropertyGraphStore (in-memory) for graph storage while reusing existing Qdrant vector store for embeddings. Large context enables knowledge graph construction from documents in single processing passes.
 
 ## Context
 
@@ -84,7 +84,7 @@ We will implement **LlamaIndex PropertyGraphIndex as an optional module** with:
 1. **Feature Flag**: Disabled by default, enabled via config
 2. **Zero Infrastructure**: Uses in-memory SimplePropertyGraphStore
 3. **Qdrant Reuse**: Leverages existing vector store for embeddings
-4. **Native Integration**: Works seamlessly with LlamaIndex pipeline
+4. **Native Integration**: Works with LlamaIndex pipeline
 5. **Minimal Code**: <100 lines of integration code required
 
 ## Related Decisions
@@ -111,7 +111,7 @@ import pickle
 from pathlib import Path
 
 class OptionalGraphRAG:
-    """Optional PropertyGraphIndex for enhanced reasoning."""
+    """Optional PropertyGraphIndex for graph-based reasoning."""
     
     def __init__(
         self, 
@@ -496,7 +496,7 @@ class GraphRAGMonitor:
 - **Enhanced Reasoning**: Superior multi-hop and relationship queries
 - **Theme Identification**: Automatic pattern and theme extraction
 - **Optional Complexity**: No impact when disabled
-- **Hybrid Flexibility**: Combines with vector RAG seamlessly
+- **Hybrid Flexibility**: Combines with vector RAG
 - **Background Processing**: Graph built without blocking
 
 ### Negative Consequences / Trade-offs

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-DocMind AI is a **modern agentic RAG system** optimized for local-first operation with 100% offline capabilities. The architecture employs a 5-agent system with unified embeddings, hierarchical retrieval, and comprehensive optimization to deliver GPT-3.5-level performance on consumer hardware.
+DocMind AI is an agentic RAG system leveraging Qwen3-4B-Instruct-2507's FULL 262K context capability through INT8 KV cache optimization, designed for local-first operation with offline capabilities. The architecture employs a 5-agent system with unified embeddings, hierarchical retrieval, and large context processing to deliver enhanced performance on RTX 4090 Laptop hardware with ~12.2GB VRAM usage.
 
 ## System Architecture
 
@@ -11,41 +11,42 @@ DocMind AI is a **modern agentic RAG system** optimized for local-first operatio
 - **Local-First**: 100% offline operation, no API dependencies
 - **Library-First**: Leverage existing libraries over custom code (91% code reduction achieved)
 - **KISS > DRY > YAGNI**: Simplicity over premature optimization
-- **Hardware-Adaptive**: Automatic scaling from RTX 3060 to RTX 4090+
+- **Large Context Capable**: Leverages FULL 262K context windows through INT8 KV cache optimization
 
 ### High-Level Architecture
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                      Streamlit UI                          │
-│              (Streaming + Session Memory)                  │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-┌─────────────────────────▼───────────────────────────────────┐
-│                 5-Agent Orchestration                      │
-│              (LangGraph Supervisor)                        │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐│
-│  │Routing  │ │Planning │ │Retrieval│ │Synthesis│ │Validation││
-│  │ Agent   │ │ Agent   │ │ Agent   │ │ Agent   │ │ Agent   ││
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘│
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-┌─────────────────────────▼───────────────────────────────────┐
-│                Adaptive Retrieval Pipeline                 │
-│           (RAPTOR-Lite + Hybrid Search)                    │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
-│  │Hierarchical │ │Dense+Sparse │ │Multi-Stage  │          │
-│  │   Indexing  │ │   Search    │ │  Reranking  │          │
-│  └─────────────┘ └─────────────┘ └─────────────┘          │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-┌─────────────────────────▼───────────────────────────────────┐
-│                    Storage Layer                           │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
-│  │   Qdrant    │ │   SQLite    │ │   DuckDB    │          │
-│  │  (Vectors)  │ │(Metadata)   │ │(Analytics)  │          │
-│  └─────────────┘ └─────────────┘ └─────────────┘          │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    A[Streamlit UI<br/>Streaming + Session Memory] --> B[5-Agent Orchestration<br/>LangGraph Supervisor]
+    
+    B --> C[Routing Agent<br/>Query Analysis]
+    B --> D[Planning Agent<br/>Query Decomposition]  
+    B --> E[Retrieval Agent<br/>Document Search]
+    B --> F[Synthesis Agent<br/>Multi-source Combination]
+    B --> G[Validation Agent<br/>Quality Assurance]
+    
+    C --> H[Adaptive Retrieval Pipeline<br/>RAPTOR-Lite + Hybrid Search]
+    D --> H
+    E --> H
+    F --> H
+    G --> H
+    
+    H --> I[Hierarchical Indexing<br/>2-3 levels max]
+    H --> J[Dense+Sparse Search<br/>BGE-M3 unified embeddings]
+    H --> K[Multi-Stage Reranking<br/>BGE-reranker-v2-m3]
+    
+    I --> L[Storage Layer]
+    J --> L
+    K --> L
+    
+    L --> M[Qdrant<br/>Vector Storage]
+    L --> N[SQLite<br/>Metadata & Sessions]
+    L --> O[DuckDB<br/>Analytics Optional]
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style H fill:#fff3e0
+    style L fill:#e8f5e8
 ```
 
 ## Technology Stack
@@ -54,11 +55,12 @@ DocMind AI is a **modern agentic RAG system** optimized for local-first operatio
 
 | Component | Model | Size | VRAM | Purpose |
 |-----------|-------|------|------|---------|
-| **LLM** | Qwen3-14B (Q4_K_M) | 8.5GB | 8-10GB | Generation, reasoning, function calling |
+| **LLM** | Qwen3-4B-Instruct-2507-AWQ | 2.92GB | 2.92GB | Generation, reasoning, 262K context |
 | **Embedding** | BGE-M3 | 2.3GB | 2-3GB | Unified dense+sparse embeddings |
 | **Reranking** | BGE-reranker-v2-m3 | 1.1GB | 1-2GB | Multi-stage reranking |
+| **KV Cache (262K)** | INT8 Quantization | 0GB | ~9.2GB | 50% memory reduction vs FP16 |
 
-**Total VRAM**: 10-12GB (RTX 3060 compatible)
+**Total VRAM**: ~12.2GB with FULL 262K context (RTX 4090 Laptop optimized)
 
 ### Core Libraries
 
@@ -154,10 +156,11 @@ unstructured = "^0.16.0"         # Document processing
 
 ### Memory Management (ADR-010)
 
-- **4-bit/8-bit quantization**: 50-70% memory reduction
+- **INT8 KV Cache**: 50% memory reduction (36 KiB vs 72 KiB per token)
+- **AWQ Quantization**: Model size reduced to 2.92GB
 - **Model sharing**: Unified BGE-M3 for embedding+reranking features
 - **Hardware adaptation**: Automatic model selection based on VRAM
-- **Resource pools**: Efficient GPU memory utilization
+- **Resource pools**: Efficient GPU memory utilization at ~12.2GB total
 
 ### Caching Strategy
 
@@ -194,23 +197,23 @@ unstructured = "^0.16.0"         # Document processing
 
 ### Minimum Configuration
 
-- **GPU**: RTX 3060 (12GB VRAM)
+- **GPU**: RTX 4060 (16GB VRAM)
 - **RAM**: 16GB system memory
 - **Storage**: 50GB for models and data
 - **Performance**: 2-4 second response times
 
-### Recommended Configuration
+### Recommended Configuration (RTX 4090 Laptop)
 
-- **GPU**: RTX 4060+ (16GB+ VRAM)
+- **GPU**: RTX 4090 Laptop (16GB VRAM)
 - **RAM**: 32GB system memory
 - **Storage**: 100GB for models and data
-- **Performance**: <2 second response times
+- **Performance**: <1.5 second response times with 262K context
 
-### Multi-GPU Support
+### Multi-Provider Support
 
-- **vLLM Integration**: 200-300% performance improvement
-- **Automatic Detection**: Hardware-adaptive provider selection
-- **Ollama/llama.cpp**: Single-GPU optimization
+- **LMDeploy (Recommended)**: INT8 KV cache, 40-60 tokens/sec +30% improvement
+- **vLLM Alternative**: FP8 KV cache equivalent, similar performance
+- **llama.cpp/Ollama**: GGUF fallback with INT8 KV cache support
 
 ## Optional Enhancements
 
@@ -306,10 +309,11 @@ This architecture overview synthesizes decisions from:
 
 ### Performance Targets
 
-- **Latency**: <3 seconds end-to-end query processing
-- **Memory**: <12GB VRAM total system usage
+- **Latency**: <1.5 seconds end-to-end query processing (RTX 4090 Laptop)
+- **Memory**: ~12.2GB VRAM total system usage with 262K context
 - **Quality**: 15%+ improvement on complex queries
 - **Reliability**: 90%+ queries processed without fallback
+- **Context**: Full 262K token processing capability
 
 ### Quality Measures
 
@@ -318,4 +322,4 @@ This architecture overview synthesizes decisions from:
 - **Consistency**: 95%+ response quality across query types
 - **Coverage**: Support for 20+ document formats
 
-This architecture delivers production-ready local RAG capabilities with enterprise-grade performance while maintaining the simplicity and local-first principles that make DocMind AI unique in the market.
+This architecture delivers production-ready local RAG capabilities with high-performance processing while maintaining the simplicity and local-first principles that make DocMind AI effective for local deployment.

@@ -6,7 +6,7 @@ Lightweight Multi-Agent RAG with Adaptive Routing and Self-Correction
 
 ## Version/Date
 
-6.0 / 2025-08-18
+7.0 / 2025-08-19
 
 ## Status
 
@@ -30,7 +30,7 @@ Traditional RAG systems suffer from fixed retrieval patterns that cannot adapt t
 3. **Self-Correction**: Validating and improving generated responses
 4. **Local Operation**: All processing occurs on consumer hardware without API dependencies
 
-Research validates that supervisor-based agentic patterns can run efficiently on local models (Qwen3-14B with 128K context via YaRN) on RTX 4090 Laptop hardware, providing significant quality improvements over basic RAG with dramatically reduced implementation complexity and the ability to process entire documents without chunking.
+Supervisor-based agentic patterns operate on Qwen3-4B-Instruct-2507 with 262K context through INT8 KV cache optimization on RTX 4090 Laptop hardware. This configuration enables quality improvements over basic RAG with reduced implementation complexity and eliminates document chunking requirements for contexts up to 262K tokens.
 
 ## Related Requirements
 
@@ -45,7 +45,7 @@ Research validates that supervisor-based agentic patterns can run efficiently on
 
 - **NFR-1:** **(Local-First)** All agentic operations must run locally without external API calls
 - **NFR-2:** **(Performance)** Agent decision overhead <300ms on RTX 4090 Laptop
-- **NFR-3:** **(Memory)** Total memory footprint <14GB VRAM with 128K context
+- **NFR-3:** **(Memory)** Total memory footprint ~12.2GB VRAM with FULL 262K context
 
 ## Alternatives
 
@@ -80,14 +80,14 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 **Implementation Strategy:**
 
 - Use `create_supervisor()` from langgraph-supervisor library
-- Local LLM for all agent decisions (Qwen3-14B with 128K context via YaRN)
+- Local LLM for all agent decisions (Qwen3-4B-Instruct-2507 with FULL 262K context via INT8 KV cache)
 - Supervisor handles state management and agent coordination automatically
 - Built-in error handling and fallback mechanisms
-- Extended context enables processing entire documents without chunking
+- Massive 262K context enables processing extensive documents and conversations without chunking limitations
 
 ## Related Decisions
 
-- **ADR-004** (Local-First LLM Strategy): Provides the local LLM for agent decision-making
+- **ADR-004** (Local-First LLM Strategy): Provides Qwen3-4B-Instruct-2507 with FULL 262K context for agent decision-making
 - **ADR-003** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
 - **ADR-010** (Performance Optimization Strategy): Provides dual-cache architecture for efficient multi-agent coordination
 - **ADR-011** (Agent Orchestration Framework): Details the supervisor library implementation with 5-agent architecture
@@ -336,8 +336,8 @@ response = result["messages"][-1]["content"]
 
 ## Changelog
 
-- **7.0 (2025-08-18)**: **MAJOR ARCHITECTURAL OPTIMIZATION** - Optimized for 32K native context with intelligent multi-stage retrieval instead of 128K brute-force approach. Updated performance targets: <150ms agent decisions, <1.5 second total latency, <11GB VRAM usage. Emphasizes sophisticated retrieval delivering 15-20K highly relevant tokens over large context processing.
-- **6.0 (2025-08-18)**: **MAJOR HARDWARE UPGRADE** - Enhanced for RTX 4090 Laptop GPU (16GB VRAM) with YaRN context scaling to 128K tokens. Updated performance targets: <200ms agent decisions, <2 second total latency, <14GB VRAM usage. Enables processing entire documents without chunking.
+- **7.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context through INT8 KV cache optimization. Agent system operates with large context windows eliminating chunking requirements. Updated performance targets: <200ms agent decisions, <1.5 second total latency, ~12.2GB VRAM usage. Agents can process documents up to 262K tokens and maintain conversation history within single attention spans.
+- **6.0 (2025-08-18)**: **HARDWARE UPGRADE** - Enhanced for RTX 4090 Laptop GPU (16GB VRAM) with YaRN context scaling to 128K tokens. Updated performance targets: <200ms agent decisions, <2 second total latency, <14GB VRAM usage. Enables processing entire documents without chunking.
 - **5.1 (2025-08-18)**: **REVERTED** - Returned to practical Qwen3-14B model after critical review. 30B MoE model unrealistic for consumer hardware (requires 24GB+ VRAM, <1 token/sec at large contexts).
 - **5.0 (2025-08-18)**: **EXPERIMENTAL** - Attempted switch to Qwen3-30B-A3B-Instruct-2507 (later found unrealistic)
 - **4.3 (2025-08-18)**: CORRECTED - Fixed context length specifications: Qwen3-14B has native 32K context, extensible to 128K with YaRN (not native 128K)

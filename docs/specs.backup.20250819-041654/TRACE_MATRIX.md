@@ -32,10 +32,6 @@ This matrix provides complete bidirectional traceability between requirements, s
 | REQ-0008 | Fallback to basic RAG | - | ADR-001 | FEAT-001 | H | ✅ |
 | REQ-0009 | Local execution only | NFR-4 | ADR-001 | FEAT-001 | C | ✅ |
 | REQ-0010 | Context preservation | FR-10 | ADR-011 | FEAT-001 | H | ✅ |
-| **Model Updates (Delta Specifications)** | | | | | | |
-| REQ-0063-v2 | Qwen3-4B-Instruct-2507-AWQ model | - | ADR-004 | FEAT-001.1 | H | 🟡 |
-| REQ-0064-v2 | 40-60 tokens/sec with INT8 KV cache | NFR-1 | ADR-010 | FEAT-001.1 | H | 🟡 |
-| REQ-0094-v2 | 262K context buffer | - | ADR-021 | FEAT-001.1 | H | 🟡 |
 | **Document Processing (8 Requirements)** | | | | | | |
 | REQ-0021 | PDF parsing with UnstructuredReader | FR-1 | ADR-009 | FEAT-003 | C | 🟡 |
 | REQ-0022 | DOCX parsing with structure | FR-1 | ADR-009 | FEAT-003 | C | 🟡 |

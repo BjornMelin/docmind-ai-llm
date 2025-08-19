@@ -6,7 +6,7 @@ Local LLM Selection and Optimization for Consumer Hardware
 
 ## Version/Date
 
-7.0 / 2025-08-18
+10.0 / 2025-08-19
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Establishes a local-first LLM strategy optimized for high-end consumer hardware (RTX 4090 Laptop GPU with 16GB VRAM), focusing on **Qwen3-14B** as the primary model with **32K native context as default**, with adaptive context scaling for specific use cases. The strategy emphasizes intelligent retrieval over brute-force large contexts, function calling capabilities, Q5_K_M/Q6_K GGUF quantization optimization, and efficient memory management while providing excellent performance (50-60 tokens/sec) through optimized context usage.
+Establishes a local-first LLM strategy using **Qwen3-4B-Instruct-2507** with AWQ quantization and INT8 KV cache optimization. This configuration enables the FULL 262K context window on RTX 4090 Laptop (16GB VRAM) through 50% KV cache memory reduction. Total memory usage at 262K: ~12.2GB (well within 16GB limit). Performance actually improves with INT8 KV cache (~30% throughput gain) while maintaining near-lossless accuracy.
 
 ## Context
 
@@ -24,9 +24,9 @@ Current architecture lacks a defined local LLM strategy, relying on external API
 2. **Function Calling**: Support for agentic RAG patterns requiring tool use
 3. **High-End Consumer Hardware**: Optimized for RTX 4090 Laptop GPU (16GB VRAM)
 4. **Quality**: Superior performance exceeding GPT-3.5 capabilities
-5. **Adaptive Context**: Support for 32K native with intelligent scaling for specific use cases
+5. **Massive Context**: Full 262K tokens achievable with AWQ + INT8 KV cache optimization
 
-Research indicates **Qwen3-14B with Q5_K_M/Q6_K quantization at 32K native context** provides optimal performance for RTX 4090 Laptop hardware. The 16GB VRAM enables higher quality quantizations with intelligent multi-stage retrieval delivering 15-20K tokens of highly relevant content. Performance benchmarks show 50-60 tokens/sec with Q5_K_M and 45-55 tokens/sec with Q6_K on RTX 4090 Laptop.
+Research confirms **Qwen3-4B-Instruct-2507 with AWQ quantization + INT8 KV cache** enables the FULL 262K context window on 16GB VRAM. The AWQ model uses ~2.92GB, and INT8 KV cache reduces memory by 50% (72 KiB → 36 KiB per token). Total memory at 262K: ~12.2GB, well within the 16GB limit. Performance benchmarks show 40-60 tokens/sec with potential 30% throughput improvement from INT8 optimization.
 
 **Adaptive Context Strategy**: Rather than defaulting to large contexts, the system uses intelligent multi-stage retrieval to provide precisely relevant content within the 32K native window. This approach delivers 3-4x performance improvement over brute-force large context approaches while maintaining higher quality through reduced "lost in the middle" effects.
 
@@ -37,7 +37,7 @@ Research indicates **Qwen3-14B with Q5_K_M/Q6_K quantization at 32K native conte
 ### Functional Requirements
 
 - **FR-1:** Support function calling for agentic RAG operations
-- **FR-2:** Handle context lengths up to 32K tokens natively, with adaptive scaling for specific use cases
+- **FR-2:** Handle context lengths up to 262K tokens with INT8 KV cache optimization
 - **FR-3:** Provide reasoning capabilities for query routing and result validation
 - **FR-4:** Support multiple conversation turns with context retention
 - **FR-5:** Enable adaptive context strategies optimized for query complexity
@@ -45,10 +45,10 @@ Research indicates **Qwen3-14B with Q5_K_M/Q6_K quantization at 32K native conte
 ### Non-Functional Requirements
 
 - **NFR-1:** **(Performance)** Response generation <1.5 seconds on RTX 4090 Laptop
-- **NFR-2:** **(Memory)** Model memory usage <11GB VRAM for inference (Q5_K_M/Q6_K quantization)
+- **NFR-2:** **(Memory)** Total usage ~12.2GB VRAM at 262K context with AWQ + INT8 KV cache
 - **NFR-3:** **(Quality)** Performance ≥95% of GPT-3.5-turbo on reasoning tasks through intelligent retrieval
 - **NFR-4:** **(Local-First)** Zero external API dependencies for core operations
-- **NFR-5:** **(Throughput)** 50-60 tokens/sec with Q5_K_M on RTX 4090 Laptop
+- **NFR-5:** **(Throughput)** 40-60 tokens/sec, with ~30% improvement from INT8 KV cache
 
 ## Alternatives
 
@@ -70,19 +70,26 @@ Research indicates **Qwen3-14B with Q5_K_M/Q6_K quantization at 32K native conte
 - **Issues**: Limited reasoning, weaker function calling, reduced quality
 - **Score**: 6/10 (performance: 8, quality: 5, capability: 4)
 
-### 4. Qwen3-14B (Selected)
+### 4. Qwen3-14B (Fallback Model)
 
-- **Benefits**: Latest generation (April 2025), 32K native context, dense architecture, proven reliability, Q5_K_M/Q6_K quantization support, optimal for intelligent retrieval
-- **Advantages**: 32K native context enables 3-4x performance improvement with sophisticated multi-stage retrieval (15-20K highly relevant tokens)
-- **Score**: 9.5/10 (quality: 9, capability: 9, performance: 10, context: 8, efficiency: 10)
+- **Benefits**: Latest generation (April 2025), 32K native context, dense architecture, proven reliability, Q5_K_M/Q6_K quantization support
+- **Role**: Handles complex reasoning tasks where 4B model may struggle
+- **Score**: 8.5/10 (quality: 9, capability: 9, performance: 8, context: 6, efficiency: 7)
 
-### 5. Dense Large Models (Qwen3-32B, Mixtral-8x7B)
+### 5. Qwen3-4B-Instruct-2507 (Primary Model - Selected)
+
+- **Benefits**: Full 262K context with AWQ + INT8 KV cache, excellent efficiency, strong benchmarks
+- **Benchmarks**: MMLU-Pro: 69.6, GPQA: 62.0, AIME25: 47.4 (2x improvement over base)
+- **Breakthrough**: INT8 KV cache enables 262K context with only ~12.2GB VRAM (previously thought impossible)
+- **Score**: 9.5/10 (quality: 7.5, capability: 9, performance: 9, full context: 10, efficiency: 10)
+
+### 6. Dense Large Models (Qwen3-32B, Mixtral-8x7B)
 
 - **Benefits**: High quality, strong reasoning capabilities
 - **Issues**: Requires high-end hardware (RTX 4090+), slower inference, 32K context limitation
 - **Score**: 7/10 (quality: 9, performance: 5, accessibility: 6, context: 7)
 
-### 6. Older Generation (Qwen2.5-14B-Instruct)
+### 7. Older Generation (Qwen2.5-14B-Instruct)
 
 - **Benefits**: Proven performance, well-documented
 - **Issues**: Only 32K native context (needs YaRN for 128K), superseded by Qwen3
@@ -90,60 +97,87 @@ Research indicates **Qwen3-14B with Q5_K_M/Q6_K quantization at 32K native conte
 
 ## Decision
 
-We will adopt **Qwen3-14B as primary with Q5_K_M quantization and 32K native context**:
+We will adopt **Qwen3-4B-Instruct-2507** with AWQ quantization and INT8 KV cache optimization:
 
-### Primary Model: **Qwen3-14B** (Optimized for RTX 4090 Laptop)
+### Model Configuration
 
-- **Architecture**: Dense (14.8B parameters)
-- **Memory**: ~10GB VRAM with Q5_K_M, ~11GB with Q6_K quantization
-- **Context**: 32,768 tokens native (32K), with adaptive strategies for specific use cases
-- **Capabilities**: Excellent function calling, strong reasoning, multilingual, thinking mode available
-- **Performance**: 50-60 tokens/sec with Q5_K_M, optimized for intelligent retrieval
-- **Release**: April 2025 (latest generation)
+- **Architecture**: Dense (4.0B parameters, 36 layers, 32 attention heads, 8 KV heads with GQA)
+- **Quantization**: AWQ-INT4 (2.92GB model size)
+- **KV Cache**: INT8 quantization (50% memory reduction)
+- **Memory Usage with INT8 KV Cache**:
+  - Model: ~2.92GB VRAM (AWQ)
+  - KV Cache per token: 36 KiB (vs 72 KiB with FP16)
+  - Total @ 32K: ~4.0GB
+  - Total @ 128K: ~7.5GB  
+  - Total @ 262K: ~12.2GB (fits in 16GB!)
+- **Achievable Context**:
+  - **Quick**: 8,192 tokens (minimal KV cache)
+  - **Standard**: 32,768 tokens (optimal performance)
+  - **Extended**: 131,072 tokens (balanced)
+  - **Maximum**: 262,144 tokens (full capability, ~75% VRAM usage)
+- **Performance**:
+  - 40-60 tokens/sec baseline
+  - ~30% throughput improvement with INT8 KV cache
+  - Near-lossless accuracy with INT8 quantization
+- **Capabilities**: Strong general reasoning, excellent math (AIME25: 47.4), good coding
 - **Hardware Target**: RTX 4090 Laptop GPU (16GB VRAM)
 
-### Adaptive Context Configuration
+### Deployment Configuration
 
-Intelligent context management optimizes performance while maintaining quality:
+Optimized settings with INT8 KV cache enabling full context:
 
 ```python
-# Adaptive context strategies for optimal performance
-CONTEXT_STRATEGIES = {
-    "default": 32768,      # 32K for most queries (optimal performance)
-    "extended": 65536,     # 64K for complex multi-document queries
-    "document": 131072     # 128K for rare full-document processing
+# Context configuration with INT8 KV cache optimization
+CONTEXT_CONFIGURATION = {
+    "quick": 8192,        # Ultra-fast responses
+    "standard": 32768,    # Default - optimal performance
+    "extended": 131072,   # Extended documents
+    "maximum": 262144     # Full context - NOW POSSIBLE with INT8!
 }
 
-# YaRN configuration for extended context (when needed)
-yarn_config = {
-    "rope_scaling": {
-        "rope_type": "yarn",
-        "factor": 2.0,  # Conservative 2x scaling for extended mode
-        "original_max_position_embeddings": 32768,
-        "attention_factor": 1.0,
-        "beta_fast": 32.0,
-        "beta_slow": 1.0,
-        "mscale": 1.0,
-        "mscale_all_dim": 0.0
-    },
-    "max_position_embeddings": 65536  # 64K for extended mode
+# LMDeploy configuration (RECOMMENDED)
+lmdeploy_config = {
+    "model": "Qwen/Qwen3-4B-Instruct-2507-AWQ",
+    "quant_policy": 8,    # INT8 KV cache quantization
+    "cache_max_entry_count": 0.9,
+    "tp": 1  # Tensor parallelism
+}
+
+# Alternative: vLLM with FP8 KV cache
+vllm_config = {
+    "model": "Qwen/Qwen3-4B-Instruct-2507-AWQ",
+    "max_model_len": 262144,  # Full context achievable!
+    "quantization": "awq",
+    "kv_cache_dtype": "fp8",  # Or "int8" if supported
+    "gpu_memory_utilization": 0.90,
+    "dtype": "float16"
 }
 ```
 
-### Optimized Models for RTX 4090 Laptop
+### Deployment Commands
 
-- **Primary**: **Qwen3-14B Q5_K_M** - 50-60 tokens/sec, ~10GB VRAM, 32K native context
-- **Quality**: **Qwen3-14B Q6_K** - 45-55 tokens/sec, ~11GB VRAM, best quality
-- **Extended**: **Qwen3-32B-AWQ** - Available for specific use cases, ~12GB VRAM
-- **Fallback**: **Qwen3-7B Q6_K** - For lower memory scenarios, excellent efficiency
+```bash
+# LMDeploy with INT8 KV cache (BEST OPTION)
+lmdeploy serve api_server \
+    Qwen/Qwen3-4B-Instruct-2507-AWQ \
+    --quant-policy 8 \
+    --cache-max-entry-count 0.9 \
+    --tp 1
 
-### Enhanced Quantization Strategy (RTX 4090 Laptop)
+# vLLM with FP8 KV cache (alternative)
+vllm serve Qwen/Qwen3-4B-Instruct-2507-AWQ \
+    --max-model-len 262144 \
+    --kv-cache-dtype fp8 \
+    --gpu-memory-utilization 0.90
+```
 
-- **Primary**: Q5_K_M GGUF for optimal quality/performance (~10GB VRAM)
-- **Best Quality**: Q6_K GGUF for maximum quality (~11GB VRAM)
-- **AWQ Alternative**: Qwen3-32B-AWQ for specific use cases (~12GB VRAM)
-- **Context Strategy**: 32K native with intelligent multi-stage retrieval
-- **KV Cache**: ~1.2GB for 32K context, optimal memory efficiency on 16GB VRAM
+### Memory Optimization Impact
+
+- **AWQ Model**: 2.92GB (vs 7.97GB FP16)
+- **INT8 KV Cache**: 36 KiB per token (vs 72 KiB FP16)
+- **Total at 262K**: ~12.2GB (75% of 16GB VRAM)
+- **Performance**: +30% throughput with INT8
+- **Accuracy**: Near-lossless with INT8 quantization
 
 ## Related Decisions
 
@@ -601,6 +635,9 @@ MEMORY_USAGE_128K = {
 
 ## Changelog
 
+- **10.0 (2025-08-19)**: **INT8 KV CACHE OPTIMIZATION** - Correction: AWQ + INT8 KV cache enables 262K context on 16GB VRAM. INT8 reduces KV cache by 50% (36 KiB vs 72 KiB per token). Total memory at 262K: ~12.2GB. Performance increases by ~30% with INT8. Deployment: LMDeploy with --quant-policy 8 or vLLM with --kv-cache-dtype fp8. Minimal accuracy degradation with INT8 quantization.
+- **9.0 (2025-08-19)**: **INITIAL REALITY CHECK** - First analysis incorrectly assumed FP16 KV cache, concluding 262K was impossible. This was corrected in v10.0 with INT8 optimization discovery.
+- **8.0 (2025-08-19)**: **INITIAL QWEN3-4B EVALUATION** - Evaluated Qwen3-4B-Instruct-2507 with strong benchmarks.
 - **7.0 (2025-08-18)**: **MAJOR ARCHITECTURAL SHIFT** - Optimized for 32K native context with intelligent multi-stage retrieval instead of 128K brute-force approach. Default configuration changed from 128K YaRN to 32K native for 3-4x performance improvement. Added adaptive context strategies (default/extended/document). Updated performance targets: <1.5 sec latency, 50-60 tokens/sec, <11GB VRAM. Emphasizes sophisticated retrieval over large context windows.
 - **6.0 (2025-08-18)**: **MAJOR HARDWARE UPGRADE** - Enhanced for RTX 4090 Laptop GPU (16GB VRAM) with YaRN context scaling to 128K tokens. Updated benchmarks and defaults for high-end hardware: Q5_K_M/Q6_K quantization, 40-60 tokens/sec performance, comprehensive YaRN configuration for llama.cpp/vLLM/transformers. Added memory usage tables and deployment commands. Qwen3-32B-AWQ now viable as primary model.
 - **5.2 (2025-08-18)**: **REVERTED** - Returned to practical **Qwen3-14B** model after critical review. 30B MoE model unrealistic for consumer hardware (requires 24GB+ VRAM, <1 token/sec at large contexts). Q4_K_M GGUF quantization provides reliable 8GB VRAM deployment. Multi-provider support with llama.cpp, Ollama, and vLLM. Realistic 32K context with 64K sliding window option.

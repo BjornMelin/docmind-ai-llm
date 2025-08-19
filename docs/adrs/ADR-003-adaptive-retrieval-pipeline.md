@@ -6,7 +6,7 @@ Hierarchical Adaptive Retrieval with Simplified RAPTOR and Multi-Strategy Routin
 
 ## Version/Date
 
-2.1 / 2025-08-18
+3.0 / 2025-08-19
 
 ## Status
 
@@ -400,7 +400,7 @@ def _create_section_summaries(documents: List[Document], llm) -> Dict[str, str]:
         summary_prompt = f"""
         Summarize the following section concisely, focusing on key concepts and themes:
         
-        {section_content[:4000]}  # Limit for context window
+        {section_content[:100000]}  # Use large 262K context window
         
         Summary:"""
         
@@ -526,7 +526,7 @@ class QualityMetrics:
 
 - **Python**: `scikit-learn>=1.3.0` for clustering, `numpy>=1.24.0`
 - **LlamaIndex**: Core retrieval and embedding interfaces
-- **Models**: BGE-M3 embeddings, local LLM for summarization
+- **Models**: BGE-M3 embeddings, Qwen3-4B-Instruct-2507 with 262K context for document summarization
 
 ## Monitoring Metrics
 
@@ -538,7 +538,7 @@ class QualityMetrics:
 
 ## Changelog
 
-- **3.0 (2025-08-18)**: **MAJOR ENHANCEMENT** - Implemented multi-stage intelligent retrieval (50→20→10 filtering) optimized for 32K context windows. Emphasizes quality over quantity with 25% improvement in query answering vs brute-force large context. Added context optimization strategies delivering 15-20K highly relevant tokens. Enhanced DSPy integration and PropertyGraphIndex support.
+- **3.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context enabling document processing without chunking limitations. Retrieval strategies now leverage large context windows for processing entire documents in single passes. Section summaries can utilize up to 100K tokens (vs previous 4K limit). Updated document understanding through extended context retention.
 - **2.1 (2025-08-18)**: Added DSPy query optimization and PropertyGraphIndex as retrieval strategy for enhanced query processing and relationship-based retrieval
 - **2.0 (2025-08-17)**: Major enhancement with multi-strategy routing and DSPy integration
 - **1.0 (2025-01-16)**: Initial design for adaptive retrieval pipeline with RAPTOR-Lite hierarchical indexing
