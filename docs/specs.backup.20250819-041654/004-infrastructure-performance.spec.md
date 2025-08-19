@@ -10,7 +10,7 @@
 
 ## 1. Objective
 
-The Infrastructure & Performance System provides the foundational layer for local-first AI operations, including multi-backend LLM support (Ollama, LlamaCPP, vLLM), GPU acceleration with automatic hardware detection, AWQ quantization with INT8 KV cache for memory efficiency, SQLite persistence with WAL mode, and resilient error handling via Tenacity. The system achieves 40-60 tokens/second inference (+30% with INT8 KV cache) while maintaining ~12.2GB VRAM usage with FULL 262K context capability.
+The Infrastructure & Performance System provides the foundational layer for local-first AI operations, including multi-backend LLM support (Ollama, LlamaCPP, vLLM), GPU acceleration with automatic hardware detection, TorchAO quantization for memory efficiency, SQLite persistence with WAL mode, and resilient error handling via Tenacity. The system achieves ~1000 tokens/second inference while maintaining <14GB VRAM usage.
 
 ## 2. Scope
 
@@ -18,7 +18,7 @@ The Infrastructure & Performance System provides the foundational layer for loca
 
 - Local LLM backend management and switching
 - GPU detection and optimization (device_map="auto")
-- Model quantization (AWQ + INT8 KV cache)
+- Model quantization (TorchAO int4)
 - SQLite database with WAL mode
 - Configuration management (environment variables + Settings)
 - Error resilience with Tenacity
@@ -38,7 +38,7 @@ The Infrastructure & Performance System provides the foundational layer for loca
 
 ### Inputs
 
-- **LLM Prompts**: Text prompts for inference (max 262K tokens)
+- **LLM Prompts**: Text prompts for inference (max 32K tokens)
 - **Configuration**: Environment variables and settings
 - **Hardware Info**: GPU/CPU capabilities detection
 - **Database Queries**: SQL operations for persistence
@@ -61,8 +61,8 @@ class LLMBackendManager:
     def initialize_backend(
         self,
         backend_type: Literal["ollama", "llamacpp", "vllm"],
-        model_name: str = "Qwen3-4B-Instruct-2507-AWQ",
-        quantization: Optional[str] = "awq",
+        model_name: str = "qwen3-14b",
+        quantization: Optional[str] = "int4",
         device_map: str = "auto"
     ) -> LLMBackend:
         """Initialize specified LLM backend."""
@@ -157,11 +157,10 @@ class PersistenceManager:
 {
   "backend": "ollama|llamacpp|vllm",
   "model": {
-    "name": "Qwen3-4B-Instruct-2507-AWQ",
-    "path": "/models/Qwen3-4B-Instruct-2507-AWQ",
-    "context_size": 262144,
-    "quantization": "awq|int8_kv|fp16|none",
-    "kv_cache_dtype": "int8"
+    "name": "qwen3-14b",
+    "path": "/models/qwen3-14b-q5_k_m.gguf",
+    "context_size": 32768,
+    "quantization": "int4|int8|fp16|none"
   },
   "inference": {
     "max_tokens": 2048,
@@ -184,13 +183,13 @@ class PersistenceManager:
 {
   "timestamp": "2025-08-19T10:00:00Z",
   "inference": {
-    "tokens_per_second": 60,
+    "tokens_per_second": 1000,
     "time_to_first_token": 150,
     "total_latency": 2000,
     "tokens_generated": 512
   },
   "resources": {
-    "vram_used": 12200,
+    "vram_used": 12000,
     "vram_total": 16000,
     "ram_used": 4000,
     "cpu_percent": 45.5,
@@ -306,17 +305,17 @@ Given an RTX 4090 GPU is available
 When the system starts
 Then GPU is automatically detected
 And model is loaded with device_map="auto"
-And inference achieves 40-60 tokens/second (+30% with INT8 KV cache)
-And VRAM usage stays within ~12.2GB
+And inference achieves ~1000 tokens/second
+And VRAM usage stays under 14GB
 ```
 
 ### Scenario 4: Quantization Impact
 
 ```gherkin
-Given a 4B parameter model with 262K context
-When AWQ quantization with INT8 KV cache is applied
-Then VRAM usage reduces by ~50% vs FP16 KV cache
-And inference speed maintains 40-60 tokens/second
+Given a 14B parameter model
+When TorchAO int4 quantization is applied
+Then VRAM usage reduces by ~58%
+And inference speed maintains >800 tokens/second
 And model accuracy degrades by <2%
 And quantized model loads successfully
 ```
@@ -365,7 +364,7 @@ And error details are logged with context
 
 ### Performance Tests
 
-- Token generation speed (target: 40-60/sec with INT8 KV cache)
+- Token generation speed (target: ~1000/sec)
 - Memory usage with quantization
 - Database transaction throughput
 - Backend switching latency
@@ -373,7 +372,7 @@ And error details are logged with context
 
 ### Stress Tests
 
-- Maximum context size handling (262K tokens)
+- Maximum context size handling (32K tokens)
 - Concurrent inference requests
 - Database under heavy load
 - Memory pressure scenarios
@@ -392,8 +391,8 @@ And error details are logged with context
 
 ### Performance Gates
 
-- Inference speed: 40-60 tokens/sec on RTX 4090 Laptop (REQ-0064)
-- VRAM usage: ~12.2GB with all features (REQ-0070)
+- Inference speed: ~1000 tokens/sec on RTX 4090 (REQ-0064)
+- VRAM usage: <14GB with all features (REQ-0070)
 - RAM usage: <4GB typical workload (REQ-0069)
 - Backend switch: <5 seconds
 - Database response: <50ms for queries
@@ -417,14 +416,14 @@ And error details are logged with context
 
 - **REQ-0061**: 100% offline operation ✓
 - **REQ-0062**: Multiple LLM backends ✓
-- **REQ-0063**: Qwen3-4B-Instruct-2507-AWQ default model ✓
-- **REQ-0064**: 40-60 tokens/sec performance (+30% INT8 KV cache) ✓
-- **REQ-0065**: AWQ quantization with INT8 KV cache ✓
+- **REQ-0063**: Qwen3-14B default model ✓
+- **REQ-0064**: ~1000 tokens/sec performance ✓
+- **REQ-0065**: TorchAO int4 quantization ✓
 - **REQ-0066**: Automatic GPU detection ✓
 - **REQ-0067**: SQLite WAL mode ✓
 - **REQ-0068**: Tenacity error handling ✓
 - **REQ-0069**: <4GB RAM usage ✓
-- **REQ-0070**: ~12.2GB VRAM usage ✓
+- **REQ-0070**: <14GB VRAM usage ✓
 - **REQ-0081**: Environment variable config ✓
 - **REQ-0082**: LlamaIndex Settings singleton ✓
 - **REQ-0083**: Docker deployment ✓
@@ -444,8 +443,7 @@ And error details are logged with context
 - `llama-cpp-python>=0.2.0`
 - `vllm>=0.3.0`
 - `torch>=2.7.1`
-- `transformers>=4.35.0` (AWQ support)
-- `vllm>=0.3.0` (INT8 KV cache)
+- `torchao>=0.1.0`
 - `tenacity>=9.1.2`
 - `loguru>=0.7.0`
 - `pydantic>=2.0.0`
@@ -453,16 +451,15 @@ And error details are logged with context
 
 ### Model Dependencies
 
-- Qwen3-4B-Instruct-2507-AWQ (AWQ quantized)
-- Model files (~2GB AWQ model)
-- Supports 262K context window
+- Qwen3-14B (Q5_K_M quantized)
+- Model files (~10GB per model)
 
 ### Infrastructure Dependencies
 
 - SQLite 3.35+ (WAL support)
 - CUDA 11.8+ (for GPU)
 - 64GB RAM recommended
-- 16GB VRAM (RTX 4090 Laptop)
+- 16GB VRAM (RTX 4090)
 
 ## 13. Traceability
 

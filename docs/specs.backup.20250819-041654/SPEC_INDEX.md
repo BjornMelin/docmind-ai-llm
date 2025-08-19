@@ -14,7 +14,6 @@ This document provides a comprehensive index of all technical specifications for
 | Feature ID | Specification | Requirements | Status | Priority |
 |------------|--------------|--------------|---------|----------|
 | [FEAT-001](#feat-001-multi-agent-coordination) | Multi-Agent Coordination | REQ-0001 to REQ-0010 | ✅ Implemented | Critical |
-| [FEAT-001.1](#feat-0011-model-update-delta) | Model Update (Delta) | REQ-0063-v2, REQ-0064-v2, REQ-0094-v2 | 🟡 Draft | High |
 | [FEAT-002](#feat-002-retrieval--search) | Retrieval & Search | REQ-0041 to REQ-0050 | Draft | Critical |
 | [FEAT-003](#feat-003-document-processing) | Document Processing | REQ-0021 to REQ-0028 | Draft | Critical |
 | [FEAT-004](#feat-004-infrastructure--performance) | Infrastructure & Performance | REQ-0061 to REQ-0090 | Draft | Critical |
@@ -49,30 +48,7 @@ This document provides a comprehensive index of all technical specifications for
 - LLM infrastructure (FEAT-004)
 - UI system (FEAT-005)
 
-**Status**: ✅ Implemented - In production
-
----
-
-### FEAT-001.1: Model Update (Delta)
-
-**File**: [001.1-multi-agent-coordination-model-update.delta.md](./001.1-multi-agent-coordination-model-update.delta.md)
-
-**Purpose**: Documents model and performance updates to the implemented multi-agent system.
-
-**Key Changes**:
-
-- Model: Qwen3-14B → Qwen3-4B-Instruct-2507-AWQ
-- Context: 32K → 262K tokens
-- Performance: ~1000 → 40-60 tokens/sec (+30% INT8 KV cache)
-- Memory: TorchAO int4 → AWQ + INT8 KV cache (~12.2GB VRAM)
-
-**Updated Requirements**:
-
-- REQ-0063-v2: Qwen3-4B-Instruct-2507-AWQ default model
-- REQ-0064-v2: 40-60 tokens/sec with INT8 KV cache
-- REQ-0094-v2: 262K context buffer capability
-
-**Status**: 🟡 Draft - Pending configuration update
+**Status**: 🟡 Draft - Ready for implementation
 
 ---
 
@@ -146,7 +122,7 @@ This document provides a comprehensive index of all technical specifications for
 
 - Multi-backend LLM (Ollama, LlamaCPP, vLLM)
 - GPU auto-detection
-- AWQ quantization with INT8 KV cache
+- TorchAO int4 quantization
 - SQLite with WAL mode
 - Tenacity error handling
 - Performance monitoring
@@ -154,8 +130,8 @@ This document provides a comprehensive index of all technical specifications for
 **Critical Requirements**:
 
 - REQ-0061: 100% offline operation
-- REQ-0064: 40-60 tokens/sec with INT8 KV cache
-- REQ-0070: ~12.2GB VRAM usage
+- REQ-0064: ~1000 tokens/sec inference
+- REQ-0070: <14GB VRAM usage
 
 **Dependencies**:
 
