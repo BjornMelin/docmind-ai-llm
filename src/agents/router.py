@@ -155,7 +155,9 @@ class RouterAgent:
                 reasoning=f"Fallback routing due to error: {str(e)}",
             )
 
-    def _parse_agent_response(self, result: dict, query: str) -> dict[str, Any]:
+    def _parse_agent_response(
+        self, result: dict[str, Any], query: str
+    ) -> dict[str, Any]:
         """Parse agent response to extract routing decision."""
         try:
             # Get the final message from agent

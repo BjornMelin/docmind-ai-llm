@@ -44,6 +44,7 @@ class MockAgentResponse:
         validation_score: float = 0.9,
         processing_time: float = 0.5,
     ):
+        """Initialize mock agent response."""
         self.content = content
         self.sources = sources or []
         self.metadata = metadata or {}
@@ -55,6 +56,7 @@ class MockMultiAgentCoordinator:
     """Mock multi-agent coordinator for testing."""
 
     def __init__(self, enable_fallback: bool = True):
+        """Initialize mock multi-agent coordinator."""
         self.enable_fallback = enable_fallback
         self.router_decisions: list[dict[str, Any]] = []
         self.planning_outputs: list[dict[str, Any]] = []
@@ -267,7 +269,7 @@ class TestRouterAgent:
     @pytest.mark.spec("FEAT-001")
     def test_simple_query_classification(self, mock_coordinator, simple_query):
         """Test router classifies simple queries correctly."""
-        response = mock_coordinator.process_query(simple_query)
+        mock_coordinator.process_query(simple_query)
 
         assert len(mock_coordinator.router_decisions) == 1
         decision = mock_coordinator.router_decisions[0]
@@ -280,7 +282,7 @@ class TestRouterAgent:
     @pytest.mark.spec("FEAT-001")
     def test_complex_query_classification(self, mock_coordinator, complex_query):
         """Test router classifies complex queries correctly."""
-        response = mock_coordinator.process_query(complex_query)
+        mock_coordinator.process_query(complex_query)
 
         assert len(mock_coordinator.router_decisions) == 1
         decision = mock_coordinator.router_decisions[0]
@@ -292,7 +294,7 @@ class TestRouterAgent:
 
     @pytest.mark.spec("FEAT-001")
     @pytest.mark.parametrize(
-        "query,expected_complexity",
+        ("query", "expected_complexity"),
         [
             ("What is machine learning?", "simple"),
             ("Compare supervised vs unsupervised learning approaches", "complex"),
@@ -319,7 +321,7 @@ class TestPlannerAgent:
     @pytest.mark.spec("FEAT-001")
     def test_complex_query_decomposition(self, mock_coordinator, complex_query):
         """Test planner decomposes complex queries into sub-tasks."""
-        response = mock_coordinator.process_query(complex_query)
+        mock_coordinator.process_query(complex_query)
 
         assert len(mock_coordinator.planning_outputs) == 1
         plan = mock_coordinator.planning_outputs[0]
@@ -349,7 +351,7 @@ class TestPlannerAgent:
     @pytest.mark.spec("FEAT-001")
     def test_no_planning_for_simple_queries(self, mock_coordinator, simple_query):
         """Test planner is not invoked for simple queries."""
-        response = mock_coordinator.process_query(simple_query)
+        mock_coordinator.process_query(simple_query)
 
         # Simple queries should not trigger planning
         assert len(mock_coordinator.planning_outputs) == 0
@@ -419,7 +421,7 @@ class TestSynthesisAgent:
     @pytest.mark.spec("FEAT-001")
     def test_multi_source_combination(self, mock_coordinator, complex_query):
         """Test synthesis agent combines results from multiple sources."""
-        response = mock_coordinator.process_query(complex_query)
+        mock_coordinator.process_query(complex_query)
 
         assert len(mock_coordinator.synthesis_results) == 1
         synthesis = mock_coordinator.synthesis_results[0]
@@ -432,7 +434,7 @@ class TestSynthesisAgent:
     @pytest.mark.spec("FEAT-001")
     def test_synthesis_metadata_tracking(self, mock_coordinator, complex_query):
         """Test synthesis agent tracks processing metadata."""
-        response = mock_coordinator.process_query(complex_query)
+        mock_coordinator.process_query(complex_query)
 
         synthesis = mock_coordinator.synthesis_results[0]
         metadata = synthesis["synthesis_metadata"]
@@ -445,7 +447,7 @@ class TestSynthesisAgent:
     @pytest.mark.spec("FEAT-001")
     def test_no_synthesis_for_simple_queries(self, mock_coordinator, simple_query):
         """Test synthesis is not invoked for simple queries."""
-        response = mock_coordinator.process_query(simple_query)
+        mock_coordinator.process_query(simple_query)
 
         # Simple queries should not trigger synthesis
         assert len(mock_coordinator.synthesis_results) == 0
@@ -457,7 +459,7 @@ class TestValidationAgent:
     @pytest.mark.spec("FEAT-001")
     def test_response_quality_validation(self, mock_coordinator, complex_query):
         """Test validator ensures response completeness and quality."""
-        response = mock_coordinator.process_query(complex_query)
+        mock_coordinator.process_query(complex_query)
 
         assert len(mock_coordinator.validation_results) == 1
         validation = mock_coordinator.validation_results[0]
@@ -533,7 +535,7 @@ class TestMultiAgentIntegration:
         self, mock_coordinator, complex_query
     ):
         """Test Scenario 2: Complex Query Decomposition."""
-        response = mock_coordinator.process_query(complex_query)
+        mock_coordinator.process_query(complex_query)
 
         # Verify routing decision
         decision = mock_coordinator.router_decisions[0]
@@ -609,7 +611,7 @@ class TestMultiAgentIntegration:
         # Verify latency requirement
         assert optimization_time < 0.1  # Under 100ms requirement
 
-        # Mock: Verify quality improvement (would be measured differently in real system)
+        # Mock: Verify quality improvement (measured differently in real)
         # For testing purposes, we assume optimization improves retrieval
         baseline_score = 0.8
         expected_improvement = baseline_score * 1.2  # 20% improvement
@@ -634,8 +636,8 @@ class TestPerformanceRequirements:
         # Verify response quality
         assert result.validation_score > 0.8
 
-        # Benchmark automatically measures time - should be under 300ms for coordination
-        # The actual coordination overhead would be measured separately from LLM inference
+        # Benchmark automatically measures time - should be under 300ms
+        # Coordination overhead measured separately from LLM inference
 
     @pytest.mark.spec("FEAT-001")
     @pytest.mark.performance
@@ -797,8 +799,10 @@ class TestContextManagement:
         )
 
         # Both responses should be meaningful
-        assert response1 is not None and response2 is not None
-        assert len(response1.content) > 10 and len(response2.content) > 10
+        assert response1 is not None
+        assert response2 is not None
+        assert len(response1.content) > 10
+        assert len(response2.content) > 10
 
         # Memory should contain conversation history
         history = memory.get_all()
@@ -811,7 +815,7 @@ class TestContextManagement:
         memory = ChatMemoryBuffer.from_defaults(token_limit=token_limit)
 
         # Add content beyond token limit
-        for i in range(50):
+        for _i in range(50):
             long_message = "This is a long message " * 20  # ~100 tokens each
             memory.put(long_message)
 
@@ -945,13 +949,18 @@ def mock_llm_responses():
     """Provide deterministic mock LLM responses for testing."""
     return {
         "routing": {
-            "simple": '{"strategy": "vector", "complexity": "simple", "needs_planning": false}',
-            "complex": '{"strategy": "hybrid", "complexity": "complex", "needs_planning": true}',
+            "simple": '{"strategy": "vector", "complexity": "simple", '
+            '"needs_planning": false}',
+            "complex": '{"strategy": "hybrid", "complexity": "complex", '
+            '"needs_planning": true}',
         },
         "planning": {
-            "complex": '{"sub_tasks": ["task1", "task2", "task3"], "execution_order": "parallel"}'
+            "complex": '{"sub_tasks": ["task1", "task2", "task3"], '
+            '"execution_order": "parallel"}'
         },
-        "synthesis": "Based on the retrieved information, here is a comprehensive analysis...",
+        "synthesis": (
+            "Based on the retrieved information, here is a comprehensive analysis..."
+        ),
         "validation": '{"valid": true, "confidence": 0.9, "issues": []}',
     }
 
@@ -970,7 +979,10 @@ def spec_test_cases():
             "should_synthesize": False,
         },
         "scenario_2_complex": {
-            "query": "Compare the environmental impact of electric vs gasoline vehicles and explain the manufacturing differences",
+            "query": (
+                "Compare the environmental impact of electric vs gasoline "
+                "vehicles and explain the manufacturing differences"
+            ),
             "expected_complexity": "complex",
             "expected_strategy": "hybrid",
             "expected_subtasks": 3,
