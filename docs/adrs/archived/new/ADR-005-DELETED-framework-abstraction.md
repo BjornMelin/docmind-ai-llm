@@ -134,4 +134,4 @@ class RAGService:
 ## Changelog
 
 - **2.0 (2025-08-17)**: DELETED - Unnecessary abstraction, use LlamaIndex directly
-- **1.0 (2025-01-16)**: Original abstraction layer proposal
+- **1.0 (2025-08-17)**: Original abstraction layer proposal

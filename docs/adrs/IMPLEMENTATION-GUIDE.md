@@ -109,6 +109,11 @@ import ollama
 structured_llm = patch(ollama.Client())
 
 class QueryAnalysis(BaseModel):
+    """Query analysis response structure for LLM-powered query parsing.
+    
+    Provides structured output for analyzing user queries to determine
+    intent, complexity level, and extract relevant entities.
+    """
     intent: str
     complexity: str
     entities: list[str]

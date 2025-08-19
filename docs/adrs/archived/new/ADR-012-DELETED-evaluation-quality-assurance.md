@@ -1005,4 +1005,4 @@ class QualityAssuranceManager:
 
 ## Changelog
 
-- **1.0 (2025-01-16)**: Initial comprehensive evaluation and quality assurance system with automated assessment and user feedback integration
+- **1.0 (2025-08-17)**: ADR deleted; initial comprehensive evaluation and quality assurance system with automated assessment and user feedback integration
