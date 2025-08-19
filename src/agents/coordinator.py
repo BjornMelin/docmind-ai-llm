@@ -92,6 +92,11 @@ class MultiAgentState(MessagesState):
     errors: list[str] = Field(default_factory=list)
     fallback_used: bool = Field(default=False)
 
+    # LangGraph supervisor requirements
+    remaining_steps: int = Field(
+        default=10, description="Remaining steps for supervisor"
+    )
+
 
 class MultiAgentCoordinator:
     """Main coordinator for multi-agent document analysis system.
@@ -144,45 +149,43 @@ class MultiAgentCoordinator:
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with specialized agents."""
         try:
-            # Create individual agents with specific tools
+            # Create individual agents with specific tools and names
             router_agent = create_react_agent(
                 self.llm,
                 tools=[route_query],
                 state_schema=MultiAgentState,
+                name="router_agent",
             )
 
             planner_agent = create_react_agent(
                 self.llm,
                 tools=[plan_query],
                 state_schema=MultiAgentState,
+                name="planner_agent",
             )
 
             retrieval_agent = create_react_agent(
                 self.llm,
                 tools=[retrieve_documents],
                 state_schema=MultiAgentState,
+                name="retrieval_agent",
             )
 
             synthesis_agent = create_react_agent(
                 self.llm,
                 tools=[synthesize_results],
                 state_schema=MultiAgentState,
+                name="synthesis_agent",
             )
 
             validation_agent = create_react_agent(
                 self.llm,
                 tools=[validate_response],
                 state_schema=MultiAgentState,
+                name="validation_agent",
             )
 
-            # Define agent members for supervisor
-            members = [
-                "router_agent",
-                "planner_agent",
-                "retrieval_agent",
-                "synthesis_agent",
-                "validation_agent",
-            ]
+            # Create list of agents for supervisor
 
             # Create supervisor system prompt
             system_prompt = (
@@ -209,19 +212,30 @@ class MultiAgentCoordinator:
                 "Respond with the agent name to call next, or 'FINISH' when complete."
             )
 
+            # Create list of agents for supervisor
+            agents = [
+                router_agent,
+                planner_agent,
+                retrieval_agent,
+                synthesis_agent,
+                validation_agent,
+            ]
+
             # Create supervisor graph
             self.graph = create_supervisor(
-                llm=self.llm,
-                members=members,
-                system_prompt=system_prompt,
+                agents=agents,
+                model=self.llm,
+                prompt=system_prompt,
             )
 
-            # Add individual agents to the graph
-            self.graph.add_node("router_agent", router_agent)
-            self.graph.add_node("planner_agent", planner_agent)
-            self.graph.add_node("retrieval_agent", retrieval_agent)
-            self.graph.add_node("synthesis_agent", synthesis_agent)
-            self.graph.add_node("validation_agent", validation_agent)
+            # Store agents for reference (nodes are already added by create_supervisor)
+            self.agents = {
+                "router_agent": router_agent,
+                "planner_agent": planner_agent,
+                "retrieval_agent": retrieval_agent,
+                "synthesis_agent": synthesis_agent,
+                "validation_agent": validation_agent,
+            }
 
             # Compile graph with memory
             self.compiled_graph = self.graph.compile(checkpointer=self.memory)

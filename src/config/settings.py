@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -47,8 +47,8 @@ class Settings(BaseSettings):
         description="LLM backend to use (local-first)",
     )
     model_name: str = Field(
-        default="qwen2.5:14b",
-        description="Model name for LLM (REQ-0063: Qwen3-14B default)",
+        default="Qwen/Qwen3-4B-Instruct-2507",
+        description="Model name for LLM (REQ-0063-v2: Qwen3-4B-Instruct-2507 with AWQ)",
     )
     llm_base_url: str = Field(
         default="http://localhost:11434",
@@ -71,14 +71,34 @@ class Settings(BaseSettings):
         le=8192,
     )
 
-    # Context Management (REQ-0010: Context preservation)
+    # Model Optimization Settings (REQ-0063-v2, REQ-0064-v2)
+    quantization: str = Field(
+        default="AWQ",
+        description="Quantization method for model (AWQ for 4-bit weights)",
+    )
+    kv_cache_dtype: str = Field(
+        default="int8",
+        description="KV cache data type for memory optimization",
+    )
+    enable_kv_cache_optimization: bool = Field(
+        default=True,
+        description="Enable KV cache optimization for performance",
+    )
+    kv_cache_performance_boost: float = Field(
+        default=1.3,
+        description="Expected performance boost from KV cache optimization (30%)",
+        ge=1.0,
+        le=2.0,
+    )
+
+    # Context Management (REQ-0094-v2: Expanded context)
     context_window_size: int = Field(
-        default=32768,
-        description="Context window size in tokens (32K native)",
+        default=262144,
+        description="Context window size in tokens (262K native with Qwen3-4B-AWQ)",
     )
     context_buffer_size: int = Field(
-        default=65536,
-        description="Maximum context buffer size (65K tokens)",
+        default=262144,
+        description="Maximum context buffer size (262K tokens)",
     )
     enable_conversation_memory: bool = Field(
         default=True,
@@ -181,8 +201,8 @@ class Settings(BaseSettings):
         description="Maximum RAM usage in GB (REQ-0069)",
     )
     max_vram_gb: float = Field(
-        default=14.0,
-        description="Maximum VRAM usage in GB (REQ-0070)",
+        default=12.2,
+        description="Maximum VRAM usage in GB (REQ-0070, optimized for AWQ+INT8)",
     )
     enable_gpu_acceleration: bool = Field(
         default=True,
