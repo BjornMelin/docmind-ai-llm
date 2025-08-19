@@ -29,7 +29,7 @@ streamlit run app.py
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 MODEL_CACHE_DIR=./models
-OLLAMA_HOST=http://localhost:11434
+LMDEPLOY_HOST=http://localhost:23333  # LMDeploy for INT8 KV cache (recommended)
 
 # Optional features (disabled by default)
 ENABLE_GRAPHRAG=false
@@ -120,7 +120,7 @@ class QueryAnalysis(BaseModel):
 
 # Guaranteed structured response
 analysis = structured_llm.create(
-    model="qwen3:14b",
+    model="Qwen3-4B-Instruct-2507-AWQ",
     response_model=QueryAnalysis,
     messages=[{"role": "user", "content": query}]
 )
@@ -176,8 +176,8 @@ def get_memory_store():
 ```python
 import dspy
 
-# Configure with local model
-dspy.settings.configure(lm=dspy.LM("ollama/qwen3:14b"))
+# Configure with local model (262K context)
+dspy.settings.configure(lm=dspy.LM("lmdeploy/Qwen3-4B-Instruct-2507-AWQ", max_tokens=262144))
 
 class QueryOptimizer(dspy.Module):
     def __init__(self):
@@ -304,22 +304,25 @@ DocMind AI supports multiple local LLM providers with automatic hardware-based s
 
 | Provider | Tokens/sec | VRAM Usage | Setup | Best For |
 |----------|------------|------------|-------|----------|
-| **Ollama** | 100-150 | Baseline | Simple | Development, easy model switching |
-| **llama.cpp** | 130-195 | -10% | Moderate | Single GPU, GGUF models, flash attention |
-| **vLLM** | 250-350 | +20% | Complex | Multi-GPU, production, high concurrency |
+| **LMDeploy** | 40-60 (+30% INT8) | 12.2GB | Simple | RECOMMENDED: INT8 KV cache, 262K context |
+| **vLLM** | 40-60 (+30% FP8) | 12.2GB | Moderate | FP8 KV cache alternative, 262K context |
+| **llama.cpp** | 30-45 | 12.2GB | Complex | GGUF fallback, INT8 KV cache |
+| **Ollama** | 25-40 | 12.2GB | Simplest | Easy setup, INT8 KV cache support |
 
 ```python
 # Automatic provider selection
 def select_provider(hardware):
-    if hardware["gpu_count"] >= 2 and hardware["gpu_memory_gb"] >= 16:
-        return "vllm"  # Multi-GPU: best performance
-    elif hardware["gpu_count"] == 1 and has_gguf_model:
-        return "llamacpp"  # Single GPU: optimal for GGUF
+    if hardware["gpu_memory_gb"] >= 16 and hardware["supports_int8_kv"]:
+        return "lmdeploy"  # RECOMMENDED: INT8 KV cache, 262K context
+    elif hardware["gpu_memory_gb"] >= 16 and hardware["supports_fp8_kv"]:
+        return "vllm"  # Alternative: FP8 KV cache, 262K context
+    elif has_gguf_model:
+        return "llamacpp"  # GGUF fallback with INT8 support
     else:
         return "ollama"  # Default: easiest setup
 
 # Environment configuration
-export DOCMIND_LLM_PROVIDER=llamacpp  # ollama, llamacpp, vllm
+export DOCMIND_LLM_PROVIDER=lmdeploy  # lmdeploy, vllm, llamacpp, ollama
 export LLAMA_FLASH_ATTN=1             # Enable flash attention
 export CUDA_VISIBLE_DEVICES=0,1       # For multi-GPU vLLM
 ```
@@ -332,7 +335,7 @@ export CUDA_VISIBLE_DEVICES=0,1       # For multi-GPU vLLM
 
 - BGE-M3 embedding pipeline (unified dense+sparse)
 - Qdrant with hybrid search support
-- Qwen3-14B with Instructor for structured outputs
+- Qwen3-4B-Instruct-2507 with Instructor for structured outputs (262K context)
 
 #### **Days 3-4: Basic RAG**
 
@@ -421,11 +424,12 @@ def test_end_to_end_rag():
 
 | Issue | Solution |
 |-------|----------|
-| Out of memory | Use Qwen3-7B instead of 14B |
+| Out of memory | Use INT8 KV cache: `LMDEPLOY_QUANT_POLICY=8` |
 | Slow embeddings | Enable GPU: `device='cuda'` |
 | Docker fails | Check GPU passthrough: `--gpus all` |
-| Models not loading | Verify with: `ollama list` |
+| Models not loading | Verify with: `lmdeploy list` |
 | Qdrant connection | Ensure port 6333 is open |
+| Context too large | Enable 262K: `DOCMIND_CONTEXT_LENGTH=262144` |
 
 ### Performance Tuning
 
@@ -456,7 +460,7 @@ from unstructured.partition.auto import partition
 # Initialize models (cached)
 @st.cache_resource
 def init_models():
-    Settings.llm = Ollama(model="qwen3:14b")
+    Settings.llm = Ollama(model="qwen3-4b-instruct-2507")  # 262K context
     Settings.embed_model = SentenceTransformer('BAAI/bge-m3')
     return CrossEncoder('BAAI/bge-reranker-v2-m3')
 
@@ -494,9 +498,9 @@ if prompt := st.chat_input():
 # models.yaml
 models:
   llm:
-    name: "qwen3:14b"
-    quantization: "4bit"
-    context_length: 131072
+    name: "qwen3-4b-instruct-2507"
+    quantization: "awq"
+    context_length: 262144
   
   embedding:
     name: "BAAI/bge-m3"
@@ -558,4 +562,4 @@ metrics = {
 - **Distributed**: Scale with multiple Qdrant nodes
 - **Load balancing**: Use nginx for multiple Streamlit instances
 
-This implementation guide provides everything needed to build DocMind AI using a library-first approach with minimal custom code while achieving production-ready performance.
+This implementation guide provides everything needed to build DocMind AI using a library-first approach with minimal custom code while achieving production-ready performance with 262K context capability.

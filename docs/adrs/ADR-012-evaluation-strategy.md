@@ -6,7 +6,7 @@ Leverage DeepEval for All Quality Assurance
 
 ## Version/Date
 
-3.4 / 2025-08-18
+4.0 / 2025-08-19
 
 ## Status
 
@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Use DeepEval library for all evaluation needs instead of writing 1000+ lines of custom evaluation code. DeepEval provides everything we need out-of-the-box for RAG evaluation, including metrics for the 5-agent system with 32K context optimization, multi-stage retrieval quality (50→20→10 pipeline), DSPy optimization effectiveness, and intelligent retrieval performance vs brute-force large context approaches.
+Use DeepEval library for all evaluation needs leveraging Qwen3-4B-Instruct-2507's 262K context capability for evaluation scenarios. DeepEval provides RAG evaluation with large context processing, including metrics for the 5-agent system utilizing 262K context windows, multi-stage retrieval quality assessment, DSPy optimization effectiveness measurement, and document evaluation within single context spans without chunking limitations.
 
 ## Context
 
@@ -25,7 +25,7 @@ The original ADR-012 had 1000+ lines of custom evaluation code including:
 - Custom metrics calculations
 - Custom quality tracking
 
-This is massive over-engineering when DeepEval already provides all these features with simple function calls.
+This is over-engineering when DeepEval already provides these features with simple function calls.
 
 **Enhanced Requirements:**
 
@@ -219,7 +219,7 @@ def test_rag_quality():
 
 ## Alternative: RAGAS
 
-If DeepEval doesn't meet needs, RAGAS is another excellent choice:
+If DeepEval doesn't meet needs, RAGAS is another good choice:
 
 ```python
 from ragas import evaluate

@@ -6,7 +6,7 @@ LangGraph-Based Agent Orchestration with Local-First Agentic Patterns
 
 ## Version/Date
 
-4.2 / 2025-08-18
+5.0 / 2025-08-19
 
 ## Status
 
@@ -22,11 +22,11 @@ The modernized architecture introduces multiple agentic components that need coo
 
 1. **Query Routing Agent**: Determines optimal retrieval strategy
 2. **Planning Agent**: Decomposes complex queries into sub-tasks
-3. **Retrieval Agent**: Executes multi-stage retrieval optimized for 32K context windows
+3. **Retrieval Agent**: Executes multi-stage retrieval leveraging FULL 262K context windows
 4. **Synthesis Agent**: Combines results from multiple retrieval passes
 5. **Response Validation Agent**: Ensures response quality and accuracy
 
-These agents need orchestration to work together effectively while maintaining context efficiency and local-first constraints. The `langgraph-supervisor` library provides the optimal solution with proven supervisor patterns, automatic state management, and conditional execution - eliminating the need for custom orchestration code while optimizing for 32K native context windows.
+These agents need orchestration to work together effectively while maintaining context efficiency and local-first constraints. The `langgraph-supervisor` library provides the optimal solution with proven supervisor patterns, automatic state management, and conditional execution - eliminating the need for custom orchestration code while leveraging the 262K context capability of Qwen3-4B-Instruct-2507 with INT8 KV cache optimization.
 
 ## Related Requirements
 
@@ -94,7 +94,7 @@ We will implement **LangGraph Supervisor-Based Orchestration** using the `langgr
 ## Related Decisions
 
 - **ADR-001** (Modern Agentic RAG): Defines the core 5-agent architecture patterns orchestrated by this framework
-- **ADR-004** (Local-First LLM Strategy): Provides the LLM for agent decision-making
+- **ADR-004** (Local-First LLM Strategy): Provides Qwen3-4B-Instruct-2507 with 262K context for large context agent decision-making
 - **ADR-010** (Performance Optimization Strategy): Provides cache coordination between the 5 agents
 - **ADR-012** (Evaluation Strategy): Evaluates the effectiveness of multi-agent coordination
 - **ADR-015** (Deployment Strategy): Deploys the 5-agent orchestration system
@@ -438,8 +438,9 @@ def process_query(query: str) -> str:
 
 ## Changelog
 
+- **5.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context capability through INT8 KV cache optimization. Retrieval agent now leverages large context windows enabling entire document processing within single context window. Updated agent coordination with ~12.2GB VRAM usage on RTX 4090 Laptop (16GB). Agents can process large documents without chunking limitations.
 - **4.1 (2025-08-18)**: Enhanced retrieval agent with DSPy optimization for automatic query rewriting and expansion, added intelligent routing for relationship queries using GraphRAG when appropriate
 - **4.0 (2025-08-17)**: **ENHANCED** - Added Planning and Synthesis agents for 5 total agents. Integrated DSPy query optimization. Better handling of complex queries through decomposition and multi-source synthesis.
 - **3.0 (2025-08-17)**: FINALIZED - Confirmed langgraph-supervisor approach, updated to accepted status. This is the correct simplification approach.
 - **2.0 (2025-01-16)**: **MAJOR SIMPLIFICATION** - Replaced custom LangGraph orchestration with `langgraph-supervisor` library. ~90% code reduction while maintaining all functionality. Improved reliability through proven patterns.
-- **1.0 (2025-01-16)**: Initial LangGraph-based agent orchestration framework with specialized agents and comprehensive error handling
+- **1.0 (2025-01-16)**: Initial LangGraph-based agent orchestration framework with specialized agents and error handling
