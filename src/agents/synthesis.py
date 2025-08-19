@@ -36,7 +36,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.agents.tools import synthesize_results
-from src.models.core import settings
+from src.config.settings import settings
 
 
 class SynthesisResult(BaseModel):

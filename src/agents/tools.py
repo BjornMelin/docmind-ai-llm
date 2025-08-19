@@ -33,7 +33,7 @@ from llama_index.core import Document
 from loguru import logger
 
 from src.agents.tool_factory import ToolFactory
-from src.models.core import settings
+from src.config.settings import settings
 
 
 @tool

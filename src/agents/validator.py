@@ -150,7 +150,7 @@ class ValidationAgent:
             messages = [HumanMessage(content=f"Validate response for query: {query}")]
 
             # Include context and validation data
-            # Note: state not used directly but kept for future context handling
+            # Context will be integrated into agent state for multi-turn conversations
 
             # Execute validation through agent
             result = self.agent.invoke(

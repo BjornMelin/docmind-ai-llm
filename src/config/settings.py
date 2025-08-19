@@ -275,14 +275,14 @@ class Settings(BaseSettings):
             )
         return v
 
-    class Config:
-        """Pydantic configuration."""
-
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        # Allow reading from environment with DOCMIND_ prefix
-        env_prefix = "DOCMIND_"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        env_prefix="DOCMIND_",
+        extra="ignore",  # Ignore extra environment variables
+        validate_default=True,  # Validate default values
+    )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert settings to dictionary."""
