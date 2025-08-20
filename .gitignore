@@ -179,7 +179,8 @@ tests-output.md
 core-files-output.md
 crawled/
 TODO.md.bak
-PYTEST_OPTIMIZATION_REPORT.md
+ai-research/
+.spec-updates/
 
 # Model caches and embeddings
 embeddings_cache/
