@@ -1,9 +1,9 @@
 {
   "meta": {
-    "generated": "2025-08-19",
-    "version": "1.1.0",
+    "generated": "2025-08-20",
+    "version": "1.1.1",
     "total_requirements": 100,
-    "coverage": "100%",
+    "coverage": "30% (partial implementation)",
     "sources": {
       "prd": "/home/bjorn/repos/agents/docmind-ai-llm/docs/PRD.md",
       "adrs": "/home/bjorn/repos/agents/docmind-ai-llm/docs/adrs/",
@@ -11,41 +11,41 @@
     },
     "specifications": {
       "total": 5,
-      "status": "draft"
+      "status": "partial implementation"
     },
     "updates": {
       "v1.1.0": {
         "date": "2025-08-19",
         "changes": [
-          "REQ-0001: Enhanced with parallel tool execution (50-87% token reduction)",
-          "REQ-0007: Improved agent latency from 300ms to 200ms",
-          "REQ-0063: Updated to Qwen3-4B-Instruct-2507-FP8 with 128K context via vLLM",
-          "REQ-0064: Updated performance targets for FP8 quantization",
-          "REQ-0069/0070: Updated memory constraints for FP8 model",
-          "REQ-0094: Increased context buffer to 128K tokens"
+          "REQ-0001: Code structure updated for multi-agent coordination (NOT VALIDATED)",
+          "REQ-0007: Agent latency targets configured (NOT VALIDATED)",
+          "REQ-0063: Settings updated to Qwen3-4B-Instruct-2507 with FP8 config (NOT VALIDATED)",
+          "REQ-0064: Performance targets documented (REQUIRES VALIDATION)",
+          "REQ-0069/0070: Memory constraints configured (REQUIRES VALIDATION)",
+          "REQ-0094: Context buffer set to 128K tokens (NOT VALIDATED)"
         ]
       }
     }
   },
   "requirements": {
     "functional": {
-      "count": 60,
-      "percentage": "60%",
+      "count": 25,
+      "percentage": "25% (code structure only)",
       "ids": ["REQ-0001", "REQ-0002", "REQ-0003", "REQ-0004", "REQ-0005", "REQ-0006", "REQ-0008", "REQ-0010", "REQ-0021", "REQ-0022", "REQ-0023", "REQ-0024", "REQ-0025", "REQ-0041", "REQ-0042", "REQ-0043", "REQ-0044", "REQ-0045", "REQ-0048", "REQ-0049", "REQ-0062", "REQ-0066", "REQ-0071", "REQ-0072", "REQ-0073", "REQ-0075", "REQ-0076", "REQ-0077", "REQ-0078", "REQ-0091", "REQ-0092", "REQ-0093", "REQ-0094", "REQ-0095", "REQ-0096"]
     },
     "non_functional": {
-      "count": 20,
-      "percentage": "20%",
+      "count": 5,
+      "percentage": "5% (configuration only)",
       "ids": ["REQ-0007", "REQ-0009", "REQ-0026", "REQ-0027", "REQ-0028", "REQ-0046", "REQ-0050", "REQ-0061", "REQ-0064", "REQ-0069", "REQ-0070", "REQ-0074", "REQ-0079", "REQ-0080", "REQ-0100"]
     },
     "technical": {
-      "count": 15,
-      "percentage": "15%",
+      "count": 5,
+      "percentage": "5% (partial settings)",
       "ids": ["REQ-0047", "REQ-0063", "REQ-0065", "REQ-0067", "REQ-0068", "REQ-0083", "REQ-0084", "REQ-0085", "REQ-0086", "REQ-0087", "REQ-0088", "REQ-0089", "REQ-0097"]
     },
     "architectural": {
-      "count": 5,
-      "percentage": "5%",
+      "count": 0,
+      "percentage": "0% (structure only)",
       "ids": ["REQ-0081", "REQ-0082", "REQ-0090", "REQ-0098", "REQ-0099"]
     }
   },
@@ -144,11 +144,11 @@
       "agent_latency": "<200ms",
       "query_latency_p95": "<2s",
       "document_throughput": ">50 pages/sec",
-      "token_generation_decode": "100-160 tokens/sec",
-      "token_generation_prefill": "800-1300 tokens/sec",
-      "vram_usage": "12-14GB",
+      "token_generation_decode": "100-160 tokens/sec (REQUIRES VALIDATION)",
+      "token_generation_prefill": "800-1300 tokens/sec (REQUIRES VALIDATION)",
+      "vram_usage": "12-14GB (REQUIRES VALIDATION)",
       "context_buffer": "131,072 tokens (128K)",
-      "parallel_tool_efficiency": "50-87% token usage reduction"
+      "parallel_tool_efficiency": "50-87% token usage reduction (NOT IMPLEMENTED)"
     },
     "quality": {
       "test_coverage": ">80%",
@@ -165,14 +165,14 @@
   "validation": {
     "completeness": {
       "all_requirements_specified": true,
-      "all_requirements_testable": true,
+      "all_requirements_testable": false,
       "all_dependencies_identified": true,
-      "all_interfaces_defined": true
+      "all_interfaces_defined": false
     },
     "consistency": {
       "no_conflicts": true,
       "priorities_aligned": true,
-      "performance_targets_consistent": true
+      "performance_targets_consistent": false
     },
     "compliance": {
       "iso_29148": true,
@@ -180,5 +180,5 @@
       "local_first": true
     }
   },
-  "status": "complete"
+  "status": "in_progress"
 }

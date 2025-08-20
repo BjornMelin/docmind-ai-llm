@@ -199,8 +199,9 @@ class ChatMemoryManager:
         if enable_dspy:
             self.context_condenser = ContextCondenser()
         
-        # Context management hooks
+        # Context management hooks for supervisor integration
         self.trim_context_hook = self._create_trim_context_hook()
+        self.format_response_hook = self._create_format_response_hook()
         
         # Load existing sessions
         self._load_existing_sessions()
@@ -221,6 +222,24 @@ class ChatMemoryManager:
             return state
         
         return trim_context_hook
+    
+    def _create_format_response_hook(self):
+        """Create post-model hook for response formatting and metadata."""
+        def format_response_hook(state):
+            """Post-model hook for response formatting."""
+            if state.get("output_mode") == "structured":
+                # Add metadata about processing
+                if state.get("context_trimmed"):
+                    state["processing_metadata"] = {
+                        "context_trimmed": True,
+                        "original_tokens": state.get("original_token_count", 0),
+                        "final_tokens": state.get("trimmed_token_count", 0),
+                        "memory_manager": "ChatMemoryBuffer",
+                        "session_id": state.get("session_id")
+                    }
+            return state
+        
+        return format_response_hook
     
     def _trim_to_token_limit(self, messages: List[ChatMessage], limit: int) -> List[ChatMessage]:
         """Aggressively trim messages to fit within token limit."""
@@ -623,6 +642,14 @@ class ChatMemoryManager:
                     del self.memory_buffers[session_id]
                 if session_id in self.session_metadata:
                     del self.session_metadata[session_id]
+    
+    def get_supervisor_hooks(self):
+        """Get pre/post model hooks for LangGraph supervisor integration."""
+        from langchain_core.runnables import RunnableLambda
+        return {
+            "pre_model_hook": RunnableLambda(self.trim_context_hook),
+            "post_model_hook": RunnableLambda(self.format_response_hook)
+        }
 ```
 
 ### Integration with Streamlit UI
@@ -850,6 +877,7 @@ class ContextManager:
 
 ## Changelog
 
+- **3.1 (2025-08-20)**: **SUPERVISOR INTEGRATION HOOKS** - Added pre/post model hooks for LangGraph supervisor integration. Created trim_context_hook for automatic context trimming at 120K threshold (8K buffer) and format_response_hook for processing metadata. Added get_supervisor_hooks() method to expose RunnableLambda hooks for supervisor configuration. Enhanced with session tracking and processing metadata for structured output mode.
 - **3.0 (2025-08-19)**: **CONTEXT WINDOW CORRECTION** - Updated for Qwen/Qwen3-4B-Instruct-2507-FP8 with 128K context window through FP8 KV cache optimization. Reduced token limit from 260K to 120K (with safety buffer), requiring aggressive trimming strategies. Updated condensation trigger from 95% to 90% utilization. Added pre-model hook for context management and enhanced memory optimization for 128K window.
 - **2.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context window through INT8 KV cache optimization. Increased token limit from 65K to 260K (95% of full context), reducing the need for conversation condensation. Users can maintain extended conversation history spanning hundreds of exchanges without context loss. Condensation trigger moved from 80% to 95% utilization.
 - **1.0 (2025-08-18)**: Initial conversational memory system with ChatMemoryBuffer, SimpleChatStore persistence, and intelligent context condensation

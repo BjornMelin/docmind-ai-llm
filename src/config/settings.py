@@ -43,8 +43,8 @@ class Settings(BaseSettings):
 
     # LLM Backend Configuration (REQ-0009: Local execution only)
     llm_backend: Literal["ollama", "llamacpp", "vllm", "openai"] = Field(
-        default="ollama",
-        description="LLM backend to use (local-first)",
+        default="vllm",
+        description="LLM backend to use (local-first, vLLM default for FP8 optimization)",
     )
     model_name: str = Field(
         default="Qwen/Qwen3-4B-Instruct-2507",
@@ -73,12 +73,12 @@ class Settings(BaseSettings):
 
     # Model Optimization Settings (REQ-0063-v2, REQ-0064-v2)
     quantization: str = Field(
-        default="AWQ",
-        description="Quantization method for model (AWQ for 4-bit weights)",
+        default="fp8",
+        description="Quantization method for model (FP8 for weights and activations)",
     )
     kv_cache_dtype: str = Field(
-        default="int8",
-        description="KV cache data type for memory optimization",
+        default="fp8",
+        description="KV cache data type for memory optimization (FP8 for maximum efficiency)",
     )
     enable_kv_cache_optimization: bool = Field(
         default=True,
@@ -93,12 +93,12 @@ class Settings(BaseSettings):
 
     # Context Management (REQ-0094-v2: Expanded context)
     context_window_size: int = Field(
-        default=262144,
-        description="Context window size in tokens (262K native with Qwen3-4B-AWQ)",
+        default=131072,
+        description="Context window size in tokens (128K with FP8 optimization for vLLM)",
     )
     context_buffer_size: int = Field(
-        default=262144,
-        description="Maximum context buffer size (262K tokens)",
+        default=131072,
+        description="Maximum context buffer size (128K tokens with FP8)",
     )
     enable_conversation_memory: bool = Field(
         default=True,
@@ -201,12 +201,40 @@ class Settings(BaseSettings):
         description="Maximum RAM usage in GB (REQ-0069)",
     )
     max_vram_gb: float = Field(
-        default=12.2,
-        description="Maximum VRAM usage in GB (REQ-0070, optimized for AWQ+INT8)",
+        default=14.0,
+        description="Maximum VRAM usage in GB (REQ-0070, optimized for FP8 quantization)",
     )
     enable_gpu_acceleration: bool = Field(
         default=True,
         description="Enable GPU acceleration if available",
+    )
+
+    # vLLM-Specific Settings (REQ-0063-v2, REQ-0064-v2)
+    vllm_gpu_memory_utilization: float = Field(
+        default=0.85,
+        description="GPU memory utilization for vLLM (conservative for 16GB VRAM)",
+        ge=0.1,
+        le=0.95,
+    )
+    vllm_attention_backend: str = Field(
+        default="FLASHINFER",
+        description="Attention backend for vLLM (FlashInfer for optimization)",
+    )
+    vllm_enable_chunked_prefill: bool = Field(
+        default=True,
+        description="Enable chunked prefill for memory efficiency",
+    )
+    vllm_max_num_batched_tokens: int = Field(
+        default=8192,
+        description="Maximum batched tokens for vLLM prefill optimization",
+        ge=1024,
+        le=16384,
+    )
+    vllm_max_num_seqs: int = Field(
+        default=16,
+        description="Maximum number of sequences in vLLM batch",
+        ge=1,
+        le=64,
     )
 
     # Persistence Configuration
@@ -319,6 +347,8 @@ class Settings(BaseSettings):
             "model_name": self.model_name,
             "context_window_size": self.context_window_size,
             "context_buffer_size": self.context_buffer_size,
+            "quantization": self.quantization,
+            "kv_cache_dtype": self.kv_cache_dtype,
         }
 
     def get_performance_config(self) -> dict[str, Any]:
@@ -330,6 +360,27 @@ class Settings(BaseSettings):
             "max_vram_gb": self.max_vram_gb,
             "enable_gpu_acceleration": self.enable_gpu_acceleration,
             "enable_performance_logging": self.enable_performance_logging,
+            "vllm_gpu_memory_utilization": self.vllm_gpu_memory_utilization,
+            "vllm_attention_backend": self.vllm_attention_backend,
+            "vllm_enable_chunked_prefill": self.vllm_enable_chunked_prefill,
+            "vllm_max_num_batched_tokens": self.vllm_max_num_batched_tokens,
+            "vllm_max_num_seqs": self.vllm_max_num_seqs,
+        }
+
+    def get_vllm_config(self) -> dict[str, Any]:
+        """Get vLLM-specific configuration."""
+        return {
+            "model_name": self.model_name,
+            "quantization": self.quantization,
+            "kv_cache_dtype": self.kv_cache_dtype,
+            "max_model_len": self.context_window_size,
+            "gpu_memory_utilization": self.vllm_gpu_memory_utilization,
+            "attention_backend": self.vllm_attention_backend,
+            "enable_chunked_prefill": self.vllm_enable_chunked_prefill,
+            "max_num_batched_tokens": self.vllm_max_num_batched_tokens,
+            "max_num_seqs": self.vllm_max_num_seqs,
+            "default_temperature": self.llm_temperature,
+            "default_max_tokens": self.llm_max_tokens,
         }
 
 

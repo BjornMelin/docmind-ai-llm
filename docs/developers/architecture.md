@@ -2,15 +2,12 @@
 
 ## High-Level Components
 
-- **Frontend:** Streamlit UI for uploads, configs, results, chat.
-
-- **Backend:** Ollama/LlamaCpp/LM Studio for LLM inference.
-
-- **Orchestration:** Multi-Agent Coordination System with LangGraph supervisor pattern.
-
-- **Storage:** Qdrant for hybrid vector search.
-
-- **Processing:** Utils for loading, chunking, analysis.
+- **Frontend**: Streamlit UI for document uploads, configuration, results, and chat interface
+- **LLM Backend**: vLLM with FlashInfer attention for Qwen3-4B-Instruct-2507-FP8 model inference
+- **Multi-Agent Orchestration**: 5-agent LangGraph supervisor system with specialized agents
+- **Vector Storage**: Qdrant for hybrid search with dense/sparse embeddings
+- **Context Management**: 128K context window optimization with FP8 KV cache
+- **Performance Layer**: FP8 quantization, parallel tool execution, CUDA 12.8+ optimization
 
 ## Multi-Agent Coordination System
 
@@ -37,13 +34,13 @@ graph TD
 
 ### Specialized Agents
 
-| Agent | Responsibility | Performance Target |
-|-------|----------------|-------------------|
-| **RouterAgent** | Query complexity analysis and strategy selection | <50ms |
-| **PlannerAgent** | Complex query decomposition into sub-tasks | <100ms |
-| **RetrievalAgent** | Multi-strategy document retrieval with DSPy optimization | <150ms |
-| **SynthesisAgent** | Multi-source result combination and deduplication | <100ms |
-| **ValidationAgent** | Response quality assessment and hallucination detection | <75ms |
+| Agent | Responsibility | Performance Target | Key Features |
+|-------|----------------|-------------------|--------------|
+| **Query Router Agent** | Query analysis and retrieval strategy selection | <50ms | Strategy caching, confidence scoring |
+| **Query Planner Agent** | Complex query decomposition into manageable sub-tasks | <100ms | Dependency mapping, resource allocation |
+| **Retrieval Expert Agent** | Multi-modal retrieval with 128K context utilization | <150ms | Hybrid search, DSPy optimization, reranking |
+| **Result Synthesizer Agent** | Multi-source result integration and conflict resolution | <100ms | Evidence ranking, citation generation |
+| **Response Validator Agent** | Quality assurance and accuracy validation | <75ms | Consistency checking, confidence assessment |
 
 ### Agent Communication Patterns
 

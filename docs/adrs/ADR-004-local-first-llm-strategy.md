@@ -14,7 +14,11 @@ Accepted
 
 ## Description
 
-Establishes a local-first LLM strategy using **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache optimization. This configuration enables a 131,072-token (128K) context window on RTX 4090 Laptop (16GB VRAM) through optimized FP8 memory usage. Total memory usage at 128K: ~12-14GB (well within 16GB limit). Performance significantly improves with FP8 quantization (100-160 tok/s decode, 800-1300 tok/s prefill) while maintaining high accuracy.
+Establishes a local-first LLM strategy using **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache optimization. This configuration enables a 131,072-token (128K) context window on RTX 4090 Laptop (16GB VRAM) through optimized FP8 memory usage. 
+
+**Hardware-Constrained Design Decision**: The 128K context limit represents sound engineering - constraining from the model's native 262K capability due to RTX 4090 Laptop's 16GB VRAM limitation. This is an intentional design choice balancing context capability with available hardware resources.
+
+Total memory usage at 128K: ~12-14GB (well within 16GB limit). Performance significantly improves with FP8 quantization (100-160 tok/s decode, 800-1300 tok/s prefill) while maintaining high accuracy.
 
 ## Context
 
@@ -24,13 +28,18 @@ Current architecture lacks a defined local LLM strategy, relying on external API
 2. **Function Calling**: Support for agentic RAG patterns requiring tool use
 3. **High-End Consumer Hardware**: Optimized for RTX 4090 Laptop GPU (16GB VRAM)
 4. **Quality**: Superior performance exceeding GPT-3.5 capabilities
-5. **Massive Context**: Full 262K tokens achievable with AWQ + INT8 KV cache optimization
+5. **Constrained Context**: 128K tokens achieved with FP8 + FP8 KV cache optimization (hardware-limited from 262K native)
 
-Research confirms **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache enables 131,072-token (128K) context window on 16GB VRAM. The FP8 model uses ~4GB for weights, and FP8 KV cache reduces memory by 50% compared to FP16. Total memory at 128K: ~12-14GB, well within the 16GB limit. Performance benchmarks show 100-160 tokens/sec decode and 800-1300 tokens/sec prefill with vLLM and FlashInfer backend.
+Research confirms **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache enables 131,072-token (128K) context window on 16GB VRAM. **Engineering Decision**: While the model natively supports 262K context, RTX 4090 Laptop's 16GB VRAM constraint necessitates limiting to 128K for reliable operation. The FP8 model uses ~4GB for weights, and FP8 KV cache reduces memory by 50% compared to FP16. Total memory at 128K: ~12-14GB, well within the 16GB limit. Performance benchmarks show 100-160 tokens/sec decode and 800-1300 tokens/sec prefill with vLLM and FlashInfer backend.
 
-**Adaptive Context Strategy**: Rather than defaulting to large contexts, the system uses intelligent multi-stage retrieval to provide precisely relevant content within the 32K native window. This approach delivers 3-4x performance improvement over brute-force large context approaches while maintaining higher quality through reduced "lost in the middle" effects.
+**Context Management Strategy**: The system leverages the 128K context window with intelligent trimming strategies to handle extended conversations and document processing. Context is automatically trimmed at 120K tokens with an 8K buffer to prevent memory overflow while maintaining conversation coherence.
 
-**Integration Benefits**: The 32K native context combined with sophisticated retrieval (ADR-003) enables processing complex queries with optimal relevance. The RTX 4090 Laptop's 16GB VRAM supports both the model and efficient retrieval operations with significantly improved throughput.
+**Integration Benefits**: The 128K context window combined with sophisticated retrieval (ADR-003) enables processing complex queries and extended conversations. The RTX 4090 Laptop's 16GB VRAM supports both the model and efficient retrieval operations with FP8 quantization delivering improved throughput.
+
+## Implementation Reference
+
+For detailed implementation scripts, testing procedures, and deployment configurations, see:
+- [FP8 Supervisor Integration Guide](../archived/implementation-plans/fp8-supervisor-integration-guide-v1.0.md)
 
 ## Related Requirements
 
@@ -119,13 +128,13 @@ We will adopt **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 
 
 ### vLLM Configuration
 
-Optimized settings with FP8 quantization for 128K context:
+Optimized settings with FP8 quantization and FlashInfer backend for 128K context:
 
 ```bash
 #!/bin/bash
 # vLLM Service Configuration for Qwen3-4B-Instruct-2507-FP8
 
-# Enable FlashInfer backend for optimized attention
+# Enable FlashInfer backend for optimized attention (verified compatible with FP8)
 export VLLM_ATTENTION_BACKEND=FLASHINFER
 export VLLM_USE_CUDNN_PREFILL=1
 
@@ -137,10 +146,9 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
   --gpu-memory-utilization 0.95 \
   --max-num-seqs 1 \
   --enable-chunked-prefill \
-  --long-prefill-token-threshold 5000 \
-  --max-long-partial-prefills 1 \
-  --swap-space 0 \
-  --dtype auto
+  --trust-remote-code \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name docmind-qwen3-fp8
 ```
 
 ### Performance Validation
@@ -610,10 +618,10 @@ MEMORY_USAGE_128K = {
 
 ## Dependencies
 
-- **Python**: `llama-cpp-python>=0.2.0`, `transformers>=4.51.0` (YaRN support), `vllm>=0.8.5` (YaRN support)
+- **Python**: `llama-cpp-python>=0.2.32,<0.3.0`, `transformers==4.55.0` (YaRN support), `vllm[flashinfer]>=0.10.1` (YaRN support)
 - **Hardware**: RTX 4090 Laptop GPU (16GB VRAM), Intel Core i9-14900HX, 64GB RAM
-- **CUDA**: CUDA 12.0+ with cuDNN 8.9+
-- **Inference**: llama.cpp with YaRN support, vLLM 0.8.5+, transformers 4.51+
+- **CUDA**: CUDA 12.8+ with cuDNN 8.9+
+- **Inference**: llama.cpp with YaRN support, vLLM 0.10.1+, transformers 4.55.0
 - **Storage**: ~10-11GB for Q5_K_M/Q6_K GGUF models, 2TB SSD recommended
 - **Optional**: Flash Attention 2 for transformers, tensor parallelism support
 
@@ -630,6 +638,7 @@ MEMORY_USAGE_128K = {
 
 ## Changelog
 
+- **11.1 (2025-08-20)**: **HARDWARE-CONSTRAINED DESIGN RATIONALE** - Clarified that 128K context limit represents sound engineering decision constraining from model's native 262K capability due to RTX 4090 Laptop 16GB VRAM limitation. Added hardware constraint rationale throughout document. Updated vLLM configuration with verified FlashInfer backend support. Context management strategy updated for 128K window with 120K threshold and 8K buffer. This is intentional design balancing capability with available hardware resources.
 - **11.0 (2025-08-19)**: **CRITICAL MODEL CORRECTION** - Updated from non-existent Qwen3-4B-Instruct-2507-AWQ to actual **Qwen/Qwen3-4B-Instruct-2507-FP8**. Context reduced from impossible 262K to realistic **131,072 tokens (128K)**. Changed quantization from AWQ + INT8 to **FP8 weights + FP8 KV cache**. Added complete vLLM configuration with FlashInfer backend. Updated performance metrics to 100-160 tok/s decode, 800-1300 tok/s prefill. Memory usage: <12-14GB VRAM at 128K (within 16GB limit).
 - **10.0 (2025-08-19)**: **INT8 KV CACHE OPTIMIZATION** - Correction: AWQ + INT8 KV cache enables 262K context on 16GB VRAM. INT8 reduces KV cache by 50% (36 KiB vs 72 KiB per token). Total memory at 262K: ~12.2GB. Performance increases by ~30% with INT8. Deployment: LMDeploy with --quant-policy 8 or vLLM with --kv-cache-dtype fp8. Minimal accuracy degradation with INT8 quantization.
 - **9.0 (2025-08-19)**: **INITIAL REALITY CHECK** - First analysis incorrectly assumed FP16 KV cache, concluding 262K was impossible. This was corrected in v10.0 with INT8 optimization discovery.

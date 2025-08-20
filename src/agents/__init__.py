@@ -58,6 +58,14 @@ from .router import (
     create_router_agent,
     detect_query_intent,
 )
+from .supervisor_graph import (
+    AgentState,
+    SupervisorConfig,
+    SupervisorGraph,
+    cleanup_supervisor_graph,
+    get_supervisor_graph,
+    initialize_supervisor_graph,
+)
 from .synthesis import (
     SynthesisAgent,
     SynthesisResult,
@@ -99,6 +107,13 @@ __all__ = [
     "MultiAgentCoordinator",
     "AgentResponse",
     "create_multi_agent_coordinator",
+    # LangGraph Supervisor System
+    "SupervisorGraph",
+    "SupervisorConfig",
+    "AgentState",
+    "get_supervisor_graph",
+    "initialize_supervisor_graph",
+    "cleanup_supervisor_graph",
     # Individual Agents
     "RouterAgent",
     "RoutingDecision",

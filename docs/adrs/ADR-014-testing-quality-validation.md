@@ -578,9 +578,9 @@ jobs:
     
     - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install deepeval pytest pytest-asyncio pytest-xvfb
+        python -m uv pip install --upgrade pip
+        uv pip install -r requirements.txt
+        uv pip install deepeval pytest pytest-asyncio pytest-xvfb
     
     - name: Run unit tests
       run: |
@@ -612,9 +612,9 @@ jobs:
     
     - name: Set up Python environment
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install deepeval pytest pytest-asyncio
+        python -m uv pip install --upgrade pip
+        uv pip install -r requirements.txt
+        uv pip install deepeval pytest pytest-asyncio
     
     - name: Run GPU performance tests
       run: |

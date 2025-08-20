@@ -1,7 +1,7 @@
 """Tests for Multi-Agent Coordination Model Update (Delta Spec 001.1).
 
 This module tests the model configuration update from Qwen3-14B to
-Qwen3-4B-Instruct-2507-AWQ with INT8 KV cache optimization and 262K context.
+Qwen3-4B-Instruct-2507 with FP8 quantization and 128K context.
 """
 
 from unittest.mock import Mock, patch
@@ -16,28 +16,28 @@ from src.config.settings import Settings
 class TestModelInitialization:
     """Test model initialization with new configuration."""
 
-    def test_model_loads_qwen3_4b_awq(self):
-        """Verify Qwen3-4B-Instruct-2507 model loads correctly with AWQ quantization."""
+    def test_model_loads_qwen3_4b_fp8(self):
+        """Verify Qwen3-4B-Instruct-2507 model loads correctly with FP8 quantization."""
         settings = Settings()
 
-        # REQ-0063-v2: Updated default model (AWQ quantization applied separately)
+        # REQ-0063-v2: Updated default model (FP8 quantization)
         assert settings.model_name == "Qwen/Qwen3-4B-Instruct-2507"
 
-    def test_int8_kv_cache_enabled(self):
-        """Verify INT8 KV cache is configured for memory optimization."""
+    def test_fp8_kv_cache_enabled(self):
+        """Verify FP8 KV cache is configured for memory optimization."""
         settings = Settings()
 
         # Check KV cache configuration
         assert hasattr(settings, "kv_cache_dtype")
-        assert settings.kv_cache_dtype == "int8"
+        assert settings.kv_cache_dtype == "fp8"
 
-    def test_context_window_expanded_to_262k(self):
-        """Verify full 262K context window is supported."""
+    def test_context_window_expanded_to_128k(self):
+        """Verify full 128K context window is supported."""
         settings = Settings()
 
         # REQ-0094-v2: Context buffer expansion
-        assert settings.context_window_size == 262144
-        assert settings.context_buffer_size == 262144
+        assert settings.context_window_size == 131072
+        assert settings.context_buffer_size == 131072
 
 
 @pytest.mark.spec("001.1")
@@ -46,7 +46,7 @@ class TestPerformanceValidation:
 
     @pytest.mark.benchmark
     def test_throughput_within_range(self, benchmark):
-        """Verify throughput is 40-60 tokens/second."""
+        """Verify throughput targets are documented (NOT VALIDATED - requires actual model testing)."""
         # Mock LLM for testing
         mock_llm = Mock()
         mock_llm.complete = Mock(return_value="Test response")
@@ -61,24 +61,26 @@ class TestPerformanceValidation:
 
         result = benchmark(generate_tokens)
 
-        # REQ-0064-v2: Performance characteristics
-        # Note: This is a mock test - actual throughput testing requires real model
+        # REQ-0064-v2: Performance characteristics (PENDING VALIDATION)
+        # Note: This is a mock test - actual throughput testing requires real model and vLLM backend
         assert result is not None
 
-    def test_int8_cache_performance_boost(self):
-        """Verify INT8 KV cache provides +30% performance boost."""
+    def test_fp8_cache_performance_boost(self):
+        """Verify FP8 KV cache optimization is configured (performance boost NOT VALIDATED)."""
         settings = Settings()
 
         # Verify optimization is enabled
         assert settings.enable_kv_cache_optimization
-        assert settings.kv_cache_performance_boost >= 1.3  # 30% boost
+        assert (
+            settings.kv_cache_performance_boost >= 1.3
+        )  # 30% boost target (NOT VALIDATED)
 
     def test_memory_usage_within_budget(self):
-        """Verify memory usage stays within 12.2GB VRAM budget."""
+        """Verify memory usage budget configured (NOT VALIDATED - requires actual testing)."""
         settings = Settings()
 
-        # Updated VRAM budget for new model
-        assert settings.max_vram_gb <= 12.2
+        # Updated VRAM budget for new model (NOT VALIDATED)
+        assert settings.max_vram_gb <= 14.0
 
 
 @pytest.mark.spec("001.1")
@@ -86,7 +88,7 @@ class TestContextHandling:
     """Test context handling with expanded window."""
 
     def test_handles_large_document_without_truncation(self):
-        """Verify system handles documents >200K tokens without truncation."""
+        """Verify system handles documents >100K tokens without truncation (NOT VALIDATED - requires actual testing)."""
         mock_llm = Mock()
         tools_data = {"vector_index": Mock(), "kg_index": Mock(), "retriever": Mock()}
 
@@ -95,7 +97,7 @@ class TestContextHandling:
         # Process should not truncate large documents
         mock_llm.complete = Mock(return_value="Processed response")
 
-        # In real implementation, this would test actual processing
+        # In real implementation, this would test actual processing (NOT VALIDATED)
         response = coordinator.process_query(
             query="Analyze this large document",
             context=None,  # Will be created internally
@@ -103,12 +105,12 @@ class TestContextHandling:
 
         assert response is not None
 
-    def test_maintains_conversation_history_within_262k(self):
-        """Verify conversation history maintained within 262K window."""
+    def test_maintains_conversation_history_within_128k(self):
+        """Verify conversation history maintained within 128K window."""
         settings = Settings()
 
         # REQ-0094-v2: Context buffer expansion
-        assert settings.context_buffer_size == 262144
+        assert settings.context_buffer_size == 131072
         assert settings.enable_conversation_memory
 
     def test_graceful_context_overflow_handling(self):
@@ -119,7 +121,7 @@ class TestContextHandling:
         coordinator = MultiAgentCoordinator(llm=mock_llm, tools_data=tools_data)
 
         # Simulate context overflow - process_query should handle gracefully
-        overflow_context = "token " * 300000  # >262K tokens
+        overflow_context = "token " * 140000  # >128K tokens
 
         # The coordinator should handle overflow by truncating or using fallback
         response = coordinator.process_query(
@@ -135,12 +137,12 @@ class TestContextHandling:
 class TestConfigurationMigration:
     """Test configuration migration from old to new model."""
 
-    def test_awq_quantization_configured(self):
-        """Verify AWQ quantization is properly configured."""
+    def test_fp8_quantization_configured(self):
+        """Verify FP8 quantization is properly configured."""
         settings = Settings()
 
         assert hasattr(settings, "quantization")
-        assert settings.quantization == "AWQ"
+        assert settings.quantization == "fp8"
 
     def test_model_identifier_updated(self):
         """Verify model identifier is updated in all configurations."""
@@ -190,11 +192,11 @@ class TestIntegrationWithMultiAgent:
     def test_agents_use_expanded_context(self):
         """Verify all agents can utilize expanded context window."""
         mock_llm = Mock()
-        mock_llm.context_window = 262144
+        mock_llm.context_window = 131072
 
         tools_data = {"vector_index": Mock(), "kg_index": Mock(), "retriever": Mock()}
 
         coordinator = MultiAgentCoordinator(llm=mock_llm, tools_data=tools_data)
 
         # Each agent should have access to full context
-        assert coordinator.llm.context_window == 262144
+        assert coordinator.llm.context_window == 131072

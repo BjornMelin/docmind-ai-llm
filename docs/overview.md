@@ -1,36 +1,41 @@
 # DocMind AI Documentation Overview
 
-Welcome to the documentation for **DocMind AI**, a local LLM-powered document analysis tool built with Streamlit, LangChain, and Ollama. This documentation is organized into sections for users, developers, and architectural decision records (ADRs).
+Welcome to the documentation for **DocMind AI**, a high-performance local LLM-powered document analysis system built with vLLM, LangGraph, and LlamaIndex. This documentation is organized into sections for users, developers, API reference, and architectural decision records (ADRs).
 
 ## Project Summary
 
-DocMind AI enables privacy-focused analysis of various document formats using local large language models. Key features include customizable prompts, hybrid search with Jina v4 and FastEmbed, GPU optimization, and interactive chat for document queries.
+DocMind AI is an offline-first document analysis system featuring a 5-agent LangGraph supervisor coordination system with the Qwen3-4B-Instruct-2507-FP8 model. Key features include 128K context windows, FP8 optimization achieving 100-160 tok/s decode performance, hybrid vector search, multi-agent reasoning, and complete privacy through local-only processing on RTX 4090 hardware.
 
 ## Documentation Structure
 
-- **[Product Requirements Document (PRD)](PRD.md)**: Defines functional and non-functional requirements, scope, and timeline.
+- **[Product Requirements Document (PRD)](PRD.md)**: Complete system requirements with validated performance specifications
 - **[User Documentation](user/)**:
-  - [Getting Started](user/getting-started.md): Installation and setup instructions.
-  - [Usage Guide](user/usage-guide.md): Detailed guide for using the app’s features.
-  - [Troubleshooting](user/troubleshooting.md): Solutions for common user issues.
+  - [Getting Started](user/getting-started.md): Installation and setup instructions
+  - [GPU Requirements](user/gpu-requirements.md): GPU hardware requirements and setup guide
+  - [Multi-Agent Coordination Guide](user/multi-agent-coordination-guide.md): Guide to the 5-agent system
+  - [Usage Guide](user/usage-guide.md): Detailed guide for using the app's features
+  - [Troubleshooting](user/troubleshooting.md): Solutions for common user issues
 - **[Developer Documentation](developers/)**:
-  - [Setup](developers/setup.md): Development environment setup.
-  - [Architecture](developers/architecture.md): High-level architecture overview.
-  - [Contributing](developers/contributing.md): Guidelines for contributing code and documentation.
-  - [LangChain Usage](developers/langchain-usage.md): Details on LangChain integration.
-  - [Testing](developers/testing.md): Instructions for writing and running tests.
-  - [Deployment](developers/deployment.md): Guide for local, Docker, and production deployments.
+  - [Setup](developers/setup.md): Development environment setup
+  - [Architecture](developers/architecture.md): High-level architecture overview
+  - [LangGraph Supervisor Architecture](developers/langgraph-supervisor-architecture.md): Multi-agent system architecture
+  - [vLLM Integration Guide](developers/vllm-integration-guide.md): Complete vLLM setup and optimization
+  - [Multi-Agent Performance Tuning](developers/multi-agent-performance-tuning.md): Performance optimization guide
+  - [Qwen3 FP8 Configuration](developers/qwen3-fp8-configuration.md): Model-specific configuration guide
+  - [GPU Setup](developers/gpu-setup.md): GPU requirements and configuration
+  - [Performance Validation](developers/performance-validation.md): Performance testing and validation
+  - [Contributing](developers/contributing.md): Guidelines for contributing code and documentation
+  - [Testing](developers/testing.md): Instructions for writing and running tests
+  - [Deployment](developers/deployment.md): Guide for local, Docker, and production deployments
+- **[API Documentation](api/)**:
+  - [Multi-Agent API](api/multi-agent-api.md): Complete API reference for the multi-agent system
 - **[Architectural Decision Records (ADRs)](adrs/)**:
-  - [001: Architecture Overview](adrs/001-architecture-overview.md)
-  - [002: Embedding Choices](adrs/002-embedding-choices.md)
-  - [003: GPU Optimization](adrs/003-gpu-optimization.md)
-  - [004: Document Loading](adrs/004-document-loading.md)
-  - [005: Text Splitting](adrs/005-text-splitting.md)
-  - [006: Analysis Pipeline](adrs/006-analysis-pipeline.md)
-  - [007: Reranking Strategy](adrs/007-reranking-strategy.md)
-  - [008: Session Persistence](adrs/008-session-persistence.md)
-  - [009: UI Framework](adrs/009-ui-framework.md)
-  - [010: LangChain Integration](adrs/010-langchain-integration.md)
+  - [Architecture Overview](adrs/ARCHITECTURE-OVERVIEW.md): Complete system architecture
+  - [ADR-011: Agent Orchestration Framework](adrs/ADR-011-agent-orchestration-framework.md): LangGraph supervisor system
+  - [ADR-004: Local-First LLM Strategy](adrs/ADR-004-local-first-llm-strategy.md): vLLM and local model strategy
+  - [ADR-010: Performance Optimization Strategy](adrs/ADR-010-performance-optimization-strategy.md): FP8 and performance optimization
+  - [ADR-021: Chat Memory & Context Management](adrs/ADR-021-chat-memory-context-management.md): 128K context window management
+  - [Additional ADRs](adrs/): Complete collection of architectural decisions
 
 ## Contributing
 
