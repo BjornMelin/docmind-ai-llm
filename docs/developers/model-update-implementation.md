@@ -1838,6 +1838,7 @@ async def migrate_to_qwen3():
 #### Model Loading Issues
 
 **Issue**: Qwen3 model fails to load with CUDA errors
+
 ```bash
 # Check CUDA compatibility
 nvidia-smi
@@ -1851,6 +1852,7 @@ uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --extra-index-
 ```
 
 **Issue**: FP8 quantization not working
+
 ```python
 # Diagnostic script
 def diagnose_fp8_issues():
@@ -1874,6 +1876,7 @@ def diagnose_fp8_issues():
 #### Performance Issues
 
 **Issue**: Lower than expected throughput
+
 ```python
 # Performance optimization checklist
 def optimize_qwen3_performance():
@@ -1894,6 +1897,7 @@ def optimize_qwen3_performance():
 #### Memory Issues
 
 **Issue**: VRAM usage exceeding 16GB
+
 ```python
 # Memory optimization strategies
 def reduce_vram_usage():
@@ -1913,6 +1917,7 @@ def reduce_vram_usage():
 #### Context Window Issues  
 
 **Issue**: Context overflow or poor utilization
+
 ```python
 # Context management solution
 def manage_context_issues():

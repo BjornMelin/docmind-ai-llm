@@ -7,6 +7,7 @@ This guide provides comprehensive configuration instructions for the Qwen3-4B-In
 ## Model Specifications
 
 ### Core Model Parameters
+
 - **Model Name**: Qwen3-4B-Instruct-2507-FP8
 - **Context Window**: 131,072 tokens (128K)
 - **Model Size**: 4.23B parameters
@@ -15,6 +16,7 @@ This guide provides comprehensive configuration instructions for the Qwen3-4B-In
 - **Training Cutoff**: July 2024 with 2507 designation
 
 ### Performance Targets
+
 - **Decode Speed**: 100-160 tokens/second
 - **Prefill Speed**: 800-1300 tokens/second
 - **VRAM Usage**: 12-14GB (target) / 16GB (maximum)
@@ -23,6 +25,7 @@ This guide provides comprehensive configuration instructions for the Qwen3-4B-In
 ## Hardware Requirements
 
 ### Minimum Requirements
+
 - **GPU**: RTX 4090 (16GB VRAM) or equivalent
 - **CUDA**: 12.8 or higher
 - **Driver**: 550.54.14 or higher
@@ -30,6 +33,7 @@ This guide provides comprehensive configuration instructions for the Qwen3-4B-In
 - **Storage**: 50GB available space for model files
 
 ### Optimal Configuration
+
 - **GPU**: RTX 4090 Laptop (16GB VRAM)
 - **CUDA**: 12.8+
 - **PyTorch**: 2.7.1 with CUDA support
@@ -1075,6 +1079,7 @@ async def run_qwen3_benchmark():
 #### Model Loading Issues
 
 **Issue**: Model fails to load with CUDA errors
+
 ```bash
 # Solution: Verify CUDA installation and compatibility
 nvidia-smi
@@ -1085,6 +1090,7 @@ uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --extra-index-
 ```
 
 **Issue**: FP8 quantization not working correctly
+
 ```python
 # Diagnostic script
 def diagnose_fp8_support():
@@ -1106,6 +1112,7 @@ diagnose_fp8_support()
 #### Performance Issues
 
 **Issue**: Lower than expected token/second performance
+
 ```python
 # Performance optimization checklist
 def optimize_qwen3_performance():
@@ -1128,6 +1135,7 @@ def optimize_qwen3_performance():
 #### Memory Issues
 
 **Issue**: VRAM usage exceeding 16GB
+
 ```python
 # Memory optimization strategies
 def optimize_memory_usage():
@@ -1149,6 +1157,7 @@ def optimize_memory_usage():
 #### Context Window Issues
 
 **Issue**: Context overflow or truncation
+
 ```python
 # Context management solution
 def manage_context_overflow():

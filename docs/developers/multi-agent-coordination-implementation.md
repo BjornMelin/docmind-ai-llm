@@ -39,7 +39,7 @@ graph TD
 
 ### Core Files Structure
 
-```
+```text
 src/agents/
 ├── __init__.py           # Module exports and compatibility
 ├── coordinator.py        # Main MultiAgentCoordinator class
