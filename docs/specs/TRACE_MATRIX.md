@@ -5,7 +5,7 @@
 This matrix provides complete bidirectional traceability between requirements, source documents (PRD/ADRs), and implementation specifications. Every requirement is traced from its origin to its implementation specification, ensuring 100% coverage and accountability.
 
 **Generated**: 2025-08-19  
-**Total Requirements**: 100  
+**Total Requirements**: 103 (including 3 FP8 delta)  
 **Coverage**: 100%
 
 ## Traceability Legend
@@ -18,6 +18,17 @@ This matrix provides complete bidirectional traceability between requirements, s
 - **Status**: ✅=Specified, 🟡=Draft, ❌=Not Started
 
 ## Complete Traceability Matrix
+
+### FP8 Model Update Traceability
+
+| Change | PRD Reference | Requirement | Specification | Status |
+|--------|---------------|-------------|---------------|--------|
+| FP8 Model | NFR-1, NFR-6 | REQ-0063-v2 | FEAT-001.1 | ✅ Specified |
+| Performance | NFR-1 | REQ-0064-v2 | FEAT-001.1 | ✅ Specified |
+| Context Window | NFR-6 | REQ-0094-v2 | FEAT-001.1 | ✅ Specified |
+| vLLM Backend | ADR-004 | REQ-0063-v2 | FEAT-001.1 | ✅ Specified |
+
+### Full Requirements Matrix
 
 | REQ ID | Requirement Summary | PRD Source | ADR Source | Specification | Priority | Status |
 |--------|-------------------|------------|------------|---------------|----------|---------|
@@ -33,9 +44,9 @@ This matrix provides complete bidirectional traceability between requirements, s
 | REQ-0009 | Local execution only | NFR-4 | ADR-001 | FEAT-001 | C | ✅ |
 | REQ-0010 | Context preservation | FR-10 | ADR-011 | FEAT-001 | H | ✅ |
 | **Model Updates (Delta Specifications)** | | | | | | |
-| REQ-0063-v2 | Qwen3-4B-Instruct-2507-AWQ model | - | ADR-004 | FEAT-001.1 | H | 🟡 |
-| REQ-0064-v2 | 40-60 tokens/sec with INT8 KV cache | NFR-1 | ADR-010 | FEAT-001.1 | H | 🟡 |
-| REQ-0094-v2 | 262K context buffer | - | ADR-021 | FEAT-001.1 | H | 🟡 |
+| REQ-0063-v2 | Qwen/Qwen3-4B-Instruct-2507-FP8 model | - | ADR-004 | FEAT-001.1 | H | ✅ |
+| REQ-0064-v2 | 100-160 tokens/sec decode, 800-1300 tokens/sec prefill | NFR-1 | ADR-010 | FEAT-001.1 | H | ✅ |
+| REQ-0094-v2 | 131,072 tokens (128K) context buffer | - | ADR-021 | FEAT-001.1 | H | ✅ |
 | **Document Processing (8 Requirements)** | | | | | | |
 | REQ-0021 | PDF parsing with UnstructuredReader | FR-1 | ADR-009 | FEAT-003 | C | 🟡 |
 | REQ-0022 | DOCX parsing with structure | FR-1 | ADR-009 | FEAT-003 | C | 🟡 |
@@ -59,7 +70,7 @@ This matrix provides complete bidirectional traceability between requirements, s
 | **Infrastructure & Performance (20 Requirements)** | | | | | | |
 | REQ-0061 | 100% offline operation | NFR-4 | ADR-004 | FEAT-004 | C | 🟡 |
 | REQ-0062 | Multi-backend LLM support | FR-9 | ADR-004 | FEAT-004 | H | 🟡 |
-| REQ-0063 | Qwen3-14B default model | - | ADR-004 | FEAT-004 | H | 🟡 |
+| REQ-0063 | Qwen/Qwen3-4B-Instruct-2507-FP8 default model | - | ADR-004 | FEAT-004 | H | ✅ |
 | REQ-0064 | ~1000 tokens/sec | NFR-1 | ADR-010 | FEAT-004 | H | 🟡 |
 | REQ-0065 | TorchAO quantization | NFR-6 | ADR-010 | FEAT-004 | H | 🟡 |
 | REQ-0066 | GPU auto-detection | NFR-9 | ADR-010 | FEAT-004 | H | 🟡 |
@@ -92,7 +103,7 @@ This matrix provides complete bidirectional traceability between requirements, s
 | REQ-0091 | DSPy optimization | - | ADR-018 | FEAT-005 | M | 🟡 |
 | REQ-0092 | Optional GraphRAG | - | ADR-019 | FEAT-005 | L | 🟡 |
 | REQ-0093 | Prompt templates | - | ADR-020 | FEAT-005 | M | 🟡 |
-| REQ-0094 | 65K context buffer | - | ADR-021 | FEAT-005 | H | 🟡 |
+| REQ-0094 | 131,072 tokens (128K) context buffer | - | ADR-021 | FEAT-005 | H | 🟡 |
 | REQ-0095 | Analysis modes | - | ADR-023 | FEAT-005 | M | 🟡 |
 | REQ-0096 | Export formats | - | ADR-022 | FEAT-005 | M | 🟡 |
 | REQ-0097 | Evaluation metrics | - | ADR-012 | FEAT-004 | M | 🟡 |
@@ -119,7 +130,7 @@ This matrix provides complete bidirectional traceability between requirements, s
 | ADR-001 | Agentic RAG | 10 | FEAT-001 |
 | ADR-002 | Embeddings | 3 | FEAT-002 |
 | ADR-003 | Retrieval | 4 | FEAT-002 |
-| ADR-004 | Local LLM | 3 | FEAT-004 |
+| ADR-004 | Local LLM (FP8) | 4 | FEAT-004, FEAT-001.1 |
 | ADR-006 | Reranking | 1 | FEAT-002 |
 | ADR-007 | Persistence | 1 | FEAT-004 |
 | ADR-009 | Documents | 6 | FEAT-003 |
@@ -143,13 +154,14 @@ This matrix provides complete bidirectional traceability between requirements, s
 
 | Specification | Requirements Count | Percentage | Dependencies |
 |--------------|-------------------|------------|--------------|
-| FEAT-001 | 10 + 1 shared | 11% | FEAT-002, FEAT-004 |
+| FEAT-001 | 10 | 10% | FEAT-002, FEAT-004 |
+| FEAT-001.1 | 3 FP8 delta | 3% | FEAT-004 |
 | FEAT-002 | 10 | 10% | FEAT-003, FEAT-004 |
 | FEAT-003 | 8 | 8% | FEAT-004 |
 | FEAT-004 | 30 | 30% | None (Foundation) |
 | FEAT-005 | 20 | 20% | FEAT-001, FEAT-003, FEAT-004 |
-| **Shared** | 21 | 21% | Multiple |
-| **Total** | **100** | **100%** | - |
+| **Shared** | 19 | 19% | Multiple |
+| **Total** | **103** | **100%** | - |
 
 ## Dependency Graph
 
@@ -163,6 +175,11 @@ graph TD
     FEAT001 --> FEAT005[FEAT-005: UI]
     FEAT003 --> FEAT005
     FEAT004 --> FEAT005
+    FEAT004 --> FEAT001_1[FEAT-001.1: FP8 Model Delta]
+    FEAT001_1 --> FEAT001
+    
+    classDef deltaSpec fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    class FEAT001_1 deltaSpec
 ```
 
 ## Critical Path Analysis
@@ -172,7 +189,7 @@ graph TD
 These requirements must be implemented first as others depend on them:
 
 1. **REQ-0061** (100% offline) - Blocks all functionality
-2. **REQ-0063** (LLM model) - Blocks agent system
+2. **REQ-0063-v2** (FP8 LLM model) - Blocks agent system
 3. **REQ-0047** (Qdrant) - Blocks retrieval
 4. **REQ-0071** (Streamlit) - Blocks all UI features
 5. **REQ-0081** (Config) - Blocks settings management
@@ -185,7 +202,18 @@ Requirements with significant technical complexity or performance implications:
 2. **REQ-0007** - Agent latency constraint
 3. **REQ-0026** - Document processing throughput
 4. **REQ-0046** - Query latency constraint
-5. **REQ-0064** - Token generation speed
+5. **REQ-0064-v2** - FP8 quantization performance with 128K context (requires vLLM backend)
+6. **REQ-0094-v2** - 128K context memory management (FP8 KV cache optimization required)
+
+### vLLM Backend Requirements
+
+The following requirements mandate vLLM backend with FlashInfer for optimal performance:
+
+- **REQ-0063-v2**: Qwen/Qwen3-4B-Instruct-2507-FP8 model loading
+- **REQ-0064-v2**: FP8 quantization + FP8 KV cache optimization
+- **REQ-0094-v2**: 128K context window management
+- **Risk Level**: High - FP8 kernel compatibility varies across hardware
+- **Mitigation**: Fallback to AWQ quantization if FP8 kernels unavailable
 
 ## Validation Checklist
 
@@ -222,10 +250,19 @@ Requirements with significant technical complexity or performance implications:
 
 ### Version Control
 
-- Matrix Version: 1.0.0
+- Matrix Version: 1.1.0
 - Last Review: 2025-08-19
 - Next Review: Weekly during implementation
 - Change Log: Track in SPECS_CHANGELOG.md
+
+### Recent Changes (v1.1.0)
+
+- **Model Update**: Qwen3-4B-Instruct-2507-AWQ → Qwen/Qwen3-4B-Instruct-2507-FP8
+- **Context Reduction**: 262K → 131,072 tokens (128K) for realistic hardware constraints
+- **Performance Update**: 40-60 tok/s → 100-160 tok/s decode, 800-1300 tok/s prefill
+- **Quantization Change**: AWQ + INT8 KV cache → FP8 + FP8 KV cache
+- **Status Update**: Model requirements moved from Draft (🟡) to Specified (✅)
+- **vLLM Requirement**: Added mandatory vLLM backend for FP8 support
 
 ## Quality Metrics
 
@@ -239,19 +276,29 @@ Requirements with significant technical complexity or performance implications:
 
 ### Implementation Readiness
 
-- **Requirements with Specs**: 100%
+- **Requirements with Specs**: 100% (103/103)
 - **Specs with Test Criteria**: 100%
 - **Specs with Interfaces**: 100%
 - **Specs with Data Contracts**: 100%
+- **FP8 Model Readiness**: 100% (vLLM backend specified)
+- **Hardware Validation**: Pending (RTX 4090 Laptop target)
 
 ## Risk Matrix
 
 | Risk Level | Count | Requirements | Mitigation |
 |------------|-------|--------------|------------|
 | Critical | 15 | Core functionality | Priority implementation |
-| High | 45 | Performance/Quality | Continuous testing |
+| High | 48 | Performance/Quality/FP8 | Continuous testing + hardware validation |
 | Medium | 30 | Features | Phased rollout |
-| Low | 10 | Nice-to-have | Future enhancement |
+| Low | 7 | Nice-to-have | Future enhancement |
+
+### FP8 Model Risks
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| FP8 kernel unavailable | High | Medium | AWQ fallback model |
+| 128K context OOM | High | Low | Dynamic context scaling |
+| vLLM compatibility | Medium | Low | Alternative backend support |
 
 ## Compliance Statement
 
@@ -262,6 +309,8 @@ This traceability matrix demonstrates:
 - Verifiable and testable requirements
 - Clear dependency management
 - Risk-based prioritization
+- Hardware-realistic performance targets (FP8 quantization)
+- Backend-specific implementation requirements (vLLM for FP8)
 
 ---
 

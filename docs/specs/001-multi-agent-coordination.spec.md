@@ -51,7 +51,16 @@ The Multi-Agent Coordination System orchestrates five specialized agents using L
 
 ```python
 class MultiAgentCoordinator:
-    """Main interface for multi-agent system."""
+    """Main interface for multi-agent system with vLLM backend."""
+    
+    def __init__(
+        self,
+        model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
+        max_context_length: int = 128000,
+        backend: str = "vllm"
+    ):
+        """Initialize coordinator with FP8 model configuration."""
+        pass
     
     def process_query(
         self,
@@ -110,6 +119,75 @@ def validate_response(
 ) -> Dict[str, Any]:
     """Validate response quality."""
     return {"valid": bool, "confidence": float, "issues": [...]}
+```
+
+### vLLM Backend Configuration
+
+```python
+class VLLMConfig:
+    """Configuration for vLLM backend serving FP8 model."""
+    
+    model: str = "Qwen/Qwen3-4B-Instruct-2507-FP8"
+    max_model_len: int = 128000
+    gpu_memory_utilization: float = 0.95
+    quantization: str = "fp8"
+    max_num_seqs: int = 256
+    
+    # Performance metrics
+    target_decode_throughput: int = 130  # 100-160 tok/s
+    target_prefill_throughput: int = 1050  # 800-1300 tok/s
+    
+    # LangGraph supervisor parameters
+    parallel_tool_calls: bool = True
+    message_forwarding: bool = True
+    enable_pre_model_hook: bool = True
+    enable_post_model_hook: bool = True
+```
+
+### Context Management Strategies
+
+```python
+class ContextManager:
+    """Manages 128K context window with trimming strategies."""
+    
+    max_context_tokens: int = 128000
+    trim_threshold: float = 0.85  # Trim at 85% capacity
+    preserve_ratio: float = 0.3   # Keep 30% of oldest context
+    
+    def pre_model_hook(self, messages: List[Message]) -> List[Message]:
+        """Trim context before model processing."""
+        pass
+    
+    def post_model_hook(self, response: str) -> str:
+        """Format response after model generation."""
+        pass
+```
+
+### LangGraph Supervisor Configuration
+
+```python
+class SupervisorConfig:
+    """Modern LangGraph supervisor parameters for agent coordination."""
+    
+    # Modern supervisor features
+    parallel_tool_calls: bool = True  # Enable concurrent tool execution
+    message_forwarding: bool = True   # Forward messages between agents
+    
+    # Hooks for context management
+    pre_model_hook: Callable = context_trimmer
+    post_model_hook: Callable = response_formatter
+    
+    # Agent coordination settings
+    max_iterations: int = 10
+    interrupt_before: List[str] = ["human", "validator"]
+    interrupt_after: List[str] = ["router", "planner"]
+    
+    # Error handling
+    retry_policy: Dict[str, int] = {
+        "max_retries": 3,
+        "backoff_factor": 1.5,
+        "timeout_seconds": 30
+    }
 ```
 
 ## 5. Data Contracts
@@ -177,6 +255,11 @@ def validate_response(
 - Add `ENABLE_MULTI_AGENT=true` to .env
 - Add `AGENT_DECISION_TIMEOUT=300` (milliseconds)
 - Add `FALLBACK_TO_BASIC_RAG=true`
+- Add `MODEL_PATH="Qwen/Qwen3-4B-Instruct-2507-FP8"`
+- Add `MAX_CONTEXT_LENGTH=128000`
+- Add `VLLM_GPU_MEMORY_UTILIZATION=0.95`
+- Add `VLLM_MAX_MODEL_LEN=128000`
+- Add `VLLM_QUANTIZATION=fp8`
 
 ## 7. Acceptance Criteria
 
@@ -220,7 +303,7 @@ Given a multi-turn conversation with 5 previous exchanges
 When a follow-up query references previous context
 Then the agents access the conversation history
 And the response maintains contextual continuity
-And the context buffer stays within 65K tokens
+And the context buffer stays within 128K tokens (with trimming strategies)
 ```
 
 ### Scenario 5: DSPy Optimization
@@ -231,6 +314,28 @@ When the retrieval agent processes the query
 Then the query is automatically rewritten for better retrieval
 And retrieval quality improves by at least 20%
 And the optimization adds less than 100ms latency
+```
+
+### Scenario 6: FP8 Model Performance
+
+```gherkin
+Given the vLLM backend is configured with FP8 quantization
+When processing a query requiring agent coordination
+Then the decode throughput is between 100-160 tokens/second
+And the prefill throughput is between 800-1300 tokens/second
+And total VRAM usage stays under 16GB
+And context management maintains 128K token limit
+```
+
+### Scenario 7: Context Window Management
+
+```gherkin
+Given a conversation approaching 128K token limit
+When the context manager pre_model_hook is triggered
+Then the context is trimmed to 85% capacity (109K tokens)
+And 30% of oldest context is preserved for continuity
+And the response maintains conversational coherence
+And no critical information is lost during trimming
 ```
 
 ## 8. Tests
@@ -256,7 +361,10 @@ And the optimization adds less than 100ms latency
 - Measure agent decision latency (target: <300ms)
 - Test concurrent query processing
 - Benchmark memory usage under load
-- Validate VRAM stays under 14GB
+- Validate VRAM stays under 16GB
+- Test FP8 model throughput (100-160 tok/s decode, 800-1300 tok/s prefill)
+- Validate 128K context window management and trimming
+- Test vLLM backend stability under sustained load
 
 ### Coverage Targets
 
@@ -279,7 +387,10 @@ And the optimization adds less than 100ms latency
 - Agent coordination overhead: <300ms (REQ-0007)
 - Total query latency: <2 seconds for 95th percentile
 - Success rate without fallback: >90% (REQ-0100)
-- Memory usage: <14GB VRAM total (REQ-0070)
+- Memory usage: <16GB VRAM total (REQ-0070)
+- FP8 model decode throughput: 100-160 tokens/second
+- FP8 model prefill throughput: 800-1300 tokens/second
+- Context management efficiency: <50ms for trimming operations
 
 ### Quality Gates
 
@@ -315,7 +426,10 @@ And the optimization adds less than 100ms latency
 - `langgraph-supervisor>=0.0.29`
 - `langgraph>=0.2.0`
 - `langchain-core>=0.3.0`
-- Local LLM (Qwen3-14B) with function calling
+- `vllm>=0.6.0` for FP8 model serving
+- Local LLM (Qwen3-4B-Instruct-2507-FP8) with function calling
+- vLLM backend for model serving and inference
+- CUDA-compatible GPU with <16GB VRAM
 
 ### Feature Dependencies
 

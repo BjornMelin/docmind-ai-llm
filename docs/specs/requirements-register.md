@@ -11,12 +11,12 @@
 
 ### Multi-Agent Coordination (REQ-0001 to REQ-0020)
 
-**REQ-0001**: The system implements a LangGraph supervisor pattern to coordinate 5 specialized agents.
+**REQ-0001**: The system implements a LangGraph supervisor pattern to coordinate 5 specialized agents with parallel tool execution reducing token usage by 50-87%.
 
 - **Source**: FR-8, ADR-001, ADR-011
 - **Type**: Functional
 - **Priority**: Critical
-- **Testable**: Verify supervisor initialization with 5 agent instances
+- **Testable**: Verify supervisor initialization with 5 agent instances and parallel tool execution efficiency
 
 **REQ-0002**: The query routing agent analyzes incoming queries to determine optimal retrieval strategy.
 
@@ -53,12 +53,12 @@
 - **Priority**: Critical
 - **Testable**: Verify validation detects hallucinations and inaccuracies
 
-**REQ-0007**: Agent coordination overhead remains under 300ms per query.
+**REQ-0007**: Agent coordination overhead remains under 200ms per query with parallel execution (improved from 300ms).
 
 - **Source**: NFR-1, ADR-001, ADR-011
 - **Type**: Non-Functional
 - **Priority**: High
-- **Testable**: Measure agent decision latency on RTX 4090
+- **Testable**: Measure agent decision latency on RTX 4090 with parallel tool execution
 
 **REQ-0008**: The system provides fallback to basic RAG when agent decisions fail.
 
@@ -227,19 +227,19 @@
 - **Priority**: High
 - **Testable**: Verify backend switching at runtime
 
-**REQ-0063**: The system uses Qwen3-14B as default LLM with 32K native context.
+**REQ-0063**: The system uses Qwen/Qwen3-4B-Instruct-2507-FP8 as default LLM with 128K context via vLLM.
 
 - **Source**: ADR-004
 - **Type**: Technical
 - **Priority**: High
-- **Testable**: Verify model loading and inference
+- **Testable**: Verify model loading and inference with vLLM backend
 
-**REQ-0064**: The system achieves ~1000 tokens/second inference on RTX 4090.
+**REQ-0064**: The system achieves 100-160 tokens/second decode, 800-1300 tokens/second prefill with FP8 quantization.
 
 - **Source**: NFR-1, ADR-010
 - **Type**: Non-Functional
 - **Priority**: High
-- **Testable**: Measure token generation speed
+- **Testable**: Measure token generation speed for both decode and prefill phases
 
 **REQ-0065**: The system implements TorchAO int4 quantization reducing VRAM by ~58%.
 
@@ -269,19 +269,19 @@
 - **Priority**: Medium
 - **Testable**: Verify exponential backoff on transient failures
 
-**REQ-0069**: Total memory usage remains under 4GB for typical workloads.
+**REQ-0069**: Total memory usage remains under 4GB for typical workloads with FP8 quantization efficiency.
 
 - **Source**: Performance requirements
 - **Type**: Non-Functional
 - **Priority**: High
-- **Testable**: Monitor memory during standard operations
+- **Testable**: Monitor memory during standard operations with FP8 model
 
-**REQ-0070**: The system maintains VRAM usage under 14GB with all features enabled.
+**REQ-0070**: The system maintains VRAM usage 12-14GB at 128K context with FP8 quantization and all features enabled.
 
 - **Source**: ADR-001, ADR-010
 - **Type**: Non-Functional
 - **Priority**: High
-- **Testable**: Monitor VRAM with full agent system active
+- **Testable**: Monitor VRAM with full agent system active at maximum context
 
 ### User Interface (REQ-0081 to REQ-0100)
 
@@ -450,12 +450,12 @@
 - **Priority**: Medium
 - **Testable**: Verify template loading and variable substitution
 
-**REQ-0094**: The system manages chat memory with 65K context buffer.
+**REQ-0094**: The system manages chat memory with 131,072 tokens (128K) context buffer with aggressive trimming.
 
 - **Source**: ADR-021
 - **Type**: Functional
 - **Priority**: High
-- **Testable**: Verify context window management and trimming
+- **Testable**: Verify context window management and aggressive trimming at 128K limit
 
 **REQ-0095**: The system supports multiple analysis modes (detailed, summary, comparison).
 

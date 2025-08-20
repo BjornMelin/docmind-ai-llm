@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-DocMind AI is an agentic RAG system leveraging Qwen3-4B-Instruct-2507's FULL 262K context capability through INT8 KV cache optimization, designed for local-first operation with offline capabilities. The architecture employs a 5-agent system with unified embeddings, hierarchical retrieval, and large context processing to deliver enhanced performance on RTX 4090 Laptop hardware with ~12.2GB VRAM usage.
+DocMind AI is an agentic RAG system leveraging Qwen3-4B-Instruct-2507-FP8's 128K context capability through FP8 KV cache optimization and parallel tool execution, designed for local-first operation with offline capabilities. The architecture employs a 5-agent system with unified embeddings, hierarchical retrieval, and efficient context processing to deliver enhanced performance on RTX 4090 Laptop hardware with 12-14GB VRAM usage.
 
 ## System Architecture
 
@@ -11,7 +11,7 @@ DocMind AI is an agentic RAG system leveraging Qwen3-4B-Instruct-2507's FULL 262
 - **Local-First**: 100% offline operation, no API dependencies
 - **Library-First**: Leverage existing libraries over custom code (91% code reduction achieved)
 - **KISS > DRY > YAGNI**: Simplicity over premature optimization
-- **Large Context Capable**: Leverages FULL 262K context windows through INT8 KV cache optimization
+- **Efficient Context Processing**: Leverages 128K context windows through FP8 KV cache optimization with parallel tool execution (50-87% token reduction)
 
 ### High-Level Architecture
 
@@ -55,12 +55,12 @@ graph TD
 
 | Component | Model | Size | VRAM | Purpose |
 |-----------|-------|------|------|---------|
-| **LLM** | Qwen3-4B-Instruct-2507-AWQ | 2.92GB | 2.92GB | Generation, reasoning, 262K context |
+| **LLM** | Qwen3-4B-Instruct-2507-FP8 | 3.6GB | 3.6GB | Generation, reasoning, 128K context |
 | **Embedding** | BGE-M3 | 2.3GB | 2-3GB | Unified dense+sparse embeddings |
 | **Reranking** | BGE-reranker-v2-m3 | 1.1GB | 1-2GB | Multi-stage reranking |
-| **KV Cache (262K)** | INT8 Quantization | 0GB | ~9.2GB | 50% memory reduction vs FP16 |
+| **KV Cache (128K)** | FP8 Quantization | 0GB | ~8GB | 50% memory reduction vs FP16 |
 
-**Total VRAM**: ~12.2GB with FULL 262K context (RTX 4090 Laptop optimized)
+**Total VRAM**: 12-14GB with 128K context (RTX 4090 Laptop optimized)
 
 ### Core Libraries
 
@@ -156,7 +156,7 @@ unstructured = "^0.16.0"         # Document processing
 
 ### Memory Management (ADR-010)
 
-- **INT8 KV Cache**: 50% memory reduction (36 KiB vs 72 KiB per token)
+- **FP8 KV Cache**: 50% memory reduction with enhanced performance
 - **AWQ Quantization**: Model size reduced to 2.92GB
 - **Model sharing**: Unified BGE-M3 for embedding+reranking features
 - **Hardware adaptation**: Automatic model selection based on VRAM
@@ -207,13 +207,13 @@ unstructured = "^0.16.0"         # Document processing
 - **GPU**: RTX 4090 Laptop (16GB VRAM)
 - **RAM**: 32GB system memory
 - **Storage**: 100GB for models and data
-- **Performance**: <1.5 second response times with 262K context
+- **Performance**: <2 second response times with 128K context and parallel execution
 
 ### Multi-Provider Support
 
-- **LMDeploy (Recommended)**: INT8 KV cache, 40-60 tokens/sec +30% improvement
+- **vLLM (Recommended)**: FP8 KV cache, 100-160 tokens/sec decode, 800-1300 prefill
 - **vLLM Alternative**: FP8 KV cache equivalent, similar performance
-- **llama.cpp/Ollama**: GGUF fallback with INT8 KV cache support
+- **llama.cpp/Ollama**: GGUF fallback with quantization support
 
 ## Optional Enhancements
 
@@ -310,10 +310,10 @@ This architecture overview synthesizes decisions from:
 ### Performance Targets
 
 - **Latency**: <1.5 seconds end-to-end query processing (RTX 4090 Laptop)
-- **Memory**: ~12.2GB VRAM total system usage with 262K context
+- **Memory**: 12-14GB VRAM total system usage with 128K context
 - **Quality**: 15%+ improvement on complex queries
 - **Reliability**: 90%+ queries processed without fallback
-- **Context**: Full 262K token processing capability
+- **Context**: 128K token processing capability with intelligent context management
 
 ### Quality Measures
 

@@ -14,7 +14,7 @@ Accepted (Optional Module)
 
 ## Description
 
-Implements LlamaIndex's native PropertyGraphIndex as an optional module leveraging Qwen3-4B-Instruct-2507's 262K context capability for entity and relationship extraction within large context windows. This approach enables processing entire document collections for graph construction without chunking limitations. The module requires ZERO additional infrastructure - using SimplePropertyGraphStore (in-memory) for graph storage while reusing existing Qdrant vector store for embeddings. Large context enables knowledge graph construction from documents in single processing passes.
+Implements LlamaIndex's native PropertyGraphIndex as an optional module leveraging Qwen3-4B-Instruct-2507-FP8's 128K context capability for entity and relationship extraction within FP8-optimized context windows. This approach enables processing large document sections for graph construction with intelligent context management. The module requires ZERO additional infrastructure - using SimplePropertyGraphStore (in-memory) for graph storage while reusing existing Qdrant vector store for embeddings. 128K context enables efficient knowledge graph construction from documents with FP8 acceleration.
 
 ## Context
 
@@ -46,8 +46,8 @@ LlamaIndex PropertyGraphIndex addresses these limitations through:
 
 ### Non-Functional Requirements
 
-- **NFR-1:** **(Performance)** Graph construction in background
-- **NFR-2:** **(Scalability)** Support incremental graph updates
+- **NFR-1:** **(Performance)** Graph construction in background with 128K context optimization
+- **NFR-2:** **(Scalability)** Support incremental graph updates within 128K context constraints
 - **NFR-3:** **(Local-First)** All graph operations run locally
 - **NFR-4:** **(Optional)** Can be completely disabled with no impact
 

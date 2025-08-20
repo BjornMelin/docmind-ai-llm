@@ -4,13 +4,13 @@
 
 ## 1. Executive Summary
 
-DocMind AI is an offline-first document analysis system architected for high performance, privacy, and maintainability. It leverages a pure **LlamaIndex** stack to combine hybrid vector search, knowledge graphs, and a **5-agent LangGraph supervisor system** for intelligent document processing with FULL 262K context capability through INT8 KV cache optimization. By eliminating external APIs and prioritizing local computation, it provides a secure, high-throughput environment for users to analyze their documents.
+DocMind AI is an offline-first document analysis system architected for high performance, privacy, and maintainability. It leverages a pure **LlamaIndex** stack to combine hybrid vector search, knowledge graphs, and a **5-agent LangGraph supervisor system** for intelligent document processing with 128K context capability through FP8 KV cache optimization. By eliminating external APIs and prioritizing local computation, it provides a secure, high-throughput environment for users to analyze their documents.
 
 ## 2. Problem Statement & Opportunity
 
 **Problem Statement:** In today's data-rich world, professionals, researchers, and students are inundated with digital documents. Extracting meaningful insights is a time-consuming, manual process. Furthermore, existing AI-powered solutions are almost exclusively cloud-based, forcing users to upload sensitive or proprietary documents to third-party servers, creating significant privacy risks and vendor lock-in. There is limited availability of solutions that offer modern AI capabilities with complete privacy through local, offline processing.
 
-**Opportunity:** There is growing market demand for professional tools that deliver advanced AI capabilities without compromising on data security. By building a high-performance, offline-first RAG application with 262K context capability, DocMind AI can serve this underserved segment. The solution provides fast, intelligent, and completely private document processing, making it an effective choice for security-conscious users.
+**Opportunity:** There is growing market demand for professional tools that deliver advanced AI capabilities without compromising on data security. By building a high-performance, offline-first RAG application with 128K context capability, DocMind AI can serve this underserved segment. The solution provides fast, intelligent, and completely private document processing, making it an effective choice for security-conscious users.
 
 ## 3. Features & Epics
 
@@ -53,12 +53,12 @@ The following requirements are derived directly from the architectural decisions
 
 ### Non-Functional Requirements (How the System Performs)
 
-* **NFR-1: Performance - High Throughput**: The system must be optimized to achieve 40-60 tokens/second (+30% with INT8 KV cache) for LLM inference on RTX 4090 Laptop hardware with FULL 262K context capability. **(ADR-004, ADR-010)**
+* **NFR-1: Performance - High Throughput**: The system must be optimized to achieve 100-160 tokens/second decode and 800-1300 tokens/second prefill (with FP8 optimization) for LLM inference on RTX 4090 Laptop hardware with 128K context capability. **(ADR-004, ADR-010)**
 * **NFR-2: Performance - Fast Reranking**: The primary reranking model must be lightweight (`BGE-reranker-v2-m3`) to ensure minimal latency impact on the query pipeline. **(ADR-014)**
 * **NFR-3: Performance - Asynchronous Processing**: The system must leverage asynchronous and parallel processing patterns (`QueryPipeline.parallel_run`) for all I/O-bound and compute-intensive tasks to ensure a non-blocking UI and maximum throughput. **(ADR-012)**
 * **NFR-4: Privacy - Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
 * **NFR-5: Resilience - Robust Error Handling**: The system must be resilient to transient failures (e.g., network hiccups, file errors) by implementing intelligent retry strategies (e.g., exponential backoff) for all critical infrastructure operations. **(ADR-022)**
-* **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ AWQ quantization and INT8 KV cache to enable FULL 262K context processing within ~12.2GB VRAM on RTX 4090 Laptop hardware, providing 50% memory reduction vs FP16 KV cache. **(ADR-004, ADR-010)**
+* **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with vLLM FlashInfer backend. **(ADR-004, ADR-010)**
 * **NFR-7: Memory Efficiency - Multimodal VRAM**: The multimodal embedding model (CLIP ViT-B/32) must be selected for its low VRAM usage (~1.4GB) to ensure efficiency. **(ADR-016)**
 * **NFR-8: Scalability - Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
 * **NFR-9: Hardware Adaptability**: The system must automatically detect available hardware (especially GPUs) and adapt its configuration for optimal performance, including model selection and context length. **(ADR-017)**
@@ -162,7 +162,7 @@ graph TD
 
 ### Model Dependencies
 
-* **Default LLM**: Qwen/Qwen3-4B-Instruct-2507-AWQ (262K native context, AWQ quantization)
+* **Default LLM**: Qwen/Qwen3-4B-Instruct-2507-FP8 (128K context, FP8 quantization)
 * **Unified Embeddings**: BAAI/bge-m3 (1024D dense + sparse unified)
 * **Multimodal**: openai/clip-vit-base-patch32 (ViT-B/32)
 * **Reranking**: BAAI/bge-reranker-v2-m3
@@ -192,10 +192,10 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 
 * [ ] Query latency <1.5 seconds for 95th percentile (RTX 4090 Laptop).
 * [ ] Document processing throughput >50 pages/second with GPU and caching.
-* [ ] System VRAM usage ~12.2GB with FULL 262K context capability.
-* [ ] Multi-agent coordination overhead remains under 300ms due to efficient LangGraph supervisor patterns.
+* [ ] System VRAM usage ~12-14GB with 128K context capability.
+* [ ] Multi-agent coordination overhead remains under 200ms due to efficient LangGraph supervisor patterns with parallel tool execution (50-87% token reduction).
 * [ ] Retrieval accuracy >80% relevance on domain-specific queries.
-* [ ] INT8 KV cache enables FULL 262K context processing without OOM errors.
+* [ ] FP8 KV cache enables 128K context processing without OOM errors.
 
 ### Quality Requirements
 

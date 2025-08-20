@@ -49,7 +49,7 @@
 
 - **Offline-First Design:** 100% local processing with no external API dependencies.
 
-- **GPU Acceleration:** CUDA support with mixed precision and quantization for 2-3x performance boost.
+- **GPU Acceleration:** CUDA support with mixed precision and FP8 quantization via vLLM FlashInfer backend for optimized performance.
 
 - **Session Persistence:** SQLite WAL with local multi-process support for concurrent access.
 
@@ -93,9 +93,9 @@
     - [Multi-Agent Coordination](#multi-agent-coordination)
     - [Performance Optimizations](#performance-optimizations)
   - [⚙️ Configuration](#️-configuration)
-    - [Basic Configuration](#basic-configuration)
+    - [Configuration Philosophy](#configuration-philosophy)
     - [Environment Variables](#environment-variables)
-    - [Cache Configuration](#cache-configuration)
+    - [Additional Configuration](#additional-configuration)
   - [📊 Performance Benchmarks](#-performance-benchmarks)
     - [Performance Metrics](#performance-metrics)
     - [Caching Performance](#caching-performance)
@@ -217,7 +217,7 @@ Access the app at `http://localhost:8501`.
 
 2. **Enter the Ollama Base URL** (default: `http://localhost:11434`).
 
-3. **Select an Ollama Model Name** (e.g., `qwen3-4b-instruct-2507` for 262K context). If the model isn't installed:
+3. **Select an Ollama Model Name** (e.g., `qwen3-4b-instruct-2507` for 128K context). If the model isn't installed:
 
    ```bash
    ollama pull qwen3-4b-instruct-2507
@@ -518,7 +518,7 @@ graph TD
 
 ### Performance Optimizations
 
-- **GPU Acceleration:** CUDA support with mixed precision (bf16) and torch.compile optimization
+- **GPU Acceleration:** CUDA support with FP8 quantization via vLLM FlashInfer backend and torch.compile optimization
 
 - **Async Processing:** QueryPipeline with parallel execution and intelligent caching
 
@@ -551,7 +551,7 @@ Key configuration options in `.env`:
 
 ```bash
 # Model & Backend Services
-DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-AWQ
+DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507
 DOCMIND_DEVICE=cuda
 DOCMIND_CONTEXT_LENGTH=262144
 LMDEPLOY_HOST=http://localhost:23333
@@ -564,7 +564,7 @@ RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 ENABLE_DSPY_OPTIMIZATION=true
 ENABLE_GRAPHRAG=false
 ENABLE_GPU_ACCELERATION=true
-LMDEPLOY_QUANT_POLICY=8  # INT8 KV cache
+LMDEPLOY_QUANT_POLICY=fp8  # FP8 KV cache
 
 # Performance Tuning
 RETRIEVAL_TOP_K=10
@@ -577,6 +577,7 @@ See the complete [.env.example](.env.example) file for all available configurati
 ### Additional Configuration
 
 **Streamlit UI Configuration** (`.streamlit/config.toml`):
+
 ```toml
 [theme]
 base = "light"
@@ -587,6 +588,7 @@ maxUploadSize = 200
 ```
 
 **Cache Configuration** (automatic via LlamaIndex):
+
 - Document processing cache: `./cache/documents` (1GB limit)
 - Embedding cache: In-memory with LRU eviction
 - Model cache: Automatic via Hugging Face transformers
@@ -600,13 +602,13 @@ maxUploadSize = 200
 | **Document Processing (Cold)** | ~15-30 seconds | 50-page PDF with GPU acceleration |
 | **Document Processing (Warm)** | ~2-5 seconds | DiskCache + index caching |
 | **Query Response** | 1-3 seconds | Hybrid retrieval + ColBERT reranking |
-| **5-Agent System Response** | 3-8 seconds | LangGraph supervisor coordination with <300ms overhead |
-| **262K Context Processing** | 1.5-3 seconds | FULL 262K context with INT8 KV cache |
+| **5-Agent System Response** | 3-8 seconds | LangGraph supervisor coordination with <200ms overhead |
+| **128K Context Processing** | 1.5-3 seconds | 128K context with FP8 KV cache |
 | **Vector Search** | <500ms | Qdrant in-memory with GPU embeddings |
 | **Test Suite (99 tests)** | ~40 seconds | Comprehensive coverage |
 | **Memory Usage (Idle)** | 400-500MB | Base application |
 | **Memory Usage (Processing)** | 1.2-2.1GB | During document analysis |
-| **GPU Memory Usage** | ~12.2GB | Model + 262K context + embedding cache |
+| **GPU Memory Usage** | ~12-14GB | Model + 128K context + embedding cache |
 
 ### Caching Performance
 
@@ -681,7 +683,7 @@ DocMind AI is designed for complete offline operation:
 2. **Pull required models:**
 
    ```bash
-   ollama pull qwen3-4b-instruct-2507  # Recommended for 262K context
+   ollama pull qwen3-4b-instruct-2507  # Recommended for 128K context
    ollama pull qwen2:7b  # Alternative lightweight model
    ```
 
@@ -696,7 +698,7 @@ DocMind AI is designed for complete offline operation:
 
 | Model Size | RAM Required | GPU VRAM | Performance | Context |
 |------------|-------------|----------|-------------|---------|
-| 4B (qwen3-4b-instruct-2507) | 16GB+ | 16GB+ | Best | 262K |
+| 4B (qwen3-4b-instruct-2507-fp8) | 16GB+ | 12-14GB | Best | 128K |
 | 7B (e.g., qwen2:7b) | 8GB+ | 4GB+ | Good | 32K |
 | 13B | 16GB+ | 8GB+ | Better | 32K |
 
@@ -732,7 +734,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 ```bash
 
 # Pull models manually
-ollama pull qwen3-4b-instruct-2507  # For 262K context
+ollama pull qwen3-4b-instruct-2507  # For 128K context
 ollama pull qwen2:7b  # Alternative
 ollama list  # Verify installation
 ```

@@ -26,7 +26,7 @@ The current architecture uses three separate embedding models:
 
 BGE-M3 represents a significant advancement by unifying dense and sparse retrieval in a single model with multi-functionality, multi-linguality, and multi-granularity support. Research shows BGE-M3 achieves superior performance compared to separate dense/sparse models while reducing resource requirements.
 
-**Integration Flow**: Processed document chunks from ADR-009 (Unstructured.io pipeline) are fed into BGE-M3 to generate 1024-dimensional unified embeddings, which are then stored in Qdrant collections (ADR-007) for retrieval by the adaptive pipeline (ADR-003).
+**Integration Flow**: Processed document chunks from ADR-009 (Unstructured.io pipeline) are fed into BGE-M3 to generate 1024-dimensional unified embeddings, which are then stored in Qdrant collections (ADR-007) for retrieval by the adaptive pipeline (ADR-003) within the 128K context constraints of the FP8 model.
 
 ## Related Requirements
 
@@ -41,7 +41,7 @@ BGE-M3 represents a significant advancement by unifying dense and sparse retriev
 
 - **NFR-1:** **(Performance)** Reduce total embedding memory footprint by >30%
 - **NFR-2:** **(Quality)** Maintain or improve retrieval accuracy vs current approach
-- **NFR-3:** **(Compatibility)** Support 8192 token context length (vs current 512)
+- **NFR-3:** **(Compatibility)** Support 8192 token context length optimized for 128K LLM context
 - **NFR-4:** **(Local-First)** All models must run offline on consumer hardware
 
 ## Alternatives
