@@ -235,3 +235,4 @@ update-plan-*.json
 docs/specs/archived/
 docs/specs.backup.*
 docs/adrs/archived/
+docs/developers/archived/
