@@ -535,6 +535,32 @@ wheels = [
 ]
 
 [[package]]
+name = "cmake"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/e3/0a11eddf5812ab39f96c2b77895a390acfd469cb64052c6a9c2d8d21b88c/cmake-4.1.0.tar.gz", hash = "sha256:bacdd21aebdf9a42e5631cfb365beb8221783fcd27c4e04f7db8b79c43fb12df", size = 34981, upload-time = "2025-08-11T17:54:05.138Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/6b/aa8b65bd42a5d5872469442f45deb58e8129fb8769f9d6ba3ebf8cdacc14/cmake-4.1.0-py3-none-macosx_10_10_universal2.whl", hash = "sha256:69df62445b22d78c2002c22edeb0e85590ae788e477d222fb2ae82c871c33090", size = 49543528, upload-time = "2025-08-11T17:52:59.578Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/8b/a873f9dbd7983d3a8981cee68246ef690b18aa41ec25281cce54c01e9a5b/cmake-4.1.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:4e3a30a4f72a8a6d8d593dc289e791f1d84352c1f629543ac8e22c62dbadb20a", size = 30369809, upload-time = "2025-08-11T17:53:03.866Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/12/43e4b2ef7a9a54aa8429715e671cea53e7823e894e98c6d26e3f3a3ebd4e/cmake-4.1.0-py3-none-manylinux2014_i686.manylinux_2_17_i686.whl", hash = "sha256:0e2fea746d746f52aa52b8498777ff665a0627d9b136bec4ae0465c38b75e799", size = 30761286, upload-time = "2025-08-11T17:53:11.876Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/40/41f8990484b221c8230efa801de522c9d7690279e4308ac8260313eaf363/cmake-4.1.0-py3-none-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:5a28a87601fa5e775017bf4f5836e8e75091d08f3e5aac411256754ba54fe5c4", size = 32602648, upload-time = "2025-08-11T17:53:15.013Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/eb/824d1735821aff0857e57d4455eaf94a4ccc77f7711b9ec3e02eaf34f9f0/cmake-4.1.0-py3-none-manylinux2014_s390x.manylinux_2_17_s390x.whl", hash = "sha256:2a8790473afbb895b8e684e479f26773e4fc5c86845e3438e8488d38de9db807", size = 28568562, upload-time = "2025-08-11T17:53:17.983Z" },
+    { url = "https://files.pythonhosted.org/packages/34/da/0217073d5b3fb8655b3de8af4e9e797a25ae28a2932b1138452a0dc89e9f/cmake-4.1.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:dab375932f5962e078da8cf76ca228c21bf4bea9ddeb1308e2b35797fa30f784", size = 29681029, upload-time = "2025-08-11T17:53:21.073Z" },
+    { url = "https://files.pythonhosted.org/packages/73/f6/daf3bad6f1a0d069befaebc3dd58ac7ae191fd772e80db0b7f1a94e51d45/cmake-4.1.0-py3-none-manylinux_2_31_armv7l.whl", hash = "sha256:f2eaa6f0a25e31fe09fb0b7f40fbf208eea5f1313093ff441ecfff7dc1b80adf", size = 26509365, upload-time = "2025-08-11T17:53:23.562Z" },
+    { url = "https://files.pythonhosted.org/packages/41/91/6ce3d9d5ab5f039cc207678e2ac1c5b8575b141beba6e51e2ea9535c4edd/cmake-4.1.0-py3-none-manylinux_2_35_riscv64.whl", hash = "sha256:3ee38de00cad0501c7dd2b94591522381e3ef9c8468094f037a17ed9e478ef13", size = 28849869, upload-time = "2025-08-11T17:53:29.624Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/2d/da9ce3ec46a3af8f35c659914ba444de8724ed5d3e3daf2fa2bf6f64879b/cmake-4.1.0-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:2d9f14b7d58e447865c111b3b90945b150724876866f5801c80970151718f710", size = 41734467, upload-time = "2025-08-11T17:53:32.917Z" },
+    { url = "https://files.pythonhosted.org/packages/91/30/0408c49409dd6e122ed63917d7c34f5bc658c2fffd10e5059965e8770c25/cmake-4.1.0-py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:574448a03acdf34c55a7c66485e7a8260709e8386e9145708e18e2abe5fc337b", size = 35021362, upload-time = "2025-08-11T17:53:35.791Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/b3/66764abbd3032c051619c4fc8b6a839c2666da27feeb53ec784b8690417a/cmake-4.1.0-py3-none-musllinux_1_2_i686.whl", hash = "sha256:b8c2538fb557b9edd74d48c189fcde42a55ad7e2c39e04254f8c5d248ca1af4c", size = 45779676, upload-time = "2025-08-11T17:53:38.932Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/ee/8b00d179e1a0f7ac22faaae1bec84577415b3664156e9b233f4ef3beeead/cmake-4.1.0-py3-none-musllinux_1_2_ppc64le.whl", hash = "sha256:7c7999c5a1d5a3a66adacc61056765557ed253dc7b8e9deab5cae546f4f9361c", size = 45844041, upload-time = "2025-08-11T17:53:42.347Z" },
+    { url = "https://files.pythonhosted.org/packages/24/0d/8e3de2d6faa7aacc8bfa3426ac873eaa8afd10c7cf96673651f1010d930c/cmake-4.1.0-py3-none-musllinux_1_2_riscv64.whl", hash = "sha256:e77ac2554a7b8a94745add465413e3266b714766e9a5d22ac8e5b36a900a1136", size = 39910078, upload-time = "2025-08-11T17:53:45.925Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/28/7bfbe0412ed6636b12025f6fa08aa8110deacaf080ed7071429783028c6c/cmake-4.1.0-py3-none-musllinux_1_2_s390x.whl", hash = "sha256:d54e68d5439193265fd7211671420601f6a672b8ca220f19e6c72238b41a84c2", size = 43995109, upload-time = "2025-08-11T17:53:48.933Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/0e/aaac412ad02ca799e2113cbca12aa960d9f80beada67769e49ac8c67dace/cmake-4.1.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:c6bd346fe4d9c205310ef9a6e09ced7e610915fa982d7b649f9b12caa6fa0605", size = 43338603, upload-time = "2025-08-11T17:53:52.634Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/98/768e4b298a5a53cd305f7aadae2cc825f00ec70a3b1b98d822c7feacb50b/cmake-4.1.0-py3-none-win32.whl", hash = "sha256:7219b7e85ed03a98af89371b9dee762e236ad94e8a09ce141070e6ac6415756f", size = 34272761, upload-time = "2025-08-11T17:53:56.096Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/d0/73cae88d8c25973f2465d5a4457264f95617c16ad321824ed4c243734511/cmake-4.1.0-py3-none-win_amd64.whl", hash = "sha256:76e8e7d80a1a9bb5c7ec13ec8da961a8c5a997247f86a08b29f0c2946290c461", size = 37551115, upload-time = "2025-08-11T17:53:59.099Z" },
+    { url = "https://files.pythonhosted.org/packages/99/69/744f829b29288720d851e485e2788e530d22783c716ac6decfbf0026b067/cmake-4.1.0-py3-none-win_arm64.whl", hash = "sha256:8d39bbfee7c181e992875cd390fc6d51a317c9374656b332021a67bb40c0b07f", size = 36333811, upload-time = "2025-08-11T17:54:02.074Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -977,7 +1003,7 @@ wheels = [
 [[package]]
 name = "docmind-ai-llm"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "diskcache" },
     { name = "dspy-ai" },
@@ -1025,8 +1051,10 @@ dependencies = [
 
 [package.optional-dependencies]
 gpu = [
+    { name = "cmake" },
     { name = "fastembed-gpu" },
-    { name = "llama-cpp-python" },
+    { name = "ninja" },
+    { name = "vllm", extra = ["flashinfer"] },
 ]
 
 [package.dev-dependencies]
@@ -1050,6 +1078,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cmake", marker = "extra == 'gpu'", specifier = ">=3.26.4" },
     { name = "diskcache", specifier = "==5.6.3" },
     { name = "dspy-ai", specifier = ">=2.5.0" },
     { name = "fastembed-gpu", marker = "extra == 'gpu'", specifier = ">=0.7.0" },
@@ -1058,7 +1087,6 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.2.74" },
     { name = "langgraph-supervisor", specifier = ">=0.0.29" },
     { name = "llama-cpp-python", specifier = ">=0.2.32,<0.3.0" },
-    { name = "llama-cpp-python", extras = ["cuda"], marker = "extra == 'gpu'", specifier = ">=0.2.32,<0.3.0" },
     { name = "llama-index-agent-openai" },
     { name = "llama-index-core", specifier = ">=0.10.0,<0.12.0" },
     { name = "llama-index-embeddings-fastembed" },
@@ -1075,6 +1103,7 @@ requires-dist = [
     { name = "llama-index-readers-file" },
     { name = "llama-index-vector-stores-qdrant" },
     { name = "loguru", specifier = ">=0.7.0" },
+    { name = "ninja", marker = "extra == 'gpu'", specifier = ">=1.11.1" },
     { name = "ollama", specifier = "==0.5.1" },
     { name = "openai", specifier = ">=1.98.0,<2.0.0" },
     { name = "openai-whisper", specifier = "==20250625" },
@@ -1087,13 +1116,14 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.1.1" },
     { name = "qdrant-client", specifier = "==1.15.1" },
     { name = "spacy", specifier = "==3.8.7" },
-    { name = "streamlit", specifier = "==1.48.0" },
+    { name = "streamlit", specifier = ">=1.48.0" },
     { name = "tenacity", specifier = ">=8.0.0" },
     { name = "tiktoken", specifier = "==0.9.0" },
     { name = "torch", specifier = "==2.7.1" },
     { name = "transformers", specifier = "==4.55.0" },
     { name = "unstructured", extras = ["all-docs"], specifier = ">=0.18.11" },
     { name = "vllm", extras = ["flashinfer"], specifier = ">=0.10.1" },
+    { name = "vllm", extras = ["flashinfer"], marker = "extra == 'gpu'", specifier = ">=0.10.1" },
 ]
 provides-extras = ["gpu"]
 
