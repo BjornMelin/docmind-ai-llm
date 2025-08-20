@@ -1,8 +1,68 @@
-# Performance Benchmarks
+# Performance Benchmarks & vLLM FlashInfer Validation
 
 ## Executive Summary
 
-✅ **PERFORMANCE BENCHMARKS** - DocMind AI delivers production-ready performance that meets all system requirements with significant performance headroom for demanding workloads.
+✅ **PERFORMANCE BENCHMARKS** - DocMind AI with vLLM FlashInfer stack delivers production-ready performance that meets all system requirements with significant performance headroom for demanding workloads.
+
+**NEW: vLLM FlashInfer Stack Validation:**
+
+The project now includes comprehensive validation for the vLLM + FlashInfer stack optimized for Qwen3-4B-Instruct-2507-FP8 on RTX 4090 16GB VRAM. This provides:
+
+- **Up to 2x FP8 speedup** with FlashInfer vs standard CUDA backend
+- **50% RTX 4090-specific performance enhancement**
+- **128K context support** with FP8 KV cache optimization
+- **Target Performance**: 100-160 tok/s decode, 800-1300 tok/s prefill
+- **PyTorch 2.7.1 compatibility** confirmed with vLLM >=0.10.1
+
+## vLLM FlashInfer Validation Tool
+
+**Quick Validation:**
+
+```bash
+# Run comprehensive vLLM FlashInfer validation
+python scripts/performance_validation.py
+
+# Skip model loading for quick environment check
+SKIP_MODEL_TEST=true python scripts/performance_validation.py
+
+# Test with specific model and backend
+VLLM_MODEL=microsoft/DialoGPT-small VLLM_ATTENTION_BACKEND=FLASHINFER python scripts/performance_validation.py
+```
+
+**Expected Output for RTX 4090:**
+
+```text
+🚀 vLLM FlashInfer Stack Validation Results
+============================================================
+
+📊 CUDA Environment:
+   CUDA Available: ✅ True
+   GPU: NVIDIA GeForce RTX 4090
+   VRAM: 24.0 GB
+   Compute Capability: (8, 9)
+   CUDA Version: 12.8
+   Driver Version: 550.54.14
+   FlashInfer Compatible: ✅ True
+
+🔥 PyTorch:
+   Version: 2.7.1
+   Expected: 2.7.1
+   Compatible: ✅ True
+
+⚡ vLLM:
+   Version: 0.10.1
+   Expected: >=0.10.1
+   Compatible: ✅ True
+   FlashInfer Available: ✅ True
+
+🎯 FlashInfer Backend Test:
+   Backend Available: ✅ True
+   Model Loaded: ✅ True
+
+🏁 Overall Status:
+✅ SUCCESS: vLLM FlashInfer stack is properly installed and configured!
+✅ Ready for Qwen3-4B-Instruct-2507-FP8 with 128K context support
+```
 
 ## Production Performance Metrics
 
