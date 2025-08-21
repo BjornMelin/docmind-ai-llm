@@ -49,7 +49,10 @@ class TestRouteQuery:
 
     def test_route_complex_query(self):
         """Test routing of complex analytical queries."""
-        query = "Compare the environmental impact of electric vs gasoline vehicles and explain the manufacturing differences"
+        query = (
+            "Compare the environmental impact of electric vs gasoline vehicles "
+            "and explain the manufacturing differences"
+        )
         result = route_query(query)
 
         decision = json.loads(result)
@@ -107,21 +110,22 @@ class TestRouteQuery:
     def test_route_query_error_handling(self):
         """Test error handling in query routing."""
         # Simulate error condition
-        with patch("src.agents.tools.logger") as mock_logger:
-            # Force an exception during processing
-            with patch("builtins.len", side_effect=Exception("Test error")):
-                result = route_query("Test query")
+        with (
+            patch("src.agents.tools.logger") as mock_logger,
+            patch("builtins.len", side_effect=Exception("Test error")),
+        ):
+            result = route_query("Test query")
 
-                decision = json.loads(result)
+            decision = json.loads(result)
 
-                # Verify fallback decision
-                assert decision["strategy"] == "vector"
-                assert decision["complexity"] == "simple"
-                assert decision["confidence"] == 0.5
-                assert "error" in decision
+            # Verify fallback decision
+            assert decision["strategy"] == "vector"
+            assert decision["complexity"] == "simple"
+            assert decision["confidence"] == 0.5
+            assert "error" in decision
 
-                # Verify error was logged
-                mock_logger.error.assert_called_once()
+            # Verify error was logged
+            mock_logger.error.assert_called_once()
 
     def test_route_query_performance_timing(self):
         """Test routing performance measurement."""
@@ -224,21 +228,22 @@ class TestPlanQuery:
 
     def test_plan_query_error_handling(self):
         """Test error handling in query planning."""
-        with patch("src.agents.tools.logger") as mock_logger:
-            # Force an exception during processing
-            with patch("builtins.len", side_effect=Exception("Planning error")):
-                result = plan_query("Test query", "complex")
+        with (
+            patch("src.agents.tools.logger") as mock_logger,
+            patch("builtins.len", side_effect=Exception("Planning error")),
+        ):
+            result = plan_query("Test query", "complex")
 
-                plan = json.loads(result)
+            plan = json.loads(result)
 
-                # Verify fallback plan
-                assert plan["original_query"] == "Test query"
-                assert plan["sub_tasks"] == ["Test query"]
-                assert plan["execution_order"] == "sequential"
-                assert "error" in plan
+            # Verify fallback plan
+            assert plan["original_query"] == "Test query"
+            assert plan["sub_tasks"] == ["Test query"]
+            assert plan["execution_order"] == "sequential"
+            assert "error" in plan
 
-                # Verify error was logged
-                mock_logger.error.assert_called_once()
+            # Verify error was logged
+            mock_logger.error.assert_called_once()
 
     def test_plan_query_performance_metrics(self):
         """Test planning performance measurement."""
@@ -511,19 +516,20 @@ class TestSynthesizeResults:
 
     def test_synthesize_error_handling(self):
         """Test error handling in synthesis process."""
-        with patch("src.agents.tools.logger") as mock_logger:
-            # Force an exception during processing
-            with patch("builtins.len", side_effect=Exception("Synthesis error")):
-                result = synthesize_results("[]", "test query")
+        with (
+            patch("src.agents.tools.logger") as mock_logger,
+            patch("builtins.len", side_effect=Exception("Synthesis error")),
+        ):
+            result = synthesize_results("[]", "test query")
 
-                data = json.loads(result)
+            data = json.loads(result)
 
-                # Verify error handling
-                assert data["documents"] == []
-                assert "error" in data
+            # Verify error handling
+            assert data["documents"] == []
+            assert "error" in data
 
-                # Verify error was logged
-                mock_logger.error.assert_called_once()
+            # Verify error was logged
+            mock_logger.error.assert_called_once()
 
 
 class TestValidateResponse:
@@ -592,7 +598,8 @@ class TestValidateResponse:
             {
                 "documents": [
                     {
-                        "content": "Neural networks with multiple layers for pattern recognition",
+                        "content": "Neural networks with multiple layers for "
+                        "pattern recognition",
                         "score": 0.9,
                     },
                 ]
@@ -612,8 +619,10 @@ class TestValidateResponse:
         """Test validation detects potential hallucinations."""
         query = "Explain quantum computing"
         response = (
-            "I cannot find specific information about quantum computing in the provided sources. "
-            "Based on my training data, quantum computing uses quantum mechanics principles."
+            "I cannot find specific information about quantum computing in the "
+            "provided sources. "
+            "Based on my training data, quantum computing uses quantum mechanics "
+            "principles."
         )
         sources = json.dumps({"documents": []})
 
@@ -667,19 +676,23 @@ class TestValidateResponse:
         query = "What is artificial intelligence?"
         response = (
             "Artificial intelligence (AI) refers to computer systems that can perform "
-            "tasks typically requiring human intelligence, such as learning, reasoning, "
-            "and problem-solving. Machine learning algorithms enable AI systems to "
+            "tasks typically requiring human intelligence, such as learning, "
+            "reasoning, "
+            "and problem-solving. Machine learning algorithms enable AI systems "
+            "to "
             "improve their performance through experience."
         )
         sources = json.dumps(
             {
                 "documents": [
                     {
-                        "content": "Artificial intelligence computer systems human intelligence learning reasoning",
+                        "content": "Artificial intelligence computer systems "
+                        "human intelligence learning reasoning",
                         "score": 0.9,
                     },
                     {
-                        "content": "Machine learning algorithms improve performance through experience",
+                        "content": "Machine learning algorithms improve "
+                        "performance through experience",
                         "score": 0.8,
                     },
                 ]
@@ -698,21 +711,22 @@ class TestValidateResponse:
 
     def test_validate_error_handling(self):
         """Test error handling in response validation."""
-        with patch("src.agents.tools.logger") as mock_logger:
-            # Force an exception during processing
-            with patch("builtins.len", side_effect=Exception("Validation error")):
-                result = validate_response("query", "response", "[]")
+        with (
+            patch("src.agents.tools.logger") as mock_logger,
+            patch("builtins.len", side_effect=Exception("Validation error")),
+        ):
+            result = validate_response("query", "response", "[]")
 
-                data = json.loads(result)
+            data = json.loads(result)
 
-                # Verify error handling
-                assert data["valid"] is False
-                assert data["confidence"] == 0.0
-                assert data["suggested_action"] == "regenerate"
-                assert "error" in data
+            # Verify error handling
+            assert data["valid"] is False
+            assert data["confidence"] == 0.0
+            assert data["suggested_action"] == "regenerate"
+            assert "error" in data
 
-                # Verify error was logged
-                mock_logger.error.assert_called_once()
+            # Verify error was logged
+            mock_logger.error.assert_called_once()
 
     def test_validate_invalid_sources_json(self):
         """Test validation with invalid sources JSON."""

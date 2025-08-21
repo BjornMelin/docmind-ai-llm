@@ -137,7 +137,7 @@ class TestMultiAgentCoordinator:
 
         performance_timer["start_timer"]("coordination")
         response = mock_coordinator.process_query(query)
-        coordination_time = performance_timer["end_timer"]("coordination")
+        performance_timer["end_timer"]("coordination")
 
         # Verify response structure
         assert isinstance(response, AgentResponse)
@@ -232,7 +232,7 @@ class TestMultiAgentCoordinator:
 
         start_time = time.perf_counter()
         response = mock_coordinator.process_query(query)
-        total_time = time.perf_counter() - start_time
+        time.perf_counter() - start_time  # Calculate time for verification
 
         # Verify coordination overhead
         coordination_ms = response.optimization_metrics["coordination_overhead_ms"]

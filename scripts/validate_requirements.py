@@ -8,6 +8,7 @@ Usage:
     python scripts/validate_requirements.py
 """
 
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -150,57 +151,27 @@ class RequirementValidator:
     # Implementation check methods
     def _check_multi_agent_system(self) -> bool:
         """Check if multi-agent system is implemented."""
-        try:
-            from agents.supervisor_graph import SupervisorGraph
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.supervisor_graph") is not None
 
     def _check_agent_router(self) -> bool:
         """Check if router agent is implemented."""
-        try:
-            from agents.router import RouterAgent
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.router") is not None
 
     def _check_agent_planner(self) -> bool:
         """Check if planner agent is implemented."""
-        try:
-            from agents.planner import PlannerAgent
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.planner") is not None
 
     def _check_agent_retrieval(self) -> bool:
         """Check if retrieval agent is implemented."""
-        try:
-            from agents.retrieval import RetrievalAgent
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.retrieval") is not None
 
     def _check_agent_synthesis(self) -> bool:
         """Check if synthesis agent is implemented."""
-        try:
-            from agents.synthesis import SynthesisAgent
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.synthesis") is not None
 
     def _check_agent_validator(self) -> bool:
         """Check if validator agent is implemented."""
-        try:
-            from agents.validator import ValidatorAgent
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.validator") is not None
 
     def _check_fallback_rag(self) -> bool:
         """Check if fallback RAG is configured."""
@@ -219,12 +190,7 @@ class RequirementValidator:
 
     def _check_document_loading(self) -> bool:
         """Check if document loading is implemented."""
-        try:
-            from utils.document import load_documents_unstructured
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("utils.document") is not None
 
     def _check_document_parsing(self) -> bool:
         """Check if document parsing is supported."""
@@ -244,12 +210,7 @@ class RequirementValidator:
 
     def _check_vector_search(self) -> bool:
         """Check if vector search is implemented."""
-        try:
-            from utils.embedding import create_vector_index
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("utils.embedding") is not None
 
     def _check_dense_embeddings(self) -> bool:
         """Check if dense embeddings are configured."""
@@ -277,12 +238,7 @@ class RequirementValidator:
 
     def _check_response_generation(self) -> bool:
         """Check if response generation is implemented."""
-        try:
-            from utils.vllm_llm import VLLMBackend
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("utils.vllm_llm") is not None
 
     def _check_export_formats(self) -> bool:
         """Check if export formats are supported."""
@@ -326,12 +282,7 @@ class RequirementValidator:
 
     def _check_hallucination_detection(self) -> bool:
         """Check if hallucination detection is implemented."""
-        try:
-            from agents.validator import detect_hallucinations
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.validator") is not None
 
     def _check_dspy_optimization(self) -> bool:
         """Check if DSPy optimization is enabled."""
@@ -339,12 +290,7 @@ class RequirementValidator:
 
     def _check_prompt_templates(self) -> bool:
         """Check if prompt templates are implemented."""
-        try:
-            from src.prompts import *  # Check if prompts module exists
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("src.prompts") is not None
 
     def _check_query_optimization(self) -> bool:
         """Check if query optimization is implemented."""
@@ -417,12 +363,7 @@ class RequirementValidator:
 
     def _check_system_monitoring(self) -> bool:
         """Check if system monitoring is implemented."""
-        try:
-            from utils.monitoring import get_performance_monitor
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("utils.monitoring") is not None
 
     def _check_qdrant_integration(self) -> bool:
         """Check if Qdrant integration is configured."""
@@ -462,12 +403,7 @@ class RequirementValidator:
 
     def _check_resource_monitoring(self) -> bool:
         """Check if resource monitoring is implemented."""
-        try:
-            from utils.monitoring import get_memory_usage
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("utils.monitoring") is not None
 
     def _check_configuration_management(self) -> bool:
         """Check if configuration management is implemented."""
@@ -475,12 +411,7 @@ class RequirementValidator:
 
     def _check_environment_validation(self) -> bool:
         """Check if environment validation is implemented."""
-        try:
-            from utils.core import validate_startup_configuration
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("utils.core") is not None
 
     def _check_api_integration(self) -> bool:
         """Check if API integration is implemented."""
@@ -500,12 +431,7 @@ class RequirementValidator:
 
     def _check_extensibility(self) -> bool:
         """Check if system is extensible."""
-        try:
-            from agents.agent_factory import create_agent_with_tools
-
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("agents.agent_factory") is not None
 
     def _check_code_quality(self) -> bool:
         """Check if code quality standards are met."""
@@ -559,16 +485,17 @@ class RequirementValidator:
         # Overall summary
         success_rate = (passed_requirements / total_requirements) * 100
         print(f"\n{'=' * 50}")
-        print(
-            f"Overall Results: {passed_requirements}/{total_requirements} ({success_rate:.1f}%)"
+        results_msg = (
+            f"Overall Results: {passed_requirements}/{total_requirements} "
+            f"({success_rate:.1f}%)"
         )
+        print(results_msg)
 
         if success_rate == 100.0:
             print("✅ ALL REQUIREMENTS MET!")
         else:
-            print(
-                f"❌ {total_requirements - passed_requirements} requirements need attention"
-            )
+            failed_count = total_requirements - passed_requirements
+            print(f"❌ {failed_count} requirements need attention")
 
         return categories
 
@@ -584,12 +511,14 @@ def main():
 
     if total_passed == total_requirements:
         print(
-            f"\n🎉 Validation Complete: ALL {total_requirements} REQUIREMENTS SATISFIED!"
+            f"\n🎉 Validation Complete: ALL {total_requirements} "
+            "REQUIREMENTS SATISFIED!"
         )
         return 0
     else:
         print(
-            f"\n⚠️  Validation Complete: {total_passed}/{total_requirements} requirements met"
+            f"\n⚠️  Validation Complete: {total_passed}/{total_requirements} "
+            "requirements met"
         )
         return 1
 

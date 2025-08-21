@@ -200,7 +200,8 @@ def plan_query(
         state: LangGraph state containing context and configuration
 
     Returns:
-        JSON string containing planning output with sub-tasks, execution order,
+        JSON string containing planning output with sub-tasks,
+        execution order,
         and estimated complexity for each sub-task
 
     Example:
@@ -433,7 +434,8 @@ def retrieve_documents(
                         new_docs = _parse_tool_result(result)
                         documents.extend(new_docs)
                         logger.debug(
-                            f"GraphRAG retrieved {len(new_docs)} documents for query: {q}"
+                            f"GraphRAG retrieved {len(new_docs)} documents "
+                            f"for query: {q}"
                         )
                     except Exception as e:
                         logger.warning(f"GraphRAG failed for query '{q}': {e}")
@@ -471,7 +473,8 @@ def retrieve_documents(
                     new_docs = _parse_tool_result(result)
                     documents.extend(new_docs)
                     logger.debug(
-                        f"{strategy_used} retrieved {len(new_docs)} documents for query: {q}"
+                        f"{strategy_used} retrieved {len(new_docs)} documents "
+                        f"for query: {q}"
                     )
                 except Exception as e:
                     logger.error(f"Retrieval failed for query '{q}': {e}")
@@ -494,7 +497,7 @@ def retrieve_documents(
             "documents": documents,
             "strategy_used": strategy_used,
             "query_original": query,
-            "query_optimized": optimized_query,
+            "query_optimized": primary_query,
             "document_count": len(documents),
             "processing_time_ms": round(processing_time * 1000, 2),
             "dspy_used": use_dspy,

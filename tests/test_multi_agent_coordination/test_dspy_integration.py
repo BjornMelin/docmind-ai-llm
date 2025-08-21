@@ -412,7 +412,7 @@ class TestDSPyLlamaIndexRetriever:
         with (
             patch("src.dspy_integration.DSPY_AVAILABLE", True),
             patch("src.dspy_integration.dspy") as mock_dspy,
-            patch("src.dspy_integration.BootstrapFewShot") as mock_bootstrap,
+            patch("src.dspy_integration.BootstrapFewShot"),
         ):
             # Mock DSPy components
             mock_dspy.configure = Mock()

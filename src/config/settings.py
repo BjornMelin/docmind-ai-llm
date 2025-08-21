@@ -44,7 +44,9 @@ class Settings(BaseSettings):
     # LLM Backend Configuration (REQ-0009: Local execution only)
     llm_backend: Literal["ollama", "llamacpp", "vllm", "openai"] = Field(
         default="vllm",
-        description="LLM backend to use (local-first, vLLM default for FP8 optimization)",
+        description=(
+            "LLM backend to use (local-first, vLLM default for FP8 optimization)"
+        ),
     )
     model_name: str = Field(
         default="Qwen/Qwen3-4B-Instruct-2507",
@@ -78,7 +80,9 @@ class Settings(BaseSettings):
     )
     kv_cache_dtype: str = Field(
         default="fp8",
-        description="KV cache data type for memory optimization (FP8 for maximum efficiency)",
+        description=(
+            "KV cache data type for memory optimization (FP8 for maximum efficiency)"
+        ),
     )
     enable_kv_cache_optimization: bool = Field(
         default=True,
@@ -94,7 +98,9 @@ class Settings(BaseSettings):
     # Context Management (REQ-0094-v2: Expanded context)
     context_window_size: int = Field(
         default=131072,
-        description="Context window size in tokens (128K with FP8 optimization for vLLM)",
+        description=(
+            "Context window size in tokens (128K with FP8 optimization for vLLM)"
+        ),
     )
     context_buffer_size: int = Field(
         default=131072,
@@ -202,7 +208,9 @@ class Settings(BaseSettings):
     )
     max_vram_gb: float = Field(
         default=14.0,
-        description="Maximum VRAM usage in GB (REQ-0070, optimized for FP8 quantization)",
+        description=(
+            "Maximum VRAM usage in GB (REQ-0070, optimized for FP8 quantization)"
+        ),
     )
     enable_gpu_acceleration: bool = Field(
         default=True,

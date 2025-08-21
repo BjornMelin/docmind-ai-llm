@@ -56,7 +56,6 @@ def mock_context_manager() -> ContextManager:
     manager = ContextManager()
 
     # Mock the token estimation to return predictable values
-    original_estimate = manager.estimate_tokens
 
     def mock_estimate_tokens(messages):
         if isinstance(messages, list) and messages:
@@ -169,19 +168,23 @@ def mock_agent_tools() -> dict[str, Mock]:
     """Create mock agent tools for testing."""
     return {
         "route_query": Mock(
-            return_value='{"strategy": "vector", "complexity": "simple", "confidence": 0.9}'
+            return_value='{"strategy": "vector", "complexity": "simple", '
+            '"confidence": 0.9}'
         ),
         "plan_query": Mock(
-            return_value='{"sub_tasks": ["Find ML definition"], "execution_order": "sequential"}'
+            return_value='{"sub_tasks": ["Find ML definition"], '
+            '"execution_order": "sequential"}'
         ),
         "retrieve_documents": Mock(
             return_value='{"documents": [{"content": "ML is...", "score": 0.9}]}'
         ),
         "synthesize_results": Mock(
-            return_value='{"documents": [{"content": "Synthesized ML content", "score": 0.95}]}'
+            return_value='{"documents": [{"content": "Synthesized ML content", '
+            '"score": 0.95}]}'
         ),
         "validate_response": Mock(
-            return_value='{"valid": true, "confidence": 0.9, "suggested_action": "accept"}'
+            return_value='{"valid": true, "confidence": 0.9, '
+            '"suggested_action": "accept"}'
         ),
     }
 
@@ -191,15 +194,18 @@ def sample_documents() -> list[Document]:
     """Create sample documents for testing retrieval."""
     return [
         Document(
-            text="Machine learning is a subset of artificial intelligence that enables computers to learn without explicit programming.",
+            text="Machine learning is a subset of artificial intelligence "
+            "that enables computers to learn without explicit programming.",
             metadata={"source": "ml_intro.pdf", "page": 1, "score": 0.95},
         ),
         Document(
-            text="Deep learning uses neural networks with multiple layers to model complex patterns in data.",
+            text="Deep learning uses neural networks with multiple layers "
+            "to model complex patterns in data.",
             metadata={"source": "dl_guide.pdf", "page": 2, "score": 0.87},
         ),
         Document(
-            text="Natural language processing combines computational linguistics with machine learning.",
+            text="Natural language processing combines computational "
+            "linguistics with machine learning.",
             metadata={"source": "nlp_basics.pdf", "page": 1, "score": 0.82},
         ),
     ]
@@ -325,7 +331,8 @@ def gherkin_test_scenarios() -> dict[str, dict[str, Any]]:
             "synthesis_required": False,
         },
         "complex_query": {
-            "query": "Compare the environmental impact of electric vs gasoline vehicles and explain the manufacturing differences",
+            "query": "Compare the environmental impact of electric vs gasoline "
+            "vehicles and explain the manufacturing differences",
             "expected_complexity": "complex",
             "expected_strategy": "hybrid",
             "max_processing_time": 5.0,

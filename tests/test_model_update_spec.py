@@ -46,7 +46,10 @@ class TestPerformanceValidation:
 
     @pytest.mark.benchmark
     def test_throughput_within_range(self, benchmark):
-        """Verify throughput targets are documented (NOT VALIDATED - requires actual model testing)."""
+        """Verify throughput targets are documented.
+
+        NOTE: NOT VALIDATED - requires actual model testing.
+        """
         # Mock LLM for testing
         mock_llm = Mock()
         mock_llm.complete = Mock(return_value="Test response")
@@ -62,11 +65,15 @@ class TestPerformanceValidation:
         result = benchmark(generate_tokens)
 
         # REQ-0064-v2: Performance characteristics (PENDING VALIDATION)
-        # Note: This is a mock test - actual throughput testing requires real model and vLLM backend
+        # Note: This is a mock test - actual throughput testing requires
+        # real model and vLLM backend
         assert result is not None
 
     def test_fp8_cache_performance_boost(self):
-        """Verify FP8 KV cache optimization is configured (performance boost NOT VALIDATED)."""
+        """Verify FP8 KV cache optimization is configured.
+
+        Performance boost NOT VALIDATED.
+        """
         settings = Settings()
 
         # Verify optimization is enabled
@@ -76,7 +83,10 @@ class TestPerformanceValidation:
         )  # 30% boost target (NOT VALIDATED)
 
     def test_memory_usage_within_budget(self):
-        """Verify memory usage budget configured (NOT VALIDATED - requires actual testing)."""
+        """Verify memory usage budget configured.
+
+        NOT VALIDATED - requires actual testing.
+        """
         settings = Settings()
 
         # Updated VRAM budget for new model (NOT VALIDATED)
@@ -88,7 +98,10 @@ class TestContextHandling:
     """Test context handling with expanded window."""
 
     def test_handles_large_document_without_truncation(self):
-        """Verify system handles documents >100K tokens without truncation (NOT VALIDATED - requires actual testing)."""
+        """Verify system handles documents >100K tokens without truncation.
+
+        NOT VALIDATED - requires actual testing.
+        """
         mock_llm = Mock()
         tools_data = {"vector_index": Mock(), "kg_index": Mock(), "retriever": Mock()}
 

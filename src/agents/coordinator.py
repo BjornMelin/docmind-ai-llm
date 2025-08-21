@@ -2,7 +2,7 @@
 
 This module implements the ADR-compliant MultiAgentCoordinator that orchestrates five
 specialized agents using langgraph-supervisor with modern optimization parameters.
-The system provides intelligent query processing with FP8 optimization and 128K context management.
+The system provides query processing with FP8 optimization and 128K context.
 
 Features:
 - ADR-011 compliant langgraph-supervisor with modern parameters
@@ -133,7 +133,8 @@ class MultiAgentCoordinator:
     - Synthesis Agent: Combines and deduplicates multi-source results
     - Validation Agent: Validates response quality and accuracy
 
-    Provides FP8 optimization, 128K context management, and <200ms coordination overhead.
+    Provides FP8 optimization, 128K context management, and <200ms coordination
+    overhead.
     """
 
     def __init__(
@@ -389,8 +390,8 @@ class MultiAgentCoordinator:
                         "context_used_tokens": self.context_manager.estimate_tokens(
                             state.get("messages", [])
                         ),
-                        "kv_cache_usage_gb": self.context_manager.calculate_kv_cache_usage(
-                            state
+                        "kv_cache_usage_gb": (
+                            self.context_manager.calculate_kv_cache_usage(state)
                         ),
                         "parallel_execution_active": state.get(
                             "parallel_tool_calls", False
@@ -438,7 +439,9 @@ class MultiAgentCoordinator:
         Example:
             >>> response = coordinator.process_query("What is machine learning?")
             >>> print(response.content)
-            >>> print(f"Token reduction: {response.optimization_metrics['token_reduction']}")
+            >>> print(
+                f"Token reduction: {response.optimization_metrics['token_reduction']}"
+            )
         """
         start_time = time.perf_counter()
         self.total_queries += 1
@@ -478,11 +481,13 @@ class MultiAgentCoordinator:
             # Validate performance targets (ADR-011)
             if coordination_time > 0.2:  # 200ms target
                 logger.warning(
-                    f"Coordination overhead {coordination_time:.3f}s exceeds 200ms target"
+                    f"Coordination overhead {coordination_time:.3f}s exceeds "
+                    f"200ms target"
                 )
 
             logger.info(
-                f"Query processed successfully in {processing_time:.3f}s (coordination: {coordination_time:.3f}s)"
+                f"Query processed successfully in {processing_time:.3f}s "
+                f"(coordination: {coordination_time:.3f}s)"
             )
             return response
 
@@ -651,7 +656,11 @@ class MultiAgentCoordinator:
             processing_time = time.perf_counter() - start_time
 
             return AgentResponse(
-                content=f"I understand you're asking about: {query}. However, the advanced multi-agent system is currently unavailable. Please try again later.",
+                content=(
+                    f"I understand you're asking about: {query}. However, the "
+                    f"advanced multi-agent system is currently unavailable. Please try "
+                    f"again later."
+                ),
                 sources=[],
                 metadata={
                     "fallback_used": True,
@@ -754,7 +763,8 @@ class MultiAgentCoordinator:
             and self.compiled_graph is not None,
             "adr_004_fp8_model": self.model_path.endswith("FP8"),
             "adr_010_performance_optimization": True,  # FP8 config present
-            "adr_011_modern_parameters": True,  # Using langgraph-supervisor with modern params
+            "adr_011_modern_parameters": True,  # Using langgraph-supervisor with
+            # modern params
             "adr_018_dspy_integration": is_dspy_available(),
             "coordination_under_200ms": self.avg_coordination_overhead < 0.2,
             "context_128k_support": self.max_context_length >= 131072,

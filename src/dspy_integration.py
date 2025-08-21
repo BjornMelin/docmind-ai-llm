@@ -22,7 +22,6 @@ from pydantic import BaseModel, Field
 
 try:
     import dspy
-    from dspy import Retrieve
     from dspy.teleprompt import BootstrapFewShot
 
     DSPY_AVAILABLE = True

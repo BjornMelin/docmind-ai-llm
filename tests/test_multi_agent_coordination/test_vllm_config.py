@@ -56,7 +56,7 @@ class TestVLLMConfig:
         assert 12 <= config.vram_usage_target_gb <= 16
 
         # Verify service configuration
-        assert config.host == "0.0.0.0"
+        assert config.host == "0.0.0.0"  # noqa: S104
         assert config.port == 8000
         assert config.served_model_name == "docmind-qwen3-fp8"
 

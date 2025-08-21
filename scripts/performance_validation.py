@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Performance Validation Script for vLLM FlashInfer Stack
+"""Performance Validation Script for vLLM FlashInfer Stack..
 
 Based on ai-research/2025-08-20/002-vllm-cuda-stack-finalization.md
 
@@ -22,6 +22,7 @@ Environment Variables:
     SKIP_MODEL_TEST: Skip actual model loading (default: false)
 """
 
+import importlib.util
 import os
 import sys
 import time
@@ -118,12 +119,9 @@ def check_vllm_version() -> dict[str, Any]:
             )
 
         # Check FlashInfer availability
-        try:
-            import flashinfer
-
-            results["flashinfer_available"] = True
-        except ImportError:
-            results["flashinfer_available"] = False
+        results["flashinfer_available"] = (
+            importlib.util.find_spec("flashinfer") is not None
+        )
 
     except Exception as e:
         print(f"❌ vLLM version check failed: {e}")
@@ -253,9 +251,8 @@ def print_results(
 
     # CUDA Environment
     print("\n📊 CUDA Environment:")
-    print(
-        f"   CUDA Available: {'✅' if cuda_env['cuda_available'] else '❌'} {cuda_env['cuda_available']}"
-    )
+    cuda_status = "✅" if cuda_env["cuda_available"] else "❌"
+    print(f"   CUDA Available: {cuda_status} {cuda_env['cuda_available']}")
     if cuda_env["cuda_available"]:
         print(f"   GPU: {cuda_env['gpu_name']}")
         print(f"   VRAM: {cuda_env['gpu_memory_gb']:.1f} GB")
@@ -263,46 +260,45 @@ def print_results(
         print(f"   CUDA Version: {cuda_env['cuda_version']}")
         if cuda_env["driver_version"]:
             print(f"   Driver Version: {cuda_env['driver_version']}")
+        flashinfer_status = "✅" if cuda_env["flashinfer_compatible"] else "❌"
         print(
-            f"   FlashInfer Compatible: {'✅' if cuda_env['flashinfer_compatible'] else '❌'} {cuda_env['flashinfer_compatible']}"
+            f"   FlashInfer Compatible: {flashinfer_status} "
+            f"{cuda_env['flashinfer_compatible']}"
         )
 
     # PyTorch
     print("\n🔥 PyTorch:")
     print(f"   Version: {pytorch_info['version']}")
     print(f"   Expected: {pytorch_info['expected']}")
-    print(
-        f"   Compatible: {'✅' if pytorch_info['compatible'] else '❌'} {pytorch_info['compatible']}"
-    )
+    pytorch_status = "✅" if pytorch_info["compatible"] else "❌"
+    print(f"   Compatible: {pytorch_status} {pytorch_info['compatible']}")
 
     # vLLM
     print("\n⚡ vLLM:")
     print(f"   Version: {vllm_info['version']}")
     print(f"   Expected: {vllm_info['expected']}")
+    vllm_status = "✅" if vllm_info["compatible"] else "❌"
+    print(f"   Compatible: {vllm_status} {vllm_info['compatible']}")
+    flashinfer_avail_status = "✅" if vllm_info["flashinfer_available"] else "❌"
     print(
-        f"   Compatible: {'✅' if vllm_info['compatible'] else '❌'} {vllm_info['compatible']}"
-    )
-    print(
-        f"   FlashInfer Available: {'✅' if vllm_info['flashinfer_available'] else '❌'} {vllm_info['flashinfer_available']}"
+        f"   FlashInfer Available: {flashinfer_avail_status} "
+        f"{vllm_info['flashinfer_available']}"
     )
 
     # Backend Test
     print("\n🎯 FlashInfer Backend Test:")
-    print(
-        f"   Backend Available: {'✅' if backend_test['backend_available'] else '❌'} {backend_test['backend_available']}"
-    )
-    print(
-        f"   Model Loaded: {'✅' if backend_test['model_loaded'] else '❌'} {backend_test['model_loaded']}"
-    )
+    backend_status = "✅" if backend_test["backend_available"] else "❌"
+    print(f"   Backend Available: {backend_status} {backend_test['backend_available']}")
+    model_status = "✅" if backend_test["model_loaded"] else "❌"
+    print(f"   Model Loaded: {model_status} {backend_test['model_loaded']}")
     if backend_test["error"]:
         print(f"   Error: {backend_test['error']}")
 
     # Performance
     if performance["test_completed"]:
         print("\n📈 Performance Results:")
-        print(
-            f"   Throughput: {performance['throughput_tokens_per_sec']:.1f} tokens/second"
-        )
+        throughput = performance["throughput_tokens_per_sec"]
+        print(f"   Throughput: {throughput:.1f} tokens/second")
         print(f"   Latency: {performance['latency_seconds']:.2f} seconds")
         print(f"   GPU Memory: {performance['memory_usage_gb']:.1f} GB")
 
@@ -333,7 +329,8 @@ def print_results(
         print("✅ Ready for Qwen3-4B-Instruct-2507-FP8 with 128K context support")
         print("\n📋 Next Steps:")
         print(
-            "1. Configure your model in .env: VLLM_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8"
+            "1. Configure your model in .env: "
+            "VLLM_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8"
         )
         print("2. Set context length: VLLM_MAX_MODEL_LEN=131072")
         print("3. Optimize GPU memory: VLLM_GPU_MEMORY_UTILIZATION=0.85")
@@ -353,7 +350,8 @@ def print_results(
             print('• Install vLLM >=0.10.1: uv pip install "vllm[flashinfer]>=0.10.1"')
         if not vllm_info["flashinfer_available"]:
             print(
-                "• FlashInfer not available - check installation or use fallback CUDA backend"
+                "• FlashInfer not available - check installation or use "
+                "fallback CUDA backend"
             )
 
     print("=" * 60)

@@ -109,9 +109,11 @@ class PerformanceValidator:
     def _record_baseline_memory(self):
         """Record baseline memory usage."""
         self.initial_ram_gb, self.initial_vram_gb = self._get_memory_usage()
-        print(
-            f"Baseline memory - RAM: {self.initial_ram_gb:.2f}GB, VRAM: {self.initial_vram_gb:.2f}GB"
+        baseline_msg = (
+            f"Baseline memory - RAM: {self.initial_ram_gb:.2f}GB, "
+            f"VRAM: {self.initial_vram_gb:.2f}GB"
         )
+        print(baseline_msg)
 
     def validate_environment(self) -> PerformanceMetrics:
         """Validate the environment and hardware."""
@@ -212,7 +214,10 @@ class PerformanceValidator:
             print("Testing decode throughput...")
 
             # Test prompt
-            prompt = "Explain the key differences between machine learning and artificial intelligence in detail:"
+            prompt = (
+                "Explain the key differences between machine learning and "
+                "artificial intelligence in detail:"
+            )
 
             # Record memory before generation
             ram_before, vram_before = self._get_memory_usage()
@@ -244,9 +249,11 @@ class PerformanceValidator:
                 result.peak_vram_gb = max(vram_after, result.peak_vram_gb)
                 result.success = True
 
-                print(
-                    f"✅ Generated {estimated_tokens:.0f} tokens in {generation_time:.2f}s"
+                token_msg = (
+                    f"✅ Generated {estimated_tokens:.0f} tokens in "
+                    f"{generation_time:.2f}s"
                 )
+                print(token_msg)
                 print(f"✅ Decode throughput: {throughput:.2f} tok/s")
                 print(f"✅ Response preview: {response_text[:100]}...")
 
@@ -277,20 +284,23 @@ class PerformanceValidator:
 
             # Create a longer context prompt (~4K tokens)
             base_text = """
-            Machine learning (ML) is a branch of artificial intelligence (AI) and computer science 
-            that focuses on the use of data and algorithms to imitate the way that humans learn, 
-            gradually improving its accuracy. Machine learning is an important component of the 
-            growing field of data science. Through the use of statistical methods, algorithms 
-            are trained to make classifications or predictions, uncovering key insights within 
-            data mining projects. These insights subsequently drive decision making within 
-            applications and businesses, ideally impacting key growth metrics.
+            Machine learning (ML) is a branch of artificial intelligence (AI) 
+            and computer science that focuses on the use of data and algorithms 
+            to imitate the way that humans learn, gradually improving its accuracy. 
+            Machine learning is an important component of the growing field of 
+            data science. Through the use of statistical methods, algorithms are 
+            trained to make classifications or predictions, uncovering key insights 
+            within data mining projects. These insights subsequently drive decision 
+            making within applications and businesses, ideally impacting key 
+            growth metrics.
             """
 
             # Repeat to create ~4K tokens
-            long_prompt = (
-                (base_text * 50)
-                + "\n\nBased on the above information, what are the key applications of machine learning?"
+            question = (
+                "\n\nBased on the above information, what are the key "
+                "applications of machine learning?"
             )
+            long_prompt = (base_text * 50) + question
 
             # Record memory before generation
             ram_before, vram_before = self._get_memory_usage()
@@ -326,9 +336,11 @@ class PerformanceValidator:
                 result.peak_vram_gb = max(vram_after, result.peak_vram_gb)
                 result.success = True
 
-                print(
-                    f"✅ Processed {estimated_prefill_tokens} prefill tokens in {generation_time:.2f}s"
+                prefill_msg = (
+                    f"✅ Processed {estimated_prefill_tokens} prefill tokens "
+                    f"in {generation_time:.2f}s"
                 )
+                print(prefill_msg)
                 print(f"✅ Prefill throughput: {prefill_throughput:.2f} tok/s")
                 print(f"✅ Generated tokens: {estimated_decode_tokens:.0f}")
 
@@ -352,7 +364,10 @@ class PerformanceValidator:
             supervisor = await initialize_supervisor_graph()
 
             # Test query
-            test_query = "What are the benefits of using machine learning in healthcare applications?"
+            test_query = (
+                "What are the benefits of using machine learning in "
+                "healthcare applications?"
+            )
 
             # Record memory before coordination
             ram_before, vram_before = self._get_memory_usage()
@@ -379,7 +394,8 @@ class PerformanceValidator:
                 print(f"✅ Response confidence: {response.get('confidence', 0.0):.2f}")
                 print(f"✅ Quality score: {response.get('quality_score', 0.0):.2f}")
             else:
-                result.error_message = f"Agent coordination failed: {response.get('error_message', 'Unknown error')}"
+                error_msg = response.get("error_message", "Unknown error")
+                result.error_message = f"Agent coordination failed: {error_msg}"
 
             return result
 
@@ -403,10 +419,12 @@ class PerformanceValidator:
         try:
             print("Testing 128K context window (this may take a while)...")
 
-            # This is a simplified test - creating actual 128K tokens would be very large
+            # This is a simplified test - creating actual 128K tokens
+            # would be very large
             # Instead, test with model's max_model_len configuration
             print(
-                f"✅ Model configured for max context: {self.vllm_backend.config.max_model_len} tokens"
+                f"✅ Model configured for max context: "
+                f"{self.vllm_backend.config.max_model_len} tokens"
             )
             print(f"✅ FP8 KV cache enabled: {self.vllm_backend.config.kv_cache_dtype}")
 
@@ -486,13 +504,17 @@ class PerformanceValidator:
 
                 # Show metrics if available
                 if result.decode_throughput_tok_s > 0:
-                    print(
-                        f"   Decode throughput: {result.decode_throughput_tok_s:.2f} tok/s"
+                    decode_msg = (
+                        f"   Decode throughput: "
+                        f"{result.decode_throughput_tok_s:.2f} tok/s"
                     )
+                    print(decode_msg)
                 if result.prefill_throughput_tok_s > 0:
-                    print(
-                        f"   Prefill throughput: {result.prefill_throughput_tok_s:.2f} tok/s"
+                    prefill_msg = (
+                        f"   Prefill throughput: "
+                        f"{result.prefill_throughput_tok_s:.2f} tok/s"
                     )
+                    print(prefill_msg)
                 if result.agent_coordination_ms > 0:
                     print(
                         f"   Agent coordination: {result.agent_coordination_ms:.2f}ms"
@@ -529,7 +551,8 @@ class PerformanceValidator:
 
         print(f"\n{'=' * 60}")
         print(
-            f"🏁 Validation Complete: {'✅ ALL PASSED' if all_passed else '❌ SOME FAILED'}"
+            f"🏁 Validation Complete: "
+            f"{'✅ ALL PASSED' if all_passed else '❌ SOME FAILED'}"
         )
 
         return results
@@ -551,7 +574,8 @@ class PerformanceValidator:
             [
                 "Requirements Validation:",
                 "- REQ-0063-v2: Model loading with FP8 quantization",
-                "- REQ-0064-v2: Performance (100-160 tok/s decode, 800-1300 tok/s prefill)",
+                "- REQ-0064-v2: Performance (100-160 tok/s decode, "
+                "800-1300 tok/s prefill)",
                 "- REQ-0069/0070: Memory (<4GB RAM, <16GB VRAM)",
                 "- REQ-0094-v2: 128K context window support",
                 "- REQ-0007: Agent coordination (<300ms)",
@@ -560,7 +584,7 @@ class PerformanceValidator:
         )
 
         # Results summary
-        for name, result in results.items():
+        for _name, result in results.items():
             status = "✅ PASS" if result.success else "❌ FAIL"
             report_lines.append(f"{status} {result.test_name}")
 

@@ -64,7 +64,9 @@ class TestGherkinScenario1SimpleQuery:
                     {
                         "documents": [
                             {
-                                "content": "Paris is the capital and largest city of France.",
+                                "content": (
+                                    "Paris is the capital and largest city of France."
+                                ),
                                 "score": 0.98,
                                 "metadata": {"source": "geography.pdf", "page": 1},
                             }
@@ -181,7 +183,8 @@ class TestGherkinScenario1SimpleQuery:
 class TestGherkinScenario2ComplexQuery:
     """Integration tests for Gherkin Scenario 2: Complex Query Decomposition.
 
-    Given a complex query "Compare the environmental impact of electric vs gasoline vehicles and explain the manufacturing differences"
+    Given a complex query "Compare the environmental impact of electric vs gasoline
+    vehicles and explain the manufacturing differences"
     When the query is processed by the multi-agent system
     Then the router agent classifies it as "complex" complexity
     And the planner agent decomposes it into 3 sub-tasks
@@ -205,7 +208,9 @@ class TestGherkinScenario2ComplexQuery:
             {
                 "messages": [
                     HumanMessage(
-                        content="Comprehensive comparison of electric vs gasoline vehicles."
+                        content=(
+                            "Comprehensive comparison of electric vs gasoline vehicles."
+                        )
                     )
                 ],
                 "routing_decision": {
@@ -227,11 +232,15 @@ class TestGherkinScenario2ComplexQuery:
                     {
                         "documents": [
                             {
-                                "content": "Electric vehicles produce zero direct emissions",
+                                "content": (
+                                    "Electric vehicles produce zero direct emissions"
+                                ),
                                 "score": 0.89,
                             },
                             {
-                                "content": "Battery manufacturing has environmental costs",
+                                "content": (
+                                    "Battery manufacturing has environmental costs"
+                                ),
                                 "score": 0.85,
                             },
                         ],
@@ -253,7 +262,9 @@ class TestGherkinScenario2ComplexQuery:
                     {
                         "documents": [
                             {
-                                "content": "Manufacturing differences in vehicle production",
+                                "content": (
+                                    "Manufacturing differences in vehicle production"
+                                ),
                                 "score": 0.87,
                             },
                         ],
@@ -377,7 +388,7 @@ class TestGherkinScenario2ComplexQuery:
                 "routing_decision": {"complexity": "complex", "needs_planning": True},
                 "planning_output": {"execution_order": "parallel"},
                 "parallel_execution_active": True,
-                "token_reduction_achieved": 0.65,  # 65% reduction through parallel execution
+                "token_reduction_achieved": 0.65,  # 65% reduction through parallel
                 "validation_result": {"confidence": 0.9},
             }
         ]
@@ -507,7 +518,7 @@ class TestGherkinScenario6FP8Performance:
 
         # Create context that would exceed 128K
         large_context = ChatMemoryBuffer.from_defaults()
-        for i in range(10):
+        for _ in range(10):
             large_context.put(HumanMessage(content="Large message content " * 1000))
 
         response = mock_coordinator.process_query(
@@ -565,7 +576,7 @@ class TestGherkinScenario8SupervisorCoordination:
 
         start_time = time.perf_counter()
         response = mock_coordinator.process_query("Test supervisor coordination")
-        coordination_time = time.perf_counter() - start_time
+        _ = time.perf_counter() - start_time
 
         # Verify ADR-011 compliance
         assert response.optimization_metrics["parallel_execution_active"] is True

@@ -174,7 +174,7 @@ class TestCoordinationOverheadPerformance:
             ]
 
             start_time = time.perf_counter()
-            response = mock_coordinator.process_query(query)
+            _ = mock_coordinator.process_query(query)
             coordination_time = (time.perf_counter() - start_time) * 1000
 
             return coordination_time
@@ -554,7 +554,7 @@ class TestStressAndLoadPerformance:
             # Maintain target QPS
             time.sleep(1.0 / queries_per_second)
 
-        total_time = time.perf_counter() - start_time
+        _ = time.perf_counter() - start_time
 
         # Analyze sustained performance
         processing_times = [s["processing_time_ms"] for s in performance_samples]
@@ -646,7 +646,7 @@ class TestPerformanceRegression:
             }
 
         # Verify baseline establishment
-        for complexity, metrics in baseline_metrics.items():
+        for _, metrics in baseline_metrics.items():
             assert metrics["coordination_overhead_ms"] < 200
             assert metrics["processing_time_ms"] < 1000
 

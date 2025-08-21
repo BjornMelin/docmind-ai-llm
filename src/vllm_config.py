@@ -1,4 +1,6 @@
-"""vLLM Configuration for Qwen3-4B-Instruct-2507-FP8 with FP8 Optimization (ADR-004, ADR-010).
+"""vLLM Configuration for Qwen3-4B-Instruct-2507-FP8 with FP8 Optimization.
+
+This module implements ADR-004 and ADR-010.
 
 This module provides configuration and setup for vLLM backend serving with
 FP8 quantization, FlashInfer backend, and 128K context support optimized
@@ -81,15 +83,19 @@ class VLLMConfig(BaseModel):
     )
 
     # Service configuration
-    host: str = Field(default="0.0.0.0")
+    host: str = Field(default="0.0.0.0")  # noqa: S104
     port: int = Field(default=8000)
     served_model_name: str = Field(default="docmind-qwen3-fp8")
 
 
 class ContextManager:
-    """Manages 128K context window with intelligent trimming strategies (ADR-004, ADR-011)."""
+    """Manages 128K context window with intelligent trimming strategies.
+
+    Implements ADR-004 and ADR-011 for context management.
+    """
 
     def __init__(self):
+        """Initialize context manager with 128K context and FP8 KV cache settings."""
         self.max_context_tokens = (
             131072  # 128K context (hardware-constrained from 262K native)
         )
@@ -185,6 +191,7 @@ class VLLMManager:
     """Manager for vLLM backend with FP8 optimization."""
 
     def __init__(self, config: VLLMConfig):
+        """Initialize vLLM manager with FP8 optimization configuration."""
         self.config = config
         self.llm: Any | None = None
         self.async_engine: Any | None = None
@@ -269,7 +276,7 @@ vllm serve {self.config.model} \\
             f.write(script_content)
 
         # Make executable
-        os.chmod(output_path, 0o755)
+        os.chmod(output_path, 0o755)  # noqa: S103
 
         logger.info(f"vLLM start script generated: {output_path}")
         return output_path
