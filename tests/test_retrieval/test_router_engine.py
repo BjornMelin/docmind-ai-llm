@@ -163,7 +163,7 @@ class TestAdaptiveRouterQueryEngine:
         mock_router_instance = MagicMock()
         mock_router_class.return_value = mock_router_instance
 
-        router = AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
+        _ = AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
 
         # Verify selector creation
         mock_selector_class.from_defaults.assert_called_once()
@@ -178,11 +178,13 @@ class TestAdaptiveRouterQueryEngine:
 
     def test_create_router_engine_no_tools_error(self, mock_vector_index):
         """Test error handling when no query engine tools available."""
-        with patch.object(
-            AdaptiveRouterQueryEngine, "_create_query_engine_tools", return_value=[]
+        with (
+            patch.object(
+                AdaptiveRouterQueryEngine, "_create_query_engine_tools", return_value=[]
+            ),
+            pytest.raises(ValueError, match="No query engine tools available"),
         ):
-            with pytest.raises(ValueError, match="No query engine tools available"):
-                AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
+            AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
 
     def test_query_success(self, mock_vector_index, sample_query_scenarios):
         """Test successful query execution through RouterQueryEngine."""
@@ -426,7 +428,7 @@ class TestRouterIntegration:
             reranker=mock_reranker,
         )
 
-        tools = router._create_query_engine_tools()
+        _ = router._create_query_engine_tools()
 
         # Should create RetrieverQueryEngine for hybrid search
         mock_retriever_engine_class.from_args.assert_called()
@@ -441,7 +443,7 @@ class TestRouterIntegration:
         """Test integration with vector index query engines."""
         router = AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
 
-        tools = router._create_query_engine_tools()
+        _ = router._create_query_engine_tools()
 
         # Should call as_query_engine with proper parameters
         mock_vector_index.as_query_engine.assert_called()
@@ -458,7 +460,7 @@ class TestRouterIntegration:
         mock_selector = MagicMock()
         mock_selector_class.from_defaults.return_value = mock_selector
 
-        router = AdaptiveRouterQueryEngine(
+        _ = AdaptiveRouterQueryEngine(
             vector_index=mock_vector_index, llm=mock_llm_for_routing
         )
 

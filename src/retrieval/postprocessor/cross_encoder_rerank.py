@@ -62,6 +62,7 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
 
     def __init__(
         self,
+        *,
         model_name: str = "BAAI/bge-reranker-v2-m3",
         top_n: int = 5,
         device: str = "cuda",
@@ -171,7 +172,7 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
             logger.debug(f"Reranked {len(nodes)} nodes -> top {len(result_nodes)}")
             return result_nodes
 
-        except Exception as e:
+        except (RuntimeError, ValueError, torch.cuda.OutOfMemoryError) as e:
             logger.error(f"CrossEncoder reranking failed: {e}")
             # Fallback: return original nodes truncated to top_n
             logger.info("Falling back to original node ordering")
@@ -261,13 +262,13 @@ def benchmark_reranking_latency(
     query_bundle = QueryBundle(query_str=query)
 
     # Warm up
-    reranker._postprocess_nodes(nodes[:3], query_bundle)
+    reranker.postprocess_nodes(nodes[:3], query_bundle)
 
     # Benchmark
     latencies = []
     for _ in range(num_runs):
         start_time = time.perf_counter()
-        reranker._postprocess_nodes(nodes, query_bundle)
+        reranker.postprocess_nodes(nodes, query_bundle)
         end_time = time.perf_counter()
         latencies.append((end_time - start_time) * 1000)  # Convert to ms
 

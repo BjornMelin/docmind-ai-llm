@@ -75,6 +75,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
 
     def __init__(
         self,
+        *,
         client: QdrantClient | None = None,
         url: str = "http://localhost:6333",
         collection_name: str = "docmind_feat002_unified",
@@ -152,7 +153,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         nodes: list[BaseNode],
         dense_embeddings: list[list[float]] | None = None,
         sparse_embeddings: list[dict[int, float]] | None = None,
-        **kwargs,
+        **_kwargs,
     ) -> list[str]:
         """Add nodes with unified dense + sparse embeddings.
 
@@ -260,17 +261,17 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
                 return self._hybrid_search(
                     query, dense_embedding, sparse_embedding, **kwargs
                 )
-            elif use_dense:
+            if use_dense:
                 # Dense-only search
                 return self._dense_search(query, dense_embedding, **kwargs)
-            elif use_sparse:
+            if use_sparse:
                 # Sparse-only search
                 return self._sparse_search(query, sparse_embedding, **kwargs)
-            else:
-                logger.warning("No embeddings provided for query")
-                return VectorStoreQueryResult(nodes=[], similarities=[], ids=[])
 
-        except Exception as e:
+            logger.warning("No embeddings provided for query")
+            return VectorStoreQueryResult(nodes=[], similarities=[], ids=[])
+
+        except (ConnectionError, TimeoutError, ValueError) as e:
             logger.error(f"Unified query failed: {e}")
             return VectorStoreQueryResult(nodes=[], similarities=[], ids=[])
 
@@ -279,7 +280,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         query: VectorStoreQuery,
         dense_embedding: list[float],
         sparse_embedding: dict[int, float],
-        **kwargs,
+        **_kwargs,
     ) -> VectorStoreQueryResult:
         """Execute hybrid search with RRF score fusion.
 
@@ -386,7 +387,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         return fused_results
 
     def _dense_search(
-        self, query: VectorStoreQuery, embedding: list[float], **kwargs
+        self, query: VectorStoreQuery, embedding: list[float], **_kwargs
     ) -> VectorStoreQueryResult:
         """Execute dense-only search using BGE-M3 dense embeddings."""
         results = self.qdrant_client.search(
@@ -400,7 +401,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         return self._convert_results(results)
 
     def _sparse_search(
-        self, query: VectorStoreQuery, sparse_embedding: dict[int, float], **kwargs
+        self, query: VectorStoreQuery, sparse_embedding: dict[int, float], **_kwargs
     ) -> VectorStoreQueryResult:
         """Execute sparse-only search using BGE-M3 sparse embeddings."""
         indices = list(sparse_embedding.keys())
@@ -437,7 +438,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
 
         return VectorStoreQueryResult(nodes=nodes, similarities=similarities, ids=ids)
 
-    def delete(self, ref_doc_id: str, **delete_kwargs: Any) -> None:
+    def delete(self, ref_doc_id: str, **_delete_kwargs: Any) -> None:
         """Delete documents by reference document ID."""
         try:
             self.qdrant_client.delete(

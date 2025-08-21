@@ -122,7 +122,7 @@ class TestBGECrossEncoderRerank:
             "src.retrieval.postprocessor.cross_encoder_rerank.torch.cuda.is_available",
             return_value=False,
         ):
-            reranker = BGECrossEncoderRerank(use_fp16=True)
+            _ = BGECrossEncoderRerank(use_fp16=True)
 
             # FP16 should not be applied without CUDA
             mock_cross_encoder.model.half.assert_not_called()
@@ -204,39 +204,41 @@ class TestBGECrossEncoderRerank:
         self, mock_cross_encoder, performance_test_nodes
     ):
         """Test reranking with sigmoid score normalization."""
-        with patch(
-            "src.retrieval.postprocessor.cross_encoder_rerank.CrossEncoder",
-            return_value=mock_cross_encoder,
-        ):
-            with patch(
+        with (
+            patch(
+                "src.retrieval.postprocessor.cross_encoder_rerank.CrossEncoder",
+                return_value=mock_cross_encoder,
+            ),
+            patch(
                 "src.retrieval.postprocessor.cross_encoder_rerank.torch"
-            ) as mock_torch:
-                # Mock raw scores and normalized scores
-                raw_scores = np.array([2.0, 1.0, 0.0, -1.0])
-                normalized_tensor = torch.tensor([0.88, 0.73, 0.50, 0.27])
+            ) as mock_torch,
+        ):
+            # Mock raw scores and normalized scores
+            raw_scores = np.array([2.0, 1.0, 0.0, -1.0])
+            normalized_tensor = torch.tensor([0.88, 0.73, 0.50, 0.27])
 
-                mock_cross_encoder.predict.return_value = raw_scores
-                mock_torch.sigmoid.return_value = normalized_tensor
-                mock_torch.tensor.return_value = normalized_tensor
-                normalized_tensor.numpy = MagicMock(
-                    return_value=np.array([0.88, 0.73, 0.50, 0.27])
-                )
+            mock_cross_encoder.predict.return_value = raw_scores
+            mock_torch.sigmoid.return_value = normalized_tensor
+            mock_torch.tensor.return_value = normalized_tensor
+            normalized_tensor.numpy = MagicMock(
+                return_value=np.array([0.88, 0.73, 0.50, 0.27])
+            )
 
-                reranker = BGECrossEncoderRerank(top_n=2, normalize_scores=True)
+            reranker = BGECrossEncoderRerank(top_n=2, normalize_scores=True)
 
-                test_nodes = performance_test_nodes[:4]
-                query_bundle = QueryBundle(query_str="test query")
+            test_nodes = performance_test_nodes[:4]
+            query_bundle = QueryBundle(query_str="test query")
 
-                result = reranker._postprocess_nodes(test_nodes, query_bundle)
+            result = reranker._postprocess_nodes(test_nodes, query_bundle)
 
-                # Verify sigmoid normalization was applied
-                mock_torch.sigmoid.assert_called_once()
-                mock_torch.tensor.assert_called_once_with(raw_scores)
+            # Verify sigmoid normalization was applied
+            mock_torch.sigmoid.assert_called_once()
+            mock_torch.tensor.assert_called_once_with(raw_scores)
 
-                # Verify normalized scores
-                assert len(result) == 2
-                assert result[0].score == 0.88  # Highest normalized score
-                assert result[1].score == 0.73  # Second highest
+            # Verify normalized scores
+            assert len(result) == 2
+            assert result[0].score == 0.88  # Highest normalized score
+            assert result[1].score == 0.73  # Second highest
 
     def test_postprocess_nodes_error_handling_fallback(
         self, mock_cross_encoder, performance_test_nodes
@@ -484,7 +486,7 @@ class TestBGECrossEncoderPerformance:
         query_bundle = QueryBundle(query_str="rtx test query")
 
         start_time = time.perf_counter()
-        result = reranker._postprocess_nodes(nodes, query_bundle)
+        _ = reranker._postprocess_nodes(nodes, query_bundle)
         end_time = time.perf_counter()
 
         latency_ms = (end_time - start_time) * 1000

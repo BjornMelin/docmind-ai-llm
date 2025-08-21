@@ -41,6 +41,7 @@ class AdaptiveRouterQueryEngine:
 
     def __init__(
         self,
+        *,
         vector_index: Any,
         kg_index: Any | None = None,
         hybrid_retriever: Any | None = None,
@@ -244,7 +245,7 @@ class AdaptiveRouterQueryEngine:
 
             return response
 
-        except Exception as e:
+        except (RuntimeError, ValueError, TimeoutError) as e:
             logger.error(f"RouterQueryEngine failed: {e}")
             # Fallback to direct semantic search
             logger.info("Falling back to direct semantic search")
@@ -272,7 +273,7 @@ class AdaptiveRouterQueryEngine:
 
             return response
 
-        except Exception as e:
+        except (RuntimeError, ValueError, TimeoutError) as e:
             logger.error(f"Async RouterQueryEngine failed: {e}")
             # Fallback to direct semantic search
             logger.info("Falling back to async semantic search")
@@ -319,7 +320,7 @@ def create_adaptive_router_engine(
 
 
 # Integration helper for Settings configuration
-def configure_router_settings(router_engine: AdaptiveRouterQueryEngine) -> None:
+def configure_router_settings(_router_engine: AdaptiveRouterQueryEngine) -> None:
     """Configure LlamaIndex Settings for RouterQueryEngine.
 
     Updates global Settings to use the AdaptiveRouterQueryEngine

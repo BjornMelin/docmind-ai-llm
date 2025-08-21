@@ -54,6 +54,7 @@ class BGEM3Embedding(BaseEmbedding):
 
     def __init__(
         self,
+        *,
         model_name: str = "BAAI/bge-m3",
         max_length: int = 8192,
         use_fp16: bool = True,

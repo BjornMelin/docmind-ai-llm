@@ -38,7 +38,7 @@ class TestBGEM3Performance:
         mock_bgem3_model = MagicMock()
 
         # Simulate realistic embedding time
-        def mock_encode(*args, **kwargs):
+        def mock_encode(*_args, **_kwargs):
             time.sleep(0.02)  # Simulate 20ms processing time
             return {"dense_vecs": np.random.rand(1, 1024).astype(np.float32)}
 
@@ -48,12 +48,15 @@ class TestBGEM3Performance:
         embedding = BGEM3Embedding(use_fp16=True, device="cuda")
 
         # Benchmark single chunk embedding
-        test_chunk = "This is a test document chunk for BGE-M3 embedding performance validation on RTX 4090 Laptop hardware."
+        test_chunk = (
+            "This is a test document chunk for BGE-M3 embedding performance "
+            "validation on RTX 4090 Laptop hardware."
+        )
 
         latencies = []
         for _ in range(10):  # Multiple runs for statistical significance
             benchmark_timer.start()
-            result = embedding._get_query_embedding(test_chunk)
+            result = embedding._get_query_embedding(test_chunk)  # pylint: disable=protected-access
             latency = benchmark_timer.stop()
             latencies.append(latency)
 
@@ -62,7 +65,7 @@ class TestBGEM3Performance:
         stats = benchmark_timer.get_stats()
 
         # Performance validation for RTX 4090
-        target_latency = rtx_4090_performance_targets["bgem3_embedding_latency_ms"]
+        _ = rtx_4090_performance_targets["bgem3_embedding_latency_ms"]
 
         # In real test, this should be < 50ms on RTX 4090
         # For mocked test, verify consistent performance
@@ -70,15 +73,14 @@ class TestBGEM3Performance:
         assert stats["p95_ms"] < 1000  # Very lenient for mocked test
         assert len(latencies) == 10
 
+    @pytest.mark.usefixtures("_rtx_4090_performance_targets")
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
-    def test_batch_embedding_throughput(
-        self, mock_flag_model_class, rtx_4090_performance_targets
-    ):
+    def test_batch_embedding_throughput(self, mock_flag_model_class):
         """Test BGE-M3 batch processing throughput optimization."""
         mock_bgem3_model = MagicMock()
 
         # Simulate batch processing efficiency
-        def mock_batch_encode(texts, **kwargs):
+        def mock_batch_encode(texts, **_kwargs):
             batch_size = len(texts)
             # Simulate batch efficiency: ~5ms per item in batch vs 20ms individual
             processing_time = max(0.005 * batch_size, 0.02)
@@ -119,7 +121,7 @@ class TestBGEM3Performance:
         mock_bgem3_model = MagicMock()
 
         # Simulate unified embedding generation
-        def mock_unified_encode(texts, **kwargs):
+        def mock_unified_encode(texts, **_kwargs):
             time.sleep(0.03)  # Simulate unified processing
             batch_size = len(texts)
             return {
@@ -175,7 +177,7 @@ class TestBGEM3Performance:
         long_text = "word " * 2000  # ~4K tokens, much larger than BGE-Large limit
 
         start_time = time.perf_counter()
-        result = embedding._get_query_embedding(long_text)
+        result = embedding._get_query_embedding(long_text)  # pylint: disable=protected-access
         end_time = time.perf_counter()
 
         latency_ms = (end_time - start_time) * 1000
@@ -205,7 +207,7 @@ class TestBGEM3Performance:
         # Process multiple batches to test memory efficiency
         for batch in range(5):
             texts = [f"batch {batch} document {i}" for i in range(10)]
-            result = embedding.get_unified_embeddings(texts)
+            _ = embedding.get_unified_embeddings(texts)
 
             current_usage = mock_memory_monitor.get_memory_usage()
 
@@ -237,7 +239,7 @@ class TestCrossEncoderPerformance:
         mock_cross_encoder.model = MagicMock()
 
         # Simulate realistic reranking latency
-        def mock_predict(pairs, **kwargs):
+        def mock_predict(pairs, **_kwargs):
             batch_size = len(pairs)
             # Simulate ~3-5ms per document pair on RTX 4090
             processing_time = batch_size * 0.003  # 3ms per pair
@@ -260,13 +262,13 @@ class TestCrossEncoderPerformance:
 
         # Benchmark reranking latency
         start_time = time.perf_counter()
-        result = reranker._postprocess_nodes(test_nodes, query_bundle)
+        result = reranker._postprocess_nodes(test_nodes, query_bundle)  # pylint: disable=protected-access
         end_time = time.perf_counter()
 
         latency_ms = (end_time - start_time) * 1000
 
         # Verify performance target
-        target_latency = rtx_4090_performance_targets["reranking_latency_ms"]
+        _ = rtx_4090_performance_targets["reranking_latency_ms"]
 
         # Should meet <100ms target on RTX 4090
         assert len(result) == 10  # top_n
@@ -285,7 +287,7 @@ class TestCrossEncoderPerformance:
         # Track batch efficiency
         call_count = 0
 
-        def mock_predict(pairs, batch_size=1, **kwargs):
+        def mock_predict(pairs, batch_size=1, **_kwargs):
             nonlocal call_count
             call_count += 1
 
@@ -321,7 +323,7 @@ class TestCrossEncoderPerformance:
             query_bundle = QueryBundle(query_str="batch optimization test")
 
             start_time = time.perf_counter()
-            result = reranker._postprocess_nodes(test_nodes, query_bundle)
+            result = reranker._postprocess_nodes(test_nodes, query_bundle)  # pylint: disable=protected-access
             end_time = time.perf_counter()
 
             latency_ms = (end_time - start_time) * 1000
@@ -341,7 +343,7 @@ class TestCrossEncoderPerformance:
         mock_cross_encoder.model = MagicMock()
 
         # Simulate consistent performance
-        def mock_predict(pairs, **kwargs):
+        def mock_predict(pairs, **_kwargs):
             time.sleep(0.05)  # 50ms simulated latency
             return np.random.rand(len(pairs))
 
@@ -384,11 +386,11 @@ class TestCrossEncoderPerformance:
         mock_cross_encoder.model = MagicMock()
 
         # Mock FP16 vs FP32 performance difference
-        def mock_predict_fp16(pairs, **kwargs):
+        def mock_predict_fp16(pairs, **_kwargs):
             time.sleep(0.03)  # Faster with FP16
             return np.random.rand(len(pairs))
 
-        def mock_predict_fp32(pairs, **kwargs):
+        def mock_predict_fp32(pairs, **_kwargs):
             time.sleep(0.05)  # Slower with FP32
             return np.random.rand(len(pairs))
 
@@ -412,7 +414,7 @@ class TestCrossEncoderPerformance:
         query_bundle = QueryBundle(query_str="FP16 performance test")
 
         start_time = time.perf_counter()
-        result_fp16 = reranker_fp16._postprocess_nodes(test_nodes, query_bundle)
+        result_fp16 = reranker_fp16._postprocess_nodes(test_nodes, query_bundle)  # pylint: disable=protected-access
         fp16_time = time.perf_counter() - start_time
 
         # Verify FP16 optimization applied
@@ -425,7 +427,7 @@ class TestCrossEncoderPerformance:
         reranker_fp32 = BGECrossEncoderRerank(use_fp16=False, device="cuda")
 
         start_time = time.perf_counter()
-        result_fp32 = reranker_fp32._postprocess_nodes(test_nodes, query_bundle)
+        result_fp32 = reranker_fp32._postprocess_nodes(test_nodes, query_bundle)  # pylint: disable=protected-access
         fp32_time = time.perf_counter() - start_time
 
         # Verify results are equivalent
@@ -472,7 +474,7 @@ class TestRouterPerformance:
         )
 
         # Mock router response with realistic latency simulation
-        def mock_query_with_latency(query_str, **kwargs):
+        def mock_query_with_latency(_query_str, **_kwargs):
             # Simulate strategy selection + retrieval + reranking
             time.sleep(0.1)  # 100ms simulated total latency
             response = MagicMock()
@@ -503,9 +505,7 @@ class TestRouterPerformance:
         latencies.sort()
         p95_latency = latencies[int(0.95 * len(latencies))]
 
-        target_p95 = (
-            rtx_4090_performance_targets["query_p95_latency_s"] * 1000
-        )  # Convert to ms
+        _ = rtx_4090_performance_targets["query_p95_latency_s"] * 1000  # Convert to ms
 
         # Should meet <2s P95 target
         assert p95_latency < 5000  # Very lenient for mocked test
@@ -516,7 +516,7 @@ class TestRouterPerformance:
         router = AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
 
         # Mock fast strategy selection
-        def mock_fast_query(query_str, **kwargs):
+        def mock_fast_query(_query_str, **_kwargs):
             time.sleep(0.02)  # 20ms selection overhead
             response = MagicMock()
             response.metadata = {"selector_result": "semantic_search"}
@@ -558,7 +558,7 @@ class TestRouterPerformance:
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         # Create components
-        embedding = BGEM3Embedding()
+        _ = BGEM3Embedding()
         reranker = BGECrossEncoderRerank()
         mock_vector_index = MagicMock()
 
@@ -567,7 +567,7 @@ class TestRouterPerformance:
         )
 
         # Mock async responses with similar latency to sync
-        async def mock_async_query(query_str, **kwargs):
+        async def mock_async_query(_query_str, **_kwargs):
             await asyncio.sleep(0.05)  # 50ms async processing
             response = MagicMock()
             response.metadata = {"selector_result": "hybrid_search"}
@@ -584,7 +584,10 @@ class TestRouterPerformance:
         async_latency = (time.perf_counter() - start_time) * 1000
 
         # Test sync performance
-        router.router_engine.query = lambda q, **kw: mock_async_query(q, **kw)
+        def sync_query_wrapper(q, **kw):
+            return mock_async_query(q, **kw)
+
+        router.router_engine.query = sync_query_wrapper
 
         start_time = time.perf_counter()
         sync_result = router.query(query)
@@ -609,6 +612,7 @@ class TestEndToEndPerformance:
         mock_cross_encoder_class,
         mock_flag_model_class,
         sample_test_documents,
+        *,
         sample_query_scenarios,
         rtx_4090_performance_targets,
         benchmark_timer,
@@ -629,7 +633,7 @@ class TestEndToEndPerformance:
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         # Create RTX 4090 optimized pipeline
-        embedding = BGEM3Embedding(use_fp16=True, batch_size=12)
+        _ = BGEM3Embedding(use_fp16=True, batch_size=12)
         reranker = BGECrossEncoderRerank(use_fp16=True, batch_size=16, top_n=3)
 
         mock_vector_index = MagicMock()
@@ -638,7 +642,7 @@ class TestEndToEndPerformance:
         )
 
         # Mock end-to-end processing
-        def mock_end_to_end_query(query_str, **kwargs):
+        def mock_end_to_end_query(_query_str, **_kwargs):
             # Simulate: embedding (20ms) + retrieval (30ms) + reranking (40ms) = 90ms
             time.sleep(0.09)
 
@@ -672,7 +676,7 @@ class TestEndToEndPerformance:
         stats = benchmark_timer.get_stats()
 
         # Should meet overall performance targets
-        target_p95 = rtx_4090_performance_targets["query_p95_latency_s"] * 1000
+        _ = rtx_4090_performance_targets["query_p95_latency_s"] * 1000
 
         assert stats["mean_ms"] < 1000  # Very lenient for mocked test
         assert stats["p95_ms"] < 2000  # P95 target validation
@@ -708,12 +712,12 @@ class TestEndToEndPerformance:
         )
 
         # Mock concurrent processing
-        def mock_concurrent_query(query_str, **kwargs):
+        def mock_concurrent_query(_query_str, **_kwargs):
             # Simulate slight latency variation under load
             import random
 
             base_latency = 0.08  # 80ms base
-            variation = random.uniform(-0.02, 0.03)  # ±20-30ms variation
+            variation = random.uniform(-0.02, 0.03)  # ±20-30ms variation  # noqa: S311
             time.sleep(max(0.01, base_latency + variation))
 
             response = MagicMock()
@@ -738,15 +742,15 @@ class TestEndToEndPerformance:
             latencies.append((query_end - query_start) * 1000)
             assert result is not None
 
-        total_time = (time.perf_counter() - start_time) * 1000
+        _ = (time.perf_counter() - start_time) * 1000
         final_memory = mock_memory_monitor.get_memory_usage()
 
         # Performance validation under load
         latencies.sort()
         p95_latency = latencies[95]  # 95th percentile
 
-        target_p95 = rtx_4090_performance_targets["query_p95_latency_s"] * 1000
-        min_accuracy = rtx_4090_performance_targets["min_retrieval_accuracy"]
+        _ = rtx_4090_performance_targets["query_p95_latency_s"] * 1000
+        _ = rtx_4090_performance_targets["min_retrieval_accuracy"]
         vram_limit = rtx_4090_performance_targets["vram_usage_gb"]
 
         # Verify load performance
@@ -778,7 +782,7 @@ class TestEndToEndPerformance:
         mock_cross_encoder = MagicMock()
         mock_cross_encoder.model = MagicMock()
 
-        def mock_relevance_scoring(pairs, **kwargs):
+        def mock_relevance_scoring(pairs, **_kwargs):
             # Simulate relevance-based scoring with some accuracy
             scores = []
             for pair in pairs:
@@ -803,9 +807,7 @@ class TestEndToEndPerformance:
         )
 
         mock_vector_index = MagicMock()
-        router = AdaptiveRouterQueryEngine(
-            vector_index=mock_vector_index, reranker=reranker
-        )
+        _ = AdaptiveRouterQueryEngine(vector_index=mock_vector_index, reranker=reranker)
 
         # Test queries with known relevant documents
         test_scenarios = [
@@ -844,7 +846,7 @@ class TestEndToEndPerformance:
 
             # Time-pressured reranking (simulate performance pressure)
             start_time = time.perf_counter()
-            reranked = reranker._postprocess_nodes(test_nodes, query_bundle)
+            reranked = reranker._postprocess_nodes(test_nodes, query_bundle)  # pylint: disable=protected-access
             latency = (time.perf_counter() - start_time) * 1000
 
             # Check accuracy: did most relevant doc rank highest?
@@ -862,7 +864,7 @@ class TestEndToEndPerformance:
 
         # Calculate overall accuracy
         overall_accuracy = sum(accuracy_results) / len(accuracy_results)
-        min_accuracy = rtx_4090_performance_targets["min_retrieval_accuracy"]
+        _ = rtx_4090_performance_targets["min_retrieval_accuracy"]
 
         # Should maintain accuracy even with performance optimization
         assert overall_accuracy >= 0.5  # At least 50% for mocked test

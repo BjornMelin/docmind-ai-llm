@@ -385,7 +385,7 @@ class TestBGEM3Performance:
         """Test FP16 acceleration for RTX 4090."""
         mock_flag_model.return_value = mock_bgem3_flag_model
 
-        embedding = BGEM3Embedding(use_fp16=True, device="cuda")
+        _ = BGEM3Embedding(use_fp16=True, device="cuda")
 
         # Verify FP16 enabled in model initialization
         mock_flag_model.assert_called_once_with(

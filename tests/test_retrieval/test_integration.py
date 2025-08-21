@@ -199,7 +199,7 @@ class TestRetrievalPipelineIntegration:
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         # Create components
-        embedding = BGEM3Embedding()
+        _ = BGEM3Embedding()
         mock_vector_index = MagicMock()
 
         # Test reranker fallback on failure
@@ -272,9 +272,7 @@ class TestRetrievalPipelineIntegration:
         )
 
         mock_vector_index = MagicMock()
-        router = AdaptiveRouterQueryEngine(
-            vector_index=mock_vector_index, reranker=reranker
-        )
+        _ = AdaptiveRouterQueryEngine(vector_index=mock_vector_index, reranker=reranker)
 
         # Test unified embedding performance
         texts = [f"test document {i}" for i in range(5)]
@@ -568,7 +566,7 @@ class TestRealWorldScenarios:
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         # Create thread-safe components
-        embedding = BGEM3Embedding()
+        _ = BGEM3Embedding()
         reranker = BGECrossEncoderRerank()
         mock_vector_index = MagicMock()
 
@@ -582,7 +580,7 @@ class TestRealWorldScenarios:
 
         # Test concurrent processing (simulated)
         results = []
-        for i, scenario in enumerate(sample_query_scenarios):
+        for _, scenario in enumerate(sample_query_scenarios):
             result = router.query(scenario["query"])
             results.append(result)
 

@@ -76,7 +76,11 @@ def sample_test_documents():
     """Documents specifically for retrieval testing scenarios."""
     return [
         Document(
-            text="Quantum computing applications in machine learning enable exponential speedups for certain optimization problems and pattern recognition tasks.",
+            text=(
+                "Quantum computing applications in machine learning enable "
+                "exponential speedups for certain optimization problems and "
+                "pattern recognition tasks."
+            ),
             metadata={
                 "source": "quantum_ml.pdf",
                 "page": 1,
@@ -84,15 +88,26 @@ def sample_test_documents():
             },
         ),
         Document(
-            text="BGE-M3 unified embeddings combine dense semantic vectors with sparse lexical representations in a single 1024-dimensional model architecture.",
+            text=(
+                "BGE-M3 unified embeddings combine dense semantic vectors "
+                "with sparse lexical representations in a single "
+                "1024-dimensional model architecture."
+            ),
             metadata={"source": "embeddings.pdf", "page": 2, "topic": "embeddings"},
         ),
         Document(
-            text="CrossEncoder reranking using BGE-reranker-v2-m3 provides superior relevance scoring compared to bi-encoder approaches.",
+            text=(
+                "CrossEncoder reranking using BGE-reranker-v2-m3 provides "
+                "superior relevance scoring compared to bi-encoder approaches."
+            ),
             metadata={"source": "reranking.pdf", "page": 1, "topic": "reranking"},
         ),
         Document(
-            text="Hybrid retrieval systems leverage both dense semantic similarity and sparse keyword matching for comprehensive document search.",
+            text=(
+                "Hybrid retrieval systems leverage both dense semantic "
+                "similarity and sparse keyword matching for comprehensive "
+                "document search."
+            ),
             metadata={
                 "source": "hybrid_search.pdf",
                 "page": 3,
@@ -100,7 +115,10 @@ def sample_test_documents():
             },
         ),
         Document(
-            text="Multi-query search decomposes complex questions into sub-queries enabling better coverage of information needs.",
+            text=(
+                "Multi-query search decomposes complex questions into "
+                "sub-queries enabling better coverage of information needs."
+            ),
             metadata={"source": "multi_query.pdf", "page": 1, "topic": "multi_query"},
         ),
     ]
@@ -198,7 +216,11 @@ def performance_test_nodes():
     for i in range(20):
         node = NodeWithScore(
             node=TextNode(
-                text=f"Performance test document {i} containing relevant information for benchmarking reranking latency and throughput.",
+                text=(
+                    f"Performance test document {i} containing relevant "
+                    f"information for benchmarking reranking latency and "
+                    f"throughput."
+                ),
                 id_=f"perf_node_{i}",
             ),
             score=0.8 - (i * 0.02),  # Decreasing scores
@@ -221,8 +243,8 @@ def rtx_4090_performance_targets():
     }
 
 
-@pytest_asyncio.fixture
-async def async_bgem3_embedding():
+@pytest.fixture
+def async_bgem3_embedding():
     """Mock async BGE-M3 embedding model."""
     mock_embedding = AsyncMock()
 
@@ -239,9 +261,11 @@ async def async_bgem3_embedding():
 @pytest.fixture
 def cuda_available():
     """Mock CUDA availability for GPU tests."""
-    with patch("torch.cuda.is_available", return_value=True):
-        with patch("torch.cuda.device_count", return_value=1):
-            yield True
+    with (
+        patch("torch.cuda.is_available", return_value=True),
+        patch("torch.cuda.device_count", return_value=1),
+    ):
+        yield True
 
 
 @pytest.fixture

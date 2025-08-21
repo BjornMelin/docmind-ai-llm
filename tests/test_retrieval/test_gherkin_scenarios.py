@@ -73,7 +73,7 @@ class TestGherkinScenario1AdaptiveStrategySelection:
         )
 
         # Mock LLM selector to choose multi_query strategy for complex query
-        def mock_router_query(query_str, **kwargs):
+        def mock_router_query(query_str, **_kwargs):
             # Simulate strategy evaluation and selection
             time.sleep(0.05)  # 50ms strategy selection
 
@@ -92,7 +92,11 @@ class TestGherkinScenario1AdaptiveStrategySelection:
                 source_nodes = [
                     NodeWithScore(
                         node=TextNode(
-                            text=f"Quantum computing application document {i} discussing various quantum algorithms and their use cases in machine learning and optimization.",
+                            text=(
+                                f"Quantum computing application document {i} "
+                                f"discussing various quantum algorithms and their "
+                                f"use cases in machine learning and optimization."
+                            ),
                             id_=f"quantum_doc_{i}",
                         ),
                         score=0.95 - (i * 0.05),
@@ -151,7 +155,7 @@ class TestGherkinScenario1AdaptiveStrategySelection:
         router = AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
 
         # Mock router to return strategy selection metadata
-        def mock_strategic_query(query_str, **kwargs):
+        def mock_strategic_query(query_str, **_kwargs):
             # Simulate LLM-based strategy selection
             if any(
                 word in query_str.lower() for word in ["explain", "how", "what", "why"]
@@ -186,7 +190,8 @@ class TestGherkinScenario1AdaptiveStrategySelection:
             result = router.query(query)
             actual_strategy = result.metadata["selector_result"]
             assert actual_strategy == expected_strategy, (
-                f"Query '{query}' should select '{expected_strategy}' but got '{actual_strategy}'"
+                f"Query '{query}' should select '{expected_strategy}' but got "
+                f"'{actual_strategy}'"
             )
 
 
@@ -245,7 +250,10 @@ class TestGherkinScenario2SimpleReranking:
 
         # Create BGE CrossEncoder reranker
         reranker = BGECrossEncoderRerank(
-            model_name="BAAI/bge-reranker-v2-m3", top_n=10, device="cuda", use_fp16=True
+            model_name="BAAI/bge-reranker-v2-m3",
+            top_n=10,
+            device="cuda",
+            use_fp16=True,
         )
 
         # GIVEN: 20 retrieved documents from RouterQueryEngine (with initial scores)
@@ -259,7 +267,7 @@ class TestGherkinScenario2SimpleReranking:
 
         # WHEN: sentence-transformers CrossEncoder reranking is applied
         start_time = time.perf_counter()
-        reranked_documents = reranker._postprocess_nodes(
+        reranked_documents = reranker._postprocess_nodes(  # pylint: disable=protected-access
             initial_documents, query_bundle
         )
         reranking_latency = (time.perf_counter() - start_time) * 1000
@@ -290,7 +298,8 @@ class TestGherkinScenario2SimpleReranking:
         # 3. Reranking adds less than 100ms latency on RTX 4090 Laptop
         target_latency = rtx_4090_performance_targets["reranking_latency_ms"]
         assert reranking_latency < target_latency, (
-            f"Reranking latency {reranking_latency:.2f}ms exceeds target {target_latency}ms"
+            f"Reranking latency {reranking_latency:.2f}ms exceeds target "
+            f"{target_latency}ms"
         )
 
         # Verify performance characteristics
@@ -307,7 +316,7 @@ class TestGherkinScenario2SimpleReranking:
         mock_cross_encoder = MagicMock()
         mock_cross_encoder.model = MagicMock()
 
-        def mock_relevance_prediction(pairs, **kwargs):
+        def mock_relevance_prediction(pairs, **_kwargs):
             # Simulate relevance-based scoring
             scores = []
             for pair in pairs:
@@ -375,7 +384,7 @@ class TestGherkinScenario2SimpleReranking:
         query_bundle = QueryBundle(query_str="machine learning algorithms")
 
         # Apply reranking
-        reranked = reranker._postprocess_nodes(test_documents, query_bundle)
+        reranked = reranker._postprocess_nodes(test_documents, query_bundle)  # pylint: disable=protected-access
 
         # Verify relevance improvement
         assert len(reranked) == 5
@@ -420,7 +429,16 @@ class TestGherkinScenario3BGEM3UnifiedEmbedding:
 
         # GIVEN: Document containing both text and images (mock multimodal content)
         document_content = {
-            "text": "This document discusses advanced machine learning techniques including neural networks, deep learning architectures, and their applications in computer vision. The content includes technical diagrams showing network topologies and performance graphs demonstrating improvements over traditional methods. Advanced concepts like attention mechanisms, transformer architectures, and multi-modal learning are explored in detail with comprehensive examples and case studies.",
+            "text": (
+                "This document discusses advanced machine learning techniques "
+                "including neural networks, deep learning architectures, and their "
+                "applications in computer vision. The content includes technical "
+                "diagrams showing network topologies and performance graphs "
+                "demonstrating improvements over traditional methods. Advanced "
+                "concepts like attention mechanisms, transformer architectures, and "
+                "multi-modal learning are explored in detail with comprehensive "
+                "examples and case studies."
+            ),
             "images": [
                 "neural_network_diagram.png",
                 "performance_comparison_chart.jpg",
@@ -513,7 +531,7 @@ class TestGherkinScenario3BGEM3UnifiedEmbedding:
         )  # Still processes successfully
 
         # 5. Cross-modal search returns relevant results (mock search)
-        def mock_cross_modal_search(text_query, top_k=5):
+        def mock_cross_modal_search(_text_query, top_k=5):
             """Mock cross-modal search across text and image collections."""
             # Mock text search results
             text_results = [
@@ -629,7 +647,7 @@ class TestGherkinScenario6PerformanceUnderLoad:
         # GIVEN: Mock optimized models for RTX 4090 Laptop
         mock_bgem3_model = MagicMock()
 
-        def mock_fast_embedding(texts, **kwargs):
+        def mock_fast_embedding(texts, **_kwargs):
             # Simulate <50ms per chunk embedding
             chunk_count = len(texts)
             processing_time = chunk_count * 0.02  # 20ms per chunk (under 50ms target)
@@ -647,23 +665,24 @@ class TestGherkinScenario6PerformanceUnderLoad:
         mock_cross_encoder = MagicMock()
         mock_cross_encoder.model = MagicMock()
 
-        def mock_fast_reranking(pairs, **kwargs):
+        def mock_fast_reranking(pairs, **_kwargs):
             # Simulate <100ms for 20 documents reranking
             doc_count = len(pairs)
-            if doc_count <= 20:
-                processing_time = 0.08  # 80ms for 20 docs (under 100ms target)
-            else:
-                processing_time = doc_count * 0.004  # Scale for larger sets
+            processing_time = (
+                0.08 if doc_count <= 20 else doc_count * 0.004
+            )  # 80ms for 20 docs (under 100ms target) or scale for larger sets
             time.sleep(processing_time)
 
             # Return relevance-based scores
-            return np.random.rand(doc_count) * 0.5 + 0.5  # Scores 0.5-1.0 for accuracy
+            return (
+                np.random.rand(doc_count) * 0.5 + 0.5  # noqa: S311
+            )  # Scores 0.5-1.0 for accuracy
 
         mock_cross_encoder.predict = mock_fast_reranking
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         # Create RTX 4090 optimized system
-        embedding = BGEM3Embedding(
+        _ = BGEM3Embedding(
             use_fp16=True,  # FP16 optimization
             batch_size=12,  # RTX 4090 optimized
             device="cuda",
@@ -682,13 +701,13 @@ class TestGherkinScenario6PerformanceUnderLoad:
         )
 
         # Mock adaptive retrieval system processing
-        def mock_adaptive_processing(query_str, **kwargs):
+        def mock_adaptive_processing(query_str, **_kwargs):
             # Simulate complete pipeline: embedding + retrieval + reranking
             import random
 
             # Base processing time with variation for load testing
             base_latency = 0.15  # 150ms base
-            load_variation = random.uniform(-0.05, 0.1)  # ±50-100ms variation
+            load_variation = random.uniform(-0.05, 0.1)  # noqa: S311
             processing_time = max(0.05, base_latency + load_variation)
             time.sleep(processing_time)
 
@@ -777,11 +796,11 @@ class TestGherkinScenario6PerformanceUnderLoad:
         )
 
         # 2. BGE-M3 embedding generation is <50ms per chunk (validated in mock)
-        embedding_target = rtx_4090_performance_targets["bgem3_embedding_latency_ms"]
+        _ = rtx_4090_performance_targets["bgem3_embedding_latency_ms"]
         # This is validated by the mock_fast_embedding function timing
 
         # 3. Reranking latency is <100ms for 20 documents (validated in mock)
-        reranking_target = rtx_4090_performance_targets["reranking_latency_ms"]
+        _ = rtx_4090_performance_targets["reranking_latency_ms"]
         # This is validated by the mock_fast_reranking function timing
 
         # 4. VRAM usage remains stable under 14GB with FP8 optimization
