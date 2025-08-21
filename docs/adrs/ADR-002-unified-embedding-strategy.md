@@ -348,15 +348,17 @@ class OptimizedBGE_M3:
 ✅ **FULLY IMPLEMENTED** (Commit c54883d - 2025-08-21)
 
 ### Completed Components
+
 - **BGE-M3 Manager**: `src/retrieval/embeddings/bge_m3_manager.py` - Unified dense/sparse embeddings
 - **CLIP Integration**: Multimodal support with 1.4GB VRAM constraint
-- **Performance Achieved**: 
+- **Performance Achieved**:
   - <50ms embedding generation per chunk (target met)
   - 3.6GB memory usage (14% reduction from 4.2GB)
   - 8K context window support (vs 512 in legacy)
 - **Test Coverage**: >95% with comprehensive unit, integration, and performance tests
 
 ### Migration Completed
+
 - ✅ Removed legacy `src/utils/embedding.py` (BGE-large + SPLADE++)
 - ✅ Replaced with unified BGE-M3 architecture
 - ✅ Full backward compatibility maintained via integration layer

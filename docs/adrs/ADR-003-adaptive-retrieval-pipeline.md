@@ -541,8 +541,9 @@ class QualityMetrics:
 ✅ **FULLY IMPLEMENTED** (Commit c54883d - 2025-08-21)
 
 ### Completed Components
+
 - **RouterQueryEngine**: `src/retrieval/query_engine/router_engine.py` - Adaptive strategy selection with LLMSingleSelector
-- **Strategy Implementation**: 
+- **Strategy Implementation**:
   - Dense semantic search (BGE-M3 dense vectors)
   - Hybrid search (BGE-M3 dense + sparse with RRF fusion)
   - Multi-query search (query decomposition)
@@ -553,6 +554,7 @@ class QualityMetrics:
   - >90% correct strategy selection accuracy
 
 ### Key Features Implemented
+
 - ✅ LLMSingleSelector for automatic strategy selection
 - ✅ QueryEngineTool definitions for all strategies
 - ✅ Fallback mechanisms for robustness
