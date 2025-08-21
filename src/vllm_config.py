@@ -272,7 +272,7 @@ vllm serve {self.config.model} \\
   --served-model-name {self.config.served_model_name}
 """
 
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(script_content)
 
         # Make executable

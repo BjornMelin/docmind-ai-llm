@@ -277,7 +277,7 @@ class RetrievalAgent:
                     "score": 1.0,
                 }
             ]
-        elif hasattr(result, "response"):
+        if hasattr(result, "response"):
             # LlamaIndex response object
             documents = []
             if hasattr(result, "source_nodes"):

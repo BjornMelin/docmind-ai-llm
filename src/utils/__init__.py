@@ -66,16 +66,6 @@ from .monitoring import (
     setup_logging,
 )
 
-# vLLM backend
-from .vllm_llm import (
-    VLLMBackend,
-    VLLMConfig,
-    cleanup_vllm_backend,
-    get_vllm_backend,
-    initialize_vllm_backend,
-    initialize_vllm_backend_async,
-)
-
 __all__ = [
     # Core utilities
     "detect_hardware",
@@ -118,11 +108,4 @@ __all__ = [
     "get_memory_usage",
     "get_system_info",
     "get_performance_monitor",
-    # vLLM backend
-    "VLLMBackend",
-    "VLLMConfig",
-    "get_vllm_backend",
-    "initialize_vllm_backend",
-    "initialize_vllm_backend_async",
-    "cleanup_vllm_backend",
 ]

@@ -103,6 +103,8 @@ class DSPyLlamaIndexRetriever:
         try:
             # For now, use basic wrapper - can be enhanced for specific LLM types
             class DSPyLLMWrapper:
+                """Wrapper class to make LlamaIndex LLMs compatible with DSPy."""
+
                 def __init__(self, llm):
                     self.llm = llm
 
@@ -283,17 +285,17 @@ class DSPyLlamaIndexRetriever:
 
 
 # Global instance for easy access
-_dspy_retriever_instance = None
+DSPY_RETRIEVER_INSTANCE = None
 
 
 def get_dspy_retriever(llm: Any = None) -> DSPyLlamaIndexRetriever:
     """Get global DSPy retriever instance."""
-    global _dspy_retriever_instance
+    global DSPY_RETRIEVER_INSTANCE
 
-    if _dspy_retriever_instance is None:
-        _dspy_retriever_instance = DSPyLlamaIndexRetriever(llm=llm)
+    if DSPY_RETRIEVER_INSTANCE is None:
+        DSPY_RETRIEVER_INSTANCE = DSPyLlamaIndexRetriever(llm=llm)
 
-    return _dspy_retriever_instance
+    return DSPY_RETRIEVER_INSTANCE
 
 
 def is_dspy_available() -> bool:
