@@ -46,11 +46,6 @@ except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
     LlamaCPP = None
     LLAMACPP_AVAILABLE = False
 
-from src.agents.agent_factory import (
-    get_agent_system,
-    process_query_with_agent_system,
-)
-from src.agents.agent_utils import create_tools_from_index
 from src.models.core import settings
 from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
