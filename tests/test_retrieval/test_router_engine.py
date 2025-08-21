@@ -23,7 +23,7 @@ from src.retrieval.query_engine.router_engine import (
 )
 
 
-class TestAdaptiveRouterQueryEngine:
+class TestAdaptiveRouterQueryEngine:  # pylint: disable=protected-access
     """Unit tests for AdaptiveRouterQueryEngine class."""
 
     def test_init_with_minimal_config(self, mock_vector_index):
@@ -328,7 +328,7 @@ class TestAdaptiveRouterFactory:
         configure_router_settings(router)
 
 
-class TestRouterStrategy:
+class TestRouterStrategy:  # pylint: disable=protected-access
     """Test strategy selection and tool descriptions."""
 
     def test_strategy_descriptions_completeness(
@@ -409,7 +409,7 @@ class TestRouterStrategy:
 
 
 @pytest.mark.integration
-class TestRouterIntegration:
+class TestRouterIntegration:  # pylint: disable=protected-access
     """Integration tests with LlamaIndex ecosystem."""
 
     @patch("src.retrieval.query_engine.router_engine.RetrieverQueryEngine")
@@ -471,7 +471,7 @@ class TestRouterIntegration:
 
 
 @pytest.mark.performance
-class TestRouterPerformance:
+class TestRouterPerformance:  # pylint: disable=protected-access,unused-argument
     """Performance and optimization tests."""
 
     def test_strategy_selection_performance_target(

@@ -29,7 +29,7 @@ from src.retrieval.postprocessor.cross_encoder_rerank import (
 )
 
 
-class TestBGECrossEncoderRerank:
+class TestBGECrossEncoderRerank:  # pylint: disable=protected-access
     """Unit tests for BGECrossEncoderRerank class."""
 
     @patch("src.retrieval.postprocessor.cross_encoder_rerank.CrossEncoder")
@@ -394,7 +394,7 @@ class TestBGECrossEncoderFactory:
         assert reranker.batch_size == 4  # Should be reduced to maximum 4
 
 
-class TestBGECrossEncoderPerformance:
+class TestBGECrossEncoderPerformance:  # pylint: disable=protected-access
     """Performance and benchmarking tests."""
 
     @patch("src.retrieval.postprocessor.cross_encoder_rerank.CrossEncoder")
@@ -501,7 +501,7 @@ class TestBGECrossEncoderPerformance:
 
 
 @pytest.mark.integration
-class TestBGECrossEncoderIntegration:
+class TestBGECrossEncoderIntegration:  # pylint: disable=protected-access
     """Integration tests with LlamaIndex ecosystem."""
 
     @patch("src.retrieval.postprocessor.cross_encoder_rerank.CrossEncoder")
@@ -582,7 +582,7 @@ class TestBGECrossEncoderIntegration:
 
 
 @pytest.mark.performance
-class TestBGECrossEncoderBenchmark:
+class TestBGECrossEncoderBenchmark:  # pylint: disable=protected-access
     """Comprehensive performance benchmarking."""
 
     def test_benchmark_reranking_latency_comprehensive(self):
@@ -590,7 +590,7 @@ class TestBGECrossEncoderBenchmark:
         # Mock reranker for testing benchmark function
         mock_reranker = MagicMock()
 
-        def mock_postprocess(nodes, query_bundle):
+        def mock_postprocess(nodes, _query_bundle):
             # Simulate reranking latency
             time.sleep(0.001)  # 1ms simulated latency
             return nodes[:5]  # Return top 5

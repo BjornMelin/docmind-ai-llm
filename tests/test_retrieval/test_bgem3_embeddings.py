@@ -24,7 +24,7 @@ from src.retrieval.embeddings.bge_m3_manager import (
 )
 
 
-class TestBGEM3Embedding:
+class TestBGEM3Embedding:  # pylint: disable=protected-access
     """Unit tests for BGEM3Embedding class."""
 
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
@@ -414,7 +414,7 @@ class TestBGEM3Performance:
 
 
 @pytest.mark.integration
-class TestBGEM3Integration:
+class TestBGEM3Integration:  # pylint: disable=protected-access
     """Integration tests with LlamaIndex ecosystem."""
 
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")

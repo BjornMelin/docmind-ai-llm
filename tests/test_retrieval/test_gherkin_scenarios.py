@@ -338,7 +338,7 @@ class TestGherkinScenario2SimpleReranking:
 
             return np.array(scores)
 
-        mock_cross_encoder.predict = mock_relevance_prediction
+        mock_cross_encoder.predict = MagicMock(side_effect=mock_relevance_prediction)
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         reranker = BGECrossEncoderRerank(top_n=5)
@@ -636,7 +636,7 @@ class TestGherkinScenario6PerformanceUnderLoad:
 
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
     @patch("src.retrieval.postprocessor.cross_encoder_rerank.CrossEncoder")
-    def test_scenario_6_performance_under_load_complete(
+    def test_scenario_6_performance_under_load_complete(  # pylint: disable=too-many-statements
         self,
         mock_cross_encoder_class,
         mock_flag_model_class,
@@ -678,7 +678,7 @@ class TestGherkinScenario6PerformanceUnderLoad:
                 np.random.rand(doc_count) * 0.5 + 0.5  # noqa: S311
             )  # Scores 0.5-1.0 for accuracy
 
-        mock_cross_encoder.predict = mock_fast_reranking
+        mock_cross_encoder.predict = MagicMock(side_effect=mock_fast_reranking)
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         # Create RTX 4090 optimized system

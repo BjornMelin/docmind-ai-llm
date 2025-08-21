@@ -249,7 +249,7 @@ def async_bgem3_embedding():
     mock_embedding = AsyncMock()
 
     # Mock async embedding generation
-    mock_embedding._aget_query_embedding.return_value = np.random.rand(1024).tolist()
+    mock_embedding._aget_query_embedding.return_value = np.random.rand(1024).tolist()  # pylint: disable=protected-access
     mock_embedding.get_unified_embeddings.return_value = {
         "dense": np.random.rand(1, 1024).astype(np.float32),
         "sparse": [{1: 0.8, 5: 0.6, 10: 0.4}],
@@ -273,15 +273,19 @@ def benchmark_timer():
     """Timer utility for performance benchmarking."""
 
     class BenchmarkTimer:
+        """Timer for benchmarking test performance."""
+
         def __init__(self):
             self.start_time = None
             self.end_time = None
             self.latencies = []
 
         def start(self):
+            """Start timing."""
             self.start_time = time.perf_counter()
 
         def stop(self):
+            """Stop timing and record latency."""
             self.end_time = time.perf_counter()
             if self.start_time:
                 latency_ms = (self.end_time - self.start_time) * 1000
@@ -290,6 +294,7 @@ def benchmark_timer():
             return None
 
         def get_stats(self):
+            """Get timing statistics."""
             if not self.latencies:
                 return {}
             return {
@@ -310,11 +315,14 @@ def mock_memory_monitor():
     """Mock GPU memory monitoring."""
 
     class MockMemoryMonitor:
+        """Mock memory monitor for testing."""
+
         def __init__(self):
             self.current_usage_gb = 8.5  # Simulate current usage
             self.peak_usage_gb = 12.3
 
         def get_memory_usage(self):
+            """Get current memory usage."""
             return {
                 "used_gb": self.current_usage_gb,
                 "total_gb": 16.0,
@@ -322,6 +330,7 @@ def mock_memory_monitor():
             }
 
         def track_peak_usage(self):
+            """Track peak memory usage."""
             return self.peak_usage_gb
 
     return MockMemoryMonitor()

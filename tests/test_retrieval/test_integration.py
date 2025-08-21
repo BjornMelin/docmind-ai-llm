@@ -24,7 +24,7 @@ from src.retrieval.query_engine.router_engine import AdaptiveRouterQueryEngine
 
 
 @pytest.mark.integration
-class TestRetrievalPipelineIntegration:
+class TestRetrievalPipelineIntegration:  # pylint: disable=protected-access,unused-argument
     """Integration tests for complete retrieval pipeline."""
 
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
@@ -303,7 +303,7 @@ class TestRetrievalPipelineIntegration:
 
 
 @pytest.mark.integration
-class TestArchitecturalReplacement:
+class TestArchitecturalReplacement:  # pylint: disable=protected-access
     """Test architectural replacements from legacy to new systems."""
 
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
@@ -495,7 +495,7 @@ class TestSystemConfiguration:
 
 @pytest.mark.integration
 @pytest.mark.slow
-class TestRealWorldScenarios:
+class TestRealWorldScenarios:  # pylint: disable=protected-access
     """Integration tests simulating real-world usage patterns."""
 
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
