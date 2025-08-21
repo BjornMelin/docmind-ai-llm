@@ -36,14 +36,14 @@ except ImportError:
 
 from llama_index.core.bridge.pydantic import Field
 from llama_index.core.schema import BaseNode, TextNode
-from llama_index.core.vector_stores import VectorStore
 from llama_index.core.vector_stores.types import (
+    BasePydanticVectorStore,
     VectorStoreQuery,
     VectorStoreQueryResult,
 )
 
 
-class QdrantUnifiedVectorStore(VectorStore):
+class QdrantUnifiedVectorStore(BasePydanticVectorStore):
     """Unified Qdrant vector store for BGE-M3 dense + sparse embeddings.
 
     Supports both dense (1024D) and sparse embeddings in a single collection
@@ -66,7 +66,7 @@ class QdrantUnifiedVectorStore(VectorStore):
     stores_text: bool = True
     is_embedding_query: bool = False
 
-    client: QdrantClient = Field(exclude=True)
+    qdrant_client: QdrantClient = Field(exclude=True)
     collection_name: str
     dense_vector_name: str = Field(default="dense")
     sparse_vector_name: str = Field(default="sparse")
@@ -97,7 +97,7 @@ class QdrantUnifiedVectorStore(VectorStore):
                 "qdrant-client not available. Install with: uv add qdrant-client"
             )
 
-        self.client = client or QdrantClient(url=url)
+        self.qdrant_client = client or QdrantClient(url=url)
         self.collection_name = collection_name
         self.embedding_dim = embedding_dim
         self.dense_vector_name = "dense"
@@ -118,12 +118,12 @@ class QdrantUnifiedVectorStore(VectorStore):
         """Initialize Qdrant collection with resilience patterns."""
         try:
             # Check if collection exists
-            collections = self.client.get_collections()
+            collections = self.qdrant_client.get_collections()
             collection_names = [col.name for col in collections.collections]
 
             if self.collection_name not in collection_names:
                 # Create collection with dense + sparse vectors
-                self.client.create_collection(
+                self.qdrant_client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config={
                         self.dense_vector_name: VectorParams(
@@ -213,7 +213,9 @@ class QdrantUnifiedVectorStore(VectorStore):
                 )
 
             # Batch upsert points with resilience
-            self.client.upsert(collection_name=self.collection_name, points=points)
+            self.qdrant_client.upsert(
+                collection_name=self.collection_name, points=points
+            )
 
             logger.info(f"Added {len(points)} nodes to unified collection")
             return node_ids
@@ -297,7 +299,7 @@ class QdrantUnifiedVectorStore(VectorStore):
         fusion_limit = min(query.similarity_top_k * 2, 50)
 
         # Execute dense search
-        dense_results = self.client.search(
+        dense_results = self.qdrant_client.search(
             collection_name=self.collection_name,
             query_vector=(self.dense_vector_name, dense_embedding),
             limit=fusion_limit,
@@ -310,7 +312,7 @@ class QdrantUnifiedVectorStore(VectorStore):
         sparse_values = list(sparse_embedding.values())
         sparse_vector = SparseVector(indices=sparse_indices, values=sparse_values)
 
-        sparse_results = self.client.search(
+        sparse_results = self.qdrant_client.search(
             collection_name=self.collection_name,
             query_vector=NamedSparseVector(
                 name=self.sparse_vector_name, vector=sparse_vector
@@ -387,7 +389,7 @@ class QdrantUnifiedVectorStore(VectorStore):
         self, query: VectorStoreQuery, embedding: list[float], **kwargs
     ) -> VectorStoreQueryResult:
         """Execute dense-only search using BGE-M3 dense embeddings."""
-        results = self.client.search(
+        results = self.qdrant_client.search(
             collection_name=self.collection_name,
             query_vector=(self.dense_vector_name, embedding),
             limit=query.similarity_top_k,
@@ -405,7 +407,7 @@ class QdrantUnifiedVectorStore(VectorStore):
         values = list(sparse_embedding.values())
         sparse_vector = SparseVector(indices=indices, values=values)
 
-        results = self.client.search(
+        results = self.qdrant_client.search(
             collection_name=self.collection_name,
             query_vector=NamedSparseVector(
                 name=self.sparse_vector_name, vector=sparse_vector
@@ -438,7 +440,7 @@ class QdrantUnifiedVectorStore(VectorStore):
     def delete(self, ref_doc_id: str, **delete_kwargs: Any) -> None:
         """Delete documents by reference document ID."""
         try:
-            self.client.delete(
+            self.qdrant_client.delete(
                 collection_name=self.collection_name,
                 points_selector=Filter(
                     must=[
@@ -454,7 +456,7 @@ class QdrantUnifiedVectorStore(VectorStore):
     def clear(self) -> None:
         """Clear all documents from the collection."""
         try:
-            self.client.delete_collection(collection_name=self.collection_name)
+            self.qdrant_client.delete_collection(collection_name=self.collection_name)
             self._init_collection_with_retry()  # Recreate empty collection
             logger.info(f"Cleared collection: {self.collection_name}")
         except Exception as e:

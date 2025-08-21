@@ -42,18 +42,8 @@ from .document import (
     load_documents_unstructured,
 )
 
-# Embedding operations
-from .embedding import (
-    create_basic_retriever,
-    create_dense_embedding,
-    create_sparse_embedding,
-    create_vector_index,
-    create_vector_index_async,
-    get_embed_model,
-    get_embedding_info,
-    verify_embedding_compatibility,
-)
-
+# Embedding operations - removed (moved to src.retrieval)
+# The embedding module was deprecated and replaced by src.retrieval.integration
 # Monitoring and logging
 from .monitoring import (
     async_performance_timer,
@@ -81,15 +71,6 @@ __all__ = [
     "clear_document_cache",
     "get_cache_stats",
     "ensure_spacy_model",
-    # Embedding operations
-    "get_embed_model",
-    "create_dense_embedding",
-    "create_sparse_embedding",
-    "create_vector_index",
-    "create_vector_index_async",
-    "create_basic_retriever",
-    "verify_embedding_compatibility",
-    "get_embedding_info",
     # Database operations
     "create_sync_client",
     "create_async_client",

@@ -65,6 +65,9 @@ dependencies = [
     "langgraph-supervisor>=0.0.29",
     "langchain-core>=0.3.0",
     "langchain-openai>=0.2.0",
+    # BGE-M3 and retrieval dependencies for FEAT-002
+    "FlagEmbedding>=1.2.11",  # BGE-M3 unified embeddings
+    "sentence-transformers>=3.0.0",  # CrossEncoder reranking
     # DSPy for prompt optimization
     "dspy-ai>=2.5.0",
     "pydantic==2.11.7",
