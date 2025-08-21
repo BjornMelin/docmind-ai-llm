@@ -3,14 +3,18 @@
 ## Metadata
 
 - **Feature ID**: FEAT-004
-- **Version**: 1.1.0
-- **Status**: Implemented
+- **Version**: 1.2.0
+- **Status**: ADR-Validated Ready
 - **Created**: 2025-08-19
-- **Validated At**: 2025-08-20
-- **Updated At**: 2025-08-20
-- **Completion Percentage**: 100%
+- **Validated At**: 2025-08-21
+- **Updated At**: 2025-08-21
+- **Completion Percentage**: 75% (reduced due to identified ADR drift)
 - **Requirements Covered**: REQ-0061 to REQ-0070, REQ-0081 to REQ-0090, REQ-0097 to REQ-0099
-- **ADR Alignment**: Complete alignment with ADR-004, ADR-007, ADR-010, ADR-011, ADR-015
+- **ADR Dependencies**: [ADR-004, ADR-007, ADR-010, ADR-011, ADR-015]
+- **Implementation Status**: Requires ADR Alignment (75% complete, critical gaps identified)
+- **Code Replacement Plan**: Listed below in Implementation Instructions
+- **Validation Timestamp**: 2025-08-21
+- **Clustering Assessment**: Single spec recommended (30 requirements manageable and highly interconnected)
 
 ## 1. Objective
 
@@ -41,7 +45,151 @@ The Infrastructure & Performance System provides the foundational layer for loca
 - Model training or fine-tuning
 - External monitoring services
 
-## 3. Inputs and Outputs
+## 3. Implementation Instructions
+
+### MANDATORY: Files to DELETE (ADR Architectural Overhaul)
+
+**CRITICAL**: The ADRs represent a COMPLETE ARCHITECTURAL OVERHAUL. The following files MUST be deleted as they contradict the new architecture:
+
+**Custom Agent Coordination (replaced by ADR-011 supervisor)**:
+
+- `src/agents/coordinator.py` → DELETE (replaced by LangGraph supervisor)
+- `src/agents/agent_factory.py` → DELETE (replaced by create_react_agent)
+- Any custom agent orchestration → DELETE (replaced by supervisor pattern)
+
+**Single-Layer Caching (replaced by ADR-010 dual-layer)**:
+
+- Any custom caching implementations → DELETE (replaced by IngestionCache + GPTCache)
+- Single-layer cache files → DELETE (replaced by dual-layer architecture)
+- Direct embedding storage → DELETE (route through IngestionCache)
+
+**Non-FP8 Infrastructure (replaced by ADR-004 FP8 optimization)**:
+
+- Any vLLM initialization without FP8 quantization → DELETE
+- Model loading functions not supporting FlashInfer → DELETE
+- Context window management not supporting 128K tokens → DELETE
+
+### Files to Replace in Current Codebase
+
+**Core Infrastructure Files:**
+
+- `src/utils/vllm_llm.py` → Update to pure vLLM + FlashInfer with FP8 optimization (remove non-FP8 fallbacks)
+- `src/core/infrastructure/gpu_monitor.py` → Enhance for FP8 KV cache monitoring and 128K context tracking
+- `src/core/infrastructure/hardware_utils.py` → Update for RTX 4090 optimization with 16GB VRAM constraints
+- `src/config/settings.py` → Update for FP8 model configuration and dual-cache system integration
+
+**Agent Orchestration Files:**
+
+- `src/agents/supervisor_graph.py` → Replace with LangGraph supervisor implementation (parallel_tool_calls=True)
+- `src/agents/coordinator.py` → Deprecate custom coordination logic, replace with supervisor patterns
+- `src/agents/agent_factory.py` → Update for 5-agent system with modern LangGraph integration
+
+**Caching Infrastructure:**
+
+- Any custom caching implementations → Replace with DualCacheSystem (IngestionCache + GPTCache)
+- Single-layer cache files → Migrate to dual-layer architecture with multi-agent sharing
+- Direct embedding storage → Route through IngestionCache for 80-95% processing reduction
+
+### Functions to Deprecate
+
+**Non-FP8 Optimization Functions:**
+
+- Any vLLM initialization without FP8 quantization and FP8 KV cache
+- Model loading functions not supporting FlashInfer attention backend
+- Memory calculations not accounting for FP8 memory optimization
+- Context window management not supporting 128K tokens with FP8 efficiency
+
+**Single-Layer Caching Functions:**
+
+- Direct document processing without IngestionCache integration
+- Custom semantic caching not using GPTCache with BGE-M3 embeddings
+- Non-shared cache implementations that don't support multi-agent coordination
+- Cache functions not supporting 60-70% hit rate optimization
+
+**Custom Agent Coordination:**
+
+- Manual agent routing logic in existing coordinator
+- Custom state management not using LangGraph supervisor patterns
+- Agent communication not supporting parallel tool execution (50-87% token reduction)
+- Context management not implementing 120K threshold with 8K buffer
+
+### Dead Code Removal
+
+**Backwards Compatibility Code:**
+
+- Support for non-FP8 quantization methods (FP16, INT8 without FP8 KV cache)
+- Fallback to CPU-only execution for GPU-optimized components
+- Legacy vLLM configurations without FlashInfer backend support
+- Model compatibility layers for non-Qwen3-4B-Instruct-2507-FP8 models
+
+**Oversized Context Support:**
+
+- Any implementations attempting >128K context (hardware constraint: 16GB VRAM)
+- YaRN scaling implementations (native 128K with FP8 sufficient)
+- Context expansion methods beyond hardware-constrained 131,072 tokens
+- Dynamic context scaling not respecting FP8 memory limitations
+
+**Alternative Provider Support:**
+
+- Ollama integration without FP8 KV cache support
+- llama.cpp implementations not supporting FP8 quantization
+- Provider abstractions not optimized for vLLM + FlashInfer backend
+- Custom deployment scripts not following Docker-first strategy (ADR-015)
+
+### Migration Strategy
+
+**Phase 1: Core Infrastructure (Pure FP8 Implementation):**
+
+- Implement pure FP8 optimization with vLLM + FlashInfer per ADR-004
+- Update GPU monitoring for FP8 KV cache tracking and 128K context management
+- Configure hardware detection for RTX 4090 Laptop optimization (16GB VRAM)
+- Remove all non-FP8 compatibility layers and fallback mechanisms
+
+**Phase 2: Dual-Layer Caching System:**
+
+- Implement comprehensive dual-layer caching per ADR-010
+- Deploy IngestionCache for 80-95% document processing reduction
+- Configure GPTCache with BGE-M3 embeddings for 60-70% query hit rate
+- Enable multi-agent cache sharing with Qdrant backend consistency (ADR-007)
+
+**Phase 3: LangGraph Multi-Agent Orchestration:**
+
+- Replace custom coordination with LangGraph supervisor per ADR-011
+- Implement 5-agent system with parallel tool execution
+- Configure modern supervisor parameters: parallel_tool_calls=True, output_mode="structured"
+- Enable 50-87% token reduction through parallel execution optimization
+
+**Phase 4: Docker-First Deployment:**
+
+- Implement Docker-first deployment strategy per ADR-015
+- Configure vLLM + FlashInfer as recommended provider in docker-compose
+- Remove complex deployment alternatives, simplify to single docker-compose approach
+- Optimize startup time <45 seconds with FP8 model caching
+
+### Validation Requirements
+
+**Performance Validation:**
+
+- Verify 100-160 tokens/sec decode performance with FP8 optimization
+- Confirm 800-1300 tokens/sec prefill at 128K context using FlashInfer
+- Validate 12-14GB VRAM usage (within 16GB RTX 4090 Laptop constraint)
+- Test dual-cache hit rates: >80% ingestion, >60% semantic
+
+**Integration Validation:**
+
+- Verify LangGraph supervisor coordination with 5 agents
+- Confirm parallel tool execution achieving 50-87% token reduction
+- Test context trimming at 120K threshold with 8K buffer
+- Validate Docker deployment with vLLM + FlashInfer configuration
+
+**Quality Validation:**
+
+- Ensure FP8 quantization maintains >98% accuracy vs FP16 baseline
+- Confirm 128K context processing without memory overflow
+- Validate cache consistency across multi-agent concurrent access
+- Test graceful degradation when approaching VRAM limits
+
+## 4. Inputs and Outputs
 
 ### Inputs
 
@@ -165,10 +313,13 @@ class AgentOrchestrator:
         return create_supervisor(
             agents=self.agents,
             system_prompt="Coordinate DocMind AI multi-agent RAG system",
-            parallel_tool_calls=True,  # Enable 50-87% token reduction
-            add_handoff_back_messages=True,  # Enhanced coordination
-            create_forward_message_tool=True,  # Direct passthrough
-            output_mode="structured"  # Enhanced formatting
+            # MODERN OPTIMIZATION PARAMETERS (verified from LangGraph documentation)
+            parallel_tool_calls=True,                           # Enable concurrent agent execution (50-87% token reduction)
+            output_mode="structured",                          # Enhanced response formatting with metadata
+            create_forward_message_tool=True,                  # Direct message passthrough capability
+            add_handoff_back_messages=True,                    # Track handoff coordination messages
+            pre_model_hook=RunnableLambda(trim_context_hook),  # Context trimming at 120K threshold
+            post_model_hook=RunnableLambda(format_response_hook), # Response formatting and metadata
         )
     
     async def coordinate_query(self, query: str, context_length: int = 131072):
@@ -532,6 +683,7 @@ CREATE TABLE performance_logs (
 ### New Files
 
 **Core Infrastructure:**
+
 - `src/infrastructure/llm_backend_manager.py` - Backend orchestration
 - `src/infrastructure/backends/ollama_backend.py` - Ollama integration
 - `src/infrastructure/backends/llamacpp_backend.py` - LlamaCPP integration
@@ -546,6 +698,7 @@ CREATE TABLE performance_logs (
 - `src/infrastructure/service_manager.py` - SystemD service management
 
 **Dual-Layer Caching System:**
+
 - `src/cache/dual_cache.py` - Main dual-cache implementation
 - `src/cache/ingestion_cache.py` - Document processing cache (80-95% reduction)
 - `src/cache/semantic_cache.py` - Query semantic cache (60-70% hit rate)
@@ -553,17 +706,20 @@ CREATE TABLE performance_logs (
 - `src/cache/kv_cache_optimizer.py` - FP8 KV cache configuration and optimization
 
 **Multi-Agent Orchestration:**
+
 - `src/agents/orchestrator.py` - LangGraph supervisor coordination
 - `src/agents/agent_manager.py` - 5-agent system management
 - `src/agents/parallel_executor.py` - Parallel tool execution (50-87% token reduction)
 - `src/agents/context_trimmer.py` - Context management for multi-agent workflows
 
 **KV Cache Optimization:**
+
 - `src/infrastructure/kv_cache_optimizer.py` - FP8 KV cache configuration and memory calculation
 - `src/infrastructure/context_calculator.py` - Context window size optimization
 - `src/infrastructure/memory_profiler.py` - VRAM usage monitoring and optimization
 
 **Test Suite:**
+
 - `tests/test_infrastructure/` - Infrastructure test suite
 - `tests/test_infrastructure/test_fp8_quantization.py` - FP8 specific tests
 - `tests/test_infrastructure/test_context_management.py` - Context window tests
@@ -894,6 +1050,7 @@ And cache eviction follows LRU policy correctly
 ### Unit Tests
 
 **Core Infrastructure:**
+
 - Backend initialization for each type (Ollama, LlamaCPP, vLLM)
 - vLLM FP8 quantization configuration
 - FlashInfer attention backend setup
@@ -905,6 +1062,7 @@ And cache eviction follows LRU policy correctly
 - SystemD service configuration parsing
 
 **Dual-Layer Caching:**
+
 - IngestionCache initialization and key generation
 - GPTCache embedding function and similarity evaluation
 - Cache key normalization for multi-agent sharing
@@ -913,6 +1071,7 @@ And cache eviction follows LRU policy correctly
 - Cache eviction policies and memory management
 
 **Multi-Agent Orchestration:**
+
 - LangGraph supervisor creation and configuration
 - Agent registration and capability definitions
 - Parallel tool execution parameter validation
@@ -923,6 +1082,7 @@ And cache eviction follows LRU policy correctly
 ### Integration Tests
 
 **Core Infrastructure:**
+
 - End-to-end LLM inference pipeline with FP8
 - vLLM service startup and health checks
 - Backend switching during active session
@@ -934,6 +1094,7 @@ And cache eviction follows LRU policy correctly
 - SystemD service lifecycle management
 
 **Dual-Layer Caching System:**
+
 - IngestionCache integration with document processing pipeline
 - GPTCache semantic similarity across agent queries
 - Cache server startup and multi-agent connection
@@ -942,6 +1103,7 @@ And cache eviction follows LRU policy correctly
 - Cross-agent cache consistency validation
 
 **Multi-Agent Orchestration:**
+
 - LangGraph supervisor initialization and agent registration
 - 5-agent workflow execution with parallel tools
 - Agent handoff mechanisms and state preservation
@@ -952,6 +1114,7 @@ And cache eviction follows LRU policy correctly
 ### Performance Tests
 
 **LLM Performance:**
+
 - Decode token generation speed (target: 100-160/sec with FP8)
 - Prefill token processing speed (target: 800-1300/sec at 128K)
 - Memory usage with FP8 quantization (12-14GB typical, <16GB max)
@@ -964,6 +1127,7 @@ And cache eviction follows LRU policy correctly
 - GPU memory utilization efficiency
 
 **Caching Performance:**
+
 - IngestionCache hit rate and processing time reduction (>80%)
 - GPTCache semantic similarity accuracy and hit rate (>60%)
 - Cache server response time for hits (<10ms)
@@ -972,6 +1136,7 @@ And cache eviction follows LRU policy correctly
 - Cache eviction performance under memory pressure
 
 **Multi-Agent Coordination:**
+
 - Supervisor coordination overhead per query (<500ms)
 - Parallel tool execution token reduction (50-87%)
 - Agent handoff latency between specialized agents (<50ms)
@@ -1002,6 +1167,7 @@ And cache eviction follows LRU policy correctly
 ### Performance Gates
 
 **LLM Performance:**
+
 - Decode speed: 100-160 tokens/sec on RTX 4090 Laptop (REQ-0064-v2)
 - Prefill speed: 800-1300 tokens/sec at 128K context
 - VRAM usage: 12-14GB typical, <16GB max (REQ-0070)
@@ -1010,6 +1176,7 @@ And cache eviction follows LRU policy correctly
 - Database response: <50ms for queries
 
 **Caching Performance:**
+
 - Ingestion cache hit reduction: >80% processing time savings
 - Semantic cache hit rate: >60% for repeated queries
 - Cache response time: <10ms for hits
@@ -1017,6 +1184,7 @@ And cache eviction follows LRU policy correctly
 - Multi-agent cache sharing: <5ms coordination overhead
 
 **Multi-Agent Coordination:**
+
 - Agent coordination overhead: <500ms per query
 - Parallel tool execution: 50-87% token reduction
 - Context trimming: <100ms for 128K windows
@@ -1026,6 +1194,7 @@ And cache eviction follows LRU policy correctly
 ### Reliability Gates
 
 **Core System:**
+
 - Offline operation: 100% functional (REQ-0061)
 - Error recovery: >90% success rate
 - GPU detection: 100% accuracy (REQ-0066)
@@ -1033,12 +1202,14 @@ And cache eviction follows LRU policy correctly
 - Concurrent DB access: No deadlocks (REQ-0067)
 
 **Caching System:**
+
 - Cache corruption recovery: 100% automatic rebuilding
 - Cache server availability: >99.9% uptime
 - Cache consistency: 100% across multi-agent access
 - Cache eviction: Graceful LRU without data loss
 
 **Multi-Agent System:**
+
 - Agent failure recovery: >95% graceful degradation
 - Supervisor restart: <5 seconds with state preservation
 - Parallel execution stability: >98% successful coordination
@@ -1054,6 +1225,7 @@ And cache eviction follows LRU policy correctly
 ## 11. Requirements Covered
 
 **Core Infrastructure (REQ-0061 to REQ-0070):**
+
 - **REQ-0061**: 100% offline operation ✓
 - **REQ-0062**: Multiple LLM backends ✓
 - **REQ-0063-v2**: Qwen/Qwen3-4B-Instruct-2507-FP8 with FP8 runtime ✓
@@ -1066,6 +1238,7 @@ And cache eviction follows LRU policy correctly
 - **REQ-0070**: 12-14GB VRAM usage typical, <16GB max ✓
 
 **Architecture & Configuration (REQ-0081 to REQ-0090):**
+
 - **REQ-0081**: Environment variable config ✓
 - **REQ-0082**: LlamaIndex Settings singleton ✓
 - **REQ-0083**: Docker deployment ✓
@@ -1078,6 +1251,7 @@ And cache eviction follows LRU policy correctly
 - **REQ-0090**: Library-first principle ✓
 
 **Additional Requirements (REQ-0097 to REQ-0099):**
+
 - **REQ-0097**: Dual-layer caching system (IngestionCache + GPTCache) ✓
 - **REQ-0098**: LangGraph supervisor multi-agent orchestration ✓
 - **REQ-0099**: Parallel tool execution with 50-87% token reduction ✓
@@ -1087,6 +1261,7 @@ And cache eviction follows LRU policy correctly
 ### Technical Dependencies
 
 **Core LLM Infrastructure:**
+
 - `ollama>=0.1.0`
 - `llama-cpp-python>=0.2.0`
 - `vllm>=0.4.0` (FP8 support)
@@ -1099,17 +1274,20 @@ And cache eviction follows LRU policy correctly
 - `python-dotenv>=1.0.0`
 
 **Dual-Layer Caching System:**
+
 - `gptcache>=0.1.34` (semantic caching)
 - `llama-index-core>=0.10.0` (ingestion cache)
 - `qdrant-client>=1.6.0` (vector backend for GPTCache)
 - `sqlite3` (built-in, cache storage)
 
 **Multi-Agent Orchestration:**
+
 - `langgraph>=0.2.0` (supervisor framework)
 - `langgraph-prebuilt>=0.1.0` (supervisor utilities)
 - `langchain-core>=0.3.0` (base framework)
 
 **Performance Optimization:**
+
 - `numpy>=1.24.0` (numerical operations)
 - `psutil>=5.9.0` (system monitoring)
 - `asyncio` (built-in, async coordination)
@@ -1128,7 +1306,46 @@ And cache eviction follows LRU policy correctly
 - 16GB VRAM (RTX 4090 Laptop optimized)
 - SystemD for vLLM service management
 
-## 13. Traceability
+## 13. Clustering Assessment
+
+### Recommendation: Maintain Single Specification
+
+**ASSESSMENT RESULT**: The current specification with 30 requirements should **NOT be split** into smaller clusters.
+
+**Rationale for Single Specification:**
+
+1. **High Interconnectedness**: All 30 requirements are tightly coupled:
+   - FP8 quantization affects LLM backend, caching, and memory management
+   - Dual-layer caching spans document processing, agent coordination, and performance
+   - 128K context capability impacts agent orchestration, memory optimization, and deployment
+   - Multi-agent system requires integrated infrastructure, caching, and orchestration
+
+2. **Implementation Dependencies**: Components must be implemented together:
+   - vLLM + FlashInfer backend requires FP8 model, KV cache optimization, and GPU management
+   - LangGraph supervisor needs dual-cache coordination for multi-agent efficiency
+   - Docker deployment must support FP8 models, cache services, and agent orchestration
+   - Performance targets can only be achieved with complete integrated system
+
+3. **Manageable Complexity**: 30 requirements organized in logical groups:
+   - **Core Infrastructure** (REQ-0061 to REQ-0070): 10 fundamental requirements
+   - **Architecture & Configuration** (REQ-0081 to REQ-0090): 10 system requirements  
+   - **Additional Requirements** (REQ-0097 to REQ-0099): 3 optimization requirements
+
+4. **Splitting Disadvantages**:
+   - Would create complex cross-spec dependencies
+   - Testing would require multiple specs to be implemented simultaneously
+   - Deployment complexity would increase significantly
+   - Architecture coherence would be compromised
+
+**Alternative Clustering Considered and Rejected:**
+
+- **FEAT-004A**: Core Infrastructure (LLM, GPU, basics) → Missing caching integration
+- **FEAT-004B**: Performance Optimization (caching, FP8) → Missing agent coordination
+- **FEAT-004C**: Deployment & Operations (Docker, monitoring) → Missing runtime integration
+
+**Conclusion**: The current single specification approach is optimal for maintaining architectural coherence while providing manageable implementation guidance.
+
+## 14. Traceability
 
 ### Source Documents
 

@@ -3,12 +3,17 @@
 ## Metadata
 
 - **Feature ID**: FEAT-001
-- **Version**: 1.0.0
-- **Status**: Implemented
+- **Version**: 1.2.0
+- **Status**: Critical Architectural Drift - Requires Complete Overhaul
 - **Created**: 2025-08-19
-- **Validated At**: 2025-08-20
-- **Completion Percentage**: 90%
+- **Last Updated**: 2025-08-21
+- **Validation Timestamp**: 2025-08-21T00:00:00Z
+- **Completion Percentage**: 15-20% (ADR-compliant implementation required)
 - **Requirements Covered**: REQ-0001 to REQ-0010
+- **ADR Dependencies**: [ADR-001, ADR-004, ADR-010, ADR-011, ADR-018]
+- **Implementation Status**: Architecture violations - Custom implementation contradicts ADRs
+- **Code Replacement Plan**: See Implementation Instructions section
+- **Critical Issues**: langgraph-supervisor not used, no parallel execution, wrong model, mock DSPy
 
 ## 1. Objective
 
@@ -32,7 +37,101 @@ The Multi-Agent Coordination System orchestrates five specialized agents using L
 - Real-time collaboration features
 - Agent learning or fine-tuning
 
-## 3. Inputs and Outputs
+## 3. Implementation Instructions
+
+### Critical: Files Requiring Deletion
+
+**MANDATORY DELETIONS** - These files contain architecture that directly violates ADR specifications and MUST be completely removed:
+
+#### Primary Architecture Conflicts (DELETE IMMEDIATELY)
+
+1. **`src/agents/supervisor_graph.py`** - VIOLATES ADR-011 (custom LangGraph vs langgraph-supervisor)
+2. **`src/agents/router.py`** - VIOLATES ADR-011 (custom routing vs tool-based approach)
+3. **`src/agents/planner.py`** - VIOLATES ADR-011 (custom planning vs tool-based approach)
+4. **`src/agents/synthesis.py`** - VIOLATES ADR-011 (custom synthesis vs tool-based approach)
+5. **`src/agents/validator.py`** - VIOLATES ADR-011 (custom validation vs tool-based approach)
+
+#### Secondary Architecture Conflicts (DELETE AFTER REPLACEMENT)
+
+6. **`src/agents/agent_factory.py`** - Custom agent creation vs create_react_agent
+7. **`src/agents/agent_utils.py`** - Utility functions for deprecated patterns
+8. **`src/core/retrieval_engine.py`** - Non-BGE-M3 retrieval implementation
+9. **`src/utils/vllm_llm.py`** - Generic vLLM vs FP8-optimized configuration
+
+### Architecture Replacement Requirements
+
+**MANDATORY CHANGES** - ADR compliance requirements:
+
+**ADR-011 Architecture with Modern Parameters**:
+
+- Replace custom LangGraph implementation with `langgraph-supervisor` library
+- Implement `create_supervisor()` with modern optimization parameters
+- Enable `parallel_tool_calls=True` for 50-87% token reduction
+- Configure `output_mode="structured"` for enhanced response formatting
+- Add `create_forward_message_tool=True` for direct message passthrough
+- Implement `add_handoff_back_messages=True` for coordination tracking
+- Add context management hooks for 128K limitation (ADR-004)
+
+**Qwen3-4B-Instruct-2507-FP8 Configuration (ADR-004)**:
+
+- Configure vLLM with FP8 quantization and FlashInfer backend
+- Set `kv_cache_dtype="fp8_e5m2"` for FP8 KV cache optimization
+- Enable `attention_backend="FLASHINFER"` for FP8 acceleration
+- Configure `max_model_len=131072` for 128K context (hardware-constrained)
+- Set `gpu_memory_utilization=0.95` for optimal RTX 4090 Laptop usage
+
+**Real DSPy Integration (ADR-018)**:
+
+- Replace mock DSPy implementation with real `DSPyLlamaIndexRetriever`
+- Implement actual query optimization with refinement and variants
+- Configure automatic query rewriting for improved retrieval quality
+
+### Migration Strategy
+
+**Phase 1: Delete Conflicting Implementation Files**
+
+- Complete removal of custom agent coordination architecture
+- Elimination of non-ADR compliant implementations
+- Clean slate preparation for ADR architecture
+
+**Phase 2: Implement Pure ADR Architecture**
+
+- Deploy `langgraph-supervisor` with modern parameters
+- Configure Qwen3-4B-Instruct-2507-FP8 with FP8 optimization
+- Implement real DSPy integration for query optimization
+
+**Phase 3: vLLM FP8 Backend Configuration**
+
+- Set up vLLM service with FlashInfer backend
+- Configure FP8 KV cache for 128K context support
+- Optimize for RTX 4090 Laptop hardware constraints
+
+### Validation Requirements
+
+**Performance Validation**:
+
+- Agent coordination overhead: <200ms (NOT 300ms)
+- Token reduction through parallel execution: 50-87%
+- Context window: 131,072 tokens (128K) with FP8 KV cache
+- Memory usage: 12-14GB VRAM on RTX 4090 Laptop
+- Decode throughput: 100-160 tokens/sec
+- Prefill throughput: 800-1300 tokens/sec
+
+**Integration Validation**:
+
+- LangGraph supervisor coordination with 5 agents
+- Parallel tool execution achieving token reduction targets
+- Context trimming at 120K threshold with 8K buffer
+- Real DSPy query optimization functionality
+
+**Quality Validation**:
+
+- FP8 quantization maintains >98% accuracy vs FP16 baseline
+- 128K context processing without memory overflow
+- All ADR features fully functional (no mock implementations)
+- Hardware optimization leverages RTX 4090 Laptop constraints
+
+## 4. Inputs and Outputs
 
 ### Inputs
 
@@ -47,7 +146,7 @@ The Multi-Agent Coordination System orchestrates five specialized agents using L
 - **Performance Metrics**: Latency and success indicators (Dict[str, float])
 - **Validation Results**: Quality and accuracy scores (Dict[str, Any])
 
-## 4. Interfaces
+## 5. Interfaces
 
 ### External Interfaces
 
@@ -330,7 +429,7 @@ class SupervisorConfig:
     }
 ```
 
-## 5. Data Contracts
+## 6. Data Contracts
 
 ### Query Routing Decision
 
@@ -371,7 +470,181 @@ class SupervisorConfig:
 }
 ```
 
-## 6. Change Plan
+## 7. Change Plan
+
+### New Files
+
+- `src/agents/coordinator.py` - Main coordinator class with langgraph-supervisor
+- `src/agents/tools.py` - Real DSPy integration and agent tools
+- `src/agents/context_manager.py` - 128K context management with FP8 optimization
+- `tests/test_agents/` - Complete agent test suite
+
+### Modified Files
+
+- `src/main.py` - Integrate supervisor-based multi-agent coordinator
+- `src/config/settings.py` - Add modern agent configuration
+- `src/ui/streamlit_app.py` - Connect UI to supervisor system
+
+### Configuration Changes
+
+- Add `MODEL_PATH="Qwen/Qwen3-4B-Instruct-2507-FP8"`
+- Add `MAX_CONTEXT_LENGTH=131072`
+- Add `VLLM_KV_CACHE_DTYPE="fp8_e5m2"`
+- Add `VLLM_ATTENTION_BACKEND="FLASHINFER"`
+- Add `PARALLEL_TOOL_CALLS=true`
+
+## 8. Acceptance Criteria
+
+### Scenario 1: Simple Query Processing
+
+```gherkin
+Given a simple factual query "What is the capital of France?"
+When the query is processed by the multi-agent system
+Then the router agent classifies it as "simple" complexity
+And the retrieval agent uses vector search strategy
+And the response is generated without planning or synthesis
+And the total processing time is under 1.5 seconds
+    
+    if total_tokens > 120000:  # Trim threshold with 8K buffer
+        messages = trim_to_token_limit(messages, 120000)
+        state["messages"] = messages
+        state["context_trimmed"] = True
+        state["tokens_trimmed"] = total_tokens - estimate_tokens(messages)
+    
+    return state
+
+def format_response_hook(state):
+    """Post-model hook for structured response formatting."""
+    if state.get("output_mode") == "structured":
+        state["response"] = structure_response(state["response"])
+        state["metadata"] = {
+            "context_used": estimate_tokens(state.get("messages", [])),
+            "kv_cache_usage_gb": calculate_kv_cache_usage(state),
+            "parallel_execution_active": state.get("parallel_tool_calls", False)
+        }
+    return state
+
+# REQUIRED: Qwen3-4B-Instruct-2507-FP8 Configuration (ADR-004)
+vllm_config = {
+    "model": "Qwen/Qwen3-4B-Instruct-2507-FP8",
+    "kv_cache_dtype": "fp8_e5m2",  # FP8 KV cache optimization
+    "calculate_kv_scales": True,
+    "attention_backend": "FLASHINFER",  # FlashInfer for FP8 acceleration
+    "max_model_len": 131072,  # 128K context (hardware-constrained)
+    "gpu_memory_utilization": 0.95,
+    "enable_chunked_prefill": True,
+    "use_cudnn_prefill": True
+}
+
+# REQUIRED: Modern Supervisor Configuration (ADR-011)
+workflow = create_supervisor(
+    agents=[
+        router_agent, planner_agent, retrieval_agent, 
+        synthesis_agent, validation_agent
+    ],
+    model=vllm_llm,  # Qwen3-4B-Instruct-2507-FP8
+    prompt=supervisor_prompt,
+    
+    # CRITICAL: Modern optimization parameters (verified from LangGraph docs)
+    parallel_tool_calls=True,                           # 50-87% token reduction
+    output_mode="structured",                          # Enhanced formatting
+    create_forward_message_tool=True,                  # Direct passthrough
+    add_handoff_back_messages=True,                    # Coordination tracking
+    pre_model_hook=RunnableLambda(trim_context_hook),  # Context management
+    post_model_hook=RunnableLambda(format_response_hook) # Response formatting
+)
+```
+
+**REPLACE** `src/agents/tools.py` with REAL DSPy implementation (ADR-018):
+
+```python
+# REQUIRED: Real DSPy Integration (NOT mock)
+from src.dspy_integration import DSPyLlamaIndexRetriever
+
+@tool
+def retrieve_documents(
+    query: str, 
+    strategy: str,
+    use_dspy: bool = True,
+    use_graphrag: bool = False
+) -> List[Document]:
+    """Execute retrieval with REAL DSPy optimization and optional GraphRAG."""
+    
+    # REAL DSPy query optimization (ADR-018)
+    if use_dspy:
+        optimized_queries = DSPyLlamaIndexRetriever.optimize_query(query)
+        primary_query = optimized_queries["refined"]
+        variant_queries = optimized_queries["variants"]
+    else:
+        primary_query = query
+        variant_queries = []
+    
+    # Optional GraphRAG (ADR-019)
+    if use_graphrag and strategy in ["relationships", "graph", "complex"]:
+        from src.graphrag_integration import OptionalGraphRAG
+        graph_rag = OptionalGraphRAG(enabled=True)
+        
+        if graph_rag.is_graph_query(query):
+            graph_results = graph_rag.query(primary_query)
+            if graph_results and graph_results.get("confidence", 0) > 0.7:
+                return graph_results["documents"]
+    
+    # Execute retrieval with all query variants
+    documents = []
+    for q in [primary_query] + variant_queries[:2]:
+        if strategy == "hybrid":
+            docs = hybrid_retriever.retrieve(q)
+        elif strategy == "graphrag":
+            docs = graphrag_retriever.retrieve(q)
+        else:
+            docs = vector_retriever.retrieve(q)
+        documents.extend(docs)
+    
+    return deduplicate_documents(documents)[:10]
+```
+
+### Phase 3: vLLM FP8 Backend Configuration
+
+**REPLACE vLLM setup** with FP8-optimized configuration (ADR-004, ADR-010):
+
+```bash
+#!/bin/bash
+# REQUIRED: vLLM with FP8 Optimization for 128K Context
+
+export VLLM_ATTENTION_BACKEND=FLASHINFER
+export VLLM_USE_CUDNN_PREFILL=1
+
+vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
+  --max-model-len 131072 \
+  --kv-cache-dtype fp8_e5m2 \
+  --calculate-kv-scales \
+  --gpu-memory-utilization 0.95 \
+  --max-num-seqs 1 \
+  --enable-chunked-prefill \
+  --trust-remote-code \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name docmind-qwen3-fp8
+```
+
+### Performance Requirements Validation
+
+**MANDATORY TARGETS** (ADR-001, ADR-011):
+
+- Agent coordination overhead: **<200ms** (NOT 300ms)
+- Token reduction through parallel execution: **50-87%**
+- Context window: **131,072 tokens (128K)** with FP8 KV cache
+- Memory usage: **12-14GB VRAM** on RTX 4090 Laptop
+- Decode throughput: **100-160 tokens/sec**
+- Prefill throughput: **800-1300 tokens/sec**
+
+### Migration Constraints
+
+- **NO BACKWARDS COMPATIBILITY**: Complete architectural replacement required
+- **NO INCREMENTAL UPDATES**: ADR violations must be fully replaced
+- **NO MOCK IMPLEMENTATIONS**: All ADR features must be fully functional
+- **HARDWARE OPTIMIZATION**: Leverage RTX 4090 Laptop constraints for 128K context
+
+## 7. Change Plan
 
 ### New Files
 
@@ -401,7 +674,7 @@ class SupervisorConfig:
 - Add `VLLM_MAX_MODEL_LEN=128000`
 - Add `VLLM_QUANTIZATION=fp8`
 
-## 7. Acceptance Criteria
+## 8. Acceptance Criteria
 
 ### Scenario 1: Simple Query Processing
 
@@ -478,22 +751,28 @@ And the response maintains conversational coherence
 And no critical information is lost during trimming
 ```
 
-### Scenario 8: Modern Supervisor Coordination
+### Scenario 8: Modern Supervisor Coordination (ARCHITECTURAL OVERHAUL REQUIRED)
 
 ```gherkin
-Given the modern supervisor system with parallel execution enabled (ADR-011)
-When processing a complex multi-step query requiring multiple agents
-Then parallel_tool_calls=True enables concurrent agent execution
-And token usage is reduced by 50-87% through parallel tool execution
-And add_handoff_back_messages=True tracks coordination messages for efficiency
-And output_mode="structured" provides enhanced response formatting with metadata
-And create_forward_message_tool=True enables direct message passthrough reducing overhead
-And total coordination overhead stays under 200ms per agent decision
-And up to 3 tools can execute in parallel simultaneously
-And structured output includes coordination metadata and performance metrics
+Given the ADR-mandated supervisor system architecture (ADR-011)
+When implementing the complete architectural replacement
+Then the existing custom LangGraph implementation must be DELETED (❌ CURRENT: Custom supervisor_graph.py)
+And langgraph-supervisor library must be used with create_supervisor() (❌ CURRENT: Custom StateGraph)
+And parallel_tool_calls=True must enable concurrent agent execution (❌ NOT IMPLEMENTED)
+And token usage must be reduced by 50-87% through parallel tool execution (❌ NOT IMPLEMENTED)
+And add_handoff_back_messages=True must track coordination messages (❌ NOT IMPLEMENTED)
+And output_mode="structured" must provide enhanced response formatting (❌ NOT IMPLEMENTED)
+And create_forward_message_tool=True must enable direct message passthrough (❌ NOT IMPLEMENTED)
+And pre_model_hook must trim context at 120K threshold with 8K buffer (❌ NOT IMPLEMENTED)
+And post_model_hook must format responses with metadata (❌ NOT IMPLEMENTED)
+And total coordination overhead must stay under 200ms per agent decision (❌ CURRENT: 300ms target)
+And Qwen3-4B-Instruct-2507-FP8 must be configured with FP8 KV cache (❌ CURRENT: Generic LLM)
+And vLLM + FlashInfer backend must be configured for 128K context (❌ NOT IMPLEMENTED)
 ```
 
-## 8. Tests
+**CRITICAL**: This scenario requires COMPLETE REPLACEMENT of the current implementation. The existing codebase violates ADR-011 architecture and must be deleted and rebuilt per ADR specifications.
+
+## 9. Tests
 
 ### Unit Tests
 
@@ -532,7 +811,7 @@ And structured output includes coordination metadata and performance metrics
 - Integration test coverage: >80%
 - Performance test scenarios: 10+
 
-## 9. Security Considerations
+## 10. Security Considerations
 
 - All agent operations execute locally (no data exfiltration)
 - Input validation prevents prompt injection
@@ -540,7 +819,7 @@ And structured output includes coordination metadata and performance metrics
 - No storage of sensitive information in agent memory
 - Sandboxed execution environment for agent tools
 
-## 10. Quality Gates
+## 11. Quality Gates
 
 ### Performance Gates
 
@@ -552,14 +831,18 @@ And structured output includes coordination metadata and performance metrics
 - FP8 model prefill throughput: 800-1300 tokens/second
 - Context management efficiency: <50ms for trimming operations
 
-### Performance Validation
+### Performance Validation - ADR Compliance Audit Results
 
-- Agent coordination latency validated at <200ms per decision with modern supervisor pattern
-- Parallel tool execution achieving 50-87% token reduction through parallel_tool_calls=True
-- FP8 KV cache enabling 128K context within 12-14GB VRAM on RTX 4090 Laptop
-- vLLM + FlashInfer backend providing 100-160 tok/s decode, 800-1300 tok/s prefill
-- Context trimming at 120K threshold with 8K buffer maintaining conversation coherence
-- Modern supervisor parameters reducing coordination overhead through structured output and message forwarding
+- ❌ **Architecture Compliance**: Custom LangGraph implementation violates ADR-011 (requires langgraph-supervisor)
+- ❌ **FP8 KV Cache**: Not implemented - generic vLLM without FP8 optimization  
+- ❌ **vLLM Backend**: Generic configuration, missing FlashInfer + FP8 setup
+- ❌ **Model Specification**: Generic LLM vs required Qwen3-4B-Instruct-2507-FP8
+- ❌ **Agent Coordination**: 300ms target violates ADR-001 requirement of <200ms
+- ❌ **Parallel Execution**: No parallel_tool_calls implementation (0% vs 50-87% target)
+- ❌ **Modern Parameters**: All 5 optimization parameters missing from supervisor
+- ❌ **Context Management**: No pre_model_hook/post_model_hook implementation
+- ❌ **DSPy Integration**: Mock implementation violates ADR-018 requirement
+- ❌ **GraphRAG**: No PropertyGraphIndex implementation per ADR-019
 
 ### Quality Gates
 
@@ -575,20 +858,32 @@ And structured output includes coordination metadata and performance metrics
 - Clean agent boundaries (single responsibility)
 - Comprehensive error handling in all agents
 
-## 11. Requirements Covered
+## 12. Requirements Coverage
 
-- **REQ-0001**: LangGraph supervisor pattern with 5 agents ✓
-- **REQ-0002**: Query routing agent for strategy selection ✓
-- **REQ-0003**: Planning agent for query decomposition ✓
-- **REQ-0004**: Retrieval agent with DSPy optimization ✓
-- **REQ-0005**: Synthesis agent for multi-source combination ✓
-- **REQ-0006**: Validation agent for response quality ✓
-- **REQ-0007-v2**: Agent coordination overhead under 200ms ✓ (improved from 300ms with parallel execution)
-- **REQ-0008**: Fallback to basic RAG on failure ✓
-- **REQ-0009**: Local execution without APIs ✓
-- **REQ-0010**: Context preservation across interactions ✓
+### Functional Requirements
 
-## 12. Dependencies
+- **REQ-0001**: LangGraph supervisor pattern with 5 agents ❌ (VIOLATION: Custom StateGraph vs langgraph-supervisor)
+- **REQ-0002**: Query routing agent for strategy selection ❌ (VIOLATION: Custom router vs tool-based)
+- **REQ-0003**: Planning agent for query decomposition ❌ (VIOLATION: Custom planner vs tool-based)
+- **REQ-0004**: Retrieval agent with DSPy optimization ❌ (VIOLATION: Mock DSPy vs real implementation)
+- **REQ-0005**: Synthesis agent for multi-source combination ❌ (VIOLATION: Custom synthesis vs tool-based)
+- **REQ-0006**: Validation agent for response quality ❌ (VIOLATION: Custom validator vs tool-based)
+- **REQ-0007-v2**: Agent coordination overhead under 200ms ❌ (VIOLATION: 300ms target vs <200ms requirement)
+- **REQ-0008**: Fallback to basic RAG on failure ⚠️ (Partial implementation exists)
+- **REQ-0009**: Local execution without APIs ⚠️ (Basic local execution, missing FP8 optimization)
+- **REQ-0010**: Context preservation across interactions ⚠️ (Basic context, missing 128K management hooks)
+
+### ADR Compliance Status
+
+- **ADR-001**: Modern Agentic RAG Architecture ❌ (VIOLATION: Custom implementation vs supervisor pattern)
+- **ADR-004**: Local-First LLM Strategy ❌ (VIOLATION: Generic LLM vs Qwen3-4B-Instruct-2507-FP8)
+- **ADR-010**: Performance Optimization Strategy ❌ (VIOLATION: Missing FP8 KV cache optimization)
+- **ADR-011**: Agent Orchestration Framework ❌ (VIOLATION: Custom LangGraph vs langgraph-supervisor)
+- **ADR-018**: DSPy Prompt Optimization ❌ (VIOLATION: Mock implementation vs real DSPy)
+
+**COMPLIANCE SCORE**: 0/10 requirements fully ADR-compliant
+
+## 13. Dependencies
 
 ### Technical Dependencies
 
@@ -607,7 +902,7 @@ And structured output includes coordination metadata and performance metrics
 - LLM infrastructure (FEAT-004) for agent decisions
 - UI system (FEAT-005) for user interaction
 
-## 13. Traceability
+## 14. Traceability
 
 ### Source Documents
 

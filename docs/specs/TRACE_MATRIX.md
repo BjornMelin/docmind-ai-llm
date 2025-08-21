@@ -4,9 +4,9 @@
 
 This matrix provides complete bidirectional traceability between requirements, source documents (PRD/ADRs), and implementation specifications. Every requirement is traced from its origin to its implementation specification, ensuring 100% coverage and accountability.
 
-**Generated**: 2025-08-20  
-**Total Requirements**: 103 (including 3 validated FP8 delta requirements)  
-**Coverage**: 100% (Core features implemented and validated)
+**Generated**: 2025-08-21  
+**Total Requirements**: 71 (individual requirement objects, 3 superseded)  
+**Coverage**: 15%-95% by component (Infrastructure 95%, Document Processing 90%, Multi-Agent 85%, Retrieval 30%, UI 15%)
 
 ## Traceability Legend
 
@@ -15,7 +15,7 @@ This matrix provides complete bidirectional traceability between requirements, s
 - **ADR**: Architecture Decision Record source
 - **SPEC**: Implementation specification
 - **Priority**: C=Critical, H=High, M=Medium, L=Low
-- **Status**: ✅=Specified, 🟡=Draft, ❌=Not Started
+- **Status**: ✅=Implemented/Validated, 🟡=Draft/In Progress, ❌=Superseded
 
 ## Complete Traceability Matrix
 
@@ -32,84 +32,87 @@ This matrix provides complete bidirectional traceability between requirements, s
 
 | REQ ID | Requirement Summary | PRD Source | ADR Source | Specification | Priority | Status |
 |--------|-------------------|------------|------------|---------------|----------|---------|
-| **Multi-Agent Coordination (10 Requirements)** | | | | | | |
-| REQ-0001 | LangGraph supervisor with 5 agents | FR-8 | ADR-001, ADR-011 | FEAT-001 | C | ✅ |
-| REQ-0002 | Query routing agent | - | ADR-001, ADR-011 | FEAT-001 | C | ✅ |
-| REQ-0003 | Planning agent for decomposition | - | ADR-001, ADR-011 | FEAT-001 | H | ✅ |
-| REQ-0004 | Retrieval agent with DSPy | - | ADR-001, ADR-011, ADR-018 | FEAT-001 | H | ✅ |
-| REQ-0005 | Synthesis agent for multi-source | - | ADR-001, ADR-011 | FEAT-001 | H | ✅ |
-| REQ-0006 | Response validation agent | - | ADR-001, ADR-011 | FEAT-001 | C | ✅ |
-| REQ-0007 | Agent overhead <300ms | NFR-1 | ADR-001, ADR-011 | FEAT-001 | H | ✅ |
-| REQ-0008 | Fallback to basic RAG | - | ADR-001 | FEAT-001 | H | ✅ |
-| REQ-0009 | Local execution only | NFR-4 | ADR-001 | FEAT-001 | C | ✅ |
-| REQ-0010 | Context preservation | FR-10 | ADR-011 | FEAT-001 | H | ✅ |
+| **Multi-Agent Coordination (11 Requirements)** | | | | | | |
+| REQ-0001 | LangGraph supervisor with 5 agents | FR-8 | ADR-001, ADR-011 | FEAT-001 | C | ✅ 85% |
+| REQ-0002 | Query routing agent | - | ADR-001, ADR-011 | FEAT-001 | C | ✅ 85% |
+| REQ-0003 | Planning agent for decomposition | - | ADR-001, ADR-011 | FEAT-001 | H | ✅ 85% |
+| REQ-0004 | Retrieval agent with DSPy | - | ADR-001, ADR-011, ADR-018 | FEAT-001 | H | ✅ 85% |
+| REQ-0005 | Synthesis agent for multi-source | - | ADR-001, ADR-011 | FEAT-001 | H | ✅ 85% |
+| REQ-0006 | Response validation agent | - | ADR-001, ADR-011 | FEAT-001 | C | ✅ 85% |
+| REQ-0007 | Agent overhead <300ms | NFR-1 | ADR-001, ADR-011 | FEAT-001 | H | ✅ 85% |
+| REQ-0008 | Fallback to basic RAG | - | ADR-001 | FEAT-001 | H | ✅ 85% |
+| REQ-0009 | Local execution only | NFR-4 | ADR-001 | FEAT-001 | C | ✅ 85% |
+| REQ-0010 | Context preservation | FR-10 | ADR-011 | FEAT-001 | H | ✅ 85% |
+| REQ-0100 | >90% success rate | - | ADR-001 | FEAT-001 | H | ✅ 85% |
 | **Model Updates (Delta Specifications)** | | | | | | |
 | REQ-0063-v2 | Qwen/Qwen3-4B-Instruct-2507-FP8 model | - | ADR-004 | FEAT-001.1 | H | ✅ IMPLEMENTED |
 | REQ-0064-v2 | 100-160 tokens/sec decode, 800-1300 tokens/sec prefill | NFR-1 | ADR-010 | FEAT-001.1 | H | ✅ VALIDATED |
 | REQ-0094-v2 | 131,072 tokens (128K) context buffer | - | ADR-021 | FEAT-001.1 | H | ✅ VALIDATED |
 | **Document Processing (8 Requirements)** | | | | | | |
-| REQ-0021 | PDF parsing with UnstructuredReader | FR-1 | ADR-009 | FEAT-003 | C | 🟡 |
-| REQ-0022 | DOCX parsing with structure | FR-1 | ADR-009 | FEAT-003 | C | 🟡 |
-| REQ-0023 | Multimodal element extraction | FR-1 | ADR-009 | FEAT-003 | C | 🟡 |
-| REQ-0024 | Semantic chunking | FR-2 | ADR-009 | FEAT-003 | C | 🟡 |
-| REQ-0025 | Document caching | FR-11 | ADR-009 | FEAT-003 | H | 🟡 |
-| REQ-0026 | >50 pages/sec throughput | Perf | - | FEAT-003 | H | 🟡 |
-| REQ-0027 | Async non-blocking processing | NFR-3 | ADR-009 | FEAT-003 | H | 🟡 |
-| REQ-0028 | Graceful error handling | NFR-5 | ADR-009 | FEAT-003 | M | 🟡 |
+| REQ-0021 | PDF parsing with UnstructuredReader | FR-1 | ADR-009 | FEAT-003 | C | ✅ 90% |
+| REQ-0022 | DOCX parsing with structure | FR-1 | ADR-009 | FEAT-003 | C | ✅ 90% |
+| REQ-0023 | Multimodal element extraction | FR-1 | ADR-009 | FEAT-003 | C | ✅ 90% |
+| REQ-0024 | Semantic chunking | FR-2 | ADR-009 | FEAT-003 | C | ✅ 90% |
+| REQ-0025 | Document caching | FR-11 | ADR-009 | FEAT-003 | H | ✅ 90% |
+| REQ-0026 | >1 page/sec throughput (quality focus) | Perf | - | FEAT-003 | H | ✅ 90% |
+| REQ-0027 | Async non-blocking processing | NFR-3 | ADR-009 | FEAT-003 | H | ✅ 90% |
+| REQ-0028 | Graceful error handling | NFR-5 | ADR-009 | FEAT-003 | M | ✅ 90% |
 | **Retrieval & Search (10 Requirements)** | | | | | | |
-| REQ-0041 | Hybrid search implementation | FR-3 | ADR-003 | FEAT-002 | C | 🟡 |
-| REQ-0042 | BGE dense embeddings | FR-4 | ADR-002 | FEAT-002 | C | 🟡 |
-| REQ-0043 | SPLADE++ sparse embeddings | FR-5 | ADR-002 | FEAT-002 | H | 🟡 |
-| REQ-0044 | CLIP image embeddings | FR-6 | ADR-002 | FEAT-002 | M | 🟡 |
-| REQ-0045 | BGE reranking | FR-7 | ADR-006 | FEAT-002 | H | 🟡 |
-| REQ-0046 | P95 latency <2s | Perf | - | FEAT-002 | C | 🟡 |
-| REQ-0047 | Qdrant vector database | - | ADR-003 | FEAT-002 | C | 🟡 |
-| REQ-0048 | RRF with k=60 | - | ADR-003 | FEAT-002 | H | 🟡 |
-| REQ-0049 | Optional GraphRAG | - | ADR-019 | FEAT-002 | M | 🟡 |
-| REQ-0050 | >80% retrieval accuracy | Perf | - | FEAT-002 | H | 🟡 |
-| **Infrastructure & Performance (20 Requirements)** | | | | | | |
-| REQ-0061 | 100% offline operation | NFR-4 | ADR-004 | FEAT-004 | C | 🟡 |
-| REQ-0062 | Multi-backend LLM support | FR-9 | ADR-004 | FEAT-004 | H | 🟡 |
-| REQ-0063 | Qwen/Qwen3-4B-Instruct-2507-FP8 default model | - | ADR-004 | FEAT-004 | H | ✅ |
-| REQ-0064 | ~1000 tokens/sec | NFR-1 | ADR-010 | FEAT-004 | H | 🟡 |
-| REQ-0065 | TorchAO quantization | NFR-6 | ADR-010 | FEAT-004 | H | 🟡 |
-| REQ-0066 | GPU auto-detection | NFR-9 | ADR-010 | FEAT-004 | H | 🟡 |
-| REQ-0067 | SQLite WAL mode | NFR-8 | ADR-007 | FEAT-004 | H | 🟡 |
-| REQ-0068 | Tenacity error handling | NFR-5 | ADR-022 | FEAT-004 | M | 🟡 |
-| REQ-0069 | <4GB RAM usage | Perf | - | FEAT-004 | H | 🟡 |
-| REQ-0070 | <14GB VRAM usage | - | ADR-001, ADR-010 | FEAT-004 | H | 🟡 |
-| REQ-0081 | Environment variables | AR-3 | ADR-024 | FEAT-004 | H | 🟡 |
-| REQ-0082 | LlamaIndex Settings | AR-3 | ADR-020 | FEAT-004 | H | 🟡 |
-| REQ-0083 | Docker deployment | - | ADR-015 | FEAT-004 | M | 🟡 |
-| REQ-0084 | One-click install | - | ADR-015 | FEAT-004 | H | 🟡 |
-| REQ-0085 | Loguru logging | Quality | - | FEAT-004 | M | 🟡 |
-| REQ-0086 | Health endpoints | - | ADR-015 | FEAT-004 | M | 🟡 |
-| REQ-0087 | Pydantic validation | Security | - | FEAT-004 | H | 🟡 |
-| REQ-0088 | Pytest >80% coverage | - | ADR-014 | FEAT-004 | H | 🟡 |
-| REQ-0089 | Performance benchmarks | - | ADR-014 | FEAT-004 | M | 🟡 |
-| REQ-0090 | Library-first principle | AR-2 | ADR-018 | FEAT-004 | C | 🟡 |
-| **User Interface (10 Requirements)** | | | | | | |
-| REQ-0071 | Streamlit interface | FR-12 | ADR-013 | FEAT-005 | C | 🟡 |
-| REQ-0072 | Settings toggles | FR-12 | ADR-013 | FEAT-005 | H | 🟡 |
-| REQ-0073 | Real-time status | - | ADR-013 | FEAT-005 | M | 🟡 |
-| REQ-0074 | Session persistence | - | ADR-016 | FEAT-005 | H | 🟡 |
-| REQ-0075 | File upload | - | ADR-013 | FEAT-005 | C | 🟡 |
-| REQ-0076 | Source attribution | - | ADR-013 | FEAT-005 | H | 🟡 |
-| REQ-0077 | Chat history | FR-10 | ADR-021 | FEAT-005 | H | 🟡 |
-| REQ-0078 | Export functionality | - | ADR-022 | FEAT-005 | M | 🟡 |
-| REQ-0079 | Context indicators | - | ADR-021 | FEAT-005 | M | 🟡 |
-| REQ-0080 | Error handling | - | ADR-013 | FEAT-005 | H | 🟡 |
-| **Advanced Features (10 Requirements)** | | | | | | |
-| REQ-0091 | DSPy optimization | - | ADR-018 | FEAT-005 | M | 🟡 |
-| REQ-0092 | Optional GraphRAG | - | ADR-019 | FEAT-005 | L | 🟡 |
-| REQ-0093 | Prompt templates | - | ADR-020 | FEAT-005 | M | 🟡 |
-| REQ-0094 | 131,072 tokens (128K) context buffer | - | ADR-021 | FEAT-005 | H | 🟡 |
-| REQ-0095 | Analysis modes | - | ADR-023 | FEAT-005 | M | 🟡 |
-| REQ-0096 | Export formats | - | ADR-022 | FEAT-005 | M | 🟡 |
-| REQ-0097 | Evaluation metrics | - | ADR-012 | FEAT-004 | M | 🟡 |
-| REQ-0098 | Native components | AR-5 | ADR-021 | FEAT-004 | H | 🟡 |
-| REQ-0099 | Pure LlamaIndex | AR-1 | ADR-021 | FEAT-004 | C | 🟡 |
-| REQ-0100 | >90% success rate | - | ADR-001 | FEAT-001 | H | 🟡 |
+| REQ-0041 | Adaptive hybrid search with BGE-M3 | FR-3 | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | C | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0042 | BGE-M3 unified embeddings | FR-4 | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | C | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0043 | BGE-M3 sparse embeddings | FR-5 | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | H | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0044 | CLIP ViT-B/32 image embeddings | FR-6 | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | M | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0045 | BGE-reranker-v2-m3 CrossEncoder | FR-7 | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | H | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0046 | P95 latency <2s on RTX 4090 Laptop | Perf | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | C | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0047 | Qdrant vector database with resilience | - | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | C | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0048 | Native LlamaIndex RRF fusion | - | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | H | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0049 | PropertyGraphIndex for GraphRAG | - | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | M | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+| REQ-0050 | >80% retrieval accuracy with DSPy | Perf | ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019 | FEAT-002 | H | 🚫 30% BGE-M3 MIGRATION REQUIRED |
+
+**Note**: FEAT-002 completion at 30% due to required BGE-M3 migration from BGE-large-en-v1.5 + SPLADE++. All retrieval requirements blocked pending migration.
+
+| **Infrastructure & Performance (23 Requirements)** | | | | | | |
+| REQ-0061 | 100% offline operation | NFR-4 | ADR-004 | FEAT-004 | C | ✅ 95% |
+| REQ-0062 | Multi-backend LLM support | FR-9 | ADR-004 | FEAT-004 | H | ✅ 95% |
+| REQ-0063 | Qwen/Qwen3-4B-Instruct-2507-FP8 default model | - | ADR-004 | FEAT-004 | H | ❌ SUPERSEDED |
+| REQ-0064 | ~1000 tokens/sec | NFR-1 | ADR-010 | FEAT-004 | H | ❌ SUPERSEDED |
+| REQ-0065 | FP8 quantization | NFR-6 | ADR-010 | FEAT-004 | H | ✅ 95% |
+| REQ-0066 | GPU auto-detection | NFR-9 | ADR-010 | FEAT-004 | H | ✅ 95% |
+| REQ-0067 | SQLite WAL mode | NFR-8 | ADR-007 | FEAT-004 | H | ✅ 95% |
+| REQ-0068 | Tenacity error handling | NFR-5 | ADR-022 | FEAT-004 | M | ✅ 95% |
+| REQ-0069 | <4GB RAM usage | Perf | - | FEAT-004 | H | ✅ 95% |
+| REQ-0070 | <14GB VRAM usage | - | ADR-001, ADR-010 | FEAT-004 | H | ✅ 95% |
+| REQ-0081 | Environment variables | AR-3 | - | FEAT-004 | H | ✅ 95% |
+| REQ-0082 | LlamaIndex Settings | AR-3 | ADR-020 | FEAT-004 | H | ✅ 95% |
+| REQ-0083 | Docker deployment | - | ADR-015 | FEAT-004 | M | ✅ 95% |
+| REQ-0084 | One-click install | - | ADR-015 | FEAT-004 | H | ✅ 95% |
+| REQ-0085 | Loguru logging | Quality | - | FEAT-004 | M | ✅ 95% |
+| REQ-0086 | Health endpoints | - | ADR-015 | FEAT-004 | M | ✅ 95% |
+| REQ-0087 | Pydantic validation | Security | - | FEAT-004 | H | ✅ 95% |
+| REQ-0088 | Pytest >80% coverage | - | ADR-014 | FEAT-004 | H | ✅ 95% |
+| REQ-0089 | Performance benchmarks | - | ADR-014 | FEAT-004 | M | ✅ 95% |
+| REQ-0090 | Library-first principle | AR-2 | ADR-018 | FEAT-004 | C | ✅ 95% |
+| REQ-0097 | Evaluation metrics | - | ADR-012 | FEAT-004 | M | ✅ 95% |
+| REQ-0098 | Native components | AR-5 | ADR-021 | FEAT-004 | H | ✅ 95% |
+| REQ-0099 | Pure LlamaIndex | AR-1 | ADR-021 | FEAT-004 | C | ✅ 95% |
+| **User Interface (16 Requirements)** | | | | | | |
+| REQ-0071 | Streamlit multipage interface | FR-12 | ADR-013, ADR-016, ADR-020, ADR-021, ADR-022, ADR-023 | FEAT-005 | C | 🚫 15% COMPLETE REWRITE REQUIRED |
+| REQ-0072 | Settings toggles | FR-12 | ADR-013 | FEAT-005 | H | 🟡 15% |
+| REQ-0073 | Real-time status | - | ADR-013 | FEAT-005 | M | 🟡 15% |
+| REQ-0074 | Session persistence | - | ADR-016 | FEAT-005 | H | 🟡 15% |
+| REQ-0075 | File upload | - | ADR-013 | FEAT-005 | C | 🟡 15% |
+| REQ-0076 | Source attribution | - | ADR-013 | FEAT-005 | H | 🟡 15% |
+| REQ-0077 | Chat history | FR-10 | ADR-021 | FEAT-005 | H | 🟡 15% |
+| REQ-0078 | Export functionality | - | ADR-022 | FEAT-005 | M | 🟡 15% |
+| REQ-0079 | Context indicators | - | ADR-021 | FEAT-005 | M | 🟡 15% |
+| REQ-0080 | Error handling | - | ADR-013 | FEAT-005 | H | 🟡 15% |
+| REQ-0091 | DSPy optimization | - | ADR-018 | FEAT-005 | M | 🟡 15% |
+| REQ-0092 | Optional GraphRAG | - | ADR-019 | FEAT-005 | L | 🟡 15% |
+| REQ-0093 | Prompt templates | - | ADR-020 | FEAT-005 | M | 🟡 15% |
+| REQ-0095 | Analysis modes | - | ADR-023 | FEAT-005 | M | 🟡 15% |
+| REQ-0096 | Export formats | - | ADR-022 | FEAT-005 | M | 🟡 15% |
+
+**Note**: FEAT-005 completion at 15% indicates major implementation gap requiring complete architectural rewrite from monolithic to multipage approach.
 
 ## Coverage Analysis by Source
 
@@ -147,21 +150,19 @@ This matrix provides complete bidirectional traceability between requirements, s
 | ADR-021 | Memory | 4 | FEAT-005, FEAT-004 |
 | ADR-022 | Export | 3 | FEAT-004, FEAT-005 |
 | ADR-023 | Analysis | 1 | FEAT-005 |
-| ADR-024 | Config | 1 | FEAT-004 |
-| **Total** | **23 ADRs** | **100%** | **All** |
+| **Total** | **22 ADRs** | **100%** | **All** |
 
 ## Specification Coverage
 
-| Specification | Requirements Count | Percentage | Dependencies |
+| Specification | Requirements Count | Completion | Dependencies |
 |--------------|-------------------|------------|--------------|
-| FEAT-001 | 10 | 10% | FEAT-002, FEAT-004 |
-| FEAT-001.1 | 3 FP8 delta | 3% | FEAT-004 |
-| FEAT-002 | 10 | 10% | FEAT-003, FEAT-004 |
-| FEAT-003 | 8 | 8% | FEAT-004 |
-| FEAT-004 | 30 | 30% | None (Foundation) |
-| FEAT-005 | 20 | 20% | FEAT-001, FEAT-003, FEAT-004 |
-| **Shared** | 19 | 19% | Multiple |
-| **Total** | **103** | **100%** | - |
+| FEAT-001 | 11 | 85% (ADR-validated) | FEAT-002, FEAT-004 |
+| FEAT-001.1 | 3 FP8 delta | 100% (FP8 validated) | FEAT-004 |
+| FEAT-002 | 10 | 30% (BGE-M3 migration required) | FEAT-003, FEAT-004 |
+| FEAT-003 | 8 | 90% (ADR-validated ready) | FEAT-004 |
+| FEAT-004 | 23 | 95% (FP8 validated) | None (Foundation) |
+| FEAT-005 | 16 | 15% (major implementation gap) | FEAT-001, FEAT-003, FEAT-004 |
+| **Total** | **71** | **15%-95% by component** | - |
 
 ## Dependency Graph
 
@@ -219,7 +220,7 @@ The following requirements mandate vLLM backend with FlashInfer for optimal perf
 
 ### Completeness
 
-- ✅ All 100 requirements mapped to specifications
+- ✅ All 71 requirements mapped to specifications
 - ✅ All PRD functional requirements covered
 - ✅ All PRD non-functional requirements covered
 - ✅ All architectural requirements addressed
@@ -276,7 +277,7 @@ The following requirements mandate vLLM backend with FlashInfer for optimal perf
 
 ### Implementation Readiness
 
-- **Requirements with Specs**: 100% (103/103)
+- **Requirements with Specs**: 100% (71/71)
 - **Specs with Test Criteria**: 100%
 - **Specs with Interfaces**: 100%
 - **Specs with Data Contracts**: 100%

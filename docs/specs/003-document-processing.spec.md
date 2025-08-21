@@ -16,18 +16,46 @@
 
 ## Implementation Instructions
 
+### ⚠️ CRITICAL: DELETE EXISTING IMPLEMENTATION FIRST ⚠️
+
+**MANDATORY DELETION**: The following files MUST be deleted before implementing this spec as they violate ALL ADR requirements:
+
+```bash
+# DELETE these files immediately - they contradict ADR-009:
+rm src/core/document_processor.py
+rm src/utils/document.py  # If exists
+
+# DELETE any LlamaIndex document processing wrappers:
+find src/ -name "*.py" -exec grep -l "SimpleDirectoryReader\|SentenceSplitter\|UnstructuredReader" {} \; | xargs rm
+
+# MODIFY configuration files to remove old chunking parameters:
+# These files contain chunk_size/chunk_overlap settings that conflict with Unstructured.io chunk_by_title:
+# - src/config/settings.py (remove chunk_size, chunk_overlap fields)
+# - src/models/core.py (remove chunk_size, chunk_overlap fields)  
+# - src/utils/core.py (remove any chunking configuration)
+```
+
+**WHY DELETION IS REQUIRED**:
+
+- Current implementation uses `SimpleDirectoryReader` and `SentenceSplitter` (violates ADR-009)
+- ADR-009 mandates DIRECT Unstructured.io usage with `partition()` and `chunk_by_title()`
+- No LlamaIndex wrappers allowed - pure library-first approach
+- Existing code cannot be refactored to ADR compliance - complete rewrite required
+
 ### Files to Replace in Current Codebase
 
 **CRITICAL**: This implementation requires complete replacement of existing document processing with direct Unstructured.io integration per ADR-009. NO BACKWARDS COMPATIBILITY - implement pure ADR vision.
 
-#### Primary Replacement Targets:
+#### Primary Replacement Targets
+
 - `src/core/document_processor.py` - **REPLACE ENTIRELY** with direct Unstructured.io integration, not LlamaIndex wrappers
 - `src/utils/document.py` - **REPLACE** with Unstructured.io chunk_by_title semantic intelligence
 - Any LlamaIndex UnstructuredReader usage - **REPLACE** with direct unstructured library calls
 - Custom chunking logic in existing code - **REPLACE** with Unstructured.io chunk_by_title semantic intelligence
 - Basic caching implementations - **REPLACE** with dual-layer IngestionCache + GPTCache system
 
-#### Functions to Deprecate:
+#### Functions to Deprecate
+
 - `DocumentProcessor.process_document()` - Replace with ResilientDocumentProcessor using direct Unstructured.io
 - `DocumentProcessor.aprocess_document()` - Replace with async Unstructured.io processing
 - Any LlamaIndex UnstructuredReader wrappers (ADR-009 requires direct Unstructured.io)
@@ -35,7 +63,8 @@
 - Single-layer caching (ADR-010 requires dual-layer IngestionCache + GPTCache)
 - Any document processing not supporting GraphRAG preparation (ADR-019)
 
-#### Dead Code Removal:
+#### Dead Code Removal
+
 - Remove LlamaIndex document processing wrappers
 - Delete custom chunking code not using Unstructured.io intelligence
 - Remove single-layer caching systems
@@ -43,7 +72,8 @@
 - Remove SimpleDirectoryReader usage in favor of direct partition() calls
 - Delete SentenceSplitter in favor of chunk_by_title
 
-#### Migration Strategy:
+#### Migration Strategy
+
 - **Pure Unstructured.io Integration**: Direct library usage per ADR-009
 - **Implement Dual-Layer Caching**: IngestionCache + GPTCache for 80-95% performance improvement
 - **BGE-M3 8K Context Support**: Integration per ADR-002
@@ -51,7 +81,8 @@
 - **Qdrant Integration**: Hybrid persistence per ADR-007
 - **Tenacity Resilience**: Retry patterns for robust processing
 
-#### New Implementation Files:
+#### New Implementation Files
+
 - `src/processing/resilient_processor.py` - ResilientDocumentProcessor with Unstructured.io
 - `src/processing/chunking/unstructured_chunker.py` - chunk_by_title implementation
 - `src/processing/embeddings/bgem3_embedder.py` - BGE-M3 8K context integration
@@ -446,6 +477,39 @@ class DualLayerCacheManager:
 - **VERIFIED ADR-019**: PropertyGraphIndex input preparation from processed documents for graph construction
 
 ### Configuration (ADR-Aligned)
+
+**REPLACE OLD CHUNKING CONFIG**: Remove chunk_size/chunk_overlap from settings and replace with:
+
+```python
+# NEW: src/config/unstructured_config.py
+class UnstructuredConfig:
+    # Unstructured.io strategy mapping (ADR-009)
+    STRATEGY_MAP = {
+        '.pdf': 'hi_res',      # Full multimodal extraction
+        '.docx': 'hi_res',     # Tables and images  
+        '.html': 'fast',       # Quick text extraction
+        '.txt': 'fast',        # Simple text
+        '.jpg': 'ocr_only',    # Image-focused
+        '.png': 'ocr_only'     # Image-focused
+    }
+    
+    # chunk_by_title parameters (ADR-009)
+    CHUNK_MAX_CHARACTERS = 1500
+    CHUNK_NEW_AFTER = 1200
+    CHUNK_COMBINE_UNDER = 500
+    MULTIPAGE_SECTIONS = True
+    
+    # BGE-M3 embedding config (ADR-002)
+    BGE_M3_MODEL = "BAAI/bge-m3"
+    BGE_M3_MAX_LENGTH = 8192
+    BGE_M3_DEVICE_MAP = "auto"
+    
+    # Dual-layer cache config (ADR-010)
+    INGESTION_CACHE_COLLECTION = "docmind_ingestion"
+    SEMANTIC_CACHE_DIMENSION = 1024  # BGE-M3 dense dimension
+```
+
+**Environment Variables**:
 
 - `UNSTRUCTURED_STRATEGY=hi_res` - High-resolution processing for PDF/DOCX
 - `CHUNK_MAX_CHARACTERS=1500` - Unstructured.io chunk_by_title max size

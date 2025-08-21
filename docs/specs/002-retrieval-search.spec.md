@@ -6,13 +6,18 @@
 - **Version**: 2.0.0
 - **Status**: Updated for ADR Alignment
 - **Created**: 2025-08-19
-- **Updated**: 2025-08-20
-- **Validated At**: 2025-08-20
-- **Completion Percentage**: 95%
+- **Updated**: 2025-08-21
+- **Validated At**: 2025-08-21
+- **ADR Dependencies**: [ADR-001, ADR-002, ADR-003, ADR-004, ADR-006, ADR-007, ADR-010, ADR-011, ADR-018, ADR-019]
+- **Implementation Status**: ADR-Aligned Specification (0% implemented - requires complete architectural replacement)
+- **Code Replacement Plan**: Listed below in Implementation Instructions
+- **Completion Percentage**: 0% (Specification complete, implementation requires complete architectural overhaul)
 - **Requirements Covered**: REQ-0041 to REQ-0050
-- **ADR Alignment**: Complete (ADR-002, ADR-003, ADR-006, ADR-007, ADR-018, ADR-019)
+- **ADR Alignment**: Complete specification, partial implementation
 
 ## 1. Objective
+
+**VALIDATION STATUS**: This specification is fully aligned with all referenced ADRs but requires COMPLETE ARCHITECTURAL REPLACEMENT for implementation. Current codebase uses deprecated BGE-large + SPLADE++ architecture that fundamentally conflicts with ADR-002's BGE-M3 unified approach. Existing retrieval engine is placeholder code that conflicts with ADR-003's RouterQueryEngine requirements. NO existing src/ or tests/ files can be preserved - complete deletion and replacement required.
 
 The Retrieval & Search System implements an adaptive, library-first retrieval pipeline using BGE-M3 unified dense/sparse embeddings, multimodal CLIP embeddings, and LlamaIndex native components. The system features automatic query optimization via DSPy, intelligent routing through RouterQueryEngine, optional PropertyGraphIndex for relationship queries, and BGE-reranker-v2-m3 for relevance optimization. Optimized for RTX 4090 Laptop hardware with 128K context support and FP8 acceleration, achieving >80% retrieval accuracy with <2 second P95 latency.
 
@@ -281,7 +286,167 @@ class SimpleReranker:
 }
 ```
 
-## 6. Change Plan
+## 6. Implementation Instructions
+
+### CRITICAL: Complete File Deletion Required
+
+**MANDATORY FIRST STEP - DELETE ALL CONFLICTING FILES:**
+
+Before implementing ANY ADR requirements, the following files MUST be completely deleted as they represent the old architecture that fundamentally conflicts with the ADR-mandated design:
+
+**DELETE IMMEDIATELY:**
+
+- `src/utils/embedding.py` - **COMPLETE DELETION REQUIRED**
+  - Uses deprecated BGE-large + SPLADE++ approach (conflicts with ADR-002 BGE-M3 unified)
+  - Uses FastEmbedEmbedding (conflicts with FlagEmbedding.BGEM3FlagModel)
+  - Cannot be adapted - architectural incompatibility
+
+- `src/core/retrieval_engine.py` - **COMPLETE DELETION REQUIRED**
+  - Placeholder implementation with mock results (conflicts with ADR-003 RouterQueryEngine)
+  - Wrong architectural approach - cannot be adapted
+  - Must be replaced with RouterQueryEngine-based implementation
+
+**DELETE ALL FILES IMPORTING:**
+
+- `FastEmbedEmbedding` (replaced by BGE-M3 FlagEmbedding)
+- `QueryFusionRetriever` (replaced by RouterQueryEngine)
+- `create_dense_embedding()` using BGE-large
+- `create_sparse_embedding()` using SPLADE++
+
+**REASON FOR COMPLETE DELETION:**
+The ADRs mandate a COMPLETE ARCHITECTURAL OVERHAUL, not an incremental migration. The existing files represent fundamentally incompatible approaches that cannot be adapted to the new architecture. Any attempt to preserve existing code will result in architectural drift and ADR non-compliance.
+
+### New Architecture Implementation (Post-Deletion)
+
+**NEW FILES TO CREATE:**
+
+- `src/retrieval/embeddings/bge_m3_manager.py` - **NEW FILE REQUIRED**
+  - IMPLEMENT: `UnifiedEmbeddingManager` using "BAAI/bge-m3" for unified dense/sparse embeddings
+  - IMPLEMENT: `FlagEmbedding.BGEM3FlagModel` integration for direct BGE-M3 access
+  - IMPLEMENT: 8K context support (vs 512 in old BGE-large)
+  - IMPLEMENT: Unified dense/sparse extraction via single model
+
+- `src/retrieval/adaptive_pipeline.py` - **NEW FILE REQUIRED**
+  - IMPLEMENT: `AdaptiveRetrievalPipeline` using LlamaIndex RouterQueryEngine
+  - IMPLEMENT: LLMSingleSelector for automatic strategy selection
+  - IMPLEMENT: QueryEngineTool definitions for vector/hybrid/multi_query/graph strategies
+  - IMPLEMENT: Query classification logic for optimal strategy routing
+
+- `src/retrieval/simple_reranker.py` - **NEW FILE REQUIRED**
+  - IMPLEMENT: `SimpleReranker` using sentence-transformers CrossEncoder
+  - IMPLEMENT: BGE-reranker-v2-m3 direct integration
+  - IMPLEMENT: <100ms reranking latency for 20 documents on RTX 4090 Laptop
+
+**ADDITIONAL NEW FILES REQUIRED:**
+
+- Any Qdrant client initialization code
+  - ADD: `@retry` decorators using Tenacity for connection resilience
+  - ADD: Exponential backoff and retry logic
+  - ADD: SQLite WAL mode configuration for concurrent access
+
+- Settings/configuration files
+  - ADD: BGE-M3 model configuration (replacing BGE-large + SPLADE++)
+  - ADD: Feature flags for DSPy optimization (experimental)
+  - ADD: Feature flags for PropertyGraphIndex GraphRAG (optional)
+  - ADD: RTX 4090 Laptop performance optimization settings
+
+### New Architecture Functions to Implement
+
+**UNIFIED EMBEDDING FUNCTIONS (BGE-M3):**
+
+```python
+# NEW - BGE-M3 unified approach (ADR-002)
+class UnifiedEmbeddingManager:
+    def generate_unified_embeddings()  # BGE-M3 dense + sparse
+    def encode_documents()  # 8K context support
+    def encode_query()  # Query-specific encoding
+```
+
+**ADAPTIVE RETRIEVAL FUNCTIONS (RouterQueryEngine):**
+
+```python
+# NEW - RouterQueryEngine approach (ADR-003)
+class AdaptiveRetrievalPipeline:
+    def retrieve()  # Automatic strategy selection
+    def _build_router_engine()  # RouterQueryEngine setup
+    def _classify_query()  # Strategy classification
+```
+
+**RERANKING FUNCTIONS (CrossEncoder):**
+
+```python
+# NEW - sentence-transformers approach (ADR-006)
+class SimpleReranker:
+    def rerank()  # BGE-reranker-v2-m3 integration
+    def predict_scores()  # Direct CrossEncoder usage
+```
+
+### Architectural Incompatibilities Eliminated
+
+**ARCHITECTURAL CONFLICTS RESOLVED:**
+
+- BGE-large + SPLADE++ dual-model → BGE-M3 unified model (ADR-002)
+- QueryFusionRetriever → RouterQueryEngine adaptive routing (ADR-003)
+- Missing reranking → BGE-reranker-v2-m3 CrossEncoder (ADR-006)
+- 512 token context → 8K token context with BGE-M3
+- Custom implementations → Library-first approach with LlamaIndex native components
+- No query optimization → DSPy automatic query rewriting (ADR-018)
+- Basic vector search → PropertyGraphIndex graph-based retrieval (ADR-019)
+
+### Implementation Strategy (Complete Architectural Replacement)
+
+**STEP 1: Complete File Deletion (BLOCKING - Must Complete First):**
+
+1. DELETE `src/utils/embedding.py` completely (architectural conflict)
+2. DELETE `src/core/retrieval_engine.py` completely (placeholder code)
+3. DELETE all files importing FastEmbedEmbedding or QueryFusionRetriever
+4. VERIFY: No BGE-large or SPLADE++ references remain in codebase
+5. **RESULT**: Clean slate for new ADR-compliant architecture
+
+**STEP 2: BGE-M3 Foundation Implementation (BLOCKING - New Architecture Core):**
+
+1. CREATE `src/retrieval/embeddings/bge_m3_manager.py` with unified BGE-M3 implementation
+2. IMPLEMENT `FlagEmbedding.BGEM3FlagModel` wrapper for unified dense/sparse extraction
+3. CONFIGURE model downloads: BGE-M3 (2.27GB) with 8K context support
+4. IMPLEMENT unified embedding generation calls for both indexing and retrieval
+5. **RESULT**: Single model replacing BGE-large + SPLADE++ dual-model approach
+
+**STEP 3: RouterQueryEngine Adaptive Retrieval (BLOCKING - Core Intelligence):**
+
+1. CREATE `src/retrieval/adaptive_pipeline.py` with RouterQueryEngine architecture
+2. IMPLEMENT `LLMSingleSelector` for automatic query routing and classification
+3. CREATE QueryEngineTool definitions for each retrieval strategy
+4. IMPLEMENT query classification logic using local LLM for optimal strategy selection
+5. **RESULT**: Intelligent adaptive retrieval replacing basic QueryFusionRetriever
+
+**STEP 4: CrossEncoder Reranking Integration (BLOCKING - Quality Enhancement):**
+
+1. CREATE `src/retrieval/simple_reranker.py` with sentence-transformers CrossEncoder
+2. IMPLEMENT BGE-reranker-v2-m3 model loading and prediction
+3. INTEGRATE reranking step into RouterQueryEngine pipeline results
+4. OPTIMIZE for <100ms reranking latency for 20 documents on RTX 4090 Laptop
+5. **RESULT**: Quality-enhanced retrieval with relevance optimization
+
+**STEP 5: Advanced Features Implementation (NON-BLOCKING - Feature Flags):**
+
+1. CREATE `src/retrieval/dspy_optimization.py` for DSPy query optimization (ADR-018)
+2. CREATE `src/retrieval/graphrag_integration.py` for PropertyGraphIndex (ADR-019)
+3. IMPLEMENT feature flags: `ENABLE_DSPY=true` and `ENABLE_GRAPHRAG=true`
+4. ADD Tenacity resilience patterns and SQLite WAL mode (ADR-007)
+5. **RESULT**: Complete ADR-compliant retrieval system with optional advanced features
+
+**CRITICAL IMPLEMENTATION NOTES:**
+
+- This is a **COMPLETE ARCHITECTURAL REPLACEMENT** - no existing code can be preserved
+- **ZERO BACKWARDS COMPATIBILITY** - delete conflicting files and implement ADR architecture from scratch
+- **DELETE FIRST, IMPLEMENT SECOND** - removal of old architecture is mandatory before new implementation
+- Focus on library-first approach using LlamaIndex native components and sentence-transformers
+- All performance targets are for RTX 4090 Laptop with FP8 optimization
+- BGE-M3 unified embeddings are the foundation - replaces ALL existing embedding code
+- RouterQueryEngine adaptive routing is the core - replaces ALL existing retrieval code
+- This specification represents the ADR-mandated architecture with NO compromise or adaptation of existing code
+
+## 7. Change Plan
 
 ### New Files
 
@@ -306,10 +471,13 @@ class SimpleReranker:
 
 ### Model Downloads
 
-- `BAAI/bge-m3` (~2.27GB) - Replaces BGE-large + SPLADE++
+- `BAAI/bge-m3` (~2.27GB) - **CRITICAL: Replaces BGE-large + SPLADE++ completely**
 - `openai/clip-vit-base-patch32` (~605MB) - Image embeddings
-- `BAAI/bge-reranker-v2-m3` (~1.12GB) - Reranking model
+- `BAAI/bge-reranker-v2-m3` (~1.12GB) - CrossEncoder reranking model
+- `Qwen3-4B-Instruct-2507-FP8` (for DSPy optimization, optional)
 - **Total Storage Reduction**: 4.2GB → 3.6GB (14% reduction)
+- **Context Improvement**: 512 tokens → 8192 tokens (16x increase with BGE-M3)
+- **MIGRATION REQUIRED**: Complete re-indexing of existing documents
 
 ## 7. Acceptance Criteria
 
@@ -479,13 +647,13 @@ And retrieval accuracy maintains >80% relevance
 ### Technical Dependencies
 
 - `qdrant-client>=1.15.0` (vector storage with resilience)
-- `sentence-transformers>=2.2.0` (CrossEncoder reranking)
-- `FlagEmbedding>=1.2.0` (BGE-M3 unified embeddings)
-- `llama-index-core>=0.12.0` (RouterQueryEngine, HybridRetriever)
+- `sentence-transformers>=2.2.0` (CrossEncoder reranking - **CRITICAL for BGE-reranker-v2-m3**)
+- `FlagEmbedding>=1.2.0` (BGE-M3 unified embeddings - **CRITICAL for BGEM3FlagModel**)
+- `llama-index-core>=0.12.0` (RouterQueryEngine, HybridRetriever - **CRITICAL for adaptive routing**)
 - `llama-index-vector-stores-qdrant>=0.1.0`
 - `dspy-ai>=2.4.0` (optional, for query optimization)
-- `torch>=2.7.1` (FP8 support)
-- `tenacity>=9.1.2` (resilience patterns)
+- `torch>=2.7.1` (FP8 support for RTX 4090 optimization)
+- `tenacity>=9.1.2` (resilience patterns - **CRITICAL for production reliability**)
 
 ### Model Dependencies
 
@@ -506,10 +674,14 @@ And retrieval accuracy maintains >80% relevance
 
 ### Source Documents
 
+- ADR-001: Modern Agentic RAG Architecture (benefits from improved embedding quality and adaptive retrieval)
 - ADR-002: Unified Embedding Strategy with BGE-M3 (v4.0)
 - ADR-003: Adaptive Retrieval Pipeline with LlamaIndex RouterQueryEngine (v3.0)
+- ADR-004: Local-First LLM Strategy (provides Qwen3-4B-Instruct-2507-FP8 for DSPy optimization)
 - ADR-006: Modern Reranking Architecture with sentence-transformers (v3.1)
 - ADR-007: Hybrid Persistence Strategy with SQLite + Qdrant resilience (v2.2)
+- ADR-010: Performance Optimization Strategy (RTX 4090 Laptop optimization and FP8 acceleration)
+- ADR-011: Agent Orchestration Framework (query routing and retrieval agents integration)
 - ADR-018: Automatic Prompt Optimization with DSPy (v2.0)
 - ADR-019: Optional GraphRAG with PropertyGraphIndex (v3.0)
 - PRD Section 3: Advanced Hybrid Search Epic
