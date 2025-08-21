@@ -172,6 +172,7 @@ cython_debug/
 .pypirc
 
 # Project specific
+CLAUDE.md
 logs/
 docmind_ai.log
 repomix-output.md
