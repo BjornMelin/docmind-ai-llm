@@ -277,6 +277,7 @@ def sample_query_responses() -> list[dict]:
 # Performance testing markers
 def pytest_configure(config):
     """Configure custom pytest markers."""
+    config.addinivalue_line("markers", "unit: marks tests as fast unit tests")
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )
@@ -285,6 +286,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "requires_gpu: marks tests that require GPU")
     config.addinivalue_line(
         "markers", "requires_network: marks tests that require network access"
+    )
+    config.addinivalue_line(
+        "markers", "feat_002: marks tests for FEAT-002 Retrieval & Search System"
     )
 
 

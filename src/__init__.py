@@ -12,8 +12,8 @@ __author__ = "Bjorn Melin"
 
 # Make key components available at package level
 from .models.core import settings
+from .retrieval.integration import create_hybrid_retriever, create_index_async
 from .utils.document import load_documents_unstructured
-from .utils.embedding import create_hybrid_retriever, create_index_async
 
 __all__ = [
     "settings",

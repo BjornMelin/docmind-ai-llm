@@ -50,9 +50,9 @@ from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
 from src.models.core import settings
 from src.prompts import PREDEFINED_PROMPTS
+from src.retrieval.integration import create_index_async
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_llama
-from src.utils.embedding import create_index_async
 
 # settings is now imported from models.core
 
