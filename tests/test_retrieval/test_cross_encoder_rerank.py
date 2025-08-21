@@ -576,7 +576,7 @@ class TestBGECrossEncoderIntegration:  # pylint: disable=protected-access
 
         # Verify reranking improved scores and ordering
         assert len(reranked) == 2
-        # Scores are normalized with sigmoid: sigmoid(0.95) ≈ 0.7211, sigmoid(0.85) ≈ 0.7006
+        # Scores normalized: sigmoid(0.95)≈0.7211, sigmoid(0.85)≈0.7006
         assert (
             abs(reranked[0].score - 0.7211) < 0.001
         )  # CrossEncoder score (normalized)
