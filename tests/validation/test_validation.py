@@ -45,7 +45,7 @@ class TestImportValidation:
         modules = [
             "src.utils.core",
             "src.utils.document",
-            "src.utils.embedding",
+            "src.retrieval.integration",
             "src.utils.database",
             "src.utils.monitoring",
         ]
@@ -62,7 +62,7 @@ class TestImportValidation:
                 elif module_name == "src.utils.document":
                     assert hasattr(module, "load_documents_unstructured")
                     assert hasattr(module, "ensure_spacy_model")
-                elif module_name == "src.utils.embedding":
+                elif module_name == "src.retrieval.integration":
                     assert hasattr(module, "create_vector_index_async")
                     assert hasattr(module, "get_embed_model")
 
@@ -134,7 +134,7 @@ class TestImportValidation:
             "src/agents/agent_factory.py",
             "src/utils/core.py",
             "src/utils/document.py",
-            "src/utils/embedding.py",
+            "src/retrieval/integration.py",
         ]
 
         for file_path in required_files:

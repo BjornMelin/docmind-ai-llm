@@ -102,7 +102,7 @@ class TestOptionalDependencyHandling:
         new_modules = [
             "src.utils.core",
             "src.utils.document",
-            "src.utils.embedding",
+            "src.retrieval.integration",
             "src.utils.database",
             "src.utils.monitoring",
         ]
@@ -134,7 +134,8 @@ class TestGracefulErrorHandling:
     def test_embedding_creation_fallback(self):
         """Test embedding creation with fallback behavior."""
         try:
-            from src.utils.embedding import get_embed_model
+            # Skip removed embedding function
+            pytest.skip("get_embed_model function removed from src.utils.embedding")
 
             # Should be able to get basic embedding model info
             model = get_embed_model()

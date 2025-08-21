@@ -83,7 +83,7 @@ class TestAdaptiveRouterQueryEngine:  # pylint: disable=protected-access
         )
         assert semantic_tool is not None
         assert "semantic" in semantic_tool.metadata.description.lower()
-        assert "bge-m3" in semantic_tool.metadata.description
+        assert "bge-m3" in semantic_tool.metadata.description.lower()
 
     def test_create_query_engine_tools_with_hybrid(
         self, mock_vector_index, mock_hybrid_retriever
@@ -194,7 +194,7 @@ class TestAdaptiveRouterQueryEngine:  # pylint: disable=protected-access
         mock_response.metadata = {"selector_result": "hybrid_search"}
 
         router = AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
-        router.router_engine.query.return_value = mock_response
+        router.router_engine.query = MagicMock(return_value=mock_response)
 
         query = sample_query_scenarios[0][
             "query"
@@ -210,13 +210,18 @@ class TestAdaptiveRouterQueryEngine:  # pylint: disable=protected-access
         """Test query fallback to direct semantic search."""
         # Mock router engine failure
         router = AdaptiveRouterQueryEngine(vector_index=mock_vector_index)
-        router.router_engine.query.side_effect = RuntimeError("Router failed")
+        router.router_engine.query = MagicMock(
+            side_effect=RuntimeError("Router failed")
+        )
 
         # Mock fallback query engine
         mock_fallback_response = MagicMock()
         mock_fallback_engine = MagicMock()
         mock_fallback_engine.query.return_value = mock_fallback_response
         mock_vector_index.as_query_engine.return_value = mock_fallback_engine
+
+        # Reset call count after router initialization calls
+        mock_vector_index.as_query_engine.reset_mock()
 
         query = "test query for fallback"
 
@@ -386,7 +391,9 @@ class TestRouterStrategy:  # pylint: disable=protected-access
         assert "multi-query" in description
         assert "decomposition" in description
         assert "complex" in description
-        assert "tree summarize" in description or "tree_summarize" in description
+        assert (
+            "tree summar" in description
+        )  # Matches both "tree summarize" and "tree summarization"
 
     def test_knowledge_graph_description(self, mock_vector_index):
         """Test knowledge graph tool description accuracy."""
@@ -483,7 +490,7 @@ class TestRouterPerformance:  # pylint: disable=protected-access,unused-argument
         # Mock fast response
         mock_response = MagicMock()
         mock_response.metadata = {"selector_result": "hybrid_search"}
-        router.router_engine.query.return_value = mock_response
+        router.router_engine.query = MagicMock(return_value=mock_response)
 
         # Benchmark multiple queries
         for _ in range(5):

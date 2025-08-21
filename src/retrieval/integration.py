@@ -13,6 +13,8 @@ from llama_index.core.node_parser import SentenceSplitter
 from loguru import logger
 
 from .embeddings.bge_m3_manager import create_bgem3_embedding
+
+# ADR-018 and ADR-019 compliance imports
 from .postprocessor.cross_encoder_rerank import create_bge_cross_encoder_reranker
 from .query_engine.router_engine import create_adaptive_router_engine
 from .vector_store.qdrant_unified import create_unified_qdrant_store
@@ -87,7 +89,7 @@ async def create_index_async(
             texts,
             return_dense=True,
             return_sparse=True,
-            return_colbert=False,
+            return_colbert=True,
         )
 
         # Add nodes to unified vector store
@@ -96,6 +98,7 @@ async def create_index_async(
             nodes=nodes,
             dense_embeddings=embeddings_result.get("dense", []),
             sparse_embeddings=embeddings_result.get("sparse", []),
+            colbert_embeddings=embeddings_result.get("colbert", []),
         )
 
         # Create vector index from unified store
@@ -160,3 +163,76 @@ def create_hybrid_retriever_compat(
 
 # Backward compatibility aliases
 create_hybrid_retriever = create_hybrid_retriever_compat
+
+
+# ADR-018 and ADR-019 experimental features
+def create_experimental_components(
+    nodes: list[Any] | None = None,
+    enable_graphrag: bool | None = None,
+    enable_dspy: bool | None = None,
+) -> dict[str, Any]:
+    """Create experimental components for ADR compliance.
+
+    Creates PropertyGraphIndex (ADR-019) and DSPy optimizer (ADR-018)
+    components with proper feature flag handling.
+
+    Args:
+        nodes: Document nodes for graph construction
+        enable_graphrag: Override for GraphRAG feature flag
+        enable_dspy: Override for DSPy feature flag
+
+    Returns:
+        Dictionary containing experimental components
+    """
+    components = {}
+
+    try:
+        # Import here to avoid circular imports and linter reordering
+        from .graph.property_graph import create_property_graph_index
+        from .optimization.dspy_optimizer import create_dspy_optimizer
+
+        # PropertyGraphIndex (ADR-019)
+        property_graph = create_property_graph_index(
+            nodes=nodes,
+            enable_experimental=enable_graphrag,
+        )
+        components["property_graph"] = property_graph
+
+        # DSPy Query Optimizer (ADR-018)
+        dspy_optimizer = create_dspy_optimizer(
+            enable_experimental=enable_dspy,
+        )
+        components["dspy_optimizer"] = dspy_optimizer
+
+        logger.info("Experimental components created for ADR compliance")
+
+    except Exception as e:
+        logger.warning(f"Failed to create experimental components: {e}")
+        # Return empty components if creation fails
+        components = {
+            "property_graph": None,
+            "dspy_optimizer": None,
+        }
+
+    return components
+
+
+def is_experimental_features_enabled() -> dict[str, bool]:
+    """Check which experimental features are enabled.
+
+    Returns:
+        Dictionary of feature flags for experimental components
+    """
+    try:
+        from .graph.property_graph import is_property_graph_enabled
+        from .optimization.dspy_optimizer import is_dspy_optimization_enabled
+
+        return {
+            "graphrag": is_property_graph_enabled(),
+            "dspy": is_dspy_optimization_enabled(),
+        }
+    except ImportError:
+        return {
+            "graphrag": False,
+            "dspy": False,
+        }

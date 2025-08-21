@@ -327,7 +327,7 @@ class TestBGEM3Factory:
         assert embedding.batch_size == 4  # CPU optimized
 
     @patch("src.retrieval.embeddings.bge_m3_manager.create_bgem3_embedding")
-    @patch("src.retrieval.embeddings.bge_m3_manager.Settings")
+    @patch("llama_index.core.Settings")
     def test_configure_bgem3_settings_success(self, mock_settings, mock_create):
         """Test successful Settings configuration."""
         mock_embedding = MagicMock()
@@ -374,7 +374,7 @@ class TestBGEM3Performance:
             batch_size=12,  # RTX 4090 optimized batch size
             max_length=8192,
             return_dense=True,
-            return_sparse=False,
+            return_sparse=True,  # Default is True in BGE-M3
             return_colbert_vecs=False,
         )
 

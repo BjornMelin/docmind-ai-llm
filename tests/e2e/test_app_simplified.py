@@ -85,11 +85,11 @@ def test_agent_factory_integration(mock_get_agent):
 
 
 @patch("src.utils.document.load_documents_llama")
-@patch("src.utils.embedding.create_index_async")
+@patch("src.retrieval.integration.create_index_async")
 def test_document_pipeline(mock_create_index, mock_load_docs):
     """Test document loading and indexing pipeline."""
+    from src.retrieval.integration import create_index_async
     from src.utils.document import load_documents_llama
-    from src.utils.embedding import create_index_async
 
     # Setup mocks
     mock_docs = [MagicMock()]
@@ -164,9 +164,9 @@ def test_no_deleted_utils_references():
         # This should succeed - utils are now in src/utils
         # Test that the import paths exist by importing modules
         try:
+            import src.retrieval.integration  # noqa: F401
             import src.utils.core  # noqa: F401
             import src.utils.document  # noqa: F401
-            import src.utils.embedding  # noqa: F401
         except ImportError:
             pytest.fail("Should be able to import from src.utils")
 

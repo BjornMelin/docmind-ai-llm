@@ -140,7 +140,7 @@ class BGEM3Embedding(BaseEmbedding):
         texts: list[str],
         return_dense: bool = True,
         return_sparse: bool = True,
-        return_colbert: bool = False,
+        return_colbert: bool = True,
     ) -> dict[str, Any]:
         """Get unified dense/sparse/colbert embeddings.
 

@@ -156,8 +156,10 @@ class TestGherkinScenario1AdaptiveStrategySelection:
 
         # Mock router to return strategy selection metadata
         def mock_strategic_query(query_str, **_kwargs):
-            # Simulate LLM-based strategy selection
-            if any(
+            # Simulate LLM-based strategy selection - check specific patterns first
+            if "relationship" in query_str.lower() or "connect" in query_str.lower():
+                strategy = "knowledge_graph"
+            elif any(
                 word in query_str.lower() for word in ["explain", "how", "what", "why"]
             ):
                 if any(
@@ -167,8 +169,6 @@ class TestGherkinScenario1AdaptiveStrategySelection:
                     strategy = "multi_query_search"  # Complex analytical
                 else:
                     strategy = "semantic_search"  # Simple explanatory
-            elif "relationship" in query_str.lower() or "connect" in query_str.lower():
-                strategy = "knowledge_graph"
             else:
                 strategy = "hybrid_search"  # Default comprehensive
 
@@ -286,11 +286,14 @@ class TestGherkinScenario2SimpleReranking:
         # 2. Top 10 reranked documents have higher relevance scores
         assert len(reranked_documents) == 10
 
-        # Verify improved relevance scores
+        # Verify improved relevance scores (sigmoid-normalized)
         reranked_scores = [node.score for node in reranked_documents]
-        assert reranked_scores[0] == 0.95  # Highest relevance
-        assert reranked_scores[-1] == 0.68  # 10th highest
-        assert all(score >= 0.68 for score in reranked_scores)
+        # Scores are normalized: sigmoid(0.95) ≈ 0.7211, sigmoid(0.68) ≈ 0.6637
+        assert abs(reranked_scores[0] - 0.7211) < 0.001  # Highest relevance
+        assert abs(reranked_scores[-1] - 0.6637) < 0.001  # 10th highest (sigmoid(0.68))
+        assert all(
+            score >= 0.663 for score in reranked_scores
+        )  # All above sigmoid(0.68)
 
         # Verify proper ordering (descending relevance)
         assert reranked_scores == sorted(reranked_scores, reverse=True)

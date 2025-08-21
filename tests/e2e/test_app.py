@@ -82,7 +82,7 @@ def test_app_model_selection(mock_ollama_list, app_test):
 
 
 @patch("src.utils.document.load_documents_llama")
-@patch("src.utils.embedding.create_index_async")
+@patch("src.retrieval.integration.create_index_async")
 def test_app_upload_and_analyze(mock_create_index, mock_load_docs, app_test, tmp_path):
     """Test document upload and analysis workflow.
 
@@ -172,7 +172,7 @@ def test_app_session_persistence(app_test):
 )
 @patch("ollama.list", return_value={"models": [{"name": "llama3:8b"}]})
 @patch("src.utils.document.load_documents_llama")
-@patch("src.utils.embedding.create_index_async")
+@patch("src.retrieval.integration.create_index_async")
 @patch("src.agents.agent_factory.get_agent_system")
 @patch("src.agents.agent_factory.process_query_with_agent_system")
 def test_end_to_end_workflow(

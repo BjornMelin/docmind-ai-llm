@@ -62,6 +62,7 @@ class AdaptiveRouterQueryEngine:
         self.hybrid_retriever = hybrid_retriever
         self.reranker = reranker
         self.llm = llm or Settings.llm
+        self._query_engine_tools = self._create_query_engine_tools()
         self.router_engine = self._create_router_engine()
 
     def _create_query_engine_tools(self) -> list[QueryEngineTool]:
@@ -195,7 +196,7 @@ class AdaptiveRouterQueryEngine:
         Returns:
             Configured RouterQueryEngine with adaptive routing
         """
-        query_engine_tools = self._create_query_engine_tools()
+        query_engine_tools = self._query_engine_tools
 
         if not query_engine_tools:
             raise ValueError("No query engine tools available for router")
@@ -285,7 +286,7 @@ class AdaptiveRouterQueryEngine:
         Returns:
             List of strategy names available for routing
         """
-        return [tool.metadata.name for tool in self.router_engine.query_engine_tools]
+        return [tool.metadata.name for tool in self._query_engine_tools]
 
 
 def create_adaptive_router_engine(

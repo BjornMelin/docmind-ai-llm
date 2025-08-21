@@ -430,7 +430,7 @@ class TestSystemConfiguration:
     """Test system-wide configuration and Settings integration."""
 
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
-    @patch("src.retrieval.embeddings.bge_m3_manager.Settings")
+    @patch("llama_index.core.Settings")
     def test_bgem3_settings_configuration(self, mock_settings, mock_flag_model_class):
         """Test BGE-M3 Settings integration replaces old embedding config."""
         from src.retrieval.embeddings.bge_m3_manager import configure_bgem3_settings
