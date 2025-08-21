@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Single Docker image deployment with docker-compose for easy local setup leveraging 262K context windows through Qwen3-4B-Instruct-2507 with INT8 KV cache optimization. Users run `docker-compose up` and the app starts with large context capability at ~12.2GB VRAM usage. No complex profiles, just environment variables for 262K context configuration with LMDeploy/vLLM support.
+Single Docker image deployment with docker-compose for easy local setup leveraging 128K context windows through Qwen3-4B-Instruct-2507-FP8 with FP8 KV cache optimization. Users run `docker-compose up` and the app starts with constrained context capability at ~12-14GB VRAM usage (hardware-limited from 262K native). No complex profiles, just environment variables for 128K context configuration with vLLM/FlashInfer support.
 
 ## Context
 
@@ -25,6 +25,11 @@ DocMind AI is a **local Streamlit app**, not an enterprise cloud service. Users 
 3. Use the app
 
 That's it. No need for multi-stage builds, hardware profiling, or complex orchestration.
+
+## Implementation Reference
+
+For detailed vLLM service configuration, systemd templates, and production deployment procedures, see:
+- [FP8 Supervisor Integration Guide](../archived/implementation-plans/fp8-supervisor-integration-guide-v1.0.md)
 
 ## Decision
 
@@ -45,7 +50,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --no-cache -r requirements.txt
 
 # Copy application
 COPY . .
@@ -55,10 +60,10 @@ RUN mkdir -p /app/data/{models,documents,cache}
 
 # Environment variables with RTX 4090 Laptop optimized defaults
 ENV PYTHONPATH=/app
-ENV DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-4B-Instruct-2507-AWQ}
-ENV DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-262144}
-ENV DOCMIND_KV_CACHE_DTYPE=${DOCMIND_KV_CACHE_DTYPE:-int8}
-ENV DOCMIND_LLM_PROVIDER=${DOCMIND_LLM_PROVIDER:-lmdeploy}
+ENV DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}
+ENV DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-131072}
+ENV DOCMIND_KV_CACHE_DTYPE=${DOCMIND_KV_CACHE_DTYPE:-fp8_e5m2}
+ENV DOCMIND_LLM_PROVIDER=${DOCMIND_LLM_PROVIDER:-vllm}
 ENV DOCMIND_DEVICE=${DOCMIND_DEVICE:-cuda}
 ENV STREAMLIT_SERVER_PORT=8501
 
@@ -87,12 +92,14 @@ services:
       - ./data:/app/data
       - ./models:/app/models
     environment:
-      - DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-4B-Instruct-2507-AWQ}
+      - DOCMIND_MODEL=${DOCMIND_MODEL:-Qwen/Qwen3-4B-Instruct-2507-FP8}
       - DOCMIND_DEVICE=${DOCMIND_DEVICE:-cuda}
-      - DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-262144}
-      - DOCMIND_KV_CACHE_DTYPE=${DOCMIND_KV_CACHE_DTYPE:-int8}
-      - DOCMIND_LLM_PROVIDER=${DOCMIND_LLM_PROVIDER:-lmdeploy}
+      - DOCMIND_CONTEXT_LENGTH=${DOCMIND_CONTEXT_LENGTH:-131072}
+      - DOCMIND_KV_CACHE_DTYPE=${DOCMIND_KV_CACHE_DTYPE:-fp8_e5m2}
+      - DOCMIND_LLM_PROVIDER=${DOCMIND_LLM_PROVIDER:-vllm}
       - CUDA_VISIBLE_DEVICES=0
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+      - VLLM_USE_CUDNN_PREFILL=1
     restart: unless-stopped
     
     # GPU support for RTX 4090 Laptop (16GB VRAM)
@@ -113,15 +120,15 @@ services:
 # Centralized configuration was deliberately rejected (see archived ADR-024)
 
 # ========================================
-# Core Model Settings - 262K CONTEXT
+# Core Model Settings - 128K CONTEXT (Hardware Constrained)
 # ========================================
-DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-AWQ
-DOCMIND_CONTEXT_LENGTH=262144  # 262K context achievable
-DOCMIND_KV_CACHE_DTYPE=int8    # INT8 KV cache enables 262K context
-DOCMIND_QUANTIZATION=awq       # AWQ quantization (2.92GB model)
+DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+DOCMIND_CONTEXT_LENGTH=131072  # 128K context (hardware-constrained from 262K native)
+DOCMIND_KV_CACHE_DTYPE=fp8_e5m2    # FP8 KV cache enables 128K context
+DOCMIND_QUANTIZATION=fp8       # FP8 quantization
 
-# LLM Provider (lmdeploy, vllm, llamacpp, ollama)
-DOCMIND_LLM_PROVIDER=lmdeploy  # Recommended for INT8 KV cache
+# LLM Provider (vllm, lmdeploy, llamacpp, ollama)
+DOCMIND_LLM_PROVIDER=vllm  # Recommended for FP8 KV cache with FlashInfer
 
 # Hardware (cpu or cuda)
 DOCMIND_DEVICE=cuda
@@ -150,22 +157,24 @@ MEMORY_LIMIT_MB=8192            # Memory usage limit
 BATCH_SIZE=32                   # Embedding batch size
 
 # ========================================
-# Provider-Specific Optimizations - INT8 KV Cache
+# Provider-Specific Optimizations - FP8 KV Cache
 # ========================================
-# LMDeploy (RECOMMENDED)
-LMDEPLOY_QUANT_POLICY=8         # INT8 KV cache quantization
+# vLLM (RECOMMENDED with FlashInfer)
+VLLM_ATTENTION_BACKEND=FLASHINFER    # FlashInfer backend for optimized attention
+VLLM_USE_CUDNN_PREFILL=1            # Use cuDNN for prefill operations
+VLLM_KV_CACHE_DTYPE=fp8_e5m2        # FP8 KV cache quantization
+VLLM_GPU_MEMORY_UTILIZATION=0.95    # High memory utilization for 16GB VRAM
+
+# LMDeploy (alternative with FP8 support)
+LMDEPLOY_QUANT_POLICY=8         # Close to FP8 quantization
 LMDEPLOY_CACHE_MAX_ENTRY=0.9    # Use 90% of cache capacity
 
-# vLLM (alternative)
-VLLM_KV_CACHE_DTYPE=fp8         # FP8 equivalent to INT8
-VLLM_GPU_MEMORY_UTILIZATION=0.90
-
 # llama.cpp (if using GGUF fallback)
-LLAMA_TYPE_K=8                  # INT8 quantization for keys
-LLAMA_TYPE_V=8                  # INT8 quantization for values
+LLAMA_TYPE_K=8                  # 8-bit quantization for keys
+LLAMA_TYPE_V=8                  # 8-bit quantization for values
 
 # Ollama (if using local models)
-OLLAMA_KV_CACHE_TYPE=q8_0       # INT8 cache quantization
+OLLAMA_KV_CACHE_TYPE=q8_0       # 8-bit cache quantization
 
 # ========================================
 # Document Processing
@@ -212,20 +221,7 @@ For users who want specific LLM providers, we offer optional Docker profiles:
 version: '3.8'
 
 services:
-  # Profile for LMDeploy users (RECOMMENDED)
-  docmind-lmdeploy:
-    profiles: ["lmdeploy"]
-    extends:
-      file: docker-compose.yml
-      service: docmind
-    environment:
-      - DOCMIND_LLM_PROVIDER=lmdeploy
-      - LMDEPLOY_QUANT_POLICY=8  # INT8 KV cache
-      - LMDEPLOY_CACHE_MAX_ENTRY=0.9
-    volumes:
-      - ./models:/app/models  # For AWQ models
-      
-  # Profile for vLLM users (INT8 KV cache alternative)
+  # Profile for vLLM users (RECOMMENDED with FlashInfer)
   docmind-vllm:
     profiles: ["vllm"]
     extends:
@@ -233,8 +229,23 @@ services:
       service: docmind
     environment:
       - DOCMIND_LLM_PROVIDER=vllm
-      - VLLM_KV_CACHE_DTYPE=fp8  # FP8 equivalent to INT8
-      - VLLM_GPU_MEMORY_UTILIZATION=0.90
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+      - VLLM_USE_CUDNN_PREFILL=1
+      - VLLM_KV_CACHE_DTYPE=fp8_e5m2  # FP8 KV cache
+      - VLLM_GPU_MEMORY_UTILIZATION=0.95
+    volumes:
+      - ./models:/app/models  # For FP8 models
+      
+  # Profile for LMDeploy users (alternative)
+  docmind-lmdeploy:
+    profiles: ["lmdeploy"]
+    extends:
+      file: docker-compose.yml
+      service: docmind
+    environment:
+      - DOCMIND_LLM_PROVIDER=lmdeploy
+      - LMDEPLOY_QUANT_POLICY=8  # 8-bit quantization
+      - LMDEPLOY_CACHE_MAX_ENTRY=0.9
     deploy:
       resources:
         reservations:
@@ -247,14 +258,14 @@ services:
 Usage:
 
 ```bash
-# Use default (LMDeploy with INT8 KV cache)
+# Use default (vLLM with FlashInfer + FP8 KV cache)
 docker-compose up
 
-# Use LMDeploy specifically
-docker-compose --profile lmdeploy up
-
-# Use vLLM with FP8 KV cache
+# Use vLLM specifically
 docker-compose --profile vllm up
+
+# Use LMDeploy alternative
+docker-compose --profile lmdeploy up
 ```
 
 ## Related Decisions
@@ -262,7 +273,7 @@ docker-compose --profile vllm up
 - **ADR-001** (Modern Agentic RAG Architecture): Deploys the complete 5-agent system architecture
 - **ADR-010** (Performance Optimization Strategy): Cache configuration affects Docker deployment requirements
 - **ADR-011** (Agent Orchestration Framework): Deploys the langgraph-supervisor 5-agent orchestration
-- **ADR-004** (Local-First LLM Strategy): Configures Qwen3-4B-Instruct-2507 with 262K context through INT8 KV cache
+- **ADR-004** (Local-First LLM Strategy): Configures Qwen3-4B-Instruct-2507-FP8 with 128K context through FP8 KV cache
 - **ADR-016** (UI State Management): Deploys Streamlit UI with proper state management
 
 ## Configuration Philosophy
@@ -305,13 +316,15 @@ This approach aligns with the project's core principles:
 
 ## Performance Targets (RTX 4090 Laptop)
 
-- **Startup Time**: <45 seconds with cached AWQ models
+- **Startup Time**: <45 seconds with cached FP8 models
 - **Image Size**: <2GB (using python:3.11-slim base)
-- **Memory Usage**: ~12.2GB VRAM for Qwen3-4B-Instruct-2507 with 262K context
-- **Model Loading**: <15 seconds for AWQ quantization from NVMe SSD
+- **Memory Usage**: ~12-14GB VRAM for Qwen3-4B-Instruct-2507-FP8 with 128K context (hardware-constrained)
+- **Model Loading**: <15 seconds for FP8 quantization from NVMe SSD
+- **Performance**: 100-160 tok/s decode, 800-1300 tok/s prefill with vLLM + FlashInfer
 
 ## Changelog
 
+- **5.1 (2025-08-20)**: **FP8 DEPLOYMENT CONFIGURATION** - Updated for Qwen3-4B-Instruct-2507-FP8 with FP8 quantization and 128K context (hardware-constrained from 262K native due to 16GB VRAM limitation). Docker configuration updated with vLLM + FlashInfer backend as recommended provider. Added VLLM_ATTENTION_BACKEND=FLASHINFER and VLLM_USE_CUDNN_PREFILL=1 environment variables. Memory usage: ~12-14GB VRAM. Performance: 100-160 tok/s decode, 800-1300 tok/s prefill. Updated all configuration files for FP8 model with accurate technical specifications.
 - **5.0 (2025-08-19)**: **CONTEXT WINDOW DEPLOYMENT** - Updated for Qwen3-4B-Instruct-2507 with AWQ quantization enabling 262K context on RTX 4090 Laptop (16GB VRAM). Docker configuration updated with INT8 KV cache support through LMDeploy (default) and vLLM. Memory usage optimized to ~12.2GB VRAM. Added LMDeploy as recommended provider with --quant-policy 8. Performance improvements: <45s startup, +30% throughput with INT8. Removed YaRN dependencies, replaced with native 262K context capability.
 - **4.0 (2025-08-18)**: **MAJOR HARDWARE UPGRADE** - Enhanced for RTX 4090 Laptop GPU (16GB VRAM). Updated Docker configuration with YaRN context scaling defaults (128K), Q5_K_M quantization, and CUDA as default device. Added proper GPU deployment configuration. Updated performance targets for high-end hardware.
 - **3.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)

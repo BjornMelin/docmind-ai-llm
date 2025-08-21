@@ -14,7 +14,6 @@ from loguru import logger
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config.settings import Settings
 from src.core.document_processor import DocumentProcessor
-from src.core.retrieval_engine import RetrievalEngine
 from src.models.schemas import AgentResponse
 
 # Load environment variables
@@ -48,17 +47,17 @@ class DocMindApplication:
         # Document processor for ingestion
         self.document_processor = DocumentProcessor(settings=self.settings)
 
-        # Retrieval engine for search
-        self.retrieval_engine = RetrievalEngine(settings=self.settings)
+        # Initialize retrieval components (handled through agents)
+        # Retrieval is managed through the multi-agent coordinator
 
         # Multi-agent coordinator if enabled
         if self.enable_multi_agent:
             self.agent_coordinator = MultiAgentCoordinator(
-                llm_backend=self.settings.llm_backend,
-                model_name=self.settings.model_name,
-                base_url=self.settings.llm_base_url,
+                model_path=self.settings.model_name,
+                max_context_length=self.settings.context_window_size,
+                backend="vllm",
                 enable_fallback=self.settings.enable_fallback_rag,
-                agent_timeout=self.settings.agent_decision_timeout / 1000.0,
+                max_agent_timeout=self.settings.agent_decision_timeout / 1000.0,
             )
         else:
             self.agent_coordinator = None
@@ -90,7 +89,7 @@ class DocMindApplication:
             if use_agents and self.agent_coordinator:
                 # Use multi-agent coordination
                 logger.info("Processing query with multi-agent system")
-                response = await self.agent_coordinator.aprocess_query(
+                response = self.agent_coordinator.process_query(
                     query=query,
                     context=context,
                 )
@@ -126,20 +125,17 @@ class DocMindApplication:
         Returns:
             Basic RAG response.
         """
-        # Execute retrieval
-        results = await self.retrieval_engine.asearch(
-            query=query,
-            top_k=self.settings.top_k,
-            use_reranking=self.settings.use_reranking,
+        # Basic RAG would need to be implemented through the retrieval agent
+        # For now, return a placeholder response
+        # TODO: Implement basic RAG pipeline using agents.retrieval module
+        content = (
+            f"Basic RAG pipeline not yet implemented for query: '{query}'. "
+            "Please use multi-agent mode."
         )
-
-        # Generate response
-        # Note: This would integrate with existing LLM infrastructure
-        content = self._generate_basic_response(query, results)
 
         return AgentResponse(
             content=content,
-            sources=results[:3],  # Top 3 sources
+            sources=[],  # No sources in placeholder implementation
             metadata={"pipeline": "basic_rag"},
             validation_score=0.8,  # Basic confidence
             processing_time=0.0,  # Would be measured
@@ -210,9 +206,8 @@ class DocMindApplication:
             # Any cleanup needed for agents
             pass
 
-        # Close vector store connections
-        if hasattr(self.retrieval_engine, "close"):
-            self.retrieval_engine.close()
+        # Close connections handled by agent coordinator
+        # No explicit cleanup needed for current implementation
 
         logger.info("Shutdown complete")
 

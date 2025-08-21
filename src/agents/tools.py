@@ -200,7 +200,8 @@ def plan_query(
         state: LangGraph state containing context and configuration
 
     Returns:
-        JSON string containing planning output with sub-tasks, execution order,
+        JSON string containing planning output with sub-tasks,
+        execution order,
         and estimated complexity for each sub-task
 
     Example:
@@ -391,63 +392,103 @@ def retrieve_documents(
         kg_index = tools_data.get("kg")
         retriever = tools_data.get("retriever")
 
-        # DSPy query optimization (mock implementation)
-        optimized_query = query
+        # Real DSPy query optimization (ADR-018)
+        optimized_queries = {"refined": query, "variants": []}
         if use_dspy:
-            # In a real implementation, this would use DSPy for query rewriting
-            if len(query.split()) < 3:
-                optimized_query = f"Find documents about {query}"
-            logger.debug(f"DSPy optimization: '{query}' -> '{optimized_query}'")
+            try:
+                from src.dspy_integration import DSPyLlamaIndexRetriever
+
+                optimized_queries = DSPyLlamaIndexRetriever.optimize_query(query)
+                logger.debug(
+                    f"DSPy optimization: '{query}' -> '{optimized_queries['refined']}'"
+                )
+            except ImportError:
+                logger.warning(
+                    "DSPy integration not available - using fallback optimization"
+                )
+                if len(query.split()) < 3:
+                    optimized_queries = {
+                        "refined": f"Find documents about {query}",
+                        "variants": [f"What is {query}?", f"Explain {query}"],
+                    }
+
+        primary_query = optimized_queries["refined"]
+        variant_queries = optimized_queries.get("variants", [])
 
         # Select retrieval strategy
         documents = []
         strategy_used = strategy
 
+        # Execute retrieval with all query variants for improved coverage
+        queries_to_process = [primary_query] + variant_queries[
+            :2
+        ]  # Limit variants for performance
+
         if strategy == "graphrag" and use_graphrag and kg_index:
-            # Use knowledge graph retrieval
-            tool = ToolFactory.create_kg_search_tool(kg_index)
-            if tool:
-                try:
-                    result = tool.call(optimized_query)
-                    # Parse result to extract documents
-                    documents = _parse_tool_result(result)
-                    logger.info(f"GraphRAG retrieved {len(documents)} documents")
-                except Exception as e:
-                    logger.warning(f"GraphRAG failed, falling back to hybrid: {e}")
-                    strategy_used = "hybrid"
+            # Use knowledge graph retrieval with optimized queries
+            for q in queries_to_process:
+                tool = ToolFactory.create_kg_search_tool(kg_index)
+                if tool:
+                    try:
+                        result = tool.call(q)
+                        new_docs = _parse_tool_result(result)
+                        documents.extend(new_docs)
+                        logger.debug(
+                            f"GraphRAG retrieved {len(new_docs)} documents "
+                            f"for query: {q}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"GraphRAG failed for query '{q}': {e}")
+                        strategy_used = "hybrid"
+                        break
 
         if strategy in ["hybrid", "vector"] or (
             strategy == "graphrag" and not documents
         ):
-            # Use hybrid or vector retrieval
-            if strategy == "hybrid" and retriever:
-                tool = ToolFactory.create_hybrid_search_tool(retriever)
-                strategy_used = "hybrid_fusion"
-            elif vector_index:
-                if strategy == "hybrid":
-                    tool = ToolFactory.create_hybrid_vector_tool(vector_index)
-                    strategy_used = "hybrid_vector"
+            # Use hybrid or vector retrieval with query variants
+            for q in queries_to_process:
+                if strategy == "hybrid" and retriever:
+                    tool = ToolFactory.create_hybrid_search_tool(retriever)
+                    strategy_used = "hybrid_fusion"
+                elif vector_index:
+                    if strategy == "hybrid":
+                        tool = ToolFactory.create_hybrid_vector_tool(vector_index)
+                        strategy_used = "hybrid_vector"
+                    else:
+                        tool = ToolFactory.create_vector_search_tool(vector_index)
+                        strategy_used = "vector"
                 else:
-                    tool = ToolFactory.create_vector_search_tool(vector_index)
-                    strategy_used = "vector"
-            else:
-                logger.error("No vector index available for retrieval")
-                return json.dumps(
-                    {
-                        "documents": [],
-                        "error": "No vector index available",
-                        "strategy_used": strategy,
-                        "query_optimized": optimized_query,
-                    }
-                )
+                    logger.error("No vector index available for retrieval")
+                    return json.dumps(
+                        {
+                            "documents": [],
+                            "error": "No vector index available",
+                            "strategy_used": strategy,
+                            "query_optimized": primary_query,
+                        }
+                    )
 
-            try:
-                result = tool.call(optimized_query)
-                documents = _parse_tool_result(result)
-                logger.info(f"{strategy_used} retrieved {len(documents)} documents")
-            except Exception as e:
-                logger.error(f"Retrieval failed: {e}")
-                documents = []
+                try:
+                    result = tool.call(q)
+                    new_docs = _parse_tool_result(result)
+                    documents.extend(new_docs)
+                    logger.debug(
+                        f"{strategy_used} retrieved {len(new_docs)} documents "
+                        f"for query: {q}"
+                    )
+                except Exception as e:
+                    logger.error(f"Retrieval failed for query '{q}': {e}")
+
+        # Deduplicate documents while preserving best scores
+        if documents:
+            seen_content = {}
+            for doc in documents:
+                content_key = doc.get("content", "")[:100]  # Use first 100 chars as key
+                if content_key not in seen_content or doc.get(
+                    "score", 0
+                ) > seen_content[content_key].get("score", 0):
+                    seen_content[content_key] = doc
+            documents = list(seen_content.values())[:10]  # Limit to top 10 results
 
         processing_time = time.perf_counter() - start_time
 
@@ -456,7 +497,7 @@ def retrieve_documents(
             "documents": documents,
             "strategy_used": strategy_used,
             "query_original": query,
-            "query_optimized": optimized_query,
+            "query_optimized": primary_query,
             "document_count": len(documents),
             "processing_time_ms": round(processing_time * 1000, 2),
             "dspy_used": use_dspy,

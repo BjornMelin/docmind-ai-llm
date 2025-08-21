@@ -4,8 +4,8 @@
 
 This glossary defines technical terms, acronyms, and concepts used throughout the DocMind AI specifications. Terms are organized alphabetically within categories for easy reference.
 
-**Version**: 1.0.0  
-**Updated**: 2025-08-19
+**Version**: 1.1.0  
+**Updated**: 2025-08-21
 
 ## Table of Contents
 
@@ -29,9 +29,11 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Agent**: An autonomous component that performs specific tasks within the multi-agent system. DocMind uses 5 specialized agents coordinated by a supervisor.
 
-**Context Window**: The maximum number of tokens an LLM can process in a single interaction. DocMind uses 32K native context, extensible to 128K with YaRN.
+**Context Window**: The maximum number of tokens an LLM can process in a single interaction. DocMind uses 128K native context (131,072 tokens) with FP8 KV cache optimization.
 
 **DSPy (Declarative Self-improving Python)**: A framework for automatic prompt optimization that improves retrieval quality by 20-30% through query rewriting and expansion.
+
+**Dual-Layer Caching**: Architecture combining IngestionCache (document processing) with GPTCache (semantic responses) for 80-95% cache hit rates and token reduction.
 
 **Few-shot Learning**: Providing a small number of examples to guide LLM behavior without fine-tuning.
 
@@ -39,17 +41,19 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Hallucination**: When an LLM generates information not supported by its training data or provided context. The validation agent detects and prevents hallucinations.
 
-**Inference**: The process of generating predictions or responses from a trained model. Target: ~1000 tokens/second.
+**Inference**: The process of generating predictions or responses from a trained model. Target: 100-160 tokens/sec decode, 800-1300 tokens/sec prefill with vLLM + FlashInfer + FP8 optimization.
 
 **Prompt Engineering**: The practice of designing effective prompts to elicit desired responses from LLMs.
 
-**Quantization**: Reducing model precision (e.g., from fp16 to int4) to decrease memory usage while maintaining accuracy. TorchAO reduces VRAM by ~58%.
+**Quantization**: Reducing model precision to decrease memory usage while maintaining accuracy. DocMind uses FP8 quantization for optimal balance of speed, accuracy, and memory efficiency.
+
+**FP8 Quantization**: 8-bit floating-point quantization that reduces memory usage by ~50% while maintaining higher precision than INT8. Combined with FP8 KV cache for maximum efficiency.
 
 **RAG (Retrieval-Augmented Generation)**: Combining information retrieval with text generation to provide factual, source-based responses.
 
 **Token**: The basic unit of text processed by LLMs. Roughly 3/4 of a word on average.
 
-**YaRN (Yet another RoPE extensioN)**: A technique to extend context windows beyond native training length through positional encoding modifications.
+**YaRN (Yet another RoPE extensioN)**: A technique to extend context windows beyond native training length through positional encoding modifications. **DEPRECATED** - No longer needed with Qwen3-4B-Instruct-2507-FP8's native 128K context.
 
 ---
 
@@ -83,9 +87,9 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Hi-res Strategy**: High-resolution parsing mode in UnstructuredReader for accurate layout preservation.
 
-**IngestionCache**: LlamaIndex component that caches processed documents to avoid redundant parsing.
+**IngestionCache**: LlamaIndex component that caches processed documents to avoid redundant parsing, part of dual-layer caching system.
 
-**IngestionPipeline**: LlamaIndex pipeline for document processing with stages for parsing, chunking, and embedding.
+**IngestionPipeline**: LlamaIndex pipeline for document processing with stages for parsing, chunking, and BGE-M3 embedding generation.
 
 **Metadata Extraction**: Capturing document properties like title, author, creation date during processing.
 
@@ -103,7 +107,7 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 ## Infrastructure
 
-**Backend**: The LLM inference engine. DocMind supports Ollama, LlamaCPP, and vLLM backends.
+**Backend**: The LLM inference engine. DocMind uses vLLM with FlashInfer as the validated production backend.
 
 **CUDA**: NVIDIA's parallel computing platform for GPU acceleration.
 
@@ -113,7 +117,11 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Environment Variables**: Configuration values set outside the application code (stored in .env file).
 
-**GPU (Graphics Processing Unit)**: Hardware accelerator for parallel computation. RTX 4090 recommended.
+**FlashInfer**: Optimized attention backend that improves vLLM performance by 25-40% with FP8 models, particularly effective for batch processing and memory efficiency.
+
+**FP8 KV Cache**: 8-bit floating-point key-value cache optimization that reduces memory usage while maintaining high precision during inference.
+
+**GPU (Graphics Processing Unit)**: Hardware accelerator for parallel computation. RTX 4090 Laptop recommended for DocMind AI.
 
 **Health Check**: Endpoint that reports system status and availability (/health).
 
@@ -121,7 +129,7 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Tenacity**: Python library for retry logic with exponential backoff on transient failures.
 
-**VRAM (Video RAM)**: GPU memory for storing models and intermediate computations. Target: <14GB usage.
+**VRAM (Video RAM)**: GPU memory for storing models and intermediate computations. Target: 12-14GB usage with FP8 quantization + FP8 KV cache optimization on RTX 4090 Laptop.
 
 **WAL (Write-Ahead Logging)**: SQLite mode enabling concurrent reads while writing.
 
@@ -129,7 +137,7 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 ## Libraries & Frameworks
 
-**LangChain**: Popular LLM framework (not used - DocMind is pure LlamaIndex).
+**LangChain**: Popular LLM framework. **NOT USED** - DocMind uses pure LlamaIndex with LangGraph for multi-agent coordination.
 
 **LangGraph**: Framework for building stateful multi-agent applications with graph-based workflows.
 
@@ -139,7 +147,7 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Loguru**: Modern Python logging library with structured output and rich formatting.
 
-**Ollama**: Local LLM inference server supporting various model formats.
+**Ollama**: Local LLM inference server supporting various model formats. **DEPRECATED** - DocMind uses vLLM + FlashInfer for production.
 
 **Pydantic**: Data validation library using Python type annotations.
 
@@ -153,13 +161,13 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Transformers**: Hugging Face library for working with transformer models.
 
-**vLLM**: High-throughput LLM inference engine with PagedAttention.
+**vLLM**: High-throughput LLM inference engine with PagedAttention, FlashInfer optimization, and FP8 + FP8 KV cache support for maximum efficiency.
 
 ---
 
 ## Models & Embeddings
 
-**BGE-large-en-v1.5**: BAAI's dense embedding model producing 1024-dimensional vectors for semantic search.
+**BGE-M3**: BAAI's unified dense/sparse embedding model with 8192 token context, replacing BGE-large + SPLADE++ combination, supporting both semantic and keyword search in a single 1024-dimensional model with superior efficiency.
 
 **BGE-reranker-v2-m3**: Cross-encoder model for reranking retrieved documents by relevance.
 
@@ -171,11 +179,13 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **PropertyGraphIndex**: LlamaIndex component for GraphRAG enabling relationship extraction and multi-hop reasoning.
 
-**Qwen3-14B**: Default LLM with 14B parameters, 32K native context, excellent performance/efficiency ratio.
+**Qwen3-4B-Instruct-2507-FP8**: Default LLM with 4B parameters, 128K native context, FP8 quantization for optimal memory efficiency and performance.
+
+**RouterQueryEngine**: LlamaIndex adaptive retrieval engine that automatically selects optimal search strategy (vector, hybrid, multi-query, or graph) based on query characteristics.
 
 **Sparse Embeddings**: High-dimensional vectors with mostly zero values, capturing exact term matches.
 
-**SPLADE++**: Sparse embedding model with learned term expansion for keyword search.
+**SPLADE++**: Sparse embedding model with learned term expansion for keyword search. **DEPRECATED** - Replaced by BGE-M3 unified approach.
 
 ---
 
@@ -197,7 +207,7 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **Time to First Token (TTFT)**: Latency before streaming response begins.
 
-**Tokens Per Second**: LLM generation speed. Target: ~1000 tokens/sec on RTX 4090.
+**Tokens Per Second**: LLM generation speed. Target: 100-160 tokens/sec decode, 800-1300 tokens/sec prefill on RTX 4090 Laptop with FP8 + FP8 KV cache optimization.
 
 ---
 
@@ -205,9 +215,11 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 **BM25**: Traditional keyword-based ranking algorithm (part of sparse search).
 
-**GraphRAG**: Graph-based retrieval using entity relationships and knowledge graphs for complex queries.
+**GraphRAG**: Graph-based retrieval using entity relationships and knowledge graphs for complex queries via PropertyGraphIndex.
 
-**Hybrid Search**: Combining dense (semantic) and sparse (keyword) search strategies.
+**Hybrid Search**: Combining dense (semantic) and sparse (keyword) search strategies using BGE-M3 unified embeddings.
+
+**HybridRetriever**: LlamaIndex component combining vector and keyword search with automatic fusion via Reciprocal Rank Fusion (RRF).
 
 **k-NN (k-Nearest Neighbors)**: Algorithm for finding similar vectors in embedding space.
 
@@ -258,11 +270,11 @@ This glossary defines technical terms, acronyms, and concepts used throughout th
 
 1. **Context-Specific Definitions**: Some terms may have specific meanings within DocMind that differ from general usage.
 
-2. **Version-Specific Information**: Model names and version numbers reflect the current implementation (2025-08-19).
+2. **Version-Specific Information**: Model names and version numbers reflect the current implementation (2025-08-21).
 
 3. **Cross-References**: Terms may reference each other. Use browser search (Ctrl+F) to find related concepts.
 
-4. **Updates**: This glossary will be updated as new terms are introduced during implementation.
+4. **Updates**: This glossary is updated as new terms are introduced during implementation.
 
 ---
 

@@ -46,11 +46,8 @@ except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
     LlamaCPP = None
     LLAMACPP_AVAILABLE = False
 
-from src.agents.agent_factory import (
-    get_agent_system,
-    process_query_with_agent_system,
-)
-from src.agents.agent_utils import create_tools_from_index
+from src.agents.coordinator import MultiAgentCoordinator
+from src.agents.tool_factory import ToolFactory
 from src.models.core import settings
 from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
@@ -69,6 +66,24 @@ async def get_ollama_models():
 async def pull_ollama_model(ollama_model_name: str):
     """Pull an Ollama model."""
     return ollama.pull(ollama_model_name)
+
+
+def create_tools_from_index(index):
+    """Create tools from index using ToolFactory."""
+    return ToolFactory.create_basic_tools({"vector": index})
+
+
+def get_agent_system(tools, llm, memory):
+    """Get agent system using MultiAgentCoordinator."""
+    coordinator = MultiAgentCoordinator()
+    return coordinator, "multi_agent"
+
+
+def process_query_with_agent_system(agent_system, query, mode, memory):
+    """Process query with agent system."""
+    if mode == "multi_agent":
+        return agent_system.process_query(query, context=memory)
+    return {"content": "Processing error"}
 
 
 # Validate configuration at startup

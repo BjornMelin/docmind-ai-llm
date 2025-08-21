@@ -4,32 +4,12 @@ This package contains utilities for creating and managing agents for
 the DocMind AI application, including the new multi-agent coordination system.
 
 Modules:
-    agent_utils: Utilities for creating and managing agents
-    agent_factory: Simple agent factory for backward compatibility
-    tool_factory: Factory for creating agent tools
-
-    Multi-Agent Coordination System:
     coordinator: Main multi-agent coordinator with LangGraph supervisor
-    router: Query routing and complexity analysis agent
-    planner: Query planning and decomposition agent
     retrieval: Document retrieval with multi-strategy support
-    synthesis: Result synthesis and deduplication agent
-    validator: Response validation and quality scoring agent
+    tool_factory: Factory for creating agent tools with optimal configuration
     tools: Shared @tool functions for agents
+           (routing, planning, retrieval, synthesis, validation)
 """  # noqa: N999
-
-# Legacy compatibility imports
-from .agent_factory import (
-    create_agentic_rag_system,
-    get_agent_system,
-    process_query_with_agent_system,
-)
-from .agent_utils import (
-    analyze_documents_agentic,
-    chat_with_agent,
-    create_agent_with_tools,
-    create_tools_from_index,
-)
 
 # Multi-Agent Coordination System imports
 from .coordinator import (
@@ -37,13 +17,8 @@ from .coordinator import (
     MultiAgentCoordinator,
     create_multi_agent_coordinator,
 )
-from .planner import (
-    PlannerAgent,
-    QueryPlan,
-    create_planner_agent,
-    decompose_comparison_query,
-    detect_decomposition_strategy,
-)
+
+# Retrieval Agent imports
 from .retrieval import (
     RetrievalAgent,
     RetrievalResult,
@@ -51,23 +26,11 @@ from .retrieval import (
     optimize_query_for_strategy,
     select_optimal_strategy,
 )
-from .router import (
-    RouterAgent,
-    RoutingDecision,
-    analyze_query_complexity,
-    create_router_agent,
-    detect_query_intent,
-)
-from .synthesis import (
-    SynthesisAgent,
-    SynthesisResult,
-    calculate_content_similarity,
-    create_synthesis_agent,
-    merge_document_metadata,
-)
+
+# Tool Factory imports
 from .tool_factory import ToolFactory
 
-# Shared tools
+# Shared Tool Functions imports
 from .tools import (
     plan_query,
     retrieve_documents,
@@ -75,62 +38,24 @@ from .tools import (
     synthesize_results,
     validate_response,
 )
-from .validator import (
-    ValidationAgent,
-    ValidationIssue,
-    ValidationResult,
-    assess_response_completeness,
-    calculate_source_coverage,
-    create_validation_agent,
-    detect_hallucinations,
-)
 
 __all__ = [
-    # Legacy compatibility
-    "analyze_documents_agentic",
-    "chat_with_agent",
-    "create_agent_with_tools",
-    "create_tools_from_index",
-    "create_agentic_rag_system",
-    "get_agent_system",
-    "process_query_with_agent_system",
-    "ToolFactory",
     # Multi-Agent Coordination System
-    "MultiAgentCoordinator",
     "AgentResponse",
+    "MultiAgentCoordinator",
     "create_multi_agent_coordinator",
-    # Individual Agents
-    "RouterAgent",
-    "RoutingDecision",
-    "create_router_agent",
-    "analyze_query_complexity",
-    "detect_query_intent",
-    "PlannerAgent",
-    "QueryPlan",
-    "create_planner_agent",
-    "decompose_comparison_query",
-    "detect_decomposition_strategy",
+    # Retrieval Agent
     "RetrievalAgent",
     "RetrievalResult",
     "create_retrieval_agent",
     "optimize_query_for_strategy",
     "select_optimal_strategy",
-    "SynthesisAgent",
-    "SynthesisResult",
-    "create_synthesis_agent",
-    "calculate_content_similarity",
-    "merge_document_metadata",
-    "ValidationAgent",
-    "ValidationResult",
-    "ValidationIssue",
-    "create_validation_agent",
-    "detect_hallucinations",
-    "calculate_source_coverage",
-    "assess_response_completeness",
-    # Shared Tools
-    "route_query",
+    # Tool Factory
+    "ToolFactory",
+    # Shared Tool Functions
     "plan_query",
     "retrieve_documents",
+    "route_query",
     "synthesize_results",
     "validate_response",
 ]

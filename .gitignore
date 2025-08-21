@@ -172,6 +172,7 @@ cython_debug/
 .pypirc
 
 # Project specific
+CLAUDE.md
 logs/
 docmind_ai.log
 repomix-output.md
@@ -179,7 +180,8 @@ tests-output.md
 core-files-output.md
 crawled/
 TODO.md.bak
-PYTEST_OPTIMIZATION_REPORT.md
+ai-research/
+.spec-updates/
 
 # Model caches and embeddings
 embeddings_cache/
@@ -228,3 +230,11 @@ Thumbs.db
 # Emacs
 \#*\#
 .\#*
+
+# Specification management
+update-plan-*.json
+docs/specs/archived/
+docs/specs.backup.*
+docs/adrs/archived/
+docs/developers/archived/
+reports/

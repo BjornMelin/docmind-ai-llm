@@ -16,7 +16,7 @@ Accepted
 
 **SIMPLIFICATION NOTE**: While this ADR describes advanced multi-stage reranking, for most use cases we recommend using BGE-reranker-v2-m3 directly via sentence-transformers CrossEncoder without custom wrappers. Only implement the full multi-stage approach if you have specific performance requirements that simple reranking doesn't meet.
 
-Original description: Enhances the current BGE-reranker-v2-m3 strategy with multi-stage filtering (Stage 2 of the 50→20→10 pipeline), adaptive batch processing, and integration with the unified embedding pipeline. The architecture provides critical context optimization for 32K native windows, filtering 50 initial candidates to 20 highly relevant results before final relevance filtering.
+Original description: Enhances the current BGE-reranker-v2-m3 strategy with multi-stage filtering (Stage 2 of the 50→20→10 pipeline), adaptive batch processing, and integration with the unified embedding pipeline. The architecture provides critical context optimization for 128K context windows with FP8 optimization, filtering 50 initial candidates to 20 highly relevant results before final relevance filtering.
 
 ## Context
 
@@ -25,7 +25,7 @@ Current reranking uses BGE-reranker-v2-m3 in a basic configuration. The moderniz
 1. **Context Optimization**: Critical Stage 2 filtering in 50→20→10 multi-stage pipeline
 2. **Quality Enhancement**: BGE-reranker-v2-m3 provides superior relevance scoring vs similarity
 3. **Performance Optimization**: Batch processing and caching for efficiency
-4. **Context Efficiency**: Optimizes content selection for 32K native context windows
+4. **Context Efficiency**: Optimizes content selection for 128K context windows with FP8 optimization
 5. **Agent Integration**: Support for agentic RAG decision-making with intelligent retrieval
 
 Research shows reranking effectiveness increases significantly with query-adaptive strategies and multi-stage filtering approaches.

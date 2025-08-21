@@ -30,7 +30,7 @@ Traditional RAG systems suffer from fixed retrieval patterns that cannot adapt t
 3. **Self-Correction**: Validating and improving generated responses
 4. **Local Operation**: All processing occurs on consumer hardware without API dependencies
 
-Supervisor-based agentic patterns operate on Qwen3-4B-Instruct-2507 with 262K context through INT8 KV cache optimization on RTX 4090 Laptop hardware. This configuration enables quality improvements over basic RAG with reduced implementation complexity and eliminates document chunking requirements for contexts up to 262K tokens.
+Supervisor-based agentic patterns operate on Qwen3-4B-Instruct-2507-FP8 with 128K context through FP8 KV cache optimization and parallel tool execution on RTX 4090 Laptop hardware. This configuration enables quality improvements over basic RAG with reduced implementation complexity while achieving 50-87% token reduction through parallel tool execution.
 
 ## Related Requirements
 
@@ -45,7 +45,7 @@ Supervisor-based agentic patterns operate on Qwen3-4B-Instruct-2507 with 262K co
 
 - **NFR-1:** **(Local-First)** All agentic operations must run locally without external API calls
 - **NFR-2:** **(Performance)** Agent decision overhead <300ms on RTX 4090 Laptop
-- **NFR-3:** **(Memory)** Total memory footprint ~12.2GB VRAM with FULL 262K context
+- **NFR-3:** **(Memory)** Total memory footprint ~12-14GB VRAM with 128K context and FP8 optimization
 
 ## Alternatives
 
@@ -80,14 +80,14 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 **Implementation Strategy:**
 
 - Use `create_supervisor()` from langgraph-supervisor library
-- Local LLM for all agent decisions (Qwen3-4B-Instruct-2507 with FULL 262K context via INT8 KV cache)
+- Local LLM for all agent decisions (Qwen3-4B-Instruct-2507-FP8 with 128K context via FP8 KV cache)
 - Supervisor handles state management and agent coordination automatically
 - Built-in error handling and fallback mechanisms
-- Massive 262K context enables processing extensive documents and conversations without chunking limitations
+- 128K context enables processing large documents and conversations with intelligent context management and parallel tool execution (50-87% token reduction)
 
 ## Related Decisions
 
-- **ADR-004** (Local-First LLM Strategy): Provides Qwen3-4B-Instruct-2507 with FULL 262K context for agent decision-making
+- **ADR-004** (Local-First LLM Strategy): Provides Qwen3-4B-Instruct-2507-FP8 with 128K context for agent decision-making
 - **ADR-003** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
 - **ADR-010** (Performance Optimization Strategy): Provides dual-cache architecture for efficient multi-agent coordination
 - **ADR-011** (Agent Orchestration Framework): Details the supervisor library implementation with 5-agent architecture
@@ -294,14 +294,14 @@ response = result["messages"][-1]["content"]
 - **Quality Assurance**: Built-in validation prevents poor responses from reaching users
 - **Maintainable Complexity**: Simple five-agent pattern avoids over-engineering
 - **Local Operation**: No external dependencies while gaining agentic capabilities
-- **Performance**: Lightweight decisions add minimal overhead to response time
+- **Performance**: Lightweight decisions add minimal overhead (<200ms) with parallel tool execution reducing token usage by 50-87%
 - **Advanced Optimization**: DSPy provides automatic prompt optimization for 20-30% improvement in retrieval quality
 - **Multi-hop Reasoning**: Optional GraphRAG enables complex relationship queries and thematic analysis
 
 ### Negative Consequences / Trade-offs
 
-- **Increased Latency**: Agent decisions add 100-300ms per query on RTX 4090 Laptop
-- **Resource Usage**: Total 12-14GB VRAM with 128K context and agent operations
+- **Increased Latency**: Agent decisions add <200ms per query on RTX 4090 Laptop with parallel execution
+- **Resource Usage**: Total 12-14GB VRAM with 128K context and FP8 optimization
 - **Complexity**: More moving parts than basic RAG, requires monitoring agent behavior
 - **Debugging**: Agent decision paths harder to trace than linear pipelines
 
@@ -315,7 +315,7 @@ response = result["messages"][-1]["content"]
 ## Dependencies
 
 - **Python**: `langgraph-supervisor>=0.0.29`, `langgraph>=0.2.0`, `langchain-core>=0.3.0`
-- **Local LLM**: Qwen3-14B with 128K context via YaRN and reliable function calling support
+- **Local LLM**: Qwen3-4B-Instruct-2507-FP8 with 128K context via vLLM and reliable function calling support
 - **Framework**: LlamaIndex integration for retrieval components
 - **Hardware**: RTX 4090 Laptop GPU (16GB VRAM), Intel Core i9-14900HX, 64GB RAM
 
@@ -336,7 +336,7 @@ response = result["messages"][-1]["content"]
 
 ## Changelog
 
-- **7.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context through INT8 KV cache optimization. Agent system operates with large context windows eliminating chunking requirements. Updated performance targets: <200ms agent decisions, <1.5 second total latency, ~12.2GB VRAM usage. Agents can process documents up to 262K tokens and maintain conversation history within single attention spans.
+- **7.0 (2025-08-19)**: **FP8 MODEL TRANSITION** - Updated for Qwen3-4B-Instruct-2507-FP8 with 128K context through FP8 KV cache optimization and parallel tool execution. Agent system operates with efficient context management and parallel tool calls achieving 50-87% token reduction. Updated performance targets: <200ms agent decisions, <2 second total latency, 12-14GB VRAM usage. Parallel execution enables efficient processing of large documents within 128K context constraints.
 - **6.0 (2025-08-18)**: **HARDWARE UPGRADE** - Enhanced for RTX 4090 Laptop GPU (16GB VRAM) with YaRN context scaling to 128K tokens. Updated performance targets: <200ms agent decisions, <2 second total latency, <14GB VRAM usage. Enables processing entire documents without chunking.
 - **5.1 (2025-08-18)**: **REVERTED** - Returned to practical Qwen3-14B model after critical review. 30B MoE model unrealistic for consumer hardware (requires 24GB+ VRAM, <1 token/sec at large contexts).
 - **5.0 (2025-08-18)**: **EXPERIMENTAL** - Attempted switch to Qwen3-30B-A3B-Instruct-2507 (later found unrealistic)

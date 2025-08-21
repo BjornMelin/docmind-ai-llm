@@ -32,7 +32,7 @@ Current retrieval is limited to flat vector similarity search with basic reranki
 
 Full RAPTOR implementation is too resource-intensive for local deployment. Our RAPTOR-Lite approach maintains hierarchical benefits while optimizing for local-first constraints.
 
-**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-007), applies adaptive routing strategies, and uses BGE-reranker-v2-m3 (ADR-006) to refine results before returning them to the agentic RAG system.
+**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-007), applies adaptive routing strategies optimized for 128K context windows, and uses BGE-reranker-v2-m3 (ADR-006) to refine results before returning them to the agentic RAG system with FP8 optimization.
 
 ## Related Requirements
 
@@ -45,8 +45,8 @@ Full RAPTOR implementation is too resource-intensive for local deployment. Our R
 
 ### Non-Functional Requirements
 
-- **NFR-1:** **(Performance)** Hierarchical retrieval overhead <1 second on consumer hardware
-- **NFR-2:** **(Memory)** RAPTOR-Lite tree storage <500MB for 10,000 documents
+- **NFR-1:** **(Performance)** Hierarchical retrieval overhead <1 second optimized for 128K context constraints
+- **NFR-2:** **(Memory)** RAPTOR-Lite tree storage <500MB for 10,000 documents within 128K context limits
 - **NFR-3:** **(Quality)** ≥15% improvement in complex query answering vs flat retrieval
 - **NFR-4:** **(Local-First)** All hierarchical processing occurs locally
 

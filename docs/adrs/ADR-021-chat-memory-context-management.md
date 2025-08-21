@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Implements conversational memory system using Qwen3-4B-Instruct-2507's 262K context window through INT8 KV cache optimization. Using LlamaIndex ChatMemoryBuffer and SimpleChatStore, the system enables persistent chat history with massive context retention, eliminating the need for context pruning in most scenarios. This approach allows conversation history analysis and context-aware processing within single attention spans.
+Implements conversational memory system using Qwen/Qwen3-4B-Instruct-2507-FP8's 131,072-token (128K) context window through FP8 KV cache optimization. Using LlamaIndex ChatMemoryBuffer and SimpleChatStore, the system enables persistent chat history with extended context retention, requiring aggressive trimming strategies for optimal performance. This approach allows conversation history analysis and context-aware processing within realistic memory constraints.
 
 ## Context
 
@@ -22,7 +22,7 @@ DocMind AI's chat interface requires sophisticated memory management to provide 
 
 1. **Chat History Persistence**: Users expect conversations to persist across application restarts
 2. **Context-Aware Responses**: Follow-up questions should leverage previous conversation context
-3. **Memory Management**: 262K context window eliminates most pruning needs, enabling extended conversation retention
+3. **Memory Management**: 128K context window requires intelligent pruning strategies for extended conversation retention
 4. **Multi-Session Support**: Users may have multiple concurrent conversation threads
 5. **Performance**: Memory operations must not degrade query response times
 
@@ -35,14 +35,14 @@ The solution leverages LlamaIndex's built-in chat memory components with SQLite 
 - **FR-1:** Persist chat conversations across application sessions
 - **FR-2:** Maintain conversation context for follow-up questions
 - **FR-3:** Support multiple concurrent conversation threads
-- **FR-4:** Use 262K context window for extended conversation retention with minimal pruning
+- **FR-4:** Use 128K context window for extended conversation retention with aggressive trimming
 - **FR-5:** Restore conversation state on application restart
 - **FR-6:** Export conversation history for external use
 
 ### Non-Functional Requirements
 
 - **NFR-1:** **(Performance)** Memory operations <100ms overhead per query
-- **NFR-2:** **(Memory Management)** 262K token buffer eliminating most pruning scenarios
+- **NFR-2:** **(Memory Management)** 128K token buffer with intelligent trimming strategies
 - **NFR-3:** **(Persistence)** SQLite storage with WAL mode for concurrent access
 - **NFR-4:** **(Context Quality)** Follow-up questions leverage full conversation history effectively
 
@@ -76,7 +76,7 @@ The solution leverages LlamaIndex's built-in chat memory components with SQLite 
 
 We will implement **LlamaIndex-based Conversational Memory** with:
 
-1. **ChatMemoryBuffer**: In-memory conversation management with 262K token limit
+1. **ChatMemoryBuffer**: In-memory conversation management with 128K token limit
 2. **SimpleChatStore**: SQLite-backed persistent storage for conversation history
 3. **Context Retention**: Massive context capability reduces need for condensation in most scenarios
 4. **Session Management**: Multi-conversation support with session isolation
@@ -178,8 +178,8 @@ class ChatMemoryManager:
     def __init__(
         self,
         db_path: Path = Path("data/chat_memory.db"),
-        token_limit: int = 260000,  # Near-FULL 262K context utilization
-        enable_condensation: bool = False,  # Rarely needed with 262K context
+        token_limit: int = 120000,  # 128K context with buffer for safety
+        enable_condensation: bool = True,  # Required with 128K context
         enable_dspy: bool = True
     ):
         self.db_path = db_path
@@ -199,8 +199,62 @@ class ChatMemoryManager:
         if enable_dspy:
             self.context_condenser = ContextCondenser()
         
+        # Context management hooks for supervisor integration
+        self.trim_context_hook = self._create_trim_context_hook()
+        self.format_response_hook = self._create_format_response_hook()
+        
         # Load existing sessions
         self._load_existing_sessions()
+    
+    def _create_trim_context_hook(self):
+        """Create pre-model hook for context trimming."""
+        def trim_context_hook(state):
+            """Pre-model hook to trim context to 128K tokens."""
+            messages = state.get("messages", [])
+            total_tokens = self._estimate_tokens(messages)
+            
+            if total_tokens > self.token_limit:  # 120K limit with buffer
+                # Aggressive trimming strategy
+                messages = self._trim_to_token_limit(messages, self.token_limit)
+                state["messages"] = messages
+                state["context_trimmed"] = True
+            
+            return state
+        
+        return trim_context_hook
+    
+    def _create_format_response_hook(self):
+        """Create post-model hook for response formatting and metadata."""
+        def format_response_hook(state):
+            """Post-model hook for response formatting."""
+            if state.get("output_mode") == "structured":
+                # Add metadata about processing
+                if state.get("context_trimmed"):
+                    state["processing_metadata"] = {
+                        "context_trimmed": True,
+                        "original_tokens": state.get("original_token_count", 0),
+                        "final_tokens": state.get("trimmed_token_count", 0),
+                        "memory_manager": "ChatMemoryBuffer",
+                        "session_id": state.get("session_id")
+                    }
+            return state
+        
+        return format_response_hook
+    
+    def _trim_to_token_limit(self, messages: List[ChatMessage], limit: int) -> List[ChatMessage]:
+        """Aggressively trim messages to fit within token limit."""
+        total_tokens = 0
+        trimmed_messages = []
+        
+        # Keep system message and last N messages
+        for msg in reversed(messages):
+            msg_tokens = self._estimate_tokens([msg])
+            if total_tokens + msg_tokens > limit:
+                break
+            trimmed_messages.insert(0, msg)
+            total_tokens += msg_tokens
+        
+        return trimmed_messages
     
     def _init_database(self):
         """Initialize SQLite database for conversation persistence."""
@@ -349,7 +403,7 @@ class ChatMemoryManager:
         new_message_tokens = self._estimate_tokens([message])
         
         if auto_condense and self.enable_condensation:
-            if current_tokens + new_message_tokens > self.token_limit * 0.95:  # Use 95% of 262K context
+            if current_tokens + new_message_tokens > self.token_limit * 0.9:  # Use 90% of 128K context
                 self._condense_conversation(session_id)
         
         # Add message to buffer
@@ -588,6 +642,14 @@ class ChatMemoryManager:
                     del self.memory_buffers[session_id]
                 if session_id in self.session_metadata:
                     del self.session_metadata[session_id]
+    
+    def get_supervisor_hooks(self):
+        """Get pre/post model hooks for LangGraph supervisor integration."""
+        from langchain_core.runnables import RunnableLambda
+        return {
+            "pre_model_hook": RunnableLambda(self.trim_context_hook),
+            "post_model_hook": RunnableLambda(self.format_response_hook)
+        }
 ```
 
 ### Integration with Streamlit UI
@@ -723,6 +785,32 @@ Please answer the current question taking into account the conversation context 
                 file_name=f"conversation_{self.current_session_id[:8]}.md",
                 mime="text/markdown"
             )
+
+class ContextManager:
+    """Manages 128K context window for multi-agent system."""
+    
+    MAX_CONTEXT_TOKENS = 128000  # Reduced from 262K
+    BUFFER_TOKENS = 8000  # Safety buffer
+    
+    def trim_messages(self, messages: List[ChatMessage]) -> List[ChatMessage]:
+        """Aggressively trim messages to fit 128K context."""
+        total_tokens = 0
+        trimmed_messages = []
+        
+        # Keep system message and last N messages
+        for msg in reversed(messages):
+            msg_tokens = self.count_tokens(msg)
+            if total_tokens + msg_tokens > self.MAX_CONTEXT_TOKENS - self.BUFFER_TOKENS:
+                break
+            trimmed_messages.insert(0, msg)
+            total_tokens += msg_tokens
+        
+        return trimmed_messages
+    
+    def count_tokens(self, message: ChatMessage) -> int:
+        """Estimate token count for a message."""
+        # Simple estimation: ~4 characters per token
+        return len(message.content) // 4
 ```
 
 ## Consequences
@@ -738,10 +826,12 @@ Please answer the current question taking into account the conversation context 
 
 ### Negative Consequences / Trade-offs
 
+- **Context Limitations**: 128K context requires more aggressive trimming than 262K
 - **Storage Requirements**: Persistent storage uses disk space for conversation history
 - **Memory Usage**: Chat buffers consume RAM proportional to conversation length
-- **Complexity**: Conversation condensation adds system complexity
+- **Complexity**: Enhanced conversation condensation adds system complexity
 - **DSPy Dependency**: Optimal condensation requires DSPy but provides graceful fallback
+- **Sliding Window Management**: Requires careful balance between context preservation and performance
 
 ### Migration Strategy
 
@@ -755,8 +845,10 @@ Please answer the current question taking into account the conversation context 
 
 - **Memory Operations**: <100ms overhead per query
 - **Context Retrieval**: <50ms for conversation history
-- **Condensation Time**: <2 seconds for long conversations
+- **Condensation Time**: <2 seconds for long conversations (more frequent with 128K)
 - **Storage Efficiency**: <1MB per 100 messages average
+- **Context Trimming**: <200ms for aggressive trimming operations
+- **Token Estimation**: <10ms for message token counting
 
 ## Dependencies
 
@@ -768,10 +860,12 @@ Please answer the current question taking into account the conversation context 
 ## Monitoring Metrics
 
 - Conversation session count and duration
-- Memory buffer token usage and condensation frequency
-- Context retrieval latency
+- Memory buffer token usage and condensation frequency (increased with 128K)
+- Context retrieval and trimming latency
 - Storage size and growth rate
 - User engagement with chat features
+- Context window utilization rates
+- Aggressive trimming effectiveness and quality preservation
 
 ## Future Enhancements
 
@@ -783,5 +877,7 @@ Please answer the current question taking into account the conversation context 
 
 ## Changelog
 
+- **3.1 (2025-08-20)**: **SUPERVISOR INTEGRATION HOOKS** - Added pre/post model hooks for LangGraph supervisor integration. Created trim_context_hook for automatic context trimming at 120K threshold (8K buffer) and format_response_hook for processing metadata. Added get_supervisor_hooks() method to expose RunnableLambda hooks for supervisor configuration. Enhanced with session tracking and processing metadata for structured output mode.
+- **3.0 (2025-08-19)**: **CONTEXT WINDOW CORRECTION** - Updated for Qwen/Qwen3-4B-Instruct-2507-FP8 with 128K context window through FP8 KV cache optimization. Reduced token limit from 260K to 120K (with safety buffer), requiring aggressive trimming strategies. Updated condensation trigger from 95% to 90% utilization. Added pre-model hook for context management and enhanced memory optimization for 128K window.
 - **2.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context window through INT8 KV cache optimization. Increased token limit from 65K to 260K (95% of full context), reducing the need for conversation condensation. Users can maintain extended conversation history spanning hundreds of exchanges without context loss. Condensation trigger moved from 80% to 95% utilization.
 - **1.0 (2025-08-18)**: Initial conversational memory system with ChatMemoryBuffer, SimpleChatStore persistence, and intelligent context condensation
