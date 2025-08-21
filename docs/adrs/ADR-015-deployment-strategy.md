@@ -29,6 +29,7 @@ That's it. No need for multi-stage builds, hardware profiling, or complex orches
 ## Implementation Reference
 
 For detailed vLLM service configuration, systemd templates, and production deployment procedures, see:
+
 - [FP8 Supervisor Integration Guide](../archived/implementation-plans/fp8-supervisor-integration-guide-v1.0.md)
 
 ## Decision

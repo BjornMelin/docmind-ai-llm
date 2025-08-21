@@ -31,6 +31,7 @@ These agents need orchestration to work together effectively while maintaining c
 ## Implementation Reference
 
 For detailed supervisor parameter configuration, context trimming implementation, and testing procedures, see:
+
 - [FP8 Supervisor Integration Guide](../archived/implementation-plans/fp8-supervisor-integration-guide-v1.0.md)
 
 ## Related Requirements
