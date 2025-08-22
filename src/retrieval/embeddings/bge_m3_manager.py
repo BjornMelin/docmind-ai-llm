@@ -52,6 +52,20 @@ class BGEM3Embedding(BaseEmbedding):
     normalize_embeddings: bool = Field(default=True)
     device: str = Field(default="cuda")
 
+    # Private attributes for Pydantic v1
+    _model: Any = None
+
+    class Config:
+        """Pydantic configuration for BGE-M3 embedding model.
+
+        Allows arbitrary types (like model instances), forbids extra fields,
+        and enables assignment validation for model updates.
+        """
+
+        arbitrary_types_allowed = True
+        extra = "forbid"
+        validate_assignment = True
+
     def __init__(
         self,
         *,
@@ -87,7 +101,10 @@ class BGEM3Embedding(BaseEmbedding):
             )
 
         try:
-            self._model = BGEM3FlagModel(model_name, use_fp16=use_fp16, device=device)
+            # Use object.__setattr__ to bypass Pydantic validation
+            # for private attributes
+            model = BGEM3FlagModel(model_name, use_fp16=use_fp16, device=device)
+            object.__setattr__(self, "_model", model)
             logger.info(f"BGE-M3 model loaded: {model_name} (FP16: {use_fp16})")
         except Exception as e:
             logger.error(f"Failed to load BGE-M3 model: {e}")

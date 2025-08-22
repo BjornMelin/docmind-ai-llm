@@ -1,10 +1,16 @@
-"""Fixtures for FEAT-002 Retrieval & Search System tests.
+"""Comprehensive fixtures for FEAT-002 Retrieval & Search System tests.
 
-This module provides specialized fixtures for testing:
-- BGE-M3 unified embeddings
+This module provides specialized fixtures and mocks for testing:
+- BGE-M3 unified embeddings with FlagEmbedding mocks
+- CLIP multimodal embeddings with model mocks
 - RouterQueryEngine adaptive strategies
 - CrossEncoder reranking with BGE-reranker-v2-m3
+- vLLM/Qwen model integration mocks
+- PropertyGraphIndex mocks
+- DSPy optimization mocks
 - Performance validation on RTX 4090 Laptop
+
+All mocks are designed to prevent real model loading while providing realistic outputs.
 """
 
 import time
@@ -15,8 +21,293 @@ import pytest
 from llama_index.core import Document
 from llama_index.core.schema import NodeWithScore, TextNode
 
+# ============================================================================
+# COMPREHENSIVE MODEL MOCKS - Prevent Real Model Loading
+# ============================================================================
 
-# Mock imports to avoid dependency issues in tests
+
+# Mock FlagEmbedding at module level to prevent import/loading issues
+@pytest.fixture(autouse=True)
+def mock_flag_embedding_imports():
+    """Auto-use fixture to mock FlagEmbedding imports before any tests run."""
+    with patch.dict(
+        "sys.modules",
+        {
+            "FlagEmbedding": MagicMock(),
+            "FlagEmbedding.BGEM3FlagModel": MagicMock(),
+        },
+    ):
+        # Create comprehensive BGEM3FlagModel mock
+        mock_bgem3_model = MagicMock()
+        mock_bgem3_model.encode.return_value = {
+            "dense_vecs": np.random.rand(2, 1024).astype(np.float32),
+            "lexical_weights": [
+                {1: 0.8, 5: 0.6, 10: 0.4, 23: 0.9},  # Token indices to weights
+                {2: 0.7, 7: 0.5, 15: 0.3, 31: 0.8},
+            ],
+            "colbert_vecs": [
+                np.random.rand(10, 1024).astype(np.float32),  # Multi-vector embeddings
+                np.random.rand(12, 1024).astype(np.float32),
+            ],
+        }
+
+        with patch("FlagEmbedding.BGEM3FlagModel", return_value=mock_bgem3_model):
+            yield mock_bgem3_model
+
+
+# Mock CLIP models to prevent loading
+@pytest.fixture(autouse=True)
+def mock_clip_models():
+    """Auto-use fixture to mock CLIP models before any tests run."""
+    # Mock CLIP embedding from LlamaIndex
+    mock_clip = MagicMock()
+    mock_clip.get_text_embedding.return_value = np.random.rand(512).tolist()
+    mock_clip.get_query_embedding.return_value = np.random.rand(512).tolist()
+    mock_clip.embed_dim = 512
+
+    with patch(
+        "llama_index.embeddings.clip.base.ClipEmbedding", return_value=mock_clip
+    ):
+        yield mock_clip
+
+
+# Mock sentence-transformers CrossEncoder to prevent loading
+@pytest.fixture(autouse=True)
+def mock_sentence_transformers():
+    """Auto-use fixture to mock sentence-transformers before any tests run."""
+    # Mock CrossEncoder class
+    mock_cross_encoder = MagicMock()
+    mock_cross_encoder.predict.return_value = np.array([0.95, 0.85, 0.75, 0.65, 0.55])
+    mock_cross_encoder.model = MagicMock()
+    mock_cross_encoder.model.half.return_value = None
+    mock_cross_encoder.num_labels = 1
+    mock_cross_encoder.tokenizer = MagicMock()
+
+    # Mock the module at import level
+    mock_sentence_transformers_module = MagicMock()
+    mock_sentence_transformers_module.CrossEncoder = MagicMock(
+        return_value=mock_cross_encoder
+    )
+
+    with (
+        patch.dict(
+            "sys.modules",
+            {
+                "sentence_transformers": mock_sentence_transformers_module,
+                "sentence_transformers.cross_encoder": MagicMock(),
+                "sentence_transformers.cross_encoder.CrossEncoder": MagicMock(
+                    return_value=mock_cross_encoder
+                ),
+            },
+        ),
+        patch("sentence_transformers.CrossEncoder", return_value=mock_cross_encoder),
+    ):
+        yield mock_cross_encoder
+
+
+# Mock vLLM components to prevent GPU model loading
+@pytest.fixture
+def mock_vllm_components():
+    """Auto-use fixture to mock vLLM components before any tests run."""
+    mock_vllm_config = MagicMock()
+    mock_vllm_config.model = "Qwen/Qwen3-4B-Instruct-2507-FP8"
+    mock_vllm_config.max_model_len = 131072
+    mock_vllm_config.kv_cache_dtype = "fp8_e5m2"
+    mock_vllm_config.quantization = "fp8"
+    mock_vllm_config.gpu_memory_utilization = 0.85
+
+    # Mock VLLM manager
+    mock_vllm_manager = AsyncMock()
+    mock_vllm_manager.initialize_engine = AsyncMock()
+    mock_vllm_manager.generate = AsyncMock(return_value="Mocked LLM response")
+    mock_vllm_manager.get_generation_metrics.return_value = {
+        "context_tokens": 100000,
+        "decode_throughput": 150.0,
+        "prefill_throughput": 1200.0,
+    }
+
+    # Mock functions that would try to load real models
+    patches = {
+        "src.core.infrastructure.vllm_config.VLLMConfig": MagicMock(
+            return_value=mock_vllm_config
+        ),
+        "src.core.infrastructure.vllm_config.VLLMManager": MagicMock(
+            return_value=mock_vllm_manager
+        ),
+        "src.core.infrastructure.vllm_config.create_vllm_manager": MagicMock(
+            return_value=mock_vllm_manager
+        ),
+        "src.core.infrastructure.vllm_config.validate_fp8_requirements": MagicMock(
+            return_value={
+                "cuda_available": True,
+                "fp8_support": True,
+                "sufficient_vram": True,
+                "flashinfer_backend": True,
+            }
+        ),
+    }
+
+    with (
+        patch.multiple("builtins", **{"__import__": MagicMock()}),
+        patch.dict("sys.modules", {"vllm": MagicMock()}),
+    ):
+        for target, mock_obj in patches.items():
+            with patch(target, mock_obj):
+                yield {
+                    "config": mock_vllm_config,
+                    "manager": mock_vllm_manager,
+                    "patches": patches,
+                }
+                break  # Exit after first iteration
+
+
+# Mock PropertyGraph components
+@pytest.fixture
+def mock_property_graph_components():
+    """Auto-use fixture to mock PropertyGraph components before any tests run."""
+    # Mock PropertyGraphIndex
+    mock_property_graph = AsyncMock()
+    mock_property_graph.build_graph = AsyncMock()
+    mock_property_graph.extract_entities = AsyncMock(
+        return_value=[
+            {"text": "LlamaIndex", "type": "FRAMEWORK", "confidence": 0.95},
+            {"text": "BGE-M3", "type": "MODEL", "confidence": 0.90},
+            {"text": "RTX 4090", "type": "HARDWARE", "confidence": 0.88},
+        ]
+    )
+    mock_property_graph.extract_relationships = AsyncMock(
+        return_value=[
+            {
+                "source": "DocMind AI",
+                "target": "LlamaIndex",
+                "type": "USES",
+                "confidence": 0.92,
+            },
+            {
+                "source": "LlamaIndex",
+                "target": "RTX 4090",
+                "type": "OPTIMIZED_FOR",
+                "confidence": 0.85,
+            },
+        ]
+    )
+    mock_property_graph.traverse_graph = AsyncMock(
+        return_value=[["LlamaIndex", "USES", "BGE-M3"]]
+    )
+    mock_property_graph.as_retriever.return_value = MagicMock()
+    mock_property_graph.as_query_engine.return_value = MagicMock()
+
+    # Mock PropertyGraphConfig
+    mock_config = MagicMock()
+    mock_config.entities = [
+        "FRAMEWORK",
+        "LIBRARY",
+        "MODEL",
+        "HARDWARE",
+        "PERSON",
+        "ORG",
+    ]
+    mock_config.relations = [
+        "USES",
+        "OPTIMIZED_FOR",
+        "PART_OF",
+        "CREATED_BY",
+        "SUPPORTS",
+    ]
+    mock_config.path_depth = 2
+    mock_config.strict_schema = True
+
+    # Apply patches defensively - only patch what exists
+    try:
+        with patch(
+            "src.retrieval.graph.property_graph_config.PropertyGraphConfig",
+            MagicMock(return_value=mock_config),
+        ):
+            pass
+    except (ImportError, AttributeError, ModuleNotFoundError):
+        pass
+
+    try:
+        with patch(
+            "src.retrieval.graph.property_graph_config.create_property_graph_index",
+            AsyncMock(return_value=mock_property_graph),
+        ):
+            pass
+    except (ImportError, AttributeError, ModuleNotFoundError):
+        pass
+
+    return {"property_graph": mock_property_graph, "config": mock_config}
+
+
+# Mock DSPy components to prevent model loading
+@pytest.fixture
+def mock_dspy_components():
+    """Mock DSPy components - use when DSPy tests are run."""
+    dspy_mock = MagicMock()
+
+    # Mock DSPy settings
+    dspy_mock.settings = MagicMock()
+    dspy_mock.settings.configure = MagicMock()
+
+    # Mock DSPy LM
+    dspy_mock.LM = MagicMock()
+
+    # Mock DSPy Example
+    example_mock = MagicMock()
+    example_mock.with_inputs = MagicMock(return_value=example_mock)
+    dspy_mock.Example = MagicMock(return_value=example_mock)
+
+    # Mock DSPy evaluate functions
+    dspy_mock.evaluate = MagicMock()
+    dspy_mock.evaluate.answer_exact_match = MagicMock()
+
+    # Mock DSPy optimization classes
+    mock_optimizer = AsyncMock()
+    mock_optimized_model = AsyncMock()
+    mock_optimized_model.forward = AsyncMock(
+        return_value=MagicMock(answer="Optimized response")
+    )
+    mock_optimizer.compile = AsyncMock(return_value=mock_optimized_model)
+
+    with patch.dict("sys.modules", {"dspy": dspy_mock}):
+        yield dspy_mock
+
+
+# Mock multimodal utilities
+@pytest.fixture
+def mock_multimodal_utilities():
+    """Mock multimodal utilities - use when multimodal tests are run."""
+    patches = {
+        "src.utils.multimodal.cross_modal_search": AsyncMock(
+            return_value=[
+                {"score": 0.95, "image_path": "/path/to/image1.jpg"},
+                {"score": 0.87, "image_path": "/path/to/image2.jpg"},
+            ]
+        ),
+        "src.utils.multimodal.generate_image_embeddings": AsyncMock(
+            return_value=np.random.rand(512).astype(np.float32)
+        ),
+        "src.utils.multimodal.validate_vram_usage": MagicMock(return_value=1.2),
+        "src.utils.multimodal.validate_end_to_end_pipeline": AsyncMock(
+            return_value={
+                "visual_similarity": 0.92,
+                "entity_relationships": ["LlamaIndex", "USES", "BGE-M3"],
+                "final_response": "Mock pipeline response",
+            }
+        ),
+        "src.retrieval.embeddings.clip_config.ClipConfig": MagicMock(),
+        "src.retrieval.embeddings.clip_config.create_clip_embedding": MagicMock(),
+        "src.retrieval.integration.create_multimodal_index": AsyncMock(),
+    }
+
+    return patches
+
+
+# ============================================================================
+# ENHANCED LEGACY FIXTURES WITH REALISTIC DATA
+# ============================================================================
+
+
 @pytest.fixture
 def mock_bgem3_flag_model():
     """Mock BGE-M3 FlagEmbedding model."""

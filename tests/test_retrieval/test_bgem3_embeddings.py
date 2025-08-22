@@ -375,7 +375,7 @@ class TestBGEM3Performance:
             max_length=8192,
             return_dense=True,
             return_sparse=True,  # Default is True in BGE-M3
-            return_colbert_vecs=False,
+            return_colbert_vecs=True,  # Default is True in BGE-M3
         )
 
         assert result["dense"].shape == (12, 1024)

@@ -73,7 +73,7 @@ class TestBGEM3Performance:
         assert stats["p95_ms"] < 1000  # Very lenient for mocked test
         assert len(latencies) == 10
 
-    @pytest.mark.usefixtures("_rtx_4090_performance_targets")
+    @pytest.mark.usefixtures("rtx_4090_performance_targets")
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
     def test_batch_embedding_throughput(self, mock_flag_model_class):
         """Test BGE-M3 batch processing throughput optimization."""

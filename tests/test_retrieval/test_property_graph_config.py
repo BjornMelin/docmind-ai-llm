@@ -8,7 +8,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from llama_index.core.schema import Document, NodeWithScore
+from llama_index.core.schema import Document, NodeWithScore, TextNode
 
 # These imports will fail initially (TDD approach)
 try:
@@ -77,10 +77,15 @@ def mock_llm():
 def mock_vector_store():
     """Mock vector store for hybrid retrieval."""
     store = MagicMock()
+
+    # Create proper TextNode mocks instead of abstract BaseNode
+    node1 = TextNode(text="Vector result 1", id_="node_1")
+    node2 = TextNode(text="Vector result 2", id_="node_2")
+
     store.query = AsyncMock(
         return_value=[
-            NodeWithScore(node=MagicMock(text="Vector result 1"), score=0.9),
-            NodeWithScore(node=MagicMock(text="Vector result 2"), score=0.85),
+            NodeWithScore(node=node1, score=0.9),
+            NodeWithScore(node=node2, score=0.85),
         ]
     )
     return store
