@@ -297,7 +297,7 @@ class TestRunner:
             "run",
             "pytest",
             "tests/unit/test_models.py",
-            "tests/unit/test_agent_factory.py",
+            "tests/unit/test_tool_factory_modern.py",
             "-v",
             "--tb=line",
             "-m",
@@ -319,8 +319,8 @@ import importlib
 
 modules = [
     'src.models.core', 'src.utils.core', 'src.utils.document',
-    'src.utils.embedding', 'src.utils.database', 'src.utils.monitoring',
-    'src.agents.agent_utils', 'src.agents.agent_factory', 'src.agents.tool_factory'
+    'src.utils.database', 'src.utils.monitoring',
+    'src.agents.coordinator', 'src.agents.tool_factory', 'src.agents.tools'
 ]
 
 failed = []
@@ -399,10 +399,11 @@ else:
                 "src/models/core.py",
                 "src/utils/core.py",
                 "src/utils/document.py",
-                "src/utils/embedding.py",
-                "src/agents/agent_factory.py",
-                "src/agents/agent_utils.py",
+                "src/utils/database.py",
+                "src/utils/monitoring.py",
+                "src/agents/coordinator.py",
                 "src/agents/tool_factory.py",
+                "src/agents/tools.py",
                 "src/app.py",
             ]
 

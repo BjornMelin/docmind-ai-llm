@@ -131,7 +131,7 @@ class TestImportValidation:
 
         required_files = [
             "src/models/core.py",
-            "src/agents/agent_factory.py",
+            "src/agents/tool_factory.py",
             "src/utils/core.py",
             "src/utils/document.py",
             "src/retrieval/integration.py",

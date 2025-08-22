@@ -12,6 +12,11 @@ from llama_index.embeddings.clip import ClipEmbedding
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
+# CLIP configuration constants
+VRAM_PER_IMAGE_GB = 0.14  # ~140MB per image for ViT-B/32
+DEFAULT_CLIP_BATCH_SIZE = 10  # Optimized batch size for 1.4GB VRAM limit
+MAX_VRAM_GB_LIMIT = 1.4  # Maximum VRAM allocation for CLIP operations
+
 
 class ClipConfig(BaseModel):
     """Configuration for CLIP multimodal embeddings with VRAM constraints."""
@@ -21,15 +26,18 @@ class ClipConfig(BaseModel):
         description="CLIP model name (ViT-B/32)",
     )
     embed_batch_size: int = Field(
-        default=10,
-        description="Batch size for embedding generation (optimized for 1.4GB VRAM)",
+        default=DEFAULT_CLIP_BATCH_SIZE,
+        description=(
+            f"Batch size for embedding generation "
+            f"(optimized for {MAX_VRAM_GB_LIMIT}GB VRAM)"
+        ),
     )
     device: str = Field(
         default="cuda" if torch.cuda.is_available() else "cpu",
         description="Device for model execution",
     )
     max_vram_gb: float = Field(
-        default=1.4,
+        default=MAX_VRAM_GB_LIMIT,
         description="Maximum VRAM usage in GB",
     )
     auto_adjust_batch: bool = Field(
@@ -54,11 +62,15 @@ class ClipConfig(BaseModel):
     @classmethod
     def validate_batch_size(cls, v: int, info: ValidationInfo) -> int:
         """Validate batch size for VRAM constraints."""
-        if v > 10 and info.data.get("max_vram_gb", 1.4) <= 1.4:
+        if (
+            v > DEFAULT_CLIP_BATCH_SIZE
+            and info.data.get("max_vram_gb", MAX_VRAM_GB_LIMIT) <= MAX_VRAM_GB_LIMIT
+        ):
             logger.warning(
-                f"Batch size {v} may exceed 1.4GB VRAM limit, adjusting to 10"
+                f"Batch size {v} may exceed {MAX_VRAM_GB_LIMIT}GB VRAM limit, "
+                f"adjusting to {DEFAULT_CLIP_BATCH_SIZE}"
             )
-            return 10
+            return DEFAULT_CLIP_BATCH_SIZE
         return v
 
     def is_valid(self) -> bool:
@@ -66,8 +78,8 @@ class ClipConfig(BaseModel):
         return (
             self.model_name
             in ["openai/clip-vit-base-patch32", "openai/clip-vit-base-patch16"]
-            and self.embed_batch_size <= 10
-            and self.max_vram_gb <= 1.4
+            and self.embed_batch_size <= DEFAULT_CLIP_BATCH_SIZE
+            and self.max_vram_gb <= MAX_VRAM_GB_LIMIT
         )
 
     def optimize_for_hardware(self) -> "ClipConfig":
@@ -77,8 +89,7 @@ class ClipConfig(BaseModel):
 
         # Estimate VRAM usage and adjust batch size
         if self.device == "cuda":
-            vram_per_image = 0.14  # ~140MB per image for ViT-B/32
-            max_batch = int(self.max_vram_gb / vram_per_image)
+            max_batch = int(self.max_vram_gb / VRAM_PER_IMAGE_GB)
             if self.embed_batch_size > max_batch:
                 logger.info(
                     f"Adjusting batch size from {self.embed_batch_size} to {max_batch} "
@@ -90,8 +101,7 @@ class ClipConfig(BaseModel):
 
     def estimated_vram_usage(self) -> float:
         """Estimate VRAM usage in GB."""
-        vram_per_image = 0.14  # ~140MB per image for ViT-B/32
-        return self.embed_batch_size * vram_per_image
+        return self.embed_batch_size * VRAM_PER_IMAGE_GB
 
 
 def create_clip_embedding(config: dict | ClipConfig) -> ClipEmbedding:

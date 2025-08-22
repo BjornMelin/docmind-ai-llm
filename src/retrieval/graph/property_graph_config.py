@@ -325,11 +325,14 @@ def calculate_entity_confidence(
 
 
 # Extension methods for PropertyGraphIndex
-def extend_property_graph_index(index: PropertyGraphIndex):
+def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex:
     """Add helper methods to PropertyGraphIndex instance.
 
     Args:
         index: PropertyGraphIndex to extend
+
+    Returns:
+        Enhanced PropertyGraphIndex with additional methods
     """
     # Add async wrappers
     index.extract_entities = lambda doc: extract_entities(index, doc)
@@ -337,22 +340,24 @@ def extend_property_graph_index(index: PropertyGraphIndex):
     index.traverse_graph = lambda q, d=2, t=3.0: traverse_graph(index, q, d, t)
 
     # Add graph statistics methods
-    async def get_entity_count():
+    async def get_entity_count() -> int:
         """Get total entity count."""
         # Mock implementation
         return 100
 
-    async def get_relationship_count():
+    async def get_relationship_count() -> int:
         """Get total relationship count."""
         # Mock implementation
         return 250
 
-    async def find_entity(entity_name: str):
+    async def find_entity(entity_name: str) -> list[dict[str, Any]]:
         """Find specific entity in graph."""
         # Mock implementation
         return [{"entity": entity_name, "connections": 5}]
 
-    async def find_relationships(entity: str, max_hops: int = 2):
+    async def find_relationships(
+        entity: str, max_hops: int = 2
+    ) -> list[dict[str, Any]]:
         """Find relationships for an entity."""
         # Mock implementation
         return [
@@ -364,18 +369,18 @@ def extend_property_graph_index(index: PropertyGraphIndex):
             }
         ]
 
-    async def add_document(document: Any):
+    async def add_document(document: Any) -> None:
         """Add new document to existing graph."""
         # The index handles this internally
         index.insert(document)
 
-    async def build_graph(documents: list[Any]):
+    async def build_graph(documents: list[Any]) -> None:
         """Build graph from documents."""
         # The index handles this internally
         for doc in documents:
             index.insert(doc)
 
-    async def query(query_str: str, top_k: int = 5):
+    async def query(query_str: str, top_k: int = 5) -> list[Any]:
         """Query the property graph."""
         retriever = index.as_retriever(similarity_top_k=top_k)
         return await asyncio.to_thread(retriever.retrieve, query_str)

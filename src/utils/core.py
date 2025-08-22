@@ -11,7 +11,7 @@ Follows KISS principle with minimal dependencies and no complex patterns.
 
 import gc
 import time
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from functools import wraps
 from typing import Any
@@ -164,7 +164,7 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
 
 
 @asynccontextmanager
-async def managed_gpu_operation():
+async def managed_gpu_operation() -> AsyncGenerator[None, None]:
     """Context manager for GPU operations with cleanup."""
     try:
         yield
@@ -176,7 +176,9 @@ async def managed_gpu_operation():
 
 
 @asynccontextmanager
-async def managed_async_qdrant_client(url: str):
+async def managed_async_qdrant_client(
+    url: str,
+) -> AsyncGenerator[AsyncQdrantClient, None]:
     """Context manager for AsyncQdrantClient with proper cleanup.
 
     Args:

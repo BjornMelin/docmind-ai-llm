@@ -431,7 +431,7 @@ class RequirementValidator:
 
     def _check_extensibility(self) -> bool:
         """Check if system is extensible."""
-        return importlib.util.find_spec("agents.agent_factory") is not None
+        return importlib.util.find_spec("agents.tool_factory") is not None
 
     def _check_code_quality(self) -> bool:
         """Check if code quality standards are met."""

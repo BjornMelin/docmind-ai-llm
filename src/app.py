@@ -58,28 +58,32 @@ from src.utils.document import load_documents_llama
 
 
 # Simple wrapper functions for Ollama API calls
-async def get_ollama_models():
+async def get_ollama_models() -> dict[str, Any]:
     """Get list of available Ollama models."""
     return ollama.list()
 
 
-async def pull_ollama_model(ollama_model_name: str):
+async def pull_ollama_model(ollama_model_name: str) -> dict[str, Any]:
     """Pull an Ollama model."""
     return ollama.pull(ollama_model_name)
 
 
-def create_tools_from_index(index):
+def create_tools_from_index(index: Any) -> dict[str, Any]:
     """Create tools from index using ToolFactory."""
     return ToolFactory.create_basic_tools({"vector": index})
 
 
-def get_agent_system(tools, llm, memory):
+def get_agent_system(
+    tools: Any, llm: Any, memory: Any
+) -> tuple[MultiAgentCoordinator, str]:
     """Get agent system using MultiAgentCoordinator."""
     coordinator = MultiAgentCoordinator()
     return coordinator, "multi_agent"
 
 
-def process_query_with_agent_system(agent_system, query, mode, memory):
+def process_query_with_agent_system(
+    agent_system: Any, query: str, mode: str, memory: Any
+) -> dict[str, Any]:
     """Process query with agent system."""
     if mode == "multi_agent":
         return agent_system.process_query(query, context=memory)
