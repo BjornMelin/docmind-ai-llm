@@ -20,29 +20,29 @@ dependencies = [
     # Core application framework
     "streamlit>=1.48.0",
     "python-dotenv==1.1.1",
-    "loguru>=0.7.0",
-    "tenacity>=8.0.0",
+    "loguru>=0.7.3",
+    "tenacity>=9.1.2",
     "diskcache==5.6.3",
     # Document processing
     "pymupdf==1.26.3",
     "python-docx==1.2.0",
-    "pillow~=10.4.0",
+    "pillow>=11.0.0,<12.0.0",
     "unstructured[all-docs]>=0.18.11",
-    "pyarrow<21.0.0",
+    "pyarrow>=21.0.0,<22.0.0",
     # AI/ML core
-    "transformers==4.55.0",
+    "transformers==4.55.4",
     "torch==2.7.1",
-    "tiktoken==0.9.0",
+    "tiktoken==0.11.0",
     "openai>=1.98.0,<2.0.0",
     "openai-whisper==20250625",
     "spacy==3.8.7",
     # LLM backends
-    "ollama==0.5.1",
+    "ollama==0.5.3",
     "llama-cpp-python>=0.2.32,<0.3.0",  # CPU version only, GPU version in [gpu] extra
     # Vector database
     "qdrant-client==1.15.1",
     # LlamaIndex ecosystem - core
-    "llama-index-core>=0.10.0,<0.12.0",
+    "llama-index-core>=0.12.14,<0.13.0",
     "llama-index-vector-stores-qdrant",
     # LlamaIndex ecosystem - LLMs
     "llama-index-llms-openai",
@@ -62,24 +62,24 @@ dependencies = [
     "llama-index-multi-modal-llms-openai",
     "llama-index-question-gen-openai",
     # Agent framework - LangGraph for multi-agent orchestration
-    "langgraph>=0.2.74",
+    "langgraph>=0.6.6",
     "langgraph-supervisor>=0.0.29",
-    "langchain-core>=0.3.0",
-    "langchain-openai>=0.2.0",
+    "langchain-core>=0.3.74",
+    "langchain-openai>=0.3.31",
     # BGE-M3 and retrieval dependencies for FEAT-002
-    "FlagEmbedding>=1.2.11",  # BGE-M3 unified embeddings
-    "sentence-transformers>=3.0.0",  # CrossEncoder reranking
+    "FlagEmbedding>=1.3.5",  # BGE-M3 unified embeddings
+    "sentence-transformers>=5.1.0",  # CrossEncoder reranking
     # DSPy for prompt optimization
     "dspy-ai>=2.5.0",
     "pydantic==2.11.7",
     "pydantic-settings==2.10.1",
-    "vllm[flashinfer]>=0.10.1",
+    "vllm[flashinfer]>=0.10.1.1",
 ]
 
 [project.optional-dependencies]
 gpu = [
     "fastembed-gpu>=0.7.0",               # GPU-accelerated embeddings
-    "vllm[flashinfer]>=0.10.1",           # vLLM with FlashInfer support
+    "vllm[flashinfer]>=0.10.1.1",         # vLLM with FlashInfer support
     # Build tools for GPU libraries
     "ninja>=1.11.1",                      # Build acceleration
     "cmake>=3.26.4",                      # Required for CUDA builds
@@ -106,7 +106,7 @@ performance-test = "scripts.performance_validation:main"
 # CUDA Stack Requirements
 cuda_version = "12.8+"
 pytorch_version = "2.7.1"
-vllm_version = ">=0.10.1"
+vllm_version = ">=0.10.1.1"
 driver_version = "550.54.14+"
 
 # Hardware Requirements for Qwen3-4B-Instruct-2507-FP8
@@ -129,7 +129,7 @@ Manual Installation Steps (if needed):
    uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
 
 2. Install vLLM with FlashInfer:
-   uv pip install "vllm[flashinfer]>=0.10.1" --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install "vllm[flashinfer]>=0.10.1.1" --extra-index-url https://download.pytorch.org/whl/cu128
 
 3. Install llama-cpp-python with CUDA:
    uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu128
@@ -191,15 +191,15 @@ asyncio_default_fixture_loop_scope = "function"
 dev = [
     "ruff==0.12.8",
     "pytest>=8.3.1",
-    "pytest-cov>=6.0.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-benchmark>=4.0.0",
+    "pytest-cov>=6.2.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
 ]
 test = [
     "pytest==8.3.1",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=6.0.0",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
     "moviepy==2.2.1",  # Only needed for video processing tests
 ]
 performance = [
