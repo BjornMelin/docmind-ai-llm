@@ -1090,6 +1090,7 @@ dependencies = [
     { name = "llama-index-llms-llama-cpp" },
     { name = "llama-index-llms-ollama" },
     { name = "llama-index-llms-openai" },
+    { name = "llama-index-llms-vllm" },
     { name = "llama-index-multi-modal-llms-openai" },
     { name = "llama-index-postprocessor-colbert-rerank" },
     { name = "llama-index-program-openai" },
@@ -1168,6 +1169,7 @@ requires-dist = [
     { name = "llama-index-llms-llama-cpp" },
     { name = "llama-index-llms-ollama" },
     { name = "llama-index-llms-openai" },
+    { name = "llama-index-llms-vllm", specifier = ">=0.5.1" },
     { name = "llama-index-multi-modal-llms-openai" },
     { name = "llama-index-postprocessor-colbert-rerank" },
     { name = "llama-index-program-openai" },
@@ -2686,6 +2688,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d9/39/a7ce514fb500951e9edb713ed918a9ffe49f1a76fccfc531a4ec5c7fe15a/llama_index_llms_openai-0.4.7.tar.gz", hash = "sha256:564af8ab39fb3f3adfeae73a59c0dca46c099ab844a28e725eee0c551d4869f8", size = 24251, upload-time = "2025-06-16T03:38:47.175Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/61/e9/391926dad180ced6bb37a62edddb8483fbecde411239bd5e726841bb77b4/llama_index_llms_openai-0.4.7-py3-none-any.whl", hash = "sha256:3b8d9d3c1bcadc2cff09724de70f074f43eafd5b7048a91247c9a41b7cd6216d", size = 25365, upload-time = "2025-06-16T03:38:45.72Z" },
+]
+
+[[package]]
+name = "llama-index-llms-vllm"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "llama-index-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/dc/dc/87b471ab366f502eac582e1fdfbd9ed99d9fc66b03b973e886ed9e8d3567/llama_index_llms_vllm-0.5.1.tar.gz", hash = "sha256:21bb1a025ede64b5ab22e7407a195d872eac95d882ab0b425e09022b80049156", size = 6345, upload-time = "2025-05-01T00:56:19.583Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/6a/ff225ba67d126a4be12b6756f7f8e6378f583ba129fe1971f7429b7a1d08/llama_index_llms_vllm-0.5.1-py3-none-any.whl", hash = "sha256:70a1fec7537d7dcb95fef2edc111f9608dcb033cd6397b410f718b4fe202806d", size = 6197, upload-time = "2025-05-01T00:56:18.834Z" },
 ]
 
 [[package]]

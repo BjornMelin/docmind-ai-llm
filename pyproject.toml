@@ -38,7 +38,7 @@ dependencies = [
     "spacy==3.8.7",
     # LLM backends
     "ollama==0.5.3",
-    "llama-cpp-python>=0.2.32,<0.3.0",  # CPU version only, GPU version in [gpu] extra
+    "llama-cpp-python>=0.2.32,<0.3.0", # CPU version only, GPU version in [gpu] extra
     # Vector database
     "qdrant-client==1.15.1",
     # LlamaIndex ecosystem - core
@@ -48,6 +48,7 @@ dependencies = [
     "llama-index-llms-openai",
     "llama-index-llms-ollama",
     "llama-index-llms-llama-cpp",
+    "llama-index-llms-vllm>=0.5.1",
     # LlamaIndex ecosystem - embeddings
     "llama-index-embeddings-openai",
     "llama-index-embeddings-huggingface",
@@ -67,8 +68,8 @@ dependencies = [
     "langchain-core>=0.3.74",
     "langchain-openai>=0.3.31",
     # BGE-M3 and retrieval dependencies for FEAT-002
-    "FlagEmbedding>=1.3.5",  # BGE-M3 unified embeddings
-    "sentence-transformers>=5.1.0",  # CrossEncoder reranking
+    "FlagEmbedding>=1.3.5", # BGE-M3 unified embeddings
+    "sentence-transformers>=5.1.0", # CrossEncoder reranking
     # DSPy for prompt optimization
     "dspy-ai>=2.5.0",
     "pydantic==2.11.7",
