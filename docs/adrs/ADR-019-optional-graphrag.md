@@ -561,7 +561,7 @@ class GraphRAGMonitor:
 - **Multimodal Integration**: PropertyGraphIndex with CLIP embeddings for image-text relationships
 - **Performance Achieved**:
   - Zero infrastructure deployment (in-memory SimplePropertyGraphStore)
-  - Graph construction in <30 seconds per 100 documents (target met) 
+  - Graph construction in <30 seconds per 100 documents (target met)
   - <3 second query latency for graph queries
   - Full Qdrant vector store reuse
 - **Test Coverage**: Comprehensive test suite in `tests/test_retrieval/test_property_graph_config.py`

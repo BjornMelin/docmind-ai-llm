@@ -25,6 +25,18 @@ from src.retrieval.postprocessor.cross_encoder_rerank import (
 )
 from src.retrieval.query_engine.router_engine import AdaptiveRouterQueryEngine
 
+# Test timing constants for deterministic simulation
+SIMULATED_EMBEDDING_SLEEP_SEC = 0.02  # 20ms processing time
+SIMULATED_UNIFIED_PROCESSING_SLEEP_SEC = 0.03  # 30ms unified processing
+SIMULATED_RERANKING_SLEEP_SEC = 0.05  # 50ms reranking latency
+SIMULATED_FP16_PROCESSING_SLEEP_SEC = 0.03  # 30ms with FP16
+SIMULATED_FP32_PROCESSING_SLEEP_SEC = 0.05  # 50ms with FP32
+SIMULATED_SELECTION_OVERHEAD_SLEEP_SEC = 0.02  # 20ms selection overhead
+SIMULATED_HEAVY_PROCESSING_SLEEP_SEC = 0.09  # 90ms heavy processing
+
+# Fixed random seed for deterministic testing
+TEST_RANDOM_SEED = 42
+
 
 @pytest.mark.performance
 class TestBGEM3Performance:
@@ -39,8 +51,10 @@ class TestBGEM3Performance:
 
         # Simulate realistic embedding time
         def mock_encode(*_args, **_kwargs):
-            time.sleep(0.02)  # Simulate 20ms processing time
-            return {"dense_vecs": np.random.rand(1, 1024).astype(np.float32)}
+            time.sleep(SIMULATED_EMBEDDING_SLEEP_SEC)  # Simulate 20ms processing time
+            # Use deterministic random state for consistent test results
+            rng = np.random.RandomState(TEST_RANDOM_SEED)
+            return {"dense_vecs": rng.rand(1, 1024).astype(np.float32)}
 
         mock_bgem3_model.encode = mock_encode
         mock_flag_model_class.return_value = mock_bgem3_model
@@ -122,10 +136,14 @@ class TestBGEM3Performance:
 
         # Simulate unified embedding generation
         def mock_unified_encode(texts, **_kwargs):
-            time.sleep(0.03)  # Simulate unified processing
+            time.sleep(
+                SIMULATED_UNIFIED_PROCESSING_SLEEP_SEC
+            )  # Simulate unified processing
             batch_size = len(texts)
+            # Use deterministic random state for consistent test results
+            rng = np.random.RandomState(TEST_RANDOM_SEED)
             return {
-                "dense_vecs": np.random.rand(batch_size, 1024).astype(np.float32),
+                "dense_vecs": rng.rand(batch_size, 1024).astype(np.float32),
                 "lexical_weights": [
                     {i: 0.8, i + 5: 0.6, i + 10: 0.4} for i in range(batch_size)
                 ],
@@ -344,8 +362,10 @@ class TestCrossEncoderPerformance:
 
         # Simulate consistent performance
         def mock_predict(pairs, **_kwargs):
-            time.sleep(0.05)  # 50ms simulated latency
-            return np.random.rand(len(pairs))
+            time.sleep(SIMULATED_RERANKING_SLEEP_SEC)  # 50ms simulated latency
+            # Use deterministic random state for consistent test results
+            rng = np.random.RandomState(TEST_RANDOM_SEED)
+            return rng.rand(len(pairs))
 
         mock_cross_encoder.predict = mock_predict
         mock_cross_encoder_class.return_value = mock_cross_encoder
@@ -387,12 +407,18 @@ class TestCrossEncoderPerformance:
 
         # Mock FP16 vs FP32 performance difference
         def mock_predict_fp16(pairs, **_kwargs):
-            time.sleep(0.03)  # Faster with FP16
-            return np.random.rand(len(pairs))
+            time.sleep(SIMULATED_FP16_PROCESSING_SLEEP_SEC)  # Faster with FP16
+            # Use deterministic random state for consistent test results
+            rng = np.random.RandomState(TEST_RANDOM_SEED)
+            return rng.rand(len(pairs))
 
         def mock_predict_fp32(pairs, **_kwargs):
-            time.sleep(0.05)  # Slower with FP32
-            return np.random.rand(len(pairs))
+            time.sleep(SIMULATED_FP32_PROCESSING_SLEEP_SEC)  # Slower with FP32
+            # Use deterministic random state for consistent test results
+            rng = np.random.RandomState(
+                TEST_RANDOM_SEED + 1
+            )  # Different seed for variation
+            return rng.rand(len(pairs))
 
         # Test FP16 performance
         mock_cross_encoder.predict = mock_predict_fp16
@@ -517,7 +543,9 @@ class TestRouterPerformance:
 
         # Mock fast strategy selection
         def mock_fast_query(_query_str, **_kwargs):
-            time.sleep(0.02)  # 20ms selection overhead
+            time.sleep(
+                SIMULATED_SELECTION_OVERHEAD_SLEEP_SEC
+            )  # 20ms selection overhead
             response = MagicMock()
             response.metadata = {"selector_result": "semantic_search"}
             return response
@@ -644,7 +672,7 @@ class TestEndToEndPerformance:
         # Mock end-to-end processing
         def mock_end_to_end_query(_query_str, **_kwargs):
             # Simulate: embedding (20ms) + retrieval (30ms) + reranking (40ms) = 90ms
-            time.sleep(0.09)
+            time.sleep(SIMULATED_HEAVY_PROCESSING_SLEEP_SEC)
 
             response = MagicMock()
             response.source_nodes = [
@@ -717,7 +745,9 @@ class TestEndToEndPerformance:
             import random
 
             base_latency = 0.08  # 80ms base
-            variation = random.uniform(-0.02, 0.03)  # ±20-30ms variation  # noqa: S311
+            # Use deterministic randomness for reproducibility
+            rng = random.Random(TEST_RANDOM_SEED)  # noqa: S311
+            variation = rng.uniform(-0.02, 0.03)  # ±20-30ms variation
             time.sleep(max(0.01, base_latency + variation))
 
             response = MagicMock()
@@ -785,6 +815,8 @@ class TestEndToEndPerformance:
         def mock_relevance_scoring(pairs, **_kwargs):
             # Simulate relevance-based scoring with some accuracy
             scores = []
+            # Use deterministic random state for consistent test results
+            rng = np.random.RandomState(TEST_RANDOM_SEED)
             for pair in pairs:
                 query, doc = pair
                 # Mock relevance: higher score for keyword matches
@@ -793,7 +825,7 @@ class TestEndToEndPerformance:
                     relevance += 0.3
                 if "bgm-m3" in query.lower() and "embedding" in doc.lower():
                     relevance += 0.3
-                scores.append(relevance + np.random.normal(0, 0.1))
+                scores.append(relevance + rng.normal(0, 0.1))
             return np.array(scores)
 
         mock_cross_encoder.predict = mock_relevance_scoring

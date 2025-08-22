@@ -77,7 +77,9 @@ def long_context_prompt():
     """Create a long context prompt for 128K testing."""
     # Generate a very long prompt to test context window
     base_text = "This is a test sentence for context window validation. " * 100
-    return base_text * 500  # Approximately 50K tokens
+    # This generates approximately 50,000 words; actual token count may be higher
+    # depending on tokenizer.
+    return base_text * 500
 
 
 @pytest.mark.spec("retrieval-enhancements")

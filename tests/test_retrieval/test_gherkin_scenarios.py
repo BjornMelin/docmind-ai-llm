@@ -710,7 +710,9 @@ class TestGherkinScenario6PerformanceUnderLoad:
 
             # Base processing time with variation for load testing
             base_latency = 0.15  # 150ms base
-            load_variation = random.uniform(-0.05, 0.1)  # noqa: S311
+            # Use deterministic randomness for reproducibility
+            rng = random.Random(42)  # noqa: S311
+            load_variation = rng.uniform(-0.05, 0.1)
             processing_time = max(0.05, base_latency + load_variation)
             time.sleep(processing_time)
 
