@@ -1,21 +1,33 @@
 #!/usr/bin/env python
-"""Comprehensive test runner with coverage reporting for DocMind AI.
+"""Comprehensive test runner with tiered testing strategy for DocMind AI.
 
-This script provides a comprehensive testing framework with the following features:
-- Organized test execution by category (unit, integration, performance)
-- Detailed coverage reporting (HTML, JSON, XML, terminal)
-- Test failure analysis with detailed reporting
-- Performance benchmarking for critical components
-- Support for different test environments (fast, full, CI/CD)
+This script implements a three-tier testing strategy based on ML engineering best practices:
+
+Tier 1 - Unit Tests (Fast):
+    - Mocked dependencies, no external services
+    - <5 seconds per test, total suite <30 seconds
+    - Run on every code change
+
+Tier 2 - Integration Tests:
+    - Lightweight models, minimal GPU usage
+    - <30 seconds per test, total suite <5 minutes
+    - Run on feature branches and PRs
+
+Tier 3 - System Tests:
+    - Real models, full GPU resources
+    - <5 minutes per test, full validation
+    - Run on staging/release candidates
 
 Usage:
-    python run_tests.py              # Run all tests
-    python run_tests.py --fast       # Run only fast unit tests
-    python run_tests.py --unit       # Run unit tests only
-    python run_tests.py --integration # Run integration tests only
-    python run_tests.py --performance # Run performance tests only
-    python run_tests.py --coverage    # Generate detailed coverage report
-    python run_tests.py --clean       # Clean test artifacts before running
+    python run_tests.py                  # Run tiered tests (unit → integration → system)
+    python run_tests.py --unit           # Run unit tests only
+    python run_tests.py --integration    # Run integration tests only
+    python run_tests.py --system         # Run system tests only
+    python run_tests.py --fast           # Run unit + integration tests
+    python run_tests.py --performance    # Run performance benchmarks
+    python run_tests.py --smoke          # Run basic smoke tests
+    python run_tests.py --coverage       # Generate detailed coverage report
+    python run_tests.py --clean          # Clean test artifacts
 """
 
 import argparse
@@ -205,7 +217,7 @@ class TestRunner:
                 result.errors = int(error_match.group(1))
 
     def run_unit_tests(self) -> TestResult:
-        """Run fast unit tests."""
+        """Run fast unit tests with mocked dependencies (<5s each)."""
         command = [
             "uv",
             "run",
@@ -217,12 +229,13 @@ class TestRunner:
             "--cov-report=term-missing",
             "--durations=10",
             "-m",
-            "not slow and not integration and not requires_gpu",
+            "unit",
+            "--timeout=30",  # Individual test timeout
         ]
-        return self.run_command(command, "Unit Tests (Fast)")
+        return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
 
     def run_integration_tests(self) -> TestResult:
-        """Run integration tests."""
+        """Run integration tests with lightweight models (<30s each)."""
         command = [
             "uv",
             "run",
@@ -234,9 +247,12 @@ class TestRunner:
             "--cov-report=term-missing",
             "--durations=10",
             "-m",
-            "integration or not slow",
+            "integration",
+            "--timeout=180",  # 3-minute timeout for integration tests
         ]
-        return self.run_command(command, "Integration Tests")
+        return self.run_command(
+            command, "Integration Tests (Tier 2 - Lightweight models)"
+        )
 
     def run_performance_tests(self) -> TestResult:
         """Run performance and benchmark tests."""
@@ -253,8 +269,41 @@ class TestRunner:
         ]
         return self.run_command(command, "Performance Tests")
 
+    def run_system_tests(self) -> TestResult:
+        """Run system tests with real models and full GPU resources (<5min each)."""
+        command = [
+            "uv",
+            "run",
+            "pytest",
+            "tests/",
+            "-v",
+            "--tb=short",
+            "--cov-report=term-missing",
+            "--durations=10",
+            "-m",
+            "system",
+            "--timeout=300",  # 5 minute timeout for system tests
+        ]
+        return self.run_command(command, "System Tests (Tier 3 - Real models + GPU)")
+
+    def run_gpu_tests(self) -> TestResult:
+        """Run GPU-required tests with hardware validation."""
+        command = [
+            "uv",
+            "run",
+            "pytest",
+            "tests/",
+            "-v",
+            "--tb=short",
+            "--durations=10",
+            "-m",
+            "requires_gpu or gpu_required",
+            "--timeout=600",  # 10 minute timeout for GPU tests
+        ]
+        return self.run_command(command, "GPU Tests (Hardware validation)")
+
     def run_slow_tests(self) -> TestResult:
-        """Run slow/expensive tests (GPU, network, model downloads)."""
+        """Run legacy slow tests (maintained for backward compatibility)."""
         command = [
             "uv",
             "run",
@@ -268,7 +317,7 @@ class TestRunner:
             "slow or requires_gpu or requires_network",
             "--timeout=600",  # 10 minute timeout for slow tests
         ]
-        return self.run_command(command, "Slow Tests (GPU/Network/Models)")
+        return self.run_command(command, "Legacy Slow Tests (GPU/Network/Models)")
 
     def run_all_tests(self) -> TestResult:
         """Run all tests with comprehensive coverage."""
@@ -297,14 +346,55 @@ class TestRunner:
             "run",
             "pytest",
             "tests/unit/test_models.py",
-            "tests/unit/test_tool_factory_modern.py",
+            "tests/unit/test_config_validation.py",
             "-v",
             "--tb=line",
             "-m",
-            "not slow",
+            "unit",
             "--maxfail=3",  # Stop after 3 failures for smoke tests
+            "--timeout=10",  # Quick timeout for smoke tests
         ]
-        return self.run_command(command, "Smoke Tests")
+        return self.run_command(command, "Smoke Tests (Basic system health)")
+
+    def run_fast_tests(self) -> TestResult:
+        """Run unit and integration tests (excludes system tests)."""
+        command = [
+            "uv",
+            "run",
+            "pytest",
+            "tests/unit",
+            "tests/integration",
+            "-v",
+            "--tb=short",
+            "--cov=src",
+            "--cov-report=term-missing",
+            "--durations=10",
+            "-m",
+            "unit or integration",
+            "--timeout=180",  # 3-minute timeout for fast tests
+        ]
+        return self.run_command(command, "Fast Tests (Unit + Integration)")
+
+    def run_tiered_tests(self) -> None:
+        """Run all tests in pyramid order: unit → integration → system."""
+        print("\n\ud83c\udfc1 Running Tiered Test Strategy")
+        print("=" * 50)
+        print("\u27a1\ufe0f Tier 1: Unit Tests (mocked dependencies)")
+        result_unit = self.run_unit_tests()
+
+        if result_unit.exit_code != 0:
+            print("\u274c Unit tests failed. Stopping tiered execution.")
+            return
+
+        print("\n\u27a1\ufe0f Tier 2: Integration Tests (lightweight models)")
+        result_integration = self.run_integration_tests()
+
+        if result_integration.exit_code != 0:
+            print("\u274c Integration tests failed. Stopping tiered execution.")
+            return
+
+        print("\n\u27a1\ufe0f Tier 3: System Tests (real models + GPU)")
+        self.run_system_tests()
 
     def validate_imports(self) -> TestResult:
         """Validate that all modules can be imported."""
@@ -487,28 +577,76 @@ else:
 
 
 def main():
-    """Main entry point for test runner."""
-    parser = argparse.ArgumentParser(description="DocMind AI Test Runner")
-    parser.add_argument("--fast", action="store_true", help="Run only fast unit tests")
-    parser.add_argument("--unit", action="store_true", help="Run unit tests only")
+    """Main entry point for tiered test runner."""
+    parser = argparse.ArgumentParser(
+        description="DocMind AI Tiered Test Runner",
+        epilog="""Three-Tier Testing Strategy:
+  Tier 1 (Unit): Fast tests with mocks (<5s each)
+  Tier 2 (Integration): Lightweight models (<30s each)
+  Tier 3 (System): Real models + GPU (<5min each)
+
+Examples:
+  python run_tests.py                    # Run all tiers in sequence
+  python run_tests.py --unit --fast      # Quick unit test validation  
+  python run_tests.py --integration      # Integration tests only
+  python run_tests.py --system           # System tests only (requires GPU)
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    # Three-tier testing strategy arguments
     parser.add_argument(
-        "--integration", action="store_true", help="Run integration tests only"
+        "--unit",
+        action="store_true",
+        help="Run unit tests only (Tier 1 - mocked dependencies)",
     )
     parser.add_argument(
-        "--performance", action="store_true", help="Run performance tests only"
+        "--integration",
+        action="store_true",
+        help="Run integration tests only (Tier 2 - lightweight models)",
     )
     parser.add_argument(
-        "--slow", action="store_true", help="Run slow tests (GPU/Network)"
+        "--system",
+        action="store_true",
+        help="Run system tests only (Tier 3 - real models + GPU)",
     )
-    parser.add_argument("--smoke", action="store_true", help="Run basic smoke tests")
+
+    # Additional test categories
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Run unit + integration tests (exclude system)",
+    )
+    parser.add_argument(
+        "--performance", action="store_true", help="Run performance benchmark tests"
+    )
+    parser.add_argument(
+        "--gpu",
+        action="store_true",
+        help="Run GPU-required tests with hardware validation",
+    )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run basic smoke tests (quick system health check)",
+    )
+
+    # Legacy support (backward compatibility)
+    parser.add_argument(
+        "--slow", action="store_true", help="Run legacy slow tests (GPU/Network/Models)"
+    )
+
+    # Utility arguments
     parser.add_argument(
         "--coverage", action="store_true", help="Generate detailed coverage report"
     )
     parser.add_argument(
-        "--clean", action="store_true", help="Clean artifacts before running"
+        "--clean", action="store_true", help="Clean test artifacts before running"
     )
     parser.add_argument(
-        "--validate-imports", action="store_true", help="Validate module imports"
+        "--validate-imports",
+        action="store_true",
+        help="Validate that all modules can be imported",
     )
 
     args = parser.parse_args()
@@ -524,36 +662,48 @@ def main():
         runner.clean_artifacts()
 
     try:
-        # Run specific test categories
+        # Run specific test categories based on tiered strategy
         if args.validate_imports:
             runner.validate_imports()
         elif args.smoke:
             runner.run_smoke_tests()
-        elif args.fast or args.unit:
+        elif args.unit:
             runner.run_unit_tests()
         elif args.integration:
             runner.run_integration_tests()
+        elif args.system:
+            runner.run_system_tests()
+        elif args.fast:
+            runner.run_fast_tests()
         elif args.performance:
             runner.run_performance_tests()
+        elif args.gpu:
+            runner.run_gpu_tests()
         elif args.slow:
+            # Legacy support for backward compatibility
             runner.run_slow_tests()
         else:
-            # Run comprehensive test suite
-            runner.validate_imports()
-            runner.run_unit_tests()
-            runner.run_integration_tests()
-            # Skip slow tests by default unless specifically requested
-            if not args.fast:
-                runner.run_slow_tests()
+            # Default: Run tiered test strategy (unit → integration → system)
+            print("\n🎯 Running Default Tiered Test Strategy")
+            print("\n📚 Learn more about test tiers:")
+            print("   --unit: Fast tests with mocks (development)")
+            print("   --integration: Lightweight models (PR validation)")
+            print("   --system: Full models + GPU (staging/release)")
+            print("   --fast: Unit + Integration only")
 
-        # Generate coverage report if requested or if running all tests
+            runner.validate_imports()
+            runner.run_tiered_tests()
+
+        # Generate coverage report if requested or if running comprehensive tests
         if args.coverage or (
             not any(
                 [
                     args.fast,
                     args.unit,
                     args.integration,
+                    args.system,
                     args.performance,
+                    args.gpu,
                     args.slow,
                     args.smoke,
                     args.validate_imports,

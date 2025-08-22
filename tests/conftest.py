@@ -1,10 +1,17 @@
 """Shared pytest fixtures and configuration for DocMind AI test suite.
 
 This module provides common fixtures, configuration, and utilities used across
-all test modules. It follows 2025 pytest best practices for AI/ML systems.
+all test modules. It follows 2025 pytest best practices for AI/ML systems with
+proper LlamaIndex MockEmbedding/MockLLM usage and tiered testing strategy.
+
+Testing Strategy:
+- Unit Tests: Fast (<5s), CPU-only, use MockEmbedding/MagicMock LLM
+- Integration Tests: Moderate speed, lightweight models (all-MiniLM-L6-v2 80MB)
+- System Tests: Full models, GPU tests, real components
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -12,6 +19,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 from llama_index.core import Document
+from llama_index.core.graph_stores import SimplePropertyGraphStore
+
+# MockLLM not available in this version, will use MagicMock
 
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -41,42 +51,124 @@ def configure_logging():
 
 
 @pytest.fixture(scope="session")
-def test_settings() -> AppSettings:
-    """Provide test settings with safe defaults."""
+def mock_settings() -> AppSettings:
+    """Configure mock LlamaIndex components for unit tests.
+
+    Sets up MagicMock LLM and MockEmbedding with proper dimensions to match BGE-M3.
+    This ensures fast, deterministic unit tests without external dependencies.
+    """
+    # Note: We don't set global Settings here as it expects real LLM instances
+    # Individual tests can use MockEmbedding and mock LLMs as needed
+
     return AppSettings(
-        backend="ollama",
+        default_model="mock-llm",
+        dense_embedding_model="mock-embedding",
+        sparse_embedding_model="mock-sparse",
+        dense_embedding_dimension=1024,
+        ollama_base_url="http://mock:11434",
+        rerank_enabled=False,  # Disable for unit tests
+        enable_sparse_embeddings=False,  # Disable for unit tests
+    )
+
+
+@pytest.fixture(scope="session")
+def integration_settings() -> AppSettings:
+    """Test settings for integration tests using lightweight models.
+
+    Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB) for faster integration tests.
+    Still validates component integration without full model overhead.
+    """
+    return AppSettings(
+        default_model="llama3.2:1b",  # Smallest Ollama model for integration
+        dense_embedding_model="sentence-transformers/all-MiniLM-L6-v2",  # 80MB lightweight
+        sparse_embedding_model="mock-sparse",  # Keep sparse as mock for integration
+        dense_embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
+        ollama_base_url="http://localhost:11434",
+        rerank_enabled=False,  # Disable expensive operations
+        enable_sparse_embeddings=True,  # Test hybrid search logic
+    )
+
+
+@pytest.fixture(scope="session")
+def system_settings() -> AppSettings:
+    """Full system test settings with real models and GPU.
+
+    Uses production models for full end-to-end validation.
+    Only used in system tests marked with @pytest.mark.system.
+    """
+    return AppSettings(
         default_model="llama3.2:3b",
         dense_embedding_model="BAAI/bge-large-en-v1.5",
         sparse_embedding_model="prithvida/Splade_PP_en_v1",
         dense_embedding_dimension=1024,
-        context_size=4096,
         ollama_base_url="http://localhost:11434",
+        rerank_enabled=True,
+        enable_sparse_embeddings=True,
     )
 
 
 @pytest.fixture
-def sample_documents() -> list[Document]:
-    """Generate sample documents for testing."""
+def test_documents() -> list[Document]:
+    """Small, consistent test document set for unit and integration tests.
+
+    Provides 5 diverse documents covering DocMind AI functionality.
+    Optimized for test speed and deterministic results.
+    """
     return [
         Document(
-            text="DocMind AI uses SPLADE++ sparse embeddings for efficient retrieval.",
-            metadata={"source": "doc1.pdf", "page": 1, "chunk_id": "chunk_1"},
+            text="DocMind AI uses SPLADE++ sparse embeddings for efficient retrieval. "
+            "This approach enables fast neural lexical matching across documents.",
+            metadata={
+                "source": "retrieval_guide.pdf",
+                "page": 1,
+                "chunk_id": "chunk_1",
+                "category": "retrieval",
+                "word_count": 15,
+            },
         ),
         Document(
-            text="BGE-Large dense embeddings provide rich semantic understanding.",
-            metadata={"source": "doc2.pdf", "page": 1, "chunk_id": "chunk_2"},
+            text="BGE-Large dense embeddings provide rich semantic understanding. "
+            "These 1024-dimensional vectors capture contextual relationships.",
+            metadata={
+                "source": "embedding_theory.pdf",
+                "page": 1,
+                "chunk_id": "chunk_2",
+                "category": "embeddings",
+                "word_count": 12,
+            },
         ),
         Document(
-            text="ColBERT reranking improves search result relevance significantly.",
-            metadata={"source": "doc3.pdf", "page": 2, "chunk_id": "chunk_3"},
+            text="ColBERT reranking improves search result relevance significantly. "
+            "Late interaction modeling enables precise relevance scoring.",
+            metadata={
+                "source": "reranking_methods.pdf",
+                "page": 2,
+                "chunk_id": "chunk_3",
+                "category": "reranking",
+                "word_count": 13,
+            },
         ),
         Document(
-            text="Hybrid search combines dense and sparse retrieval methods.",
-            metadata={"source": "doc4.pdf", "page": 1, "chunk_id": "chunk_4"},
+            text="Hybrid search combines dense and sparse retrieval methods. "
+            "RRF fusion weights multiple retrieval signals optimally.",
+            metadata={
+                "source": "hybrid_search.pdf",
+                "page": 1,
+                "chunk_id": "chunk_4",
+                "category": "search",
+                "word_count": 14,
+            },
         ),
         Document(
-            text="RRF fusion algorithm weights dense and sparse results optimally.",
-            metadata={"source": "doc5.pdf", "page": 3, "chunk_id": "chunk_5"},
+            text="Multi-agent coordination enables complex query decomposition. "
+            "LangGraph supervisor manages agent communication effectively.",
+            metadata={
+                "source": "agent_architecture.pdf",
+                "page": 3,
+                "chunk_id": "chunk_5",
+                "category": "agents",
+                "word_count": 12,
+            },
         ),
     ]
 
@@ -161,17 +253,26 @@ startxref
     return pdf_path
 
 
-@pytest.fixture
-def mock_embedding_model() -> MagicMock:
-    """Create a mock embedding model for testing."""
-    mock_model = MagicMock()
-    mock_model.embed_documents.return_value = [
-        [0.1, 0.2, 0.3] * 341,  # 1024-dim embedding
-        [0.4, 0.5, 0.6] * 341,
-        [0.7, 0.8, 0.9] * 341,
-    ]
-    mock_model.embed_query.return_value = [0.5, 0.5, 0.5] * 341
-    return mock_model
+@pytest.fixture(scope="session")
+def lightweight_embedding_model():
+    """Lightweight embedding model for integration tests.
+
+    Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB).
+    Only loads if integration tests are running to avoid unnecessary overhead.
+    """
+    # Only import and load if we're running integration tests
+    if "integration" in os.environ.get("PYTEST_CURRENT_TEST", "") or any(
+        "integration" in arg for arg in sys.argv
+    ):
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        except ImportError:
+            pytest.skip("sentence-transformers not available for integration tests")
+    else:
+        # Return None for unit tests - they should use MockEmbedding
+        return None
 
 
 @pytest.fixture
@@ -213,12 +314,13 @@ async def mock_async_embedding_model() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_llm() -> MagicMock:
-    """Create a mock LLM for testing."""
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = "Mock LLM response"
-    mock_llm.stream.return_value = iter(["Mock ", "stream ", "response"])
-    return mock_llm
+def in_memory_graph_store():
+    """In-memory graph store for testing property graph functionality.
+
+    Provides SimplePropertyGraphStore for testing graph RAG features
+    without external dependencies.
+    """
+    return SimplePropertyGraphStore()
 
 
 @pytest_asyncio.fixture(loop_scope="function")
@@ -232,14 +334,54 @@ async def mock_async_llm() -> AsyncMock:
 
 @pytest.fixture
 def mock_qdrant_client() -> MagicMock:
-    """Create a mock Qdrant client for testing."""
+    """Comprehensive mock Qdrant client with proper async methods.
+
+    Provides realistic responses for both sync and async operations.
+    Includes proper collection management and search functionality.
+    """
     mock_client = MagicMock()
-    mock_client.search.return_value = [
-        MagicMock(id=1, score=0.9, payload={"text": "Document 1"}),
-        MagicMock(id=2, score=0.8, payload={"text": "Document 2"}),
-        MagicMock(id=3, score=0.7, payload={"text": "Document 3"}),
+
+    # Mock search results with realistic structure
+    mock_search_results = [
+        MagicMock(
+            id="doc_1",
+            score=0.92,
+            payload={
+                "text": "DocMind AI uses advanced retrieval techniques",
+                "metadata": {"source": "doc1.pdf", "page": 1},
+            },
+        ),
+        MagicMock(
+            id="doc_2",
+            score=0.87,
+            payload={
+                "text": "BGE embeddings provide semantic understanding",
+                "metadata": {"source": "doc2.pdf", "page": 2},
+            },
+        ),
+        MagicMock(
+            id="doc_3",
+            score=0.81,
+            payload={
+                "text": "Hybrid search combines multiple methods",
+                "metadata": {"source": "doc3.pdf", "page": 1},
+            },
+        ),
     ]
-    mock_client.count.return_value = MagicMock(count=100)
+
+    # Configure sync methods
+    mock_client.search.return_value = mock_search_results
+    mock_client.count.return_value = MagicMock(count=150)
+    mock_client.create_collection.return_value = True
+    mock_client.delete_collection.return_value = True
+    mock_client.collection_exists.return_value = True
+
+    # Configure async methods
+    mock_client.asearch = AsyncMock(return_value=mock_search_results)
+    mock_client.aupsert = AsyncMock(return_value=True)
+    mock_client.acreate_collection = AsyncMock(return_value=True)
+    mock_client.adelete_collection = AsyncMock(return_value=True)
+
     return mock_client
 
 
@@ -274,22 +416,86 @@ def sample_query_responses() -> list[dict]:
     ]
 
 
-# Performance testing markers
+@pytest.fixture(scope="session")
+def cleanup_test_artifacts():
+    """Clean up test artifacts after session.
+
+    Ensures test isolation by cleaning up temporary files,
+    cached models, and other test artifacts.
+    """
+    yield  # Tests run here
+
+    # Cleanup after all tests complete
+    import shutil
+    import tempfile
+
+    # Clean up any test cache directories
+    temp_dirs = [
+        Path(tempfile.gettempdir()) / "docmind_test_cache",
+        Path(tempfile.gettempdir()) / "sentence_transformers_cache",
+    ]
+
+    for temp_dir in temp_dirs:
+        if temp_dir.exists():
+            try:
+                shutil.rmtree(temp_dir)
+            except PermissionError:
+                pass  # Ignore cleanup failures
+
+
+# Enhanced pytest configuration with tiered testing strategy
 def pytest_configure(config):
-    """Configure custom pytest markers."""
-    config.addinivalue_line("markers", "unit: marks tests as fast unit tests")
+    """Configure custom pytest markers for tiered testing strategy.
+
+    Implements ML testing best practices with clear test categories:
+    - Unit: Fast, mocked, deterministic
+    - Integration: Moderate speed, lightweight models
+    - System: Full models, GPU, end-to-end
+    """
+    # Core test categories (tiered strategy)
     config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
-    )
-    config.addinivalue_line("markers", "integration: marks tests as integration tests")
-    config.addinivalue_line("markers", "performance: marks tests as performance tests")
-    config.addinivalue_line("markers", "requires_gpu: marks tests that require GPU")
-    config.addinivalue_line(
-        "markers", "requires_network: marks tests that require network access"
+        "markers", "unit: Fast unit tests (<5s) using MockEmbedding/MockLLM - CPU only"
     )
     config.addinivalue_line(
-        "markers", "feat_002: marks tests for FEAT-002 Retrieval & Search System"
+        "markers",
+        "integration: Integration tests with lightweight models (all-MiniLM-L6-v2)",
     )
+    config.addinivalue_line(
+        "markers", "system: Full system tests with production models and GPU"
+    )
+
+    # Performance and resource markers
+    config.addinivalue_line(
+        "markers", "performance: Performance benchmarks and memory usage tests"
+    )
+    config.addinivalue_line(
+        "markers", "slow: Long-running tests (deselect with '-m \"not slow\"')"
+    )
+
+    # Hardware requirement markers
+    config.addinivalue_line("markers", "requires_gpu: Tests requiring GPU acceleration")
+    config.addinivalue_line(
+        "markers", "requires_network: Tests requiring network access"
+    )
+    config.addinivalue_line("markers", "requires_ollama: Tests requiring Ollama server")
+
+    # Feature-specific markers
+    config.addinivalue_line("markers", "agents: Multi-agent coordination system tests")
+    config.addinivalue_line(
+        "markers", "retrieval: Retrieval and search system tests (FEAT-002)"
+    )
+    config.addinivalue_line(
+        "markers", "embeddings: Embedding model and vectorstore tests"
+    )
+    config.addinivalue_line(
+        "markers", "multimodal: CLIP and multimodal functionality tests"
+    )
+
+    # Legacy markers (for backward compatibility)
+    config.addinivalue_line(
+        "markers", "feat_002: Legacy marker for FEAT-002 (use 'retrieval' instead)"
+    )
+    config.addinivalue_line("markers", "spec: Specification-based tests")
 
 
 @pytest.fixture
