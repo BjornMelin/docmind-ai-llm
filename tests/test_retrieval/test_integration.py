@@ -22,6 +22,9 @@ from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
 from src.retrieval.postprocessor.cross_encoder_rerank import BGECrossEncoderRerank
 from src.retrieval.query_engine.router_engine import AdaptiveRouterQueryEngine
 
+# Constants for deterministic testing
+DETERMINISTIC_SEED = 42
+
 
 @pytest.mark.integration
 class TestRetrievalPipelineIntegration:  # pylint: disable=protected-access,unused-argument
@@ -37,12 +40,15 @@ class TestRetrievalPipelineIntegration:  # pylint: disable=protected-access,unus
         sample_query_scenarios,
     ):
         """Test complete BGE-M3 → Router → Reranker pipeline."""
+        # Create deterministic random state
+        deterministic_random = np.random.RandomState(DETERMINISTIC_SEED)
+
         # Mock BGE-M3 embeddings
         mock_bgem3_model = MagicMock()
         mock_bgem3_model.encode.return_value = {
-            "dense_vecs": np.random.rand(len(sample_test_documents), 1024).astype(
-                np.float32
-            )
+            "dense_vecs": deterministic_random.rand(
+                len(sample_test_documents), 1024
+            ).astype(np.float32)
         }
         mock_flag_model_class.return_value = mock_bgem3_model
 
@@ -97,10 +103,13 @@ class TestRetrievalPipelineIntegration:  # pylint: disable=protected-access,unus
         self, mock_cross_encoder_class, mock_flag_model_class, sample_query_scenarios
     ):
         """Test async integration across all components."""
+        # Create deterministic random state
+        deterministic_random = np.random.RandomState(DETERMINISTIC_SEED)
+
         # Mock models
         mock_bgem3_model = MagicMock()
         mock_bgem3_model.encode.return_value = {
-            "dense_vecs": np.random.rand(1, 1024).astype(np.float32)
+            "dense_vecs": deterministic_random.rand(1, 1024).astype(np.float32)
         }
         mock_flag_model_class.return_value = mock_bgem3_model
 
@@ -246,10 +255,13 @@ class TestRetrievalPipelineIntegration:  # pylint: disable=protected-access,unus
         benchmark_timer,
     ):
         """Test performance optimizations work across integrated components."""
+        # Create deterministic random state
+        deterministic_random = np.random.RandomState(DETERMINISTIC_SEED)
+
         # Mock optimized models
         mock_bgem3_model = MagicMock()
         mock_bgem3_model.encode.return_value = {
-            "dense_vecs": np.random.rand(5, 1024).astype(np.float32)
+            "dense_vecs": deterministic_random.rand(5, 1024).astype(np.float32)
         }
         mock_flag_model_class.return_value = mock_bgem3_model
 
@@ -309,9 +321,12 @@ class TestArchitecturalReplacement:  # pylint: disable=protected-access
     @patch("src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel")
     def test_bge_large_to_bgem3_replacement(self, mock_flag_model_class):
         """Test BGE-Large + SPLADE++ replacement with BGE-M3 unified."""
+        # Create deterministic random state
+        deterministic_random = np.random.RandomState(DETERMINISTIC_SEED)
+
         mock_bgem3_model = MagicMock()
         mock_bgem3_model.encode.return_value = {
-            "dense_vecs": np.random.rand(3, 1024).astype(np.float32),
+            "dense_vecs": deterministic_random.rand(3, 1024).astype(np.float32),
             "lexical_weights": [
                 {1: 0.8, 5: 0.6, 10: 0.4},
                 {2: 0.7, 7: 0.5, 15: 0.3},
@@ -504,19 +519,22 @@ class TestRealWorldScenarios:  # pylint: disable=protected-access
         self, mock_cross_encoder_class, mock_flag_model_class, large_document_set
     ):
         """Test integration with realistic document volumes."""
+        # Create deterministic random state
+        deterministic_random = np.random.RandomState(DETERMINISTIC_SEED)
+
         # Mock models for large batch processing
         mock_bgem3_model = MagicMock()
         mock_bgem3_model.encode.return_value = {
-            "dense_vecs": np.random.rand(len(large_document_set), 1024).astype(
-                np.float32
-            )
+            "dense_vecs": deterministic_random.rand(
+                len(large_document_set), 1024
+            ).astype(np.float32)
         }
         mock_flag_model_class.return_value = mock_bgem3_model
 
         mock_cross_encoder = MagicMock()
         mock_cross_encoder.model = MagicMock()
         # Mock scores for top 20 documents
-        mock_cross_encoder.predict.return_value = np.random.rand(20)
+        mock_cross_encoder.predict.return_value = deterministic_random.rand(20)
         mock_cross_encoder_class.return_value = mock_cross_encoder
 
         # Create components optimized for large batches
@@ -553,10 +571,13 @@ class TestRealWorldScenarios:  # pylint: disable=protected-access
         self, mock_cross_encoder_class, mock_flag_model_class, sample_query_scenarios
     ):
         """Test integration handles concurrent queries efficiently."""
+        # Create deterministic random state
+        deterministic_random = np.random.RandomState(DETERMINISTIC_SEED)
+
         # Mock models
         mock_bgem3_model = MagicMock()
         mock_bgem3_model.encode.return_value = {
-            "dense_vecs": np.random.rand(1, 1024).astype(np.float32)
+            "dense_vecs": deterministic_random.rand(1, 1024).astype(np.float32)
         }
         mock_flag_model_class.return_value = mock_bgem3_model
 
