@@ -2,6 +2,8 @@
 
 Provides cross-modal search, VRAM validation, and end-to-end pipeline utilities
 for multimodal retrieval with CLIP embeddings.
+
+Uses resource management utilities for robust GPU operations.
 """
 
 import asyncio
@@ -49,38 +51,62 @@ async def generate_image_embeddings(
 def validate_vram_usage(
     clip_embedding: Any, images: list[Image.Image] | None = None
 ) -> float:
-    """Validate VRAM usage for CLIP model.
+    """Validate VRAM usage for CLIP model with robust error handling.
 
     Args:
         clip_embedding: CLIP embedding model
         images: Optional list of images to process
 
     Returns:
-        VRAM usage in GB
+        VRAM usage in GB (0.0 if CUDA unavailable or error)
     """
-    if not torch.cuda.is_available():
+    try:
+        if not torch.cuda.is_available():
+            return 0.0
+
+        # Clear cache before measurement
+        torch.cuda.empty_cache()
+
+        # Measure baseline VRAM
+        baseline_vram = torch.cuda.memory_allocated() / 1024**3
+
+        if images:
+            # Process images to measure VRAM with load
+            for img in images[:10]:  # Test with up to 10 images
+                try:
+                    _ = clip_embedding.get_image_embedding(img)
+                except RuntimeError as e:
+                    if "CUDA" in str(e).upper() or "memory" in str(e).lower():
+                        logger.warning(
+                            f"CUDA/memory error processing image for VRAM test: {e}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Runtime error processing image for VRAM test: {e}"
+                        )
+                    break
+                except Exception as e:
+                    logger.warning(
+                        f"Unexpected error processing image for VRAM test: {e}"
+                    )
+                    break
+
+        # Measure current VRAM safely
+        try:
+            current_vram = torch.cuda.memory_allocated() / 1024**3
+        except RuntimeError as e:
+            logger.warning(f"Failed to measure current VRAM: {e}")
+            current_vram = baseline_vram
+
+        # Return max of baseline and current
+        return max(baseline_vram, current_vram)
+
+    except RuntimeError as e:
+        logger.warning(f"CUDA error during VRAM validation: {e}")
         return 0.0
-
-    # Clear cache before measurement
-    torch.cuda.empty_cache()
-
-    # Measure baseline VRAM
-    baseline_vram = torch.cuda.memory_allocated() / 1024**3
-
-    if images:
-        # Process images to measure VRAM with load
-        for img in images[:10]:  # Test with up to 10 images
-            try:
-                _ = clip_embedding.get_image_embedding(img)
-            except Exception as e:
-                logger.warning(f"Error processing image for VRAM test: {e}")
-                break
-
-    # Measure current VRAM
-    current_vram = torch.cuda.memory_allocated() / 1024**3
-
-    # Return max of baseline and current
-    return max(baseline_vram, current_vram)
+    except Exception as e:
+        logger.error(f"Unexpected error during VRAM validation: {e}")
+        return 0.0
 
 
 async def cross_modal_search(

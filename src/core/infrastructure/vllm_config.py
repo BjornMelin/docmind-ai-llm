@@ -13,28 +13,48 @@ from typing import Any
 import torch
 from llama_index.core import Settings
 
-# Note: vLLM integration not available in this LlamaIndex version
-# Using mock LLM for configuration purposes
+# Import vLLM with proper error handling - no mocks in production
 try:
     from llama_index.llms.vllm import Vllm
+
+    VllmType: type | None = Vllm
 except ImportError:
-    # Mock Vllm class for configuration testing
-    class Vllm:
-        """Mock vLLM class for configuration testing when real vLLM is unavailable."""
-
-        def __init__(self, **kwargs):
-            """Initialize mock vLLM instance.
-
-            Args:
-                **kwargs: Configuration parameters
-            """
-            self.model = kwargs.get("model", "mock-model")
-            self.kwargs = kwargs
-
+    Vllm = None
+    VllmType = None
+    # Logger will be initialized below, warning will be logged when needed
 
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# Log vLLM availability warning if not available
+if Vllm is None:
+    logger.warning(
+        "vLLM not available - vLLM features disabled. "
+        "Install with: uv sync --extra gpu or pip install 'vllm[flashinfer]>=0.10.1'"
+    )
+
+
+def is_vllm_available() -> bool:
+    """Check if vLLM is available.
+
+    Returns:
+        True if vLLM is available, False otherwise
+    """
+    return Vllm is not None
+
+
+def require_vllm() -> None:
+    """Require vLLM to be available, raise ImportError if not.
+
+    Raises:
+        ImportError: When vLLM is not available
+    """
+    if Vllm is None:
+        raise ImportError(
+            "vLLM is not available. Please install with: "
+            "uv sync --extra gpu or pip install 'vllm[flashinfer]>=0.10.1'"
+        )
 
 
 class FP8Precision(str, Enum):
@@ -100,27 +120,45 @@ class VLLMManager:
         self._setup_environment()
 
     def _setup_environment(self) -> None:
-        """Setup vLLM environment variables."""
+        """Setup vLLM environment variables with error handling."""
         os.environ["VLLM_ATTENTION_BACKEND"] = self.config.attention_backend.value
 
         # Enable FP8 optimizations on Ada Lovelace (RTX 4090)
-        if torch.cuda.is_available():
-            device_name = torch.cuda.get_device_name(0)
-            if "RTX 4090" in device_name or "Ada Lovelace" in device_name:
-                logger.info(f"Detected RTX 4090: {device_name}")
-                os.environ["VLLM_USE_FP8_E4M3"] = (
-                    "1" if self.config.kv_cache_dtype == FP8Precision.E4M3 else "0"
-                )
-                os.environ["VLLM_USE_FP8_E5M2"] = (
-                    "1" if self.config.kv_cache_dtype == FP8Precision.E5M2 else "0"
-                )
+        try:
+            if torch.cuda.is_available():
+                device_name = torch.cuda.get_device_name(0)
+                if "RTX 4090" in device_name or "Ada Lovelace" in device_name:
+                    logger.info(f"Detected RTX 4090: {device_name}")
+                    os.environ["VLLM_USE_FP8_E4M3"] = (
+                        "1" if self.config.kv_cache_dtype == FP8Precision.E4M3 else "0"
+                    )
+                    os.environ["VLLM_USE_FP8_E5M2"] = (
+                        "1" if self.config.kv_cache_dtype == FP8Precision.E5M2 else "0"
+                    )
+        except RuntimeError as e:
+            logger.warning(f"Failed to detect GPU device for FP8 setup: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error during GPU environment setup: {e}")
 
-    def create_vllm_instance(self) -> Vllm:
+    def create_vllm_instance(self) -> Any | None:
         """Create optimized vLLM instance.
 
         Returns:
-            Configured vLLM instance
+            Configured vLLM instance or None if vLLM is not available
+
+        Raises:
+            ImportError: When vLLM is not available
+            Exception: When vLLM instance creation fails
         """
+        # Check if vLLM is available
+        if Vllm is None:
+            error_msg = (
+                "vLLM is not available. Please install with: "
+                "uv sync --extra gpu or pip install 'vllm[flashinfer]>=0.10.1'"
+            )
+            logger.error(error_msg)
+            raise ImportError(error_msg)
+
         try:
             # Import vLLM for direct configuration
             from vllm import LLM
@@ -165,6 +203,9 @@ class VLLMManager:
             logger.info("vLLM FP8 instance created successfully")
             return vllm_llm
 
+        except ImportError:
+            # Re-raise ImportError with context
+            raise
         except Exception as e:
             logger.error(f"Failed to create vLLM instance: {e}")
             raise
@@ -221,14 +262,21 @@ class VLLMManager:
         return validation_results
 
     def _get_vram_usage(self) -> float:
-        """Get current VRAM usage.
+        """Get current VRAM usage with proper error handling.
 
         Returns:
-            VRAM usage in GB
+            VRAM usage in GB (0.0 if CUDA unavailable or error)
         """
-        if torch.cuda.is_available():
-            return torch.cuda.memory_allocated() / 1024**3
-        return 0.0
+        try:
+            if torch.cuda.is_available():
+                return torch.cuda.memory_allocated() / 1024**3
+            return 0.0
+        except RuntimeError as e:
+            logger.warning(f"CUDA memory check failed: {e}")
+            return 0.0
+        except Exception as e:
+            logger.error(f"Unexpected error checking VRAM: {e}")
+            return 0.0
 
     def _benchmark_decode_throughput(self) -> float:
         """Benchmark decode throughput.
@@ -306,9 +354,21 @@ class VLLMManager:
         return fp8_reduction
 
     def integrate_with_llamaindex(self) -> None:
-        """Integrate vLLM with LlamaIndex global settings."""
+        """Integrate vLLM with LlamaIndex global settings.
+
+        Raises:
+            ValueError: When vLLM instance is not created
+            ImportError: When vLLM is not available
+        """
+        if Vllm is None:
+            error_msg = "vLLM is not available for LlamaIndex integration"
+            logger.error(error_msg)
+            raise ImportError(error_msg)
+
         if not self.llm_instance:
-            raise ValueError("vLLM instance not created")
+            raise ValueError(
+                "vLLM instance not created. Call create_vllm_instance() first."
+            )
 
         # Set as global LLM
         Settings.llm = self.llm_instance
@@ -352,11 +412,27 @@ class VLLMManager:
                         f"VRAM: {end_vram:.2f}GB"
                     )
 
+                except RuntimeError as e:
+                    if "CUDA" in str(e).upper() or "memory" in str(e).lower():
+                        logger.warning(
+                            f"❌ Context size {size} failed due to CUDA/memory "
+                            f"error: {e}"
+                        )
+                    else:
+                        logger.warning(
+                            f"❌ Context size {size} failed with runtime error: {e}"
+                        )
+                    results.append(
+                        {"context_size": size, "success": False, "error": str(e)}
+                    )
+                    break
                 except Exception as e:
                     results.append(
                         {"context_size": size, "success": False, "error": str(e)}
                     )
-                    logger.warning(f"❌ Context size {size} failed: {e}")
+                    logger.warning(
+                        f"❌ Context size {size} failed with unexpected error: {e}"
+                    )
                     break
 
             max_successful_context = max(
@@ -389,35 +465,52 @@ def create_fp8_vllm_config(model_name: str | None = None) -> VLLMConfig:
         config.model_name = model_name
 
     # Auto-detect hardware optimizations
-    if torch.cuda.is_available():
-        device_name = torch.cuda.get_device_name(0)
-        gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+    try:
+        if torch.cuda.is_available():
+            device_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
 
-        if "RTX 4090" in device_name:
-            # RTX 4090 optimizations
-            config.gpu_memory_utilization = 0.85
-            config.kv_cache_dtype = FP8Precision.E5M2
-            config.attention_backend = VLLMBackend.FLASHINFER
-            config.max_vram_gb = 14.0
-        elif gpu_memory < 12:
-            # Lower memory GPU
-            config.gpu_memory_utilization = 0.8
-            config.max_model_len = 65536  # Reduce context for memory
-        else:
-            # High memory GPU
-            config.gpu_memory_utilization = 0.9
+            if "RTX 4090" in device_name:
+                # RTX 4090 optimizations
+                config.gpu_memory_utilization = 0.85
+                config.kv_cache_dtype = FP8Precision.E5M2
+                config.attention_backend = VLLMBackend.FLASHINFER
+                config.max_vram_gb = 14.0
+            elif gpu_memory < 12:
+                # Lower memory GPU
+                config.gpu_memory_utilization = 0.8
+                config.max_model_len = 65536  # Reduce context for memory
+            else:
+                # High memory GPU
+                config.gpu_memory_utilization = 0.9
 
-        logger.info(f"Configured for GPU: {device_name} ({gpu_memory:.1f}GB)")
+            logger.info(f"Configured for GPU: {device_name} ({gpu_memory:.1f}GB)")
+    except RuntimeError as e:
+        logger.warning(f"Failed to detect GPU hardware for optimization: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error during hardware detection: {e}")
 
     return config
 
 
-def setup_vllm_fp8() -> VLLMManager:
+def setup_vllm_fp8() -> VLLMManager | None:
     """Setup vLLM with FP8 optimization.
 
     Returns:
-        Configured vLLM manager
+        Configured vLLM manager or None if vLLM is not available
+
+    Raises:
+        ImportError: When vLLM is not available
+        Exception: When vLLM setup fails
     """
+    if Vllm is None:
+        error_msg = (
+            "vLLM is not available. Please install with: "
+            "uv sync --extra gpu or pip install 'vllm[flashinfer]>=0.10.1'"
+        )
+        logger.error(error_msg)
+        raise ImportError(error_msg)
+
     config = create_fp8_vllm_config()
     manager = VLLMManager(config)
     manager.create_vllm_instance()
@@ -428,30 +521,49 @@ def setup_vllm_fp8() -> VLLMManager:
 
 
 def validate_fp8_requirements() -> dict[str, Any]:
-    """Validate system requirements for FP8.
+    """Validate system requirements for FP8 with error handling.
 
     Returns:
         Requirements validation results
     """
     results = {
-        "cuda_available": torch.cuda.is_available(),
-        "gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
-        "gpu_name": torch.cuda.get_device_name(0)
-        if torch.cuda.is_available()
-        else "N/A",
-        "cuda_version": torch.version.cuda if hasattr(torch.version, "cuda") else "N/A",
+        "cuda_available": False,
+        "gpu_count": 0,
+        "gpu_name": "N/A",
+        "cuda_version": "N/A",
         "supports_fp8": False,
         "vram_gb": 0.0,
+        "gpu_compute_capability": "N/A",
     }
 
-    if torch.cuda.is_available():
-        gpu_props = torch.cuda.get_device_properties(0)
-        results["vram_gb"] = gpu_props.total_memory / 1024**3
-        results["gpu_compute_capability"] = f"{gpu_props.major}.{gpu_props.minor}"
+    try:
+        results["cuda_available"] = torch.cuda.is_available()
+        results["cuda_version"] = (
+            torch.version.cuda if hasattr(torch.version, "cuda") else "N/A"
+        )
 
-        # Check for FP8 support (Ada Lovelace and newer)
-        if gpu_props.major >= 9 or (gpu_props.major == 8 and gpu_props.minor >= 9):
-            results["supports_fp8"] = True
+        if results["cuda_available"]:
+            results["gpu_count"] = torch.cuda.device_count()
+
+            if results["gpu_count"] > 0:
+                results["gpu_name"] = torch.cuda.get_device_name(0)
+
+                gpu_props = torch.cuda.get_device_properties(0)
+                results["vram_gb"] = gpu_props.total_memory / 1024**3
+                results["gpu_compute_capability"] = (
+                    f"{gpu_props.major}.{gpu_props.minor}"
+                )
+
+                # Check for FP8 support (Ada Lovelace and newer)
+                if gpu_props.major >= 9 or (
+                    gpu_props.major == 8 and gpu_props.minor >= 9
+                ):
+                    results["supports_fp8"] = True
+
+    except RuntimeError as e:
+        logger.warning(f"CUDA validation failed: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error during FP8 requirements validation: {e}")
 
     # Validate software requirements
     try:

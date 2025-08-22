@@ -43,8 +43,12 @@ def detect_hardware() -> dict[str, Any]:
             vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
-    except (RuntimeError, OSError, AttributeError) as e:
-        logger.warning(f"Hardware detection failed: {e}")
+    except RuntimeError as e:
+        logger.warning(f"CUDA error during hardware detection: {e}")
+    except (OSError, AttributeError) as e:
+        logger.warning(f"System error during hardware detection: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error during hardware detection: {e}")
 
     return hardware_info
 
@@ -77,14 +81,18 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
 
     # Check GPU configuration
     if settings.gpu_acceleration:
-        if torch.cuda.is_available():
-            try:
+        try:
+            if torch.cuda.is_available():
                 gpu_name = torch.cuda.get_device_name(0)
                 results["info"].append(f"GPU available: {gpu_name}")
-            except Exception as e:
-                results["warnings"].append(f"GPU detection issue: {e}")
-        else:
-            results["warnings"].append("GPU acceleration enabled but no GPU available")
+            else:
+                results["warnings"].append(
+                    "GPU acceleration enabled but no GPU available"
+                )
+        except RuntimeError as e:
+            results["warnings"].append(f"CUDA error during GPU detection: {e}")
+        except Exception as e:
+            results["warnings"].append(f"Unexpected error during GPU detection: {e}")
 
     # Check chunk configuration
     if settings.chunk_overlap >= settings.chunk_size:

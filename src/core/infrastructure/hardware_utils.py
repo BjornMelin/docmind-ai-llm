@@ -2,11 +2,16 @@
 
 This module provides minimal hardware detection using PyTorch native APIs only.
 Replaces the deprecated utils/hardware_utils.py with KISS-compliant implementation.
+
+Uses the resource management utilities for robust error handling.
 """
 
+import logging
 from typing import Any
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -27,42 +32,54 @@ def detect_hardware() -> dict[str, Any]:
         - 'cpu_threads': Number of CPU threads
     """
     hardware_info = {
-        "cuda_available": torch.cuda.is_available(),
+        "cuda_available": False,
         "gpu_name": "Unknown",
         "vram_total_gb": None,
         "vram_available_gb": None,
         "gpu_compute_capability": None,
-        "gpu_device_count": torch.cuda.device_count()
-        if torch.cuda.is_available()
-        else 0,
-        "fastembed_providers": [],
+        "gpu_device_count": 0,
+        "fastembed_providers": ["CPUExecutionProvider"],
         "cpu_cores": 1,
         "cpu_threads": 1,
     }
 
-    if hardware_info["cuda_available"]:
-        device_props = torch.cuda.get_device_properties(0)
-        hardware_info["gpu_name"] = device_props.name
-        vram_gb = device_props.total_memory / (1024**3)
-        hardware_info["vram_total_gb"] = round(vram_gb, 1)
+    try:
+        hardware_info["cuda_available"] = torch.cuda.is_available()
 
-        try:
-            vram_available = device_props.total_memory - torch.cuda.memory_allocated(0)
-            hardware_info["vram_available_gb"] = round(vram_available / (1024**3), 1)
-        except (RuntimeError, OSError):
-            # Handle CUDA runtime errors or system-level issues
-            hardware_info["vram_available_gb"] = hardware_info["vram_total_gb"]
+        if hardware_info["cuda_available"]:
+            hardware_info["gpu_device_count"] = torch.cuda.device_count()
 
-        hardware_info["gpu_compute_capability"] = (
-            device_props.major,
-            device_props.minor,
-        )
-        hardware_info["fastembed_providers"] = [
-            "CUDAExecutionProvider",
-            "CPUExecutionProvider",
-        ]
-    else:
-        hardware_info["fastembed_providers"] = ["CPUExecutionProvider"]
+            if hardware_info["gpu_device_count"] > 0:
+                device_props = torch.cuda.get_device_properties(0)
+                hardware_info["gpu_name"] = device_props.name
+                vram_gb = device_props.total_memory / (1024**3)
+                hardware_info["vram_total_gb"] = round(vram_gb, 1)
+
+                try:
+                    vram_available = (
+                        device_props.total_memory - torch.cuda.memory_allocated(0)
+                    )
+                    hardware_info["vram_available_gb"] = round(
+                        vram_available / (1024**3), 1
+                    )
+                except (RuntimeError, OSError) as e:
+                    # Handle CUDA runtime errors or system-level issues
+                    logger.warning(f"Failed to get available VRAM: {e}")
+                    hardware_info["vram_available_gb"] = hardware_info["vram_total_gb"]
+
+                hardware_info["gpu_compute_capability"] = (
+                    device_props.major,
+                    device_props.minor,
+                )
+                hardware_info["fastembed_providers"] = [
+                    "CUDAExecutionProvider",
+                    "CPUExecutionProvider",
+                ]
+
+    except RuntimeError as e:
+        logger.warning(f"CUDA hardware detection failed: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error during hardware detection: {e}")
 
     # CPU info
     import os
@@ -97,7 +114,7 @@ def get_optimal_providers(force_cpu: bool = False) -> list[str]:
 
 
 def get_recommended_batch_size(model_type: str = "embedding") -> int:
-    """Get recommended batch size based on available hardware.
+    """Get recommended batch size based on available hardware with error handling.
 
     Args:
         model_type: Type of model ("embedding", "llm", "vision")
@@ -105,22 +122,28 @@ def get_recommended_batch_size(model_type: str = "embedding") -> int:
     Returns:
         Recommended batch size for the model type and available hardware
     """
-    if not torch.cuda.is_available():
-        # Conservative CPU batch sizes
-        return {"embedding": 16, "llm": 1, "vision": 4}.get(model_type, 8)
+    cpu_defaults = {"embedding": 16, "llm": 1, "vision": 4}
 
     try:
+        if not torch.cuda.is_available():
+            return cpu_defaults.get(model_type, 8)
+
         device_props = torch.cuda.get_device_properties(0)
         vram_gb = device_props.total_memory / (1024**3)
-    except (RuntimeError, OSError):
-        vram_gb = 4  # Fallback assumption for CUDA errors or system issues
 
-    # GPU batch sizes based on available VRAM
-    if vram_gb >= 16:  # High-end GPU
-        return {"embedding": 128, "llm": 8, "vision": 32}.get(model_type, 64)
-    elif vram_gb >= 8:  # Mid-range GPU
-        return {"embedding": 64, "llm": 4, "vision": 16}.get(model_type, 32)
-    elif vram_gb >= 4:  # Entry-level GPU
-        return {"embedding": 32, "llm": 2, "vision": 8}.get(model_type, 16)
-    else:  # Low VRAM or unknown
-        return {"embedding": 16, "llm": 1, "vision": 4}.get(model_type, 8)
+        # GPU batch sizes based on available VRAM
+        if vram_gb >= 16:  # High-end GPU
+            return {"embedding": 128, "llm": 8, "vision": 32}.get(model_type, 64)
+        elif vram_gb >= 8:  # Mid-range GPU
+            return {"embedding": 64, "llm": 4, "vision": 16}.get(model_type, 32)
+        elif vram_gb >= 4:  # Entry-level GPU
+            return {"embedding": 32, "llm": 2, "vision": 8}.get(model_type, 16)
+        else:  # Low VRAM
+            return {"embedding": 16, "llm": 1, "vision": 4}.get(model_type, 8)
+
+    except (RuntimeError, OSError) as e:
+        logger.warning(f"Failed to get GPU properties for batch size: {e}")
+        return cpu_defaults.get(model_type, 8)
+    except Exception as e:
+        logger.error(f"Unexpected error determining batch size: {e}")
+        return cpu_defaults.get(model_type, 8)

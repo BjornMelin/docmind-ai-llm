@@ -184,7 +184,7 @@ async def create_property_graph_index_async(
 
 
 async def extract_entities(index: PropertyGraphIndex, document: Any) -> list[dict]:
-    """Extract entities from a document.
+    """Extract entities from a document using configured extractors.
 
     Args:
         index: PropertyGraphIndex instance
@@ -193,39 +193,51 @@ async def extract_entities(index: PropertyGraphIndex, document: Any) -> list[dic
     Returns:
         List of entities with types and confidence
     """
+    if not hasattr(index, "kg_extractors") or not index.kg_extractors:
+        raise NotImplementedError(
+            "Entity extraction requires configured extractors. "
+            "Ensure the PropertyGraphIndex has kg_extractors configured."
+        )
+
     entities = []
 
-    # Use the index's extractors to extract entities
-    for extractor in index.kg_extractors:
-        if hasattr(extractor, "extract_entities"):
-            extracted = await extractor.extract_entities(document)
-            entities.extend(extracted)
+    # Extract entities using the graph store's internal representation
+    # LlamaIndex extractors work internally during index construction
+    # For post-construction entity access, query the graph store directly
+    if hasattr(index, "property_graph_store"):
+        try:
+            # Get all nodes (entities) from the graph store
+            all_nodes = await asyncio.to_thread(
+                lambda: list(index.property_graph_store.get_nodes())
+            )
 
-    # Mock implementation for testing
-    # In reality, the extractors handle this internally
-    entities = [
-        {
-            "text": "LlamaIndex",
-            "type": "FRAMEWORK",
-            "confidence": 0.95,
-        },
-        {
-            "text": "BGE-M3",
-            "type": "MODEL",
-            "confidence": 0.92,
-        },
-        {
-            "text": "RTX 4090",
-            "type": "HARDWARE",
-            "confidence": 0.98,
-        },
-    ]
+            for node in all_nodes:
+                if hasattr(node, "properties"):
+                    entity_data = {
+                        "text": getattr(node, "name", str(node.id)),
+                        "type": node.properties.get("type", "UNKNOWN"),
+                        "confidence": node.properties.get("confidence", 0.8),
+                        "id": str(node.id),
+                    }
+                    entities.append(entity_data)
+
+        except Exception as e:
+            logger.warning(f"Could not extract entities from graph store: {e}")
+            raise NotImplementedError(
+                "Entity extraction from existing graph not yet implemented. "
+                "Entities are extracted during index construction."
+            ) from e
+    else:
+        raise NotImplementedError(
+            "Entity extraction requires access to the underlying graph store. "
+            "Ensure PropertyGraphIndex has a property_graph_store configured."
+        )
 
     return entities
 
 
 async def extract_relationships(index: PropertyGraphIndex, document: Any) -> list[dict]:
-    """Extract relationships from a document.
+    """Extract relationships from a document using configured extractors.
 
     Args:
         index: PropertyGraphIndex instance
@@ -234,23 +246,50 @@ async def extract_relationships(index: PropertyGraphIndex, document: Any) -> lis
     Returns:
         List of relationships with types and confidence
     """
+    if not hasattr(index, "kg_extractors") or not index.kg_extractors:
+        raise NotImplementedError(
+            "Relationship extraction requires configured extractors. "
+            "Ensure the PropertyGraphIndex has kg_extractors configured."
+        )
+
     relationships = []
 
-    # Mock implementation for testing
-    relationships = [
-        {
-            "source": "LlamaIndex",
-            "target": "BGE-M3",
-            "type": "USES",
-            "confidence": 0.88,
-        },
-        {
-            "source": "LlamaIndex",
-            "target": "RTX 4090",
-            "type": "OPTIMIZED_FOR",
-            "confidence": 0.85,
-        },
-    ]
+    # Extract relationships using the graph store's internal representation
+    # LlamaIndex extractors work internally during index construction
+    # For post-construction relationship access, query the graph store directly
+    if hasattr(index, "property_graph_store"):
+        try:
+            # Get all edges (relationships) from the graph store
+            all_edges = await asyncio.to_thread(
+                lambda: list(index.property_graph_store.get_edges())
+            )
+
+            for edge in all_edges:
+                if hasattr(edge, "properties"):
+                    relationship_data = {
+                        "source": str(edge.source_id),
+                        "target": str(edge.target_id),
+                        "type": edge.properties.get(
+                            "type", getattr(edge, "label", "UNKNOWN")
+                        ),
+                        "confidence": edge.properties.get("confidence", 0.8),
+                        "id": str(
+                            getattr(edge, "id", f"{edge.source_id}-{edge.target_id}")
+                        ),
+                    }
+                    relationships.append(relationship_data)
+
+        except Exception as e:
+            logger.warning(f"Could not extract relationships from graph store: {e}")
+            raise NotImplementedError(
+                "Relationship extraction from existing graph not yet implemented. "
+                "Relationships are extracted during index construction."
+            ) from e
+    else:
+        raise NotImplementedError(
+            "Relationship extraction requires access to the underlying graph store. "
+            "Ensure PropertyGraphIndex has a property_graph_store configured."
+        )
 
     return relationships
 
@@ -341,33 +380,168 @@ def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex
 
     # Add graph statistics methods
     async def get_entity_count() -> int:
-        """Get total entity count."""
-        # Mock implementation
-        return 100
+        """Get total entity count from the graph store."""
+        try:
+            if hasattr(index, "property_graph_store"):
+                nodes = await asyncio.to_thread(
+                    lambda: list(index.property_graph_store.get_nodes())
+                )
+                return len(nodes)
+            else:
+                raise NotImplementedError(
+                    "Entity count requires access to property_graph_store"
+                )
+        except Exception as e:
+            logger.warning(f"Could not get entity count: {e}")
+            raise NotImplementedError(
+                "Entity count calculation not yet implemented for this graph store type"
+            ) from e
 
     async def get_relationship_count() -> int:
-        """Get total relationship count."""
-        # Mock implementation
-        return 250
+        """Get total relationship count from the graph store."""
+        try:
+            if hasattr(index, "property_graph_store"):
+                edges = await asyncio.to_thread(
+                    lambda: list(index.property_graph_store.get_edges())
+                )
+                return len(edges)
+            else:
+                raise NotImplementedError(
+                    "Relationship count requires access to property_graph_store"
+                )
+        except Exception as e:
+            logger.warning(f"Could not get relationship count: {e}")
+            raise NotImplementedError(
+                "Relationship count calculation not yet implemented "
+                "for this graph store type"
+            ) from e
 
     async def find_entity(entity_name: str) -> list[dict[str, Any]]:
-        """Find specific entity in graph."""
-        # Mock implementation
-        return [{"entity": entity_name, "connections": 5}]
+        """Find specific entity in graph by name."""
+        try:
+            if hasattr(index, "property_graph_store"):
+                # Search for nodes matching the entity name
+                all_nodes = await asyncio.to_thread(
+                    lambda: list(index.property_graph_store.get_nodes())
+                )
+
+                matching_entities = []
+                for node in all_nodes:
+                    node_name = getattr(node, "name", str(node.id))
+                    if entity_name.lower() in node_name.lower():
+                        # Count connections for this entity
+                        connections = await asyncio.to_thread(
+                            lambda node_id=node.id: len(
+                                list(
+                                    index.property_graph_store.get_edges(
+                                        source_ids=[node_id]
+                                    )
+                                )
+                            )
+                        )
+
+                        matching_entities.append(
+                            {
+                                "entity": node_name,
+                                "id": str(node.id),
+                                "connections": connections,
+                                "type": getattr(node, "properties", {}).get(
+                                    "type", "UNKNOWN"
+                                ),
+                            }
+                        )
+
+                return matching_entities
+            else:
+                raise NotImplementedError(
+                    "Entity search requires access to property_graph_store"
+                )
+        except Exception as e:
+            logger.warning(f"Could not find entity {entity_name}: {e}")
+            raise NotImplementedError(
+                "Entity search not yet implemented for this graph store type"
+            ) from e
 
     async def find_relationships(
         entity: str, max_hops: int = 2
     ) -> list[dict[str, Any]]:
-        """Find relationships for an entity."""
-        # Mock implementation
-        return [
-            {
-                "nodes": [entity, "RelatedEntity"],
-                "edges": [
-                    {"source": entity, "target": "RelatedEntity", "type": "USES"}
-                ],
-            }
-        ]
+        """Find relationships for an entity within max_hops."""
+        try:
+            if hasattr(index, "property_graph_store"):
+                # First find the entity node
+                all_nodes = await asyncio.to_thread(
+                    lambda: list(index.property_graph_store.get_nodes())
+                )
+
+                entity_node = None
+                for node in all_nodes:
+                    node_name = getattr(node, "name", str(node.id))
+                    if entity.lower() in node_name.lower():
+                        entity_node = node
+                        break
+
+                if not entity_node:
+                    return []
+
+                # Initialize relationship traversal
+                # Note: Direct edge retrieval not needed for traversal algorithm
+
+                relationships = []
+                visited_nodes = {str(entity_node.id)}
+                current_nodes = [entity_node.id]
+
+                for hop in range(max_hops):
+                    next_nodes = []
+                    hop_edges = []
+
+                    for current_node_id in current_nodes:
+                        # Use lambda with default parameter to bind variable
+                        node_edges = await asyncio.to_thread(
+                            lambda node_id=current_node_id: list(
+                                index.property_graph_store.get_edges(
+                                    source_ids=[node_id]
+                                )
+                            )
+                        )
+
+                        for edge in node_edges:
+                            if str(edge.target_id) not in visited_nodes:
+                                hop_edges.append(
+                                    {
+                                        "source": str(edge.source_id),
+                                        "target": str(edge.target_id),
+                                        "type": edge.properties.get(
+                                            "type", getattr(edge, "label", "UNKNOWN")
+                                        ),
+                                        "hop": hop + 1,
+                                    }
+                                )
+                                next_nodes.append(edge.target_id)
+                                visited_nodes.add(str(edge.target_id))
+
+                    if hop_edges:
+                        relationships.append(
+                            {
+                                "nodes": list(visited_nodes),
+                                "edges": hop_edges,
+                                "hop_level": hop + 1,
+                            }
+                        )
+
+                    current_nodes = next_nodes
+                    if not current_nodes:
+                        break
+
+                return relationships
+            else:
+                raise NotImplementedError(
+                    "Relationship traversal requires access to property_graph_store"
+                )
+        except Exception as e:
+            logger.warning(f"Could not find relationships for {entity}: {e}")
+            raise NotImplementedError(
+                "Relationship traversal not yet implemented for this graph store type"
+            ) from e
 
     async def add_document(document: Any) -> None:
         """Add new document to existing graph."""
