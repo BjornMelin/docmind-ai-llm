@@ -53,6 +53,7 @@ dependencies = [
     "llama-index-embeddings-huggingface",
     "llama-index-embeddings-jinaai",
     "llama-index-embeddings-fastembed",
+    "llama-index-embeddings-clip>=0.1.0",
     # LlamaIndex ecosystem - tools
     "llama-index-postprocessor-colbert-rerank",
     "llama-index-agent-openai",

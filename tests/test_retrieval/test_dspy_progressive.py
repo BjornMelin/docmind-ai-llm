@@ -262,6 +262,7 @@ class TestDSPyProgressive:
             zero_shot_rag,  # Build on zero-shot
             trainset=examples,
         )
+        assert few_shot_rag is not None
 
         # Phase 3: Production (simulate with more data)
         # Would collect real user queries and feedback

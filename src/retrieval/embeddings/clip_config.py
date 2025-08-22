@@ -6,12 +6,11 @@ optimized for RTX 4090 with 1.4GB VRAM limit for CLIP operations.
 Library-first implementation using llama-index-embeddings-clip.
 """
 
-
 import torch
 from llama_index.core import Settings
 from llama_index.embeddings.clip import ClipEmbedding
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 
 class ClipConfig(BaseModel):
@@ -53,9 +52,9 @@ class ClipConfig(BaseModel):
 
     @field_validator("embed_batch_size")
     @classmethod
-    def validate_batch_size(cls, v: int, values: dict) -> int:
+    def validate_batch_size(cls, v: int, info: ValidationInfo) -> int:
         """Validate batch size for VRAM constraints."""
-        if v > 10 and values.get("max_vram_gb", 1.4) <= 1.4:
+        if v > 10 and info.data.get("max_vram_gb", 1.4) <= 1.4:
             logger.warning(
                 f"Batch size {v} may exceed 1.4GB VRAM limit, adjusting to 10"
             )

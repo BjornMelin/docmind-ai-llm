@@ -4,6 +4,6 @@ This module implements DSPy-based query optimization functionality per ADR-018
 for enhanced retrieval performance.
 """
 
-from .dspy_optimizer import DSPyQueryOptimizer
+from .dspy_progressive import DSPyOptimizer
 
-__all__ = ["DSPyQueryOptimizer"]
+__all__ = ["DSPyOptimizer"]

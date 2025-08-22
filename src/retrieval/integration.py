@@ -166,7 +166,7 @@ create_hybrid_retriever = create_hybrid_retriever_compat
 
 
 # ADR-018 and ADR-019 experimental features
-def create_experimental_components(
+async def create_experimental_components(
     nodes: list[Any] | None = None,
     enable_graphrag: bool | None = None,
     enable_dspy: bool | None = None,
@@ -188,20 +188,22 @@ def create_experimental_components(
 
     try:
         # Import here to avoid circular imports and linter reordering
-        from .graph.property_graph import create_property_graph_index
-        from .optimization.dspy_optimizer import create_dspy_optimizer
+        from .graph.property_graph_config import create_property_graph_index
+        from .optimization.dspy_progressive import DSPyOptimizer
 
         # PropertyGraphIndex (ADR-019)
-        property_graph = create_property_graph_index(
-            nodes=nodes,
-            enable_experimental=enable_graphrag,
-        )
+        property_graph = None
+        if enable_graphrag and nodes:
+            property_graph = await create_property_graph_index(
+                nodes=nodes,
+                enable_experimental=enable_graphrag,
+            )
         components["property_graph"] = property_graph
 
         # DSPy Query Optimizer (ADR-018)
-        dspy_optimizer = create_dspy_optimizer(
-            enable_experimental=enable_dspy,
-        )
+        dspy_optimizer = None
+        if enable_dspy:
+            dspy_optimizer = DSPyOptimizer()
         components["dspy_optimizer"] = dspy_optimizer
 
         logger.info("Experimental components created for ADR compliance")
@@ -224,12 +226,12 @@ def is_experimental_features_enabled() -> dict[str, bool]:
         Dictionary of feature flags for experimental components
     """
     try:
-        from .graph.property_graph import is_property_graph_enabled
-        from .optimization.dspy_optimizer import is_dspy_optimization_enabled
+        from .graph.property_graph_config import PropertyGraphConfig
+        from .optimization.dspy_progressive import DSPyOptimizer
 
         return {
-            "graphrag": is_property_graph_enabled(),
-            "dspy": is_dspy_optimization_enabled(),
+            "graphrag": PropertyGraphConfig is not None,
+            "dspy": DSPyOptimizer is not None,
         }
     except ImportError:
         return {

@@ -193,6 +193,7 @@ class TestVLLMPerformance:
             max_tokens=1,  # Minimal generation to measure prefill
             temperature=0.0,
         )
+        assert response is not None
 
         prefill_time = time.perf_counter() - start_time
 

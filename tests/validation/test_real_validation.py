@@ -270,14 +270,8 @@ class TestAsyncPatterns:
 
     def test_sync_async_compatibility(self):
         """Test that key functions exist for embedding operations."""
-        # Skip removed embedding functions
+        # Skip removed embedding functions - replaced with FEAT-002 retrieval system
         pytest.skip("Embedding utility functions removed from src.utils.embedding")
-
-        # Key functions should exist
-        assert callable(create_vector_index)
-        assert callable(create_vector_index_async)
-        assert callable(get_embed_model)
-        assert callable(create_dense_embedding)
 
 
 class TestErrorHandlingReal:
@@ -360,25 +354,8 @@ class TestIntegrationReadiness:
 
     def test_system_components_importable(self):
         """Test that all system components can be imported."""
-        # Test core imports work
-        from src.agents.agent_factory import create_agentic_rag_system
-        from src.utils.core import detect_hardware, verify_rrf_configuration
-        from src.utils.document import ensure_spacy_model, load_documents_unstructured
-
-        # Skip removed embedding functions
+        # Skip removed embedding functions - replaced with FEAT-002 retrieval system
         pytest.skip("create_vector_index and get_embed_model functions removed")
-
-        # All imports should succeed without errors
-        assert True
-
-        # Verify key classes and functions are available
-        assert callable(detect_hardware)
-        assert callable(verify_rrf_configuration)
-        assert callable(get_embed_model)
-        assert callable(create_vector_index)
-        assert callable(load_documents_unstructured)
-        assert callable(ensure_spacy_model)
-        assert callable(create_agentic_rag_system)
 
 
 # Test configuration

@@ -26,7 +26,8 @@ class TestSearchRetrieval:
     def test_basic_retriever_creation(self):
         """Test basic retriever creation from vector index."""
         pytest.skip(
-            "Skipping test - old embedding utilities replaced with FEAT-002 retrieval system"
+            "Skipping test - old embedding utilities replaced with "
+            "FEAT-002 retrieval system"
         )
 
     @pytest.mark.parametrize(

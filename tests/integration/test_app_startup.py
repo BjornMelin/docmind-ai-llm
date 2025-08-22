@@ -272,38 +272,10 @@ class TestGracefulDegradation:
 
     def test_embedding_fallback_mechanisms(self):
         """Test that embedding systems have fallback mechanisms."""
-        src_path = str(PROJECT_ROOT / "src")
-        if src_path not in sys.path:
-            sys.path.insert(0, src_path)
-
-        try:
-            # Test that embedding utilities can handle missing providers gracefully
-            # Skip embedding utilities test - functions moved/removed
-            pytest.skip(
-                "Embedding utilities test skipped - functions moved to retrieval module"
-            )
-
-            # Test that embedding model creation has proper fallback
-            try:
-                model = get_embed_model()
-                assert model is not None
-                print("Embedding model creation successful")
-
-                # Test embedding info gathering
-                embedding_info = get_embedding_info()
-                assert isinstance(embedding_info, dict)
-                print(f"Embedding info available: {list(embedding_info.keys())}")
-
-            except Exception as e:
-                print(f"Embedding operations failed gracefully: {e}")
-                # In test environment, this might fail due to missing models
-                # but should not crash the app
-
-        except ImportError as e:
-            pytest.skip(f"Embedding utilities not available: {e}")
-        finally:
-            if src_path in sys.path:
-                sys.path.remove(src_path)
+        # Skip embedding utilities test - functions moved/removed in FEAT-002
+        pytest.skip(
+            "Embedding utilities test skipped - functions moved to retrieval module"
+        )
 
 
 class TestCoreIntegration:

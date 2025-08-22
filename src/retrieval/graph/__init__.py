@@ -4,6 +4,6 @@ This module implements PropertyGraphIndex functionality per ADR-019
 for relationship-based document analysis.
 """
 
-from .property_graph import PropertyGraphIndex
+from .property_graph_config import PropertyGraphConfig
 
-__all__ = ["PropertyGraphIndex"]
+__all__ = ["PropertyGraphConfig"]

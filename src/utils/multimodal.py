@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 import torch
-from llama_index.core import MultiModalVectorStoreIndex
+from llama_index.core.indices import MultiModalVectorStoreIndex
 from llama_index.core.schema import ImageDocument
 from loguru import logger
 from PIL import Image

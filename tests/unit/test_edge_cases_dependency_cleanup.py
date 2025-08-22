@@ -133,19 +133,8 @@ class TestGracefulErrorHandling:
 
     def test_embedding_creation_fallback(self):
         """Test embedding creation with fallback behavior."""
-        try:
-            # Skip removed embedding function
-            pytest.skip("get_embed_model function removed from src.utils.embedding")
-
-            # Should be able to get basic embedding model info
-            model = get_embed_model()
-            assert model is not None
-
-        except ImportError:
-            pytest.skip("Embedding utilities not available")
-        except Exception as e:
-            # Some configuration errors are acceptable in test environment
-            print(f"Expected configuration error in test env: {e}")
+        # Skip removed embedding function - replaced with FEAT-002 retrieval system
+        pytest.skip("get_embed_model function removed from src.utils.embedding")
 
 
 if __name__ == "__main__":
