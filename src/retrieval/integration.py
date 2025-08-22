@@ -188,15 +188,14 @@ async def create_experimental_components(
 
     try:
         # Import here to avoid circular imports and linter reordering
-        from .graph.property_graph_config import create_property_graph_index
+        from .graph.property_graph_config import create_property_graph_index_async
         from .optimization.dspy_progressive import DSPyOptimizer
 
         # PropertyGraphIndex (ADR-019)
         property_graph = None
         if enable_graphrag and nodes:
-            property_graph = await create_property_graph_index(
-                nodes=nodes,
-                enable_experimental=enable_graphrag,
+            property_graph = await create_property_graph_index_async(
+                documents=nodes,  # nodes are Document objects
             )
         components["property_graph"] = property_graph
 

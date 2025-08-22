@@ -106,6 +106,8 @@ class TestVLLMFP8Configuration:
 
         # Environment is set up during initialization
         assert os.environ.get("VLLM_ATTENTION_BACKEND") == "FLASHINFER"
+        # Verify manager was properly initialized
+        assert manager.config == config
 
         # Test that the config has the right values
         assert config.attention_backend == "FLASHINFER"

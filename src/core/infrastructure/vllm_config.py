@@ -20,7 +20,14 @@ try:
 except ImportError:
     # Mock Vllm class for configuration testing
     class Vllm:
+        """Mock vLLM class for configuration testing when real vLLM is unavailable."""
+
         def __init__(self, **kwargs):
+            """Initialize mock vLLM instance.
+
+            Args:
+                **kwargs: Configuration parameters
+            """
             self.model = kwargs.get("model", "mock-model")
             self.kwargs = kwargs
 

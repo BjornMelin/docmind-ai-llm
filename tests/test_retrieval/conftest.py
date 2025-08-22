@@ -111,6 +111,13 @@ class MockVLLMConfig:
     """Mock VLLMConfig class without spec issues."""
 
     def __init__(self, **kwargs):
+        """Initialize mock VLLMConfig with FP8 optimization settings.
+
+        Args:
+            **kwargs: Configuration parameters for vLLM settings including
+                model_name, max_model_len, kv_cache_dtype, quantization,
+                gpu_memory_utilization, attention_backend, and performance targets.
+        """
         self.model_name = kwargs.get("model_name", "Qwen/Qwen3-4B-Instruct-2507-FP8")
         self.max_model_len = kwargs.get("max_model_len", 131072)
         self.kv_cache_dtype = kwargs.get("kv_cache_dtype", "fp8_e5m2")
@@ -136,6 +143,11 @@ class MockVLLMManager:
     """Mock VLLMManager class without spec issues."""
 
     def __init__(self, config=None):
+        """Initialize mock VLLMManager with performance metrics simulation.
+
+        Args:
+            config: Optional MockVLLMConfig instance. If None, creates default config.
+        """
         self.config = config or MockVLLMConfig()
         self.llm_instance = None
         self.performance_metrics = {
@@ -150,16 +162,39 @@ class MockVLLMManager:
         }
 
     def create_vllm_instance(self):
+        """Create mock vLLM LLM instance for testing.
+
+        Returns:
+            MockLLM: Mock LLM instance configured for vLLM testing.
+        """
         self.llm_instance = MockLLM(response_text="Mock vLLM response")
         return self.llm_instance
 
     def validate_fp8_performance(self):
+        """Validate FP8 quantization performance metrics.
+
+        Returns:
+            dict: Performance metrics including VRAM usage, decode/prefill throughput,
+                FP8 memory reduction, and target achievement status.
+        """
         return self.performance_metrics
 
     def integrate_with_llamaindex(self):
+        """Mock integration with LlamaIndex framework.
+
+        Simulates the integration process between vLLM and LlamaIndex
+        for testing purposes.
+        """
         pass
 
     def test_128k_context_support(self):
+        """Test 128K context window support with various context sizes.
+
+        Returns:
+            dict: Test results containing max_context_supported, supports_128k flag,
+                and detailed results for different context sizes with success status,
+                latency, and VRAM usage measurements.
+        """
         return {
             "max_context_supported": 131072,
             "supports_128k": True,
@@ -203,12 +238,30 @@ class MockPropertyGraphIndex:
     """Mock PropertyGraphIndex with proper method signatures."""
 
     def __init__(self, documents=None, kg_extractors=None, **kwargs):
+        """Initialize mock PropertyGraphIndex for knowledge graph testing.
+
+        Args:
+            documents: Optional list of documents to index. Defaults to empty list.
+            kg_extractors: Optional knowledge graph extractors. Defaults to empty list.
+            **kwargs: Additional configuration parameters including schema and
+                path_depth.
+        """
         self.documents = documents or []
         self.kg_extractors = kg_extractors or []
         self.schema = kwargs.get("schema", {})
         self.path_depth = kwargs.get("path_depth", 2)
 
     async def extract_entities(self, document):
+        """Extract entities from a document using mock knowledge graph extraction.
+
+        Args:
+            document: Document to extract entities from.
+
+        Returns:
+            list: List of extracted entities with text, type, and confidence scores.
+                Mock entities include LlamaIndex (FRAMEWORK), BGE-M3 (MODEL),
+                and RTX 4090 (HARDWARE).
+        """
         return [
             {"text": "LlamaIndex", "type": "FRAMEWORK", "confidence": 0.95},
             {"text": "BGE-M3", "type": "MODEL", "confidence": 0.92},
@@ -216,6 +269,16 @@ class MockPropertyGraphIndex:
         ]
 
     async def extract_relationships(self, document):
+        """Extract relationships between entities from a document.
+
+        Args:
+            document: Document to extract relationships from.
+
+        Returns:
+            list: List of relationships with source, target, type, and confidence.
+                Mock relationships include LlamaIndex USES BGE-M3 and
+                LlamaIndex OPTIMIZED_FOR RTX 4090.
+        """
         return [
             {
                 "source": "LlamaIndex",
@@ -232,11 +295,30 @@ class MockPropertyGraphIndex:
         ]
 
     async def traverse_graph(self, query, max_depth=2, timeout=3.0):
+        """Traverse the knowledge graph to find relevant nodes.
+
+        Args:
+            query: Query to search for in the graph.
+            max_depth: Maximum traversal depth. Defaults to 2.
+            timeout: Query timeout in seconds. Defaults to 3.0.
+
+        Returns:
+            list[NodeWithScore]: List of graph nodes with relevance scores.
+        """
         # Mock graph traversal results
         mock_node = TextNode(text="Graph traversal result", id_="graph_node_1")
         return [NodeWithScore(node=mock_node, score=0.9)]
 
     def as_retriever(self, **kwargs):
+        """Create a mock retriever interface for the property graph.
+
+        Args:
+            **kwargs: Optional retriever configuration parameters.
+
+        Returns:
+            MagicMock: Mock retriever that returns NodeWithScore objects
+                with graph retrieval results.
+        """
         mock_retriever = MagicMock()
         mock_node = TextNode(text="Graph retrieval result", id_="graph_retriever_1")
         mock_retriever.retrieve.return_value = [
@@ -245,6 +327,14 @@ class MockPropertyGraphIndex:
         return mock_retriever
 
     def as_query_engine(self, **kwargs):
+        """Create a mock query engine from the property graph.
+
+        Args:
+            **kwargs: Additional configuration options for the query engine.
+
+        Returns:
+            MagicMock: Mock query engine for testing purposes.
+        """
         return MagicMock()
 
 
@@ -262,6 +352,12 @@ class MockDSPyPrediction:
     """Mock DSPy prediction with proper attributes."""
 
     def __init__(self, answer="Mock DSPy answer", **kwargs):
+        """Initialize MockDSPyPrediction with answer and attributes.
+
+        Args:
+            answer: The predicted answer text.
+            **kwargs: Additional attributes to set on the prediction object.
+        """
         self.answer = answer
         self.strategy = kwargs.get("strategy", "factual")
         self.search_query = kwargs.get("search_query", "mock query")
@@ -274,12 +370,27 @@ class MockDSPyExample:
     """Mock DSPy Example with proper interface."""
 
     def __init__(self, question="", answer="", **kwargs):
+        """Initialize MockDSPyExample with question and answer.
+
+        Args:
+            question: The example question.
+            answer: The example answer.
+            **kwargs: Additional attributes to set on the example object.
+        """
         self.question = question
         self.answer = answer
         for key, value in kwargs.items():
             setattr(self, key, value)
 
     def with_inputs(self, *inputs):
+        """Set inputs for the DSPy example (mock implementation).
+
+        Args:
+            *inputs: Variable number of input arguments.
+
+        Returns:
+            MockDSPyExample: Returns self for method chaining.
+        """
         return self
 
 
@@ -549,28 +660,75 @@ class MockLLM(LLM):
     response_text: str = "Mock LLM response"
 
     def __init__(self, response_text: str = "Mock LLM response", **kwargs):
+        """Initialize MockLLM with configurable response text.
+
+        Args:
+            response_text: The text to return in all LLM responses.
+            **kwargs: Additional arguments passed to LLM base class.
+        """
         super().__init__(**kwargs)
         self.response_text = response_text
 
     @property
     def metadata(self) -> LLMMetadata:
+        """Get LLM metadata for mock model.
+
+        Returns:
+            LLMMetadata: Mock metadata with 128K context window.
+        """
         return LLMMetadata(
             context_window=128000, num_output=2048, model_name="mock-llm"
         )
 
     def complete(self, prompt: str, **kwargs) -> CompletionResponse:
+        """Complete a prompt with mock response.
+
+        Args:
+            prompt: Input prompt to complete.
+            **kwargs: Additional completion parameters.
+
+        Returns:
+            CompletionResponse: Mock completion with configured response text.
+        """
         return CompletionResponse(
             text=self.response_text, additional_kwargs={"tool_choice": "hybrid_search"}
         )
 
     async def acomplete(self, prompt: str, **kwargs) -> CompletionResponse:
+        """Asynchronously complete a prompt with mock response.
+
+        Args:
+            prompt: Input prompt to complete.
+            **kwargs: Additional completion parameters.
+
+        Returns:
+            CompletionResponse: Mock completion with configured response text.
+        """
         return self.complete(prompt, **kwargs)
 
     def stream_complete(self, prompt: str, **kwargs):
+        """Stream complete a prompt with mock response.
+
+        Args:
+            prompt: Input prompt to complete.
+            **kwargs: Additional completion parameters.
+
+        Yields:
+            CompletionResponse: Mock streaming completion responses.
+        """
         # Return a mock stream
         yield CompletionResponse(text=self.response_text)
 
     def chat(self, messages, **kwargs):
+        """Chat with messages using mock response.
+
+        Args:
+            messages: Chat messages to respond to.
+            **kwargs: Additional chat parameters.
+
+        Returns:
+            ChatResponse: Mock chat response with configured text.
+        """
         from llama_index.core.base.llms.types import ChatMessage, ChatResponse
 
         return ChatResponse(
@@ -578,9 +736,27 @@ class MockLLM(LLM):
         )
 
     async def achat(self, messages, **kwargs):
+        """Asynchronously chat with messages using mock response.
+
+        Args:
+            messages: Chat messages to respond to.
+            **kwargs: Additional chat parameters.
+
+        Returns:
+            ChatResponse: Mock chat response with configured text.
+        """
         return self.chat(messages, **kwargs)
 
     def stream_chat(self, messages, **kwargs):
+        """Stream chat with messages using mock response.
+
+        Args:
+            messages: Chat messages to respond to.
+            **kwargs: Additional chat parameters.
+
+        Yields:
+            ChatResponse: Mock streaming chat responses.
+        """
         from llama_index.core.base.llms.types import ChatMessage, ChatResponse
 
         yield ChatResponse(
@@ -588,10 +764,28 @@ class MockLLM(LLM):
         )
 
     async def astream_chat(self, messages, **kwargs):
+        """Asynchronously stream chat with messages using mock response.
+
+        Args:
+            messages: Chat messages to respond to.
+            **kwargs: Additional chat parameters.
+
+        Yields:
+            ChatResponse: Mock streaming chat responses.
+        """
         for response in self.stream_chat(messages, **kwargs):
             yield response
 
     async def astream_complete(self, prompt: str, **kwargs):
+        """Asynchronously stream complete a prompt with mock response.
+
+        Args:
+            prompt: Input prompt to complete.
+            **kwargs: Additional completion parameters.
+
+        Yields:
+            CompletionResponse: Mock streaming completion responses.
+        """
         for response in self.stream_complete(prompt, **kwargs):
             yield response
 
@@ -606,7 +800,9 @@ def mock_llm_for_routing():
 def mock_llm():
     """Proper mock LLM for property graph and other tests."""
     return MockLLM(
-        response_text="Entities: LlamaIndex (FRAMEWORK), BGE-M3 (MODEL), RTX 4090 (HARDWARE)"
+        response_text=(
+            "Entities: LlamaIndex (FRAMEWORK), BGE-M3 (MODEL), RTX 4090 (HARDWARE)"
+        )
     )
 
 
