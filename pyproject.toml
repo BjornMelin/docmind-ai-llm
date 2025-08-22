@@ -70,6 +70,12 @@ dependencies = [
     "sentence-transformers>=3.0.0",  # CrossEncoder reranking
     # DSPy for prompt optimization
     "dspy-ai>=2.5.0",
+    # FEAT-002.1 Implementation Dependencies (2025-08-22)
+    # Note: All FEAT-002.1 components use existing dependencies:
+    # - CLIP: llama-index-embeddings-huggingface (includes ClipEmbedding)
+    # - PropertyGraphIndex: llama-index-core (native PropertyGraphIndex)
+    # - DSPy: dspy-ai>=2.5.0 (progressive optimization)
+    # - vLLM FP8: vllm[flashinfer] (RTX 4090 optimization)
     "pydantic==2.11.7",
     "pydantic-settings==2.10.1",
     "vllm[flashinfer]>=0.10.1",

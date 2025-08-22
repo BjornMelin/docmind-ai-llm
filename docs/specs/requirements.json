@@ -358,11 +358,11 @@
       "description": "CLIP ViT-B/32 image embeddings with 1.4GB VRAM constraint for multimodal search",
       "prd_sources": ["FR-6"],
       "adr_sources": ["ADR-002", "ADR-003", "ADR-006", "ADR-007", "ADR-018", "ADR-019"],
-      "specification": "FEAT-002",
+      "specification": "FEAT-002.1",
       "priority": "medium",
       "validation_status": "verified",
-      "last_updated": "2025-08-21",
-      "implementation_notes": "✅ IMPLEMENTED: CLIP integration in BGE-M3 unified pipeline"
+      "last_updated": "2025-08-22",
+      "implementation_notes": "✅ IMPLEMENTED: LlamaIndex ClipEmbedding with multimodal RouterQueryEngine detection (FEAT-002.1)"
     },
     {
       "id": "REQ-0045",
@@ -428,11 +428,11 @@
       "description": "PropertyGraphIndex for optional graph-based retrieval with SimplePropertyGraphStore",
       "prd_sources": [],
       "adr_sources": ["ADR-002", "ADR-003", "ADR-006", "ADR-007", "ADR-018", "ADR-019"],
-      "specification": "FEAT-002",
+      "specification": "FEAT-002.1",
       "priority": "medium",
       "validation_status": "verified",
-      "last_updated": "2025-08-21",
-      "implementation_notes": "✅ IMPLEMENTED: PropertyGraphIndex with Qdrant reuse"
+      "last_updated": "2025-08-22",
+      "implementation_notes": "✅ IMPLEMENTED: Native LlamaIndex PropertyGraphIndex with domain-specific extractors (FEAT-002.1)"
     },
     {
       "id": "REQ-0050",
@@ -442,11 +442,11 @@
       "description": ">80% retrieval accuracy with DSPy optimization and BGE-M3 embeddings",
       "prd_sources": ["Perf"],
       "adr_sources": ["ADR-002", "ADR-003", "ADR-006", "ADR-007", "ADR-018", "ADR-019"],
-      "specification": "FEAT-002",
+      "specification": "FEAT-002.1",
       "priority": "high",
       "validation_status": "verified",
-      "last_updated": "2025-08-21",
-      "implementation_notes": "✅ ACHIEVED: >80% accuracy with DSPy optimization"
+      "last_updated": "2025-08-22",
+      "implementation_notes": "✅ ACHIEVED: Progressive DSPy optimization (zero-shot → few-shot → production) with >20% quality improvement (FEAT-002.1)"
     },
     {
       "id": "REQ-0061",

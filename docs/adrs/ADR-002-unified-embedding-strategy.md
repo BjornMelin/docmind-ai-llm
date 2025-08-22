@@ -10,7 +10,15 @@ BGE-M3 Unified Dense/Sparse Embedding with CLIP Multimodal Support
 
 ## Status
 
-Accepted
+Implemented
+
+## Implementation Date
+
+2025-08-22
+
+## Implemented In
+
+FEAT-002.1 Retrieval System Enhancements
 
 ## Description
 

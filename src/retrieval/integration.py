@@ -236,3 +236,95 @@ def is_experimental_features_enabled() -> dict[str, bool]:
             "graphrag": False,
             "dspy": False,
         }
+
+
+async def create_multimodal_index(
+    clip_embedding: Any,
+    qdrant_client: Any,
+    collection_name: str = "multimodal",
+    text_documents: list[Any] | None = None,
+    image_documents: list[Any] | None = None,
+) -> VectorStoreIndex:
+    """Create multimodal index with CLIP embeddings (REQ-0044).
+
+    Args:
+        clip_embedding: CLIP embedding model
+        qdrant_client: Qdrant client instance
+        collection_name: Collection name for multimodal vectors
+        text_documents: Optional text documents
+        image_documents: Optional image documents
+
+    Returns:
+        VectorStoreIndex configured for cross-modal search with CLIP
+    """
+    from llama_index.vector_stores.qdrant import QdrantVectorStore
+    from qdrant_client.models import Distance, VectorParams
+
+    try:
+        logger.info("Creating multimodal index with CLIP embeddings")
+
+        # Create Qdrant collection for CLIP vectors (512-dim)
+        qdrant_client.recreate_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(
+                size=512,  # CLIP ViT-B/32 dimension
+                distance=Distance.COSINE,
+            ),
+        )
+
+        # Create vector store
+        vector_store = QdrantVectorStore(
+            client=qdrant_client,
+            collection_name=collection_name,
+        )
+
+        # Set CLIP as embed model
+        Settings.embed_model = clip_embedding
+
+        # Combine documents
+        all_docs = []
+        if text_documents:
+            all_docs.extend(text_documents)
+        if image_documents:
+            all_docs.extend(image_documents)
+
+        # Create multimodal-capable index using regular VectorStoreIndex with CLIP
+        if all_docs:
+            index = VectorStoreIndex.from_documents(
+                documents=all_docs,
+                vector_store=vector_store,
+            )
+        else:
+            index = VectorStoreIndex.from_vector_store(
+                vector_store=vector_store,
+            )
+
+        logger.info(f"Created multimodal index in collection {collection_name}")
+        return index
+
+    except Exception as e:
+        logger.error(f"Failed to create multimodal index: {e}")
+        raise
+
+
+def integrate_vllm_with_llamaindex(vllm_config: dict) -> Any:
+    """Integrate vLLM with LlamaIndex settings.
+
+    Args:
+        vllm_config: vLLM configuration dictionary
+
+    Returns:
+        Configured Vllm instance for LlamaIndex
+    """
+    from llama_index.llms.vllm import Vllm
+
+    vllm_llm = Vllm(
+        model=vllm_config["model"],
+        tensor_parallel_size=1,
+        dtype="float16",
+        quantization=vllm_config.get("quantization", "fp8"),
+        kv_cache_dtype=vllm_config.get("kv_cache_dtype", "fp8_e5m2"),
+        max_new_tokens=2048,
+    )
+
+    return vllm_llm

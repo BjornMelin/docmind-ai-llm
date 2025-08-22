@@ -6,7 +6,8 @@ on query characteristics.
 
 Key features:
 - LLMSingleSelector for automatic strategy selection
-- QueryEngineTool definitions for vector/hybrid/multi_query/graph strategies
+- QueryEngineTool definitions for vector/hybrid/multi_query/graph/multimodal strategies
+- Multimodal query detection for CLIP image search
 - Fallback mechanisms for robustness
 - Integration with BGE-M3 embeddings and CrossEncoder reranking
 """
@@ -32,6 +33,7 @@ class AdaptiveRouterQueryEngine:
     - Hybrid search (BGE-M3 dense + sparse vectors with RRF fusion)
     - Multi-query search (query decomposition for complex questions)
     - Knowledge graph search (GraphRAG relationships, optional)
+    - Multimodal search (CLIP image-text cross-modal retrieval)
 
     Performance targets (RTX 4090 Laptop):
     - <50ms strategy selection overhead
@@ -45,6 +47,7 @@ class AdaptiveRouterQueryEngine:
         vector_index: Any,
         kg_index: Any | None = None,
         hybrid_retriever: Any | None = None,
+        multimodal_index: Any | None = None,
         reranker: Any | None = None,
         llm: Any | None = None,
     ):
@@ -54,12 +57,14 @@ class AdaptiveRouterQueryEngine:
             vector_index: Primary vector index for semantic search
             kg_index: Optional knowledge graph index for relationships
             hybrid_retriever: Optional hybrid retriever for dense+sparse search
+            multimodal_index: Optional multimodal index for CLIP image-text search
             reranker: Optional reranker for result quality improvement
             llm: Optional LLM for strategy selection (defaults to Settings.llm)
         """
         self.vector_index = vector_index
         self.kg_index = kg_index
         self.hybrid_retriever = hybrid_retriever
+        self.multimodal_index = multimodal_index
         self.reranker = reranker
         self.llm = llm or Settings.llm
         self._query_engine_tools = self._create_query_engine_tools()
@@ -184,8 +189,97 @@ class AdaptiveRouterQueryEngine:
                 )
             )
 
+        # 5. Multimodal Search Tool (CLIP Image-Text Cross-Modal - Optional)
+        if self.multimodal_index:
+            multimodal_engine = self.multimodal_index.as_query_engine(
+                similarity_top_k=10,
+                image_similarity_top_k=5,
+                node_postprocessors=[self.reranker] if self.reranker else [],
+                response_mode="compact",
+                streaming=True,
+            )
+            tools.append(
+                QueryEngineTool(
+                    query_engine=multimodal_engine,
+                    metadata=ToolMetadata(
+                        name="multimodal_search",
+                        description=(
+                            "Multimodal search using CLIP for cross-modal image-text "
+                            "retrieval with ViT-B/32 embeddings. Specialized for: "
+                            "image-related queries, visual content questions, diagrams "
+                            "and charts analysis, text-to-image search ('show me "
+                            "diagrams of...'), image-to-text search, visual similarity "
+                            "matching. Combines CLIP's 512-dimensional embeddings for "
+                            "both text and images with cross-modal understanding. "
+                            "Optimized for <1.4GB VRAM usage while maintaining high "
+                            "accuracy for visual and textual content correlation."
+                        ),
+                    ),
+                )
+            )
+
         logger.info(f"Created {len(tools)} query engine tools for adaptive routing")
         return tools
+
+    def _detect_multimodal_query(self, query_str: str) -> bool:
+        """Detect if a query involves multimodal/image content.
+
+        Args:
+            query_str: User query string
+
+        Returns:
+            True if query likely involves images/visual content
+        """
+        # Pattern-based detection for image-related queries
+        image_keywords = [
+            "image",
+            "picture",
+            "photo",
+            "diagram",
+            "chart",
+            "graph",
+            "figure",
+            "screenshot",
+            "visualization",
+            "visual",
+            "show me",
+            "display",
+            "view",
+            "illustration",
+            "drawing",
+            "sketch",
+            "icon",
+            "logo",
+            "banner",
+            "infographic",
+        ]
+
+        image_phrases = [
+            "show me diagrams",
+            "find images",
+            "visual representation",
+            "what does it look like",
+            "similar images",
+            "image of",
+            "picture of",
+            "screenshot of",
+            "diagram showing",
+            "chart displaying",
+            "graph of",
+        ]
+
+        query_lower = query_str.lower()
+
+        # Check for image keywords
+        if any(keyword in query_lower for keyword in image_keywords):
+            return True
+
+        # Check for image-related phrases
+        if any(phrase in query_lower for phrase in image_phrases):
+            return True
+
+        # Pattern matching for specific image requests
+        return "file:" in query_lower or ".jpg" in query_lower or ".png" in query_lower
 
     def _create_router_engine(self) -> RouterQueryEngine:
         """Create RouterQueryEngine with LLMSingleSelector.
@@ -293,28 +387,31 @@ def create_adaptive_router_engine(
     vector_index: Any,
     kg_index: Any | None = None,
     hybrid_retriever: Any | None = None,
+    multimodal_index: Any | None = None,
     reranker: Any | None = None,
     llm: Any | None = None,
 ) -> AdaptiveRouterQueryEngine:
     """Factory function for creating adaptive router engine.
 
     Factory function following library-first principle for easy instantiation
-    with comprehensive strategy support.
+    with comprehensive strategy support including multimodal CLIP search.
 
     Args:
         vector_index: Primary vector index for semantic search
         kg_index: Optional knowledge graph index for relationships
         hybrid_retriever: Optional hybrid retriever for dense+sparse search
+        multimodal_index: Optional multimodal index for CLIP image-text search
         reranker: Optional reranker for result quality improvement
         llm: Optional LLM for strategy selection (defaults to Settings.llm)
 
     Returns:
-        Configured AdaptiveRouterQueryEngine for FEAT-002
+        Configured AdaptiveRouterQueryEngine for FEAT-002.1
     """
     return AdaptiveRouterQueryEngine(
         vector_index=vector_index,
         kg_index=kg_index,
         hybrid_retriever=hybrid_retriever,
+        multimodal_index=multimodal_index,
         reranker=reranker,
         llm=llm,
     )
