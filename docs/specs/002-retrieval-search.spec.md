@@ -18,6 +18,7 @@
 ## 1. Objective
 
 **IMPLEMENTATION STATUS**: ✅ FULLY IMPLEMENTED (Commit c54883d - 2025-08-21). Complete architectural replacement successfully completed:
+
 - ✅ BGE-M3 unified dense/sparse embeddings implemented (replaced BGE-large + SPLADE++)
 - ✅ RouterQueryEngine with LLMSingleSelector for adaptive strategy selection
 - ✅ CrossEncoder reranking with BGE-reranker-v2-m3 via sentence-transformers
@@ -296,7 +297,7 @@ class SimpleReranker:
 
 ### ✅ IMPLEMENTATION COMPLETED (Commit c54883d - 2025-08-21)
 
-**STATUS: ALL REQUIREMENTS SUCCESSFULLY IMPLEMENTED**
+> **STATUS: ALL REQUIREMENTS SUCCESSFULLY IMPLEMENTED**
 
 Before implementing ANY ADR requirements, the following files MUST be completely deleted as they represent the old architecture that fundamentally conflicts with the ADR-mandated design:
 
@@ -712,6 +713,7 @@ And retrieval accuracy maintains >80% relevance
 ### ✅ Successfully Implemented Components
 
 **Core Modules:**
+
 - `src/retrieval/embeddings/bge_m3_manager.py` - BGE-M3 unified dense/sparse embeddings
 - `src/retrieval/query_engine/router_engine.py` - RouterQueryEngine with adaptive routing
 - `src/retrieval/postprocessor/cross_encoder_rerank.py` - CrossEncoder reranking
@@ -719,6 +721,7 @@ And retrieval accuracy maintains >80% relevance
 - `src/retrieval/integration.py` - Integration layer for backward compatibility
 
 **Test Suite:**
+
 - `tests/test_retrieval/test_bgem3_embeddings.py` - BGE-M3 embedding tests
 - `tests/test_retrieval/test_router_engine.py` - RouterQueryEngine tests
 - `tests/test_retrieval/test_cross_encoder_rerank.py` - Reranking tests

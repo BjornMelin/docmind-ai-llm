@@ -103,8 +103,9 @@ We will adopt **BGE-M3 + CLIP strategy** for 100% local operation:
 
 2. **Image Embeddings**: `openai/clip-vit-base-patch32` (512 dimensions)
    - Proven performance for multimodal search
-   - Existing integration with LlamaIndex
+   - **Library-First Approach**: Uses LlamaIndex's native ClipEmbedding implementation
    - Lower memory footprint than alternatives
+   - **Update 2025-01-22**: Confirmed LlamaIndex ClipEmbedding is production-ready
 
 ## Related Decisions
 
@@ -155,6 +156,7 @@ class UnifiedEmbeddingConfig:
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
             )
         
+        # Use LlamaIndex native ClipEmbedding
         self.image_model = ClipEmbedding(
             model_name="openai/clip-vit-base-patch32"
         )

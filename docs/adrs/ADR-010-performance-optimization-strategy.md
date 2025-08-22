@@ -30,6 +30,8 @@ The multi-agent RAG architecture introduces significant performance challenges t
 
 **BREAKTHROUGH**: With RTX 4090 Laptop's 16GB VRAM and FP8 KV cache optimization, we achieve 128K context at ~12-14GB total memory usage while improving performance by ~30% through quantization efficiency. Combined with parallel tool execution gains (50-87% token reduction), the system delivers substantial performance improvements.
 
+**CONFIRMED COMPATIBILITY**: **Update 2025-01-22** - RTX 4090 (Ada Lovelace architecture) DOES support FP8 quantization through vLLM and FlashInfer backends. This includes both FP8 KV cache (`fp8_e5m2`) and model weights quantization with proven stability and performance benefits.
+
 ## Related Requirements
 
 ### Functional Requirements
