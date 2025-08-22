@@ -10,19 +10,18 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from llama_index.core.schema import Document, NodeWithScore, TextNode
 
-# These imports will fail initially (TDD approach)
+# Import real implementations
+from src.retrieval.graph.property_graph_config import (
+    PropertyGraphConfig,
+)
+from src.retrieval.graph.property_graph_config import (
+    create_property_graph_index_async as create_property_graph_index,
+)
+
+# Mock create_hybrid_retriever if it doesn't exist
 try:
-    from src.retrieval.graph.property_graph_config import (
-        PropertyGraphConfig,
-        create_property_graph_index,
-        create_tech_schema,
-    )
     from src.retrieval.integration import create_hybrid_retriever
 except ImportError:
-    # Mock for initial test run
-    PropertyGraphConfig = MagicMock
-    create_property_graph_index = MagicMock
-    create_tech_schema = MagicMock
     create_hybrid_retriever = MagicMock
 
 
@@ -61,16 +60,7 @@ def tech_schema():
     }
 
 
-@pytest.fixture
-def mock_llm():
-    """Mock LLM for entity extraction."""
-    llm = MagicMock()
-    llm.complete = AsyncMock(
-        return_value=MagicMock(
-            text="Entities: LlamaIndex (FRAMEWORK), BGE-M3 (MODEL), RTX 4090 (HARDWARE)"
-        )
-    )
-    return llm
+# Note: mock_llm is now provided by conftest.py as proper LlamaIndex LLM mock
 
 
 @pytest.fixture
@@ -117,7 +107,6 @@ class TestPropertyGraphConfiguration:
         self, sample_documents, tech_schema, mock_llm
     ):
         """Test configuration of SimpleLLMPathExtractor and SchemaLLMPathExtractor."""
-        # This will fail initially - implementation needed
         from llama_index.core import Settings
 
         Settings.llm = mock_llm
@@ -132,8 +121,10 @@ class TestPropertyGraphConfiguration:
 
         # Verify extractors are configured
         assert len(index.kg_extractors) >= 2
-        assert any("SimpleLLMPathExtractor" in str(e) for e in index.kg_extractors)
-        assert any("SchemaLLMPathExtractor" in str(e) for e in index.kg_extractors)
+
+        extractor_types = [type(e).__name__ for e in index.kg_extractors]
+        assert "SimpleLLMPathExtractor" in extractor_types
+        assert "SchemaLLMPathExtractor" in extractor_types
 
         # Verify schema is applied
         assert index.schema == tech_schema
@@ -143,14 +134,18 @@ class TestPropertyGraphConfiguration:
         self, sample_documents, tech_schema, mock_llm
     ):
         """Test entity extraction from technical documentation."""
-        # This will fail initially - implementation needed
         index = await create_property_graph_index(
             documents=sample_documents,
             schema=tech_schema,
             llm=mock_llm,
         )
 
-        # Extract entities
+        # Extract entities using extended method
+        from src.retrieval.graph.property_graph_config import (
+            extend_property_graph_index,
+        )
+
+        extend_property_graph_index(index)
         entities = await index.extract_entities(sample_documents[0])
 
         # Verify expected entities found
@@ -173,14 +168,18 @@ class TestPropertyGraphConfiguration:
         self, sample_documents, tech_schema, mock_llm
     ):
         """Test relationship extraction between entities."""
-        # This will fail initially - implementation needed
         index = await create_property_graph_index(
             documents=sample_documents,
             schema=tech_schema,
             llm=mock_llm,
         )
 
-        # Extract relationships
+        # Extract relationships using extended method
+        from src.retrieval.graph.property_graph_config import (
+            extend_property_graph_index,
+        )
+
+        extend_property_graph_index(index)
         relationships = await index.extract_relationships(sample_documents[0])
 
         # Verify expected relationships

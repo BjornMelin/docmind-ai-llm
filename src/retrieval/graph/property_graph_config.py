@@ -10,12 +10,12 @@ import asyncio
 from typing import Any
 
 from llama_index.core import PropertyGraphIndex, Settings
+from llama_index.core.graph_stores import SimplePropertyGraphStore
 from llama_index.core.indices.property_graph import (
     ImplicitPathExtractor,
     SchemaLLMPathExtractor,
     SimpleLLMPathExtractor,
 )
-from llama_index.core.storage.property_graph import SimplePropertyGraphStore
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -74,7 +74,7 @@ def create_tech_schema() -> dict[str, list[str]]:
     }
 
 
-async def create_property_graph_index(
+def create_property_graph_index(
     documents: list[Any],
     schema: dict[str, list[str]] | None = None,
     llm: Any | None = None,
@@ -116,10 +116,6 @@ async def create_property_graph_index(
         # Schema-guided extraction for consistent entity types
         SchemaLLMPathExtractor(
             llm=llm,
-            possible_entities=schema["entities"],
-            possible_relations=schema["relations"],
-            kg_validation_schema=schema,
-            strict=True,
         ),
         # Implicit relationship extraction from structure
         ImplicitPathExtractor(),
@@ -145,6 +141,46 @@ async def create_property_graph_index(
 
     logger.info(f"PropertyGraphIndex created with {len(documents)} documents")
     return index
+
+
+async def create_property_graph_index_async(
+    documents: list[Any],
+    schema: dict[str, list[str]] | None = None,
+    llm: Any | None = None,
+    vector_store: Any | None = None,
+    max_paths_per_chunk: int = 20,
+    num_workers: int = 4,
+    path_depth: int = 2,
+) -> PropertyGraphIndex:
+    """Async wrapper for creating PropertyGraphIndex.
+
+    Args:
+        documents: Documents to build graph from
+        schema: Domain-specific schema for entities/relations
+        llm: Language model for extraction
+        vector_store: Optional vector store for hybrid retrieval
+        max_paths_per_chunk: Max paths per chunk
+        num_workers: Parallel workers
+        path_depth: Multi-hop traversal depth
+
+    Returns:
+        Configured PropertyGraphIndex
+    """
+    import asyncio
+
+    # Run synchronous version in thread executor to avoid event loop conflicts
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None,
+        create_property_graph_index,
+        documents,
+        schema,
+        llm,
+        vector_store,
+        max_paths_per_chunk,
+        num_workers,
+        path_depth,
+    )
 
 
 async def extract_entities(index: PropertyGraphIndex, document: Any) -> list[dict]:

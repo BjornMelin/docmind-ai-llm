@@ -19,6 +19,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import numpy as np
 import pytest
 from llama_index.core import Document
+from llama_index.core.base.llms.types import CompletionResponse, LLMMetadata
+from llama_index.core.llms.llm import LLM
 from llama_index.core.schema import NodeWithScore, TextNode
 
 # ============================================================================
@@ -105,83 +107,121 @@ def mock_sentence_transformers():
         yield mock_cross_encoder
 
 
+class MockVLLMConfig:
+    """Mock VLLMConfig class without spec issues."""
+
+    def __init__(self, **kwargs):
+        self.model_name = kwargs.get("model_name", "Qwen/Qwen3-4B-Instruct-2507-FP8")
+        self.max_model_len = kwargs.get("max_model_len", 131072)
+        self.kv_cache_dtype = kwargs.get("kv_cache_dtype", "fp8_e5m2")
+        self.quantization = kwargs.get("quantization", "fp8")
+        self.gpu_memory_utilization = kwargs.get("gpu_memory_utilization", 0.85)
+        self.attention_backend = kwargs.get("attention_backend", "FLASHINFER")
+        self.target_decode_tokens_per_sec = kwargs.get(
+            "target_decode_tokens_per_sec", 120.0
+        )
+        self.target_prefill_tokens_per_sec = kwargs.get(
+            "target_prefill_tokens_per_sec", 900.0
+        )
+        self.max_vram_gb = kwargs.get("max_vram_gb", 14.0)
+        self.fp8_memory_reduction_target = kwargs.get(
+            "fp8_memory_reduction_target", 0.5
+        )
+        self.enable_performance_validation = kwargs.get(
+            "enable_performance_validation", True
+        )
+
+
+class MockVLLMManager:
+    """Mock VLLMManager class without spec issues."""
+
+    def __init__(self, config=None):
+        self.config = config or MockVLLMConfig()
+        self.llm_instance = None
+        self.performance_metrics = {
+            "vram_usage_gb": 12.5,
+            "decode_throughput_tokens_per_sec": 150.0,
+            "prefill_throughput_tokens_per_sec": 1200.0,
+            "fp8_memory_reduction": 0.55,
+            "meets_decode_target": True,
+            "meets_prefill_target": True,
+            "meets_vram_target": True,
+            "meets_memory_reduction_target": True,
+        }
+
+    def create_vllm_instance(self):
+        self.llm_instance = MockLLM(response_text="Mock vLLM response")
+        return self.llm_instance
+
+    def validate_fp8_performance(self):
+        return self.performance_metrics
+
+    def integrate_with_llamaindex(self):
+        pass
+
+    def test_128k_context_support(self):
+        return {
+            "max_context_supported": 131072,
+            "supports_128k": True,
+            "results": [
+                {
+                    "context_size": 32768,
+                    "success": True,
+                    "latency": 1.5,
+                    "vram_usage": 10.2,
+                },
+                {
+                    "context_size": 65536,
+                    "success": True,
+                    "latency": 2.1,
+                    "vram_usage": 11.8,
+                },
+                {
+                    "context_size": 131072,
+                    "success": True,
+                    "latency": 3.2,
+                    "vram_usage": 13.5,
+                },
+            ],
+        }
+
+
 # Mock vLLM components to prevent GPU model loading
 @pytest.fixture
 def mock_vllm_components():
     """Auto-use fixture to mock vLLM components before any tests run."""
-    mock_vllm_config = MagicMock()
-    mock_vllm_config.model = "Qwen/Qwen3-4B-Instruct-2507-FP8"
-    mock_vllm_config.max_model_len = 131072
-    mock_vllm_config.kv_cache_dtype = "fp8_e5m2"
-    mock_vllm_config.quantization = "fp8"
-    mock_vllm_config.gpu_memory_utilization = 0.85
+    mock_vllm_config = MockVLLMConfig()
+    mock_vllm_manager = MockVLLMManager(config=mock_vllm_config)
 
-    # Mock VLLM manager
-    mock_vllm_manager = AsyncMock()
-    mock_vllm_manager.initialize_engine = AsyncMock()
-    mock_vllm_manager.generate = AsyncMock(return_value="Mocked LLM response")
-    mock_vllm_manager.get_generation_metrics.return_value = {
-        "context_tokens": 100000,
-        "decode_throughput": 150.0,
-        "prefill_throughput": 1200.0,
+    return {
+        "config": mock_vllm_config,
+        "manager": mock_vllm_manager,
     }
 
-    # Mock functions that would try to load real models
-    patches = {
-        "src.core.infrastructure.vllm_config.VLLMConfig": MagicMock(
-            return_value=mock_vllm_config
-        ),
-        "src.core.infrastructure.vllm_config.VLLMManager": MagicMock(
-            return_value=mock_vllm_manager
-        ),
-        "src.core.infrastructure.vllm_config.create_vllm_manager": MagicMock(
-            return_value=mock_vllm_manager
-        ),
-        "src.core.infrastructure.vllm_config.validate_fp8_requirements": MagicMock(
-            return_value={
-                "cuda_available": True,
-                "fp8_support": True,
-                "sufficient_vram": True,
-                "flashinfer_backend": True,
-            }
-        ),
-    }
 
-    with (
-        patch.multiple("builtins", **{"__import__": MagicMock()}),
-        patch.dict("sys.modules", {"vllm": MagicMock()}),
-    ):
-        for target, mock_obj in patches.items():
-            with patch(target, mock_obj):
-                yield {
-                    "config": mock_vllm_config,
-                    "manager": mock_vllm_manager,
-                    "patches": patches,
-                }
-                break  # Exit after first iteration
+class MockPropertyGraphIndex:
+    """Mock PropertyGraphIndex with proper method signatures."""
 
+    def __init__(self, documents=None, kg_extractors=None, **kwargs):
+        self.documents = documents or []
+        self.kg_extractors = kg_extractors or []
+        self.schema = kwargs.get("schema", {})
+        self.path_depth = kwargs.get("path_depth", 2)
 
-# Mock PropertyGraph components
-@pytest.fixture
-def mock_property_graph_components():
-    """Auto-use fixture to mock PropertyGraph components before any tests run."""
-    # Mock PropertyGraphIndex
-    mock_property_graph = AsyncMock()
-    mock_property_graph.build_graph = AsyncMock()
-    mock_property_graph.extract_entities = AsyncMock(
-        return_value=[
+    async def extract_entities(self, document):
+        return [
             {"text": "LlamaIndex", "type": "FRAMEWORK", "confidence": 0.95},
-            {"text": "BGE-M3", "type": "MODEL", "confidence": 0.90},
-            {"text": "RTX 4090", "type": "HARDWARE", "confidence": 0.88},
+            {"text": "BGE-M3", "type": "MODEL", "confidence": 0.92},
+            {"text": "RTX 4090", "type": "HARDWARE", "confidence": 0.98},
         ]
-    )
-    mock_property_graph.extract_relationships = AsyncMock(
-        return_value=[
+
+    async def extract_relationships(self, document):
+        return [
             {
-                "source": "DocMind AI",
-                "target": "LlamaIndex",
+                "source": "LlamaIndex",
+                "target": "BGE-M3",
                 "type": "USES",
-                "confidence": 0.92,
+                "confidence": 0.88,
             },
             {
                 "source": "LlamaIndex",
@@ -190,53 +230,57 @@ def mock_property_graph_components():
                 "confidence": 0.85,
             },
         ]
-    )
-    mock_property_graph.traverse_graph = AsyncMock(
-        return_value=[["LlamaIndex", "USES", "BGE-M3"]]
-    )
-    mock_property_graph.as_retriever.return_value = MagicMock()
-    mock_property_graph.as_query_engine.return_value = MagicMock()
 
-    # Mock PropertyGraphConfig
-    mock_config = MagicMock()
-    mock_config.entities = [
-        "FRAMEWORK",
-        "LIBRARY",
-        "MODEL",
-        "HARDWARE",
-        "PERSON",
-        "ORG",
-    ]
-    mock_config.relations = [
-        "USES",
-        "OPTIMIZED_FOR",
-        "PART_OF",
-        "CREATED_BY",
-        "SUPPORTS",
-    ]
-    mock_config.path_depth = 2
-    mock_config.strict_schema = True
+    async def traverse_graph(self, query, max_depth=2, timeout=3.0):
+        # Mock graph traversal results
+        mock_node = TextNode(text="Graph traversal result", id_="graph_node_1")
+        return [NodeWithScore(node=mock_node, score=0.9)]
 
-    # Apply patches defensively - only patch what exists
-    try:
-        with patch(
-            "src.retrieval.graph.property_graph_config.PropertyGraphConfig",
-            MagicMock(return_value=mock_config),
-        ):
-            pass
-    except (ImportError, AttributeError, ModuleNotFoundError):
-        pass
+    def as_retriever(self, **kwargs):
+        mock_retriever = MagicMock()
+        mock_node = TextNode(text="Graph retrieval result", id_="graph_retriever_1")
+        mock_retriever.retrieve.return_value = [
+            NodeWithScore(node=mock_node, score=0.85)
+        ]
+        return mock_retriever
 
-    try:
-        with patch(
-            "src.retrieval.graph.property_graph_config.create_property_graph_index",
-            AsyncMock(return_value=mock_property_graph),
-        ):
-            pass
-    except (ImportError, AttributeError, ModuleNotFoundError):
-        pass
+    def as_query_engine(self, **kwargs):
+        return MagicMock()
 
-    return {"property_graph": mock_property_graph, "config": mock_config}
+
+# Mock PropertyGraph components
+@pytest.fixture
+def mock_property_graph_components():
+    """Auto-use fixture to mock PropertyGraph components before any tests run."""
+    return {
+        "property_graph": MockPropertyGraphIndex(),
+        "config": MockVLLMConfig(),
+    }
+
+
+class MockDSPyPrediction:
+    """Mock DSPy prediction with proper attributes."""
+
+    def __init__(self, answer="Mock DSPy answer", **kwargs):
+        self.answer = answer
+        self.strategy = kwargs.get("strategy", "factual")
+        self.search_query = kwargs.get("search_query", "mock query")
+        # Add any other attributes that tests might expect
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
+class MockDSPyExample:
+    """Mock DSPy Example with proper interface."""
+
+    def __init__(self, question="", answer="", **kwargs):
+        self.question = question
+        self.answer = answer
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    def with_inputs(self, *inputs):
+        return self
 
 
 # Mock DSPy components to prevent model loading
@@ -253,21 +297,36 @@ def mock_dspy_components():
     dspy_mock.LM = MagicMock()
 
     # Mock DSPy Example
-    example_mock = MagicMock()
-    example_mock.with_inputs = MagicMock(return_value=example_mock)
-    dspy_mock.Example = MagicMock(return_value=example_mock)
+    dspy_mock.Example = MockDSPyExample
+
+    # Mock DSPy prediction
+    dspy_mock.Prediction = MockDSPyPrediction
 
     # Mock DSPy evaluate functions
     dspy_mock.evaluate = MagicMock()
     dspy_mock.evaluate.answer_exact_match = MagicMock()
 
-    # Mock DSPy optimization classes
-    mock_optimizer = AsyncMock()
-    mock_optimized_model = AsyncMock()
-    mock_optimized_model.forward = AsyncMock(
-        return_value=MagicMock(answer="Optimized response")
+    # Mock DSPy optimization classes with proper interfaces
+    mock_optimizer = MagicMock()
+    mock_optimized_model = MagicMock()
+
+    def mock_forward(question=None, **kwargs):
+        return MockDSPyPrediction(
+            answer="Optimized DSPy response",
+            strategy="factual",
+            search_query=question or "default query",
+        )
+
+    mock_optimized_model.side_effect = mock_forward
+    mock_optimizer.compile.return_value = mock_optimized_model
+
+    # Mock DSPy teleprompt modules
+    dspy_mock.teleprompt = MagicMock()
+    dspy_mock.teleprompt.MIPROv2 = MagicMock(return_value=mock_optimizer)
+    dspy_mock.teleprompt.BootstrapFewShot = MagicMock(return_value=mock_optimizer)
+    dspy_mock.teleprompt.BootstrapFewShotWithRandomSearch = MagicMock(
+        return_value=mock_optimizer
     )
-    mock_optimizer.compile = AsyncMock(return_value=mock_optimized_model)
 
     with patch.dict("sys.modules", {"dspy": dspy_mock}):
         yield dspy_mock
@@ -484,20 +543,71 @@ def mock_hybrid_retriever():
     return mock_retriever
 
 
+class MockLLM(LLM):
+    """Proper LlamaIndex LLM mock that inherits from LLM base class."""
+
+    response_text: str = "Mock LLM response"
+
+    def __init__(self, response_text: str = "Mock LLM response", **kwargs):
+        super().__init__(**kwargs)
+        self.response_text = response_text
+
+    @property
+    def metadata(self) -> LLMMetadata:
+        return LLMMetadata(
+            context_window=128000, num_output=2048, model_name="mock-llm"
+        )
+
+    def complete(self, prompt: str, **kwargs) -> CompletionResponse:
+        return CompletionResponse(
+            text=self.response_text, additional_kwargs={"tool_choice": "hybrid_search"}
+        )
+
+    async def acomplete(self, prompt: str, **kwargs) -> CompletionResponse:
+        return self.complete(prompt, **kwargs)
+
+    def stream_complete(self, prompt: str, **kwargs):
+        # Return a mock stream
+        yield CompletionResponse(text=self.response_text)
+
+    def chat(self, messages, **kwargs):
+        from llama_index.core.base.llms.types import ChatMessage, ChatResponse
+
+        return ChatResponse(
+            message=ChatMessage(role="assistant", content=self.response_text)
+        )
+
+    async def achat(self, messages, **kwargs):
+        return self.chat(messages, **kwargs)
+
+    def stream_chat(self, messages, **kwargs):
+        from llama_index.core.base.llms.types import ChatMessage, ChatResponse
+
+        yield ChatResponse(
+            message=ChatMessage(role="assistant", content=self.response_text)
+        )
+
+    async def astream_chat(self, messages, **kwargs):
+        for response in self.stream_chat(messages, **kwargs):
+            yield response
+
+    async def astream_complete(self, prompt: str, **kwargs):
+        for response in self.stream_complete(prompt, **kwargs):
+            yield response
+
+
 @pytest.fixture
 def mock_llm_for_routing():
     """Mock LLM specifically for RouterQueryEngine selection."""
-    mock_llm = MagicMock()
+    return MockLLM(response_text="hybrid_search")
 
-    # Mock strategy selection responses
-    mock_llm.complete.return_value = MagicMock(
-        text="hybrid_search",  # Default to hybrid strategy
-        additional_kwargs={"tool_choice": "hybrid_search"},
+
+@pytest.fixture
+def mock_llm():
+    """Proper mock LLM for property graph and other tests."""
+    return MockLLM(
+        response_text="Entities: LlamaIndex (FRAMEWORK), BGE-M3 (MODEL), RTX 4090 (HARDWARE)"
     )
-
-    mock_llm.predict.return_value = "hybrid_search"
-
-    return mock_llm
 
 
 @pytest.fixture
@@ -653,3 +763,15 @@ def test_config_reranker():
         "max_length": 512,
         "normalize_scores": True,
     }
+
+
+@pytest.fixture
+def mock_vllm_config():
+    """Mock VLLMConfig for FP8 tests."""
+    return MockVLLMConfig()
+
+
+@pytest.fixture
+def mock_vllm_manager():
+    """Mock VLLMManager for FP8 tests."""
+    return MockVLLMManager()
