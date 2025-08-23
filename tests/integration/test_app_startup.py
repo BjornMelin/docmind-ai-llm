@@ -88,7 +88,7 @@ class TestAppStartup:
             sys.path.insert(0, src_path)
 
         components_to_test = [
-            ("src.agents.agent_factory", "get_agent_system"),
+            ("src.agents.coordinator", "create_multi_agent_coordinator"),
             ("src.utils.document", "load_documents_llama"),
             ("src.retrieval.integration", "create_index_async"),
             ("src.utils.core", "detect_hardware"),
@@ -204,13 +204,16 @@ class TestAsyncFunctionality:
             sys.path.insert(0, src_path)
 
         try:
-            from src.agents.agent_factory import process_query_with_agent_system
+            from src.agents.coordinator import MultiAgentCoordinator
 
-            # Test that agent function exists and is callable
-            assert callable(process_query_with_agent_system)
+            # Test that coordinator class exists and is callable
+            assert callable(MultiAgentCoordinator)
 
-            # Note: The function is synchronous by design for the current implementation
-            # This is correct behavior after dependency cleanup
+            # Test that process_query method exists
+            assert hasattr(MultiAgentCoordinator, "process_query")
+
+            # Note: The MultiAgentCoordinator uses async processing
+            # for enhanced performance
 
         except ImportError as e:
             pytest.skip(f"Agent functionality failed (missing deps): {e}")

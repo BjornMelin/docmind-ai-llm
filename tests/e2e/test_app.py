@@ -109,20 +109,22 @@ def test_app_upload_and_analyze(mock_create_index, mock_load_docs, app_test, tmp
     assert not app.exception
 
 
-@patch("src.agents.agent_factory.get_agent_system")
-@patch("src.agents.agent_factory.process_query_with_agent_system")
-def test_app_chat_functionality(mock_process_query, mock_get_agent, app_test):
-    """Test chat functionality with ReActAgent.
+@patch("src.agents.coordinator.create_multi_agent_coordinator")
+@patch.object("src.agents.coordinator.MultiAgentCoordinator", "process_query")
+def test_app_chat_functionality(mock_process_query, mock_create_coordinator, app_test):
+    """Test chat functionality with MultiAgentCoordinator.
 
     Args:
         mock_process_query: Mock query processing.
-        mock_get_agent: Mock agent system.
+        mock_create_coordinator: Mock coordinator creation.
         app_test: Streamlit app test fixture.
     """
     # Setup mocks
-    mock_agent = MagicMock()
-    mock_get_agent.return_value = (mock_agent, "single")
-    mock_process_query.return_value = "This is a test response."
+    mock_coordinator = MagicMock()
+    mock_create_coordinator.return_value = mock_coordinator
+    mock_response = MagicMock()
+    mock_response.content = "This is a test response."
+    mock_process_query.return_value = mock_response
 
     app = app_test.run()
 
@@ -173,11 +175,11 @@ def test_app_session_persistence(app_test):
 @patch("ollama.list", return_value={"models": [{"name": "llama3:8b"}]})
 @patch("src.utils.document.load_documents_llama")
 @patch("src.retrieval.integration.create_index_async")
-@patch("src.agents.agent_factory.get_agent_system")
-@patch("src.agents.agent_factory.process_query_with_agent_system")
+@patch("src.agents.coordinator.create_multi_agent_coordinator")
+@patch.object("src.agents.coordinator.MultiAgentCoordinator", "process_query")
 def test_end_to_end_workflow(
     mock_process_query,
-    mock_get_agent,
+    mock_create_coordinator,
     mock_create_index,
     mock_load_docs,
     mock_ollama_list,
@@ -201,7 +203,7 @@ def test_end_to_end_workflow(
     mock_load_docs.return_value = [MagicMock()]
     mock_create_index.return_value = MagicMock()
     mock_agent = MagicMock()
-    mock_get_agent.return_value = (mock_agent, "single")
+    mock_create_coordinator.return_value = (mock_agent, "single")
     mock_process_query.return_value = "Document analysis completed successfully."
 
     # Run the app

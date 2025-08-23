@@ -38,7 +38,7 @@ from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.postprocessor.colbert_rerank import ColbertRerank
 from loguru import logger
 
-from src.models.core import settings
+from src.config.settings import settings
 
 
 class ToolFactory:

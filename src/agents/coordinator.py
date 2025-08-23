@@ -201,11 +201,24 @@ class MultiAgentCoordinator:
                 model_path=self.model_path, max_context_length=self.max_context_length
             )
 
-            # For now, use a mock LLM until vLLM is properly integrated
-            from unittest.mock import Mock
+            # Initialize LLM from vLLM manager (production-ready)
+            if (
+                self.vllm_manager
+                and hasattr(self.vllm_manager, "llm")
+                and self.vllm_manager.llm
+            ):
+                # Use the properly initialized vLLM engine
+                from llama_index.llms.vllm import Vllm
 
-            self.llm = Mock()
-            self.llm.complete = lambda prompt: Mock(text="Mock response")
+                self.llm = Vllm(model=self.vllm_manager.llm)
+                logger.info("LLM initialized from vLLM manager")
+            else:
+                # Raise error if vLLM manager not properly initialized
+                raise RuntimeError(
+                    "vLLM manager not properly initialized. "
+                    "Please ensure vLLM is configured before creating "
+                    "MultiAgentCoordinator."
+                )
 
             # Initialize DSPy integration (ADR-018)
             if is_dspy_available():

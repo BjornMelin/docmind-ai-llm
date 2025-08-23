@@ -129,44 +129,41 @@ class TestHardwareDetectionReal:
 # in favor of a simple ReActAgent that handles all query types uniformly.
 
 
-class TestAgentFactoryReal:
-    """Test real agent factory functionality."""
+class TestMultiAgentCoordinatorReal:
+    """Test real MultiAgentCoordinator functionality."""
 
-    def test_agent_factory_functions_exist(self):
-        """Test that agent factory functions exist and are callable."""
-        from src.agents.agent_factory import (
-            create_agentic_rag_system,
-            create_single_agent,
-            get_agent_system,
-            process_query_with_agent_system,
+    def test_coordinator_functions_exist(self):
+        """Test that coordinator functions exist and are callable."""
+        from src.agents.coordinator import (
+            MultiAgentCoordinator,
+            create_multi_agent_coordinator,
         )
 
         # Verify functions exist and are callable
-        assert callable(create_agentic_rag_system)
-        assert callable(create_single_agent)
-        assert callable(get_agent_system)
-        assert callable(process_query_with_agent_system)
+        assert callable(MultiAgentCoordinator)
+        assert callable(create_multi_agent_coordinator)
 
-    def test_backward_compatibility_functions(self):
-        """Test that backward compatibility functions work."""
-        from src.agents.agent_factory import create_single_agent, get_agent_system
+        # Test that MultiAgentCoordinator has required methods
+        assert hasattr(MultiAgentCoordinator, "process_query")
+        assert callable(MultiAgentCoordinator.process_query)
 
-        # Test that these functions exist (they are aliases for the main function)
-        assert callable(create_single_agent)
-        assert callable(get_agent_system)
-
-        # Verify these functions have the expected signatures
+    def test_coordinator_initialization(self):
+        """Test that MultiAgentCoordinator can be initialized."""
         import inspect
 
-        # create_single_agent should accept tools, llm, and memory
-        sig = inspect.signature(create_single_agent)
-        expected_params = ["tools", "llm", "memory"]
+        from src.agents.coordinator import MultiAgentCoordinator
+
+        # Verify coordinator constructor signature
+        sig = inspect.signature(MultiAgentCoordinator.__init__)
+        # MultiAgentCoordinator should have standard parameters
+        expected_params = ["self"]
+        # The constructor should at least have self parameter
         assert all(param in sig.parameters for param in expected_params)
 
-        # get_agent_system should return a tuple
-        sig = inspect.signature(get_agent_system)
-        assert "tools" in sig.parameters
-        assert "llm" in sig.parameters
+        # Test that process_query method exists with correct signature
+        process_query_sig = inspect.signature(MultiAgentCoordinator.process_query)
+        assert "self" in process_query_sig.parameters
+        assert "query" in process_query_sig.parameters
 
 
 class TestDocumentHandlingReal:

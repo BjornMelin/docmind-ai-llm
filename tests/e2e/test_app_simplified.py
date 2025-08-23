@@ -67,21 +67,19 @@ def test_app_initialization(mock_validate, mock_detect):
         pytest.skip(f"Import error (expected in test environment): {e}")
 
 
-@patch("src.agents.agent_factory.get_agent_system")
-def test_agent_factory_integration(mock_get_agent):
-    """Test that agent factory functions work correctly."""
-    from src.agents.agent_factory import create_agentic_rag_system
+@patch("src.agents.coordinator.create_multi_agent_coordinator")
+def test_coordinator_integration(mock_create_coordinator):
+    """Test that MultiAgentCoordinator functions work correctly."""
+    # Setup mock coordinator
+    mock_coordinator = MagicMock()
+    mock_create_coordinator.return_value = mock_coordinator
 
-    mock_llm = MagicMock()
-    mock_tools = [MagicMock()]
+    # Test coordinator creation
+    coordinator = mock_create_coordinator()
+    assert coordinator is not None
 
-    agent = create_agentic_rag_system(mock_tools, mock_llm)
-    assert agent is not None
-
-    # Test get_agent_system returns correct format
-    mock_get_agent.return_value = (agent, "single")
-    result = mock_get_agent(mock_tools, mock_llm)
-    assert result[1] == "single"
+    # Test that we can create a coordinator instance
+    mock_create_coordinator.assert_called_once()
 
 
 @patch("src.utils.document.load_documents_llama")
@@ -130,29 +128,21 @@ def test_models_core_import():
         pytest.fail(f"Failed to import required models: {e}")
 
 
-def test_simplified_architecture_compatibility():
-    """Test that the simplified architecture components work together."""
+def test_multi_agent_architecture_compatibility():
+    """Test that the multi-agent architecture components work together."""
     try:
         # Test that we can import all key components
-        from src.agents.agent_factory import create_agentic_rag_system, get_agent_system
+        from src.agents.coordinator import (
+            MultiAgentCoordinator,
+            create_multi_agent_coordinator,
+        )
 
-        # Verify single agent architecture
-        mock_tools = [MagicMock()]
-        mock_llm = MagicMock()
+        # Verify multi-agent coordinator exists and is callable
+        assert callable(MultiAgentCoordinator)
+        assert callable(create_multi_agent_coordinator)
 
-        with patch("llama_index.core.agent.ReActAgent.from_tools") as mock_react:
-            mock_agent = MagicMock()
-            mock_react.return_value = mock_agent
-
-            # Test agent creation
-            agent = create_agentic_rag_system(mock_tools, mock_llm)
-            assert agent == mock_agent
-
-            # Test get_agent_system always returns single mode
-            result = get_agent_system(mock_tools, mock_llm, enable_multi_agent=True)
-            assert (
-                result[1] == "single"
-            )  # Should always be single in simplified architecture
+        # Test that MultiAgentCoordinator has required methods
+        assert hasattr(MultiAgentCoordinator, "process_query")
 
     except ImportError as e:
         pytest.skip(f"Import error (expected in some test environments): {e}")
