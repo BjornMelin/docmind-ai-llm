@@ -157,6 +157,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",  # assert usage (standard practice in pytest tests)
+    "S311",  # pseudo-random generators (acceptable for test timing simulation)
 ]
 
 [tool.ruff.lint.isort]
