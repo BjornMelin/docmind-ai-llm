@@ -256,7 +256,220 @@ This guide helps resolve common issues when using DocMind AI.
   "
   ```
 
-### 12. vLLM Backend Troubleshooting
+### 12. GPU Resource Management and Error Handling
+
+DocMind AI includes comprehensive GPU resource management to prevent crashes and memory leaks. Here's how to troubleshoot resource-related issues:
+
+#### GPU Memory and Resource Issues
+
+**Symptoms**: Application crashes with CUDA errors, memory leaks, GPU out of memory errors, or poor performance over time.
+
+**Solutions**:
+
+1. **Check Resource Management Status**:
+   ```bash
+   # Verify resource management utilities are available
+   python -c "
+   from src.utils.resource_management import gpu_memory_context, get_safe_gpu_info
+   print('Resource management available: True')
+   gpu_info = get_safe_gpu_info()
+   print(f'GPU Info: {gpu_info}')
+   "
+   ```
+
+2. **Use GPU Memory Context Managers**:
+   - Always wrap GPU operations in context managers to prevent memory leaks
+   - The system will automatically clean up GPU memory on success or failure
+   ```bash
+   # Example of proper GPU operation
+   python -c "
+   from src.utils.resource_management import gpu_memory_context
+   with gpu_memory_context():
+       # Your GPU operations here
+       print('GPU operation completed with automatic cleanup')
+   "
+   ```
+
+3. **Monitor GPU Memory Usage**:
+   ```bash
+   # Check current GPU memory usage safely
+   python -c "
+   from src.utils.resource_management import get_safe_vram_usage
+   vram = get_safe_vram_usage()
+   print(f'Current VRAM usage: {vram:.2f} GB')
+   "
+   
+   # Continuous monitoring
+   nvidia-smi --query-gpu=memory.used,memory.total --format=csv --loop=1
+   ```
+
+#### CUDA Error Handling
+
+**Symptoms**: RuntimeError with CUDA messages, GPU operations failing, or application crashes during GPU operations.
+
+**Solutions**:
+
+1. **Enable Comprehensive Error Handling**:
+   ```bash
+   # Check if CUDA error handling is working
+   python -c "
+   from src.utils.resource_management import safe_cuda_operation
+   import torch
+   
+   # This will handle errors gracefully
+   result = safe_cuda_operation(
+       lambda: torch.cuda.is_available(),
+       'CUDA availability check',
+       default_return=False
+   )
+   print(f'CUDA available: {result}')
+   "
+   ```
+
+2. **Diagnose CUDA Issues**:
+   ```bash
+   # Check CUDA installation and compatibility
+   python -c "
+   import torch
+   print(f'PyTorch version: {torch.__version__}')
+   print(f'CUDA available: {torch.cuda.is_available()}')
+   if torch.cuda.is_available():
+       print(f'CUDA version: {torch.version.cuda}')
+       print(f'GPU name: {torch.cuda.get_device_name(0)}')
+       print(f'GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB')
+   "
+   ```
+
+3. **Review CUDA Error Logs**:
+   - Check application logs for CUDA error patterns:
+   ```bash
+   # Look for CUDA errors in logs
+   grep -i "cuda.*error" logs/app.log
+   grep -i "runtime.*error" logs/app.log
+   grep -i "gpu.*error" logs/app.log
+   ```
+
+#### Model Loading and Lifecycle Issues
+
+**Symptoms**: Models not loading properly, memory leaks with model operations, or models not being cleaned up.
+
+**Solutions**:
+
+1. **Use Model Context Managers**:
+   ```bash
+   # Example of proper model lifecycle management
+   python -c "
+   from src.utils.resource_management import model_context
+   import asyncio
+   
+   async def test_model_context():
+       async def create_test_model():
+           # Your model creation code here
+           return {'model': 'test', 'loaded': True}
+       
+       async with model_context(create_test_model) as model:
+           print(f'Model loaded: {model}')
+           # Model will be automatically cleaned up
+       
+       print('Model context test completed')
+   
+   asyncio.run(test_model_context())
+   "
+   ```
+
+2. **Check Model Memory Usage**:
+   ```bash
+   # Monitor memory usage during model operations
+   python -c "
+   from src.utils.resource_management import get_safe_gpu_info
+   info = get_safe_gpu_info()
+   print(f'GPU memory info: {info}')
+   "
+   ```
+
+#### Hardware Detection Issues
+
+**Symptoms**: Hardware not detected properly, wrong GPU information, or fallback to suboptimal configurations.
+
+**Solutions**:
+
+1. **Test Hardware Detection**:
+   ```bash
+   # Safe hardware detection that won't crash
+   python -c "
+   from src.core.infrastructure.hardware_utils import detect_hardware
+   hardware = detect_hardware()
+   print(f'Detected hardware: {hardware}')
+   "
+   ```
+
+2. **Check Hardware Compatibility**:
+   ```bash
+   # Verify GPU compute capability for FP8 support
+   python -c "
+   from src.utils.resource_management import get_safe_gpu_info
+   gpu_info = get_safe_gpu_info()
+   if 'compute_capability' in gpu_info:
+       compute_cap = gpu_info['compute_capability']
+       fp8_support = compute_cap[0] >= 8 if compute_cap else False
+       print(f'FP8 support: {fp8_support}')
+   else:
+       print('GPU info not available')
+   "
+   ```
+
+#### Performance Degradation Over Time
+
+**Symptoms**: Application starts fast but slows down over time, increasing memory usage, or eventual crashes.
+
+**Solutions**:
+
+1. **Enable Automatic Resource Cleanup**:
+   - Ensure all GPU operations use context managers
+   - The system will prevent memory leaks automatically
+
+2. **Monitor Resource Usage**:
+   ```bash
+   # Run resource management demo to verify cleanup
+   python demo_resource_management.py
+   
+   # Check for memory leaks in logs
+   grep -i "memory.*leak" logs/app.log
+   grep -i "cleanup.*failed" logs/app.log
+   ```
+
+3. **Clear GPU Cache if Needed**:
+   ```bash
+   # Manual GPU cache clearing (last resort)
+   python -c "
+   import torch
+   if torch.cuda.is_available():
+       torch.cuda.empty_cache()
+       print('GPU cache cleared')
+   else:
+       print('CUDA not available')
+   "
+   ```
+
+#### Resource Management Configuration
+
+**Environment Variables for Resource Management**:
+```bash
+# Add to your .env file for optimal resource management
+DOCMIND_ENABLE_GPU_ACCELERATION=true
+DOCMIND_AUTO_GPU_CLEANUP=true
+DOCMIND_SAFE_FALLBACKS=true
+
+# GPU memory management
+PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+TOKENIZERS_PARALLELISM=false
+
+# Error handling verbosity
+DOCMIND_LOG_GPU_ERRORS=true
+DOCMIND_LOG_LEVEL=INFO  # or DEBUG for more details
+```
+
+### 13. vLLM Backend Troubleshooting
 
 #### vLLM Server Connection Issues
 - **Symptoms**: "Connection refused" to vLLM server or server won't start.
