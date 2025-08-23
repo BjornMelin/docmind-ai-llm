@@ -123,7 +123,7 @@ class MultiAgentState(MessagesState):
 
 
 class MultiAgentCoordinator:
-    """ADR-compliant coordinator for multi-agent document analysis system.
+    """Coordinator for multi-agent document analysis system.
 
     Orchestrates five specialized agents using LangGraph supervisor pattern with
     modern optimization parameters as specified in ADR-011:

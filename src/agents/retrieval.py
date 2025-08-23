@@ -101,8 +101,8 @@ class RetrievalAgent:
         strategy: str = "hybrid",
         use_dspy: bool = True,
         use_graphrag: bool = False,
-        context: ChatMemoryBuffer | None = None,
-        **kwargs,
+        _context: ChatMemoryBuffer | None = None,
+        **_kwargs,
     ) -> RetrievalResult:
         """Execute document retrieval using specified strategy.
 
@@ -115,8 +115,8 @@ class RetrievalAgent:
             strategy: Retrieval strategy ("vector", "hybrid", "graphrag")
             use_dspy: Whether to use DSPy query optimization
             use_graphrag: Whether to use GraphRAG for relationships
-            context: Optional conversation context
-            **kwargs: Additional parameters for retrieval
+            _context: Optional conversation context (not yet implemented)
+            **_kwargs: Additional parameters for retrieval (not yet implemented)
 
         Returns:
             RetrievalResult with documents and comprehensive metadata
@@ -427,7 +427,7 @@ class RetrievalAgent:
 
         return RetrievalResult(
             documents=[],
-            strategy_used="failed",
+            strategy_used=f"{strategy}_failed",
             query_original=query,
             query_optimized=query,
             document_count=0,

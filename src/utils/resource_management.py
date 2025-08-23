@@ -47,9 +47,9 @@ def gpu_memory_context() -> Generator[None, None, None]:
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
         except RuntimeError as e:
-            logger.warning(f"GPU cleanup failed during context exit: {e}")
+            logger.warning("GPU cleanup failed during context exit: %s", e)
         except Exception as e:
-            logger.error(f"Unexpected error during GPU cleanup: {e}")
+            logger.error("Unexpected error during GPU cleanup: %s", e)
         finally:
             # Always run garbage collection
             gc.collect()
@@ -83,9 +83,9 @@ async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
         except RuntimeError as e:
-            logger.warning(f"GPU cleanup failed during async context exit: {e}")
+            logger.warning("GPU cleanup failed during async context exit: %s", e)
         except Exception as e:
-            logger.error(f"Unexpected error during async GPU cleanup: {e}")
+            logger.error("Unexpected error during async GPU cleanup: %s", e)
         finally:
             # Always run garbage collection
             gc.collect()

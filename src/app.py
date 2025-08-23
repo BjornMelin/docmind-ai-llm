@@ -74,9 +74,12 @@ def create_tools_from_index(index: Any) -> dict[str, Any]:
 
 
 def get_agent_system(
-    tools: Any, llm: Any, memory: Any
+    _tools: Any, _llm: Any, _memory: Any
 ) -> tuple[MultiAgentCoordinator, str]:
-    """Get agent system using MultiAgentCoordinator."""
+    """Get agent system using MultiAgentCoordinator.
+
+    Note: Parameters are currently not used but kept for future compatibility.
+    """
     coordinator = MultiAgentCoordinator()
     return coordinator, "multi_agent"
 
@@ -314,9 +317,9 @@ async def run_analysis() -> None:
 
                 # Get appropriate agent system
                 agent_system, mode = get_agent_system(
-                    tools=agent_tools,
-                    llm=llm,
-                    memory=st.session_state.memory,
+                    _tools=agent_tools,
+                    _llm=llm,
+                    _memory=st.session_state.memory,
                 )
 
                 # Process analysis with agent system
@@ -362,9 +365,9 @@ if user_input:
                 tools = create_tools_from_index(st.session_state.index)
                 st.session_state.agent_system, st.session_state.agent_mode = (
                     get_agent_system(
-                        tools=tools,
-                        llm=llm,
-                        memory=st.session_state.memory,
+                        _tools=tools,
+                        _llm=llm,
+                        _memory=st.session_state.memory,
                     )
                 )
 

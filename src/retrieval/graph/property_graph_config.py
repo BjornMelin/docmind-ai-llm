@@ -166,8 +166,6 @@ async def create_property_graph_index_async(
     Returns:
         Configured PropertyGraphIndex
     """
-    import asyncio
-
     # Run synchronous version in thread executor to avoid event loop conflicts
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
@@ -318,8 +316,6 @@ async def traverse_graph(
     )
 
     # Perform retrieval
-    import asyncio
-
     try:
         nodes = await asyncio.wait_for(
             asyncio.to_thread(retriever.retrieve, query),
