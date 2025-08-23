@@ -314,21 +314,30 @@ class TestEmbeddingIntegrationExample:
 
         vector_store = SimpleVectorStore()
 
+        exception_raised = None
+        index = None
+
         try:
             # This should not crash the integration
             index = VectorStoreIndex.from_documents(
                 invalid_docs,
                 storage_context=StorageContext.from_defaults(vector_store=vector_store),
             )
+        except Exception as e:
+            exception_raised = e
+
+        # Validate behavior outside try-except block
+        if exception_raised is None:
             # If successful, validate it handles edge cases
             assert index is not None, (
                 "Index creation should succeed even with edge cases"
             )
-        except Exception as e:
+        else:
             # If it fails, it should fail gracefully with clear error
-            assert "text" in str(e).lower() or "document" in str(e).lower(), (
-                f"Error should be descriptive about document issues: {e}"
-            )
+            assert (
+                "text" in str(exception_raised).lower()
+                or "document" in str(exception_raised).lower()
+            ), f"Error should be descriptive about document issues: {exception_raised}"
 
         # Test mock Qdrant client error scenarios
         original_search = mock_qdrant_client.search
@@ -340,7 +349,7 @@ class TestEmbeddingIntegrationExample:
         try:
             # This simulates network failure to Qdrant
             mock_qdrant_client.search(query_vector=[0.1] * 384, limit=5)
-            assert False, "Should have raised ConnectionError"
+            pytest.fail("Should have raised ConnectionError")
         except ConnectionError:
             # Expected behavior - external service failure
             pass

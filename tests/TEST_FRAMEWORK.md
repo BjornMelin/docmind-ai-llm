@@ -4,9 +4,10 @@
 
 This test framework implements ML testing best practices with a tiered strategy based on AI research recommendations. It uses proper LlamaIndex mocking components and lightweight models for efficient, reliable testing.
 
-## Testing Strategy (Pyramid)
+## Testing Strategy (Two-Tier + Optional GPU Smoke Tests)
 
 ### 🔹 Unit Tests (Fast, Mocked)
+
 - **Speed**: <5 seconds each
 - **Dependencies**: None (CPU-only)
 - **Components**: `MockEmbedding`, `MockLLM` from LlamaIndex
@@ -23,6 +24,7 @@ def test_embedding_logic(mock_settings):
 ```
 
 ### 🔸 Integration Tests (Moderate Speed, Lightweight)
+
 - **Speed**: 10-30 seconds each
 - **Dependencies**: Lightweight models (all-MiniLM-L6-v2: 80MB)
 - **Components**: Real model integration, mocked external services
@@ -38,19 +40,20 @@ def test_real_embedding_pipeline(integration_settings, lightweight_embedding_mod
         assert embeddings.shape[1] == 384  # MiniLM dimensions
 ```
 
-### 🔶 System Tests (Full Models, GPU)
-- **Speed**: 60+ seconds each  
-- **Dependencies**: Production models, GPU, external services
-- **Components**: Full pipeline with real models
-- **Purpose**: End-to-end validation, performance benchmarks
-- **Run with**: `pytest -m system`
+### 🔶 GPU Smoke Tests (Optional Manual Validation)
 
-```python
-@pytest.mark.system
-@pytest.mark.requires_gpu
-def test_full_pipeline(system_settings):
-    # Uses BGE-M3 (1GB), real Ollama, full GPU pipeline
-    # Only run on systems with proper GPU setup
+- **Speed**: Manual execution outside CI
+- **Dependencies**: Production models, GPU, external services  
+- **Components**: Real hardware validation scripts
+- **Purpose**: Pre-release validation on target hardware
+- **Run with**: Manual scripts or `pytest -m requires_gpu`
+
+```bash
+# Manual GPU smoke test (outside CI)
+python scripts/gpu_validation.py
+
+# Optional GPU tests via pytest
+pytest -m "requires_gpu" --timeout=600
 ```
 
 ## Test Configuration Framework
@@ -60,6 +63,7 @@ def test_full_pipeline(system_settings):
 The framework provides three settings fixtures for different test levels:
 
 #### `mock_settings` (Unit Tests)
+
 ```python
 @pytest.fixture(scope="session")
 def mock_settings() -> AppSettings:
@@ -70,6 +74,7 @@ def mock_settings() -> AppSettings:
 ```
 
 #### `integration_settings` (Integration Tests)
+
 ```python
 @pytest.fixture(scope="session") 
 def integration_settings() -> AppSettings:
@@ -81,52 +86,61 @@ def integration_settings() -> AppSettings:
     )
 ```
 
-#### `system_settings` (System Tests)
+#### `gpu_smoke_config` (Optional GPU Validation)
+
 ```python
-@pytest.fixture(scope="session")
-def system_settings() -> AppSettings:
-    """Full production models for system tests."""
-    return AppSettings(
-        dense_embedding_model="BAAI/bge-large-en-v1.5",  # 1GB
-        enable_reranking=True,  # Full feature testing
+# For manual GPU smoke tests (outside CI)
+def gpu_smoke_config() -> dict:
+    """Configuration for manual GPU validation."""
+    return {
+        "model_name": "BAAI/bge-large-en-v1.5",  # 1GB
+        "enable_reranking": True,  # Full feature testing
+        "gpu_memory_limit": 14.0,  # RTX 4090 target
         ...
-    )
+    }
 ```
 
 ### Core Test Fixtures
 
 #### Document Fixtures
+
 - `test_documents`: Small, consistent set (5 docs) for unit/integration
 - `large_document_set`: Performance testing (100 docs)
 
 #### Model Fixtures  
+
 - `lightweight_embedding_model`: all-MiniLM-L6-v2 (80MB) for integration
 - `in_memory_graph_store`: SimplePropertyGraphStore for testing
 - `mock_qdrant_client`: Comprehensive async/sync Qdrant mock
 
 #### Infrastructure
+
 - `cleanup_test_artifacts`: Session cleanup for test isolation
 - `temp_vector_store`: Temporary directories for testing
 
 ## Test Markers
 
 ### Core Categories
+
 - `@pytest.mark.unit`: Fast unit tests with mocks
-- `@pytest.mark.integration`: Integration tests with lightweight models  
-- `@pytest.mark.system`: Full system tests with production models
+- `@pytest.mark.integration`: Integration tests with lightweight models
+- `@pytest.mark.requires_gpu`: Optional GPU tests (manual execution)
 
 ### Resource Requirements
+
 - `@pytest.mark.requires_gpu`: Tests requiring GPU acceleration
 - `@pytest.mark.requires_network`: Tests requiring network access
 - `@pytest.mark.requires_ollama`: Tests requiring Ollama server
 
 ### Feature Areas
+
 - `@pytest.mark.agents`: Multi-agent coordination tests
 - `@pytest.mark.retrieval`: Retrieval and search system tests
 - `@pytest.mark.embeddings`: Embedding model tests
 - `@pytest.mark.multimodal`: CLIP and multimodal tests
 
 ### Performance
+
 - `@pytest.mark.performance`: Performance benchmarks
 - `@pytest.mark.slow`: Long-running tests
 
@@ -141,8 +155,8 @@ pytest -m unit
 # Integration tests with lightweight models  
 pytest -m integration
 
-# Full system tests (production validation)
-pytest -m "system and not slow"
+# Optional GPU tests (manual execution)
+pytest -m "requires_gpu" --timeout=600
 
 # Skip GPU tests on CPU-only machines
 pytest -m "not requires_gpu"
@@ -155,6 +169,7 @@ pytest -m "multimodal and not slow"
 ### Test Development Patterns
 
 #### Unit Test Pattern
+
 ```python
 @pytest.mark.unit
 @pytest.mark.embeddings
@@ -170,6 +185,7 @@ def test_embedding_dimension_validation(mock_settings):
 ```
 
 #### Integration Test Pattern  
+
 ```python
 @pytest.mark.integration
 @pytest.mark.embeddings  
@@ -189,43 +205,49 @@ async def test_embedding_pipeline_with_lightweight_model(
     assert embeddings.dtype == np.float32
 ```
 
-#### System Test Pattern
+#### GPU Smoke Test Pattern
+
 ```python
-@pytest.mark.system
 @pytest.mark.requires_gpu
-async def test_full_retrieval_pipeline_performance(system_settings):
-    """Test full retrieval pipeline with production models."""
-    # Only run on systems with proper GPU setup
+@pytest.mark.timeout(300)
+def test_gpu_smoke_validation():
+    """Manual GPU smoke test for pre-release validation."""
+    # Run outside CI - manual hardware validation
     if not torch.cuda.is_available():
-        pytest.skip("GPU not available for system tests")
+        pytest.skip("GPU not available for smoke tests")
     
-    # Use full production models
-    # ... full pipeline test with performance benchmarks
+    # Basic GPU functionality check
+    # ... hardware validation with timeout
 ```
 
 ## Benefits of This Approach
 
 ### 1. **Speed & Efficiency**
+
 - Unit tests run in <5s each using MockEmbedding
 - Integration tests use 80MB models vs 1GB production models
-- System tests only run when needed for full validation
+- GPU smoke tests run manually outside CI for targeted validation
 
 ### 2. **Reliability**
+
 - MockEmbedding provides deterministic results
 - No flaky tests due to model loading failures
 - Proper test isolation with cleanup fixtures
 
-### 3. **Developer Experience** 
+### 3. **Developer Experience**
+
 - Fast feedback loop during development
 - Clear test categories for different purposes
 - Easy to run subset of tests based on need
 
 ### 4. **CI/CD Friendly**
+
 - Unit tests run on any machine (CPU-only)
 - Integration tests work without GPU
-- System tests can be optional based on environment
+- GPU smoke tests run manually outside CI pipeline
 
 ### 5. **Maintainability**
+
 - Uses LlamaIndex built-in mocks (no custom mocking)
 - Library-first approach reduces maintenance burden
 - Clear separation of concerns by test level
@@ -233,6 +255,7 @@ async def test_full_retrieval_pipeline_performance(system_settings):
 ## Migration from Old Tests
 
 ### Before (Over-mocking)
+
 ```python
 @patch("src.utils.embedding.create_embedding_model")
 @patch("src.core.llm.LLMManager")
@@ -243,6 +266,7 @@ def test_with_excessive_patching(mock_llm, mock_embedding):
 ```
 
 ### After (Proper Boundaries)
+
 ```python
 @pytest.mark.unit
 def test_with_proper_mocking(mock_settings):
@@ -255,8 +279,8 @@ def test_with_proper_mocking(mock_settings):
 ## Performance Targets
 
 - **Unit Tests**: <5 seconds each, 90%+ should be <1s
-- **Integration Tests**: <30 seconds each, use <200MB memory  
-- **System Tests**: <5 minutes each, full GPU utilization
+- **Integration Tests**: <30 seconds each, use <200MB memory
+- **GPU Smoke Tests**: Manual execution, hardware-specific validation
 
 ## Best Practices
 

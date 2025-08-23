@@ -7,10 +7,11 @@ proper LlamaIndex MockEmbedding/MockLLM usage and tiered testing strategy.
 Testing Strategy:
 - Unit Tests: Fast (<5s), CPU-only, use MockEmbedding/MagicMock LLM
 - Integration Tests: Moderate speed, lightweight models (all-MiniLM-L6-v2 80MB)
-- System Tests: Full models, GPU tests, real components
+- GPU Smoke Tests: Optional manual validation outside CI
 """
 
 import asyncio
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -80,7 +81,9 @@ def integration_settings() -> AppSettings:
     """
     return AppSettings(
         default_model="llama3.2:1b",  # Smallest Ollama model for integration
-        dense_embedding_model="sentence-transformers/all-MiniLM-L6-v2",  # 80MB lightweight
+        dense_embedding_model=(
+            "sentence-transformers/all-MiniLM-L6-v2"  # 80MB lightweight
+        ),
         sparse_embedding_model="mock-sparse",  # Keep sparse as mock for integration
         dense_embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
         ollama_base_url="http://localhost:11434",
@@ -437,10 +440,8 @@ def cleanup_test_artifacts():
 
     for temp_dir in temp_dirs:
         if temp_dir.exists():
-            try:
+            with contextlib.suppress(PermissionError):
                 shutil.rmtree(temp_dir)
-            except PermissionError:
-                pass  # Ignore cleanup failures
 
 
 # Enhanced pytest configuration with tiered testing strategy

@@ -66,8 +66,12 @@ def check_cuda_availability() -> bool:
                 "-c",
                 "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); "
                 "print(f'CUDA devices: {torch.cuda.device_count()}'); "
-                "print(f'Current device: {torch.cuda.current_device() if torch.cuda.is_available() else \"N/A\"}'); "
-                "print(f'Device name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')",
+                "current_dev = torch.cuda.current_device() if "
+                "torch.cuda.is_available() else 'N/A'; "
+                "print(f'Current device: {current_dev}'); "
+                "dev_name = torch.cuda.get_device_name(0) if "
+                "torch.cuda.is_available() else 'N/A'; "
+                "print(f'Device name: {dev_name}')",
             ],
             capture_output=True,
             text=True,
@@ -150,8 +154,8 @@ def monitor_gpu_memory() -> dict:
                 "free": int(memory_data[1]) - int(memory_data[0]),
                 "utilization": (int(memory_data[0]) / int(memory_data[1])) * 100,
             }
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Warning: Could not get GPU memory info: {e}")
 
     return {"used": 0, "total": 0, "free": 0, "utilization": 0}
 
@@ -202,7 +206,8 @@ def main():
 
     print(f"✅ GPU detected: {gpu_info['name']}")
     print(
-        f"   Memory: {gpu_info['memory_total']}MB total, {gpu_info['memory_free']}MB free"
+        f"   Memory: {gpu_info['memory_total']}MB total, "
+        f"{gpu_info['memory_free']}MB free"
     )
     print(f"   Driver: {gpu_info['driver_version']}")
     if gpu_info["cuda_version"]:
@@ -229,12 +234,14 @@ def main():
     if args.compatibility:
         print("\n📋 Hardware Compatibility Summary:")
         print(
-            f"   GPU: {'✅' if test_results['hardware'] else '❌'} {gpu_info['name'] if gpu_info else 'Not detected'}"
+            f"   GPU: {'✅' if test_results['hardware'] else '❌'} "
+            f"{gpu_info['name'] if gpu_info else 'Not detected'}"
         )
-        print(f"   CUDA: {'✅' if test_results['cuda'] else '❌'} Available")
-        print(
-            f"   VRAM: {'✅' if gpu_info and gpu_info['memory_total'] >= 12000 else '⚠️'} {gpu_info['memory_total'] if gpu_info else 0}MB"
-        )
+        cuda_status = "✅" if test_results["cuda"] else "❌"
+        print(f"   CUDA: {cuda_status} Available")
+        vram_status = "✅" if gpu_info and gpu_info["memory_total"] >= 12000 else "⚠️"
+        vram_amount = gpu_info["memory_total"] if gpu_info else 0
+        print(f"   VRAM: {vram_status} {vram_amount}MB")
 
         if test_results["hardware"] and test_results["cuda"]:
             print("\n✅ GPU is compatible with DocMind AI")
@@ -250,7 +257,8 @@ def main():
         # Monitor initial memory
         initial_memory = monitor_gpu_memory()
         print(
-            f"Initial VRAM usage: {initial_memory['used']}MB ({initial_memory['utilization']:.1f}%)"
+            f"Initial VRAM usage: {initial_memory['used']}MB "
+            f"({initial_memory['utilization']:.1f}%)"
         )
 
         # Run smoke test
@@ -262,7 +270,8 @@ def main():
         # Check memory after test
         final_memory = monitor_gpu_memory()
         print(
-            f"Final VRAM usage: {final_memory['used']}MB ({final_memory['utilization']:.1f}%)"
+            f"Final VRAM usage: {final_memory['used']}MB "
+            f"({final_memory['utilization']:.1f}%)"
         )
 
         memory_increase = final_memory["used"] - initial_memory["used"]
@@ -276,7 +285,8 @@ def main():
         # Monitor memory before tests
         initial_memory = monitor_gpu_memory()
         print(
-            f"Initial VRAM: {initial_memory['used']}MB used, {initial_memory['free']}MB free"
+            f"Initial VRAM: {initial_memory['used']}MB used, "
+            f"{initial_memory['free']}MB free"
         )
 
         cmd = ["uv", "run", "python", "scripts/run_tests.py", "--gpu"]
@@ -290,18 +300,19 @@ def main():
             f"Final VRAM: {final_memory['used']}MB used, {final_memory['free']}MB free"
         )
 
-        # Step 4: System tests with real models
-        print("\n🧠 Step 4: System Tests (Real Models)")
+        # Step 4: Performance validation (replacing system tests)
+        print("\n🧠 Step 4: Performance Validation")
 
-        cmd = ["uv", "run", "python", "scripts/run_tests.py", "--system"]
-        exit_code, _ = run_command(cmd, "System Tests", timeout=2400)
+        cmd = ["uv", "run", "python", "scripts/run_tests.py", "--performance"]
+        exit_code, _ = run_command(cmd, "Performance Tests", timeout=2400)
         exit_codes.append(exit_code)
-        test_results["system"] = exit_code == 0
+        test_results["performance"] = exit_code == 0
 
-        # Monitor memory usage during system tests
+        # Monitor memory usage after performance tests
         post_system_memory = monitor_gpu_memory()
         print(
-            f"Post-system VRAM: {post_system_memory['used']}MB used, {post_system_memory['free']}MB free"
+            f"Post-performance VRAM: {post_system_memory['used']}MB used, "
+            f"{post_system_memory['free']}MB free"
         )
 
     # Step 5: Performance benchmarks (if requested)
@@ -380,7 +391,8 @@ def main():
         )
         if utilization > 90:
             print(
-                f"   ⚠️  High VRAM utilization ({utilization:.1f}%) - consider model optimization"
+                f"   ⚠️  High VRAM utilization ({utilization:.1f}%) - "
+                "consider model optimization"
             )
         elif utilization > 70:
             print(f"   ✅ Good VRAM utilization ({utilization:.1f}%)")

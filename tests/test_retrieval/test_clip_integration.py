@@ -9,6 +9,7 @@ Follows AI research recommendations:
 - Proper mocking boundaries at external service interfaces
 """
 
+import asyncio
 import time
 from unittest.mock import MagicMock, patch
 
@@ -209,7 +210,6 @@ class TestClipMultimodalIntegration:
         ]
 
         # Test search result validation
-        query = "architecture diagram showing system components"
         top_k = 5
 
         # Simulate search result processing
@@ -320,7 +320,11 @@ class TestClipMultimodalIntegration:
             """Determine search strategy based on query type."""
             if isinstance(query, dict):
                 query_type = query.get("type")
-                if query_type == "image" or query_type == "text" and "image" in query.get("data", "").lower():
+                if (
+                    query_type == "image"
+                    or query_type == "text"
+                    and "image" in query.get("data", "").lower()
+                ):
                     return "multimodal"
                 elif query_type == "text":
                     return "hybrid"
@@ -502,7 +506,7 @@ class TestClipMultimodalIntegration:
         for VRAM-constrained environments.
         """
         max_vram_gb = clip_config["max_vram_gb"]  # 1.4GB
-        base_batch_size = clip_config["embed_batch_size"]  # 10
+        clip_config["embed_batch_size"]  # 10
 
         # Mock VRAM usage per image (realistic estimate)
         vram_per_image_mb = 45  # 45MB per image for CLIP ViT-B/32
@@ -532,16 +536,19 @@ class TestClipMultimodalIntegration:
 
             # Validate optimization
             assert expected_vram_gb <= max_vram_gb, (
-                f"{description}: Optimized batch uses {expected_vram_gb:.2f}GB > {max_vram_gb}GB limit"
+                f"{description}: Optimized batch uses {expected_vram_gb:.2f}GB > "
+                f"{max_vram_gb}GB limit"
             )
 
             if should_fit:
                 assert optimized_batch == batch_size, (
-                    f"{description}: Batch size unnecessarily reduced from {batch_size} to {optimized_batch}"
+                    f"{description}: Batch size unnecessarily reduced from "
+                    f"{batch_size} to {optimized_batch}"
                 )
             else:
                 assert optimized_batch < batch_size, (
-                    f"{description}: Batch size not reduced from {batch_size} (got {optimized_batch})"
+                    f"{description}: Batch size not reduced from {batch_size} "
+                    f"(got {optimized_batch})"
                 )
 
             assert optimized_batch > 0, "Optimized batch size must be positive"
@@ -595,7 +602,8 @@ class TestClipMultimodalIntegration:
         # Validate resource management
         max_concurrent_vram = max_concurrent_requests * results[0]["vram_used_gb"]
         assert max_concurrent_vram <= max_vram_gb, (
-            f"Peak concurrent VRAM {max_concurrent_vram:.2f}GB exceeds limit {max_vram_gb}GB"
+            f"Peak concurrent VRAM {max_concurrent_vram:.2f}GB exceeds limit "
+            f"{max_vram_gb}GB"
         )
 
         # Validate performance (should complete efficiently due to concurrency control)
@@ -648,7 +656,8 @@ class TestClipConfiguration:
                 estimated_vram_gb = embed_batch_size * 0.045  # 45MB per item
                 if estimated_vram_gb > max_vram_gb:
                     errors.append(
-                        f"VRAM constraint violated: {estimated_vram_gb:.2f}GB > {max_vram_gb}GB"
+                        f"VRAM constraint violated: {estimated_vram_gb:.2f}GB > "
+                        f"{max_vram_gb}GB"
                     )
 
             # Batch size validation
@@ -760,7 +769,8 @@ class TestClipConfiguration:
             safety_limit_gb = max_vram_gb * 0.9  # 10% safety margin
 
             assert estimated_vram_gb <= safety_limit_gb, (
-                f"{description}: Estimated VRAM {estimated_vram_gb:.2f}GB exceeds safety limit {safety_limit_gb:.2f}GB"
+                f"{description}: Estimated VRAM {estimated_vram_gb:.2f}GB exceeds "
+                f"safety limit {safety_limit_gb:.2f}GB"
             )
 
         # Test edge cases

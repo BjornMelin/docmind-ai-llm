@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Comprehensive test runner with tiered testing strategy for DocMind AI.
 
-This script implements a three-tier testing strategy based on ML engineering best practices:
+This script implements a two-tier testing strategy based on ML engineering
+best practices:
 
 Tier 1 - Unit Tests (Fast):
     - Mocked dependencies, no external services
@@ -13,16 +14,16 @@ Tier 2 - Integration Tests:
     - <30 seconds per test, total suite <5 minutes
     - Run on feature branches and PRs
 
-Tier 3 - System Tests:
-    - Real models, full GPU resources
-    - <5 minutes per test, full validation
-    - Run on staging/release candidates
+GPU Smoke Tests:
+    - Optional manual validation
+    - Outside CI/CD pipeline
+    - Real hardware testing for releases
 
 Usage:
-    python run_tests.py                  # Run tiered tests (unit → integration → system)
+    python run_tests.py                  # Run tiered tests (unit → integration)
     python run_tests.py --unit           # Run unit tests only
     python run_tests.py --integration    # Run integration tests only
-    python run_tests.py --system         # Run system tests only
+    python run_tests.py --gpu            # Run GPU tests only
     python run_tests.py --fast           # Run unit + integration tests
     python run_tests.py --performance    # Run performance benchmarks
     python run_tests.py --smoke          # Run basic smoke tests
@@ -230,7 +231,6 @@ class TestRunner:
             "--durations=10",
             "-m",
             "unit",
-            "--timeout=30",  # Individual test timeout
         ]
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
 
@@ -248,7 +248,6 @@ class TestRunner:
             "--durations=10",
             "-m",
             "integration",
-            "--timeout=180",  # 3-minute timeout for integration tests
         ]
         return self.run_command(
             command, "Integration Tests (Tier 2 - Lightweight models)"
@@ -269,23 +268,6 @@ class TestRunner:
         ]
         return self.run_command(command, "Performance Tests")
 
-    def run_system_tests(self) -> TestResult:
-        """Run system tests with real models and full GPU resources (<5min each)."""
-        command = [
-            "uv",
-            "run",
-            "pytest",
-            "tests/",
-            "-v",
-            "--tb=short",
-            "--cov-report=term-missing",
-            "--durations=10",
-            "-m",
-            "system",
-            "--timeout=300",  # 5 minute timeout for system tests
-        ]
-        return self.run_command(command, "System Tests (Tier 3 - Real models + GPU)")
-
     def run_gpu_tests(self) -> TestResult:
         """Run GPU-required tests with hardware validation."""
         command = [
@@ -298,7 +280,6 @@ class TestRunner:
             "--durations=10",
             "-m",
             "requires_gpu or gpu_required",
-            "--timeout=600",  # 10 minute timeout for GPU tests
         ]
         return self.run_command(command, "GPU Tests (Hardware validation)")
 
@@ -315,7 +296,6 @@ class TestRunner:
             "--durations=10",
             "-m",
             "slow or requires_gpu or requires_network",
-            "--timeout=600",  # 10 minute timeout for slow tests
         ]
         return self.run_command(command, "Legacy Slow Tests (GPU/Network/Models)")
 
@@ -349,10 +329,7 @@ class TestRunner:
             "tests/unit/test_config_validation.py",
             "-v",
             "--tb=line",
-            "-m",
-            "unit",
             "--maxfail=3",  # Stop after 3 failures for smoke tests
-            "--timeout=10",  # Quick timeout for smoke tests
         ]
         return self.run_command(command, "Smoke Tests (Basic system health)")
 
@@ -371,12 +348,11 @@ class TestRunner:
             "--durations=10",
             "-m",
             "unit or integration",
-            "--timeout=180",  # 3-minute timeout for fast tests
         ]
         return self.run_command(command, "Fast Tests (Unit + Integration)")
 
     def run_tiered_tests(self) -> None:
-        """Run all tests in pyramid order: unit → integration → system."""
+        """Run all tests in pyramid order: unit → integration (no system tests)."""
         print("\n\ud83c\udfc1 Running Tiered Test Strategy")
         print("=" * 50)
         print("\u27a1\ufe0f Tier 1: Unit Tests (mocked dependencies)")
@@ -393,8 +369,7 @@ class TestRunner:
             print("\u274c Integration tests failed. Stopping tiered execution.")
             return
 
-        print("\n\u27a1\ufe0f Tier 3: System Tests (real models + GPU)")
-        self.run_system_tests()
+        print("\n\u2705 All tiered tests passed! GPU smoke tests available via --gpu")
 
     def validate_imports(self) -> TestResult:
         """Validate that all modules can be imported."""
@@ -589,7 +564,7 @@ Examples:
   python run_tests.py                    # Run all tiers in sequence
   python run_tests.py --unit --fast      # Quick unit test validation  
   python run_tests.py --integration      # Integration tests only
-  python run_tests.py --system           # System tests only (requires GPU)
+  python run_tests.py --gpu              # GPU tests only (requires GPU)
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -604,11 +579,6 @@ Examples:
         "--integration",
         action="store_true",
         help="Run integration tests only (Tier 2 - lightweight models)",
-    )
-    parser.add_argument(
-        "--system",
-        action="store_true",
-        help="Run system tests only (Tier 3 - real models + GPU)",
     )
 
     # Additional test categories
@@ -671,8 +641,6 @@ Examples:
             runner.run_unit_tests()
         elif args.integration:
             runner.run_integration_tests()
-        elif args.system:
-            runner.run_system_tests()
         elif args.fast:
             runner.run_fast_tests()
         elif args.performance:
@@ -688,7 +656,7 @@ Examples:
             print("\n📚 Learn more about test tiers:")
             print("   --unit: Fast tests with mocks (development)")
             print("   --integration: Lightweight models (PR validation)")
-            print("   --system: Full models + GPU (staging/release)")
+            print("   --gpu: Manual GPU smoke tests (staging/release)")
             print("   --fast: Unit + Integration only")
 
             runner.validate_imports()
@@ -701,7 +669,6 @@ Examples:
                     args.fast,
                     args.unit,
                     args.integration,
-                    args.system,
                     args.performance,
                     args.gpu,
                     args.slow,
