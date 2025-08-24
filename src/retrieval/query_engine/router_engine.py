@@ -20,6 +20,14 @@ from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
+# Router Engine Configuration Constants
+DEFAULT_DENSE_SIMILARITY_TOP_K = 10
+DEFAULT_MULTI_QUERY_SIMILARITY_TOP_K = 15
+DEFAULT_KG_SIMILARITY_TOP_K = 10
+DEFAULT_MULTIMODAL_SIMILARITY_TOP_K = 10
+DEFAULT_IMAGE_SIMILARITY_TOP_K = 5
+QUERY_TRUNCATE_LENGTH = 100
+
 
 class AdaptiveRouterQueryEngine:
     """Adaptive RouterQueryEngine for FEAT-002 retrieval system.
@@ -111,7 +119,7 @@ class AdaptiveRouterQueryEngine:
 
         # 2. Dense Semantic Search Tool (BGE-M3 Dense Only)
         dense_engine = self.vector_index.as_query_engine(
-            similarity_top_k=10,
+            similarity_top_k=DEFAULT_DENSE_SIMILARITY_TOP_K,
             node_postprocessors=[self.reranker] if self.reranker else [],
             response_mode="compact",
             streaming=True,
@@ -138,7 +146,7 @@ class AdaptiveRouterQueryEngine:
         # Note: This would typically use MultiQueryRetriever from LlamaIndex
         # For now, using semantic search as base with enhanced description
         multi_query_engine = self.vector_index.as_query_engine(
-            similarity_top_k=15,  # Slightly higher for decomposed queries
+            similarity_top_k=DEFAULT_MULTI_QUERY_SIMILARITY_TOP_K,
             node_postprocessors=[self.reranker] if self.reranker else [],
             response_mode="tree_summarize",  # Better for complex queries
             streaming=True,
@@ -164,7 +172,7 @@ class AdaptiveRouterQueryEngine:
         # 4. Knowledge Graph Search Tool (Relationships - Optional)
         if self.kg_index:
             kg_engine = self.kg_index.as_query_engine(
-                similarity_top_k=10,
+                similarity_top_k=DEFAULT_KG_SIMILARITY_TOP_K,
                 include_text=True,
                 node_postprocessors=[self.reranker] if self.reranker else [],
                 response_mode="compact",
@@ -192,8 +200,8 @@ class AdaptiveRouterQueryEngine:
         # 5. Multimodal Search Tool (CLIP Image-Text Cross-Modal - Optional)
         if self.multimodal_index:
             multimodal_engine = self.multimodal_index.as_query_engine(
-                similarity_top_k=10,
-                image_similarity_top_k=5,
+                similarity_top_k=DEFAULT_MULTIMODAL_SIMILARITY_TOP_K,
+                image_similarity_top_k=DEFAULT_IMAGE_SIMILARITY_TOP_K,
                 node_postprocessors=[self.reranker] if self.reranker else [],
                 response_mode="compact",
                 streaming=True,
@@ -218,7 +226,7 @@ class AdaptiveRouterQueryEngine:
                 )
             )
 
-        logger.info(f"Created {len(tools)} query engine tools for adaptive routing")
+        logger.info("Created %d query engine tools for adaptive routing", len(tools))
         return tools
 
     def _detect_multimodal_query(self, query_str: str) -> bool:
@@ -324,7 +332,9 @@ class AdaptiveRouterQueryEngine:
             Query response with metadata about selected strategy
         """
         try:
-            logger.info(f"Executing adaptive query: {query_str[:100]}...")
+            logger.info(
+                "Executing adaptive query: %s...", query_str[:QUERY_TRUNCATE_LENGTH]
+            )
 
             # Execute through RouterQueryEngine
             response = self.router_engine.query(query_str, **kwargs)
@@ -332,7 +342,7 @@ class AdaptiveRouterQueryEngine:
             # Log selected strategy if available
             selected_tool = getattr(response, "metadata", {}).get("selector_result")
             if selected_tool:
-                logger.info(f"Router selected strategy: {selected_tool}")
+                logger.info("Router selected strategy: %s", selected_tool)
             else:
                 logger.info(
                     "Router executed query (strategy selection metadata unavailable)"
@@ -341,7 +351,7 @@ class AdaptiveRouterQueryEngine:
             return response
 
         except (RuntimeError, ValueError, TimeoutError) as e:
-            logger.error(f"RouterQueryEngine failed: {e}")
+            logger.error("RouterQueryEngine failed: %s", e)
             # Fallback to direct semantic search
             logger.info("Falling back to direct semantic search")
             return self.vector_index.as_query_engine().query(query_str, **kwargs)
@@ -357,19 +367,22 @@ class AdaptiveRouterQueryEngine:
             Query response with metadata about selected strategy
         """
         try:
-            logger.info(f"Executing async adaptive query: {query_str[:100]}...")
+            logger.info(
+                "Executing async adaptive query: %s...",
+                query_str[:QUERY_TRUNCATE_LENGTH],
+            )
 
             response = await self.router_engine.aquery(query_str, **kwargs)
 
             # Log selected strategy if available
             selected_tool = getattr(response, "metadata", {}).get("selector_result")
             if selected_tool:
-                logger.info(f"Router selected strategy: {selected_tool}")
+                logger.info("Router selected strategy: %s", selected_tool)
 
             return response
 
         except (RuntimeError, ValueError, TimeoutError) as e:
-            logger.error(f"Async RouterQueryEngine failed: {e}")
+            logger.error("Async RouterQueryEngine failed: %s", e)
             # Fallback to direct semantic search
             logger.info("Falling back to async semantic search")
             return await self.vector_index.as_query_engine().aquery(query_str, **kwargs)
@@ -431,6 +444,6 @@ def configure_router_settings(_router_engine: AdaptiveRouterQueryEngine) -> None
         # Note: Settings doesn't have a direct query_engine property
         # This would be handled at the application level
         logger.info("RouterQueryEngine configured for adaptive retrieval")
-    except Exception as e:
-        logger.error(f"Failed to configure router settings: {e}")
+    except (AttributeError, ValueError, RuntimeError) as e:
+        logger.error("Failed to configure router settings: %s", e)
         raise

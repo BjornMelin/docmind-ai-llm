@@ -25,6 +25,8 @@ except ImportError:
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.bridge.pydantic import Field
 
+from src.config.settings import settings
+
 
 class BGEM3Embedding(BaseEmbedding):
     """BGE-M3 unified dense/sparse embedding model for DocMind AI.
@@ -45,10 +47,10 @@ class BGEM3Embedding(BaseEmbedding):
     - 8K context vs 512 in BGE-large
     """
 
-    model_name: str = Field(default="BAAI/bge-m3")
-    max_length: int = Field(default=8192)
+    model_name: str = Field(default=settings.bge_m3_model_name)
+    max_length: int = Field(default=settings.bge_m3_max_length)
     use_fp16: bool = Field(default=True)
-    batch_size: int = Field(default=12)
+    batch_size: int = Field(default=settings.bge_m3_batch_size_gpu)
     normalize_embeddings: bool = Field(default=True)
     device: str = Field(default="cuda")
 
@@ -69,10 +71,10 @@ class BGEM3Embedding(BaseEmbedding):
     def __init__(
         self,
         *,
-        model_name: str = "BAAI/bge-m3",
-        max_length: int = 8192,
+        model_name: str = settings.bge_m3_model_name,
+        max_length: int = settings.bge_m3_max_length,
         use_fp16: bool = True,
-        batch_size: int = 12,
+        batch_size: int = settings.bge_m3_batch_size_gpu,
         device: str = "cuda",
         **kwargs,
     ):
@@ -105,9 +107,9 @@ class BGEM3Embedding(BaseEmbedding):
             # for private attributes
             model = BGEM3FlagModel(model_name, use_fp16=use_fp16, device=device)
             object.__setattr__(self, "_model", model)
-            logger.info(f"BGE-M3 model loaded: {model_name} (FP16: {use_fp16})")
-        except Exception as e:
-            logger.error(f"Failed to load BGE-M3 model: {e}")
+            logger.info("BGE-M3 model loaded: %s (FP16: %s)", model_name, use_fp16)
+        except (ImportError, RuntimeError, ValueError) as e:
+            logger.error("Failed to load BGE-M3 model: %s", e)
             raise
 
     def _get_query_embedding(self, query: str) -> list[float]:
@@ -194,11 +196,11 @@ class BGEM3Embedding(BaseEmbedding):
             if return_colbert and "colbert_vecs" in embeddings:
                 result["colbert"] = embeddings["colbert_vecs"]
 
-            logger.debug(f"Generated unified embeddings for {len(texts)} texts")
+            logger.debug("Generated unified embeddings for %d texts", len(texts))
             return result
 
-        except Exception as e:
-            logger.error(f"Failed to generate unified embeddings: {e}")
+        except (RuntimeError, ValueError) as e:
+            logger.error("Failed to generate unified embeddings: %s", e)
             raise
 
     def get_sparse_embedding(self, text: str) -> dict[int, float]:
@@ -220,14 +222,14 @@ class BGEM3Embedding(BaseEmbedding):
     @property
     def embed_dim(self) -> int:
         """BGE-M3 dense embedding dimension."""
-        return 1024
+        return settings.bge_m3_embedding_dim
 
 
 def create_bgem3_embedding(
-    model_name: str = "BAAI/bge-m3",
+    model_name: str = settings.bge_m3_model_name,
     use_fp16: bool = True,
     device: str = "cuda",
-    max_length: int = 8192,
+    max_length: int = settings.bge_m3_max_length,
 ) -> BGEM3Embedding:
     """Create BGE-M3 embedding instance with optimal settings for RTX 4090.
 
@@ -244,7 +246,11 @@ def create_bgem3_embedding(
         Configured BGEM3Embedding instance optimized for RTX 4090 Laptop
     """
     # RTX 4090 optimized batch size
-    batch_size = 12 if device == "cuda" else 4
+    batch_size = (
+        settings.bge_m3_batch_size_gpu
+        if device == "cuda"
+        else settings.bge_m3_batch_size_cpu
+    )
 
     return BGEM3Embedding(
         model_name=model_name,
@@ -268,6 +274,6 @@ def configure_bgem3_settings() -> None:
         bgem3_model = create_bgem3_embedding()
         Settings.embed_model = bgem3_model
         logger.info("LlamaIndex Settings configured for BGE-M3 unified embeddings")
-    except Exception as e:
-        logger.error(f"Failed to configure BGE-M3 settings: {e}")
+    except (ImportError, RuntimeError, ValueError) as e:
+        logger.error("Failed to configure BGE-M3 settings: %s", e)
         raise

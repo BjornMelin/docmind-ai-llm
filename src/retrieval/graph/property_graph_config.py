@@ -19,6 +19,24 @@ from llama_index.core.indices.property_graph import (
 from loguru import logger
 from pydantic import BaseModel, Field
 
+# Property Graph Configuration Constants
+DEFAULT_MAX_PATHS_PER_CHUNK = 20
+DEFAULT_NUM_WORKERS = 4
+DEFAULT_PATH_DEPTH = 2
+DEFAULT_MAX_TRIPLETS_PER_CHUNK = 10
+DEFAULT_ENTITY_CONFIDENCE = 0.8
+DEFAULT_RELATIONSHIP_CONFIDENCE = 0.8
+DEFAULT_TRAVERSAL_TIMEOUT = 3.0
+DEFAULT_MAX_HOPS = 2
+DEFAULT_TOP_K = 5
+BASE_CONFIDENCE_SCORE = 0.5
+SCHEMA_MATCH_BONUS = 0.2
+SCHEMA_EXTRACTOR_BONUS = 0.2
+SIMPLE_EXTRACTOR_BONUS = 0.1
+CONTEXT_LENGTH_THRESHOLD = 50
+CONTEXT_BONUS = 0.1
+MAX_CONFIDENCE_SCORE = 1.0
+
 
 class PropertyGraphConfig(BaseModel):
     """Configuration for PropertyGraphIndex with domain settings."""
@@ -45,15 +63,15 @@ class PropertyGraphConfig(BaseModel):
         description="Relationship types for extraction",
     )
     max_paths_per_chunk: int = Field(
-        default=20,
+        default=DEFAULT_MAX_PATHS_PER_CHUNK,
         description="Maximum paths to extract per chunk",
     )
     num_workers: int = Field(
-        default=4,
+        default=DEFAULT_NUM_WORKERS,
         description="Number of workers for parallel extraction",
     )
     path_depth: int = Field(
-        default=2,
+        default=DEFAULT_PATH_DEPTH,
         description="Maximum traversal depth for multi-hop queries",
     )
     strict_schema: bool = Field(
@@ -79,9 +97,9 @@ def create_property_graph_index(
     schema: dict[str, list[str]] | None = None,
     llm: Any | None = None,
     vector_store: Any | None = None,
-    max_paths_per_chunk: int = 20,
-    num_workers: int = 4,
-    path_depth: int = 2,
+    max_paths_per_chunk: int = DEFAULT_MAX_PATHS_PER_CHUNK,
+    num_workers: int = DEFAULT_NUM_WORKERS,
+    path_depth: int = DEFAULT_PATH_DEPTH,
 ) -> PropertyGraphIndex:
     """Create PropertyGraphIndex with domain-specific extractors.
 
@@ -131,7 +149,7 @@ def create_property_graph_index(
         property_graph_store=property_graph_store,
         vector_store=vector_store,
         show_progress=True,
-        max_triplets_per_chunk=10,
+        max_triplets_per_chunk=DEFAULT_MAX_TRIPLETS_PER_CHUNK,
     )
 
     # Store configuration
@@ -139,7 +157,7 @@ def create_property_graph_index(
     index.kg_extractors = kg_extractors
     index.path_depth = path_depth
 
-    logger.info(f"PropertyGraphIndex created with {len(documents)} documents")
+    logger.info("PropertyGraphIndex created with %d documents", len(documents))
     return index
 
 
@@ -148,9 +166,9 @@ async def create_property_graph_index_async(
     schema: dict[str, list[str]] | None = None,
     llm: Any | None = None,
     vector_store: Any | None = None,
-    max_paths_per_chunk: int = 20,
-    num_workers: int = 4,
-    path_depth: int = 2,
+    max_paths_per_chunk: int = DEFAULT_MAX_PATHS_PER_CHUNK,
+    num_workers: int = DEFAULT_NUM_WORKERS,
+    path_depth: int = DEFAULT_PATH_DEPTH,
 ) -> PropertyGraphIndex:
     """Async wrapper for creating PropertyGraphIndex.
 
@@ -214,13 +232,15 @@ async def extract_entities(index: PropertyGraphIndex, document: Any) -> list[dic
                     entity_data = {
                         "text": getattr(node, "name", str(node.id)),
                         "type": node.properties.get("type", "UNKNOWN"),
-                        "confidence": node.properties.get("confidence", 0.8),
+                        "confidence": node.properties.get(
+                            "confidence", DEFAULT_ENTITY_CONFIDENCE
+                        ),
                         "id": str(node.id),
                     }
                     entities.append(entity_data)
 
-        except Exception as e:
-            logger.warning(f"Could not extract entities from graph store: {e}")
+        except (KeyError, AttributeError, RuntimeError) as e:
+            logger.warning("Could not extract entities from graph store: %s", e)
             raise NotImplementedError(
                 "Entity extraction from existing graph not yet implemented. "
                 "Entities are extracted during index construction."
@@ -270,15 +290,17 @@ async def extract_relationships(index: PropertyGraphIndex, document: Any) -> lis
                         "type": edge.properties.get(
                             "type", getattr(edge, "label", "UNKNOWN")
                         ),
-                        "confidence": edge.properties.get("confidence", 0.8),
+                        "confidence": edge.properties.get(
+                            "confidence", DEFAULT_RELATIONSHIP_CONFIDENCE
+                        ),
                         "id": str(
                             getattr(edge, "id", f"{edge.source_id}-{edge.target_id}")
                         ),
                     }
                     relationships.append(relationship_data)
 
-        except Exception as e:
-            logger.warning(f"Could not extract relationships from graph store: {e}")
+        except (KeyError, AttributeError, RuntimeError) as e:
+            logger.warning("Could not extract relationships from graph store: %s", e)
             raise NotImplementedError(
                 "Relationship extraction from existing graph not yet implemented. "
                 "Relationships are extracted during index construction."
@@ -295,8 +317,8 @@ async def extract_relationships(index: PropertyGraphIndex, document: Any) -> lis
 async def traverse_graph(
     index: PropertyGraphIndex,
     query: str,
-    max_depth: int = 2,
-    timeout: float = 3.0,
+    max_depth: int = DEFAULT_PATH_DEPTH,
+    timeout: float = DEFAULT_TRAVERSAL_TIMEOUT,
 ) -> list[Any]:
     """Traverse graph with multi-hop queries.
 
@@ -323,7 +345,7 @@ async def traverse_graph(
         )
         return nodes
     except TimeoutError:
-        logger.warning(f"Graph traversal timed out after {timeout}s")
+        logger.warning("Graph traversal timed out after %.1fs", timeout)
         return []
 
 
@@ -339,24 +361,24 @@ def calculate_entity_confidence(
     Returns:
         Confidence score between 0 and 1
     """
-    confidence = 0.5  # Base confidence
+    confidence = BASE_CONFIDENCE_SCORE  # Base confidence
 
     # Check if entity type is in schema
     if entity.get("type") in schema.get("entities", []):
-        confidence += 0.2
+        confidence += SCHEMA_MATCH_BONUS
 
     # Check extractor type
     if entity.get("extractor") == "SchemaLLMPathExtractor":
-        confidence += 0.2
+        confidence += SCHEMA_EXTRACTOR_BONUS
     elif entity.get("extractor") == "SimpleLLMPathExtractor":
-        confidence += 0.1
+        confidence += SIMPLE_EXTRACTOR_BONUS
 
     # Check context quality
     context = entity.get("context", "")
-    if len(context) > 50:
-        confidence += 0.1
+    if len(context) > CONTEXT_LENGTH_THRESHOLD:
+        confidence += CONTEXT_BONUS
 
-    return min(confidence, 1.0)
+    return min(confidence, MAX_CONFIDENCE_SCORE)
 
 
 # Extension methods for PropertyGraphIndex
@@ -372,7 +394,11 @@ def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex
     # Add async wrappers
     index.extract_entities = lambda doc: extract_entities(index, doc)
     index.extract_relationships = lambda doc: extract_relationships(index, doc)
-    index.traverse_graph = lambda q, d=2, t=3.0: traverse_graph(index, q, d, t)
+    index.traverse_graph = (
+        lambda q, d=DEFAULT_PATH_DEPTH, t=DEFAULT_TRAVERSAL_TIMEOUT: traverse_graph(
+            index, q, d, t
+        )
+    )
 
     # Add graph statistics methods
     async def get_entity_count() -> int:
@@ -387,8 +413,8 @@ def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex
                 raise NotImplementedError(
                     "Entity count requires access to property_graph_store"
                 )
-        except Exception as e:
-            logger.warning(f"Could not get entity count: {e}")
+        except (KeyError, AttributeError, RuntimeError) as e:
+            logger.warning("Could not get entity count: %s", e)
             raise NotImplementedError(
                 "Entity count calculation not yet implemented for this graph store type"
             ) from e
@@ -405,8 +431,8 @@ def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex
                 raise NotImplementedError(
                     "Relationship count requires access to property_graph_store"
                 )
-        except Exception as e:
-            logger.warning(f"Could not get relationship count: {e}")
+        except (KeyError, AttributeError, RuntimeError) as e:
+            logger.warning("Could not get relationship count: %s", e)
             raise NotImplementedError(
                 "Relationship count calculation not yet implemented "
                 "for this graph store type"
@@ -452,14 +478,14 @@ def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex
                 raise NotImplementedError(
                     "Entity search requires access to property_graph_store"
                 )
-        except Exception as e:
-            logger.warning(f"Could not find entity {entity_name}: {e}")
+        except (KeyError, AttributeError, RuntimeError) as e:
+            logger.warning("Could not find entity %s: %s", entity_name, e)
             raise NotImplementedError(
                 "Entity search not yet implemented for this graph store type"
             ) from e
 
     async def find_relationships(
-        entity: str, max_hops: int = 2
+        entity: str, max_hops: int = DEFAULT_MAX_HOPS
     ) -> list[dict[str, Any]]:
         """Find relationships for an entity within max_hops."""
         try:
@@ -533,8 +559,8 @@ def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex
                 raise NotImplementedError(
                     "Relationship traversal requires access to property_graph_store"
                 )
-        except Exception as e:
-            logger.warning(f"Could not find relationships for {entity}: {e}")
+        except (KeyError, AttributeError, RuntimeError) as e:
+            logger.warning("Could not find relationships for %s: %s", entity, e)
             raise NotImplementedError(
                 "Relationship traversal not yet implemented for this graph store type"
             ) from e
@@ -550,7 +576,7 @@ def extend_property_graph_index(index: PropertyGraphIndex) -> PropertyGraphIndex
         for doc in documents:
             index.insert(doc)
 
-    async def query(query_str: str, top_k: int = 5) -> list[Any]:
+    async def query(query_str: str, top_k: int = DEFAULT_TOP_K) -> list[Any]:
         """Query the property graph."""
         retriever = index.as_retriever(similarity_top_k=top_k)
         return await asyncio.to_thread(retriever.retrieve, query_str)

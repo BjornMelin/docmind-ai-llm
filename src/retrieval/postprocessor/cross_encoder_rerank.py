@@ -30,6 +30,17 @@ from llama_index.core.bridge.pydantic import Field
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
 
+# Cross-Encoder Reranking Constants
+DEFAULT_TOP_N = 5
+DEFAULT_BATCH_SIZE = 16
+DEFAULT_MAX_LENGTH = 512
+CUDA_BATCH_SIZE_MIN = 16
+CPU_BATCH_SIZE_MAX = 4
+WARMUP_SIZE = 3
+MS_CONVERSION_FACTOR = 1000
+RTX_4090_TARGET_LATENCY_MS = 100.0
+SINGLE_NODE_THRESHOLD = 1
+
 
 class BGECrossEncoderRerank(BaseNodePostprocessor):
     """CrossEncoder reranker using BGE-reranker-v2-m3.
@@ -53,23 +64,23 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
     """
 
     model_name: str = Field(default="BAAI/bge-reranker-v2-m3")
-    top_n: int = Field(default=5)
+    top_n: int = Field(default=DEFAULT_TOP_N)
     device: str = Field(default="cuda")
     use_fp16: bool = Field(default=True)
     normalize_scores: bool = Field(default=True)
-    batch_size: int = Field(default=16)
-    max_length: int = Field(default=512)
+    batch_size: int = Field(default=DEFAULT_BATCH_SIZE)
+    max_length: int = Field(default=DEFAULT_MAX_LENGTH)
 
     def __init__(
         self,
         *,
         model_name: str = "BAAI/bge-reranker-v2-m3",
-        top_n: int = 5,
+        top_n: int = DEFAULT_TOP_N,
         device: str = "cuda",
         use_fp16: bool = True,
         normalize_scores: bool = True,
-        batch_size: int = 16,
-        max_length: int = 512,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        max_length: int = DEFAULT_MAX_LENGTH,
         **kwargs,
     ):
         """Initialize BGE CrossEncoder reranker.
@@ -111,9 +122,9 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
                 self._model.model.half()
                 logger.info("CrossEncoder using FP16 acceleration")
 
-            logger.info(f"BGE CrossEncoder loaded: {model_name} (FP16: {use_fp16})")
-        except Exception as e:
-            logger.error(f"Failed to load CrossEncoder: {e}")
+            logger.info("BGE CrossEncoder loaded: %s (FP16: %s)", model_name, use_fp16)
+        except (ImportError, RuntimeError, OSError) as e:
+            logger.error("Failed to load CrossEncoder: %s", e)
             raise
 
     def _postprocess_nodes(
@@ -136,7 +147,7 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
         if not query_bundle or not nodes:
             return nodes
 
-        if len(nodes) <= 1:
+        if len(nodes) <= SINGLE_NODE_THRESHOLD:
             return nodes[: self.top_n]
 
         query_text = query_bundle.query_str
@@ -169,11 +180,11 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
             # Return top_n results
             result_nodes = reranked_nodes[: self.top_n]
 
-            logger.debug(f"Reranked {len(nodes)} nodes -> top {len(result_nodes)}")
+            logger.debug("Reranked %d nodes -> top %d", len(nodes), len(result_nodes))
             return result_nodes
 
         except (RuntimeError, ValueError, torch.cuda.OutOfMemoryError) as e:
-            logger.error(f"CrossEncoder reranking failed: {e}")
+            logger.error("CrossEncoder reranking failed: %s", e)
             # Fallback: return original nodes truncated to top_n
             logger.info("Falling back to original node ordering")
             return nodes[: self.top_n]
@@ -197,10 +208,10 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
 
 def create_bge_cross_encoder_reranker(
     model_name: str = "BAAI/bge-reranker-v2-m3",
-    top_n: int = 5,
+    top_n: int = DEFAULT_TOP_N,
     use_fp16: bool = True,
     device: str = "cuda",
-    batch_size: int = 16,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> BGECrossEncoderRerank:
     """Create BGE CrossEncoder reranker with optimal settings for RTX 4090.
 
@@ -218,7 +229,11 @@ def create_bge_cross_encoder_reranker(
         Configured BGECrossEncoderRerank instance optimized for RTX 4090 Laptop
     """
     # RTX 4090 optimized batch size
-    batch_size = max(batch_size, 16) if device == "cuda" else min(batch_size, 4)
+    batch_size = (
+        max(batch_size, CUDA_BATCH_SIZE_MIN)
+        if device == "cuda"
+        else min(batch_size, CPU_BATCH_SIZE_MAX)
+    )
 
     return BGECrossEncoderRerank(
         model_name=model_name,
@@ -227,13 +242,16 @@ def create_bge_cross_encoder_reranker(
         use_fp16=use_fp16,
         normalize_scores=True,
         batch_size=batch_size,
-        max_length=512,  # Optimal for BGE-reranker-v2-m3
+        max_length=DEFAULT_MAX_LENGTH,  # Optimal for BGE-reranker-v2-m3
     )
 
 
 # Performance monitoring helper
 def benchmark_reranking_latency(
-    reranker: BGECrossEncoderRerank, query: str, documents: list[str], num_runs: int = 5
+    reranker: BGECrossEncoderRerank,
+    query: str,
+    documents: list[str],
+    num_runs: int = DEFAULT_TOP_N,
 ) -> dict[str, float]:
     """Benchmark reranking latency for performance validation.
 
@@ -262,7 +280,7 @@ def benchmark_reranking_latency(
     query_bundle = QueryBundle(query_str=query)
 
     # Warm up
-    reranker.postprocess_nodes(nodes[:3], query_bundle)
+    reranker.postprocess_nodes(nodes[:WARMUP_SIZE], query_bundle)
 
     # Benchmark
     latencies = []
@@ -270,12 +288,14 @@ def benchmark_reranking_latency(
         start_time = time.perf_counter()
         reranker.postprocess_nodes(nodes, query_bundle)
         end_time = time.perf_counter()
-        latencies.append((end_time - start_time) * 1000)  # Convert to ms
+        latencies.append(
+            (end_time - start_time) * MS_CONVERSION_FACTOR
+        )  # Convert to ms
 
     return {
         "mean_latency_ms": sum(latencies) / len(latencies),
         "min_latency_ms": min(latencies),
         "max_latency_ms": max(latencies),
         "num_documents": len(documents),
-        "target_latency_ms": 100.0,  # RTX 4090 target
+        "target_latency_ms": RTX_4090_TARGET_LATENCY_MS,  # RTX 4090 target
     }

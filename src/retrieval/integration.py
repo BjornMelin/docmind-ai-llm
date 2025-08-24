@@ -12,12 +12,18 @@ from llama_index.core.ingestion import IngestionPipeline
 from llama_index.core.node_parser import SentenceSplitter
 from loguru import logger
 
+from src.config.settings import settings
+
 from .embeddings.bge_m3_manager import create_bgem3_embedding
 
 # ADR-018 and ADR-019 compliance imports
 from .postprocessor.cross_encoder_rerank import create_bge_cross_encoder_reranker
 from .query_engine.router_engine import create_adaptive_router_engine
 from .vector_store.qdrant_unified import create_unified_qdrant_store
+
+# Integration configuration constants
+CLIP_EMBEDDING_DIM = 512  # CLIP ViT-B/32 dimension
+VLLM_MAX_NEW_TOKENS = 2048
 
 
 async def create_index_async(
@@ -50,28 +56,28 @@ async def create_index_async(
         embedding_model = create_bgem3_embedding(
             use_fp16=use_gpu,
             device=device,
-            max_length=8192,
+            max_length=settings.bge_m3_max_length,
         )
 
         # Configure global settings
         Settings.embed_model = embedding_model
-        Settings.chunk_size = 512
-        Settings.chunk_overlap = 50
+        Settings.chunk_size = settings.chunk_size
+        Settings.chunk_overlap = settings.chunk_overlap
 
         # Initialize unified vector store
         vector_store = create_unified_qdrant_store(
             url=qdrant_url,
             collection_name=collection_name,
-            embedding_dim=1024,  # BGE-M3 dimension
-            rrf_alpha=0.7,  # 70% dense, 30% sparse
+            embedding_dim=settings.bge_m3_embedding_dim,  # BGE-M3 dimension
+            rrf_alpha=settings.rrf_fusion_alpha,  # RRF fusion alpha parameter
         )
 
         # Create ingestion pipeline with BGE-M3
         pipeline = IngestionPipeline(
             transformations=[
                 SentenceSplitter(
-                    chunk_size=512,
-                    chunk_overlap=50,
+                    chunk_size=settings.chunk_size,
+                    chunk_overlap=settings.chunk_overlap,
                     separator=" ",
                 ),
                 embedding_model,
@@ -79,7 +85,7 @@ async def create_index_async(
         )
 
         # Process documents to nodes
-        logger.info(f"Processing {len(documents)} documents with BGE-M3 pipeline")
+        logger.info("Processing %d documents with BGE-M3 pipeline", len(documents))
         nodes = await asyncio.to_thread(pipeline.run, documents=documents)
 
         # Generate unified embeddings for nodes
@@ -107,18 +113,18 @@ async def create_index_async(
             embed_model=embedding_model,
         )
 
-        logger.info(f"Created unified index with {len(node_ids)} nodes using BGE-M3")
+        logger.info("Created unified index with %d nodes using BGE-M3", len(node_ids))
         return index
 
-    except Exception as e:
-        logger.error(f"Failed to create unified index: {e}")
+    except (ImportError, AttributeError, RuntimeError, ValueError) as e:
+        logger.error("Failed to create unified index: %s", e)
         raise
 
 
 def create_hybrid_retriever_compat(
     index: VectorStoreIndex,
     use_reranking: bool = True,
-    similarity_top_k: int = 10,
+    similarity_top_k: int = settings.top_k,
 ) -> Any:
     """Create hybrid retriever using FEAT-002 RouterQueryEngine.
 
@@ -156,8 +162,8 @@ def create_hybrid_retriever_compat(
         logger.info("Adaptive router engine created successfully")
         return router_engine
 
-    except Exception as e:
-        logger.error(f"Failed to create adaptive router engine: {e}")
+    except (ImportError, AttributeError, RuntimeError) as e:
+        logger.error("Failed to create adaptive router engine: %s", e)
         raise
 
 
@@ -207,8 +213,8 @@ async def create_experimental_components(
 
         logger.info("Experimental components created for ADR compliance")
 
-    except Exception as e:
-        logger.warning(f"Failed to create experimental components: {e}")
+    except (ImportError, AttributeError, RuntimeError) as e:
+        logger.warning("Failed to create experimental components: %s", e)
         # Return empty components if creation fails
         components = {
             "property_graph": None,
@@ -268,7 +274,7 @@ async def create_multimodal_index(
         qdrant_client.recreate_collection(
             collection_name=collection_name,
             vectors_config=VectorParams(
-                size=512,  # CLIP ViT-B/32 dimension
+                size=CLIP_EMBEDDING_DIM,  # CLIP ViT-B/32 dimension
                 distance=Distance.COSINE,
             ),
         )
@@ -300,11 +306,11 @@ async def create_multimodal_index(
                 vector_store=vector_store,
             )
 
-        logger.info(f"Created multimodal index in collection {collection_name}")
+        logger.info("Created multimodal index in collection %s", collection_name)
         return index
 
-    except Exception as e:
-        logger.error(f"Failed to create multimodal index: {e}")
+    except (ImportError, AttributeError, RuntimeError, ValueError) as e:
+        logger.error("Failed to create multimodal index: %s", e)
         raise
 
 
@@ -325,7 +331,7 @@ def integrate_vllm_with_llamaindex(vllm_config: dict) -> Any:
         dtype="float16",
         quantization=vllm_config.get("quantization", "fp8"),
         kv_cache_dtype=vllm_config.get("kv_cache_dtype", "fp8_e5m2"),
-        max_new_tokens=2048,
+        max_new_tokens=VLLM_MAX_NEW_TOKENS,
     )
 
     return vllm_llm

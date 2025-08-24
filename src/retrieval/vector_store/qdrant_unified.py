@@ -42,6 +42,21 @@ from llama_index.core.vector_stores.types import (
     VectorStoreQueryResult,
 )
 
+from src.config.settings import settings
+
+# Qdrant configuration constants
+MAX_FUSION_LIMIT = 50
+DEFAULT_COLLECTION_SIZE = 1000
+# Retry configuration constants
+RETRY_ATTEMPTS = 3
+RETRY_MIN_WAIT = 1
+RETRY_MAX_WAIT = 10
+INIT_RETRY_MIN = 4
+INIT_RETRY_MAX = 10
+ADD_RETRY_MIN = 2
+ADD_RETRY_MAX = 8
+QUERY_RETRY_MAX = 4
+
 
 class QdrantUnifiedVectorStore(BasePydanticVectorStore):
     """Unified Qdrant vector store for BGE-M3 dense + sparse embeddings.
@@ -70,8 +85,12 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
     collection_name: str
     dense_vector_name: str = Field(default="dense")
     sparse_vector_name: str = Field(default="sparse")
-    embedding_dim: int = Field(default=1024)  # BGE-M3 dimension
-    rrf_alpha: float = Field(default=0.7)  # Dense/sparse fusion weight
+    embedding_dim: int = Field(
+        default=settings.bge_m3_embedding_dim
+    )  # BGE-M3 dimension
+    rrf_alpha: float = Field(
+        default=settings.rrf_fusion_alpha
+    )  # Dense/sparse fusion weight
 
     def __init__(
         self,
@@ -79,8 +98,8 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         client: QdrantClient | None = None,
         url: str = "http://localhost:6333",
         collection_name: str = "docmind_feat002_unified",
-        embedding_dim: int = 1024,
-        rrf_alpha: float = 0.7,
+        embedding_dim: int = settings.bge_m3_embedding_dim,
+        rrf_alpha: float = settings.rrf_fusion_alpha,
         **kwargs,
     ):
         """Initialize QdrantUnifiedVectorStore.
@@ -111,8 +130,8 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         self._init_collection_with_retry()
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
+        stop=stop_after_attempt(RETRY_ATTEMPTS),
+        wait=wait_exponential(multiplier=1, min=INIT_RETRY_MIN, max=INIT_RETRY_MAX),
         reraise=True,
     )
     def _init_collection_with_retry(self) -> None:
@@ -135,17 +154,17 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
                         self.sparse_vector_name: SparseVectorParams()
                     },
                 )
-                logger.info(f"Created unified collection: {self.collection_name}")
+                logger.info("Created unified collection: %s", self.collection_name)
             else:
-                logger.info(f"Using existing collection: {self.collection_name}")
+                logger.info("Using existing collection: %s", self.collection_name)
 
-        except Exception as e:
-            logger.error(f"Failed to initialize Qdrant collection: {e}")
+        except (ConnectionError, TimeoutError, RuntimeError) as e:
+            logger.error("Failed to initialize Qdrant collection: %s", e)
             raise
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=8),
+        stop=stop_after_attempt(RETRY_ATTEMPTS),
+        wait=wait_exponential(multiplier=1, min=ADD_RETRY_MIN, max=ADD_RETRY_MAX),
         reraise=True,
     )
     def add(
@@ -218,16 +237,16 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
                 collection_name=self.collection_name, points=points
             )
 
-            logger.info(f"Added {len(points)} nodes to unified collection")
+            logger.info("Added %d nodes to unified collection", len(points))
             return node_ids
 
-        except Exception as e:
-            logger.error(f"Failed to add nodes to Qdrant: {e}")
+        except (ConnectionError, TimeoutError, RuntimeError) as e:
+            logger.error("Failed to add nodes to Qdrant: %s", e)
             raise
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=4),
+        stop=stop_after_attempt(RETRY_ATTEMPTS),
+        wait=wait_exponential(multiplier=1, min=RETRY_MIN_WAIT, max=QUERY_RETRY_MAX),
         reraise=True,
     )
     def query(
@@ -271,8 +290,8 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
             logger.warning("No embeddings provided for query")
             return VectorStoreQueryResult(nodes=[], similarities=[], ids=[])
 
-        except (ConnectionError, TimeoutError, ValueError) as e:
-            logger.error(f"Unified query failed: {e}")
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
+            logger.error("Unified query failed: %s", e)
             return VectorStoreQueryResult(nodes=[], similarities=[], ids=[])
 
     def _hybrid_search(
@@ -297,7 +316,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
             VectorStoreQueryResult with RRF-fused results
         """
         # Get more results for fusion (2x the requested amount)
-        fusion_limit = min(query.similarity_top_k * 2, 50)
+        fusion_limit = min(query.similarity_top_k * 2, MAX_FUSION_LIMIT)
 
         # Execute dense search
         dense_results = self.qdrant_client.search(
@@ -330,7 +349,10 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         return self._convert_results(fused_results[: query.similarity_top_k])
 
     def _apply_rrf_fusion(
-        self, dense_results: list[Any], sparse_results: list[Any], k: int = 60
+        self,
+        dense_results: list[Any],
+        sparse_results: list[Any],
+        k: int = settings.rrf_k_constant,
     ) -> list[Any]:
         """Apply Reciprocal Rank Fusion to combine dense and sparse results.
 
@@ -449,9 +471,9 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
                     ]
                 ),
             )
-            logger.info(f"Deleted documents with doc_id: {ref_doc_id}")
-        except Exception as e:
-            logger.error(f"Failed to delete documents: {e}")
+            logger.info("Deleted documents with doc_id: %s", ref_doc_id)
+        except (ConnectionError, TimeoutError, RuntimeError) as e:
+            logger.error("Failed to delete documents: %s", e)
             raise
 
     def clear(self) -> None:
@@ -459,17 +481,17 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         try:
             self.qdrant_client.delete_collection(collection_name=self.collection_name)
             self._init_collection_with_retry()  # Recreate empty collection
-            logger.info(f"Cleared collection: {self.collection_name}")
-        except Exception as e:
-            logger.error(f"Failed to clear collection: {e}")
+            logger.info("Cleared collection: %s", self.collection_name)
+        except (ConnectionError, TimeoutError, RuntimeError) as e:
+            logger.error("Failed to clear collection: %s", e)
             raise
 
 
 def create_unified_qdrant_store(
     url: str = "http://localhost:6333",
     collection_name: str = "docmind_feat002_unified",
-    embedding_dim: int = 1024,
-    rrf_alpha: float = 0.7,
+    embedding_dim: int = settings.bge_m3_embedding_dim,
+    rrf_alpha: float = settings.rrf_fusion_alpha,
 ) -> QdrantUnifiedVectorStore:
     """Create unified Qdrant vector store for BGE-M3 embeddings.
 
