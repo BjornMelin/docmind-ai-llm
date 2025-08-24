@@ -47,16 +47,14 @@ class MockAppSettings:
         for key, value in kwargs.items():
             setattr(self, key, value)
         # Set defaults
-        self.dense_embedding_dimension = getattr(
-            self, "dense_embedding_dimension", 1024
-        )
+        self.embedding_dimension = getattr(self, "embedding_dimension", 1024)
         self.rrf_fusion_weight_dense = getattr(self, "rrf_fusion_weight_dense", 0.7)
         self.rrf_fusion_weight_sparse = getattr(self, "rrf_fusion_weight_sparse", 0.3)
-        self.dense_embedding_model = getattr(
-            self, "dense_embedding_model", "BAAI/bge-large-en-v1.5"
+        self.embedding_model = getattr(
+            self, "embedding_model", "BAAI/bge-large-en-v1.5"
         )
-        self.llm_model = getattr(self, "llm_model", "gpt-4")
-        self.gpu_enabled = getattr(self, "gpu_enabled", True)
+        self.model_name = getattr(self, "model_name", "gpt-4")
+        self.enable_gpu_acceleration = getattr(self, "enable_gpu_acceleration", True)
 
 
 class TestRefactoredPipelineIntegration:
@@ -405,13 +403,13 @@ class TestRefactoredPipelineIntegration:
         """
         # Test valid settings creation
         valid_settings = MockAppSettings(
-            dense_embedding_dimension=1024,
+            embedding_dimension=1024,
             rrf_fusion_weight_dense=0.7,
             rrf_fusion_weight_sparse=0.3,
-            dense_embedding_model="BAAI/bge-large-en-v1.5",
+            embedding_model="BAAI/bge-large-en-v1.5",
         )
 
-        assert valid_settings.dense_embedding_dimension == 1024
+        assert valid_settings.embedding_dimension == 1024
         assert valid_settings.rrf_fusion_weight_dense == 0.7
 
         # Test validation logic

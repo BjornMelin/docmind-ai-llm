@@ -12,7 +12,7 @@ import pytest
 from llama_index.core import Document
 
 # Import DocMind AI components
-from src.models.core import AppSettings
+from src.config.settings import AppSettings
 from src.utils.core import (
     detect_hardware,
     verify_rrf_configuration,
@@ -29,18 +29,18 @@ class TestRealConfiguration:
         # Verify core configuration is loaded
         assert isinstance(settings.backend, str)
         assert isinstance(settings.ollama_base_url, str)
-        assert isinstance(settings.default_model, str)
+        assert isinstance(settings.model_name, str)
 
         # Verify embedding configuration
-        assert isinstance(settings.dense_embedding_model, str)
+        assert isinstance(settings.embedding_model, str)
         assert isinstance(settings.sparse_embedding_model, str)
-        assert settings.dense_embedding_dimension > 0
+        assert settings.embedding_dimension > 0
 
         # Verify SPLADE++ is configured
         assert "Splade_PP_en_v1" in settings.sparse_embedding_model
 
         # Verify BGE-Large is configured
-        assert "bge-large-en-v1.5" in settings.dense_embedding_model
+        assert "bge-large-en-v1.5" in settings.embedding_model
 
     def test_rrf_configuration_real_settings(self):
         """Test RRF configuration with real settings."""
@@ -71,7 +71,7 @@ class TestRealConfiguration:
         settings = AppSettings()
 
         # Verify GPU settings are boolean
-        assert isinstance(settings.gpu_acceleration, bool)
+        assert isinstance(settings.enable_gpu_acceleration, bool)
         # Check if enable_quantization exists (it may not be in simplified settings)
         if hasattr(settings, "enable_quantization"):
             assert isinstance(settings.enable_quantization, bool)
@@ -219,11 +219,11 @@ class TestConfigurationValidation:
         settings = AppSettings()
 
         # BGE-Large should be 1024 dimensions
-        if "bge-large" in settings.dense_embedding_model.lower():
-            assert settings.dense_embedding_dimension == 1024
+        if "bge-large" in settings.embedding_model.lower():
+            assert settings.embedding_dimension == 1024
 
         # Verify dimension is positive
-        assert settings.dense_embedding_dimension > 0
+        assert settings.embedding_dimension > 0
 
     def test_batch_size_configurations(self):
         """Test batch size configurations are reasonable."""
@@ -319,9 +319,9 @@ class TestIntegrationReadiness:
         settings = AppSettings()
 
         # Dense embedding model
-        assert settings.dense_embedding_model is not None
-        assert len(settings.dense_embedding_model) > 0
-        assert "bge" in settings.dense_embedding_model.lower()
+        assert settings.embedding_model is not None
+        assert len(settings.embedding_model) > 0
+        assert "bge" in settings.embedding_model.lower()
 
         # Sparse embedding model
         assert settings.sparse_embedding_model is not None
@@ -344,10 +344,10 @@ class TestIntegrationReadiness:
         if hasattr(settings, "backend"):
             assert settings.backend in ["ollama", "lmstudio", "llamacpp"]
 
-        # Check default_model attribute
-        assert hasattr(settings, "default_model")
-        assert settings.default_model is not None
-        assert len(settings.default_model) > 0
+        # Check model_name attribute
+        assert hasattr(settings, "model_name")
+        assert settings.model_name is not None
+        assert len(settings.model_name) > 0
 
     def test_system_components_importable(self):
         """Test that all system components can be imported."""

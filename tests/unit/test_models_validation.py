@@ -8,8 +8,8 @@ valid configuration loading, data validation, and error handling.
 import pytest
 from pydantic import ValidationError
 
-from src.models.core import AnalysisOutput
-from src.models.core import Settings as AppSettings
+from src.config.settings import AnalysisOutput
+from src.config.settings import Settings as AppSettings
 
 
 class TestAnalysisOutputValidation:
@@ -131,28 +131,26 @@ class TestAppSettingsConfiguration:
 
         # Critical settings should have defaults
         assert settings.qdrant_url is not None
-        assert settings.llm_model is not None
+        assert settings.model_name is not None
         assert settings.chunk_size > 0
         assert settings.chunk_overlap >= 0
-        assert settings.similarity_top_k > 0
+        assert settings.top_k > 0
 
         # Verify reasonable defaults for RAG
         assert settings.chunk_size >= 500  # Reasonable minimum
         assert (
             settings.chunk_overlap < settings.chunk_size
         )  # Overlap should be less than size
-        assert settings.similarity_top_k <= 20  # Reasonable maximum
+        assert settings.top_k <= 20  # Reasonable maximum
 
     def test_app_settings_validates_chunk_configuration(self):
         """Chunk settings should be validated for proper RAG operation."""
         # Valid configuration should work
-        valid_settings = AppSettings(
-            chunk_size=1000, chunk_overlap=200, similarity_top_k=5
-        )
+        valid_settings = AppSettings(chunk_size=1000, chunk_overlap=200, top_k=5)
 
         assert valid_settings.chunk_size == 1000
         assert valid_settings.chunk_overlap == 200
-        assert valid_settings.similarity_top_k == 5
+        assert valid_settings.top_k == 5
 
     def test_app_settings_validates_rrf_weights(self):
         """RRF fusion weights should be validated for hybrid search."""
@@ -194,8 +192,8 @@ class TestAppSettingsConfiguration:
         settings = AppSettings()
 
         # Should have sensible model defaults
-        assert settings.llm_model is not None
-        assert len(settings.llm_model) > 0
+        assert settings.model_name is not None
+        assert len(settings.model_name) > 0
 
     def test_app_settings_embedding_configuration(self):
         """Embedding settings should support hybrid search capabilities."""
@@ -214,14 +212,14 @@ class TestAppSettingsConfiguration:
         settings = AppSettings()
 
         # GPU settings should be boolean
-        assert isinstance(settings.gpu_enabled, bool)
+        assert isinstance(settings.enable_gpu_acceleration, bool)
 
     def test_app_settings_debug_and_logging(self):
         """Debug and logging settings should be properly configured."""
         settings = AppSettings()
 
         # Cache should be boolean
-        assert isinstance(settings.cache_enabled, bool)
+        assert isinstance(settings.enable_document_caching, bool)
 
 
 class TestRealWorldConfigurationScenarios:
@@ -232,50 +230,50 @@ class TestRealWorldConfigurationScenarios:
         production_settings = AppSettings(
             chunk_size=1024,
             chunk_overlap=128,
-            similarity_top_k=10,
-            gpu_enabled=True,
+            top_k=10,
+            enable_gpu_acceleration=True,
         )
 
         # Production settings should be conservative
-        assert production_settings.gpu_enabled is True
+        assert production_settings.enable_gpu_acceleration is True
         assert production_settings.chunk_overlap < production_settings.chunk_size
 
     def test_development_configuration(self):
         """Test configuration suitable for development."""
         dev_settings = AppSettings(
             chunk_size=512,  # Smaller for faster testing
-            similarity_top_k=3,  # Fewer results for testing
-            gpu_enabled=False,  # May not be available in dev
+            top_k=3,  # Fewer results for testing
+            enable_gpu_acceleration=False,  # May not be available in dev
         )
 
         assert dev_settings.chunk_size <= 1000  # Reasonable for dev
-        assert dev_settings.gpu_enabled is False
+        assert dev_settings.enable_gpu_acceleration is False
 
     def test_memory_constrained_configuration(self):
         """Test configuration for memory-constrained environments."""
         memory_efficient_settings = AppSettings(
             chunk_size=256,  # Smaller chunks
             embedding_batch_size=10,  # Smaller batches
-            similarity_top_k=3,  # Fewer results
-            gpu_enabled=False,  # CPU-only for memory efficiency
+            top_k=3,  # Fewer results
+            enable_gpu_acceleration=False,  # CPU-only for memory efficiency
         )
 
         assert memory_efficient_settings.chunk_size <= 512
         assert memory_efficient_settings.embedding_batch_size <= 20
-        assert memory_efficient_settings.similarity_top_k <= 5
+        assert memory_efficient_settings.top_k <= 5
 
     def test_high_performance_configuration(self):
         """Test configuration for high-performance environments."""
         high_perf_settings = AppSettings(
             chunk_size=2048,  # Larger chunks for more context
             embedding_batch_size=50,  # Larger batches
-            similarity_top_k=20,  # More comprehensive results
-            gpu_enabled=True,  # GPU acceleration
+            top_k=20,  # More comprehensive results
+            enable_gpu_acceleration=True,  # GPU acceleration
         )
 
         assert high_perf_settings.chunk_size >= 1000
         assert high_perf_settings.embedding_batch_size >= 30
-        assert high_perf_settings.gpu_enabled is True
+        assert high_perf_settings.enable_gpu_acceleration is True
 
 
 class TestConfigurationValidationEdgeCases:
@@ -297,24 +295,24 @@ class TestConfigurationValidationEdgeCases:
             pass  # This is acceptable behavior
 
     def test_extreme_similarity_values(self):
-        """Extreme similarity_top_k values should be handled."""
+        """Extreme top_k values should be handled."""
         # Very small value
-        small_k_settings = AppSettings(similarity_top_k=1)
-        assert small_k_settings.similarity_top_k == 1
+        small_k_settings = AppSettings(top_k=1)
+        assert small_k_settings.top_k == 1
 
         # Large but reasonable value
-        large_k_settings = AppSettings(similarity_top_k=100)
-        assert large_k_settings.similarity_top_k == 100
+        large_k_settings = AppSettings(top_k=100)
+        assert large_k_settings.top_k == 100
 
     def test_gpu_settings_boundary_values(self):
         """GPU settings boundary values should be handled correctly."""
         # GPU disabled
-        gpu_off_settings = AppSettings(gpu_enabled=False)
-        assert gpu_off_settings.gpu_enabled is False
+        gpu_off_settings = AppSettings(enable_gpu_acceleration=False)
+        assert gpu_off_settings.enable_gpu_acceleration is False
 
         # GPU enabled
-        gpu_on_settings = AppSettings(gpu_enabled=True)
-        assert gpu_on_settings.gpu_enabled is True
+        gpu_on_settings = AppSettings(enable_gpu_acceleration=True)
+        assert gpu_on_settings.enable_gpu_acceleration is True
 
     def test_url_format_variations(self):
         """Different URL formats should be handled appropriately."""

@@ -54,7 +54,7 @@ class TestAppStartup:
             sys.path.insert(0, src_path)
 
         try:
-            from src.models.core import settings
+            from src.config.settings import settings
 
             # Test that settings object exists and has expected attributes
             assert settings is not None
@@ -291,7 +291,7 @@ class TestCoreIntegration:
             sys.path.insert(0, src_path)
 
         try:
-            from src.models.core import settings
+            from src.config.settings import settings
 
             # Test that settings can be used
             assert settings is not None

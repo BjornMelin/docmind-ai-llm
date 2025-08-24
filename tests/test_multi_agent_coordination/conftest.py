@@ -13,7 +13,6 @@ Features:
 - FP8 optimization mock components
 """
 
-import asyncio
 import time
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -31,16 +30,16 @@ from src.agents.coordinator import MultiAgentCoordinator, MultiAgentState
 from src.dspy_integration import DSPyLlamaIndexRetriever
 from src.vllm_config import ContextManager, VLLMConfig, VLLMManager
 
-
-@pytest.fixture(scope="session")
-def event_loop_policy():
-    """Set event loop policy for async tests."""
-    return asyncio.DefaultEventLoopPolicy()
+# Note: event_loop_policy removed - use fixture from main conftest.py
 
 
 @pytest.fixture
 def mock_vllm_config() -> VLLMConfig:
-    """Create mock vLLM configuration for testing."""
+    """Create mock vLLM configuration for multi-agent testing.
+
+    Returns:
+        VLLMConfig: Mock vLLM config optimized for FP8 and 128K context.
+    """
     return VLLMConfig(
         model="Qwen/Qwen3-4B-Instruct-2507-FP8",
         max_model_len=131072,
@@ -52,11 +51,15 @@ def mock_vllm_config() -> VLLMConfig:
 
 @pytest.fixture
 def mock_context_manager() -> ContextManager:
-    """Create mock context manager with realistic token handling."""
+    """Create mock context manager with realistic token handling.
+
+    Returns:
+        ContextManager: Mock context manager for testing token estimation and
+            context window management.
+    """
     manager = ContextManager()
 
     # Mock the token estimation to return predictable values
-
     def mock_estimate_tokens(messages):
         if isinstance(messages, list) and messages:
             # Return reasonable token counts for testing
@@ -70,7 +73,11 @@ def mock_context_manager() -> ContextManager:
 
 @pytest.fixture
 def mock_llm() -> Mock:
-    """Create comprehensive mock LLM for agent testing."""
+    """Create comprehensive mock LLM for multi-agent testing.
+
+    Returns:
+        Mock: Mock LLM with sync/async methods for agent coordination testing.
+    """
     mock_llm = Mock()
 
     # Mock different response types
@@ -91,13 +98,21 @@ def mock_llm() -> Mock:
 
 @pytest.fixture
 def mock_memory() -> InMemorySaver:
-    """Create mock memory for state persistence."""
+    """Create mock memory for state persistence.
+
+    Returns:
+        InMemorySaver: In-memory state saver for testing agent coordination.
+    """
     return InMemorySaver()
 
 
 @pytest.fixture
 def sample_agent_state() -> MultiAgentState:
-    """Create sample agent state for testing."""
+    """Create sample agent state for testing multi-agent workflows.
+
+    Returns:
+        MultiAgentState: Pre-configured agent state with test data and mock tools.
+    """
     return MultiAgentState(
         messages=[HumanMessage(content="What is machine learning?")],
         tools_data={
@@ -114,7 +129,11 @@ def sample_agent_state() -> MultiAgentState:
 
 @pytest.fixture
 def mock_dspy_retriever() -> DSPyLlamaIndexRetriever:
-    """Create mock DSPy retriever with optimization capabilities."""
+    """Create mock DSPy retriever with optimization capabilities.
+
+    Returns:
+        DSPyLlamaIndexRetriever: Mock DSPy retriever for testing query optimization.
+    """
     with patch("src.dspy_integration.DSPY_AVAILABLE", True):
         retriever = DSPyLlamaIndexRetriever(llm=Mock())
         retriever.optimization_enabled = True

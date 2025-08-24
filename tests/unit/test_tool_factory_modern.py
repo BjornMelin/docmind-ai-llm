@@ -1,416 +1,482 @@
-"""Modern comprehensive test coverage for tool_factory.py.
+"""Enhanced unit tests for tool_factory.py with realistic scenarios.
 
-This test suite provides comprehensive coverage for the ToolFactory class,
-using modern pytest fixtures, proper typing, and parametrized tests
-following 2025 best practices.
-
-Key improvements:
-- Modern pytest fixtures instead of MagicMock scattered throughout
-- Proper type hints on all test methods
-- Parametrized tests to reduce duplication
-- Better test organization and readability
+Focuses on testing actual ToolFactory behavior with minimal mocking,
+realistic test data, and comprehensive edge case coverage.
+Tests tool creation logic rather than mock interactions.
 """
 
-from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
 from llama_index.core.tools import QueryEngineTool
 
-# Import the module under test
-from src.agents.tool_factory import ToolFactory
-from src.models.core import Settings as AppSettings
+from src.agents.tool_factory import (
+    DEFAULT_RERANKING_TOP_K,
+    DEFAULT_VECTOR_SIMILARITY_TOP_K,
+    KG_SIMILARITY_TOP_K,
+    ToolFactory,
+)
+from src.config.settings import Settings as AppSettings
 
 
 @pytest.fixture
-def mock_query_engine() -> Mock:
-    """Create a mock query engine with proper spec."""
+def mock_index():
+    """Create a lightweight mock index for testing."""
+    index = Mock()
+    query_engine = Mock()
+    index.as_query_engine.return_value = query_engine
+    return index
+
+
+@pytest.fixture
+def mock_retriever():
+    """Create a lightweight mock retriever for testing."""
     return Mock()
 
 
 @pytest.fixture
-def mock_reranker() -> Mock:
-    """Create a mock reranker instance."""
-    return Mock()
+def basic_settings() -> AppSettings:
+    """Create basic test settings."""
+    return AppSettings()
 
 
 @pytest.fixture
-def test_settings() -> AppSettings:
-    """Create test settings with reranker configuration."""
+def reranker_settings() -> AppSettings:
+    """Create settings with reranker enabled."""
     return AppSettings(
         reranker_model="colbert-ir/colbertv2.0",
         reranking_top_k=5,
     )
 
 
-class TestToolFactoryBasicMethods:
-    """Test basic ToolFactory methods with modern fixtures."""
+class TestToolFactoryConstants:
+    """Test ToolFactory constants are reasonable."""
 
-    @pytest.mark.parametrize(
-        ("tool_name", "tool_description", "expected_name"),
-        [
-            ("test_tool", "Test description", "test_tool"),
-            ("", "Empty name test", ""),
-            (
-                "very_long_tool_name_that_exceeds_normal_length",
-                "Long name test",
-                "very_long_tool_name_that_exceeds_normal_length",
-            ),
-            ("tool-with-dashes", "Dash test", "tool-with-dashes"),
-            ("tool_with_underscores", "Underscore test", "tool_with_underscores"),
-        ],
-    )
-    def test_create_query_tool_name_variations(
-        self,
-        mock_query_engine: Mock,
-        tool_name: str,
-        tool_description: str,
-        expected_name: str,
-    ) -> None:
-        """Test query tool creation with various name formats."""
-        result = ToolFactory.create_query_tool(
-            mock_query_engine, tool_name, tool_description
-        )
+    def test_constants_are_valid(self):
+        """Test that ToolFactory constants have reasonable values."""
+        assert isinstance(DEFAULT_RERANKING_TOP_K, int)
+        assert DEFAULT_RERANKING_TOP_K > 0
+
+        assert isinstance(KG_SIMILARITY_TOP_K, int)
+        assert KG_SIMILARITY_TOP_K > 0
+
+        assert isinstance(DEFAULT_VECTOR_SIMILARITY_TOP_K, int)
+        assert DEFAULT_VECTOR_SIMILARITY_TOP_K > 0
+
+        # KG should typically need more results than vector search
+        assert KG_SIMILARITY_TOP_K >= DEFAULT_VECTOR_SIMILARITY_TOP_K
+
+
+class TestToolFactoryBasicMethods:
+    """Test basic ToolFactory methods with realistic scenarios."""
+
+    def test_create_query_tool_basic(self):
+        """Test basic query tool creation works correctly."""
+        mock_engine = Mock()
+        tool_name = "test_tool"
+        tool_description = "A test tool for validation"
+
+        result = ToolFactory.create_query_tool(mock_engine, tool_name, tool_description)
 
         assert isinstance(result, QueryEngineTool)
-        assert result.query_engine == mock_query_engine
-        assert result.metadata.name == expected_name
+        assert result.query_engine == mock_engine
+        assert result.metadata.name == tool_name
         assert result.metadata.description == tool_description
-        assert result.metadata.return_direct is False
+        assert result.metadata.return_direct is False  # Should allow agent reasoning
+
+    def test_create_query_tool_edge_cases(self):
+        """Test query tool creation with edge case inputs."""
+        # Test with None engine
+        result = ToolFactory.create_query_tool(None, "test", "description")
+        assert isinstance(result, QueryEngineTool)
+        assert result.query_engine is None
+
+        # Test with empty strings
+        result = ToolFactory.create_query_tool(Mock(), "", "")
+        assert result.metadata.name == ""
+        assert result.metadata.description == ""
+
+        # Test with very long inputs
+        long_name = "x" * 1000
+        long_desc = "y" * 10000
+        result = ToolFactory.create_query_tool(Mock(), long_name, long_desc)
+        assert result.metadata.name == long_name
+        assert result.metadata.description == long_desc
 
     @pytest.mark.parametrize(
-        ("description_length", "multiplier"),
+        ("name", "description"),
         [
-            ("Short description", 1),
-            ("Medium length description with more detail", 1),
-            ("Very long description. ", 50),  # 50x repetition
-            ("Extremely long description. ", 100),  # 100x repetition
+            ("simple_tool", "Simple description"),
+            ("tool-with-dashes", "Tool with dashes"),
+            ("tool_with_underscores", "Tool with underscores"),
+            ("123numeric", "Numeric start"),
+            ("UPPERCASE", "Uppercase name"),
         ],
     )
-    def test_create_query_tool_description_lengths(
-        self,
-        mock_query_engine: Mock,
-        description_length: str,
-        multiplier: int,
-    ) -> None:
-        """Test query tool creation with varying description lengths."""
-        long_description = description_length * multiplier
+    def test_create_query_tool_name_variations(self, name, description):
+        """Test query tool creation with various name patterns."""
+        mock_engine = Mock()
 
-        result = ToolFactory.create_query_tool(
-            mock_query_engine, "test_tool", long_description
+        result = ToolFactory.create_query_tool(mock_engine, name, description)
+
+        assert result.metadata.name == name
+        assert result.metadata.description == description
+
+    def test_create_query_tool_metadata_consistency(self):
+        """Test that query tool metadata is consistent."""
+        mock_engine = Mock()
+
+        tool = ToolFactory.create_query_tool(
+            mock_engine, "test_tool", "Test description"
         )
 
-        assert result.metadata.description == long_description
-        assert len(result.metadata.description) == len(long_description)
+        # Verify metadata structure
+        assert hasattr(tool.metadata, "name")
+        assert hasattr(tool.metadata, "description")
+        assert hasattr(tool.metadata, "return_direct")
 
-    @pytest.mark.parametrize(
-        ("query_engine", "should_succeed"),
-        [
-            (None, True),  # Should handle None gracefully
-            ("mock_engine", True),  # Should work with any object
-        ],
-    )
-    def test_create_query_tool_engine_variants(
-        self,
-        query_engine: Any,
-        should_succeed: bool,
-    ) -> None:
-        """Test query tool creation with various query engine types."""
-        if query_engine == "mock_engine":
-            query_engine = Mock()
-
-        result = ToolFactory.create_query_tool(query_engine, "test_tool", "Description")
-
-        if should_succeed:
-            assert isinstance(result, QueryEngineTool)
-            assert result.query_engine == query_engine
-        else:
-            # Add specific failure cases if needed
-            pass
+        # Verify types
+        assert isinstance(tool.metadata.name, str)
+        assert isinstance(tool.metadata.description, str)
+        assert isinstance(tool.metadata.return_direct, bool)
 
 
 class TestToolFactoryReranker:
-    """Test ColBERT reranker creation and configuration with modern fixtures."""
+    """Test ColBERT reranker creation with realistic scenarios."""
 
-    @pytest.mark.parametrize(
-        ("model_name", "top_k", "expected_calls"),
-        [
-            ("colbert-ir/colbertv2.0", 5, 1),
-            ("colbert-ir/colbertv1.0", 10, 1),
-            ("custom-colbert-model", 3, 1),
-        ],
-    )
-    def test_create_reranker_success(
-        self,
-        model_name: str,
-        top_k: int,
-        expected_calls: int,
-    ) -> None:
-        """Test successful reranker creation with different configurations."""
+    def test_create_reranker_with_valid_settings(self):
+        """Test reranker creation with valid configuration."""
         test_settings = AppSettings(
-            reranker_model=model_name,
-            reranking_top_k=top_k,
+            reranker_model="colbert-ir/colbertv2.0",
+            reranking_top_k=5,
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert,
         ):
             mock_reranker = Mock()
-            mock_colbert_class.return_value = mock_reranker
+            mock_colbert.return_value = mock_reranker
 
             result = ToolFactory._create_reranker()
 
             assert result == mock_reranker
-            assert mock_colbert_class.call_count == expected_calls
-            mock_colbert_class.assert_called_with(
-                top_n=top_k, model=model_name, keep_retrieval_score=True
+            mock_colbert.assert_called_once_with(
+                top_n=5, model="colbert-ir/colbertv2.0", keep_retrieval_score=True
             )
 
-    @pytest.mark.parametrize(
-        ("missing_config"),
-        [
-            "no_model",
-            "no_top_k",
-            "both_missing",
-        ],
-    )
-    def test_create_reranker_missing_config(self, missing_config: str) -> None:
-        """Test reranker creation with missing configuration."""
-        # Create settings with missing config
-        if missing_config == "no_model":
-            test_settings = AppSettings(reranker_model=None, reranking_top_k=5)
-        elif missing_config == "no_top_k":
-            test_settings = AppSettings(
-                reranker_model="colbert-ir/colbertv2.0", reranking_top_k=None
-            )
-        else:  # both_missing
-            test_settings = AppSettings(reranker_model=None, reranking_top_k=None)
+    def test_create_reranker_no_model_configured(self):
+        """Test reranker creation when no model is configured."""
+        test_settings = AppSettings(reranker_model=None)
 
-        with patch("agents.tool_factory.settings", test_settings):
+        with patch("src.agents.tool_factory.settings", test_settings):
             result = ToolFactory._create_reranker()
-
-            # Should return None when configuration is missing
             assert result is None
 
-    def test_create_reranker_import_error(self) -> None:
-        """Test reranker creation when ColbertRerank is not available."""
+    def test_create_reranker_empty_model_string(self):
+        """Test reranker creation with empty model string."""
+        test_settings = AppSettings(reranker_model="")
+
+        with patch("src.agents.tool_factory.settings", test_settings):
+            result = ToolFactory._create_reranker()
+            assert result is None
+
+    def test_create_reranker_uses_default_top_k(self):
+        """Test reranker creation uses default top_k when not specified."""
+        test_settings = AppSettings(
+            reranker_model="colbert-ir/colbertv2.0",
+            reranking_top_k=None,  # Should use default
+        )
+
+        with (
+            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert,
+        ):
+            mock_reranker = Mock()
+            mock_colbert.return_value = mock_reranker
+
+            ToolFactory._create_reranker()
+
+            # Should use DEFAULT_RERANKING_TOP_K
+            mock_colbert.assert_called_once_with(
+                top_n=DEFAULT_RERANKING_TOP_K,
+                model="colbert-ir/colbertv2.0",
+                keep_retrieval_score=True,
+            )
+
+    def test_create_reranker_error_handling(self):
+        """Test reranker creation handles errors gracefully."""
         test_settings = AppSettings(
             reranker_model="colbert-ir/colbertv2.0",
             reranking_top_k=5,
         )
 
+        # Test import error
         with (
-            patch("agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.settings", test_settings),
             patch(
-                "agents.tool_factory.ColbertRerank",
+                "src.agents.tool_factory.ColbertRerank",
                 side_effect=ImportError("ColbertRerank not available"),
             ),
         ):
             result = ToolFactory._create_reranker()
-
-            # Should return None when import fails
             assert result is None
 
-    def test_create_reranker_initialization_error(self) -> None:
-        """Test reranker creation when initialization fails."""
-        test_settings = AppSettings(
-            reranker_model="colbert-ir/colbertv2.0",
-            reranking_top_k=5,
-        )
-
+        # Test runtime error
         with (
-            patch("agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.settings", test_settings),
             patch(
-                "agents.tool_factory.ColbertRerank",
-                side_effect=Exception("Model loading failed"),
+                "src.agents.tool_factory.ColbertRerank",
+                side_effect=RuntimeError("Model loading failed"),
             ),
         ):
             result = ToolFactory._create_reranker()
-
-            # Should return None when initialization fails
             assert result is None
 
-
-class TestToolFactoryConfiguration:
-    """Test configuration-related functionality with modern fixtures."""
-
-    @pytest.mark.parametrize(
-        ("config_scenario"),
-        [
-            "valid_complete",
-            "valid_minimal",
-            "invalid_missing_required",
-            "invalid_wrong_types",
-        ],
-    )
-    def test_configuration_validation(self, config_scenario: str) -> None:
-        """Test various configuration validation scenarios."""
-        if config_scenario == "valid_complete":
-            settings = AppSettings(
+    def test_reranker_parameter_validation(self):
+        """Test reranker parameter handling."""
+        # Test various top_k values
+        for top_k in [1, 5, 10, 20]:
+            test_settings = AppSettings(
                 reranker_model="colbert-ir/colbertv2.0",
-                reranking_top_k=5,
-                # Add other required settings
+                reranking_top_k=top_k,
             )
-        elif config_scenario == "valid_minimal":
-            settings = AppSettings()  # Default values
-        elif config_scenario == "invalid_missing_required":
-            # This would depend on what's actually required
-            settings = AppSettings()
-        else:  # invalid_wrong_types
-            # This would test type validation if it exists
-            settings = AppSettings()
 
-        # Test configuration usage - this would depend on actual validation logic
-        # For now, just verify settings can be created
-        assert settings is not None
+            with (
+                patch("src.agents.tool_factory.settings", test_settings),
+                patch("src.agents.tool_factory.ColbertRerank") as mock_colbert,
+            ):
+                mock_colbert.return_value = Mock()
+                ToolFactory._create_reranker()
+                mock_colbert.assert_called_once_with(
+                    top_n=top_k,
+                    model="colbert-ir/colbertv2.0",
+                    keep_retrieval_score=True,
+                )
 
 
-class TestToolFactoryErrorHandling:
-    """Test error handling scenarios with modern fixtures."""
+class TestToolFactoryVectorSearch:
+    """Test vector search tool creation with realistic scenarios."""
 
-    @pytest.mark.parametrize(
-        ("error_type", "error_message", "expected_result"),
-        [
-            (ImportError, "Module not found", None),
-            (RuntimeError, "Runtime error", None),
-            (Exception, "Generic error", None),
-        ],
-    )
-    def test_error_handling_scenarios(
-        self,
-        error_type: type,
-        error_message: str,
-        expected_result: Any | None,
-    ) -> None:
-        """Test various error handling scenarios."""
-        test_settings = AppSettings(
-            reranker_model="colbert-ir/colbertv2.0",
-            reranking_top_k=5,
-        )
+    def test_create_vector_search_tool_basic(self, mock_index, basic_settings):
+        """Test basic vector search tool creation."""
+        with patch("src.agents.tool_factory.settings", basic_settings):
+            tool = ToolFactory.create_vector_search_tool(mock_index)
 
-        with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch(
-                "agents.tool_factory.ColbertRerank",
-                side_effect=error_type(error_message),
-            ),
-        ):
-            result = ToolFactory._create_reranker()
-            assert result == expected_result
+            assert isinstance(tool, QueryEngineTool)
+            assert tool.metadata.name == "vector_search"
+            assert "semantic similarity" in tool.metadata.description.lower()
+            assert tool.query_engine is not None
 
-    def test_graceful_degradation(self) -> None:
-        """Test that the factory gracefully degrades when components fail."""
-        # Test that tools can still be created even when reranker fails
+            # Verify index configuration
+            mock_index.as_query_engine.assert_called_once()
+
+    def test_create_vector_search_tool_with_custom_settings(self, mock_index):
+        """Test vector search tool with custom similarity_top_k."""
+        custom_settings = AppSettings(top_k=10, debug=True)
+
+        with patch("src.agents.tool_factory.settings", custom_settings):
+            ToolFactory.create_vector_search_tool(mock_index)
+
+            # Should use custom settings
+            call_args = mock_index.as_query_engine.call_args
+            assert call_args[1]["similarity_top_k"] == 10
+            assert call_args[1]["verbose"] is True
+
+
+class TestToolFactoryKnowledgeGraph:
+    """Test knowledge graph tool creation."""
+
+    def test_create_kg_search_tool_success(self, basic_settings):
+        """Test successful KG search tool creation."""
+        mock_kg_index = Mock()
         mock_query_engine = Mock()
+        mock_kg_index.as_query_engine.return_value = mock_query_engine
 
-        with patch(
-            "agents.tool_factory.ColbertRerank",
-            side_effect=ImportError("Not available"),
+        with patch("src.agents.tool_factory.settings", basic_settings):
+            tool = ToolFactory.create_kg_search_tool(mock_kg_index)
+
+            assert isinstance(tool, QueryEngineTool)
+            assert tool.metadata.name == "knowledge_graph"
+            assert "knowledge graph" in tool.metadata.description.lower()
+            assert "entity" in tool.metadata.description.lower()
+
+            # Verify KG-specific configuration
+            call_args = mock_kg_index.as_query_engine.call_args
+            assert call_args[1]["similarity_top_k"] == KG_SIMILARITY_TOP_K
+            assert call_args[1]["include_text"] is True
+
+    def test_create_kg_search_tool_none_index(self):
+        """Test KG search tool creation with None index."""
+        result = ToolFactory.create_kg_search_tool(None)
+        assert result is None
+
+    def test_create_kg_search_tool_falsy_values(self):
+        """Test KG search tool with various falsy values."""
+        falsy_values = [None, False, 0, "", [], {}]
+
+        for falsy_value in falsy_values:
+            result = ToolFactory.create_kg_search_tool(falsy_value)
+            assert result is None
+
+
+class TestToolFactoryHybridSearch:
+    """Test hybrid search tool creation."""
+
+    def test_create_hybrid_search_tool_success(self, mock_retriever, basic_settings):
+        """Test successful hybrid search tool creation."""
+        with (
+            patch("src.agents.tool_factory.settings", basic_settings),
+            patch("src.agents.tool_factory.RetrieverQueryEngine") as mock_engine_class,
         ):
-            # Tool creation should still work
-            result = ToolFactory.create_query_tool(
-                mock_query_engine, "test_tool", "Test description"
+            mock_query_engine = Mock()
+            mock_engine_class.return_value = mock_query_engine
+
+            tool = ToolFactory.create_hybrid_search_tool(mock_retriever)
+
+            assert isinstance(tool, QueryEngineTool)
+            assert tool.metadata.name == "hybrid_fusion_search"
+            assert "rrf" in tool.metadata.description.lower()
+            assert "reciprocal rank fusion" in tool.metadata.description.lower()
+
+            # Verify engine configuration
+            mock_engine_class.assert_called_once_with(
+                retriever=mock_retriever, node_postprocessors=[]
             )
 
-            assert isinstance(result, QueryEngineTool)
-            assert result.query_engine == mock_query_engine
+    def test_create_hybrid_search_tool_with_none_retriever(self):
+        """Test hybrid search tool with None retriever."""
+        with patch("src.agents.tool_factory.RetrieverQueryEngine") as mock_engine_class:
+            mock_engine_class.return_value = Mock()
 
+            tool = ToolFactory.create_hybrid_search_tool(None)
 
-class TestToolFactoryPerformance:
-    """Test performance-related scenarios with modern fixtures."""
-
-    def test_tool_creation_performance(self, mock_query_engine: Mock) -> None:
-        """Test that tool creation is reasonably fast."""
-        import time
-
-        start_time = time.time()
-
-        # Create multiple tools
-        tools = []
-        for i in range(100):
-            tool = ToolFactory.create_query_tool(
-                mock_query_engine, f"tool_{i}", f"Description {i}"
+            assert isinstance(tool, QueryEngineTool)
+            mock_engine_class.assert_called_once_with(
+                retriever=None, node_postprocessors=[]
             )
-            tools.append(tool)
-
-        end_time = time.time()
-
-        # Should create 100 tools in less than 1 second
-        assert end_time - start_time < 1.0
-        assert len(tools) == 100
-
-        # All tools should be properly configured
-        for i, tool in enumerate(tools):
-            assert tool.metadata.name == f"tool_{i}"
-            assert tool.metadata.description == f"Description {i}"
-
-    def test_memory_usage_reasonable(self, mock_query_engine: Mock) -> None:
-        """Test that tool creation doesn't use excessive memory."""
-        import sys
-
-        # Create many tools
-        tools = []
-        for i in range(1000):
-            tool = ToolFactory.create_query_tool(
-                mock_query_engine, f"tool_{i}", f"Description {i}"
-            )
-            tools.append(tool)
-
-        # Memory usage should be reasonable (this is a basic check)
-        final_size = sum(sys.getsizeof(tool) for tool in tools)
-
-        # Each tool should not be excessively large
-        average_tool_size = final_size / len(tools)
-        assert average_tool_size < 10000  # Less than 10KB per tool
 
 
 class TestToolFactoryIntegration:
-    """Test integration scenarios with modern fixtures."""
+    """Test tool factory integration scenarios."""
 
-    def test_end_to_end_tool_workflow(self, mock_query_engine: Mock) -> None:
-        """Test complete tool creation and usage workflow."""
-        # Create reranker
-        with (
-            patch(
-                "agents.tool_factory.settings",
-                AppSettings(reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5),
-            ),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
-        ):
-            mock_reranker = Mock()
-            mock_colbert_class.return_value = mock_reranker
+    def test_create_tools_from_indexes_comprehensive(self, mock_index, mock_retriever):
+        """Test creating tools from all available components."""
+        mock_kg_index = Mock()
+        mock_kg_index.as_query_engine.return_value = Mock()
 
-            reranker = ToolFactory._create_reranker()
-            assert reranker == mock_reranker
+        with patch("src.agents.tool_factory.settings", AppSettings()):
+            tools = ToolFactory.create_tools_from_indexes(
+                vector_index=mock_index,
+                kg_index=mock_kg_index,
+                retriever=mock_retriever,
+            )
 
-        # Create query tool
-        tool = ToolFactory.create_query_tool(
-            mock_query_engine, "integration_tool", "Integration test tool"
+            # Should create hybrid fusion, KG, and vector tools
+            assert len(tools) >= 2  # At least hybrid + vector
+
+            tool_names = [tool.metadata.name for tool in tools]
+            assert "hybrid_fusion_search" in tool_names
+            assert "vector_search" in tool_names
+
+    def test_create_tools_from_indexes_vector_only(self, mock_index):
+        """Test tool creation with only vector index."""
+        with patch("src.agents.tool_factory.settings", AppSettings()):
+            tools = ToolFactory.create_tools_from_indexes(
+                vector_index=mock_index, kg_index=None, retriever=None
+            )
+
+            # Should create hybrid vector + basic vector tools
+            assert len(tools) == 2
+            tool_names = [tool.metadata.name for tool in tools]
+            assert "hybrid_vector_search" in tool_names
+            assert "vector_search" in tool_names
+
+    def test_create_tools_from_indexes_no_vector_index(self):
+        """Test error handling when no vector index provided."""
+        tools = ToolFactory.create_tools_from_indexes(
+            vector_index=None, kg_index=Mock(), retriever=Mock()
         )
 
-        # Verify tool properties
+        # Should return empty list
+        assert tools == []
+
+    def test_create_basic_tools_legacy_compatibility(self, mock_index):
+        """Test legacy create_basic_tools method."""
+        index_data = {"vector": mock_index, "kg": None, "retriever": None}
+
+        tools = ToolFactory.create_basic_tools(index_data)
+
+        # Should work the same as create_tools_from_indexes
+        assert isinstance(tools, list)
+        assert len(tools) >= 1
+
+    def test_create_basic_tools_empty_dict(self):
+        """Test basic tools creation with empty dict."""
+        tools = ToolFactory.create_basic_tools({})
+        assert tools == []  # Should return empty list when no vector index
+
+
+class TestToolFactoryEdgeCases:
+    """Test edge cases and error conditions."""
+
+    def test_tool_descriptions_are_informative(self, mock_index):
+        """Test that tool descriptions contain helpful information."""
+        with patch("src.agents.tool_factory.settings", AppSettings()):
+            vector_tool = ToolFactory.create_vector_search_tool(mock_index)
+            hybrid_tool = ToolFactory.create_hybrid_vector_tool(mock_index)
+
+            # Descriptions should be substantial and informative
+            assert len(vector_tool.metadata.description) > 50
+            assert len(hybrid_tool.metadata.description) > 50
+
+            # Should contain key terms
+            assert "best for:" in vector_tool.metadata.description.lower()
+            assert "semantic" in vector_tool.metadata.description.lower()
+
+    def test_tool_metadata_consistency(self, mock_index, mock_retriever):
+        """Test that all tools have consistent metadata structure."""
+        with (
+            patch("src.agents.tool_factory.settings", AppSettings()),
+            patch("src.agents.tool_factory.RetrieverQueryEngine", return_value=Mock()),
+        ):
+            tools = [
+                ToolFactory.create_vector_search_tool(mock_index),
+                ToolFactory.create_hybrid_vector_tool(mock_index),
+                ToolFactory.create_hybrid_search_tool(mock_retriever),
+            ]
+
+            for tool in tools:
+                assert hasattr(tool.metadata, "name")
+                assert hasattr(tool.metadata, "description")
+                assert hasattr(tool.metadata, "return_direct")
+                assert isinstance(tool.metadata.name, str)
+                assert isinstance(tool.metadata.description, str)
+                assert tool.metadata.return_direct is False
+
+    @pytest.mark.performance
+    def test_tool_creation_performance(self):
+        """Test that tool creation is reasonably fast."""
+        import time
+
+        mock_engine = Mock()
+        start_time = time.time()
+
+        # Create many tools
+        for i in range(100):
+            ToolFactory.create_query_tool(mock_engine, f"tool_{i}", f"Description {i}")
+
+        elapsed_time = time.time() - start_time
+
+        # Should create 100 tools in under 1 second
+        assert elapsed_time < 1.0
+
+    def test_error_resilience(self):
+        """Test that tool factory handles errors gracefully."""
+        # Should handle None inputs gracefully
+        tool = ToolFactory.create_query_tool(None, "test", "test")
         assert isinstance(tool, QueryEngineTool)
-        assert tool.metadata.name == "integration_tool"
-        assert tool.metadata.description == "Integration test tool"
 
-    @pytest.mark.parametrize("num_tools", [1, 5, 10, 50])
-    def test_multiple_tool_creation(
-        self, mock_query_engine: Mock, num_tools: int
-    ) -> None:
-        """Test creating multiple tools efficiently."""
-        tools = []
-
-        for i in range(num_tools):
-            tool = ToolFactory.create_query_tool(
-                mock_query_engine, f"tool_{i}", f"Tool number {i} description"
-            )
-            tools.append(tool)
-
-        # Verify all tools were created correctly
-        assert len(tools) == num_tools
-
-        for i, tool in enumerate(tools):
-            assert tool.metadata.name == f"tool_{i}"
-            assert f"Tool number {i}" in tool.metadata.description
-            assert tool.query_engine == mock_query_engine
+        # Should handle empty strings
+        tool = ToolFactory.create_query_tool(Mock(), "", "")
+        assert isinstance(tool, QueryEngineTool)

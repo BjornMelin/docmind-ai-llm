@@ -108,11 +108,11 @@ def test_document_pipeline(mock_create_index, mock_load_docs):
 def test_models_core_import():
     """Test that models.core can be imported and contains required classes."""
     try:
-        from src.models.core import AnalysisOutput, Settings
+        from src.config.settings import AnalysisOutput, Settings
 
         # Test Settings class exists and can be instantiated
         settings = Settings()
-        assert hasattr(settings, "llm_model")
+        assert hasattr(settings, "model_name")
         assert hasattr(settings, "embedding_model")
 
         # Test AnalysisOutput class exists

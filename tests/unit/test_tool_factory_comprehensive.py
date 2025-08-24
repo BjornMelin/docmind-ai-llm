@@ -20,7 +20,7 @@ from llama_index.core.tools import QueryEngineTool
 
 # Import the module under test
 from src.agents.tool_factory import ToolFactory
-from src.models.core import Settings as AppSettings
+from src.config.settings import Settings as AppSettings
 
 
 class TestToolFactoryBasicMethods:
@@ -180,9 +180,7 @@ class TestToolFactoryVectorSearch:
         mock_query_engine = MagicMock()
         mock_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(
-            similarity_top_k=5, debug_mode=False, reranker_model=None
-        )
+        test_settings = AppSettings(top_k=5, debug_mode=False, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_vector_search_tool(mock_index)
@@ -194,7 +192,7 @@ class TestToolFactoryVectorSearch:
 
             # Verify query engine configuration
             mock_index.as_query_engine.assert_called_once_with(
-                similarity_top_k=5, node_postprocessors=[], verbose=False
+                top_k=5, node_postprocessors=[], verbose=False
             )
 
     def test_create_vector_search_tool_with_reranker(self):
@@ -204,7 +202,7 @@ class TestToolFactoryVectorSearch:
         mock_index.as_query_engine.return_value = mock_query_engine
 
         test_settings = AppSettings(
-            similarity_top_k=10,
+            top_k=10,
             debug_mode=True,
             reranker_model="colbert-ir/colbertv2.0",
             reranking_top_k=3,
@@ -224,7 +222,7 @@ class TestToolFactoryVectorSearch:
             # Verify reranker was created and used
             mock_colbert_class.assert_called_once()
             mock_index.as_query_engine.assert_called_once_with(
-                similarity_top_k=10,
+                top_k=10,
                 node_postprocessors=[mock_reranker],
                 verbose=True,
             )
@@ -251,7 +249,7 @@ class TestToolFactoryVectorSearch:
 
             # Should use default similarity_top_k of 5
             mock_index.as_query_engine.assert_called_once_with(
-                similarity_top_k=5, node_postprocessors=[], verbose=False
+                top_k=5, node_postprocessors=[], verbose=False
             )
 
 
@@ -277,7 +275,7 @@ class TestToolFactoryKnowledgeGraph:
 
             # Verify KG-specific configuration
             mock_kg_index.as_query_engine.assert_called_once_with(
-                similarity_top_k=10,  # KG uses higher top_k
+                top_k=10,  # KG uses higher top_k
                 include_text=True,
                 node_postprocessors=[],
                 verbose=False,
@@ -304,7 +302,7 @@ class TestToolFactoryKnowledgeGraph:
 
             # Verify reranker was used
             mock_kg_index.as_query_engine.assert_called_once_with(
-                similarity_top_k=10,
+                top_k=10,
                 include_text=True,
                 node_postprocessors=[mock_reranker],
                 verbose=True,
@@ -416,9 +414,7 @@ class TestToolFactoryHybridVector:
         mock_query_engine = MagicMock()
         mock_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(
-            similarity_top_k=7, debug_mode=True, reranker_model=None
-        )
+        test_settings = AppSettings(top_k=7, debug_mode=True, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_hybrid_vector_tool(mock_index)
@@ -442,7 +438,7 @@ class TestToolFactoryHybridVector:
         mock_index.as_query_engine.return_value = mock_query_engine
 
         test_settings = AppSettings(
-            similarity_top_k=5,
+            top_k=5,
             debug_mode=False,
             reranker_model="colbert-ir/colbertv2.0",
             reranking_top_k=3,
@@ -459,7 +455,7 @@ class TestToolFactoryHybridVector:
 
             # Verify reranker integration
             mock_index.as_query_engine.assert_called_once_with(
-                similarity_top_k=5,
+                top_k=5,
                 node_postprocessors=[mock_reranker],
                 verbose=False,
             )
@@ -725,10 +721,10 @@ class TestToolFactoryEdgeCases:
             # Default settings
             AppSettings(),
             # Minimal settings
-            AppSettings(similarity_top_k=1, debug_mode=False, reranker_model=None),
+            AppSettings(top_k=1, debug_mode=False, reranker_model=None),
             # Maximal settings
             AppSettings(
-                similarity_top_k=50,
+                top_k=50,
                 debug_mode=True,
                 reranker_model="colbert-ir/colbertv2.0",
                 reranking_top_k=20,
@@ -786,9 +782,7 @@ class TestToolFactoryEdgeCases:
         mock_index1.as_query_engine.return_value = mock_query_engine1
         mock_index2.as_query_engine.return_value = mock_query_engine2
 
-        test_settings = AppSettings(
-            similarity_top_k=5, debug_mode=True, reranker_model=None
-        )
+        test_settings = AppSettings(top_k=5, debug_mode=True, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             # Create two tools from different indexes
@@ -802,11 +796,11 @@ class TestToolFactoryEdgeCases:
 
             # Verify different configurations were used
             mock_index1.as_query_engine.assert_called_once_with(
-                similarity_top_k=5, node_postprocessors=[], verbose=True
+                top_k=5, node_postprocessors=[], verbose=True
             )
 
             mock_index2.as_query_engine.assert_called_once_with(
-                similarity_top_k=10,  # KG uses higher top_k
+                top_k=10,  # KG uses higher top_k
                 include_text=True,
                 node_postprocessors=[],
                 verbose=True,
@@ -903,7 +897,7 @@ class TestToolFactoryIntegration:
 
         # Realistic settings
         test_settings = AppSettings(
-            similarity_top_k=10,
+            top_k=10,
             debug_mode=False,
             reranker_model="colbert-ir/colbertv2.0",
             reranking_top_k=5,

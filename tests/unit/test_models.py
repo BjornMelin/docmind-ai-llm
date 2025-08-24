@@ -11,8 +11,8 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.models.core import AnalysisOutput
-from src.models.core import Settings as AppSettings
+from src.config.settings import AnalysisOutput
+from src.config.settings import Settings as AppSettings
 
 
 def test_analysis_output_creation():
@@ -63,15 +63,15 @@ def test_settings_default_values():
     settings = AppSettings()
 
     # Core LLM Configuration
-    assert settings.llm_model == "gpt-4"
+    assert settings.model_name == "gpt-4"
     assert settings.embedding_model == "text-embedding-3-small"
 
     # Search and Retrieval
-    assert settings.similarity_top_k == 10
-    assert settings.hybrid_alpha == 0.7
+    assert settings.top_k == 10
+    assert settings.rrf_fusion_weight_dense == 0.7
 
     # Hardware and Performance
-    assert settings.gpu_enabled is True
+    assert settings.enable_gpu_acceleration is True
 
     # Document Processing
     assert settings.chunk_size == 1024
@@ -82,11 +82,11 @@ def test_settings_default_values():
     assert settings.timeout == 30
 
     # Optimization
-    assert settings.cache_enabled is True
+    assert settings.enable_document_caching is True
 
     # Infrastructure
     assert settings.vector_store_type == "qdrant"
-    assert settings.rerank_enabled is True
+    assert settings.use_reranking is True
 
 
 @patch.dict(os.environ, {"QDRANT_URL": "http://test:1234"})
@@ -100,8 +100,8 @@ def test_dense_embedding_settings():
     """Test dense embedding configuration settings."""
     settings = AppSettings()
 
-    assert settings.dense_embedding_dimension == 1024
-    assert settings.dense_embedding_model == "BAAI/bge-large-en-v1.5"
+    assert settings.embedding_dimension == 1024
+    assert settings.embedding_model == "BAAI/bge-large-en-v1.5"
 
 
 def test_sparse_embedding_settings():
@@ -109,7 +109,7 @@ def test_sparse_embedding_settings():
     settings = AppSettings()
 
     assert settings.sparse_embedding_model is None
-    assert settings.enable_sparse_embeddings is False
+    assert settings.use_sparse_embeddings is False
 
 
 def test_rrf_fusion_weights():
@@ -135,8 +135,7 @@ def test_gpu_acceleration_settings():
     """Test GPU acceleration configuration settings."""
     settings = AppSettings()
 
-    assert settings.gpu_acceleration is True
-    assert settings.gpu_enabled is True
+    assert settings.enable_gpu_acceleration is True
 
 
 def test_qdrant_url_configuration():
@@ -155,18 +154,18 @@ def test_embedding_dimension_validation():
     """Test embedding dimension validation."""
     # Test valid dimension with non-BGE model
     settings = AppSettings(
-        dense_embedding_dimension=768,
-        dense_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_dimension=768,
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
     )
-    assert settings.dense_embedding_dimension == 768
+    assert settings.embedding_dimension == 768
 
     # Test invalid dimension (too small)
     with pytest.raises(ValidationError, match="Embedding dimension must be positive"):
-        AppSettings(dense_embedding_dimension=0)
+        AppSettings(embedding_dimension=0)
 
     # Test invalid dimension (too large)
     with pytest.raises(ValidationError, match="Embedding dimension seems too large"):
-        AppSettings(dense_embedding_dimension=20000)
+        AppSettings(embedding_dimension=20000)
 
 
 def test_bge_model_dimension_validation():
@@ -176,8 +175,8 @@ def test_bge_model_dimension_validation():
         ValidationError, match="BGE-Large model requires 1024 dimensions"
     ):
         AppSettings(
-            dense_embedding_model="BAAI/bge-large-en-v1.5",
-            dense_embedding_dimension=768,
+            embedding_model="BAAI/bge-large-en-v1.5",
+            embedding_dimension=768,
         )
 
 
@@ -186,8 +185,8 @@ def test_environment_variable_loading():
     test_cases = [
         ("CHUNK_SIZE", "chunk_size", "512", 512),
         ("CHUNK_OVERLAP", "chunk_overlap", "100", 100),
-        ("GPU_ACCELERATION", "gpu_acceleration", "false", False),
-        ("ENABLE_SPARSE_EMBEDDINGS", "enable_sparse_embeddings", "true", True),
+        ("ENABLE_GPU_ACCELERATION", "enable_gpu_acceleration", "false", False),
+        ("USE_SPARSE_EMBEDDINGS", "use_sparse_embeddings", "true", True),
         ("RRF_FUSION_ALPHA", "rrf_fusion_alpha", "45", 45),
     ]
 
@@ -200,7 +199,7 @@ def test_environment_variable_loading():
 def test_splade_model_name_validation():
     """Test SPLADE model name validation when sparse embeddings are enabled."""
     settings = AppSettings(
-        enable_sparse_embeddings=True,
+        use_sparse_embeddings=True,
         sparse_embedding_model="prithivida/Splade_PP_en_v1",
     )
     assert settings.sparse_embedding_model == "prithivida/Splade_PP_en_v1"

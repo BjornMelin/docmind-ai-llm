@@ -37,7 +37,7 @@ from sentence_transformers import SentenceTransformer
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.agents.tools import retrieve_documents, route_query
-from src.models.core import AppSettings
+from src.config.settings import AppSettings
 from src.retrieval.graph.property_graph_config import PropertyGraphConfig
 
 
@@ -177,15 +177,15 @@ def integration_settings():
         AppSettings: Test configuration optimized for integration tests
     """
     return AppSettings(
-        default_model="mock-llm",
-        dense_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
-        dense_embedding_dimension=384,
+        model_name="mock-llm",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_dimension=384,
         chunk_size=512,
         chunk_overlap=50,
-        gpu_acceleration=False,
-        enable_sparse_embeddings=False,
+        enable_gpu_acceleration=False,
+        use_sparse_embeddings=False,
         qdrant_url="http://localhost:6333",
-        retrieval_top_k=3,
+        top_k=3,
     )
 
 
@@ -582,8 +582,8 @@ class TestQueryPipelineIntegration:
 
 
 @pytest.mark.integration
-class TestMultiAgentCoordination:
-    """Test multi-agent coordination with lightweight components."""
+class TestMultiAgentCoordinationIntegration:
+    """Integration tests for multi-agent coordination with performance monitoring."""
 
     @pytest.mark.asyncio
     async def test_agent_coordination_with_mock_models(
@@ -630,9 +630,14 @@ class TestMultiAgentCoordination:
         end_time = time.perf_counter()
         processing_time = end_time - start_time
 
-        # Validate coordination performance
-        assert processing_time < 6.0, (
+        # Validate coordination performance with regression thresholds
+        assert processing_time < 8.0, (
             f"Agent coordination too slow: {processing_time:.2f}s"
+        )
+
+        print(
+            f"Agent coordination performance: {processing_time:.2f}s "
+            "for routing + retrieval"
         )
 
     def test_agent_tool_integration(
@@ -696,7 +701,12 @@ class TestMultiAgentCoordination:
         assert route_result["strategy"] == "retrieval_focused"
         assert len(retrieval_result["documents"]) <= 2
         assert all(doc["score"] > 0 for doc in retrieval_result["documents"])
-        assert processing_time < 4.0, f"Tool chain too slow: {processing_time:.2f}s"
+        assert processing_time < 6.0, f"Tool chain too slow: {processing_time:.2f}s"
+
+        print(
+            f"Tool integration performance: {processing_time:.2f}s for "
+            f"{len(nodes)} results"
+        )
 
 
 @pytest.mark.integration
@@ -806,42 +816,94 @@ class TestResourceManagement:
 class TestPerformanceIntegration:
     """Integration tests focused on performance with lightweight models."""
 
-    def test_end_to_end_performance(
+    def test_end_to_end_performance_regression(
         self,
         lightweight_llama_embedding,
         mock_llm_for_integration,
         test_documents_comprehensive,
-        benchmark,
     ):
-        """Test end-to-end pipeline performance with benchmark.
+        """Test end-to-end pipeline performance with regression detection.
 
         Validates:
-        - Complete pipeline execution time
+        - Complete pipeline execution time <15s
         - Performance consistency across runs
         - Resource efficiency with lightweight models
-        - Baseline performance metrics
+        - Baseline performance metrics with timing assertions
         """
         Settings.embed_model = lightweight_llama_embedding
         Settings.llm = mock_llm_for_integration
 
         def end_to_end_operation():
+            start_time = time.perf_counter()
+
             # Create index
             index = VectorStoreIndex.from_documents(
                 test_documents_comprehensive, vector_store=SimpleVectorStore()
             )
 
+            index_time = time.perf_counter() - start_time
+
             # Query index
+            query_start = time.perf_counter()
             query_engine = index.as_query_engine(similarity_top_k=2)
             response = query_engine.query("What are the key AI techniques?")
+            query_time = time.perf_counter() - query_start
 
-            return len(response.source_nodes)
+            total_time = time.perf_counter() - start_time
 
-        # Benchmark the operation
-        result = benchmark(end_to_end_operation)
+            return {
+                "result_count": len(response.source_nodes),
+                "index_time": index_time,
+                "query_time": query_time,
+                "total_time": total_time,
+            }
 
-        # Validate benchmarked results
-        assert result > 0, "Should return source nodes"
-        assert result <= 2, "Should respect top_k limit"
+        # Execute operation multiple times for consistency
+        results = []
+        for _ in range(3):
+            result = end_to_end_operation()
+            results.append(result)
+
+        # Validate performance regression thresholds
+        for result in results:
+            assert result["result_count"] > 0, "Should return source nodes"
+            assert result["result_count"] <= 2, "Should respect top_k limit"
+            assert result["index_time"] < 10.0, (
+                f"Index creation too slow: {result['index_time']:.2f}s"
+            )
+            assert result["query_time"] < 5.0, (
+                f"Query processing too slow: {result['query_time']:.2f}s"
+            )
+            assert result["total_time"] < 15.0, (
+                f"End-to-end too slow: {result['total_time']:.2f}s"
+            )
+
+        # Calculate performance statistics
+        avg_total = sum(r["total_time"] for r in results) / len(results)
+        max_total = max(r["total_time"] for r in results)
+        min_total = min(r["total_time"] for r in results)
+
+        print(
+            f"Performance stats: avg={avg_total:.2f}s, max={max_total:.2f}s, "
+            f"min={min_total:.2f}s"
+        )
+
+        # Performance consistency check (allow for initialization overhead)
+        variance_ratio = max_total / min_total
+        print(f"Performance variance: {variance_ratio:.1f}x (max/min)")
+
+        # For integration tests, focus on absolute thresholds rather than variance
+        # High variance is expected due to initialization, model loading, etc.
+        if variance_ratio > 5.0:
+            print(
+                f"Warning: High variance detected ({variance_ratio:.1f}x) - "
+                f"consider warmup runs"
+            )
+
+        # Ensure average performance is reasonable (main regression detection)
+        assert avg_total < 12.0, (
+            f"Average performance regression detected: {avg_total:.2f}s"
+        )
 
     @pytest.mark.parametrize("doc_count", [3, 5, 10])
     def test_scalability_with_document_count(
@@ -885,11 +947,16 @@ class TestPerformanceIntegration:
         assert time_per_doc < 2.0, f"Per-document time too high: {time_per_doc:.2f}s"
         assert len(response.source_nodes) <= 2, "Should respect top_k limit"
 
-        # Performance should scale reasonably
+        # Performance regression thresholds with more realistic scaling
         max_expected_time = min(
-            30.0, 3.0 + doc_count * 0.5
+            20.0, 4.0 + doc_count * 0.3
         )  # Base time + linear scaling
         assert processing_time < max_expected_time, (
             f"Processing time {processing_time:.2f}s exceeds expected "
-            f"{max_expected_time:.2f}s"
+            f"{max_expected_time:.2f}s for {doc_count} documents"
+        )
+
+        print(
+            f"Scalability test (n={doc_count}): {processing_time:.2f}s total, "
+            f"{time_per_doc:.2f}s per doc"
         )

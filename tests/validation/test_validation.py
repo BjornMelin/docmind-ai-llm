@@ -106,7 +106,7 @@ class TestImportValidation:
 
     def test_basic_validation_integration(self):
         """Test that we can call basic validation functions."""
-        from src.models.core import AppSettings
+        from src.config.settings import AppSettings
         from src.utils.core import validate_startup_configuration
 
         # validate_startup_configuration now requires a settings parameter
@@ -145,7 +145,7 @@ class TestImportValidation:
         """Test basic system health check."""
         # Test that basic imports work
         try:
-            from src.models.core import AppSettings
+            from src.config.settings import AppSettings
             from src.utils.core import detect_hardware
 
             # Create basic settings instance
@@ -165,18 +165,18 @@ class TestSettingsValidation:
 
     def test_settings_creation(self):
         """Test that settings can be created with defaults."""
-        from src.models.core import AppSettings
+        from src.config.settings import AppSettings
 
         settings = AppSettings()
         assert settings is not None
         # Check for actual attributes that exist in the simplified Settings class
         assert hasattr(settings, "qdrant_url")
-        assert hasattr(settings, "gpu_acceleration")
+        assert hasattr(settings, "enable_gpu_acceleration")
         assert hasattr(settings, "chunk_size")
 
     def test_settings_required_fields(self):
         """Test that settings have required fields."""
-        from src.models.core import AppSettings
+        from src.config.settings import AppSettings
 
         settings = AppSettings()
 
@@ -187,9 +187,9 @@ class TestSettingsValidation:
         assert isinstance(settings.chunk_overlap, int)
 
         # Test additional key settings that should exist
-        assert hasattr(settings, "dense_embedding_dimension")
-        assert hasattr(settings, "dense_embedding_model")
-        assert hasattr(settings, "retrieval_top_k")
+        assert hasattr(settings, "embedding_dimension")
+        assert hasattr(settings, "embedding_model")
+        assert hasattr(settings, "top_k")
 
 
 if __name__ == "__main__":

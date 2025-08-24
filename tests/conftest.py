@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import os
 import sys
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -26,6 +27,8 @@ from llama_index.core.graph_stores import SimplePropertyGraphStore
 
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
+# Import new centralized settings for new fixtures
+from src.config.settings import Settings as NewSettings
 from src.models import AppSettings
 
 # Configure pytest-asyncio for proper async handling
@@ -62,13 +65,13 @@ def mock_settings() -> AppSettings:
     # Individual tests can use MockEmbedding and mock LLMs as needed
 
     return AppSettings(
-        default_model="mock-llm",
-        dense_embedding_model="mock-embedding",
+        model_name="mock-llm",
+        embedding_model="mock-embedding",
         sparse_embedding_model="mock-sparse",
-        dense_embedding_dimension=1024,
+        embedding_dimension=1024,
         ollama_base_url="http://mock:11434",
-        rerank_enabled=False,  # Disable for unit tests
-        enable_sparse_embeddings=False,  # Disable for unit tests
+        use_reranking=False,  # Disable for unit tests
+        use_sparse_embeddings=False,  # Disable for unit tests
     )
 
 
@@ -80,15 +83,15 @@ def integration_settings() -> AppSettings:
     Still validates component integration without full model overhead.
     """
     return AppSettings(
-        default_model="llama3.2:1b",  # Smallest Ollama model for integration
-        dense_embedding_model=(
+        model_name="llama3.2:1b",  # Smallest Ollama model for integration
+        embedding_model=(
             "sentence-transformers/all-MiniLM-L6-v2"  # 80MB lightweight
         ),
         sparse_embedding_model="mock-sparse",  # Keep sparse as mock for integration
-        dense_embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
+        embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
         ollama_base_url="http://localhost:11434",
-        rerank_enabled=False,  # Disable expensive operations
-        enable_sparse_embeddings=True,  # Test hybrid search logic
+        use_reranking=False,  # Disable expensive operations
+        use_sparse_embeddings=True,  # Test hybrid search logic
     )
 
 
@@ -100,13 +103,184 @@ def system_settings() -> AppSettings:
     Only used in system tests marked with @pytest.mark.system.
     """
     return AppSettings(
-        default_model="llama3.2:3b",
-        dense_embedding_model="BAAI/bge-large-en-v1.5",
+        model_name="llama3.2:3b",
+        embedding_model="BAAI/bge-large-en-v1.5",
         sparse_embedding_model="prithvida/Splade_PP_en_v1",
-        dense_embedding_dimension=1024,
+        embedding_dimension=1024,
         ollama_base_url="http://localhost:11434",
-        rerank_enabled=True,
-        enable_sparse_embeddings=True,
+        use_reranking=True,
+        use_sparse_embeddings=True,
+    )
+
+
+# New centralized settings fixtures
+@pytest.fixture(scope="session")
+def centralized_mock_settings(tmp_path_factory) -> NewSettings:
+    """Mock centralized settings for unit tests.
+
+    Uses temporary directories and conservative values for fast, deterministic testing.
+    Designed for the new centralized settings system in src/config/settings.py.
+    """
+    # Create temporary directories for testing
+    temp_dir = tmp_path_factory.mktemp("settings_test")
+
+    return NewSettings(
+        debug=True,  # Debug mode for testing
+        log_level="DEBUG",
+        # Use temporary directories
+        data_dir=str(temp_dir / "data"),
+        cache_dir=str(temp_dir / "cache"),
+        log_file=str(temp_dir / "logs" / "test.log"),
+        sqlite_db_path=str(temp_dir / "test.db"),
+        # Conservative performance settings for testing
+        max_memory_gb=2.0,
+        max_vram_gb=4.0,
+        enable_gpu_acceleration=False,  # Disabled for unit tests
+        # Fast timeouts for testing
+        agent_decision_timeout=100,  # Fast timeout
+        request_timeout_seconds=5.0,
+        streaming_delay_seconds=0.001,  # Minimal delay
+        # Minimal context for speed
+        context_window_size=8192,
+        context_buffer_size=8192,
+        default_token_limit=8192,
+        # Test-optimized batch sizes
+        bge_m3_batch_size_gpu=2,
+        bge_m3_batch_size_cpu=1,
+        default_batch_size=5,
+        # Disable expensive operations for unit tests
+        use_reranking=False,
+        use_sparse_embeddings=False,
+        enable_dspy_optimization=False,
+        enable_performance_logging=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def centralized_integration_settings(tmp_path_factory) -> NewSettings:
+    """Integration test settings for the centralized settings system.
+
+    Uses lightweight models and reasonable performance settings for integration tests.
+    Balances test speed with realistic configuration testing.
+    """
+    temp_dir = tmp_path_factory.mktemp("integration_test")
+
+    return NewSettings(
+        debug=False,
+        log_level="INFO",
+        # Test directories
+        data_dir=str(temp_dir / "data"),
+        cache_dir=str(temp_dir / "cache"),
+        # Integration-appropriate settings
+        model_name="llama3.2:1b",  # Lightweight model
+        llm_backend="ollama",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",  # 80MB model
+        embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
+        # Moderate performance settings
+        max_memory_gb=4.0,
+        max_vram_gb=8.0,
+        enable_gpu_acceleration=True,
+        # Reasonable timeouts
+        agent_decision_timeout=200,
+        max_agent_retries=1,  # Fewer retries for speed
+        # Enable key features for integration testing
+        enable_multi_agent=True,
+        use_reranking=True,
+        use_sparse_embeddings=True,
+        retrieval_strategy="hybrid",
+        # Moderate batch sizes
+        bge_m3_batch_size_gpu=6,
+        bge_m3_batch_size_cpu=2,
+        # Enable caching for integration tests
+        enable_document_caching=True,
+        enable_performance_logging=True,
+    )
+
+
+@pytest.fixture(scope="session")
+def centralized_system_settings() -> NewSettings:
+    """Full system test settings for the centralized settings system.
+
+    Production-like configuration for comprehensive system testing.
+    Uses default values from the centralized settings system.
+    """
+    return NewSettings()  # Use all defaults - production configuration
+
+
+@pytest.fixture
+def temp_settings_dirs(tmp_path):
+    """Create temporary directories for settings testing.
+
+    Provides clean temporary directories for each test that needs
+    to test directory creation and file operations.
+    """
+    return {
+        "data_dir": tmp_path / "test_data",
+        "cache_dir": tmp_path / "test_cache",
+        "log_dir": tmp_path / "test_logs",
+        "db_dir": tmp_path / "test_db",
+    }
+
+
+@pytest.fixture
+def centralized_settings_with_temp_dirs(tmp_path):
+    """Create settings instance with temporary directories.
+
+    Useful for tests that need to verify directory creation
+    and file system integration without affecting real directories.
+    """
+    return NewSettings(
+        data_dir=str(tmp_path / "data"),
+        cache_dir=str(tmp_path / "cache"),
+        log_file=str(tmp_path / "logs" / "test.log"),
+        sqlite_db_path=str(tmp_path / "db" / "test.db"),
+    )
+
+
+@pytest.fixture
+def settings_environment_override():
+    """Context manager for testing environment variable overrides.
+
+    Usage:
+        with settings_environment_override({'DOCMIND_DEBUG': 'true'}):
+            settings = NewSettings()
+            assert settings.debug is True
+    """
+    import contextlib
+    import os
+    from unittest.mock import patch
+
+    @contextlib.contextmanager
+    def _override(env_vars):
+        with patch.dict(os.environ, env_vars):
+            yield
+
+    return _override
+
+
+@pytest.fixture
+def benchmark_settings() -> NewSettings:
+    """Settings optimized for performance benchmarking.
+
+    Realistic production settings for accurate performance measurement.
+    """
+    return NewSettings(
+        debug=False,
+        log_level="ERROR",  # Minimal logging
+        enable_performance_logging=True,
+        # Performance-optimized settings
+        enable_gpu_acceleration=True,
+        vllm_gpu_memory_utilization=0.90,
+        enable_kv_cache_optimization=True,
+        # Production batch sizes
+        bge_m3_batch_size_gpu=12,
+        default_batch_size=20,
+        # All features enabled for realistic benchmarking
+        enable_multi_agent=True,
+        use_reranking=True,
+        use_sparse_embeddings=True,
+        enable_dspy_optimization=True,
+        retrieval_strategy="hybrid",
     )
 
 
@@ -262,6 +436,7 @@ def lightweight_embedding_model():
 
     Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB).
     Only loads if integration tests are running to avoid unnecessary overhead.
+    Session-scoped for performance - expensive model loading happens once.
     """
     # Only import and load if we're running integration tests
     if "integration" in os.environ.get("PYTEST_CURRENT_TEST", "") or any(
@@ -305,7 +480,11 @@ def mock_reranker() -> MagicMock:
 
 @pytest_asyncio.fixture(loop_scope="function")
 async def mock_async_embedding_model() -> AsyncMock:
-    """Create an async mock embedding model for testing."""
+    """Create an async mock embedding model for testing.
+
+    Returns:
+        AsyncMock: Async mock embedding model with proper aembed methods.
+    """
     mock_model = AsyncMock()
     mock_model.aembed_documents.return_value = [
         [0.1, 0.2, 0.3] * 341,  # 1024-dim embedding
@@ -328,10 +507,21 @@ def in_memory_graph_store():
 
 @pytest_asyncio.fixture(loop_scope="function")
 async def mock_async_llm() -> AsyncMock:
-    """Create an async mock LLM for testing."""
+    """Create an async mock LLM for testing.
+
+    Returns:
+        AsyncMock: Async mock LLM with proper async methods and streaming support.
+    """
     mock_llm = AsyncMock()
     mock_llm.ainvoke.return_value = "Mock async LLM response"
     mock_llm.astream.return_value = iter(["Mock ", "async ", "stream"])
+
+    # Add additional async methods commonly used
+    mock_llm.acomplete.return_value = AsyncMock(text="Mock async completion")
+    mock_llm.astream_complete.return_value = iter(
+        [AsyncMock(text="Token1"), AsyncMock(text="Token2")]
+    )
+
     return mock_llm
 
 
@@ -419,12 +609,13 @@ def sample_query_responses() -> list[dict]:
     ]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def cleanup_test_artifacts():
     """Clean up test artifacts after session.
 
     Ensures test isolation by cleaning up temporary files,
     cached models, and other test artifacts.
+    Session-scoped with autouse to ensure cleanup always happens.
     """
     yield  # Tests run here
 
@@ -436,6 +627,7 @@ def cleanup_test_artifacts():
     temp_dirs = [
         Path(tempfile.gettempdir()) / "docmind_test_cache",
         Path(tempfile.gettempdir()) / "sentence_transformers_cache",
+        Path(tempfile.gettempdir()) / "pytest_cache",
     ]
 
     for temp_dir in temp_dirs:
@@ -499,13 +691,17 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "spec: Specification-based tests")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def benchmark_config():
-    """Configuration for pytest-benchmark tests."""
+    """Configuration for pytest-benchmark tests.
+
+    Session-scoped since benchmark configuration is constant across tests.
+    """
     return {
         "min_rounds": 3,
         "max_time": 1.0,
         "min_time": 0.01,
         "warmup": True,
         "disable_gc": True,
+        "timer": time.perf_counter,
     }

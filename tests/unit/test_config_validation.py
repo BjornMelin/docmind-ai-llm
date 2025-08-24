@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from src.models.core import Settings
+from src.config.settings import Settings
 from src.utils.core import validate_startup_configuration
 
 
@@ -99,27 +99,27 @@ class TestEmbeddingDimensionValidation:
         with pytest.raises(
             ValidationError, match="Embedding dimension must be positive"
         ):
-            Settings(dense_embedding_dimension=-100)
+            Settings(embedding_dimension=-100)
 
         with pytest.raises(
             ValidationError, match="Embedding dimension must be positive"
         ):
-            Settings(dense_embedding_dimension=0)
+            Settings(embedding_dimension=0)
 
     def test_embedding_dimension_validation_reasonable_size(self):
         """Test embedding dimension must be reasonable size."""
         with pytest.raises(
             ValidationError, match="Embedding dimension seems too large"
         ):
-            Settings(dense_embedding_dimension=15000)  # > 10000
+            Settings(embedding_dimension=15000)  # > 10000
 
     def test_embedding_dimension_validation_valid_sizes(self):
         """Test valid embedding dimension sizes."""
         valid_dimensions = [512, 768, 1024, 1536, 3072, 4096]
 
         for dim in valid_dimensions:
-            settings = Settings(dense_embedding_dimension=dim)
-            assert settings.dense_embedding_dimension == dim
+            settings = Settings(embedding_dimension=dim)
+            assert settings.embedding_dimension == dim
 
 
 class TestModelCompatibilityValidation:
@@ -128,11 +128,11 @@ class TestModelCompatibilityValidation:
     def test_bge_large_dimension_validation_correct(self):
         """Test BGE-Large model with correct dimension."""
         settings = Settings(
-            dense_embedding_model="BAAI/bge-large-en-v1.5",
-            dense_embedding_dimension=1024,
+            embedding_model="BAAI/bge-large-en-v1.5",
+            embedding_dimension=1024,
         )
-        assert settings.dense_embedding_model == "BAAI/bge-large-en-v1.5"
-        assert settings.dense_embedding_dimension == 1024
+        assert settings.embedding_model == "BAAI/bge-large-en-v1.5"
+        assert settings.embedding_dimension == 1024
 
     def test_bge_large_dimension_validation_incorrect(self):
         """Test BGE-Large model with incorrect dimension."""
@@ -140,8 +140,8 @@ class TestModelCompatibilityValidation:
             ValidationError, match="BGE-Large model requires 1024 dimensions"
         ):
             Settings(
-                dense_embedding_model="BAAI/bge-large-en-v1.5",
-                dense_embedding_dimension=768,  # Wrong dimension for BGE-Large
+                embedding_model="BAAI/bge-large-en-v1.5",
+                embedding_dimension=768,  # Wrong dimension for BGE-Large
             )
 
     def test_splade_model_validation_correct(self):
@@ -237,7 +237,7 @@ class TestStartupConfigurationValidation:
         # Mock no GPU available
         mock_cuda_available.return_value = False
 
-        settings = Settings(gpu_acceleration=True)
+        settings = Settings(enable_gpu_acceleration=True)
         result = validate_startup_configuration(settings)
 
         assert result["valid"] is True
@@ -255,8 +255,8 @@ class TestStartupConfigurationValidation:
         mock_client.get_collections.return_value = []
 
         settings = Settings(
-            dense_embedding_model="BAAI/bge-large-en-v1.5",
-            dense_embedding_dimension=768,  # Wrong dimension triggers warning
+            embedding_model="BAAI/bge-large-en-v1.5",
+            embedding_dimension=768,  # Wrong dimension triggers warning
         )
 
         # This should pass validation but generate warnings
@@ -273,7 +273,7 @@ class TestStartupConfigurationValidation:
         mock_client.get_collections.return_value = []
 
         settings = Settings(
-            enable_sparse_embeddings=True,
+            use_sparse_embeddings=True,
             rrf_fusion_alpha=5,  # Outside typical range
         )
         result = validate_startup_configuration(settings)
@@ -294,7 +294,7 @@ class TestValidationIntegration:
             Settings(
                 rrf_fusion_weight_dense=0.6,  # Wrong sum
                 rrf_fusion_weight_sparse=0.5,  # Wrong sum
-                dense_embedding_dimension=-1,  # Invalid dimension
+                embedding_dimension=-1,  # Invalid dimension
                 chunk_size=100,  # Too small
                 chunk_overlap=200,  # Larger than chunk_size
             )
@@ -310,7 +310,7 @@ class TestValidationIntegration:
         # Should not raise any validation errors
         assert settings.rrf_fusion_weight_dense == 0.7
         assert settings.rrf_fusion_weight_sparse == 0.3
-        assert settings.dense_embedding_dimension == 1024
+        assert settings.embedding_dimension == 1024
         assert settings.chunk_size > settings.chunk_overlap
 
     def test_environment_override_validation(self):
@@ -342,7 +342,7 @@ class TestValidationIntegration:
         settings = Settings(
             rrf_fusion_weight_dense=0.6,
             rrf_fusion_weight_sparse=0.4,
-            dense_embedding_dimension=1024,
+            embedding_dimension=1024,
             chunk_size=1024,
             chunk_overlap=200,
         )
