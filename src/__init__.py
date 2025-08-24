@@ -11,7 +11,7 @@ __version__ = "0.1.0"
 __author__ = "Bjorn Melin"
 
 # Make key components available at package level
-from .models.core import settings
+from .config.settings import settings
 from .retrieval.integration import create_hybrid_retriever, create_index_async
 from .utils.document import load_documents_unstructured
 

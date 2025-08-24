@@ -59,8 +59,18 @@ from src.agents.tools import (
     synthesize_results,
     validate_response,
 )
+from src.config.settings import settings
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 from src.vllm_config import ContextManager, VLLMConfig, create_vllm_manager
+
+# Constants
+
+COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
+CONTEXT_TRIM_STRATEGY = "last"
+PARALLEL_TOOL_CALLS_ENABLED = True
+OUTPUT_MODE_STRUCTURED = "structured"
+CREATE_FORWARD_MESSAGE_TOOL_ENABLED = True
+ADD_HANDOFF_BACK_MESSAGES_ENABLED = True
 
 
 class AgentResponse(BaseModel):
@@ -140,10 +150,10 @@ class MultiAgentCoordinator:
     def __init__(
         self,
         model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-        max_context_length: int = 131072,  # 128K context
+        max_context_length: int = settings.context_window_size,  # 128K context
         backend: str = "vllm",
         enable_fallback: bool = True,
-        max_agent_timeout: float = 3.0,  # Reduced from 5.0 for <200ms target
+        max_agent_timeout: float = settings.default_agent_timeout,  # Reduced from 5.0
     ):
         """Initialize ADR-compliant multi-agent coordinator.
 
@@ -187,7 +197,7 @@ class MultiAgentCoordinator:
         self._setup_complete = False
 
         logger.info(
-            f"ADR-compliant MultiAgentCoordinator initialized (model: {model_path})"
+            "ADR-compliant MultiAgentCoordinator initialized (model: %s)", model_path
         )
 
     def _ensure_setup(self) -> bool:
@@ -233,8 +243,8 @@ class MultiAgentCoordinator:
             self._setup_complete = True
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to setup coordinator: {e}")
+        except (RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Failed to setup coordinator: %s", e)
             return False
 
     def _setup_agent_graph(self) -> None:
@@ -297,10 +307,10 @@ class MultiAgentCoordinator:
                 model=self.llm,
                 prompt=system_prompt,
                 # CRITICAL: Modern optimization parameters (ADR-011)
-                parallel_tool_calls=True,  # 50-87% token reduction
-                output_mode="structured",  # Enhanced formatting
-                create_forward_message_tool=True,  # Direct passthrough
-                add_handoff_back_messages=True,  # Coordination tracking
+                parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,  # 50-87% reduction
+                output_mode=OUTPUT_MODE_STRUCTURED,  # Enhanced formatting
+                create_forward_message_tool=CREATE_FORWARD_MESSAGE_TOOL_ENABLED,
+                add_handoff_back_messages=ADD_HANDOFF_BACK_MESSAGES_ENABLED,
                 # ADR-004, ADR-011: Context management hooks for 128K limitation
                 pre_model_hook=self._create_pre_model_hook(),  # Context trimming
                 post_model_hook=self._create_post_model_hook(),  # Response formatting
@@ -322,8 +332,8 @@ class MultiAgentCoordinator:
 
             logger.info("ADR-011 compliant agent graph setup completed successfully")
 
-        except Exception as e:
-            logger.error(f"Failed to setup ADR-compliant agent graph: {e}")
+        except (RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Failed to setup ADR-compliant agent graph: %s", e)
             raise RuntimeError(f"Agent graph initialization failed: {e}") from e
 
     def _create_supervisor_prompt(self) -> str:
@@ -366,7 +376,7 @@ class MultiAgentCoordinator:
                     # Use intelligent trimming strategy
                     trimmed_messages = trim_messages(
                         messages,
-                        strategy="last",
+                        strategy=CONTEXT_TRIM_STRATEGY,
                         token_counter=self.context_manager.estimate_tokens,
                         max_tokens=self.context_manager.trim_threshold,
                         start_on="human",
@@ -385,8 +395,8 @@ class MultiAgentCoordinator:
                     )
 
                 return state
-            except Exception as e:
-                logger.warning(f"Pre-model hook failed: {e}")
+            except (RuntimeError, ValueError, AttributeError) as e:
+                logger.warning("Pre-model hook failed: %s", e)
                 return state
 
         return pre_model_hook
@@ -422,8 +432,8 @@ class MultiAgentCoordinator:
                         )
 
                 return state
-            except Exception as e:
-                logger.warning(f"Post-model hook failed: {e}")
+            except (RuntimeError, ValueError, AttributeError) as e:
+                logger.warning("Post-model hook failed: %s", e)
                 return state
 
         return post_model_hook
@@ -492,20 +502,21 @@ class MultiAgentCoordinator:
             self._update_performance_metrics(processing_time, coordination_time)
 
             # Validate performance targets (ADR-011)
-            if coordination_time > 0.2:  # 200ms target
+            if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:  # 200ms target
                 logger.warning(
-                    f"Coordination overhead {coordination_time:.3f}s exceeds "
-                    f"200ms target"
+                    "Coordination overhead %.3fs exceeds 200ms target",
+                    coordination_time,
                 )
 
             logger.info(
-                f"Query processed successfully in {processing_time:.3f}s "
-                f"(coordination: {coordination_time:.3f}s)"
+                "Query processed successfully in %.3fs (coordination: %.3fs)",
+                processing_time,
+                coordination_time,
             )
             return response
 
-        except Exception as e:
-            logger.error(f"ADR-compliant multi-agent processing failed: {e}")
+        except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
+            logger.error("ADR-compliant multi-agent processing failed: %s", e)
 
             # Fallback to basic RAG if enabled
             if self.enable_fallback:
@@ -540,13 +551,13 @@ class MultiAgentCoordinator:
                 # Check for timeout (more aggressive for <200ms target)
                 elapsed = time.perf_counter() - initial_state.total_start_time
                 if elapsed > self.max_agent_timeout:
-                    logger.warning(f"Agent workflow timeout after {elapsed:.2f}s")
+                    logger.warning("Agent workflow timeout after %.2fs", elapsed)
                     break
 
             return result or initial_state
 
-        except Exception as e:
-            logger.error(f"ADR-compliant agent workflow execution failed: {e}")
+        except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
+            logger.error("ADR-compliant agent workflow execution failed: %s", e)
             raise
 
     def _extract_response(
@@ -585,7 +596,8 @@ class MultiAgentCoordinator:
             processing_time = time.perf_counter() - start_time
             optimization_metrics = {
                 "coordination_overhead_ms": round(coordination_time * 1000, 2),
-                "meets_200ms_target": coordination_time < 0.2,
+                "meets_200ms_target": coordination_time
+                < COORDINATION_OVERHEAD_THRESHOLD,
                 "parallel_execution_active": final_state.get(
                     "parallel_execution_active", False
                 ),
@@ -628,8 +640,8 @@ class MultiAgentCoordinator:
                 optimization_metrics=optimization_metrics,
             )
 
-        except Exception as e:
-            logger.error(f"Failed to extract response: {e}")
+        except (RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Failed to extract response: %s", e)
             processing_time = time.perf_counter() - start_time
             return AgentResponse(
                 content=f"Error extracting response: {str(e)}",
@@ -685,8 +697,8 @@ class MultiAgentCoordinator:
                 optimization_metrics={"fallback_mode": True},
             )
 
-        except Exception as e:
-            logger.error(f"Fallback RAG also failed: {e}")
+        except (RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Fallback RAG also failed: %s", e)
             processing_time = time.perf_counter() - start_time
             return AgentResponse(
                 content=f"System temporarily unavailable. Error: {str(e)}",
@@ -749,7 +761,8 @@ class MultiAgentCoordinator:
             "avg_coordination_overhead_ms": round(
                 self.avg_coordination_overhead * 1000, 2
             ),
-            "meets_200ms_target": self.avg_coordination_overhead < 0.2,
+            "meets_200ms_target": self.avg_coordination_overhead
+            < COORDINATION_OVERHEAD_THRESHOLD,
             "agent_timeout": self.max_agent_timeout,
             "fallback_enabled": self.enable_fallback,
             # ADR compliance
@@ -779,7 +792,8 @@ class MultiAgentCoordinator:
             "adr_011_modern_parameters": True,  # Using langgraph-supervisor with
             # modern params
             "adr_018_dspy_integration": is_dspy_available(),
-            "coordination_under_200ms": self.avg_coordination_overhead < 0.2,
+            "coordination_under_200ms": self.avg_coordination_overhead
+            < COORDINATION_OVERHEAD_THRESHOLD,
             "context_128k_support": self.max_context_length >= 131072,
         }
 
@@ -796,7 +810,7 @@ class MultiAgentCoordinator:
 # Factory function for ADR-compliant coordinator
 def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length: int = 131072,
+    max_context_length: int = settings.context_window_size,
     enable_fallback: bool = True,
 ) -> MultiAgentCoordinator:
     """Create ADR-compliant multi-agent coordinator.

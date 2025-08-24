@@ -38,6 +38,16 @@ from pydantic import BaseModel, Field
 
 from src.agents.tools import retrieve_documents
 
+# Constants
+RECURSION_LIMIT = 3
+PERFORMANCE_TARGET_MS = 150  # milliseconds
+BASE_CONFIDENCE = 0.5
+CONFIDENCE_HIGH_DOC_COUNT = 0.3
+CONFIDENCE_MEDIUM_DOC_COUNT = 0.2
+CONFIDENCE_LOW_DOC_COUNT = 0.1
+CONFIDENCE_STRATEGY_BONUS = 0.1
+CONFIDENCE_QUALITY_BONUS = 0.05
+
 
 class RetrievalResult(BaseModel):
     """Document retrieval result with metadata."""
@@ -143,7 +153,9 @@ class RetrievalAgent:
             # Execute retrieval through agent
             result = self.agent.invoke(
                 {"messages": messages},
-                {"recursion_limit": 3},  # Limit iterations for performance
+                {
+                    "recursion_limit": RECURSION_LIMIT
+                },  # Limit iterations for performance
             )
 
             # Parse agent response
@@ -168,14 +180,16 @@ class RetrievalAgent:
             retrieval_result = RetrievalResult(**result_data)
 
             logger.info(
-                f"Retrieved {retrieval_result.document_count} documents via "
-                f"{retrieval_result.strategy_used} ({processing_time * 1000:.1f}ms)"
+                "Retrieved %d documents via %s (%.1fms)",
+                retrieval_result.document_count,
+                retrieval_result.strategy_used,
+                processing_time * 1000,
             )
 
             return retrieval_result
 
-        except Exception as e:
-            logger.error(f"Document retrieval failed: {e}")
+        except (OSError, RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Document retrieval failed: %s", e)
 
             # Fallback retrieval
             processing_time = time.perf_counter() - start_time
@@ -206,8 +220,8 @@ class RetrievalAgent:
             logger.warning("Could not parse JSON from agent, using fallback retrieval")
             return self._execute_fallback_retrieval(query, strategy)
 
-        except Exception as e:
-            logger.error(f"Failed to parse agent response: {e}")
+        except (RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Failed to parse agent response: %s", e)
             return self._execute_fallback_retrieval(query, strategy)
 
     def _execute_fallback_retrieval(self, query: str, strategy: str) -> dict[str, Any]:
@@ -256,8 +270,8 @@ class RetrievalAgent:
                 "graphrag_used": strategy == "graphrag",
             }
 
-        except Exception as e:
-            logger.error(f"Fallback retrieval also failed: {e}")
+        except (OSError, RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Fallback retrieval also failed: %s", e)
             return {
                 "documents": [],
                 "error": str(e),
@@ -364,28 +378,28 @@ class RetrievalAgent:
         self, documents: list, strategy_used: str, retrieval_data: dict
     ) -> float:
         """Calculate confidence score for retrieval quality."""
-        confidence = 0.5  # Base confidence
+        confidence = BASE_CONFIDENCE  # Base confidence
 
         # Document count factor
         doc_count = len(documents)
         if doc_count >= 5:
-            confidence += 0.3
+            confidence += CONFIDENCE_HIGH_DOC_COUNT
         elif doc_count >= 2:
-            confidence += 0.2
+            confidence += CONFIDENCE_MEDIUM_DOC_COUNT
         elif doc_count >= 1:
-            confidence += 0.1
+            confidence += CONFIDENCE_LOW_DOC_COUNT
 
         # Strategy factor
         if "fallback" not in strategy_used:
-            confidence += 0.1
+            confidence += CONFIDENCE_STRATEGY_BONUS
         if strategy_used in ["hybrid_fusion", "graphrag"]:
-            confidence += 0.1
+            confidence += CONFIDENCE_STRATEGY_BONUS
 
         # Quality indicators
         if retrieval_data.get("dspy_used"):
-            confidence += 0.05
+            confidence += CONFIDENCE_QUALITY_BONUS
         if "error" not in retrieval_data:
-            confidence += 0.05
+            confidence += CONFIDENCE_QUALITY_BONUS
 
         return min(confidence, 1.0)
 
@@ -462,7 +476,8 @@ class RetrievalAgent:
             "avg_retrieval_time_ms": round(avg_time * 1000, 2),
             "max_retrieval_time_ms": round(max_time * 1000, 2),
             "min_retrieval_time_ms": round(min_time * 1000, 2),
-            "performance_target_met": avg_time < 0.15,  # 150ms target
+            "performance_target_met": avg_time
+            < (PERFORMANCE_TARGET_MS / 1000),  # 150ms target
             "strategy_usage": self.strategy_usage,
         }
 

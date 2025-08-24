@@ -36,6 +36,16 @@ except ImportError:
     logger.warning("vLLM not available - using fallback configuration")
     VLLM_AVAILABLE = False
 
+from src.config.settings import settings
+
+# Constants
+MAX_TOKEN_LIMIT = 120000  # Trim at 120K (8K buffer for 128K limit)
+KV_CACHE_MEMORY_PER_TOKEN = 1024  # bytes per token with FP8
+KV_CACHE_GB_AT_128K = 8.0  # ~8GB KV cache at 128K
+CHARS_PER_TOKEN_AVERAGE = 4  # Simplified estimation - 4 chars per token average
+FILE_PERMISSION_EXECUTABLE = 0o755
+MINIMUM_VRAM_REQUIREMENT_GB = 12
+
 
 class VLLMConfig(BaseModel):
     """Configuration for vLLM backend serving FP8 model with FlashInfer optimization."""
@@ -46,7 +56,7 @@ class VLLMConfig(BaseModel):
         description="FP8 quantized model path",
     )
     max_model_len: int = Field(
-        default=131072,  # 128K context (hardware-constrained from 262K native)
+        default=settings.context_window_size,  # 128K context (hardware-constrained)
         description="Maximum context length in tokens",
     )
     gpu_memory_utilization: float = Field(
@@ -97,14 +107,16 @@ class ContextManager:
     def __init__(self):
         """Initialize context manager with 128K context and FP8 KV cache settings."""
         self.max_context_tokens = (
-            131072  # 128K context (hardware-constrained from 262K native)
+            settings.context_window_size  # 128K context (hardware-constrained)
         )
-        self.trim_threshold = 120000  # Trim at 120K (8K buffer for 128K limit)
+        self.trim_threshold = MAX_TOKEN_LIMIT  # Trim at 120K (8K buffer for 128K limit)
         self.preserve_ratio = 0.3  # Keep 30% of oldest context for continuity
 
         # Memory calculations for FP8 KV cache (ADR-010)
-        self.kv_cache_memory_per_token = 1024  # bytes per token with FP8
-        self.total_kv_cache_gb_at_128k = 8.0  # ~8GB KV cache at 128K
+        self.kv_cache_memory_per_token = (
+            KV_CACHE_MEMORY_PER_TOKEN  # bytes per token with FP8
+        )
+        self.total_kv_cache_gb_at_128k = KV_CACHE_GB_AT_128K  # ~8GB KV cache at 128K
 
     def pre_model_hook(self, state: dict) -> dict:
         """Trim context before model processing (ADR-011)."""
@@ -135,7 +147,7 @@ class ContextManager:
         """Estimate token count for context management."""
         # Simplified estimation - 4 chars per token average
         total_chars = sum(len(str(msg.get("content", ""))) for msg in messages)
-        return total_chars // 4
+        return total_chars // CHARS_PER_TOKEN_AVERAGE
 
     def trim_to_token_limit(self, messages: list[dict], limit: int) -> list[dict]:
         """Trim messages to token limit while preserving conversation structure."""
@@ -244,12 +256,12 @@ class VLLMManager:
             )
 
             logger.info(
-                f"vLLM engine initialized successfully with {self.config.model}"
+                "vLLM engine initialized successfully with %s", self.config.model
             )
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to initialize vLLM engine: {e}")
+        except (ImportError, RuntimeError, ValueError, OSError) as e:
+            logger.error("Failed to initialize vLLM engine: %s", e)
             return False
 
     def generate_start_script(self, output_path: str = "start_vllm.sh") -> str:
@@ -276,9 +288,9 @@ vllm serve {self.config.model} \\
             f.write(script_content)
 
         # Make executable
-        os.chmod(output_path, 0o755)  # noqa: S103
+        os.chmod(output_path, FILE_PERMISSION_EXECUTABLE)  # noqa: S103
 
-        logger.info(f"vLLM start script generated: {output_path}")
+        logger.info("vLLM start script generated: %s", output_path)
         return output_path
 
     def validate_performance(self) -> dict[str, Any]:
@@ -315,11 +327,11 @@ vllm serve {self.config.model} \\
                 "validation_timestamp": time.time(),
             }
 
-            logger.info(f"Performance validation completed: {throughput:.1f} tok/s")
+            logger.info("Performance validation completed: %.1f tok/s", throughput)
             return validation_results
 
-        except Exception as e:
-            logger.error(f"Performance validation failed: {e}")
+        except (ImportError, RuntimeError, ValueError, AttributeError) as e:
+            logger.error("Performance validation failed: %s", e)
             return {"error": str(e), "validation_failed": True}
 
     def get_performance_metrics(self) -> dict[str, Any]:
@@ -344,7 +356,7 @@ vllm serve {self.config.model} \\
 
 def create_vllm_manager(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length: int = 131072,
+    max_context_length: int = settings.context_window_size,
 ) -> VLLMManager:
     """Create vLLM manager with FP8 optimization."""
     config = VLLMConfig(model=model_path, max_model_len=max_context_length)
@@ -368,7 +380,7 @@ def validate_fp8_requirements() -> dict[str, bool]:
             # Check GPU memory
             total_memory = torch.cuda.get_device_properties(0).total_memory
             memory_gb = total_memory / (1024**3)
-            requirements["sufficient_vram"] = memory_gb >= 12
+            requirements["sufficient_vram"] = memory_gb >= MINIMUM_VRAM_REQUIREMENT_GB
         else:
             requirements["sufficient_vram"] = False
     except ImportError:
