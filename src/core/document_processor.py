@@ -48,7 +48,9 @@ class DocumentProcessor:
             # Parse into nodes
             nodes = self.text_splitter.get_nodes_from_documents(documents)
 
-            logger.info(f"Processed document {file_path}: {len(nodes)} chunks created")
+            logger.info(
+                "Processed document %s: %d chunks created", file_path, len(nodes)
+            )
 
             return {
                 "status": "success",
@@ -57,8 +59,14 @@ class DocumentProcessor:
                 "documents": len(documents),
             }
 
-        except Exception as e:
-            logger.error(f"Error processing document {file_path}: {e}")
+        except (
+            FileNotFoundError,
+            PermissionError,
+            ValueError,
+            ImportError,
+            RuntimeError,
+        ) as e:
+            logger.error("Error processing document %s: %s", file_path, e)
             return {
                 "status": "error",
                 "file": str(file_path),

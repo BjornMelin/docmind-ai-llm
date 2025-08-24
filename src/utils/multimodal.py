@@ -17,6 +17,14 @@ from llama_index.core.schema import ImageDocument
 from loguru import logger
 from PIL import Image
 
+from src.config.settings import settings
+
+# Constants
+MAX_TEST_IMAGES = 10
+TEXT_TRUNCATION_LIMIT = 200
+RANK_ADJUSTMENT = 1
+EMBEDDING_DIMENSIONS = 512
+
 
 async def generate_image_embeddings(
     clip_embedding: Any, image: Image.Image
@@ -68,44 +76,44 @@ def validate_vram_usage(
         torch.cuda.empty_cache()
 
         # Measure baseline VRAM
-        baseline_vram = torch.cuda.memory_allocated() / 1024**3
+        baseline_vram = torch.cuda.memory_allocated() / settings.bytes_to_gb_divisor
 
         if images:
             # Process images to measure VRAM with load
-            for img in images[:10]:  # Test with up to 10 images
+            for img in images[:MAX_TEST_IMAGES]:  # Test with up to N images
                 try:
                     _ = clip_embedding.get_image_embedding(img)
                 except RuntimeError as e:
                     if "CUDA" in str(e).upper() or "memory" in str(e).lower():
                         logger.warning(
-                            f"CUDA/memory error processing image for VRAM test: {e}"
+                            "CUDA/memory error processing image for VRAM test: %s", e
                         )
                     else:
                         logger.warning(
-                            f"Runtime error processing image for VRAM test: {e}"
+                            "Runtime error processing image for VRAM test: %s", e
                         )
                     break
-                except Exception as e:
+                except (ValueError, TypeError) as e:
                     logger.warning(
-                        f"Unexpected error processing image for VRAM test: {e}"
+                        "Type/value error processing image for VRAM test: %s", e
                     )
                     break
 
         # Measure current VRAM safely
         try:
-            current_vram = torch.cuda.memory_allocated() / 1024**3
+            current_vram = torch.cuda.memory_allocated() / settings.bytes_to_gb_divisor
         except RuntimeError as e:
-            logger.warning(f"Failed to measure current VRAM: {e}")
+            logger.warning("Failed to measure current VRAM: %s", e)
             current_vram = baseline_vram
 
         # Return max of baseline and current
         return max(baseline_vram, current_vram)
 
     except RuntimeError as e:
-        logger.warning(f"CUDA error during VRAM validation: {e}")
+        logger.warning("CUDA error during VRAM validation: %s", e)
         return 0.0
-    except Exception as e:
-        logger.error(f"Unexpected error during VRAM validation: {e}")
+    except (ValueError, TypeError) as e:
+        logger.error("Type/value error during VRAM validation: %s", e)
         return 0.0
 
 
@@ -143,8 +151,10 @@ async def cross_modal_search(
                 {
                     "score": node.score,
                     "image_path": node.node.metadata.get("image_path", ""),
-                    "text": node.node.text[:200] if node.node.text else "",
-                    "rank": i + 1,
+                    "text": node.node.text[:TEXT_TRUNCATION_LIMIT]
+                    if node.node.text
+                    else "",
+                    "rank": i + RANK_ADJUSTMENT,
                 }
             )
 
@@ -162,8 +172,10 @@ async def cross_modal_search(
                 {
                     "similarity": node.score,
                     "image_path": node.node.metadata.get("image_path", ""),
-                    "text": node.node.text[:200] if node.node.text else "",
-                    "rank": i + 1,
+                    "text": node.node.text[:TEXT_TRUNCATION_LIMIT]
+                    if node.node.text
+                    else "",
+                    "rank": i + RANK_ADJUSTMENT,
                 }
             )
 
@@ -203,7 +215,7 @@ async def validate_end_to_end_pipeline(
     entities = ["LlamaIndex", "BGE-M3"]  # Would be extracted by property_graph
     results["entity_relationships"] = {
         "entities_found": entities,
-        "relationship_count": len(entities) - 1,
+        "relationship_count": len(entities) - RANK_ADJUSTMENT,
     }
 
     # Step 3: Generate final response (mock for now)
@@ -215,7 +227,7 @@ async def validate_end_to_end_pipeline(
     elapsed_time = time.perf_counter() - start_time
     results["pipeline_time"] = elapsed_time
 
-    logger.info(f"End-to-end pipeline completed in {elapsed_time:.2f}s")
+    logger.info("End-to-end pipeline completed in %.2fs", elapsed_time)
     return results
 
 
@@ -242,8 +254,8 @@ def create_image_documents(
                 metadata=metadata or {"source": "multimodal"},
             )
             documents.append(doc)
-        except Exception as e:
-            logger.error(f"Failed to create ImageDocument for {path}: {e}")
+        except (OSError, ValueError) as e:
+            logger.error("Failed to create ImageDocument for %s: %s", path, e)
 
     return documents
 
@@ -251,7 +263,7 @@ def create_image_documents(
 def batch_process_images(
     clip_embedding: Any,
     images: list[Image.Image],
-    batch_size: int = 10,
+    batch_size: int = settings.default_batch_size,
 ) -> np.ndarray:
     """Process images in batches for efficiency.
 
@@ -276,10 +288,10 @@ def batch_process_images(
                 if hasattr(emb, "cpu"):
                     emb = emb.cpu().numpy()
                 batch_embeddings.append(emb)
-            except Exception as e:
-                logger.error(f"Failed to process image: {e}")
+            except (RuntimeError, ValueError) as e:
+                logger.error("Failed to process image: %s", e)
                 # Add zero embedding as placeholder
-                batch_embeddings.append(np.zeros(512))
+                batch_embeddings.append(np.zeros(EMBEDDING_DIMENSIONS))
 
         embeddings.extend(batch_embeddings)
 

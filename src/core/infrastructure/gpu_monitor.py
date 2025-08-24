@@ -11,6 +11,11 @@ from dataclasses import dataclass
 
 import torch
 
+# GPU Monitoring Constants
+BYTES_TO_GB_FACTOR = 1024**3
+PERCENT_CONVERSION_FACTOR = 100
+MAX_UTILIZATION_PERCENT = 100.0
+
 
 @dataclass(frozen=True)
 class GPUMetrics:
@@ -48,8 +53,12 @@ async def gpu_performance_monitor() -> AsyncGenerator[GPUMetrics | None, None]:
 
     current_device = torch.cuda.current_device()
     device_props = torch.cuda.get_device_properties(current_device)
-    allocated = torch.cuda.memory_allocated(current_device) / 1024**3
-    reserved = torch.cuda.memory_reserved(current_device) / 1024**3
-    utilization = min((allocated / (device_props.total_memory / 1024**3)) * 100, 100.0)
+    allocated = torch.cuda.memory_allocated(current_device) / BYTES_TO_GB_FACTOR
+    reserved = torch.cuda.memory_reserved(current_device) / BYTES_TO_GB_FACTOR
+    utilization = min(
+        (allocated / (device_props.total_memory / BYTES_TO_GB_FACTOR))
+        * PERCENT_CONVERSION_FACTOR,
+        MAX_UTILIZATION_PERCENT,
+    )
 
     yield GPUMetrics(device_props.name, allocated, reserved, utilization)

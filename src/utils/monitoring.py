@@ -20,6 +20,10 @@ from typing import Any
 import psutil
 from loguru import logger
 
+from src.config.settings import settings
+
+# Constants
+
 
 def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
     """Setup basic logging configuration with Loguru.
@@ -56,7 +60,7 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
             compression="gz",
         )
 
-    logger.info(f"Logging configured: level={log_level}, file={log_file}")
+    logger.info("Logging configured: level=%s, file=%s", log_level, log_file)
 
 
 def log_error_with_context(
@@ -124,7 +128,7 @@ def performance_timer(operation: str, **context: Any):
     """
     start_time = time.perf_counter()
     process = psutil.Process()
-    start_memory = process.memory_info().rss / 1024 / 1024  # MB
+    start_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -138,7 +142,7 @@ def performance_timer(operation: str, **context: Any):
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = process.memory_info().rss / 1024 / 1024  # MB
+        end_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
@@ -167,7 +171,7 @@ async def async_performance_timer(operation: str, **context: Any):
     """
     start_time = time.perf_counter()
     process = psutil.Process()
-    start_memory = process.memory_info().rss / 1024 / 1024  # MB
+    start_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -181,7 +185,7 @@ async def async_performance_timer(operation: str, **context: Any):
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = process.memory_info().rss / 1024 / 1024  # MB
+        end_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
@@ -208,12 +212,12 @@ def get_memory_usage() -> dict[str, float]:
         memory_info = process.memory_info()
 
         return {
-            "rss_mb": round(memory_info.rss / 1024 / 1024, 2),
-            "vms_mb": round(memory_info.vms / 1024 / 1024, 2),
+            "rss_mb": round(memory_info.rss / settings.bytes_to_mb_divisor, 2),
+            "vms_mb": round(memory_info.vms / settings.bytes_to_mb_divisor, 2),
             "percent": round(process.memory_percent(), 2),
         }
-    except Exception as e:
-        logger.warning(f"Failed to get memory usage: {e}")
+    except (OSError, psutil.Error) as e:
+        logger.warning("Failed to get memory usage: %s", e)
         return {"rss_mb": 0.0, "vms_mb": 0.0, "percent": 0.0}
 
 
@@ -225,15 +229,17 @@ def get_system_info() -> dict[str, Any]:
     """
     try:
         return {
-            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "cpu_percent": psutil.cpu_percent(
+                interval=settings.cpu_monitoring_interval
+            ),
             "memory_percent": psutil.virtual_memory().percent,
             "disk_percent": psutil.disk_usage("/").percent,
             "load_average": psutil.getloadavg()
             if hasattr(psutil, "getloadavg")
             else None,
         }
-    except Exception as e:
-        logger.warning(f"Failed to get system info: {e}")
+    except (OSError, psutil.Error) as e:
+        logger.warning("Failed to get system info: %s", e)
         return {}
 
 
@@ -292,7 +298,7 @@ class SimplePerformanceMonitor:
         return {
             "total_operations": len(metrics),
             "successful_operations": len(successes),
-            "success_rate": len(successes) / len(metrics) * 100,
+            "success_rate": len(successes) / len(metrics) * settings.percent_multiplier,
             "avg_duration_seconds": sum(durations) / len(durations),
             "min_duration_seconds": min(durations),
             "max_duration_seconds": max(durations),

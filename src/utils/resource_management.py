@@ -15,6 +15,8 @@ from typing import Any
 
 import torch
 
+from src.config.settings import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,8 +50,8 @@ def gpu_memory_context() -> Generator[None, None, None]:
                 torch.cuda.empty_cache()
         except RuntimeError as e:
             logger.warning("GPU cleanup failed during context exit: %s", e)
-        except Exception as e:
-            logger.error("Unexpected error during GPU cleanup: %s", e)
+        except (ImportError, ModuleNotFoundError) as e:
+            logger.error("Import error during GPU cleanup: %s", e)
         finally:
             # Always run garbage collection
             gc.collect()
@@ -84,8 +86,8 @@ async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
                 torch.cuda.empty_cache()
         except RuntimeError as e:
             logger.warning("GPU cleanup failed during async context exit: %s", e)
-        except Exception as e:
-            logger.error("Unexpected error during async GPU cleanup: %s", e)
+        except (ImportError, ModuleNotFoundError) as e:
+            logger.error("Import error during async GPU cleanup: %s", e)
         finally:
             # Always run garbage collection
             gc.collect()
@@ -203,9 +205,9 @@ def cuda_error_context(
         yield result_dict
     except RuntimeError as e:
         if "CUDA" in str(e).upper():
-            logger.warning(f"{operation_name} failed with CUDA error: {e}")
+            logger.warning("%s failed with CUDA error: %s", operation_name, e)
         else:
-            logger.warning(f"{operation_name} failed with runtime error: {e}")
+            logger.warning("%s failed with runtime error: %s", operation_name, e)
 
         if reraise:
             raise
@@ -214,7 +216,7 @@ def cuda_error_context(
             result_dict["error"] = str(e)
 
     except (OSError, AttributeError) as e:
-        logger.warning(f"{operation_name} failed with system error: {e}")
+        logger.warning("%s failed with system error: %s", operation_name, e)
 
         if reraise:
             raise
@@ -222,8 +224,8 @@ def cuda_error_context(
             result_dict["result"] = default_return
             result_dict["error"] = str(e)
 
-    except Exception as e:
-        logger.error(f"{operation_name} failed with unexpected error: {e}")
+    except (ImportError, ModuleNotFoundError) as e:
+        logger.error("%s failed with import error: %s", operation_name, e)
 
         if reraise:
             raise
@@ -263,17 +265,17 @@ def safe_cuda_operation(
     except RuntimeError as e:
         if log_errors:
             if "CUDA" in str(e).upper():
-                logger.warning(f"{operation_name} failed with CUDA error: {e}")
+                logger.warning("%s failed with CUDA error: %s", operation_name, e)
             else:
-                logger.warning(f"{operation_name} failed with runtime error: {e}")
+                logger.warning("%s failed with runtime error: %s", operation_name, e)
         return default_return
     except (OSError, AttributeError) as e:
         if log_errors:
-            logger.warning(f"{operation_name} failed with system error: {e}")
+            logger.warning("%s failed with system error: %s", operation_name, e)
         return default_return
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError) as e:
         if log_errors:
-            logger.error(f"{operation_name} failed with unexpected error: {e}")
+            logger.error("%s failed with import error: %s", operation_name, e)
         return default_return
 
 
@@ -290,9 +292,9 @@ async def _cleanup_model(model: Any, cleanup_method: str | None) -> None:
             else:
                 cleanup_func()
         else:
-            logger.debug(f"Model has no cleanup method: {cleanup_method}")
-    except Exception as e:
-        logger.warning(f"Model cleanup failed: {e}")
+            logger.debug("Model has no cleanup method: %s", cleanup_method)
+    except (AttributeError, TypeError) as e:
+        logger.warning("Model cleanup failed: %s", e)
 
 
 def _sync_cleanup_model(model: Any, cleanup_method: str | None) -> None:
@@ -305,9 +307,9 @@ def _sync_cleanup_model(model: Any, cleanup_method: str | None) -> None:
             cleanup_func = getattr(model, cleanup_method)
             cleanup_func()
         else:
-            logger.debug(f"Model has no cleanup method: {cleanup_method}")
-    except Exception as e:
-        logger.warning(f"Model cleanup failed: {e}")
+            logger.debug("Model has no cleanup method: %s", cleanup_method)
+    except (AttributeError, TypeError) as e:
+        logger.warning("Model cleanup failed: %s", e)
 
 
 def get_safe_vram_usage() -> float:
@@ -320,7 +322,7 @@ def get_safe_vram_usage() -> float:
         VRAM usage in GB (0.0 if CUDA unavailable or error)
     """
     return safe_cuda_operation(
-        lambda: torch.cuda.memory_allocated() / 1024**3
+        lambda: torch.cuda.memory_allocated() / settings.bytes_to_gb_divisor
         if torch.cuda.is_available()
         else 0.0,
         "VRAM usage check",
@@ -365,15 +367,18 @@ def get_safe_gpu_info() -> dict[str, Any]:
 
                 if props:
                     info["compute_capability"] = f"{props.major}.{props.minor}"
-                    info["total_memory_gb"] = props.total_memory / 1024**3
+                    info["total_memory_gb"] = (
+                        props.total_memory / settings.bytes_to_gb_divisor
+                    )
 
                 info["allocated_memory_gb"] = safe_cuda_operation(
-                    lambda: torch.cuda.memory_allocated(0) / 1024**3,
+                    lambda: torch.cuda.memory_allocated(0)
+                    / settings.bytes_to_gb_divisor,
                     "allocated memory",
                     0.0,
                 )
 
-    except Exception as e:
-        logger.warning(f"Failed to get GPU info: {e}")
+    except (RuntimeError, OSError) as e:
+        logger.warning("Failed to get GPU info: %s", e)
 
     return info

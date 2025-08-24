@@ -20,7 +20,12 @@ import torch
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
-from src.models.core import AppSettings
+from src.config.settings import AppSettings, settings
+
+# Constants for validation
+WEIGHT_TOLERANCE = 0.05
+RRF_ALPHA_MIN = 10
+RRF_ALPHA_MAX = 100
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -40,15 +45,18 @@ def detect_hardware() -> dict[str, Any]:
 
         if hardware_info["cuda_available"]:
             hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
-            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            vram_gb = (
+                torch.cuda.get_device_properties(0).total_memory
+                / settings.bytes_to_gb_divisor
+            )
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
     except RuntimeError as e:
-        logger.warning(f"CUDA error during hardware detection: {e}")
+        logger.warning("CUDA error during hardware detection: %s", e)
     except (OSError, AttributeError) as e:
-        logger.warning(f"System error during hardware detection: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error during hardware detection: {e}")
+        logger.warning("System error during hardware detection: %s", e)
+    except (ImportError, ModuleNotFoundError) as e:
+        logger.error("Import error during hardware detection: %s", e)
 
     return hardware_info
 
@@ -75,12 +83,15 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
         client.get_collections()
         results["info"].append(f"Qdrant connection successful: {settings.qdrant_url}")
         client.close()
-    except Exception as e:
+    except ConnectionError as e:
         results["errors"].append(f"Qdrant connection failed: {e}")
+        results["valid"] = False
+    except OSError as e:
+        results["errors"].append(f"Qdrant network error: {e}")
         results["valid"] = False
 
     # Check GPU configuration
-    if settings.gpu_acceleration:
+    if settings.enable_gpu_acceleration:
         try:
             if torch.cuda.is_available():
                 gpu_name = torch.cuda.get_device_name(0)
@@ -91,8 +102,8 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
                 )
         except RuntimeError as e:
             results["warnings"].append(f"CUDA error during GPU detection: {e}")
-        except Exception as e:
-            results["warnings"].append(f"Unexpected error during GPU detection: {e}")
+        except (ImportError, ModuleNotFoundError) as e:
+            results["warnings"].append(f"Import error during GPU detection: {e}")
 
     # Check chunk configuration
     if settings.chunk_overlap >= settings.chunk_size:
@@ -103,11 +114,12 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
         results["valid"] = False
 
     # Check RRF configuration if sparse embeddings enabled
-    if settings.enable_sparse_embeddings and not (
-        10 <= settings.rrf_fusion_alpha <= 100
+    if settings.use_sparse_embeddings and not (
+        RRF_ALPHA_MIN <= settings.rrf_fusion_alpha <= RRF_ALPHA_MAX
     ):
         results["warnings"].append(
-            f"RRF alpha {settings.rrf_fusion_alpha} outside optimal range [10, 100]"
+            f"RRF alpha {settings.rrf_fusion_alpha} outside optimal range "
+            f"[{RRF_ALPHA_MIN}, {RRF_ALPHA_MAX}]"
         )
 
     if not results["valid"]:
@@ -135,12 +147,12 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
     }
 
     # Check research-backed weights (0.7 dense, 0.3 sparse)
-    expected_dense = 0.7
-    expected_sparse = 0.3
+    expected_dense = settings.rrf_fusion_weight_dense
+    expected_sparse = settings.rrf_fusion_weight_sparse
 
     if (
-        abs(settings.rrf_fusion_weight_dense - expected_dense) < 0.05
-        and abs(settings.rrf_fusion_weight_sparse - expected_sparse) < 0.05
+        abs(settings.rrf_fusion_weight_dense - expected_dense) < WEIGHT_TOLERANCE
+        and abs(settings.rrf_fusion_weight_sparse - expected_sparse) < WEIGHT_TOLERANCE
     ):
         verification["weights_correct"] = True
     else:
@@ -153,14 +165,15 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
         )
 
     # Check RRF alpha parameter
-    if 10 <= settings.rrf_fusion_alpha <= 100:
+    if RRF_ALPHA_MIN <= settings.rrf_fusion_alpha <= RRF_ALPHA_MAX:
         verification["alpha_in_range"] = True
     else:
         verification["issues"].append(
             f"RRF alpha ({settings.rrf_fusion_alpha}) outside research range (10-100)"
         )
         verification["recommendations"].append(
-            "Set RRF alpha between 10-100, with 60 as optimal"
+            f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "
+            f"with {settings.rrf_k_constant} as optimal"
         )
 
     # Calculate hybrid alpha for LlamaIndex
@@ -223,6 +236,6 @@ def async_timer(func: Callable) -> Callable:
         finally:
             end_time = time.perf_counter()
             duration = end_time - start_time
-            logger.info(f"{func.__name__} completed in {duration:.2f}s")
+            logger.info("%s completed in %.2fs", func.__name__, duration)
 
     return wrapper

@@ -42,8 +42,6 @@ from .document import (
     load_documents_unstructured,
 )
 
-# Embedding operations - removed (moved to src.retrieval)
-# The embedding module was deprecated and replaced by src.retrieval.integration
 # Monitoring and logging
 from .monitoring import (
     async_performance_timer,

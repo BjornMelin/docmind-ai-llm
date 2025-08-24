@@ -17,6 +17,7 @@ from typing import Any
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
+from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 from qdrant_client.http.models import (
     Distance,
     SparseIndexParams,
@@ -24,7 +25,7 @@ from qdrant_client.http.models import (
     VectorParams,
 )
 
-from src.models.core import settings
+from src.config.settings import settings
 
 
 def get_client_config() -> dict[str, Any]:
@@ -35,7 +36,7 @@ def get_client_config() -> dict[str, Any]:
     """
     return {
         "url": settings.qdrant_url,
-        "timeout": 60,
+        "timeout": settings.default_qdrant_timeout,
         "prefer_grpc": True,
     }
 
@@ -51,17 +52,22 @@ def create_sync_client():
     try:
         config = get_client_config()
         client = QdrantClient(**config)
-        logger.debug(f"Created sync Qdrant client: {config['url']}")
+        logger.debug("Created sync Qdrant client: %s", config["url"])
         yield client
-    except Exception as e:
-        logger.error(f"Failed to create sync Qdrant client: {e}")
+    except (
+        ResponseHandlingException,
+        UnexpectedResponse,
+        ConnectionError,
+        TimeoutError,
+    ) as e:
+        logger.error("Failed to create sync Qdrant client: %s", e)
         raise
     finally:
         if client is not None:
             try:
                 client.close()
-            except Exception as e:
-                logger.warning(f"Error closing sync client: {e}")
+            except (ResponseHandlingException, ConnectionError) as e:
+                logger.warning("Error closing sync client: %s", e)
 
 
 @asynccontextmanager
@@ -75,23 +81,28 @@ async def create_async_client():
     try:
         config = get_client_config()
         client = AsyncQdrantClient(**config)
-        logger.debug(f"Created async Qdrant client: {config['url']}")
+        logger.debug("Created async Qdrant client: %s", config["url"])
         yield client
-    except Exception as e:
-        logger.error(f"Failed to create async Qdrant client: {e}")
+    except (
+        ResponseHandlingException,
+        UnexpectedResponse,
+        ConnectionError,
+        TimeoutError,
+    ) as e:
+        logger.error("Failed to create async Qdrant client: %s", e)
         raise
     finally:
         if client is not None:
             try:
                 await client.close()
-            except Exception as e:
-                logger.warning(f"Error closing async client: {e}")
+            except (ResponseHandlingException, ConnectionError) as e:
+                logger.warning("Error closing async client: %s", e)
 
 
 async def setup_hybrid_collection_async(
     client: AsyncQdrantClient,
     collection_name: str,
-    dense_embedding_size: int = 1024,
+    dense_embedding_size: int = settings.bge_m3_embedding_dim,
     recreate: bool = False,
 ) -> QdrantVectorStore:
     """Setup Qdrant collection for hybrid search (async).
@@ -105,11 +116,11 @@ async def setup_hybrid_collection_async(
     Returns:
         QdrantVectorStore configured for hybrid search
     """
-    logger.info(f"Setting up hybrid collection: {collection_name}")
+    logger.info("Setting up hybrid collection: %s", collection_name)
 
     if recreate and await client.collection_exists(collection_name):
         await client.delete_collection(collection_name)
-        logger.info(f"Deleted existing collection: {collection_name}")
+        logger.info("Deleted existing collection: %s", collection_name)
 
     if not await client.collection_exists(collection_name):
         # Create collection with both dense and sparse vectors
@@ -127,7 +138,7 @@ async def setup_hybrid_collection_async(
                 )
             },
         )
-        logger.success(f"Created hybrid collection: {collection_name}")
+        logger.success("Created hybrid collection: %s", collection_name)
 
     # Create sync client for QdrantVectorStore compatibility
     sync_client = QdrantClient(url=settings.qdrant_url)
@@ -136,14 +147,14 @@ async def setup_hybrid_collection_async(
         client=sync_client,
         collection_name=collection_name,
         enable_hybrid=True,
-        batch_size=20,
+        batch_size=settings.default_batch_size,
     )
 
 
 def setup_hybrid_collection(
     client: QdrantClient,
     collection_name: str,
-    dense_embedding_size: int = 1024,
+    dense_embedding_size: int = settings.bge_m3_embedding_dim,
     recreate: bool = False,
 ) -> QdrantVectorStore:
     """Setup Qdrant collection for hybrid search (sync).
@@ -157,11 +168,11 @@ def setup_hybrid_collection(
     Returns:
         QdrantVectorStore configured for hybrid search
     """
-    logger.info(f"Setting up hybrid collection: {collection_name}")
+    logger.info("Setting up hybrid collection: %s", collection_name)
 
     if recreate and client.collection_exists(collection_name):
         client.delete_collection(collection_name)
-        logger.info(f"Deleted existing collection: {collection_name}")
+        logger.info("Deleted existing collection: %s", collection_name)
 
     if not client.collection_exists(collection_name):
         # Create collection with both dense and sparse vectors
@@ -179,19 +190,19 @@ def setup_hybrid_collection(
                 )
             },
         )
-        logger.success(f"Created hybrid collection: {collection_name}")
+        logger.success("Created hybrid collection: %s", collection_name)
 
     return QdrantVectorStore(
         client=client,
         collection_name=collection_name,
         enable_hybrid=True,
-        batch_size=20,
+        batch_size=settings.default_batch_size,
     )
 
 
 def create_vector_store(
     collection_name: str,
-    dense_embedding_size: int = 1024,
+    dense_embedding_size: int = settings.bge_m3_embedding_dim,
     enable_hybrid: bool = True,
 ) -> QdrantVectorStore:
     """Create QdrantVectorStore with standard configuration.
@@ -210,7 +221,7 @@ def create_vector_store(
         client=client,
         collection_name=collection_name,
         enable_hybrid=enable_hybrid,
-        batch_size=20,
+        batch_size=settings.default_batch_size,
     )
 
 
@@ -236,8 +247,13 @@ def get_collection_info(collection_name: str) -> dict[str, Any]:
                 "sparse_vectors_config": info.config.params.sparse_vectors,
                 "status": info.status,
             }
-    except Exception as e:
-        logger.error(f"Failed to get collection info for {collection_name}: {e}")
+    except (
+        ResponseHandlingException,
+        UnexpectedResponse,
+        ConnectionError,
+        TimeoutError,
+    ) as e:
+        logger.error("Failed to get collection info for %s: %s", collection_name, e)
         return {"exists": False, "error": str(e)}
 
 
@@ -256,8 +272,13 @@ def test_connection() -> dict[str, Any]:
                 "collections_count": len(collections.collections),
                 "collections": [c.name for c in collections.collections],
             }
-    except Exception as e:
-        logger.error(f"Qdrant connection test failed: {e}")
+    except (
+        ResponseHandlingException,
+        UnexpectedResponse,
+        ConnectionError,
+        TimeoutError,
+    ) as e:
+        logger.error("Qdrant connection test failed: %s", e)
         return {
             "connected": False,
             "url": settings.qdrant_url,
@@ -277,7 +298,7 @@ def clear_collection(collection_name: str) -> bool:
     try:
         with create_sync_client() as client:
             if not client.collection_exists(collection_name):
-                logger.warning(f"Collection {collection_name} does not exist")
+                logger.warning("Collection %s does not exist", collection_name)
                 return False
 
             # Delete and recreate collection (fastest way to clear)
@@ -291,9 +312,14 @@ def clear_collection(collection_name: str) -> bool:
                 sparse_vectors_config=info.config.params.sparse_vectors,
             )
 
-            logger.success(f"Cleared collection: {collection_name}")
+            logger.success("Cleared collection: %s", collection_name)
             return True
 
-    except Exception as e:
-        logger.error(f"Failed to clear collection {collection_name}: {e}")
+    except (
+        ResponseHandlingException,
+        UnexpectedResponse,
+        ConnectionError,
+        TimeoutError,
+    ) as e:
+        logger.error("Failed to clear collection %s: %s", collection_name, e)
         return False

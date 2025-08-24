@@ -128,7 +128,7 @@ class VLLMManager:
             if torch.cuda.is_available():
                 device_name = torch.cuda.get_device_name(0)
                 if "RTX 4090" in device_name or "Ada Lovelace" in device_name:
-                    logger.info(f"Detected RTX 4090: {device_name}")
+                    logger.info("Detected RTX 4090: %s", device_name)
                     os.environ["VLLM_USE_FP8_E4M3"] = (
                         "1" if self.config.kv_cache_dtype == FP8Precision.E4M3 else "0"
                     )
@@ -136,9 +136,9 @@ class VLLMManager:
                         "1" if self.config.kv_cache_dtype == FP8Precision.E5M2 else "0"
                     )
         except RuntimeError as e:
-            logger.warning(f"Failed to detect GPU device for FP8 setup: {e}")
+            logger.warning("Failed to detect GPU device for FP8 setup: %s", e)
         except Exception as e:
-            logger.error(f"Unexpected error during GPU environment setup: {e}")
+            logger.error("Unexpected error during GPU environment setup: %s", e)
 
     def create_vllm_instance(self) -> Any | None:
         """Create optimized vLLM instance.
@@ -207,7 +207,7 @@ class VLLMManager:
             # Re-raise ImportError with context
             raise
         except Exception as e:
-            logger.error(f"Failed to create vLLM instance: {e}")
+            logger.error("Failed to create vLLM instance: %s", e)
             raise
 
     def validate_fp8_performance(self) -> dict[str, Any]:
@@ -272,10 +272,10 @@ class VLLMManager:
                 return torch.cuda.memory_allocated() / 1024**3
             return 0.0
         except RuntimeError as e:
-            logger.warning(f"CUDA memory check failed: {e}")
+            logger.warning("CUDA memory check failed: %s", e)
             return 0.0
         except Exception as e:
-            logger.error(f"Unexpected error checking VRAM: {e}")
+            logger.error("Unexpected error checking VRAM: %s", e)
             return 0.0
 
     def _benchmark_decode_throughput(self) -> float:
@@ -299,11 +299,11 @@ class VLLMManager:
             output_tokens = len(response.text.split()) * 1.3  # Approximate tokens
             throughput = output_tokens / elapsed_time if elapsed_time > 0 else 0
 
-            logger.info(f"Decode throughput: {throughput:.1f} tokens/sec")
+            logger.info("Decode throughput: %.1f tokens/sec", throughput)
             return throughput
 
         except Exception as e:
-            logger.warning(f"Decode benchmark failed: {e}")
+            logger.warning("Decode benchmark failed: %s", e)
             return 0.0
 
     def _benchmark_prefill_throughput(self) -> float:
@@ -329,11 +329,11 @@ class VLLMManager:
             prefill_tokens = len(long_context.split()) * 1.3  # Approximate tokens
             throughput = prefill_tokens / elapsed_time if elapsed_time > 0 else 0
 
-            logger.info(f"Prefill throughput: {throughput:.1f} tokens/sec")
+            logger.info("Prefill throughput: %.1f tokens/sec", throughput)
             return throughput
 
         except Exception as e:
-            logger.warning(f"Prefill benchmark failed: {e}")
+            logger.warning("Prefill benchmark failed: %s", e)
             return 0.0
 
     def _estimate_fp8_memory_reduction(self) -> float:
@@ -350,7 +350,7 @@ class VLLMManager:
         if self.config.quantization == "fp8":
             fp8_reduction = 0.55  # Slightly higher with model quantization
 
-        logger.info(f"Estimated FP8 memory reduction: {fp8_reduction:.1%}")
+        logger.info("Estimated FP8 memory reduction: %.1%%", fp8_reduction * 100)
         return fp8_reduction
 
     def integrate_with_llamaindex(self) -> None:
@@ -408,19 +408,22 @@ class VLLMManager:
                         }
                     )
                     logger.info(
-                        f"✅ Context size {size}: {elapsed_time:.2f}s, "
-                        f"VRAM: {end_vram:.2f}GB"
+                        "✅ Context size %d: %.2fs, VRAM: %.2fGB",
+                        size,
+                        elapsed_time,
+                        end_vram,
                     )
 
                 except RuntimeError as e:
                     if "CUDA" in str(e).upper() or "memory" in str(e).lower():
                         logger.warning(
-                            f"❌ Context size {size} failed due to CUDA/memory "
-                            f"error: {e}"
+                            "❌ Context size %d failed due to CUDA/memory error: %s",
+                            size,
+                            e,
                         )
                     else:
                         logger.warning(
-                            f"❌ Context size {size} failed with runtime error: {e}"
+                            "❌ Context size %d failed with runtime error: %s", size, e
                         )
                     results.append(
                         {"context_size": size, "success": False, "error": str(e)}
@@ -431,7 +434,7 @@ class VLLMManager:
                         {"context_size": size, "success": False, "error": str(e)}
                     )
                     logger.warning(
-                        f"❌ Context size {size} failed with unexpected error: {e}"
+                        "❌ Context size %d failed with unexpected error: %s", size, e
                     )
                     break
 
@@ -447,7 +450,7 @@ class VLLMManager:
             }
 
         except Exception as e:
-            logger.error(f"Context test failed: {e}")
+            logger.error("Context test failed: %s", e)
             return {"max_context_supported": 0, "supports_128k": False, "error": str(e)}
 
 
@@ -484,11 +487,11 @@ def create_fp8_vllm_config(model_name: str | None = None) -> VLLMConfig:
                 # High memory GPU
                 config.gpu_memory_utilization = 0.9
 
-            logger.info(f"Configured for GPU: {device_name} ({gpu_memory:.1f}GB)")
+            logger.info("Configured for GPU: %s (%.1fGB)", device_name, gpu_memory)
     except RuntimeError as e:
-        logger.warning(f"Failed to detect GPU hardware for optimization: {e}")
+        logger.warning("Failed to detect GPU hardware for optimization: %s", e)
     except Exception as e:
-        logger.error(f"Unexpected error during hardware detection: {e}")
+        logger.error("Unexpected error during hardware detection: %s", e)
 
     return config
 
@@ -561,9 +564,9 @@ def validate_fp8_requirements() -> dict[str, Any]:
                     results["supports_fp8"] = True
 
     except RuntimeError as e:
-        logger.warning(f"CUDA validation failed: {e}")
+        logger.warning("CUDA validation failed: %s", e)
     except Exception as e:
-        logger.error(f"Unexpected error during FP8 requirements validation: {e}")
+        logger.error("Unexpected error during FP8 requirements validation: %s", e)
 
     # Validate software requirements
     try:

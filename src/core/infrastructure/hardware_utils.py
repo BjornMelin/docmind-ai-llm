@@ -13,6 +13,25 @@ import torch
 
 logger = logging.getLogger(__name__)
 
+# Hardware Detection Constants
+BYTES_TO_GB_FACTOR = 1024**3
+DEFAULT_CPU_CORES = 1
+DEFAULT_BATCH_SIZE_FALLBACK = 8
+HIGH_END_VRAM_THRESHOLD = 16
+MID_RANGE_VRAM_THRESHOLD = 8
+ENTRY_LEVEL_VRAM_THRESHOLD = 4
+
+# Batch Size Configuration by Model Type and VRAM
+CPU_BATCH_SIZES = {"embedding": 16, "llm": 1, "vision": 4}
+HIGH_END_BATCH_SIZES = {"embedding": 128, "llm": 8, "vision": 32}
+HIGH_END_DEFAULT_BATCH = 64
+MID_RANGE_BATCH_SIZES = {"embedding": 64, "llm": 4, "vision": 16}
+MID_RANGE_DEFAULT_BATCH = 32
+ENTRY_LEVEL_BATCH_SIZES = {"embedding": 32, "llm": 2, "vision": 8}
+ENTRY_LEVEL_DEFAULT_BATCH = 16
+LOW_VRAM_BATCH_SIZES = {"embedding": 16, "llm": 1, "vision": 4}
+LOW_VRAM_DEFAULT_BATCH = 8
+
 
 def detect_hardware() -> dict[str, Any]:
     """Detect hardware capabilities using PyTorch native APIs.
@@ -52,7 +71,7 @@ def detect_hardware() -> dict[str, Any]:
             if hardware_info["gpu_device_count"] > 0:
                 device_props = torch.cuda.get_device_properties(0)
                 hardware_info["gpu_name"] = device_props.name
-                vram_gb = device_props.total_memory / (1024**3)
+                vram_gb = device_props.total_memory / BYTES_TO_GB_FACTOR
                 hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
                 try:
@@ -60,11 +79,11 @@ def detect_hardware() -> dict[str, Any]:
                         device_props.total_memory - torch.cuda.memory_allocated(0)
                     )
                     hardware_info["vram_available_gb"] = round(
-                        vram_available / (1024**3), 1
+                        vram_available / BYTES_TO_GB_FACTOR, 1
                     )
                 except (RuntimeError, OSError) as e:
                     # Handle CUDA runtime errors or system-level issues
-                    logger.warning(f"Failed to get available VRAM: {e}")
+                    logger.warning("Failed to get available VRAM: %s", e)
                     hardware_info["vram_available_gb"] = hardware_info["vram_total_gb"]
 
                 hardware_info["gpu_compute_capability"] = (
@@ -77,14 +96,14 @@ def detect_hardware() -> dict[str, Any]:
                 ]
 
     except RuntimeError as e:
-        logger.warning(f"CUDA hardware detection failed: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error during hardware detection: {e}")
+        logger.warning("CUDA hardware detection failed: %s", e)
+    except (OSError, ImportError, AttributeError) as e:
+        logger.error("Unexpected error during hardware detection: %s", e)
 
     # CPU info
     import os
 
-    hardware_info["cpu_cores"] = os.cpu_count() or 1
+    hardware_info["cpu_cores"] = os.cpu_count() or DEFAULT_CPU_CORES
     hardware_info["cpu_threads"] = hardware_info["cpu_cores"]
 
     return hardware_info
@@ -122,28 +141,28 @@ def get_recommended_batch_size(model_type: str = "embedding") -> int:
     Returns:
         Recommended batch size for the model type and available hardware
     """
-    cpu_defaults = {"embedding": 16, "llm": 1, "vision": 4}
+    cpu_defaults = CPU_BATCH_SIZES
 
     try:
         if not torch.cuda.is_available():
-            return cpu_defaults.get(model_type, 8)
+            return cpu_defaults.get(model_type, DEFAULT_BATCH_SIZE_FALLBACK)
 
         device_props = torch.cuda.get_device_properties(0)
-        vram_gb = device_props.total_memory / (1024**3)
+        vram_gb = device_props.total_memory / BYTES_TO_GB_FACTOR
 
         # GPU batch sizes based on available VRAM
-        if vram_gb >= 16:  # High-end GPU
-            return {"embedding": 128, "llm": 8, "vision": 32}.get(model_type, 64)
-        elif vram_gb >= 8:  # Mid-range GPU
-            return {"embedding": 64, "llm": 4, "vision": 16}.get(model_type, 32)
-        elif vram_gb >= 4:  # Entry-level GPU
-            return {"embedding": 32, "llm": 2, "vision": 8}.get(model_type, 16)
+        if vram_gb >= HIGH_END_VRAM_THRESHOLD:  # High-end GPU
+            return HIGH_END_BATCH_SIZES.get(model_type, HIGH_END_DEFAULT_BATCH)
+        elif vram_gb >= MID_RANGE_VRAM_THRESHOLD:  # Mid-range GPU
+            return MID_RANGE_BATCH_SIZES.get(model_type, MID_RANGE_DEFAULT_BATCH)
+        elif vram_gb >= ENTRY_LEVEL_VRAM_THRESHOLD:  # Entry-level GPU
+            return ENTRY_LEVEL_BATCH_SIZES.get(model_type, ENTRY_LEVEL_DEFAULT_BATCH)
         else:  # Low VRAM
-            return {"embedding": 16, "llm": 1, "vision": 4}.get(model_type, 8)
+            return LOW_VRAM_BATCH_SIZES.get(model_type, LOW_VRAM_DEFAULT_BATCH)
 
     except (RuntimeError, OSError) as e:
-        logger.warning(f"Failed to get GPU properties for batch size: {e}")
-        return cpu_defaults.get(model_type, 8)
-    except Exception as e:
-        logger.error(f"Unexpected error determining batch size: {e}")
-        return cpu_defaults.get(model_type, 8)
+        logger.warning("Failed to get GPU properties for batch size: %s", e)
+        return cpu_defaults.get(model_type, DEFAULT_BATCH_SIZE_FALLBACK)
+    except (ImportError, AttributeError, ValueError) as e:
+        logger.error("Unexpected error determining batch size: %s", e)
+        return cpu_defaults.get(model_type, DEFAULT_BATCH_SIZE_FALLBACK)
