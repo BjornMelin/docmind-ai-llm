@@ -1,9 +1,13 @@
-"""Simplified models module for DocMind AI.
+"""Models module for DocMind AI.
 
-This module exports the essential configuration and analysis models.
+This module provides backward compatibility by re-exporting configuration
+and analysis models from the centralized settings system.
+
+DEPRECATED: Direct imports from this module are deprecated.
+Use `from src.config.settings import Settings, AnalysisOutput, settings` instead.
 """  # noqa: N999
 
-# Import from the core module
-from .core import AnalysisOutput, AppSettings, Settings, settings
+# Re-export from centralized settings for backward compatibility
+from src.config.settings import AnalysisOutput, AppSettings, Settings, settings
 
 __all__ = ["AnalysisOutput", "AppSettings", "Settings", "settings"]

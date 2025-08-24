@@ -7,8 +7,23 @@ components including multi-agent settings, LLM backends, and performance tuning.
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class AnalysisOutput(BaseModel):
+    """Structured output schema for document analysis results.
+
+    Defines the expected format for analysis results from the language model,
+    ensuring consistent structure for summaries, insights, action items, and
+    questions. Used with Pydantic output parsing to validate and structure
+    LLM responses.
+    """
+
+    summary: str = Field(description="Summary of the document")
+    key_insights: list[str] = Field(description="Key insights extracted")
+    action_items: list[str] = Field(description="Action items identified")
+    open_questions: list[str] = Field(description="Open questions surfaced")
 
 
 class Settings(BaseSettings):
@@ -134,6 +149,23 @@ class Settings(BaseSettings):
         ge=1,
         le=500,
     )
+    # Additional compatibility fields from models/core.py
+    parse_strategy: str = Field(
+        default="hi_res",
+        description="Document parsing strategy for Unstructured",
+    )
+    max_retries: int = Field(
+        default=3,
+        description="Maximum retry attempts for operations",
+        ge=0,
+        le=10,
+    )
+    timeout: int = Field(
+        default=30,
+        description="Operation timeout in seconds",
+        ge=1,
+        le=300,
+    )
 
     # Retrieval Configuration
     retrieval_strategy: Literal["vector", "hybrid", "graphrag"] = Field(
@@ -150,9 +182,13 @@ class Settings(BaseSettings):
         default=True,
         description="Enable BGE reranking (REQ-0045)",
     )
-    reranker_top_k: int = Field(
+    reranker_model: str = Field(
+        default="BAAI/bge-reranker-v2-m3",
+        description="Reranking model to use",
+    )
+    reranking_top_k: int = Field(
         default=5,
-        description="Top K after reranking",
+        description="Top-k after reranking",
         ge=1,
         le=20,
     )
@@ -169,6 +205,16 @@ class Settings(BaseSettings):
     use_sparse_embeddings: bool = Field(
         default=True,
         description="Enable SPLADE++ sparse embeddings (REQ-0043)",
+    )
+    sparse_embedding_model: str | None = Field(
+        default=None,
+        description="Sparse embedding model (SPLADE++)",
+    )
+    embedding_batch_size: int = Field(
+        default=100,
+        description="Batch size for embedding processing",
+        ge=1,
+        le=1000,
     )
 
     # Vector Database Configuration (REQ-0047)
@@ -215,6 +261,19 @@ class Settings(BaseSettings):
     enable_gpu_acceleration: bool = Field(
         default=True,
         description="Enable GPU acceleration if available",
+    )
+    # Backend configuration compatibility
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama server base URL",
+    )
+    lmstudio_base_url: str = Field(
+        default="http://localhost:1234/v1",
+        description="LMStudio server base URL",
+    )
+    llamacpp_model_path: str = Field(
+        default="/path/to/model.gguf",
+        description="llama.cpp model file path",
     )
 
     # vLLM-Specific Settings (REQ-0063-v2, REQ-0064-v2)
@@ -303,7 +362,194 @@ class Settings(BaseSettings):
         description="Available analysis modes (REQ-0095)",
     )
 
-    @field_validator("data_dir", "cache_dir", "log_file", mode="before")
+    # Centralized Constants - Eliminating DRY violations from recent remediation
+
+    # Memory and Size Conversion Constants
+    bytes_to_gb_divisor: int = Field(
+        default=1024**3,
+        description="Divisor to convert bytes to GB (1024^3)",
+    )
+    bytes_to_mb_divisor: int = Field(
+        default=1024 * 1024,
+        description="Divisor to convert bytes to MB (1024^2)",
+    )
+
+    # BGE-M3 Model Constants
+    bge_m3_embedding_dim: int = Field(
+        default=1024,
+        description="BGE-M3 embedding dimension",
+        ge=512,
+        le=4096,
+    )
+    bge_m3_max_length: int = Field(
+        default=8192,
+        description="BGE-M3 maximum token length",
+        ge=512,
+        le=16384,
+    )
+    bge_m3_model_name: str = Field(
+        default="BAAI/bge-m3",
+        description="BGE-M3 model identifier",
+    )
+    bge_m3_batch_size_gpu: int = Field(
+        default=12,
+        description="BGE-M3 GPU batch size",
+        ge=1,
+        le=128,
+    )
+    bge_m3_batch_size_cpu: int = Field(
+        default=4,
+        description="BGE-M3 CPU batch size",
+        ge=1,
+        le=32,
+    )
+
+    # Hybrid Retrieval Constants
+    rrf_k_constant: int = Field(
+        default=60,
+        description="RRF constant for reciprocal rank calculation",
+        ge=10,
+        le=100,
+    )
+    # Additional RRF fusion compatibility fields
+    rrf_fusion_weight_dense: float = Field(
+        default=0.7,
+        description="RRF fusion weight for dense embeddings",
+        ge=0.0,
+        le=1.0,
+    )
+    rrf_fusion_weight_sparse: float = Field(
+        default=0.3,
+        description="RRF fusion weight for sparse embeddings",
+        ge=0.0,
+        le=1.0,
+    )
+    rrf_fusion_alpha: int = Field(
+        default=60,
+        description="RRF fusion alpha parameter",
+        ge=10,
+        le=100,
+    )
+
+    # Default Processing Values
+    default_batch_size: int = Field(
+        default=20,
+        description="Standard batch size for operations",
+        ge=1,
+        le=128,
+    )
+    default_confidence_threshold: float = Field(
+        default=0.8,
+        description="Default confidence threshold for operations",
+        ge=0.0,
+        le=1.0,
+    )
+    default_entity_confidence: float = Field(
+        default=0.8,
+        description="Default entity extraction confidence",
+        ge=0.0,
+        le=1.0,
+    )
+
+    # Query Engine Constants
+
+    # Timeout Configuration
+    default_qdrant_timeout: int = Field(
+        default=60,
+        description="Default Qdrant operation timeout in seconds",
+        ge=10,
+        le=300,
+    )
+    default_agent_timeout: float = Field(
+        default=3.0,
+        description="Default agent operation timeout in seconds",
+        ge=1.0,
+        le=10.0,
+    )
+
+    # Cache and Processing
+    cache_expiry_seconds: int = Field(
+        default=3600,
+        description="Cache expiry time in seconds (1 hour)",
+        ge=300,
+        le=86400,
+    )
+    spacy_download_timeout: int = Field(
+        default=300,
+        description="spaCy model download timeout in seconds",
+        ge=60,
+        le=1200,
+    )
+
+    # Performance Monitoring
+    cpu_monitoring_interval: float = Field(
+        default=0.1,
+        description="CPU monitoring interval in seconds",
+        ge=0.01,
+        le=1.0,
+    )
+    percent_multiplier: int = Field(
+        default=100,
+        description="Multiplier for percentage calculations",
+    )
+
+    # App.py Constants - moved to eliminate duplication
+    default_token_limit: int = Field(
+        default=131072,
+        description="Default token limit (128K context)",
+        ge=1024,
+        le=1000000,
+    )
+    context_size_options: list[int] = Field(
+        default=[8192, 32768, 65536, 131072],
+        description="Available context size options",
+    )
+    suggested_context_high: int = Field(
+        default=65536,
+        description="Suggested high context size (64K)",
+        ge=8192,
+        le=131072,
+    )
+    suggested_context_medium: int = Field(
+        default=32768,
+        description="Suggested medium context size (32K)",
+        ge=8192,
+        le=131072,
+    )
+    suggested_context_low: int = Field(
+        default=8192,
+        description="Suggested low context size (8K)",
+        ge=1024,
+        le=131072,
+    )
+    request_timeout_seconds: float = Field(
+        default=60.0,
+        description="Request timeout in seconds",
+        ge=1.0,
+        le=300.0,
+    )
+    streaming_delay_seconds: float = Field(
+        default=0.02,
+        description="Streaming delay between chunks in seconds",
+        ge=0.001,
+        le=1.0,
+    )
+    minimum_vram_high_gb: int = Field(
+        default=16,
+        description="Minimum VRAM for high performance (GB)",
+        ge=4,
+        le=80,
+    )
+    minimum_vram_medium_gb: int = Field(
+        default=8,
+        description="Minimum VRAM for medium performance (GB)",
+        ge=2,
+        le=32,
+    )
+
+    @field_validator(
+        "data_dir", "cache_dir", "log_file", "sqlite_db_path", mode="before"
+    )
     @classmethod
     def create_directories(cls, v: Path | str | None) -> Path | None:
         """Create directories if they don't exist."""
@@ -315,6 +561,14 @@ class Settings(BaseSettings):
                 path.mkdir(parents=True, exist_ok=True)
             return path
         return None
+
+    @field_validator("app_name", "model_name", "embedding_model", "bge_m3_model_name")
+    @classmethod
+    def validate_non_empty_strings(cls, v: str) -> str:
+        """Validate that critical string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty or whitespace-only")
+        return v.strip()
 
     @field_validator("llm_backend")
     @classmethod
@@ -328,6 +582,82 @@ class Settings(BaseSettings):
                 "OpenAI backend selected - ensure using local-compatible endpoint",
                 UserWarning,
                 stacklevel=2,
+            )
+        return v
+
+    @field_validator("rrf_fusion_weight_dense", "rrf_fusion_weight_sparse")
+    @classmethod
+    def validate_rrf_weight_range(cls, v: float) -> float:
+        """Validate RRF weights are between 0 and 1."""
+        if not 0 <= v <= 1:
+            raise ValueError("RRF weight must be between 0 and 1")
+        return v
+
+    @field_validator("rrf_fusion_weight_sparse")
+    @classmethod
+    def validate_rrf_weights_sum(cls, v: float, info) -> float:
+        """Validate that RRF weights sum to 1.0 (within tolerance)."""
+        if "rrf_fusion_weight_dense" in info.data:
+            dense_weight = info.data["rrf_fusion_weight_dense"]
+            total = dense_weight + v
+            if abs(total - 1.0) > 0.001:  # Tolerance for floating point
+                raise ValueError("RRF weights must sum to 1.0")
+        return v
+
+    @field_validator("embedding_dimension")
+    @classmethod
+    def validate_embedding_dimension(cls, v: int) -> int:
+        """Validate embedding dimension is positive and reasonable."""
+        if v <= 0:
+            raise ValueError("Embedding dimension must be positive")
+        if v > 10000:
+            raise ValueError("Embedding dimension seems too large")
+        return v
+
+    @field_validator("embedding_model")
+    @classmethod
+    def validate_bge_model_dimension(cls, v: str, info) -> str:
+        """Validate BGE-Large model has correct dimension."""
+        if "bge-large-en" in v.lower():
+            if "embedding_dimension" in info.data:
+                dimension = info.data["embedding_dimension"]
+                if dimension != 1024:
+                    raise ValueError("BGE-Large model requires 1024 dimensions")
+        return v
+
+    @field_validator("sparse_embedding_model")
+    @classmethod
+    def validate_splade_model(cls, v: str | None) -> str | None:
+        """Validate SPLADE++ model name."""
+        if (
+            v
+            and v.lower() not in [None, "none", ""]
+            and "splade" in v.lower()
+            and "prithivida/Splade_PP_en_v1" not in v
+        ):
+            raise ValueError("Invalid SPLADE++ model name")
+        return v
+
+    @field_validator("chunk_overlap")
+    @classmethod
+    def validate_chunk_overlap(cls, v: int, info) -> int:
+        """Validate chunk overlap is smaller than chunk size."""
+        if "chunk_size" in info.data:
+            chunk_size = info.data["chunk_size"]
+            if v >= chunk_size:
+                raise ValueError(
+                    f"Chunk size ({chunk_size}) must be larger than overlap ({v})"
+                )
+        return v
+
+    @field_validator("parse_strategy")
+    @classmethod
+    def validate_parse_strategy(cls, v: str) -> str:
+        """Validate parse strategy is one of the supported options."""
+        valid_strategies = {"auto", "hi_res", "fast", "ocr_only", "vlm"}
+        if v not in valid_strategies:
+            raise ValueError(
+                f"Parse strategy must be one of {valid_strategies}, got '{v}'"
             )
         return v
 
@@ -394,3 +724,13 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+# For backward compatibility, also expose as AppSettings
+AppSettings = Settings
+
+__all__ = [
+    "Settings",
+    "AppSettings",
+    "AnalysisOutput",
+    "settings",
+]
