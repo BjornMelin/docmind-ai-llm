@@ -472,7 +472,7 @@ class SimpleReranker:
 
 - `src/vector_store/qdrant_manager.py` - BGE-M3 collection setup with resilience
 - `src/config/embedding_config.py` - BGE-M3 unified configuration
-- `src/config/settings.py` - Feature flags for DSPy and GraphRAG
+- `src/config/app_settings.py` - Feature flags for DSPy and GraphRAG
 - `src/agents/retrieval.py` - RouterQueryEngine integration for agents
 - `src/pipeline/ingestion.py` - BGE-M3 embedding generation
 

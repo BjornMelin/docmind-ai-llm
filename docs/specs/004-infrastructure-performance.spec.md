@@ -76,7 +76,7 @@ The Infrastructure & Performance System provides the foundational layer for loca
 - `src/utils/vllm_llm.py` → Update to pure vLLM + FlashInfer with FP8 optimization (remove non-FP8 fallbacks)
 - `src/core/infrastructure/gpu_monitor.py` → Enhance for FP8 KV cache monitoring and 128K context tracking
 - `src/core/infrastructure/hardware_utils.py` → Update for RTX 4090 optimization with 16GB VRAM constraints
-- `src/config/settings.py` → Update for FP8 model configuration and dual-cache system integration
+- `src/config/app_settings.py` → Update for FP8 model configuration and dual-cache system integration
 
 **Agent Orchestration Files:**
 
@@ -729,7 +729,7 @@ CREATE TABLE performance_logs (
 
 ### Modified Files
 
-- `src/config/settings.py` - Infrastructure settings with FP8 and dual-cache configuration
+- `src/config/app_settings.py` - Infrastructure settings with FP8 and dual-cache configuration
 - `src/main.py` - Initialize infrastructure with vLLM service and multi-agent orchestration
 - `.env` - Add FP8, vLLM, caching, and multi-agent infrastructure variables
 - `pyproject.toml` - Add vLLM>=0.4.0, flashinfer, gptcache>=0.1.34, langgraph dependencies
