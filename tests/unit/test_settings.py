@@ -26,7 +26,8 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.config.settings import Settings, settings
+from src.config.app_settings import DocMindSettings
+from src.config.settings import settings
 
 
 class TestSettingsDefaults:
@@ -34,7 +35,7 @@ class TestSettingsDefaults:
 
     def test_application_metadata_defaults(self):
         """Test application metadata has correct defaults."""
-        s = Settings()
+        s = settings
 
         assert s.app_name == "DocMind AI"
         assert s.app_version == "2.0.0"
@@ -42,7 +43,7 @@ class TestSettingsDefaults:
 
     def test_multi_agent_defaults(self):
         """Test multi-agent coordination defaults are properly configured."""
-        s = Settings()
+        s = settings
 
         # Multi-agent should be enabled by default
         assert s.enable_multi_agent is True
@@ -52,7 +53,7 @@ class TestSettingsDefaults:
 
     def test_llm_backend_defaults(self):
         """Test LLM backend defaults are properly configured for local-first."""
-        s = Settings()
+        s = settings
 
         assert s.llm_backend == "vllm"  # vLLM for FP8 optimization
         assert s.model_name == "Qwen/Qwen3-4B-Instruct-2507"  # Latest model
@@ -63,7 +64,7 @@ class TestSettingsDefaults:
 
     def test_model_optimization_defaults(self):
         """Test model optimization settings are correctly configured."""
-        s = Settings()
+        s = settings
 
         assert s.quantization == "fp8"  # FP8 for memory efficiency
         assert s.kv_cache_dtype == "fp8"  # FP8 for KV cache
@@ -72,7 +73,7 @@ class TestSettingsDefaults:
 
     def test_context_management_defaults(self):
         """Test context management has proper 128K defaults."""
-        s = Settings()
+        s = settings
 
         assert s.context_window_size == 131072  # 128K
         assert s.context_buffer_size == 131072  # 128K
@@ -80,7 +81,7 @@ class TestSettingsDefaults:
 
     def test_document_processing_defaults(self):
         """Test document processing has sensible defaults."""
-        s = Settings()
+        s = settings
 
         assert s.chunk_size == 512
         assert s.chunk_overlap == 50
@@ -89,7 +90,7 @@ class TestSettingsDefaults:
 
     def test_retrieval_defaults(self):
         """Test retrieval configuration defaults."""
-        s = Settings()
+        s = settings
 
         assert s.retrieval_strategy == "hybrid"  # Hybrid is optimal
         assert s.top_k == 10
@@ -98,7 +99,7 @@ class TestSettingsDefaults:
 
     def test_embedding_defaults(self):
         """Test embedding configuration defaults."""
-        s = Settings()
+        s = settings
 
         assert s.embedding_model == "BAAI/bge-large-en-v1.5"
         assert s.embedding_dimension == 1024  # BGE-Large dimension
@@ -106,7 +107,7 @@ class TestSettingsDefaults:
 
     def test_vector_database_defaults(self):
         """Test vector database configuration defaults."""
-        s = Settings()
+        s = settings
 
         assert s.vector_store_type == "qdrant"  # Qdrant is primary
         assert s.qdrant_url == "http://localhost:6333"
@@ -114,7 +115,7 @@ class TestSettingsDefaults:
 
     def test_performance_defaults(self):
         """Test performance configuration defaults are reasonable."""
-        s = Settings()
+        s = settings
 
         assert s.max_query_latency_ms == 2000  # 2s max latency
         assert s.max_memory_gb == 4.0  # 4GB RAM limit
@@ -123,7 +124,7 @@ class TestSettingsDefaults:
 
     def test_vllm_defaults(self):
         """Test vLLM-specific defaults are optimized for RTX 4090."""
-        s = Settings()
+        s = settings
 
         assert s.vllm_gpu_memory_utilization == 0.85  # 85% utilization
         assert s.vllm_attention_backend == "FLASHINFER"  # FlashInfer backend
@@ -133,7 +134,7 @@ class TestSettingsDefaults:
 
     def test_persistence_defaults(self):
         """Test persistence configuration creates proper paths."""
-        s = Settings()
+        s = settings
 
         assert s.data_dir == Path("./data")
         assert s.cache_dir == Path("./cache")
@@ -142,7 +143,7 @@ class TestSettingsDefaults:
 
     def test_centralized_constants_defaults(self):
         """Test all centralized constants have proper defaults."""
-        s = Settings()
+        s = settings
 
         # Memory conversion constants
         assert s.bytes_to_gb_divisor == 1024**3
@@ -176,211 +177,211 @@ class TestFieldValidation:
     def test_agent_timeout_range_validation(self):
         """Test agent decision timeout must be within valid range."""
         # Valid range
-        Settings(agent_decision_timeout=100)
-        Settings(agent_decision_timeout=500)
-        Settings(agent_decision_timeout=1000)
+        DocMindSettings(agent_decision_timeout=100)
+        DocMindSettings(agent_decision_timeout=500)
+        DocMindSettings(agent_decision_timeout=1000)
 
         # Invalid: too low
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 100"
         ):
-            Settings(agent_decision_timeout=50)
+            DocMindSettings(agent_decision_timeout=50)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 1000"
         ):
-            Settings(agent_decision_timeout=2000)
+            DocMindSettings(agent_decision_timeout=2000)
 
     def test_max_agent_retries_validation(self):
         """Test max agent retries has reasonable bounds."""
         # Valid range
-        Settings(max_agent_retries=0)
-        Settings(max_agent_retries=3)
-        Settings(max_agent_retries=5)
+        DocMindSettings(max_agent_retries=0)
+        DocMindSettings(max_agent_retries=3)
+        DocMindSettings(max_agent_retries=5)
 
         # Invalid: negative
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 0"
         ):
-            Settings(max_agent_retries=-1)
+            DocMindSettings(max_agent_retries=-1)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 5"
         ):
-            Settings(max_agent_retries=10)
+            DocMindSettings(max_agent_retries=10)
 
     def test_llm_temperature_validation(self):
         """Test LLM temperature must be in valid range."""
         # Valid temperatures
-        Settings(llm_temperature=0.0)
-        Settings(llm_temperature=0.5)
-        Settings(llm_temperature=2.0)
+        DocMindSettings(llm_temperature=0.0)
+        DocMindSettings(llm_temperature=0.5)
+        DocMindSettings(llm_temperature=2.0)
 
         # Invalid: negative
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 0"
         ):
-            Settings(llm_temperature=-0.1)
+            DocMindSettings(llm_temperature=-0.1)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 2"
         ):
-            Settings(llm_temperature=3.0)
+            DocMindSettings(llm_temperature=3.0)
 
     def test_llm_max_tokens_validation(self):
         """Test LLM max tokens has reasonable bounds."""
         # Valid token counts
-        Settings(llm_max_tokens=128)
-        Settings(llm_max_tokens=2048)
-        Settings(llm_max_tokens=8192)
+        DocMindSettings(llm_max_tokens=128)
+        DocMindSettings(llm_max_tokens=2048)
+        DocMindSettings(llm_max_tokens=8192)
 
         # Invalid: too low
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 128"
         ):
-            Settings(llm_max_tokens=64)
+            DocMindSettings(llm_max_tokens=64)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 8192"
         ):
-            Settings(llm_max_tokens=16384)
+            DocMindSettings(llm_max_tokens=16384)
 
     def test_chunk_size_validation(self):
         """Test chunk size has reasonable bounds."""
         # Valid chunk sizes
-        Settings(chunk_size=128)
-        Settings(chunk_size=512)
-        Settings(chunk_size=2048)
+        DocMindSettings(chunk_size=128)
+        DocMindSettings(chunk_size=512)
+        DocMindSettings(chunk_size=2048)
 
         # Invalid: too small
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 128"
         ):
-            Settings(chunk_size=64)
+            DocMindSettings(chunk_size=64)
 
         # Invalid: too large
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 2048"
         ):
-            Settings(chunk_size=4096)
+            DocMindSettings(chunk_size=4096)
 
     def test_chunk_overlap_validation(self):
         """Test chunk overlap has reasonable bounds."""
         # Valid overlaps
-        Settings(chunk_overlap=0)
-        Settings(chunk_overlap=100)
-        Settings(chunk_overlap=200)
+        DocMindSettings(chunk_overlap=0)
+        DocMindSettings(chunk_overlap=100)
+        DocMindSettings(chunk_overlap=200)
 
         # Invalid: negative
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 0"
         ):
-            Settings(chunk_overlap=-10)
+            DocMindSettings(chunk_overlap=-10)
 
         # Invalid: too large
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 200"
         ):
-            Settings(chunk_overlap=500)
+            DocMindSettings(chunk_overlap=500)
 
     def test_top_k_validation(self):
         """Test top_k retrieval has reasonable bounds."""
         # Valid top-k values
-        Settings(top_k=1)
-        Settings(top_k=10)
-        Settings(top_k=50)
+        DocMindSettings(top_k=1)
+        DocMindSettings(top_k=10)
+        DocMindSettings(top_k=50)
 
         # Invalid: zero or negative
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 1"
         ):
-            Settings(top_k=0)
+            DocMindSettings(top_k=0)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 50"
         ):
-            Settings(top_k=100)
+            DocMindSettings(top_k=100)
 
     def test_bge_m3_dimension_validation(self):
         """Test BGE-M3 embedding dimension validation."""
         # Valid dimensions
-        Settings(bge_m3_embedding_dim=512)
-        Settings(bge_m3_embedding_dim=1024)
-        Settings(bge_m3_embedding_dim=4096)
+        DocMindSettings(bge_m3_embedding_dim=512)
+        DocMindSettings(bge_m3_embedding_dim=1024)
+        DocMindSettings(bge_m3_embedding_dim=4096)
 
         # Invalid: too small
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 512"
         ):
-            Settings(bge_m3_embedding_dim=256)
+            DocMindSettings(bge_m3_embedding_dim=256)
 
         # Invalid: too large
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 4096"
         ):
-            Settings(bge_m3_embedding_dim=8192)
+            DocMindSettings(bge_m3_embedding_dim=8192)
 
     def test_rrf_alpha_validation(self):
         """Test RRF alpha weight validation."""
         # Valid alpha values (integer range 10-100)
-        Settings(rrf_fusion_alpha=10)
-        Settings(rrf_fusion_alpha=60)  # Default
-        Settings(rrf_fusion_alpha=100)
+        DocMindSettings(rrf_fusion_alpha=10)
+        DocMindSettings(rrf_fusion_alpha=60)  # Default
+        DocMindSettings(rrf_fusion_alpha=100)
 
         # Invalid: too low
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 10"
         ):
-            Settings(rrf_fusion_alpha=5)
+            DocMindSettings(rrf_fusion_alpha=5)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 100"
         ):
-            Settings(rrf_fusion_alpha=150)
+            DocMindSettings(rrf_fusion_alpha=150)
 
     def test_vllm_gpu_memory_validation(self):
         """Test vLLM GPU memory utilization validation."""
         # Valid utilization values
-        Settings(vllm_gpu_memory_utilization=0.1)
-        Settings(vllm_gpu_memory_utilization=0.85)
-        Settings(vllm_gpu_memory_utilization=0.95)
+        DocMindSettings(vllm_gpu_memory_utilization=0.1)
+        DocMindSettings(vllm_gpu_memory_utilization=0.85)
+        DocMindSettings(vllm_gpu_memory_utilization=0.95)
 
         # Invalid: too low
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 0.1"
         ):
-            Settings(vllm_gpu_memory_utilization=0.05)
+            DocMindSettings(vllm_gpu_memory_utilization=0.05)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 0.95"
         ):
-            Settings(vllm_gpu_memory_utilization=1.0)
+            DocMindSettings(vllm_gpu_memory_utilization=1.0)
 
     def test_streamlit_port_validation(self):
         """Test Streamlit port validation."""
         # Valid ports
-        Settings(streamlit_port=1024)
-        Settings(streamlit_port=8501)
-        Settings(streamlit_port=65535)
+        DocMindSettings(streamlit_port=1024)
+        DocMindSettings(streamlit_port=8501)
+        DocMindSettings(streamlit_port=65535)
 
         # Invalid: too low (system ports)
         with pytest.raises(
             ValidationError, match="Input should be greater than or equal to 1024"
         ):
-            Settings(streamlit_port=80)
+            DocMindSettings(streamlit_port=80)
 
         # Invalid: too high
         with pytest.raises(
             ValidationError, match="Input should be less than or equal to 65535"
         ):
-            Settings(streamlit_port=70000)
+            DocMindSettings(streamlit_port=70000)
 
 
 class TestDirectoryCreation:
@@ -394,7 +395,7 @@ class TestDirectoryCreation:
         assert not test_data_dir.exists()
 
         # Create settings with custom data directory
-        Settings(data_dir=str(test_data_dir))
+        DocMindSettings(data_dir=str(test_data_dir))
 
         # Directory should now exist
         assert test_data_dir.exists()
@@ -405,7 +406,7 @@ class TestDirectoryCreation:
         test_cache_dir = tmp_path / "test_cache"
 
         assert not test_cache_dir.exists()
-        Settings(cache_dir=str(test_cache_dir))
+        DocMindSettings(cache_dir=str(test_cache_dir))
         assert test_cache_dir.exists()
 
     def test_log_file_parent_creation(self, tmp_path):
@@ -415,7 +416,7 @@ class TestDirectoryCreation:
         # Parent directory shouldn't exist
         assert not test_log_file.parent.exists()
 
-        Settings(log_file=str(test_log_file))
+        DocMindSettings(log_file=str(test_log_file))
 
         # Parent directory should be created
         assert test_log_file.parent.exists()
@@ -426,7 +427,7 @@ class TestDirectoryCreation:
         test_db_path = tmp_path / "db" / "test.db"
 
         assert not test_db_path.parent.exists()
-        Settings(sqlite_db_path=str(test_db_path))
+        DocMindSettings(sqlite_db_path=str(test_db_path))
         assert test_db_path.parent.exists()
 
     def test_nested_directory_creation(self, tmp_path):
@@ -434,7 +435,7 @@ class TestDirectoryCreation:
         nested_dir = tmp_path / "level1" / "level2" / "level3"
 
         assert not nested_dir.exists()
-        Settings(data_dir=str(nested_dir))
+        DocMindSettings(data_dir=str(nested_dir))
         assert nested_dir.exists()
         assert nested_dir.is_dir()
 
@@ -447,14 +448,14 @@ class TestLLMBackendValidation:
         valid_backends = ["ollama", "llamacpp", "vllm", "openai"]
 
         for backend in valid_backends:
-            s = Settings(llm_backend=backend)
+            s = DocMindSettings(llm_backend=backend)
             assert s.llm_backend == backend
 
     def test_openai_backend_warning(self):
         """Test OpenAI backend triggers local-compatible warning."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            Settings(llm_backend="openai")
+            DocMindSettings(llm_backend="openai")
 
             # Should have exactly one warning
             assert len(w) == 1
@@ -467,7 +468,7 @@ class TestLLMBackendValidation:
         for backend in ["ollama", "llamacpp", "vllm"]:
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
-                Settings(llm_backend=backend)
+                DocMindSettings(llm_backend=backend)
                 assert len(w) == 0
 
 
@@ -477,7 +478,7 @@ class TestEnvironmentVariableOverrides:
     def test_basic_env_override(self):
         """Test basic environment variable override."""
         with patch.dict(os.environ, {"DOCMIND_DEBUG": "true"}):
-            s = Settings()
+            s = settings
             assert s.debug is True
 
     def test_numeric_env_override(self):
@@ -490,7 +491,7 @@ class TestEnvironmentVariableOverrides:
                 "DOCMIND_TOP_K": "15",
             },
         ):
-            s = Settings()
+            s = settings
             assert s.agent_decision_timeout == 500
             assert s.llm_temperature == 0.5
             assert s.top_k == 15
@@ -505,7 +506,7 @@ class TestEnvironmentVariableOverrides:
                 "DOCMIND_ENABLE_GPU_ACCELERATION": "false",
             },
         ):
-            s = Settings()
+            s = settings
             assert s.enable_multi_agent is False
             assert s.use_reranking is True
             assert s.enable_gpu_acceleration is False
@@ -520,7 +521,7 @@ class TestEnvironmentVariableOverrides:
                 "DOCMIND_CACHE_DIR": "/tmp/custom/cache",
             },
         ):
-            s = Settings()
+            s = settings
             assert s.data_dir == Path("/tmp/custom/data")
             assert s.cache_dir == Path("/tmp/custom/cache")
 
@@ -531,7 +532,7 @@ class TestEnvironmentVariableOverrides:
             os.environ,
             {"DOCMIND_ANALYSIS_MODES": '["quick", "detailed", "comprehensive"]'},
         ):
-            s = Settings()
+            s = settings
             assert s.analysis_modes == ["quick", "detailed", "comprehensive"]
 
     def test_env_validation_still_applies(self):
@@ -542,18 +543,18 @@ class TestEnvironmentVariableOverrides:
                 ValidationError, match="Input should be less than or equal to 1000"
             ),
         ):
-            Settings()
+            _ = settings  # Trigger validation
 
     def test_env_prefix_enforced(self):
         """Test environment variables must have DOCMIND_ prefix."""
         with patch.dict(os.environ, {"DEBUG": "true"}):  # No prefix
-            s = Settings()
+            s = settings
             assert s.debug is False  # Should use default, not env var
 
     def test_case_insensitive_env_vars(self):
         """Test environment variables are case insensitive."""
         with patch.dict(os.environ, {"docmind_debug": "true"}):
-            s = Settings()
+            s = settings
             assert s.debug is True
 
 
@@ -562,7 +563,7 @@ class TestConfigurationMethods:
 
     def test_get_agent_config(self):
         """Test get_agent_config returns correct agent-specific settings."""
-        s = Settings()
+        s = settings
         agent_config = s.get_agent_config()
 
         expected_keys = {
@@ -585,7 +586,7 @@ class TestConfigurationMethods:
 
     def test_get_performance_config(self):
         """Test get_performance_config returns performance settings."""
-        s = Settings()
+        s = settings
         perf_config = s.get_performance_config()
 
         expected_keys = {
@@ -608,7 +609,7 @@ class TestConfigurationMethods:
 
     def test_get_vllm_config(self):
         """Test get_vllm_config returns vLLM-specific settings."""
-        s = Settings()
+        s = settings
         vllm_config = s.get_vllm_config()
 
         expected_keys = {
@@ -632,8 +633,8 @@ class TestConfigurationMethods:
 
     def test_to_dict_method(self):
         """Test to_dict method returns complete settings."""
-        s = Settings()
-        settings_dict = s.to_dict()
+        s = settings
+        settings_dict = s.model_dump()
 
         # Should contain all fields
         assert "app_name" in settings_dict
@@ -652,14 +653,14 @@ class TestCentralizedConstants:
 
     def test_memory_conversion_constants(self):
         """Test memory conversion constants are correct."""
-        s = Settings()
+        s = settings
 
         assert s.bytes_to_gb_divisor == 1024**3  # 1073741824
         assert s.bytes_to_mb_divisor == 1024 * 1024  # 1048576
 
     def test_bge_m3_constants(self):
         """Test BGE-M3 model constants are properly centralized."""
-        s = Settings()
+        s = settings
 
         assert s.bge_m3_embedding_dim == 1024
         assert s.bge_m3_max_length == 8192
@@ -669,7 +670,7 @@ class TestCentralizedConstants:
 
     def test_hybrid_retrieval_constants(self):
         """Test hybrid retrieval constants are research-backed."""
-        s = Settings()
+        s = settings
 
         # RRF parameters
         assert s.rrf_fusion_alpha == 60  # RRF fusion alpha parameter
@@ -684,7 +685,7 @@ class TestCentralizedConstants:
 
     def test_default_processing_constants(self):
         """Test default processing value constants."""
-        s = Settings()
+        s = settings
 
         assert s.default_batch_size == 20
         assert s.default_confidence_threshold == 0.8
@@ -694,7 +695,7 @@ class TestCentralizedConstants:
 
     def test_timeout_configuration_constants(self):
         """Test timeout configuration constants."""
-        s = Settings()
+        s = settings
 
         assert s.default_qdrant_timeout == 60  # 1 minute
         assert s.default_agent_timeout == 3.0  # 3 seconds
@@ -703,7 +704,7 @@ class TestCentralizedConstants:
 
     def test_app_constants_moved_from_scattered_files(self):
         """Test constants moved from app.py and other scattered files."""
-        s = Settings()
+        s = settings
 
         # Token and context constants
         assert s.default_token_limit == 131072  # 128K
@@ -720,7 +721,7 @@ class TestCentralizedConstants:
 
     def test_monitoring_constants(self):
         """Test performance monitoring constants."""
-        s = Settings()
+        s = settings
 
         assert s.cpu_monitoring_interval == 0.1  # 100ms
         assert s.percent_multiplier == 100
@@ -732,7 +733,7 @@ class TestGlobalSettingsInstance:
     def test_global_settings_instance_exists(self):
         """Test global settings instance is available."""
         assert settings is not None
-        assert isinstance(settings, Settings)
+        assert isinstance(settings, DocMindSettings)
 
     def test_global_settings_has_defaults(self):
         """Test global settings instance has proper defaults."""
@@ -754,7 +755,7 @@ class TestEdgeCasesAndErrorHandling:
 
     def test_none_values_handled_correctly(self):
         """Test None values are handled correctly where allowed."""
-        s = Settings(
+        s = DocMindSettings(
             llm_api_key=None,  # Should be allowed
             log_file=None,  # Should be allowed
         )
@@ -768,33 +769,33 @@ class TestEdgeCasesAndErrorHandling:
         with pytest.raises(
             ValidationError, match="Field cannot be empty or whitespace-only"
         ):
-            Settings(app_name="")
+            DocMindSettings(app_name="")
 
         with pytest.raises(
             ValidationError, match="Field cannot be empty or whitespace-only"
         ):
-            Settings(model_name="")
+            DocMindSettings(model_name="")
 
         with pytest.raises(
             ValidationError, match="Field cannot be empty or whitespace-only"
         ):
-            Settings(embedding_model="")
+            DocMindSettings(embedding_model="")
 
         # Test whitespace-only strings are also rejected
         with pytest.raises(
             ValidationError, match="Field cannot be empty or whitespace-only"
         ):
-            Settings(app_name="   ")
+            DocMindSettings(app_name="   ")
 
         with pytest.raises(
             ValidationError, match="Field cannot be empty or whitespace-only"
         ):
-            Settings(model_name="  \t  ")
+            DocMindSettings(model_name="  \t  ")
 
     def test_extreme_boundary_values(self):
         """Test extreme boundary values."""
         # Test minimum values
-        s = Settings(
+        s = DocMindSettings(
             agent_decision_timeout=100,  # Minimum allowed
             max_agent_retries=0,  # Minimum allowed
             llm_temperature=0.0,  # Minimum allowed
@@ -807,7 +808,7 @@ class TestEdgeCasesAndErrorHandling:
         assert s.chunk_overlap == 0
 
         # Test maximum values
-        s = Settings(
+        s = DocMindSettings(
             agent_decision_timeout=1000,  # Maximum allowed
             max_agent_retries=5,  # Maximum allowed
             llm_temperature=2.0,  # Maximum allowed
@@ -825,7 +826,7 @@ class TestEdgeCasesAndErrorHandling:
         with patch.dict(
             os.environ, {"DOCMIND_TOP_K": "15", "DOCMIND_LLM_TEMPERATURE": "0.5"}
         ):
-            s = Settings()
+            s = settings
             assert isinstance(s.top_k, int)
             assert isinstance(s.llm_temperature, float)
             assert s.top_k == 15
@@ -834,23 +835,23 @@ class TestEdgeCasesAndErrorHandling:
     def test_invalid_literal_values(self):
         """Test invalid literal values are rejected."""
         with pytest.raises(ValidationError, match="Input should be"):
-            Settings(llm_backend="invalid_backend")
+            DocMindSettings(llm_backend="invalid_backend")
 
         with pytest.raises(ValidationError, match="Input should be"):
-            Settings(retrieval_strategy="invalid_strategy")
+            DocMindSettings(retrieval_strategy="invalid_strategy")
 
         with pytest.raises(ValidationError, match="Input should be"):
-            Settings(vector_store_type="invalid_store")
+            DocMindSettings(vector_store_type="invalid_store")
 
     def test_path_edge_cases(self, tmp_path):
         """Test path handling edge cases."""
         # Relative paths should work
-        s = Settings(data_dir="./relative/path")
+        s = DocMindSettings(data_dir="./relative/path")
         assert s.data_dir == Path("./relative/path")
 
         # Path-like strings should work
         test_path = str(tmp_path / "test")
-        s = Settings(data_dir=test_path)
+        s = DocMindSettings(data_dir=test_path)
         assert s.data_dir == Path(test_path)
 
 
@@ -859,7 +860,7 @@ class TestBackwardCompatibilityAndIntegration:
 
     def test_constants_accessible_via_settings_instance(self):
         """Test all moved constants are accessible via settings."""
-        s = Settings()
+        s = settings
 
         # These constants were moved from scattered files
         # and should be accessible via the centralized settings
@@ -903,11 +904,11 @@ class TestBackwardCompatibilityAndIntegration:
         """Test importing settings doesn't cause circular imports or other issues."""
         # This should not raise any exceptions
         try:
-            from src.config.settings import Settings
+            from src.config.app_settings import DocMindSettings
 
             # Basic usage should work
-            s = Settings()
-            config = s.to_dict()
+            s = settings
+            config = s.model_dump()
 
             assert isinstance(config, dict)
             assert len(config) > 50  # Should have many settings
@@ -921,7 +922,7 @@ class TestRealWorldScenarios:
 
     def test_rtx_4090_optimized_configuration(self):
         """Test settings are optimized for RTX 4090 16GB setup."""
-        s = Settings()
+        s = settings
 
         # Memory settings should be optimized for 16GB VRAM
         assert s.max_vram_gb == 14.0  # Leave 2GB headroom
@@ -937,7 +938,7 @@ class TestRealWorldScenarios:
 
     def test_128k_context_configuration(self):
         """Test 128K context window is properly configured."""
-        s = Settings()
+        s = settings
 
         assert s.context_window_size == 131072  # 128K
         assert s.context_buffer_size == 131072
@@ -948,7 +949,7 @@ class TestRealWorldScenarios:
 
     def test_local_first_configuration(self):
         """Test configuration enforces local-first architecture."""
-        s = Settings()
+        s = settings
 
         # Default backend should be local
         assert s.llm_backend in ["ollama", "llamacpp", "vllm"]  # Not OpenAI
@@ -958,7 +959,7 @@ class TestRealWorldScenarios:
 
     def test_hybrid_search_configuration(self):
         """Test hybrid search is properly configured."""
-        s = Settings()
+        s = settings
 
         assert s.retrieval_strategy == "hybrid"
         assert s.use_sparse_embeddings is True
@@ -970,7 +971,7 @@ class TestRealWorldScenarios:
 
     def test_production_ready_defaults(self):
         """Test defaults are suitable for production use."""
-        s = Settings()
+        s = settings
 
         # Performance settings should be reasonable
         assert s.max_query_latency_ms <= 5000  # Under 5 seconds
@@ -988,12 +989,12 @@ class TestRealWorldScenarios:
     def test_development_vs_production_scenarios(self):
         """Test settings work for both development and production."""
         # Development scenario (debug enabled)
-        dev_settings = Settings(debug=True, log_level="DEBUG")
+        dev_settings = DocMindSettings(debug=True, log_level="DEBUG")
         assert dev_settings.debug is True
         assert dev_settings.log_level == "DEBUG"
 
         # Production scenario (debug disabled)
-        prod_settings = Settings(debug=False, log_level="INFO")
+        prod_settings = DocMindSettings(debug=False, log_level="INFO")
         assert prod_settings.debug is False
         assert prod_settings.log_level == "INFO"
 

@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config.settings import Settings
+from src.config.app_settings import DocMindSettings
 
 
 class TestCrossModuleIntegration:
@@ -31,7 +31,7 @@ class TestCrossModuleIntegration:
 
     def test_app_module_settings_integration(self):
         """Test app.py module can properly use centralized settings."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Test constants that were moved from app.py
         assert hasattr(s, "default_token_limit")
@@ -48,7 +48,7 @@ class TestCrossModuleIntegration:
 
     def test_tool_factory_settings_integration(self):
         """Test tool factory can access all needed settings."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Tool factory needs agent configuration
         agent_config = s.get_agent_config()
@@ -68,7 +68,7 @@ class TestCrossModuleIntegration:
 
     def test_retrieval_module_settings_integration(self):
         """Test retrieval modules can access BGE-M3 and hybrid search settings."""
-        s = Settings()
+        s = DocMindSettings()
 
         # BGE-M3 constants should be accessible
         assert hasattr(s, "bge_m3_embedding_dim")
@@ -88,7 +88,7 @@ class TestCrossModuleIntegration:
 
     def test_vllm_module_settings_integration(self):
         """Test vLLM configuration integrates with actual vLLM usage patterns."""
-        s = Settings()
+        s = DocMindSettings()
 
         vllm_config = s.get_vllm_config()
 
@@ -121,7 +121,7 @@ class TestCrossModuleIntegration:
 
     def test_coordinator_settings_integration(self):
         """Test multi-agent coordinator can use settings properly."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Coordinator needs both agent and performance config
         agent_config = s.get_agent_config()
@@ -139,7 +139,7 @@ class TestCrossModuleIntegration:
 
     def test_database_utils_settings_integration(self):
         """Test database utilities can access persistence settings."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Database settings should be accessible
         assert hasattr(s, "sqlite_db_path")
@@ -153,7 +153,7 @@ class TestCrossModuleIntegration:
 
     def test_monitoring_utils_settings_integration(self):
         """Test monitoring utilities can access performance monitoring settings."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Monitoring constants should be accessible
         assert hasattr(s, "cpu_monitoring_interval")
@@ -177,7 +177,7 @@ class TestSettingsWithActualFileOperations:
         test_log_file = tmp_path / "logs" / "integration.log"
 
         # Create settings with custom directories
-        s = Settings(
+        s = DocMindSettings(
             data_dir=str(test_data_dir),
             cache_dir=str(test_cache_dir),
             log_file=str(test_log_file),
@@ -204,7 +204,7 @@ class TestSettingsWithActualFileOperations:
         """Test SQLite database path works with actual database operations."""
         test_db_path = tmp_path / "db" / "test_integration.db"
 
-        s = Settings(sqlite_db_path=str(test_db_path))
+        s = DocMindSettings(sqlite_db_path=str(test_db_path))
 
         # Parent directory should be created
         assert test_db_path.parent.exists()
@@ -230,7 +230,7 @@ class TestSettingsWithActualFileOperations:
         """Test deeply nested directory creation works in practice."""
         nested_path = tmp_path / "level1" / "level2" / "level3" / "level4"
 
-        s = Settings(data_dir=str(nested_path))
+        s = DocMindSettings(data_dir=str(nested_path))
 
         # Settings object should exist
         assert s is not None
@@ -263,7 +263,7 @@ class TestEnvironmentIntegration:
         }
 
         with patch.dict("os.environ", production_env):
-            s = Settings()
+            s = DocMindSettings()
 
             # Production settings should be applied
             assert s.debug is False
@@ -285,7 +285,7 @@ class TestEnvironmentIntegration:
         }
 
         with patch.dict("os.environ", dev_env):
-            s = Settings()
+            s = DocMindSettings()
 
             # Development settings should be applied
             assert s.debug is True
@@ -305,7 +305,7 @@ class TestEnvironmentIntegration:
         }
 
         with patch.dict("os.environ", gpu_env):
-            s = Settings()
+            s = DocMindSettings()
 
             # GPU settings should be optimized
             assert s.enable_gpu_acceleration is True
@@ -325,7 +325,7 @@ class TestEnvironmentIntegration:
         }
 
         with patch.dict("os.environ", hybrid_env):
-            s = Settings()
+            s = DocMindSettings()
 
             # Hybrid search should be configured
             assert s.retrieval_strategy == "hybrid"
@@ -341,19 +341,17 @@ class TestBackwardCompatibilityIntegration:
     def test_old_settings_still_work_alongside_new(self):
         """Test that old settings system still works while new system is active."""
         # This tests that both settings systems can coexist during migration
-        from src.config.settings import Settings as NewSettings
-        from src.config.settings import Settings as OldSettings
 
         # Both should be importable and instantiable
-        new_settings = NewSettings()
-        old_settings = OldSettings()
+        new_settings = DocMindSettings()
+        old_settings = DocMindSettings()
 
         # Both should have basic functionality
         assert hasattr(new_settings, "model_name")
         assert hasattr(old_settings, "model_name")
 
         # New settings should have more comprehensive configuration
-        new_dict = new_settings.to_dict()
+        new_dict = new_settings.model_dump()
         old_dict = old_settings.model_dump()
 
         # New settings should have significantly more fields
@@ -385,7 +383,7 @@ class TestBackwardCompatibilityIntegration:
 
     def test_re_exported_constants_accessibility(self):
         """Test that constants moved to centralized settings are still accessible."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Constants that were moved from different modules should be accessible
         moved_constants = [
@@ -410,7 +408,7 @@ class TestConfigurationMethodIntegration:
     @patch("src.agents.coordinator.MultiAgentCoordinator")
     def test_agent_config_integrates_with_coordinator(self, mock_coordinator):
         """Test agent configuration integrates with actual coordinator usage."""
-        s = Settings()
+        s = DocMindSettings()
         agent_config = s.get_agent_config()
 
         # Simulate coordinator creation with settings
@@ -423,7 +421,7 @@ class TestConfigurationMethodIntegration:
 
     def test_performance_config_integrates_with_monitoring(self):
         """Test performance configuration integrates with monitoring systems."""
-        s = Settings()
+        s = DocMindSettings()
         perf_config = s.get_performance_config()
 
         # Performance config should have metrics suitable for monitoring
@@ -440,7 +438,7 @@ class TestConfigurationMethodIntegration:
 
     def test_vllm_config_realistic_integration(self):
         """Test vLLM config works with realistic vLLM usage patterns."""
-        s = Settings()
+        s = DocMindSettings()
         vllm_config = s.get_vllm_config()
 
         # Simulate vLLM server configuration
@@ -460,8 +458,8 @@ class TestConfigurationMethodIntegration:
 
     def test_to_dict_integration_with_serialization(self):
         """Test to_dict method integrates with actual serialization needs."""
-        s = Settings()
-        settings_dict = s.to_dict()
+        s = DocMindSettings()
+        settings_dict = s.model_dump()
 
         # Should be JSON serializable (common integration need)
         import json
@@ -485,7 +483,7 @@ class TestRealWorldUsagePatterns:
 
     def test_streamlit_app_integration_pattern(self):
         """Test settings work with typical Streamlit app usage patterns."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Streamlit app would typically access these settings
         app_config = {
@@ -511,7 +509,7 @@ class TestRealWorldUsagePatterns:
 
     def test_document_processing_integration_pattern(self):
         """Test settings work with document processing workflows."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Document processing would use these settings
         processing_config = {
@@ -532,7 +530,7 @@ class TestRealWorldUsagePatterns:
 
     def test_embedding_pipeline_integration_pattern(self):
         """Test settings work with embedding pipeline usage."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Embedding pipeline would use these settings
         embedding_config = {
@@ -554,7 +552,7 @@ class TestRealWorldUsagePatterns:
 
     def test_retrieval_system_integration_pattern(self):
         """Test settings work with retrieval system workflows."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Retrieval system would use these settings
         retrieval_config = {
@@ -584,7 +582,7 @@ class TestRealWorldUsagePatterns:
 
     def test_multi_agent_coordination_integration_pattern(self):
         """Test settings work with multi-agent coordination workflows."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Multi-agent system would use these settings
         coordination_config = {
@@ -620,7 +618,7 @@ class TestSettingsWithMockedComponents:
     @patch("qdrant_client.QdrantClient")
     def test_qdrant_integration_with_settings(self, mock_qdrant):
         """Test settings work properly with Qdrant client integration."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Mock Qdrant client
         mock_client = MagicMock()
@@ -638,7 +636,7 @@ class TestSettingsWithMockedComponents:
     @patch("sqlite3.connect")
     def test_sqlite_integration_with_settings(self, mock_sqlite):
         """Test settings work properly with SQLite database integration."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Mock SQLite connection
         mock_conn = MagicMock()
@@ -657,7 +655,7 @@ class TestSettingsWithMockedComponents:
         self, mock_tokenizer, mock_model
     ):
         """Test settings work with embedding model loading integration."""
-        s = Settings()
+        s = DocMindSettings()
 
         # Mock model and tokenizer
         mock_tokenizer.from_pretrained.return_value = MagicMock()
@@ -678,7 +676,7 @@ class TestSettingsWithMockedComponents:
         import asyncio
 
         async def async_operation_with_settings():
-            s = Settings()
+            s = DocMindSettings()
 
             # Simulate async operations using settings
             await asyncio.sleep(s.streaming_delay_seconds)  # Use settings delay
@@ -708,7 +706,7 @@ class TestConcurrentSettingsAccess:
         results = []
 
         def access_settings():
-            s = Settings()
+            s = DocMindSettings()
             # Access multiple settings to test thread safety
             config = {
                 "model_name": s.model_name,

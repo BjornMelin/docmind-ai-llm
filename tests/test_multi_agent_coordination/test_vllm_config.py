@@ -18,7 +18,7 @@ from unittest.mock import Mock, patch
 
 from langchain_core.messages import HumanMessage
 
-from src.vllm_config import (
+from src.config.vllm_config import (
     ContextManager,
     VLLMConfig,
     VLLMManager,

@@ -28,8 +28,9 @@ from llama_index.core.graph_stores import SimplePropertyGraphStore
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 # Import new centralized settings for new fixtures
-from src.config.settings import Settings as NewSettings
-from src.models import AppSettings
+from src.config.app_settings import (
+    DocMindSettings as AppSettings,
+)
 
 # Configure pytest-asyncio for proper async handling
 pytest_plugins = ("pytest_asyncio",)
@@ -115,7 +116,7 @@ def system_settings() -> AppSettings:
 
 # New centralized settings fixtures
 @pytest.fixture(scope="session")
-def centralized_mock_settings(tmp_path_factory) -> NewSettings:
+def centralized_mock_settings(tmp_path_factory) -> AppSettings:
     """Mock centralized settings for unit tests.
 
     Uses temporary directories and conservative values for fast, deterministic testing.
@@ -124,7 +125,7 @@ def centralized_mock_settings(tmp_path_factory) -> NewSettings:
     # Create temporary directories for testing
     temp_dir = tmp_path_factory.mktemp("settings_test")
 
-    return NewSettings(
+    return AppSettings(
         debug=True,  # Debug mode for testing
         log_level="DEBUG",
         # Use temporary directories
@@ -157,7 +158,7 @@ def centralized_mock_settings(tmp_path_factory) -> NewSettings:
 
 
 @pytest.fixture(scope="session")
-def centralized_integration_settings(tmp_path_factory) -> NewSettings:
+def centralized_integration_settings(tmp_path_factory) -> AppSettings:
     """Integration test settings for the centralized settings system.
 
     Uses lightweight models and reasonable performance settings for integration tests.
@@ -165,7 +166,7 @@ def centralized_integration_settings(tmp_path_factory) -> NewSettings:
     """
     temp_dir = tmp_path_factory.mktemp("integration_test")
 
-    return NewSettings(
+    return AppSettings(
         debug=False,
         log_level="INFO",
         # Test directories
@@ -198,13 +199,13 @@ def centralized_integration_settings(tmp_path_factory) -> NewSettings:
 
 
 @pytest.fixture(scope="session")
-def centralized_system_settings() -> NewSettings:
+def centralized_system_settings() -> AppSettings:
     """Full system test settings for the centralized settings system.
 
     Production-like configuration for comprehensive system testing.
     Uses default values from the centralized settings system.
     """
-    return NewSettings()  # Use all defaults - production configuration
+    return AppSettings()  # Use all defaults - production configuration
 
 
 @pytest.fixture
@@ -229,7 +230,7 @@ def centralized_settings_with_temp_dirs(tmp_path):
     Useful for tests that need to verify directory creation
     and file system integration without affecting real directories.
     """
-    return NewSettings(
+    return AppSettings(
         data_dir=str(tmp_path / "data"),
         cache_dir=str(tmp_path / "cache"),
         log_file=str(tmp_path / "logs" / "test.log"),
@@ -243,7 +244,7 @@ def settings_environment_override():
 
     Usage:
         with settings_environment_override({'DOCMIND_DEBUG': 'true'}):
-            settings = NewSettings()
+            settings = AppSettings()
             assert settings.debug is True
     """
     import contextlib
@@ -259,12 +260,12 @@ def settings_environment_override():
 
 
 @pytest.fixture
-def benchmark_settings() -> NewSettings:
+def benchmark_settings() -> AppSettings:
     """Settings optimized for performance benchmarking.
 
     Realistic production settings for accurate performance measurement.
     """
-    return NewSettings(
+    return AppSettings(
         debug=False,
         log_level="ERROR",  # Minimal logging
         enable_performance_logging=True,

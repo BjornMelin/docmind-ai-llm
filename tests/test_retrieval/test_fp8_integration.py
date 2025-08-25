@@ -12,17 +12,12 @@ import pytest
 import torch
 
 # Import real implementations
-from src.core.infrastructure.vllm_config import (
+from src.config.vllm_config import (
     VLLMConfig,
     VLLMManager,
+    create_vllm_manager,
     validate_fp8_requirements,
 )
-
-# Mock functions that may not exist
-try:
-    from src.core.infrastructure.vllm_config import create_vllm_manager
-except ImportError:
-    create_vllm_manager = MagicMock
 
 try:
     from src.retrieval.integration import integrate_vllm_with_llamaindex

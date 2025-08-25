@@ -16,7 +16,6 @@ from src.agents.tool_factory import (
     KG_SIMILARITY_TOP_K,
     ToolFactory,
 )
-from src.config.settings import Settings as AppSettings
 
 
 @pytest.fixture

@@ -12,7 +12,6 @@ import pytest
 from llama_index.core import Document
 
 # Import DocMind AI components
-from src.config.settings import AppSettings
 from src.utils.core import (
     detect_hardware,
     verify_rrf_configuration,
@@ -24,7 +23,7 @@ class TestRealConfiguration:
 
     def test_settings_loading(self):
         """Test that settings load correctly from environment."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # Verify core configuration is loaded
         assert isinstance(settings.backend, str)
@@ -44,7 +43,7 @@ class TestRealConfiguration:
 
     def test_rrf_configuration_real_settings(self):
         """Test RRF configuration with real settings."""
-        settings = AppSettings()
+        settings = AppSettings
         verification = verify_rrf_configuration(settings)
 
         # Log verification results for debugging
@@ -68,7 +67,7 @@ class TestRealConfiguration:
 
     def test_gpu_configuration_consistency(self):
         """Test GPU configuration is consistent across settings."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # Verify GPU settings are boolean
         assert isinstance(settings.enable_gpu_acceleration, bool)
@@ -216,7 +215,7 @@ class TestConfigurationValidation:
 
     def test_embedding_dimension_consistency(self):
         """Test that embedding dimensions are consistent."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # BGE-Large should be 1024 dimensions
         if "bge-large" in settings.embedding_model.lower():
@@ -227,7 +226,7 @@ class TestConfigurationValidation:
 
     def test_batch_size_configurations(self):
         """Test batch size configurations are reasonable."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # Embedding batch size should be reasonable for most hardware
         assert 1 <= settings.embedding_batch_size <= 512
@@ -237,7 +236,7 @@ class TestConfigurationValidation:
 
     def test_reranking_configuration(self):
         """Test reranking configuration meets Phase 2.2 requirements."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # Phase 2.2: retrieve 20, rerank to 5
         assert settings.reranking_top_k == 5
@@ -277,7 +276,7 @@ class TestErrorHandlingReal:
     def test_settings_validation_errors(self):
         """Test settings validation with invalid values."""
         # Test with invalid RRF weights
-        settings = AppSettings()
+        settings = AppSettings
 
         # Weights should be between 0 and 1
         with pytest.raises(ValueError, match="Weight must be between 0 and 1"):
@@ -288,7 +287,7 @@ class TestErrorHandlingReal:
 
     def test_batch_size_validation(self):
         """Test batch size validation."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # Test invalid batch sizes
         with pytest.raises(ValueError, match="Batch size must be greater than 0"):
@@ -316,7 +315,7 @@ class TestIntegrationReadiness:
 
     def test_all_required_models_configured(self):
         """Test that all required models are properly configured."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # Dense embedding model
         assert settings.embedding_model is not None
@@ -330,7 +329,7 @@ class TestIntegrationReadiness:
 
     def test_qdrant_configuration(self):
         """Test Qdrant configuration is properly set."""
-        settings = AppSettings()
+        settings = AppSettings
 
         assert settings.qdrant_url is not None
         assert len(settings.qdrant_url) > 0
@@ -338,7 +337,7 @@ class TestIntegrationReadiness:
 
     def test_llm_backend_configuration(self):
         """Test LLM backend configuration."""
-        settings = AppSettings()
+        settings = AppSettings
 
         # Check if backend attribute exists (may not be in simplified settings)
         if hasattr(settings, "backend"):

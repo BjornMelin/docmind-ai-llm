@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.agents.coordinator import MultiAgentCoordinator
-from src.config.settings import Settings
+from src.config.app_settings import app_settings
 
 
 @pytest.mark.spec("001.1")
@@ -18,14 +18,14 @@ class TestModelInitialization:
 
     def test_model_loads_qwen3_4b_fp8(self):
         """Verify Qwen3-4B-Instruct-2507 model loads correctly with FP8 quantization."""
-        settings = Settings()
+        settings = app_settings
 
         # REQ-0063-v2: Updated default model (FP8 quantization)
         assert settings.model_name == "Qwen/Qwen3-4B-Instruct-2507"
 
     def test_fp8_kv_cache_enabled(self):
         """Verify FP8 KV cache is configured for memory optimization."""
-        settings = Settings()
+        settings = app_settings
 
         # Check KV cache configuration
         assert hasattr(settings, "kv_cache_dtype")
@@ -33,7 +33,7 @@ class TestModelInitialization:
 
     def test_context_window_expanded_to_128k(self):
         """Verify full 128K context window is supported."""
-        settings = Settings()
+        settings = app_settings
 
         # REQ-0094-v2: Context buffer expansion
         assert settings.context_window_size == 131072
@@ -74,7 +74,7 @@ class TestPerformanceValidation:
 
         Performance boost NOT VALIDATED.
         """
-        settings = Settings()
+        settings = app_settings
 
         # Verify optimization is enabled
         assert settings.enable_kv_cache_optimization
@@ -87,7 +87,7 @@ class TestPerformanceValidation:
 
         NOT VALIDATED - requires actual testing.
         """
-        settings = Settings()
+        settings = app_settings
 
         # Updated VRAM budget for new model (NOT VALIDATED)
         assert settings.max_vram_gb <= 14.0
@@ -120,7 +120,7 @@ class TestContextHandling:
 
     def test_maintains_conversation_history_within_128k(self):
         """Verify conversation history maintained within 128K window."""
-        settings = Settings()
+        settings = app_settings
 
         # REQ-0094-v2: Context buffer expansion
         assert settings.context_buffer_size == 131072
@@ -152,14 +152,14 @@ class TestConfigurationMigration:
 
     def test_fp8_quantization_configured(self):
         """Verify FP8 quantization is properly configured."""
-        settings = Settings()
+        settings = app_settings
 
         assert hasattr(settings, "quantization")
         assert settings.quantization == "fp8"
 
     def test_model_identifier_updated(self):
         """Verify model identifier is updated in all configurations."""
-        settings = Settings()
+        settings = app_settings
 
         # Check all model references are updated
         assert "Qwen3-14B" not in settings.model_name

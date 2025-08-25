@@ -37,7 +37,7 @@ from sentence_transformers import SentenceTransformer
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.agents.tools import retrieve_documents, route_query
-from src.config.settings import AppSettings
+from src.config.app_settings import DocMindSettings
 from src.retrieval.graph.property_graph_config import PropertyGraphConfig
 
 
@@ -174,9 +174,9 @@ def integration_settings():
     """Create lightweight settings for integration testing.
 
     Returns:
-        AppSettings: Test configuration optimized for integration tests
+        DocMindSettings: Test configuration optimized for integration tests
     """
-    return AppSettings(
+    return DocMindSettings(
         model_name="mock-llm",
         embedding_model="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dimension=384,

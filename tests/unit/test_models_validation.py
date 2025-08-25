@@ -8,8 +8,7 @@ valid configuration loading, data validation, and error handling.
 import pytest
 from pydantic import ValidationError
 
-from src.config.settings import AnalysisOutput
-from src.config.settings import Settings as AppSettings
+from src.models.schemas import AnalysisOutput
 
 
 class TestAnalysisOutputValidation:

@@ -25,7 +25,8 @@ import pytest
 from langchain_core.messages import HumanMessage
 from llama_index.core.memory import ChatMemoryBuffer
 
-from src.agents.coordinator import AgentResponse, MultiAgentCoordinator
+from src.agents.coordinator import MultiAgentCoordinator
+from src.agents.models import AgentResponse
 
 
 class TestGherkinScenario1SimpleQuery:

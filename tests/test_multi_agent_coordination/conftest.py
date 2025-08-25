@@ -26,9 +26,10 @@ from llama_index.core import Document
 from llama_index.core.memory import ChatMemoryBuffer
 
 # Import the classes we're testing
-from src.agents.coordinator import MultiAgentCoordinator, MultiAgentState
+from src.agents.coordinator import MultiAgentCoordinator
+from src.agents.models import MultiAgentState
+from src.config.vllm_config import ContextManager, VLLMConfig, VLLMManager
 from src.dspy_integration import DSPyLlamaIndexRetriever
-from src.vllm_config import ContextManager, VLLMConfig, VLLMManager
 
 # Note: event_loop_policy removed - use fixture from main conftest.py
 

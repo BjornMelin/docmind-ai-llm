@@ -18,12 +18,11 @@ from langchain_core.messages import HumanMessage
 from llama_index.core.memory import ChatMemoryBuffer
 
 from src.agents.coordinator import (
-    AgentResponse,
     MultiAgentCoordinator,
-    MultiAgentState,
     create_multi_agent_coordinator,
 )
-from src.vllm_config import VLLMConfig
+from src.agents.models import AgentResponse, MultiAgentState
+from src.config.vllm_config import VLLMConfig
 
 
 class TestMultiAgentCoordinator:

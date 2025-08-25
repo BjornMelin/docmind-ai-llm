@@ -20,7 +20,7 @@ from llama_index.core.tools import QueryEngineTool
 
 # Import the module under test
 from src.agents.tool_factory import ToolFactory
-from src.config.settings import Settings as AppSettings
+from src.config.app_settings import DocMindSettings as AppSettings
 
 
 class TestToolFactoryBasicMethods:
@@ -83,8 +83,8 @@ class TestToolFactoryReranker:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.app_settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
             mock_colbert_class.return_value = mock_reranker
@@ -121,8 +121,8 @@ class TestToolFactoryReranker:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.app_settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
             mock_colbert_class.return_value = mock_reranker
@@ -139,7 +139,7 @@ class TestToolFactoryReranker:
         test_settings = AppSettings(reranker_model="invalid-model", reranking_top_k=5)
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch(
                 "agents.tool_factory.ColbertRerank",
                 side_effect=RuntimeError("Model not found"),
@@ -158,7 +158,7 @@ class TestToolFactoryReranker:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch(
                 "agents.tool_factory.ColbertRerank",
                 side_effect=ImportError("ColbertRerank not installed"),
@@ -209,8 +209,8 @@ class TestToolFactoryVectorSearch:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.app_settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
             mock_colbert_class.return_value = mock_reranker
@@ -292,8 +292,8 @@ class TestToolFactoryKnowledgeGraph:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.app_settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
             mock_colbert_class.return_value = mock_reranker
@@ -368,8 +368,8 @@ class TestToolFactoryHybridSearch:
             )
 
             with (
-                patch("agents.tool_factory.settings", test_settings),
-                patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+                patch("src.agents.tool_factory.app_settings", test_settings),
+                patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
             ):
                 mock_reranker = MagicMock()
                 mock_colbert_class.return_value = mock_reranker
@@ -445,8 +445,8 @@ class TestToolFactoryHybridVector:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.app_settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
             mock_colbert_class.return_value = mock_reranker
@@ -836,8 +836,8 @@ class TestToolFactoryPerformanceScenarios:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.app_settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker1 = MagicMock()
             mock_reranker2 = MagicMock()
@@ -904,8 +904,8 @@ class TestToolFactoryIntegration:
         )
 
         with (
-            patch("agents.tool_factory.settings", test_settings),
-            patch("agents.tool_factory.ColbertRerank") as mock_colbert_class,
+            patch("src.agents.tool_factory.app_settings", test_settings),
+            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
             patch("agents.tool_factory.RetrieverQueryEngine", return_value=MagicMock()),
         ):
             mock_reranker = MagicMock()

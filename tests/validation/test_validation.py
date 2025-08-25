@@ -106,12 +106,11 @@ class TestImportValidation:
 
     def test_basic_validation_integration(self):
         """Test that we can call basic validation functions."""
-        from src.config.settings import AppSettings
         from src.utils.core import validate_startup_configuration
 
         # validate_startup_configuration now requires a settings parameter
         try:
-            settings = AppSettings()
+            settings = app_settings
             result = validate_startup_configuration(settings)
             # Result should be a dict with validation results
             assert isinstance(result, dict)
@@ -145,11 +144,10 @@ class TestImportValidation:
         """Test basic system health check."""
         # Test that basic imports work
         try:
-            from src.config.settings import AppSettings
             from src.utils.core import detect_hardware
 
             # Create basic settings instance
-            settings = AppSettings()
+            settings = app_settings
             assert settings is not None
 
             # Test hardware detection doesn't crash
@@ -165,9 +163,7 @@ class TestSettingsValidation:
 
     def test_settings_creation(self):
         """Test that settings can be created with defaults."""
-        from src.config.settings import AppSettings
-
-        settings = AppSettings()
+        settings = app_settings
         assert settings is not None
         # Check for actual attributes that exist in the simplified Settings class
         assert hasattr(settings, "qdrant_url")
@@ -176,9 +172,7 @@ class TestSettingsValidation:
 
     def test_settings_required_fields(self):
         """Test that settings have required fields."""
-        from src.config.settings import AppSettings
-
-        settings = AppSettings()
+        settings = app_settings
 
         # These should exist and have reasonable defaults
         assert hasattr(settings, "chunk_size")

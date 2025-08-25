@@ -688,9 +688,9 @@ class TestDocumentProcessingThroughputBenchmarks:
                 start_time = time.perf_counter()
 
                 # Process documents in batches
-                from src.config.settings import AppSettings
+                from src.config.app_settings import app_settings
 
-                settings = AppSettings()
+                settings = app_settings
 
                 processed_documents = []
                 for i in range(0, len(file_paths), batch_size):
