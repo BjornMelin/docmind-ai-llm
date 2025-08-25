@@ -59,13 +59,13 @@ class SpacyManager:
 
             # Download model if not installed
             if not is_package(model_name):
-                logger.info(f"Downloading spaCy model: {model_name}")
+                logger.info("Downloading spaCy model: %s", model_name)
                 download(model_name)
 
             # Load and cache the model
             nlp = spacy.load(model_name)
             self._models[model_name] = nlp
-            logger.info(f"Loaded spaCy model: {model_name}")
+            logger.info("Loaded spaCy model: %s", model_name)
             return nlp
 
     @contextmanager

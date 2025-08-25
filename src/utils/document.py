@@ -28,7 +28,7 @@ from llama_index.core import Document
 from llama_index.readers.file import UnstructuredReader
 from loguru import logger
 
-from src.models.core import settings
+from src.config.app_settings import app_settings
 
 # Simple document cache using diskcache
 _document_cache = diskcache.Cache("./cache/documents")
@@ -40,8 +40,8 @@ def _get_file_hash(file_path: str) -> str:
         with open(file_path, "rb") as f:
             content = f.read()
         return hashlib.sha256(content).hexdigest()
-    except Exception as e:
-        logger.warning(f"Could not hash file {file_path}: {e}")
+    except (OSError, PermissionError) as e:
+        logger.warning("Could not hash file %s: %s", file_path, e)
         return f"nohash_{Path(file_path).name}_{Path(file_path).stat().st_mtime}"
 
 
@@ -62,7 +62,7 @@ def _get_cached(file_path: str) -> list[Document] | None:
 def _cache_documents(file_path: str, documents: list[Document]) -> None:
     """Cache documents with 1 hour expiry."""
     file_hash = _get_file_hash(file_path)
-    _document_cache.set(file_hash, documents, expire=3600)
+    _document_cache.set(file_hash, documents, expire=app_settings.cache_expiry_seconds)
 
 
 def load_documents_unstructured(file_path: str | Path) -> list[Document]:
@@ -89,10 +89,10 @@ def load_documents_unstructured(file_path: str | Path) -> list[Document]:
     # Check cache first
     cached_docs = _get_cached(file_path)
     if cached_docs:
-        logger.info(f"Using cached document for {Path(file_path).name}")
+        logger.info("Using cached document for %s", Path(file_path).name)
         return cached_docs
 
-    logger.info(f"Loading document with UnstructuredReader: {Path(file_path).name}")
+    logger.info("Loading document with UnstructuredReader: %s", Path(file_path).name)
 
     try:
         # Validate file exists
@@ -105,7 +105,7 @@ def load_documents_unstructured(file_path: str | Path) -> list[Document]:
         # Load with hi_res strategy for multimodal extraction (ADR-004)
         documents = reader.load_data(
             file=file_path,
-            strategy=getattr(settings, "parse_strategy", "hi_res"),
+            strategy=getattr(app_settings, "parse_strategy", "hi_res"),
             split_documents=True,
         )
 
@@ -118,17 +118,25 @@ def load_documents_unstructured(file_path: str | Path) -> list[Document]:
                     "filename": Path(file_path).name,
                     "source": str(file_path),
                     "loader": "unstructured_reader",
-                    "strategy": getattr(settings, "parse_strategy", "hi_res"),
+                    "strategy": getattr(app_settings, "parse_strategy", "hi_res"),
                 }
             )
 
         # Cache results
         _cache_documents(file_path, documents)
 
-        logger.success(f"Loaded {len(documents)} elements from {Path(file_path).name}")
+        logger.success(
+            "Loaded %d elements from %s", len(documents), Path(file_path).name
+        )
         return documents
 
-    except Exception as e:
+    except (
+        FileNotFoundError,
+        PermissionError,
+        ValueError,
+        ImportError,
+        RuntimeError,
+    ) as e:
         error_msg = f"Failed to load document {Path(file_path).name}: {str(e)}"
         logger.error(error_msg)
         raise RuntimeError(error_msg) from e
@@ -161,10 +169,10 @@ def load_documents_from_directory(directory_path: str | Path) -> list[Document]:
         files.extend(directory_path.glob(f"**/*{ext}"))  # Recursive search
 
     if not files:
-        logger.warning(f"No supported documents found in {directory_path}")
+        logger.warning("No supported documents found in %s", directory_path)
         return []
 
-    logger.info(f"Found {len(files)} documents in {directory_path}")
+    logger.info("Found %d documents in %s", len(files), directory_path)
 
     # Load all documents
     all_documents = []
@@ -172,12 +180,18 @@ def load_documents_from_directory(directory_path: str | Path) -> list[Document]:
         try:
             documents = load_documents_unstructured(file_path)
             all_documents.extend(documents)
-        except Exception as e:
-            logger.warning(f"Failed to load {file_path.name}: {e}")
+        except (
+            FileNotFoundError,
+            PermissionError,
+            ValueError,
+            ImportError,
+            RuntimeError,
+        ) as e:
+            logger.warning("Failed to load %s: %s", file_path.name, e)
             continue
 
     logger.success(
-        f"Loaded {len(all_documents)} total elements from {len(files)} files"
+        "Loaded %d total elements from %d files", len(all_documents), len(files)
     )
     return all_documents
 
@@ -201,7 +215,7 @@ def get_document_info(file_path: str | Path) -> dict[str, Any]:
     return {
         "filename": file_path.name,
         "size_bytes": stat.st_size,
-        "size_mb": round(stat.st_size / 1024 / 1024, 2),
+        "size_mb": round(stat.st_size / app_settings.bytes_to_mb_divisor, 2),
         "extension": file_path.suffix.lower(),
         "modified": stat.st_mtime,
         "is_cached": _is_cached(str(file_path)),
@@ -217,10 +231,10 @@ def clear_document_cache() -> int:
     try:
         count = len(_document_cache)
         _document_cache.clear()
-        logger.info(f"Cleared {count} cached documents")
+        logger.info("Cleared %d cached documents", count)
         return count
-    except Exception as e:
-        logger.error(f"Failed to clear cache: {e}")
+    except (OSError, PermissionError) as e:
+        logger.error("Failed to clear cache: %s", e)
         return 0
 
 
@@ -242,8 +256,8 @@ def get_cache_stats() -> dict[str, Any]:
             if Path(_document_cache.directory).exists()
             else 0,
         }
-    except Exception as e:
-        logger.error(f"Failed to get cache stats: {e}")
+    except (OSError, PermissionError, AttributeError) as e:
+        logger.error("Failed to get cache stats: %s", e)
         return {"error": str(e)}
 
 
@@ -260,7 +274,7 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
         Loaded spaCy Language model instance or None if fails
     """
     start_time = time.perf_counter()
-    logger.info(f"Loading spaCy model: {model_name}")
+    logger.info("Loading spaCy model: %s", model_name)
 
     try:
         import spacy
@@ -268,15 +282,17 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
         # Try to load existing model first
         try:
             nlp = spacy.load(model_name)
-            logger.success(f"spaCy model '{model_name}' loaded successfully")
+            logger.success("spaCy model '%s' loaded successfully", model_name)
 
             duration = time.perf_counter() - start_time
-            logger.info(f"spaCy model loaded in {duration:.2f}s")
+            logger.info("spaCy model loaded in %.2fs", duration)
             return nlp
 
         except OSError:
             # Model not found locally, try to download
-            logger.info(f"spaCy model '{model_name}' not found locally, downloading...")
+            logger.info(
+                "spaCy model '%s' not found locally, downloading...", model_name
+            )
 
             try:
                 # Download with simple subprocess call
@@ -304,17 +320,17 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
                     check=True,
                     capture_output=True,
                     text=True,
-                    timeout=300,  # 5 minute timeout
+                    timeout=app_settings.spacy_download_timeout,
                 )
 
-                logger.info(f"spaCy model '{model_name}' downloaded successfully")
+                logger.info("spaCy model '%s' downloaded successfully", model_name)
 
                 # Try loading again after download
                 nlp = spacy.load(model_name)
-                logger.success(f"spaCy model '{model_name}' loaded after download")
+                logger.success("spaCy model '%s' loaded after download", model_name)
 
                 duration = time.perf_counter() - start_time
-                logger.info(f"spaCy model downloaded and loaded in {duration:.2f}s")
+                logger.info("spaCy model downloaded and loaded in %.2fs", duration)
                 return nlp
 
             except (
@@ -322,14 +338,14 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
                 subprocess.CalledProcessError,
                 OSError,
             ) as e:
-                logger.error(f"Failed to download spaCy model '{model_name}': {e}")
+                logger.error("Failed to download spaCy model '%s': %s", model_name, e)
                 return None
 
     except ImportError:
         logger.error("spaCy is not installed. Install with: pip install spacy")
         return None
-    except Exception as e:
-        logger.error(f"Unexpected error loading spaCy model '{model_name}': {e}")
+    except (RuntimeError, ValueError) as e:
+        logger.error("Unexpected error loading spaCy model '%s': %s", model_name, e)
         return None
 
 
@@ -362,15 +378,15 @@ def extract_entities_with_spacy(
                     "label": ent.label_,
                     "start": ent.start_char,
                     "end": ent.end_char,
-                    "confidence": 1.0,  # spaCy doesn't provide confidence by default
+                    "confidence": app_settings.default_entity_confidence,  # spaCy
                 }
             )
 
-        logger.info(f"Extracted {len(entities)} entities from text")
+        logger.info("Extracted %d entities from text", len(entities))
         return entities
 
-    except Exception as e:
-        logger.error(f"Failed to extract entities: {e}")
+    except (ValueError, RuntimeError, AttributeError) as e:
+        logger.error("Failed to extract entities: %s", e)
         return []
 
 
@@ -410,11 +426,11 @@ def extract_relationships_with_spacy(
                     }
                 )
 
-        logger.info(f"Extracted {len(relationships)} relationships from text")
+        logger.info("Extracted %d relationships from text", len(relationships))
         return relationships
 
-    except Exception as e:
-        logger.error(f"Failed to extract relationships: {e}")
+    except (ValueError, RuntimeError, AttributeError) as e:
+        logger.error("Failed to extract relationships: %s", e)
         return []
 
 

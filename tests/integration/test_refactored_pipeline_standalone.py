@@ -47,16 +47,14 @@ class MockAppSettings:
         for key, value in kwargs.items():
             setattr(self, key, value)
         # Set defaults
-        self.dense_embedding_dimension = getattr(
-            self, "dense_embedding_dimension", 1024
-        )
+        self.embedding_dimension = getattr(self, "embedding_dimension", 1024)
         self.rrf_fusion_weight_dense = getattr(self, "rrf_fusion_weight_dense", 0.7)
         self.rrf_fusion_weight_sparse = getattr(self, "rrf_fusion_weight_sparse", 0.3)
-        self.dense_embedding_model = getattr(
-            self, "dense_embedding_model", "BAAI/bge-large-en-v1.5"
+        self.embedding_model = getattr(
+            self, "embedding_model", "BAAI/bge-large-en-v1.5"
         )
-        self.llm_model = getattr(self, "llm_model", "gpt-4")
-        self.gpu_enabled = getattr(self, "gpu_enabled", True)
+        self.model_name = getattr(self, "model_name", "gpt-4")
+        self.enable_gpu_acceleration = getattr(self, "enable_gpu_acceleration", True)
 
 
 class TestRefactoredPipelineIntegration:
@@ -405,13 +403,13 @@ class TestRefactoredPipelineIntegration:
         """
         # Test valid settings creation
         valid_settings = MockAppSettings(
-            dense_embedding_dimension=1024,
+            embedding_dimension=1024,
             rrf_fusion_weight_dense=0.7,
             rrf_fusion_weight_sparse=0.3,
-            dense_embedding_model="BAAI/bge-large-en-v1.5",
+            embedding_model="BAAI/bge-large-en-v1.5",
         )
 
-        assert valid_settings.dense_embedding_dimension == 1024
+        assert valid_settings.embedding_dimension == 1024
         assert valid_settings.rrf_fusion_weight_dense == 0.7
 
         # Test validation logic
@@ -434,39 +432,44 @@ class TestRefactoredPipelineIntegration:
             validate_rrf_weights(1.5, 0.3)
 
     @pytest.mark.integration
-    def test_agent_factory_creation_simulation(self):
-        """Test agent factory creation patterns.
+    def test_coordinator_creation_simulation(self):
+        """Test MultiAgentCoordinator creation patterns.
 
         Validates:
-        - Single agent creation
-        - Multi-agent system creation
-        - Specialist agent configuration
-        - System selection logic
+        - MultiAgentCoordinator instantiation
+        - Agent orchestration capabilities
+        - 5-agent system configuration
+        - Process query functionality
         """
-        # Mock LLM
+        # Mock LLM for coordinator testing
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = "Mock LLM response"
 
-        # Simulate single agent creation
-        def create_single_agent_mock(tools, llm, memory=None):
-            return MagicMock(tools=tools, llm=llm, memory=memory, type="single")
-
-        single_agent = create_single_agent_mock(self.mock_tools, mock_llm)
-        assert single_agent is not None
-        assert single_agent.type == "single"
-
-        # Simulate multi-agent system creation
-        def create_multi_agent_system_mock(tools, llm, **kwargs):
+        # Simulate MultiAgentCoordinator creation
+        def create_coordinator_mock(**kwargs):
             return MagicMock(
-                tools=tools,
-                llm=llm,
-                type="multi",
-                specialists=["document", "knowledge", "multimodal"],
+                llm=mock_llm,
+                type="multi_agent_coordinator",
+                agents=["routing", "planning", "retrieval", "synthesis", "validation"],
+                **kwargs,
             )
 
-        multi_agent = create_multi_agent_system_mock(self.mock_tools, mock_llm)
-        assert multi_agent is not None
-        assert multi_agent.type == "multi"
+        coordinator = create_coordinator_mock()
+        assert coordinator is not None
+        assert coordinator.type == "multi_agent_coordinator"
+        assert len(coordinator.agents) == 5
+
+        # Simulate process_query method
+        def mock_process_query(query, context=None):
+            return MagicMock(
+                content="Mock coordinator response",
+                metadata={"agents_used": coordinator.agents[:3]},
+            )
+
+        coordinator.process_query = mock_process_query
+        response = coordinator.process_query("test query")
+        assert response is not None
+        assert "Mock coordinator response" in response.content
 
     @pytest.mark.integration
     @pytest.mark.asyncio

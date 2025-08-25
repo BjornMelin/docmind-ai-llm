@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Establishes a local-first LLM strategy using **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache optimization. This configuration enables a 131,072-token (128K) context window on RTX 4090 Laptop (16GB VRAM) through optimized FP8 memory usage. 
+Establishes a local-first LLM strategy using **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache optimization. This configuration enables a 131,072-token (128K) context window on RTX 4090 Laptop (16GB VRAM) through optimized FP8 memory usage.
 
 **Hardware-Constrained Design Decision**: The 128K context limit represents sound engineering - constraining from the model's native 262K capability due to RTX 4090 Laptop's 16GB VRAM limitation. This is an intentional design choice balancing context capability with available hardware resources.
 
@@ -39,6 +39,7 @@ Research confirms **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and 
 ## Implementation Reference
 
 For detailed implementation scripts, testing procedures, and deployment configurations, see:
+
 - [FP8 Supervisor Integration Guide](../archived/implementation-plans/fp8-supervisor-integration-guide-v1.0.md)
 
 ## Related Requirements

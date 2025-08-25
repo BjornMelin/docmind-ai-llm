@@ -30,7 +30,7 @@ find src/ -name "*.py" -exec grep -l "SimpleDirectoryReader\|SentenceSplitter\|U
 
 # MODIFY configuration files to remove old chunking parameters:
 # These files contain chunk_size/chunk_overlap settings that conflict with Unstructured.io chunk_by_title:
-# - src/config/settings.py (remove chunk_size, chunk_overlap fields)
+# - src/config/app_settings.py (remove chunk_size, chunk_overlap fields)
 # - src/models/core.py (remove chunk_size, chunk_overlap fields)  
 # - src/utils/core.py (remove any chunking configuration)
 ```
@@ -464,7 +464,7 @@ class DualLayerCacheManager:
 ### Modified Files
 
 - `src/main.py` - Integrate ResilientDocumentProcessor with dual-cache system
-- `src/config/settings.py` - BGE-M3, Qdrant, and cache configuration
+- `src/config/app_settings.py` - BGE-M3, Qdrant, and cache configuration
 - `src/ui/upload_handler.py` - Connect upload to resilient processor with progress tracking
 - `src/storage/vector_store.py` - Qdrant integration for embeddings and semantic cache
 

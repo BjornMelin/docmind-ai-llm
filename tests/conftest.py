@@ -1,21 +1,36 @@
 """Shared pytest fixtures and configuration for DocMind AI test suite.
 
 This module provides common fixtures, configuration, and utilities used across
-all test modules. It follows 2025 pytest best practices for AI/ML systems.
+all test modules. It follows 2025 pytest best practices for AI/ML systems with
+proper LlamaIndex MockEmbedding/MockLLM usage and tiered testing strategy.
+
+Testing Strategy:
+- Unit Tests: Fast (<5s), CPU-only, use MockEmbedding/MagicMock LLM
+- Integration Tests: Moderate speed, lightweight models (all-MiniLM-L6-v2 80MB)
+- GPU Smoke Tests: Optional manual validation outside CI
 """
 
 import asyncio
+import contextlib
+import os
 import sys
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 from llama_index.core import Document
+from llama_index.core.graph_stores import SimplePropertyGraphStore
+
+# MockLLM not available in this version, will use MagicMock
 
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.models import AppSettings
+# Import new centralized settings for new fixtures
+from src.config.app_settings import (
+    DocMindSettings as AppSettings,
+)
 
 # Configure pytest-asyncio for proper async handling
 pytest_plugins = ("pytest_asyncio",)
@@ -41,42 +56,297 @@ def configure_logging():
 
 
 @pytest.fixture(scope="session")
-def test_settings() -> AppSettings:
-    """Provide test settings with safe defaults."""
+def mock_settings() -> AppSettings:
+    """Configure mock LlamaIndex components for unit tests.
+
+    Sets up MagicMock LLM and MockEmbedding with proper dimensions to match BGE-M3.
+    This ensures fast, deterministic unit tests without external dependencies.
+    """
+    # Note: We don't set global Settings here as it expects real LLM instances
+    # Individual tests can use MockEmbedding and mock LLMs as needed
+
     return AppSettings(
-        backend="ollama",
-        default_model="llama3.2:3b",
-        dense_embedding_model="BAAI/bge-large-en-v1.5",
-        sparse_embedding_model="prithvida/Splade_PP_en_v1",
-        dense_embedding_dimension=1024,
-        context_size=4096,
+        model_name="mock-llm",
+        embedding_model="mock-embedding",
+        sparse_embedding_model="mock-sparse",
+        embedding_dimension=1024,
+        ollama_base_url="http://mock:11434",
+        use_reranking=False,  # Disable for unit tests
+        use_sparse_embeddings=False,  # Disable for unit tests
+    )
+
+
+@pytest.fixture(scope="session")
+def integration_settings() -> AppSettings:
+    """Test settings for integration tests using lightweight models.
+
+    Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB) for faster integration tests.
+    Still validates component integration without full model overhead.
+    """
+    return AppSettings(
+        model_name="llama3.2:1b",  # Smallest Ollama model for integration
+        embedding_model=(
+            "sentence-transformers/all-MiniLM-L6-v2"  # 80MB lightweight
+        ),
+        sparse_embedding_model="mock-sparse",  # Keep sparse as mock for integration
+        embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
         ollama_base_url="http://localhost:11434",
+        use_reranking=False,  # Disable expensive operations
+        use_sparse_embeddings=True,  # Test hybrid search logic
+    )
+
+
+@pytest.fixture(scope="session")
+def system_settings() -> AppSettings:
+    """Full system test settings with real models and GPU.
+
+    Uses production models for full end-to-end validation.
+    Only used in system tests marked with @pytest.mark.system.
+    """
+    return AppSettings(
+        model_name="llama3.2:3b",
+        embedding_model="BAAI/bge-large-en-v1.5",
+        sparse_embedding_model="prithvida/Splade_PP_en_v1",
+        embedding_dimension=1024,
+        ollama_base_url="http://localhost:11434",
+        use_reranking=True,
+        use_sparse_embeddings=True,
+    )
+
+
+# New centralized settings fixtures
+@pytest.fixture(scope="session")
+def centralized_mock_settings(tmp_path_factory) -> AppSettings:
+    """Mock centralized settings for unit tests.
+
+    Uses temporary directories and conservative values for fast, deterministic testing.
+    Designed for the new centralized settings system in src/config/settings.py.
+    """
+    # Create temporary directories for testing
+    temp_dir = tmp_path_factory.mktemp("settings_test")
+
+    return AppSettings(
+        debug=True,  # Debug mode for testing
+        log_level="DEBUG",
+        # Use temporary directories
+        data_dir=str(temp_dir / "data"),
+        cache_dir=str(temp_dir / "cache"),
+        log_file=str(temp_dir / "logs" / "test.log"),
+        sqlite_db_path=str(temp_dir / "test.db"),
+        # Conservative performance settings for testing
+        max_memory_gb=2.0,
+        max_vram_gb=4.0,
+        enable_gpu_acceleration=False,  # Disabled for unit tests
+        # Fast timeouts for testing
+        agent_decision_timeout=100,  # Fast timeout
+        request_timeout_seconds=5.0,
+        streaming_delay_seconds=0.001,  # Minimal delay
+        # Minimal context for speed
+        context_window_size=8192,
+        context_buffer_size=8192,
+        default_token_limit=8192,
+        # Test-optimized batch sizes
+        bge_m3_batch_size_gpu=2,
+        bge_m3_batch_size_cpu=1,
+        default_batch_size=5,
+        # Disable expensive operations for unit tests
+        use_reranking=False,
+        use_sparse_embeddings=False,
+        enable_dspy_optimization=False,
+        enable_performance_logging=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def centralized_integration_settings(tmp_path_factory) -> AppSettings:
+    """Integration test settings for the centralized settings system.
+
+    Uses lightweight models and reasonable performance settings for integration tests.
+    Balances test speed with realistic configuration testing.
+    """
+    temp_dir = tmp_path_factory.mktemp("integration_test")
+
+    return AppSettings(
+        debug=False,
+        log_level="INFO",
+        # Test directories
+        data_dir=str(temp_dir / "data"),
+        cache_dir=str(temp_dir / "cache"),
+        # Integration-appropriate settings
+        model_name="llama3.2:1b",  # Lightweight model
+        llm_backend="ollama",
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",  # 80MB model
+        embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
+        # Moderate performance settings
+        max_memory_gb=4.0,
+        max_vram_gb=8.0,
+        enable_gpu_acceleration=True,
+        # Reasonable timeouts
+        agent_decision_timeout=200,
+        max_agent_retries=1,  # Fewer retries for speed
+        # Enable key features for integration testing
+        enable_multi_agent=True,
+        use_reranking=True,
+        use_sparse_embeddings=True,
+        retrieval_strategy="hybrid",
+        # Moderate batch sizes
+        bge_m3_batch_size_gpu=6,
+        bge_m3_batch_size_cpu=2,
+        # Enable caching for integration tests
+        enable_document_caching=True,
+        enable_performance_logging=True,
+    )
+
+
+@pytest.fixture(scope="session")
+def centralized_system_settings() -> AppSettings:
+    """Full system test settings for the centralized settings system.
+
+    Production-like configuration for comprehensive system testing.
+    Uses default values from the centralized settings system.
+    """
+    return AppSettings()  # Use all defaults - production configuration
+
+
+@pytest.fixture
+def temp_settings_dirs(tmp_path):
+    """Create temporary directories for settings testing.
+
+    Provides clean temporary directories for each test that needs
+    to test directory creation and file operations.
+    """
+    return {
+        "data_dir": tmp_path / "test_data",
+        "cache_dir": tmp_path / "test_cache",
+        "log_dir": tmp_path / "test_logs",
+        "db_dir": tmp_path / "test_db",
+    }
+
+
+@pytest.fixture
+def centralized_settings_with_temp_dirs(tmp_path):
+    """Create settings instance with temporary directories.
+
+    Useful for tests that need to verify directory creation
+    and file system integration without affecting real directories.
+    """
+    return AppSettings(
+        data_dir=str(tmp_path / "data"),
+        cache_dir=str(tmp_path / "cache"),
+        log_file=str(tmp_path / "logs" / "test.log"),
+        sqlite_db_path=str(tmp_path / "db" / "test.db"),
     )
 
 
 @pytest.fixture
-def sample_documents() -> list[Document]:
-    """Generate sample documents for testing."""
+def settings_environment_override():
+    """Context manager for testing environment variable overrides.
+
+    Usage:
+        with settings_environment_override({'DOCMIND_DEBUG': 'true'}):
+            settings = AppSettings()
+            assert settings.debug is True
+    """
+    import contextlib
+    import os
+    from unittest.mock import patch
+
+    @contextlib.contextmanager
+    def _override(env_vars):
+        with patch.dict(os.environ, env_vars):
+            yield
+
+    return _override
+
+
+@pytest.fixture
+def benchmark_settings() -> AppSettings:
+    """Settings optimized for performance benchmarking.
+
+    Realistic production settings for accurate performance measurement.
+    """
+    return AppSettings(
+        debug=False,
+        log_level="ERROR",  # Minimal logging
+        enable_performance_logging=True,
+        # Performance-optimized settings
+        enable_gpu_acceleration=True,
+        vllm_gpu_memory_utilization=0.90,
+        enable_kv_cache_optimization=True,
+        # Production batch sizes
+        bge_m3_batch_size_gpu=12,
+        default_batch_size=20,
+        # All features enabled for realistic benchmarking
+        enable_multi_agent=True,
+        use_reranking=True,
+        use_sparse_embeddings=True,
+        enable_dspy_optimization=True,
+        retrieval_strategy="hybrid",
+    )
+
+
+@pytest.fixture
+def test_documents() -> list[Document]:
+    """Small, consistent test document set for unit and integration tests.
+
+    Provides 5 diverse documents covering DocMind AI functionality.
+    Optimized for test speed and deterministic results.
+    """
     return [
         Document(
-            text="DocMind AI uses SPLADE++ sparse embeddings for efficient retrieval.",
-            metadata={"source": "doc1.pdf", "page": 1, "chunk_id": "chunk_1"},
+            text="DocMind AI uses SPLADE++ sparse embeddings for efficient retrieval. "
+            "This approach enables fast neural lexical matching across documents.",
+            metadata={
+                "source": "retrieval_guide.pdf",
+                "page": 1,
+                "chunk_id": "chunk_1",
+                "category": "retrieval",
+                "word_count": 15,
+            },
         ),
         Document(
-            text="BGE-Large dense embeddings provide rich semantic understanding.",
-            metadata={"source": "doc2.pdf", "page": 1, "chunk_id": "chunk_2"},
+            text="BGE-Large dense embeddings provide rich semantic understanding. "
+            "These 1024-dimensional vectors capture contextual relationships.",
+            metadata={
+                "source": "embedding_theory.pdf",
+                "page": 1,
+                "chunk_id": "chunk_2",
+                "category": "embeddings",
+                "word_count": 12,
+            },
         ),
         Document(
-            text="ColBERT reranking improves search result relevance significantly.",
-            metadata={"source": "doc3.pdf", "page": 2, "chunk_id": "chunk_3"},
+            text="ColBERT reranking improves search result relevance significantly. "
+            "Late interaction modeling enables precise relevance scoring.",
+            metadata={
+                "source": "reranking_methods.pdf",
+                "page": 2,
+                "chunk_id": "chunk_3",
+                "category": "reranking",
+                "word_count": 13,
+            },
         ),
         Document(
-            text="Hybrid search combines dense and sparse retrieval methods.",
-            metadata={"source": "doc4.pdf", "page": 1, "chunk_id": "chunk_4"},
+            text="Hybrid search combines dense and sparse retrieval methods. "
+            "RRF fusion weights multiple retrieval signals optimally.",
+            metadata={
+                "source": "hybrid_search.pdf",
+                "page": 1,
+                "chunk_id": "chunk_4",
+                "category": "search",
+                "word_count": 14,
+            },
         ),
         Document(
-            text="RRF fusion algorithm weights dense and sparse results optimally.",
-            metadata={"source": "doc5.pdf", "page": 3, "chunk_id": "chunk_5"},
+            text="Multi-agent coordination enables complex query decomposition. "
+            "LangGraph supervisor manages agent communication effectively.",
+            metadata={
+                "source": "agent_architecture.pdf",
+                "page": 3,
+                "chunk_id": "chunk_5",
+                "category": "agents",
+                "word_count": 12,
+            },
         ),
     ]
 
@@ -161,17 +431,27 @@ startxref
     return pdf_path
 
 
-@pytest.fixture
-def mock_embedding_model() -> MagicMock:
-    """Create a mock embedding model for testing."""
-    mock_model = MagicMock()
-    mock_model.embed_documents.return_value = [
-        [0.1, 0.2, 0.3] * 341,  # 1024-dim embedding
-        [0.4, 0.5, 0.6] * 341,
-        [0.7, 0.8, 0.9] * 341,
-    ]
-    mock_model.embed_query.return_value = [0.5, 0.5, 0.5] * 341
-    return mock_model
+@pytest.fixture(scope="session")
+def lightweight_embedding_model():
+    """Lightweight embedding model for integration tests.
+
+    Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB).
+    Only loads if integration tests are running to avoid unnecessary overhead.
+    Session-scoped for performance - expensive model loading happens once.
+    """
+    # Only import and load if we're running integration tests
+    if "integration" in os.environ.get("PYTEST_CURRENT_TEST", "") or any(
+        "integration" in arg for arg in sys.argv
+    ):
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        except ImportError:
+            pytest.skip("sentence-transformers not available for integration tests")
+    else:
+        # Return None for unit tests - they should use MockEmbedding
+        return None
 
 
 @pytest.fixture
@@ -201,7 +481,11 @@ def mock_reranker() -> MagicMock:
 
 @pytest_asyncio.fixture(loop_scope="function")
 async def mock_async_embedding_model() -> AsyncMock:
-    """Create an async mock embedding model for testing."""
+    """Create an async mock embedding model for testing.
+
+    Returns:
+        AsyncMock: Async mock embedding model with proper aembed methods.
+    """
     mock_model = AsyncMock()
     mock_model.aembed_documents.return_value = [
         [0.1, 0.2, 0.3] * 341,  # 1024-dim embedding
@@ -213,33 +497,85 @@ async def mock_async_embedding_model() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_llm() -> MagicMock:
-    """Create a mock LLM for testing."""
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = "Mock LLM response"
-    mock_llm.stream.return_value = iter(["Mock ", "stream ", "response"])
-    return mock_llm
+def in_memory_graph_store():
+    """In-memory graph store for testing property graph functionality.
+
+    Provides SimplePropertyGraphStore for testing graph RAG features
+    without external dependencies.
+    """
+    return SimplePropertyGraphStore()
 
 
 @pytest_asyncio.fixture(loop_scope="function")
 async def mock_async_llm() -> AsyncMock:
-    """Create an async mock LLM for testing."""
+    """Create an async mock LLM for testing.
+
+    Returns:
+        AsyncMock: Async mock LLM with proper async methods and streaming support.
+    """
     mock_llm = AsyncMock()
     mock_llm.ainvoke.return_value = "Mock async LLM response"
     mock_llm.astream.return_value = iter(["Mock ", "async ", "stream"])
+
+    # Add additional async methods commonly used
+    mock_llm.acomplete.return_value = AsyncMock(text="Mock async completion")
+    mock_llm.astream_complete.return_value = iter(
+        [AsyncMock(text="Token1"), AsyncMock(text="Token2")]
+    )
+
     return mock_llm
 
 
 @pytest.fixture
 def mock_qdrant_client() -> MagicMock:
-    """Create a mock Qdrant client for testing."""
+    """Comprehensive mock Qdrant client with proper async methods.
+
+    Provides realistic responses for both sync and async operations.
+    Includes proper collection management and search functionality.
+    """
     mock_client = MagicMock()
-    mock_client.search.return_value = [
-        MagicMock(id=1, score=0.9, payload={"text": "Document 1"}),
-        MagicMock(id=2, score=0.8, payload={"text": "Document 2"}),
-        MagicMock(id=3, score=0.7, payload={"text": "Document 3"}),
+
+    # Mock search results with realistic structure
+    mock_search_results = [
+        MagicMock(
+            id="doc_1",
+            score=0.92,
+            payload={
+                "text": "DocMind AI uses advanced retrieval techniques",
+                "metadata": {"source": "doc1.pdf", "page": 1},
+            },
+        ),
+        MagicMock(
+            id="doc_2",
+            score=0.87,
+            payload={
+                "text": "BGE embeddings provide semantic understanding",
+                "metadata": {"source": "doc2.pdf", "page": 2},
+            },
+        ),
+        MagicMock(
+            id="doc_3",
+            score=0.81,
+            payload={
+                "text": "Hybrid search combines multiple methods",
+                "metadata": {"source": "doc3.pdf", "page": 1},
+            },
+        ),
     ]
-    mock_client.count.return_value = MagicMock(count=100)
+
+    # Configure sync methods
+    mock_client.search.return_value = mock_search_results
+    mock_client.count.return_value = MagicMock(count=150)
+    mock_client.create_collection.return_value = True
+    mock_client.delete_collection.return_value = True
+    mock_client.collection_exists.return_value = True
+
+    # Configure async methods
+    mock_client.asearch = AsyncMock(return_value=mock_search_results)
+    mock_client.aupsert = AsyncMock(return_value=True)
+    mock_client.acreate_collection = AsyncMock(return_value=True)
+    mock_client.adelete_collection = AsyncMock(return_value=True)
+
     return mock_client
 
 
@@ -274,27 +610,99 @@ def sample_query_responses() -> list[dict]:
     ]
 
 
-# Performance testing markers
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_artifacts():
+    """Clean up test artifacts after session.
+
+    Ensures test isolation by cleaning up temporary files,
+    cached models, and other test artifacts.
+    Session-scoped with autouse to ensure cleanup always happens.
+    """
+    yield  # Tests run here
+
+    # Cleanup after all tests complete
+    import shutil
+    import tempfile
+
+    # Clean up any test cache directories
+    temp_dirs = [
+        Path(tempfile.gettempdir()) / "docmind_test_cache",
+        Path(tempfile.gettempdir()) / "sentence_transformers_cache",
+        Path(tempfile.gettempdir()) / "pytest_cache",
+    ]
+
+    for temp_dir in temp_dirs:
+        if temp_dir.exists():
+            with contextlib.suppress(PermissionError):
+                shutil.rmtree(temp_dir)
+
+
+# Enhanced pytest configuration with tiered testing strategy
 def pytest_configure(config):
-    """Configure custom pytest markers."""
+    """Configure custom pytest markers for tiered testing strategy.
+
+    Implements ML testing best practices with clear test categories:
+    - Unit: Fast, mocked, deterministic
+    - Integration: Moderate speed, lightweight models
+    - System: Full models, GPU, end-to-end
+    """
+    # Core test categories (tiered strategy)
     config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+        "markers", "unit: Fast unit tests (<5s) using MockEmbedding/MockLLM - CPU only"
     )
-    config.addinivalue_line("markers", "integration: marks tests as integration tests")
-    config.addinivalue_line("markers", "performance: marks tests as performance tests")
-    config.addinivalue_line("markers", "requires_gpu: marks tests that require GPU")
     config.addinivalue_line(
-        "markers", "requires_network: marks tests that require network access"
+        "markers",
+        "integration: Integration tests with lightweight models (all-MiniLM-L6-v2)",
+    )
+    config.addinivalue_line(
+        "markers", "system: Full system tests with production models and GPU"
     )
 
+    # Performance and resource markers
+    config.addinivalue_line(
+        "markers", "performance: Performance benchmarks and memory usage tests"
+    )
+    config.addinivalue_line(
+        "markers", "slow: Long-running tests (deselect with '-m \"not slow\"')"
+    )
 
-@pytest.fixture
+    # Hardware requirement markers
+    config.addinivalue_line("markers", "requires_gpu: Tests requiring GPU acceleration")
+    config.addinivalue_line(
+        "markers", "requires_network: Tests requiring network access"
+    )
+    config.addinivalue_line("markers", "requires_ollama: Tests requiring Ollama server")
+
+    # Feature-specific markers
+    config.addinivalue_line("markers", "agents: Multi-agent coordination system tests")
+    config.addinivalue_line(
+        "markers", "retrieval: Retrieval and search system tests (FEAT-002)"
+    )
+    config.addinivalue_line(
+        "markers", "embeddings: Embedding model and vectorstore tests"
+    )
+    config.addinivalue_line(
+        "markers", "multimodal: CLIP and multimodal functionality tests"
+    )
+
+    # Legacy markers (for backward compatibility)
+    config.addinivalue_line(
+        "markers", "feat_002: Legacy marker for FEAT-002 (use 'retrieval' instead)"
+    )
+    config.addinivalue_line("markers", "spec: Specification-based tests")
+
+
+@pytest.fixture(scope="session")
 def benchmark_config():
-    """Configuration for pytest-benchmark tests."""
+    """Configuration for pytest-benchmark tests.
+
+    Session-scoped since benchmark configuration is constant across tests.
+    """
     return {
         "min_rounds": 3,
         "max_time": 1.0,
         "min_time": 0.01,
         "warmup": True,
         "disable_gc": True,
+        "timer": time.perf_counter,
     }

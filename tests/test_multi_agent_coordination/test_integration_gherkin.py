@@ -21,11 +21,12 @@ Features tested:
 import time
 from typing import Any
 
-import pytest_asyncio
+import pytest
 from langchain_core.messages import HumanMessage
 from llama_index.core.memory import ChatMemoryBuffer
 
-from src.agents.coordinator import AgentResponse, MultiAgentCoordinator
+from src.agents.coordinator import MultiAgentCoordinator
+from src.agents.models import AgentResponse
 
 
 class TestGherkinScenario1SimpleQuery:
@@ -39,7 +40,7 @@ class TestGherkinScenario1SimpleQuery:
     And the total processing time is under 1.5 seconds
     """
 
-    @pytest_asyncio.async_test
+    @pytest.mark.asyncio
     async def test_simple_query_end_to_end_processing(
         self,
         mock_coordinator: MultiAgentCoordinator,
@@ -193,7 +194,7 @@ class TestGherkinScenario2ComplexQuery:
     And the validator ensures response completeness
     """
 
-    @pytest_asyncio.async_test
+    @pytest.mark.asyncio
     async def test_complex_query_end_to_end_processing(
         self,
         mock_coordinator: MultiAgentCoordinator,

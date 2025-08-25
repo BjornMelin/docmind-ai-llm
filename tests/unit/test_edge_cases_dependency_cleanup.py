@@ -102,7 +102,7 @@ class TestOptionalDependencyHandling:
         new_modules = [
             "src.utils.core",
             "src.utils.document",
-            "src.utils.embedding",
+            "src.retrieval.integration",
             "src.utils.database",
             "src.utils.monitoring",
         ]
@@ -120,7 +120,7 @@ class TestGracefulErrorHandling:
     def test_app_startup_without_optional_deps(self):
         """Test that app can start without optional dependencies."""
         try:
-            from src.models.core import settings
+            from src.config.settings import settings
             from src.utils.core import validate_startup_configuration
 
             # Should not crash even if some dependencies are missing
@@ -133,18 +133,8 @@ class TestGracefulErrorHandling:
 
     def test_embedding_creation_fallback(self):
         """Test embedding creation with fallback behavior."""
-        try:
-            from src.utils.embedding import get_embed_model
-
-            # Should be able to get basic embedding model info
-            model = get_embed_model()
-            assert model is not None
-
-        except ImportError:
-            pytest.skip("Embedding utilities not available")
-        except Exception as e:
-            # Some configuration errors are acceptable in test environment
-            print(f"Expected configuration error in test env: {e}")
+        # Skip removed embedding function - replaced with FEAT-002 retrieval system
+        pytest.skip("get_embed_model function removed from src.utils.embedding")
 
 
 if __name__ == "__main__":

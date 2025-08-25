@@ -20,6 +20,19 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+# DSPy Configuration Constants
+DEFAULT_MAX_VARIANTS = 2
+DEFAULT_NUM_BOOTSTRAP_EXAMPLES = 5
+MIN_QUERY_WORDS_THRESHOLD = 3
+FALLBACK_VARIANTS_LIMIT = 2
+FALLBACK_QUALITY_SCORE = 0.3
+BASE_QUALITY_SCORE = 0.5
+REFINEMENT_BONUS = 0.2
+SPECIFICITY_BONUS = 0.1
+VARIANT_BONUS_BASE = 0.2
+VARIANT_BONUS_PER_ITEM = 0.1
+MAX_QUALITY_SCORE = 1.0
+
 try:
     import dspy
     from dspy.teleprompt import BootstrapFewShot
@@ -68,7 +81,7 @@ class DSPyLlamaIndexRetriever:
     quality through query rewriting and variant generation.
     """
 
-    def __init__(self, llm: Any = None, max_variants: int = 2):
+    def __init__(self, llm: Any = None, max_variants: int = DEFAULT_MAX_VARIANTS):
         """Initialize DSPy retriever with optimization components.
 
         Args:
@@ -90,8 +103,8 @@ class DSPyLlamaIndexRetriever:
 
                 logger.info("DSPy integration initialized successfully")
 
-            except Exception as e:
-                logger.warning(f"DSPy initialization failed: {e}")
+            except (ImportError, AttributeError, RuntimeError) as e:
+                logger.warning("DSPy initialization failed: %s", e)
                 self.optimization_enabled = False
         else:
             self.optimization_enabled = False
@@ -112,14 +125,14 @@ class DSPyLlamaIndexRetriever:
                     try:
                         response = self.llm.complete(prompt)
                         return str(response)
-                    except Exception as e:
-                        logger.error(f"LLM call failed in DSPy wrapper: {e}")
+                    except (RuntimeError, AttributeError, ValueError) as e:
+                        logger.error("LLM call failed in DSPy wrapper: %s", e)
                         return ""
 
             return DSPyLLMWrapper(llm)
 
-        except Exception as e:
-            logger.error(f"Failed to wrap LLM for DSPy: {e}")
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.error("Failed to wrap LLM for DSPy: %s", e)
             raise
 
     @classmethod
@@ -153,8 +166,8 @@ class DSPyLlamaIndexRetriever:
             try:
                 refined_result = instance.query_refiner(query=query)
                 refined_query = refined_result.refined_query
-            except Exception as e:
-                logger.warning(f"Query refinement failed: {e}")
+            except (AttributeError, RuntimeError, ValueError) as e:
+                logger.warning("Query refinement failed: %s", e)
                 refined_query = query
 
             # Generate variants if enabled
@@ -166,8 +179,8 @@ class DSPyLlamaIndexRetriever:
                         variants.append(variant_result.variant1)
                     if hasattr(variant_result, "variant2") and variant_result.variant2:
                         variants.append(variant_result.variant2)
-                except Exception as e:
-                    logger.warning(f"Variant generation failed: {e}")
+                except (AttributeError, RuntimeError, ValueError) as e:
+                    logger.warning("Variant generation failed: %s", e)
 
             # Calculate optimization time
             optimization_time = time.perf_counter() - start_time
@@ -186,11 +199,11 @@ class DSPyLlamaIndexRetriever:
                 "optimized": True,
             }
 
-            logger.debug(f"DSPy optimization completed in {optimization_time:.3f}s")
+            logger.debug("DSPy optimization completed in %.3fs", optimization_time)
             return result
 
-        except Exception as e:
-            logger.error(f"DSPy optimization failed: {e}")
+        except (ImportError, AttributeError, RuntimeError, ValueError) as e:
+            logger.error("DSPy optimization failed: %s", e)
             return cls._fallback_optimization(query, start_time)
 
     @staticmethod
@@ -203,7 +216,7 @@ class DSPyLlamaIndexRetriever:
         variants = []
 
         # Simple enhancement rules
-        if len(query.split()) < 3:
+        if len(query.split()) < MIN_QUERY_WORDS_THRESHOLD:
             enhanced_query = f"Find information about {query}"
             variants = [f"What is {query}?", f"Explain {query}"]
         elif "compare" in query.lower():
@@ -215,9 +228,9 @@ class DSPyLlamaIndexRetriever:
         return {
             "original": query,
             "refined": enhanced_query,
-            "variants": variants[:2],
+            "variants": variants[:FALLBACK_VARIANTS_LIMIT],
             "optimization_time": optimization_time,
-            "quality_score": 0.3,  # Lower score for fallback
+            "quality_score": FALLBACK_QUALITY_SCORE,  # Lower score for fallback
             "optimized": False,
         }
 
@@ -230,24 +243,27 @@ class DSPyLlamaIndexRetriever:
         Returns:
             Quality score between 0.0 and 1.0
         """
-        score = 0.5  # Base score
+        score = BASE_QUALITY_SCORE  # Base score
 
         # Reward refinement
         if len(refined) > len(original):
-            score += 0.2
+            score += REFINEMENT_BONUS
 
         # Reward specificity
         if any(word in refined.lower() for word in ["specific", "detailed", "explain"]):
-            score += 0.1
+            score += SPECIFICITY_BONUS
 
         # Reward variants
         if variants:
-            score += min(0.2, len(variants) * 0.1)
+            score += min(VARIANT_BONUS_BASE, len(variants) * VARIANT_BONUS_PER_ITEM)
 
-        return min(1.0, score)
+        return min(MAX_QUALITY_SCORE, score)
 
     def optimize_retrieval_pipeline(
-        self, retriever: Any, queries: list[str], num_examples: int = 5
+        self,
+        retriever: Any,
+        queries: list[str],
+        num_examples: int = DEFAULT_NUM_BOOTSTRAP_EXAMPLES,
     ) -> Any:
         """Optimize entire retrieval pipeline using DSPy bootstrapping.
 
@@ -276,11 +292,11 @@ class DSPyLlamaIndexRetriever:
             # Update instance
             self.query_refiner = optimized_refiner
 
-            logger.info(f"Retrieval pipeline optimized with {len(examples)} examples")
+            logger.info("Retrieval pipeline optimized with %d examples", len(examples))
             return retriever
 
-        except Exception as e:
-            logger.error(f"Pipeline optimization failed: {e}")
+        except (ImportError, AttributeError, RuntimeError, ValueError) as e:
+            logger.error("Pipeline optimization failed: %s", e)
             return retriever
 
 

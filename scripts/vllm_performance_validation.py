@@ -284,14 +284,14 @@ class PerformanceValidator:
 
             # Create a longer context prompt (~4K tokens)
             base_text = """
-            Machine learning (ML) is a branch of artificial intelligence (AI) 
-            and computer science that focuses on the use of data and algorithms 
-            to imitate the way that humans learn, gradually improving its accuracy. 
-            Machine learning is an important component of the growing field of 
-            data science. Through the use of statistical methods, algorithms are 
-            trained to make classifications or predictions, uncovering key insights 
-            within data mining projects. These insights subsequently drive decision 
-            making within applications and businesses, ideally impacting key 
+            Machine learning (ML) is a branch of artificial intelligence (AI)
+            and computer science that focuses on the use of data and algorithms
+            to imitate the way that humans learn, gradually improving its accuracy.
+            Machine learning is an important component of the growing field of
+            data science. Through the use of statistical methods, algorithms are
+            trained to make classifications or predictions, uncovering key insights
+            within data mining projects. These insights subsequently drive decision
+            making within applications and businesses, ideally impacting key
             growth metrics.
             """
 

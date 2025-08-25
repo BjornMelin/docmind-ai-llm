@@ -28,7 +28,7 @@ Example:
         search_tool = ToolFactory.create_vector_search_tool(vector_index)
 
 Attributes:
-    settings (AppSettings): Global application settings for tool configuration.
+    settings (DocMindSettings): Global application settings for tool configuration.
 """
 
 from typing import Any
@@ -38,7 +38,15 @@ from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.postprocessor.colbert_rerank import ColbertRerank
 from loguru import logger
 
-from src.models.core import settings
+from src.config.app_settings import app_settings
+
+# Constants
+
+KG_SIMILARITY_TOP_K = 10
+
+# Re-export settings constants for backward compatibility
+DEFAULT_RERANKING_TOP_K = app_settings.reranking_top_k
+DEFAULT_VECTOR_SIMILARITY_TOP_K = app_settings.top_k
 
 
 class ToolFactory:
@@ -91,19 +99,19 @@ class ToolFactory:
         Returns:
             ColbertRerank or None: Configured reranker or None if disabled.
         """
-        if not settings.reranker_model:
+        if not app_settings.reranker_model:
             return None
 
         try:
             reranker = ColbertRerank(
-                top_n=settings.reranking_top_k or 5,
-                model=settings.reranker_model,
+                top_n=app_settings.reranking_top_k,
+                model=app_settings.reranker_model,
                 keep_retrieval_score=True,
             )
-            logger.info(f"ColBERT reranker created: {settings.reranker_model}")
+            logger.info("ColBERT reranker created: %s", app_settings.reranker_model)
             return reranker
-        except Exception as e:
-            logger.warning(f"Failed to create ColBERT reranker: {e}")
+        except (RuntimeError, ValueError, AttributeError, ImportError) as e:
+            logger.warning("Failed to create ColBERT reranker: %s", e)
             return None
 
     @classmethod
@@ -129,9 +137,9 @@ class ToolFactory:
 
         # Configure query engine with optimal settings
         query_engine = index.as_query_engine(
-            similarity_top_k=settings.similarity_top_k or 5,
+            similarity_top_k=app_settings.top_k,
             node_postprocessors=postprocessors,
-            verbose=settings.debug_mode,
+            verbose=False,
         )
 
         return cls.create_query_tool(
@@ -172,10 +180,10 @@ class ToolFactory:
         postprocessors = [reranker] if reranker else []
 
         query_engine = kg_index.as_query_engine(
-            similarity_top_k=10,  # KG queries may need more results
+            similarity_top_k=KG_SIMILARITY_TOP_K,  # KG queries may need more results
             include_text=True,  # Include source text with entities
             node_postprocessors=postprocessors,
-            verbose=settings.debug_mode,
+            verbose=False,
         )
 
         return cls.create_query_tool(
@@ -255,9 +263,9 @@ class ToolFactory:
         postprocessors = [reranker] if reranker else []
 
         query_engine = index.as_query_engine(
-            similarity_top_k=settings.similarity_top_k or 5,
+            similarity_top_k=app_settings.top_k,
             node_postprocessors=postprocessors,
-            verbose=settings.debug_mode,
+            verbose=False,
         )
 
         return cls.create_query_tool(
@@ -337,7 +345,7 @@ class ToolFactory:
         tools.append(cls.create_vector_search_tool(vector_index))
         logger.info("Added vector search tool")
 
-        logger.info(f"Created {len(tools)} tools for agent")
+        logger.info("Created %d tools for agent", len(tools))
         return tools
 
     @classmethod

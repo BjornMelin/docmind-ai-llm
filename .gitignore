@@ -130,6 +130,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.example.old
 .venv
 env/
 venv/
@@ -238,3 +239,5 @@ docs/specs.backup.*
 docs/adrs/archived/
 docs/developers/archived/
 reports/
+docs/research/
+ADR_TEMPLATE.md

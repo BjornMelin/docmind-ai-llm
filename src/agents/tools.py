@@ -33,7 +33,38 @@ from llama_index.core import Document
 from loguru import logger
 
 from src.agents.tool_factory import ToolFactory
-from src.config.settings import settings
+from src.config.app_settings import app_settings
+
+# Constants
+
+COMPLEX_QUERY_WORD_THRESHOLD = 20
+MEDIUM_QUERY_WORD_THRESHOLD = 10
+RECENT_CHAT_HISTORY_LIMIT = 3
+COMPLEX_CONFIDENCE = 0.9
+MEDIUM_CONFIDENCE = 0.85
+SIMPLE_CONFIDENCE = 0.95
+CONFIDENCE_ADJUSTMENT_FACTOR = 0.8
+FALLBACK_CONFIDENCE = 0.5
+VARIANT_QUERY_LIMIT = 2
+CONTENT_KEY_LENGTH = 100
+MAX_RETRIEVAL_RESULTS = 10
+SIMILARITY_THRESHOLD = 0.8
+MIN_RESPONSE_LENGTH = 50
+CONFIDENCE_REDUCTION_INCOMPLETE = 0.8
+CONFIDENCE_REDUCTION_NO_SOURCE = 0.7
+CONFIDENCE_REDUCTION_NO_SOURCES = 0.6
+CONFIDENCE_REDUCTION_HALLUCINATION = 0.5
+CONFIDENCE_REDUCTION_LOW_RELEVANCE = 0.8
+CONFIDENCE_REDUCTION_COHERENCE = 0.9
+RELEVANCE_THRESHOLD = 0.3
+ACCEPT_CONFIDENCE_THRESHOLD = 0.8
+REFINE_CONFIDENCE_THRESHOLD = 0.6
+VALIDATION_CONFIDENCE_THRESHOLD = 0.6
+MAX_SENTENCE_WORD_OVERLAP = 5
+MIN_AVG_SENTENCE_LENGTH = 3
+MAX_AVG_SENTENCE_LENGTH = 50
+MAX_ISSUES_FOR_ACCEPT = 1
+FIRST_N_SOURCES_CHECK = 3
 
 
 @tool
@@ -69,7 +100,9 @@ def route_query(
         context = state.get("context") if state else None
         previous_queries = []
         if context and hasattr(context, "chat_history"):
-            previous_queries = [msg.content for msg in context.chat_history[-3:]]
+            previous_queries = [
+                msg.content for msg in context.chat_history[-RECENT_CHAT_HISTORY_LIMIT:]
+            ]
 
         # Analyze query characteristics
         query_lower = query.lower().strip()
@@ -114,29 +147,29 @@ def route_query(
         complexity = "simple"
         strategy = "vector"
         needs_planning = False
-        confidence = 0.8
+        confidence = app_settings.default_confidence_threshold
 
         if (
             any(pattern in query_lower for pattern in complex_patterns)
-            or word_count > 20
+            or word_count > COMPLEX_QUERY_WORD_THRESHOLD
         ):
             complexity = "complex"
             strategy = "hybrid"
             needs_planning = True
-            confidence = 0.9
+            confidence = COMPLEX_CONFIDENCE
         elif (
             any(pattern in query_lower for pattern in medium_patterns)
-            or word_count > 10
+            or word_count > MEDIUM_QUERY_WORD_THRESHOLD
         ):
             complexity = "medium"
             strategy = "hybrid"
             needs_planning = False
-            confidence = 0.85
+            confidence = MEDIUM_CONFIDENCE
         elif any(pattern in query_lower for pattern in simple_patterns):
             complexity = "simple"
             strategy = "vector"
             needs_planning = False
-            confidence = 0.95
+            confidence = SIMPLE_CONFIDENCE
 
         # Check for context dependencies
         context_indicators = ["this", "that", "it", "they", "them", "above", "previous"]
@@ -145,7 +178,9 @@ def route_query(
             and not previous_queries
         ):
             # Contextual query without previous context
-            confidence *= 0.8  # Lower confidence without context
+            confidence *= (
+                CONFIDENCE_ADJUSTMENT_FACTOR  # Lower confidence without context
+            )
 
         # GraphRAG strategy for relationship queries
         if any(
@@ -166,17 +201,17 @@ def route_query(
             "context_dependent": bool(previous_queries),
         }
 
-        logger.info(f"Query routed: {complexity} complexity, {strategy} strategy")
+        logger.info("Query routed: %s complexity, %s strategy", complexity, strategy)
         return json.dumps(decision)
 
-    except Exception as e:
-        logger.error(f"Query routing failed: {e}")
+    except (RuntimeError, ValueError, AttributeError) as e:
+        logger.error("Query routing failed: %s", e)
         # Fallback decision
         fallback = {
             "strategy": "vector",
             "complexity": "simple",
             "needs_planning": False,
-            "confidence": 0.5,
+            "confidence": FALLBACK_CONFIDENCE,
             "error": str(e),
         }
         return json.dumps(fallback)
@@ -324,12 +359,12 @@ def plan_query(
         }
 
         logger.info(
-            f"Query planned: {len(sub_tasks)} sub-tasks, {execution_order} execution"
+            "Query planned: %d sub-tasks, %s execution", len(sub_tasks), execution_order
         )
         return json.dumps(plan)
 
-    except Exception as e:
-        logger.error(f"Query planning failed: {e}")
+    except (RuntimeError, ValueError, AttributeError) as e:
+        logger.error("Query planning failed: %s", e)
         # Fallback plan
         fallback = {
             "original_query": query,
@@ -400,7 +435,9 @@ def retrieve_documents(
 
                 optimized_queries = DSPyLlamaIndexRetriever.optimize_query(query)
                 logger.debug(
-                    f"DSPy optimization: '{query}' -> '{optimized_queries['refined']}'"
+                    "DSPy optimization: '%s' -> '%s'",
+                    query,
+                    optimized_queries["refined"],
                 )
             except ImportError:
                 logger.warning(
@@ -421,7 +458,7 @@ def retrieve_documents(
 
         # Execute retrieval with all query variants for improved coverage
         queries_to_process = [primary_query] + variant_queries[
-            :2
+            :VARIANT_QUERY_LIMIT
         ]  # Limit variants for performance
 
         if strategy == "graphrag" and use_graphrag and kg_index:
@@ -434,11 +471,12 @@ def retrieve_documents(
                         new_docs = _parse_tool_result(result)
                         documents.extend(new_docs)
                         logger.debug(
-                            f"GraphRAG retrieved {len(new_docs)} documents "
-                            f"for query: {q}"
+                            "GraphRAG retrieved %d documents for query: %s",
+                            len(new_docs),
+                            q,
                         )
-                    except Exception as e:
-                        logger.warning(f"GraphRAG failed for query '{q}': {e}")
+                    except (OSError, RuntimeError, ValueError, AttributeError) as e:
+                        logger.warning("GraphRAG failed for query '%s': %s", q, e)
                         strategy_used = "hybrid"
                         break
 
@@ -473,22 +511,28 @@ def retrieve_documents(
                     new_docs = _parse_tool_result(result)
                     documents.extend(new_docs)
                     logger.debug(
-                        f"{strategy_used} retrieved {len(new_docs)} documents "
-                        f"for query: {q}"
+                        "%s retrieved %d documents for query: %s",
+                        strategy_used,
+                        len(new_docs),
+                        q,
                     )
-                except Exception as e:
-                    logger.error(f"Retrieval failed for query '{q}': {e}")
+                except (OSError, RuntimeError, ValueError, AttributeError) as e:
+                    logger.error("Retrieval failed for query '%s': %s", q, e)
 
         # Deduplicate documents while preserving best scores
         if documents:
             seen_content = {}
             for doc in documents:
-                content_key = doc.get("content", "")[:100]  # Use first 100 chars as key
+                content_key = doc.get("content", "")[
+                    :CONTENT_KEY_LENGTH
+                ]  # Use first 100 chars as key
                 if content_key not in seen_content or doc.get(
                     "score", 0
                 ) > seen_content[content_key].get("score", 0):
                     seen_content[content_key] = doc
-            documents = list(seen_content.values())[:10]  # Limit to top 10 results
+            documents = list(seen_content.values())[
+                :MAX_RETRIEVAL_RESULTS
+            ]  # Limit to top 10 results
 
         processing_time = time.perf_counter() - start_time
 
@@ -506,8 +550,8 @@ def retrieve_documents(
 
         return json.dumps(result_data, default=str)
 
-    except Exception as e:
-        logger.error(f"Document retrieval failed: {e}")
+    except (OSError, RuntimeError, ValueError, AttributeError) as e:
+        logger.error("Document retrieval failed: %s", e)
         return json.dumps(
             {
                 "documents": [],
@@ -576,8 +620,9 @@ def synthesize_results(
                     total_processing_time += result["processing_time_ms"]
 
         logger.info(
-            f"Synthesizing {len(all_documents)} documents from "
-            f"{len(results_list)} sources"
+            "Synthesizing %d documents from %d sources",
+            len(all_documents),
+            len(results_list),
         )
 
         # Deduplicate documents by content similarity
@@ -596,7 +641,7 @@ def synthesize_results(
                     if (
                         len(content_words.intersection(seen_words))
                         / max(len(content_words), 1)
-                        > 0.8
+                        > SIMILARITY_THRESHOLD
                     ):
                         is_duplicate = True
                         break
@@ -611,7 +656,7 @@ def synthesize_results(
         )
 
         # Limit to top results
-        max_results = getattr(settings, "synthesis_max_docs", 10)
+        max_results = getattr(app_settings, "synthesis_max_docs", MAX_RETRIEVAL_RESULTS)
         final_documents = ranked_documents[:max_results]
 
         processing_time = time.perf_counter() - start_time
@@ -634,11 +679,11 @@ def synthesize_results(
             "original_query": original_query,
         }
 
-        logger.info(f"Synthesis complete: {len(final_documents)} final documents")
+        logger.info("Synthesis complete: %d final documents", len(final_documents))
         return json.dumps(result_data, default=str)
 
-    except Exception as e:
-        logger.error(f"Result synthesis failed: {e}")
+    except (RuntimeError, ValueError, AttributeError) as e:
+        logger.error("Result synthesis failed: %s", e)
         return json.dumps({"documents": [], "error": str(e), "synthesis_metadata": {}})
 
 
@@ -687,7 +732,7 @@ def validate_response(
         confidence = 1.0
 
         # Check 1: Response length and completeness
-        if len(response.strip()) < 50:
+        if len(response.strip()) < MIN_RESPONSE_LENGTH:
             issues.append(
                 {
                     "type": "incomplete_response",
@@ -697,19 +742,22 @@ def validate_response(
                     ),
                 }
             )
-            confidence *= 0.8
+            confidence *= CONFIDENCE_REDUCTION_INCOMPLETE
 
         # Check 2: Source attribution
         source_mentioned = False
         if source_docs:
             # Look for source references in response
-            for doc in source_docs[:3]:  # Check first 3 sources
+            for doc in source_docs[:FIRST_N_SOURCES_CHECK]:  # Check first 3 sources
                 if isinstance(doc, dict):
                     doc_content = doc.get("content", doc.get("text", ""))
                     # Simple check for content overlap
                     doc_words = set(doc_content.lower().split())
                     response_words = set(response.lower().split())
-                    if len(doc_words.intersection(response_words)) > 5:
+                    if (
+                        len(doc_words.intersection(response_words))
+                        > MAX_SENTENCE_WORD_OVERLAP
+                    ):
                         source_mentioned = True
                         break
 
@@ -723,7 +771,7 @@ def validate_response(
                         ),
                     }
                 )
-                confidence *= 0.7
+                confidence *= CONFIDENCE_REDUCTION_NO_SOURCE
         else:
             issues.append(
                 {
@@ -732,7 +780,7 @@ def validate_response(
                     "description": "No source documents provided for validation",
                 }
             )
-            confidence *= 0.6
+            confidence *= CONFIDENCE_REDUCTION_NO_SOURCES
 
         # Check 3: Hallucination detection (basic checks)
         hallucination_indicators = [
@@ -755,7 +803,7 @@ def validate_response(
                     ),
                 }
             )
-            confidence *= 0.5
+            confidence *= CONFIDENCE_REDUCTION_HALLUCINATION
 
         # Check 4: Query relevance
         query_words = set(query.lower().split())
@@ -764,7 +812,7 @@ def validate_response(
             query_words
         )
 
-        if relevance_overlap < 0.3:
+        if relevance_overlap < RELEVANCE_THRESHOLD:
             issues.append(
                 {
                     "type": "low_relevance",
@@ -772,7 +820,7 @@ def validate_response(
                     "description": "Response may not adequately address the query",
                 }
             )
-            confidence *= 0.8
+            confidence *= CONFIDENCE_REDUCTION_INCOMPLETE
 
         # Check 5: Response coherence (basic structure check)
         sentences = response.split(". ")
@@ -780,7 +828,10 @@ def validate_response(
             avg_sentence_length = sum(len(s.split()) for s in sentences) / len(
                 sentences
             )
-            if avg_sentence_length < 3 or avg_sentence_length > 50:
+            if (
+                avg_sentence_length < MIN_AVG_SENTENCE_LENGTH
+                or avg_sentence_length > MAX_AVG_SENTENCE_LENGTH
+            ):
                 issues.append(
                     {
                         "type": "coherence_issue",
@@ -788,12 +839,15 @@ def validate_response(
                         "description": "Response may have unusual sentence structure",
                     }
                 )
-                confidence *= 0.9
+                confidence *= CONFIDENCE_REDUCTION_COHERENCE
 
         # Determine suggested action
-        if confidence >= 0.8 and len(issues) <= 1:
+        if (
+            confidence >= ACCEPT_CONFIDENCE_THRESHOLD
+            and len(issues) <= MAX_ISSUES_FOR_ACCEPT
+        ):
             suggested_action = "accept"
-        elif confidence >= 0.6:
+        elif confidence >= REFINE_CONFIDENCE_THRESHOLD:
             suggested_action = "refine"
         else:
             suggested_action = "regenerate"
@@ -801,7 +855,7 @@ def validate_response(
         processing_time = time.perf_counter() - start_time
 
         validation_result = {
-            "valid": confidence >= 0.6,
+            "valid": confidence >= VALIDATION_CONFIDENCE_THRESHOLD,
             "confidence": round(confidence, 2),
             "issues": issues,
             "suggested_action": suggested_action,
@@ -812,13 +866,14 @@ def validate_response(
         }
 
         logger.info(
-            f"Response validation: {confidence:.2f} confidence, "
-            f"{suggested_action} action"
+            "Response validation: %.2f confidence, %s action",
+            confidence,
+            suggested_action,
         )
         return json.dumps(validation_result)
 
-    except Exception as e:
-        logger.error(f"Response validation failed: {e}")
+    except (RuntimeError, ValueError, AttributeError) as e:
+        logger.error("Response validation failed: %s", e)
         return json.dumps(
             {
                 "valid": False,

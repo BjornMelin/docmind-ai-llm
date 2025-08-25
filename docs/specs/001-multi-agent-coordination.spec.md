@@ -52,7 +52,7 @@ The Multi-Agent Coordination System orchestrates five specialized agents using L
 
 #### Infrastructure Issues Requiring Resolution
 
-5. **`src/utils/vllm_llm.py`** - ❌ MISSING - Causing import failures in src/utils/__init__.py:70
+5. **`src/utils/vllm_llm.py`** - ❌ MISSING - Causing import failures in src/utils/**init**.py:70
 6. **Test infrastructure** - ❌ Import conflicts preventing test execution
 7. **vLLM backend integration** - ⚠️ Configuration complete, runtime integration needs validation
 
@@ -87,19 +87,19 @@ The Multi-Agent Coordination System orchestrates five specialized agents using L
 
 ### Implementation Completion Status (Post-Commit 2bf5cb4)
 
-**✅ Phase 1: Architecture Replacement - COMPLETED**
+#### **✅ Phase 1: Architecture Replacement - COMPLETED**
 
 - ✅ Implemented ADR-compliant agent coordination architecture
 - ✅ Deployed langgraph-supervisor based implementation
 - ✅ Eliminated custom LangGraph implementations
 
-**✅ Phase 2: Core ADR Architecture - COMPLETED**
+#### **✅ Phase 2: Core ADR Architecture - COMPLETED**
 
 - ✅ Deployed `langgraph-supervisor` with modern parameters (coordinator.py)
 - ✅ Configured Qwen3-4B-Instruct-2507-FP8 with FP8 optimization (vllm_config.py)
 - ✅ Implemented real DSPy integration for query optimization (dspy_integration.py)
 
-**⚠️ Phase 3: Infrastructure Integration - IN PROGRESS**
+#### **⚠️ Phase 3: Infrastructure Integration - IN PROGRESS**
 
 - ✅ vLLM configuration completed with FlashInfer backend
 - ✅ FP8 KV cache configuration for 128K context support
@@ -410,7 +410,7 @@ class SupervisorConfig:
     
     # Performance optimization
     agent_decision_timeout_ms: int = 200  # <200ms per agent decision (ADR-001)
-    total_coordination_overhead_ms: int = 300  # Total overhead target
+    total_coordination_overhead_ms: int = 200  # Total overhead target (per ADR-001)
     
     # Error handling
     retry_policy: Dict[str, int] = {
@@ -482,7 +482,7 @@ class SupervisorConfig:
 ### Modified Files
 
 - `src/main.py` - Integrate supervisor-based multi-agent coordinator
-- `src/config/settings.py` - Add modern agent configuration
+- `src/config/app_settings.py` - Add modern agent configuration
 - `src/ui/streamlit_app.py` - Connect UI to supervisor system
 
 ### Configuration Changes
@@ -660,13 +660,13 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
 ### Modified Files
 
 - `src/main.py` - Integrate multi-agent coordinator
-- `src/config/settings.py` - Add agent configuration
+- `src/config/app_settings.py` - Add agent configuration
 - `src/ui/streamlit_app.py` - Connect UI to agent system
 
 ### Configuration Changes
 
 - Add `ENABLE_MULTI_AGENT=true` to .env
-- Add `AGENT_DECISION_TIMEOUT=300` (milliseconds)
+- Add `AGENT_DECISION_TIMEOUT=200` (milliseconds)
 - Add `FALLBACK_TO_BASIC_RAG=true`
 - Add `MODEL_PATH="Qwen/Qwen3-4B-Instruct-2507-FP8"`
 - Add `MAX_CONTEXT_LENGTH=128000`
@@ -765,7 +765,7 @@ And output_mode="structured" must provide enhanced response formatting (❌ NOT 
 And create_forward_message_tool=True must enable direct message passthrough (❌ NOT IMPLEMENTED)
 And pre_model_hook must trim context at 120K threshold with 8K buffer (❌ NOT IMPLEMENTED)
 And post_model_hook must format responses with metadata (❌ NOT IMPLEMENTED)
-And total coordination overhead must stay under 200ms per agent decision (❌ CURRENT: 300ms target)
+And total coordination overhead must stay under 200ms per agent decision (✅ CURRENT: 200ms target per ADR-001)
 And Qwen3-4B-Instruct-2507-FP8 must be configured with FP8 KV cache (❌ CURRENT: Generic LLM)
 And vLLM + FlashInfer backend must be configured for 128K context (❌ NOT IMPLEMENTED)
 ```

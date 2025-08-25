@@ -30,7 +30,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from src.agents.coordinator import MultiAgentCoordinator
-from src.vllm_config import VLLMConfig, VLLMManager
+from src.config.vllm_config import VLLMConfig, VLLMManager
 
 
 class TestCoordinationOverheadPerformance:

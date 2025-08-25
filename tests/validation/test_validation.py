@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from src.config.app_settings import app_settings
+
 
 class TestImportValidation:
     """Validate all modules can be imported successfully."""
@@ -45,7 +47,7 @@ class TestImportValidation:
         modules = [
             "src.utils.core",
             "src.utils.document",
-            "src.utils.embedding",
+            "src.retrieval.integration",
             "src.utils.database",
             "src.utils.monitoring",
         ]
@@ -62,7 +64,7 @@ class TestImportValidation:
                 elif module_name == "src.utils.document":
                     assert hasattr(module, "load_documents_unstructured")
                     assert hasattr(module, "ensure_spacy_model")
-                elif module_name == "src.utils.embedding":
+                elif module_name == "src.retrieval.integration":
                     assert hasattr(module, "create_vector_index_async")
                     assert hasattr(module, "get_embed_model")
 
@@ -106,12 +108,11 @@ class TestImportValidation:
 
     def test_basic_validation_integration(self):
         """Test that we can call basic validation functions."""
-        from src.models.core import AppSettings
         from src.utils.core import validate_startup_configuration
 
         # validate_startup_configuration now requires a settings parameter
         try:
-            settings = AppSettings()
+            settings = app_settings
             result = validate_startup_configuration(settings)
             # Result should be a dict with validation results
             assert isinstance(result, dict)
@@ -131,10 +132,10 @@ class TestImportValidation:
 
         required_files = [
             "src/models/core.py",
-            "src/agents/agent_factory.py",
+            "src/agents/tool_factory.py",
             "src/utils/core.py",
             "src/utils/document.py",
-            "src/utils/embedding.py",
+            "src/retrieval/integration.py",
         ]
 
         for file_path in required_files:
@@ -145,11 +146,10 @@ class TestImportValidation:
         """Test basic system health check."""
         # Test that basic imports work
         try:
-            from src.models.core import AppSettings
             from src.utils.core import detect_hardware
 
             # Create basic settings instance
-            settings = AppSettings()
+            settings = app_settings
             assert settings is not None
 
             # Test hardware detection doesn't crash
@@ -165,20 +165,16 @@ class TestSettingsValidation:
 
     def test_settings_creation(self):
         """Test that settings can be created with defaults."""
-        from src.models.core import AppSettings
-
-        settings = AppSettings()
+        settings = app_settings
         assert settings is not None
         # Check for actual attributes that exist in the simplified Settings class
         assert hasattr(settings, "qdrant_url")
-        assert hasattr(settings, "gpu_acceleration")
+        assert hasattr(settings, "enable_gpu_acceleration")
         assert hasattr(settings, "chunk_size")
 
     def test_settings_required_fields(self):
         """Test that settings have required fields."""
-        from src.models.core import AppSettings
-
-        settings = AppSettings()
+        settings = app_settings
 
         # These should exist and have reasonable defaults
         assert hasattr(settings, "chunk_size")
@@ -187,9 +183,9 @@ class TestSettingsValidation:
         assert isinstance(settings.chunk_overlap, int)
 
         # Test additional key settings that should exist
-        assert hasattr(settings, "dense_embedding_dimension")
-        assert hasattr(settings, "dense_embedding_model")
-        assert hasattr(settings, "retrieval_top_k")
+        assert hasattr(settings, "embedding_dimension")
+        assert hasattr(settings, "embedding_model")
+        assert hasattr(settings, "top_k")
 
 
 if __name__ == "__main__":

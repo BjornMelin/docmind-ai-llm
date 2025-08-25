@@ -13,17 +13,16 @@ import time
 from typing import Any
 from unittest.mock import Mock, patch
 
-import pytest_asyncio
+import pytest
 from langchain_core.messages import HumanMessage
 from llama_index.core.memory import ChatMemoryBuffer
 
 from src.agents.coordinator import (
-    AgentResponse,
     MultiAgentCoordinator,
-    MultiAgentState,
     create_multi_agent_coordinator,
 )
-from src.vllm_config import VLLMConfig
+from src.agents.models import AgentResponse, MultiAgentState
+from src.config.vllm_config import VLLMConfig
 
 
 class TestMultiAgentCoordinator:
@@ -128,7 +127,7 @@ class TestMultiAgentCoordinator:
             assert "fp8_optimization" in metrics
             assert metrics["fp8_optimization"] is True
 
-    @pytest_asyncio.async_test
+    @pytest.mark.asyncio
     async def test_process_query_simple_scenario(
         self, mock_coordinator: MultiAgentCoordinator, performance_timer: dict[str, Any]
     ):
@@ -158,7 +157,7 @@ class TestMultiAgentCoordinator:
         assert "routing_decision" in response.metadata
         assert "adr_compliance" in response.metadata
 
-    @pytest_asyncio.async_test
+    @pytest.mark.asyncio
     async def test_process_query_complex_scenario(
         self, mock_coordinator: MultiAgentCoordinator
     ):

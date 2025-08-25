@@ -1,6 +1,45 @@
 """Data schemas for DocMind AI with Multi-Agent Coordination.
 
-Pydantic models for request/response validation and data structures.
+This module contains shared Pydantic models used across multiple modules in the
+DocMind AI system. Following the hybrid model organization strategy, this module
+centralizes models that are:
+
+- Used by multiple modules throughout the codebase
+- Part of the public API interface
+- Core data structures shared across domains
+
+HYBRID MODEL ORGANIZATION STRATEGY:
+
+1. **Centralized Shared Models** (this module):
+   - Document: Core document representation used throughout the system
+   - QueryRequest: API request model used by multiple components
+   - AgentDecision: Decision tracking used across agent coordination
+   - ConversationTurn/ConversationContext: Chat memory shared across agents
+   - PerformanceMetrics: System monitoring shared across components
+   - ValidationResult: Response validation shared across agents
+   - ErrorResponse: Error handling shared across the system
+   - AnalysisOutput: Structured output format for LLM responses
+
+2. **Domain-Specific Models** (colocated with usage):
+   - Agent models: src/agents/models.py (AgentResponse, MultiAgentState)
+   - Retrieval models: src/retrieval/*/*.py (ClipConfig, PropertyGraphConfig,
+     DSPyConfig)
+   - Configuration models: src/config/*.py (VLLMConfig)
+   - Feature-specific models: Kept with their respective modules
+
+3. **Benefits**:
+   - Reduces circular imports by centralizing shared models
+   - Maintains domain cohesion for specialized models
+   - Simplifies maintenance and testing
+   - Clear separation of concerns
+
+4. **Import Conventions**:
+   - Shared models: `from src.models.schemas import Document, QueryRequest`
+   - Agent models: `from src.agents.models import AgentResponse, MultiAgentState`
+   - Domain models: Import from their colocated modules
+
+This organization follows Domain-Driven Design principles while maintaining
+practical import simplicity and avoiding over-centralization.
 """
 
 from datetime import datetime
@@ -65,38 +104,6 @@ class AgentDecision(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional decision metadata",
-    )
-
-
-class AgentResponse(BaseModel):
-    """Response model from the multi-agent system."""
-
-    content: str = Field(description="Generated response content")
-    sources: list[Document] = Field(
-        default_factory=list,
-        description="Source documents used",
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Response metadata including agent decisions",
-    )
-    validation_score: float = Field(
-        default=0.0,
-        description="Response validation score",
-        ge=0.0,
-        le=1.0,
-    )
-    processing_time: float = Field(
-        default=0.0,
-        description="Total processing time in seconds",
-    )
-    agent_decisions: list[AgentDecision] = Field(
-        default_factory=list,
-        description="Decisions made by agents during processing",
-    )
-    fallback_used: bool = Field(
-        default=False,
-        description="Whether fallback to basic RAG was used",
     )
 
 
@@ -250,3 +257,18 @@ class ErrorResponse(BaseModel):
         default=None,
         description="Suggested resolution",
     )
+
+
+class AnalysisOutput(BaseModel):
+    """Structured output schema for document analysis results.
+
+    Defines the expected format for analysis results from the language model,
+    ensuring consistent structure for summaries, insights, action items, and
+    questions. Used with Pydantic output parsing to validate and structure
+    LLM responses.
+    """
+
+    summary: str = Field(description="Summary of the document")
+    key_insights: list[str] = Field(description="Key insights extracted")
+    action_items: list[str] = Field(description="Action items identified")
+    open_questions: list[str] = Field(description="Open questions surfaced")

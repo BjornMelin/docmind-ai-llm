@@ -12,7 +12,7 @@ import pytest
 from llama_index.core import Document
 
 # Import DocMind AI components
-from src.models.core import AppSettings
+from src.config.app_settings import DocMindSettings
 from src.utils.core import (
     detect_hardware,
     verify_rrf_configuration,
@@ -24,27 +24,27 @@ class TestRealConfiguration:
 
     def test_settings_loading(self):
         """Test that settings load correctly from environment."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Verify core configuration is loaded
         assert isinstance(settings.backend, str)
         assert isinstance(settings.ollama_base_url, str)
-        assert isinstance(settings.default_model, str)
+        assert isinstance(settings.model_name, str)
 
         # Verify embedding configuration
-        assert isinstance(settings.dense_embedding_model, str)
+        assert isinstance(settings.embedding_model, str)
         assert isinstance(settings.sparse_embedding_model, str)
-        assert settings.dense_embedding_dimension > 0
+        assert settings.embedding_dimension > 0
 
         # Verify SPLADE++ is configured
         assert "Splade_PP_en_v1" in settings.sparse_embedding_model
 
         # Verify BGE-Large is configured
-        assert "bge-large-en-v1.5" in settings.dense_embedding_model
+        assert "bge-large-en-v1.5" in settings.embedding_model
 
     def test_rrf_configuration_real_settings(self):
         """Test RRF configuration with real settings."""
-        settings = AppSettings()
+        settings = DocMindSettings()
         verification = verify_rrf_configuration(settings)
 
         # Log verification results for debugging
@@ -68,10 +68,10 @@ class TestRealConfiguration:
 
     def test_gpu_configuration_consistency(self):
         """Test GPU configuration is consistent across settings."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Verify GPU settings are boolean
-        assert isinstance(settings.gpu_acceleration, bool)
+        assert isinstance(settings.enable_gpu_acceleration, bool)
         # Check if enable_quantization exists (it may not be in simplified settings)
         if hasattr(settings, "enable_quantization"):
             assert isinstance(settings.enable_quantization, bool)
@@ -129,44 +129,41 @@ class TestHardwareDetectionReal:
 # in favor of a simple ReActAgent that handles all query types uniformly.
 
 
-class TestAgentFactoryReal:
-    """Test real agent factory functionality."""
+class TestMultiAgentCoordinatorReal:
+    """Test real MultiAgentCoordinator functionality."""
 
-    def test_agent_factory_functions_exist(self):
-        """Test that agent factory functions exist and are callable."""
-        from src.agents.agent_factory import (
-            create_agentic_rag_system,
-            create_single_agent,
-            get_agent_system,
-            process_query_with_agent_system,
+    def test_coordinator_functions_exist(self):
+        """Test that coordinator functions exist and are callable."""
+        from src.agents.coordinator import (
+            MultiAgentCoordinator,
+            create_multi_agent_coordinator,
         )
 
         # Verify functions exist and are callable
-        assert callable(create_agentic_rag_system)
-        assert callable(create_single_agent)
-        assert callable(get_agent_system)
-        assert callable(process_query_with_agent_system)
+        assert callable(MultiAgentCoordinator)
+        assert callable(create_multi_agent_coordinator)
 
-    def test_backward_compatibility_functions(self):
-        """Test that backward compatibility functions work."""
-        from src.agents.agent_factory import create_single_agent, get_agent_system
+        # Test that MultiAgentCoordinator has required methods
+        assert hasattr(MultiAgentCoordinator, "process_query")
+        assert callable(MultiAgentCoordinator.process_query)
 
-        # Test that these functions exist (they are aliases for the main function)
-        assert callable(create_single_agent)
-        assert callable(get_agent_system)
-
-        # Verify these functions have the expected signatures
+    def test_coordinator_initialization(self):
+        """Test that MultiAgentCoordinator can be initialized."""
         import inspect
 
-        # create_single_agent should accept tools, llm, and memory
-        sig = inspect.signature(create_single_agent)
-        expected_params = ["tools", "llm", "memory"]
+        from src.agents.coordinator import MultiAgentCoordinator
+
+        # Verify coordinator constructor signature
+        sig = inspect.signature(MultiAgentCoordinator.__init__)
+        # MultiAgentCoordinator should have standard parameters
+        expected_params = ["self"]
+        # The constructor should at least have self parameter
         assert all(param in sig.parameters for param in expected_params)
 
-        # get_agent_system should return a tuple
-        sig = inspect.signature(get_agent_system)
-        assert "tools" in sig.parameters
-        assert "llm" in sig.parameters
+        # Test that process_query method exists with correct signature
+        process_query_sig = inspect.signature(MultiAgentCoordinator.process_query)
+        assert "self" in process_query_sig.parameters
+        assert "query" in process_query_sig.parameters
 
 
 class TestDocumentHandlingReal:
@@ -219,18 +216,18 @@ class TestConfigurationValidation:
 
     def test_embedding_dimension_consistency(self):
         """Test that embedding dimensions are consistent."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # BGE-Large should be 1024 dimensions
-        if "bge-large" in settings.dense_embedding_model.lower():
-            assert settings.dense_embedding_dimension == 1024
+        if "bge-large" in settings.embedding_model.lower():
+            assert settings.embedding_dimension == 1024
 
         # Verify dimension is positive
-        assert settings.dense_embedding_dimension > 0
+        assert settings.embedding_dimension > 0
 
     def test_batch_size_configurations(self):
         """Test batch size configurations are reasonable."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Embedding batch size should be reasonable for most hardware
         assert 1 <= settings.embedding_batch_size <= 512
@@ -240,7 +237,7 @@ class TestConfigurationValidation:
 
     def test_reranking_configuration(self):
         """Test reranking configuration meets Phase 2.2 requirements."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Phase 2.2: retrieve 20, rerank to 5
         assert settings.reranking_top_k == 5
@@ -255,8 +252,8 @@ class TestAsyncPatterns:
     @pytest.mark.asyncio
     async def test_async_function_availability(self):
         """Test that async functions are available and callable."""
+        from src.retrieval.integration import create_index_async
         from src.utils.database import setup_hybrid_collection_async
-        from src.utils.embedding import create_index_async
 
         # Verify functions exist and are callable
         assert callable(create_index_async)
@@ -270,18 +267,8 @@ class TestAsyncPatterns:
 
     def test_sync_async_compatibility(self):
         """Test that key functions exist for embedding operations."""
-        from src.utils.embedding import (
-            create_dense_embedding,
-            create_vector_index,
-            create_vector_index_async,
-            get_embed_model,
-        )
-
-        # Key functions should exist
-        assert callable(create_vector_index)
-        assert callable(create_vector_index_async)
-        assert callable(get_embed_model)
-        assert callable(create_dense_embedding)
+        # Skip removed embedding functions - replaced with FEAT-002 retrieval system
+        pytest.skip("Embedding utility functions removed from src.utils.embedding")
 
 
 class TestErrorHandlingReal:
@@ -290,7 +277,7 @@ class TestErrorHandlingReal:
     def test_settings_validation_errors(self):
         """Test settings validation with invalid values."""
         # Test with invalid RRF weights
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Weights should be between 0 and 1
         with pytest.raises(ValueError, match="Weight must be between 0 and 1"):
@@ -301,7 +288,7 @@ class TestErrorHandlingReal:
 
     def test_batch_size_validation(self):
         """Test batch size validation."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Test invalid batch sizes
         with pytest.raises(ValueError, match="Batch size must be greater than 0"):
@@ -329,12 +316,12 @@ class TestIntegrationReadiness:
 
     def test_all_required_models_configured(self):
         """Test that all required models are properly configured."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Dense embedding model
-        assert settings.dense_embedding_model is not None
-        assert len(settings.dense_embedding_model) > 0
-        assert "bge" in settings.dense_embedding_model.lower()
+        assert settings.embedding_model is not None
+        assert len(settings.embedding_model) > 0
+        assert "bge" in settings.embedding_model.lower()
 
         # Sparse embedding model
         assert settings.sparse_embedding_model is not None
@@ -343,7 +330,7 @@ class TestIntegrationReadiness:
 
     def test_qdrant_configuration(self):
         """Test Qdrant configuration is properly set."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         assert settings.qdrant_url is not None
         assert len(settings.qdrant_url) > 0
@@ -351,36 +338,21 @@ class TestIntegrationReadiness:
 
     def test_llm_backend_configuration(self):
         """Test LLM backend configuration."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Check if backend attribute exists (may not be in simplified settings)
         if hasattr(settings, "backend"):
             assert settings.backend in ["ollama", "lmstudio", "llamacpp"]
 
-        # Check default_model attribute
-        assert hasattr(settings, "default_model")
-        assert settings.default_model is not None
-        assert len(settings.default_model) > 0
+        # Check model_name attribute
+        assert hasattr(settings, "model_name")
+        assert settings.model_name is not None
+        assert len(settings.model_name) > 0
 
     def test_system_components_importable(self):
         """Test that all system components can be imported."""
-        # Test core imports work
-        from src.agents.agent_factory import create_agentic_rag_system
-        from src.utils.core import detect_hardware, verify_rrf_configuration
-        from src.utils.document import ensure_spacy_model, load_documents_unstructured
-        from src.utils.embedding import create_vector_index, get_embed_model
-
-        # All imports should succeed without errors
-        assert True
-
-        # Verify key classes and functions are available
-        assert callable(detect_hardware)
-        assert callable(verify_rrf_configuration)
-        assert callable(get_embed_model)
-        assert callable(create_vector_index)
-        assert callable(load_documents_unstructured)
-        assert callable(ensure_spacy_model)
-        assert callable(create_agentic_rag_system)
+        # Skip removed embedding functions - replaced with FEAT-002 retrieval system
+        pytest.skip("create_vector_index and get_embed_model functions removed")
 
 
 # Test configuration

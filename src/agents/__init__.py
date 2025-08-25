@@ -13,10 +13,10 @@ Modules:
 
 # Multi-Agent Coordination System imports
 from .coordinator import (
-    AgentResponse,
     MultiAgentCoordinator,
     create_multi_agent_coordinator,
 )
+from .models import AgentResponse, MultiAgentState
 
 # Retrieval Agent imports
 from .retrieval import (
@@ -42,6 +42,7 @@ from .tools import (
 __all__ = [
     # Multi-Agent Coordination System
     "AgentResponse",
+    "MultiAgentState",
     "MultiAgentCoordinator",
     "create_multi_agent_coordinator",
     # Retrieval Agent
