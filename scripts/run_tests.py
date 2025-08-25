@@ -562,7 +562,7 @@ def main():
 
 Examples:
   python run_tests.py                    # Run all tiers in sequence
-  python run_tests.py --unit --fast      # Quick unit test validation  
+  python run_tests.py --unit --fast      # Quick unit test validation
   python run_tests.py --integration      # Integration tests only
   python run_tests.py --gpu              # GPU tests only (requires GPU)
         """,

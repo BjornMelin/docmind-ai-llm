@@ -16,6 +16,7 @@ from src.agents.tool_factory import (
     KG_SIMILARITY_TOP_K,
     ToolFactory,
 )
+from src.config.app_settings import DocMindSettings
 
 
 @pytest.fixture
@@ -34,15 +35,15 @@ def mock_retriever():
 
 
 @pytest.fixture
-def basic_settings() -> AppSettings:
+def basic_settings() -> DocMindSettings:
     """Create basic test settings."""
-    return AppSettings()
+    return DocMindSettings()
 
 
 @pytest.fixture
-def reranker_settings() -> AppSettings:
+def reranker_settings() -> DocMindSettings:
     """Create settings with reranker enabled."""
-    return AppSettings(
+    return DocMindSettings(
         reranker_model="colbert-ir/colbertv2.0",
         reranking_top_k=5,
     )
@@ -145,7 +146,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_with_valid_settings(self):
         """Test reranker creation with valid configuration."""
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             reranker_model="colbert-ir/colbertv2.0",
             reranking_top_k=5,
         )
@@ -166,7 +167,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_no_model_configured(self):
         """Test reranker creation when no model is configured."""
-        test_settings = AppSettings(reranker_model=None)
+        test_settings = DocMindSettings(reranker_model=None)
 
         with patch("src.agents.tool_factory.settings", test_settings):
             result = ToolFactory._create_reranker()
@@ -174,7 +175,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_empty_model_string(self):
         """Test reranker creation with empty model string."""
-        test_settings = AppSettings(reranker_model="")
+        test_settings = DocMindSettings(reranker_model="")
 
         with patch("src.agents.tool_factory.settings", test_settings):
             result = ToolFactory._create_reranker()
@@ -182,7 +183,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_uses_default_top_k(self):
         """Test reranker creation uses default top_k when not specified."""
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             reranker_model="colbert-ir/colbertv2.0",
             reranking_top_k=None,  # Should use default
         )
@@ -205,7 +206,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_error_handling(self):
         """Test reranker creation handles errors gracefully."""
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             reranker_model="colbert-ir/colbertv2.0",
             reranking_top_k=5,
         )
@@ -236,7 +237,7 @@ class TestToolFactoryReranker:
         """Test reranker parameter handling."""
         # Test various top_k values
         for top_k in [1, 5, 10, 20]:
-            test_settings = AppSettings(
+            test_settings = DocMindSettings(
                 reranker_model="colbert-ir/colbertv2.0",
                 reranking_top_k=top_k,
             )
@@ -272,7 +273,7 @@ class TestToolFactoryVectorSearch:
 
     def test_create_vector_search_tool_with_custom_settings(self, mock_index):
         """Test vector search tool with custom similarity_top_k."""
-        custom_settings = AppSettings(top_k=10, debug=True)
+        custom_settings = DocMindSettings(top_k=10, debug=True)
 
         with patch("src.agents.tool_factory.settings", custom_settings):
             ToolFactory.create_vector_search_tool(mock_index)
@@ -364,7 +365,7 @@ class TestToolFactoryIntegration:
         mock_kg_index = Mock()
         mock_kg_index.as_query_engine.return_value = Mock()
 
-        with patch("src.agents.tool_factory.settings", AppSettings()):
+        with patch("src.agents.tool_factory.settings", DocMindSettings()):
             tools = ToolFactory.create_tools_from_indexes(
                 vector_index=mock_index,
                 kg_index=mock_kg_index,
@@ -380,7 +381,7 @@ class TestToolFactoryIntegration:
 
     def test_create_tools_from_indexes_vector_only(self, mock_index):
         """Test tool creation with only vector index."""
-        with patch("src.agents.tool_factory.settings", AppSettings()):
+        with patch("src.agents.tool_factory.settings", DocMindSettings()):
             tools = ToolFactory.create_tools_from_indexes(
                 vector_index=mock_index, kg_index=None, retriever=None
             )
@@ -421,7 +422,7 @@ class TestToolFactoryEdgeCases:
 
     def test_tool_descriptions_are_informative(self, mock_index):
         """Test that tool descriptions contain helpful information."""
-        with patch("src.agents.tool_factory.settings", AppSettings()):
+        with patch("src.agents.tool_factory.settings", DocMindSettings()):
             vector_tool = ToolFactory.create_vector_search_tool(mock_index)
             hybrid_tool = ToolFactory.create_hybrid_vector_tool(mock_index)
 
@@ -436,7 +437,7 @@ class TestToolFactoryEdgeCases:
     def test_tool_metadata_consistency(self, mock_index, mock_retriever):
         """Test that all tools have consistent metadata structure."""
         with (
-            patch("src.agents.tool_factory.settings", AppSettings()),
+            patch("src.agents.tool_factory.settings", DocMindSettings()),
             patch("src.agents.tool_factory.RetrieverQueryEngine", return_value=Mock()),
         ):
             tools = [

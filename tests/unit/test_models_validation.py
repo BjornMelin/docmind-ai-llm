@@ -8,6 +8,7 @@ valid configuration loading, data validation, and error handling.
 import pytest
 from pydantic import ValidationError
 
+from src.config.app_settings import DocMindSettings
 from src.models.schemas import AnalysisOutput
 
 
@@ -121,12 +122,12 @@ class TestAnalysisOutputValidation:
         assert deserialized.key_insights == output.key_insights
 
 
-class TestAppSettingsConfiguration:
-    """Test the AppSettings model used for application configuration."""
+class TestDocMindSettingsConfiguration:
+    """Test the DocMindSettings model used for application configuration."""
 
     def test_app_settings_loads_with_defaults(self):
         """App settings should load with sensible defaults for development."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Critical settings should have defaults
         assert settings.qdrant_url is not None
@@ -145,7 +146,7 @@ class TestAppSettingsConfiguration:
     def test_app_settings_validates_chunk_configuration(self):
         """Chunk settings should be validated for proper RAG operation."""
         # Valid configuration should work
-        valid_settings = AppSettings(chunk_size=1000, chunk_overlap=200, top_k=5)
+        valid_settings = DocMindSettings(chunk_size=1000, chunk_overlap=200, top_k=5)
 
         assert valid_settings.chunk_size == 1000
         assert valid_settings.chunk_overlap == 200
@@ -154,7 +155,7 @@ class TestAppSettingsConfiguration:
     def test_app_settings_validates_rrf_weights(self):
         """RRF fusion weights should be validated for hybrid search."""
         # Valid RRF weights should sum to 1.0 or be reasonable
-        settings = AppSettings(
+        settings = DocMindSettings(
             rrf_fusion_weight_dense=0.7, rrf_fusion_weight_sparse=0.3
         )
 
@@ -171,14 +172,14 @@ class TestAppSettingsConfiguration:
 
     def test_app_settings_url_validation(self):
         """URL settings should be properly formatted."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # URLs should be well-formed
         assert settings.qdrant_url.startswith(("http://", "https://"))
         assert settings.ollama_base_url.startswith(("http://", "https://"))
 
         # Should handle custom URLs
-        custom_settings = AppSettings(
+        custom_settings = DocMindSettings(
             qdrant_url="http://custom-qdrant:6333",
             ollama_base_url="http://custom-ollama:11434",
         )
@@ -188,7 +189,7 @@ class TestAppSettingsConfiguration:
 
     def test_app_settings_model_configuration(self):
         """Model settings should be properly configured for LLM operations."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Should have sensible model defaults
         assert settings.model_name is not None
@@ -196,7 +197,7 @@ class TestAppSettingsConfiguration:
 
     def test_app_settings_embedding_configuration(self):
         """Embedding settings should support hybrid search capabilities."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Embedding model should be specified
         assert settings.embedding_model is not None
@@ -208,14 +209,14 @@ class TestAppSettingsConfiguration:
 
     def test_app_settings_hardware_configuration(self):
         """Hardware settings should be configured appropriately."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # GPU settings should be boolean
         assert isinstance(settings.enable_gpu_acceleration, bool)
 
     def test_app_settings_debug_and_logging(self):
         """Debug and logging settings should be properly configured."""
-        settings = AppSettings()
+        settings = DocMindSettings()
 
         # Cache should be boolean
         assert isinstance(settings.enable_document_caching, bool)
@@ -226,7 +227,7 @@ class TestRealWorldConfigurationScenarios:
 
     def test_production_like_configuration(self):
         """Test configuration that would be used in production."""
-        production_settings = AppSettings(
+        production_settings = DocMindSettings(
             chunk_size=1024,
             chunk_overlap=128,
             top_k=10,
@@ -239,7 +240,7 @@ class TestRealWorldConfigurationScenarios:
 
     def test_development_configuration(self):
         """Test configuration suitable for development."""
-        dev_settings = AppSettings(
+        dev_settings = DocMindSettings(
             chunk_size=512,  # Smaller for faster testing
             top_k=3,  # Fewer results for testing
             enable_gpu_acceleration=False,  # May not be available in dev
@@ -250,7 +251,7 @@ class TestRealWorldConfigurationScenarios:
 
     def test_memory_constrained_configuration(self):
         """Test configuration for memory-constrained environments."""
-        memory_efficient_settings = AppSettings(
+        memory_efficient_settings = DocMindSettings(
             chunk_size=256,  # Smaller chunks
             embedding_batch_size=10,  # Smaller batches
             top_k=3,  # Fewer results
@@ -263,7 +264,7 @@ class TestRealWorldConfigurationScenarios:
 
     def test_high_performance_configuration(self):
         """Test configuration for high-performance environments."""
-        high_perf_settings = AppSettings(
+        high_perf_settings = DocMindSettings(
             chunk_size=2048,  # Larger chunks for more context
             embedding_batch_size=50,  # Larger batches
             top_k=20,  # More comprehensive results
@@ -282,7 +283,7 @@ class TestConfigurationValidationEdgeCases:
         """Invalid chunk configurations should be handled properly."""
         # Chunk overlap larger than chunk size should be handled
         try:
-            settings = AppSettings(
+            settings = DocMindSettings(
                 chunk_size=100,
                 chunk_overlap=200,  # Overlap larger than size
             )
@@ -296,21 +297,21 @@ class TestConfigurationValidationEdgeCases:
     def test_extreme_similarity_values(self):
         """Extreme top_k values should be handled."""
         # Very small value
-        small_k_settings = AppSettings(top_k=1)
+        small_k_settings = DocMindSettings(top_k=1)
         assert small_k_settings.top_k == 1
 
         # Large but reasonable value
-        large_k_settings = AppSettings(top_k=100)
+        large_k_settings = DocMindSettings(top_k=100)
         assert large_k_settings.top_k == 100
 
     def test_gpu_settings_boundary_values(self):
         """GPU settings boundary values should be handled correctly."""
         # GPU disabled
-        gpu_off_settings = AppSettings(enable_gpu_acceleration=False)
+        gpu_off_settings = DocMindSettings(enable_gpu_acceleration=False)
         assert gpu_off_settings.enable_gpu_acceleration is False
 
         # GPU enabled
-        gpu_on_settings = AppSettings(enable_gpu_acceleration=True)
+        gpu_on_settings = DocMindSettings(enable_gpu_acceleration=True)
         assert gpu_on_settings.enable_gpu_acceleration is True
 
     def test_url_format_variations(self):
@@ -323,6 +324,6 @@ class TestConfigurationValidationEdgeCases:
         ]
 
         for url in url_variations:
-            settings = AppSettings(qdrant_url=url)
+            settings = DocMindSettings(qdrant_url=url)
             assert settings.qdrant_url == url
             assert settings.qdrant_url.startswith(("http://", "https://"))

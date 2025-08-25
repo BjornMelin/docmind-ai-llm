@@ -904,8 +904,6 @@ class TestBackwardCompatibilityAndIntegration:
         """Test importing settings doesn't cause circular imports or other issues."""
         # This should not raise any exceptions
         try:
-            from src.config.app_settings import DocMindSettings
-
             # Basic usage should work
             s = settings
             config = s.model_dump()

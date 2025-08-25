@@ -42,7 +42,7 @@ from llama_index.core.vector_stores.types import (
     VectorStoreQueryResult,
 )
 
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 # Qdrant configuration constants
 MAX_FUSION_LIMIT = 50
@@ -86,10 +86,10 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
     dense_vector_name: str = Field(default="dense")
     sparse_vector_name: str = Field(default="sparse")
     embedding_dim: int = Field(
-        default=settings.bge_m3_embedding_dim
+        default=app_settings.bge_m3_embedding_dim
     )  # BGE-M3 dimension
     rrf_alpha: float = Field(
-        default=settings.rrf_fusion_alpha
+        default=app_settings.rrf_fusion_alpha
     )  # Dense/sparse fusion weight
 
     def __init__(
@@ -98,8 +98,8 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         client: QdrantClient | None = None,
         url: str = "http://localhost:6333",
         collection_name: str = "docmind_feat002_unified",
-        embedding_dim: int = settings.bge_m3_embedding_dim,
-        rrf_alpha: float = settings.rrf_fusion_alpha,
+        embedding_dim: int = app_settings.bge_m3_embedding_dim,
+        rrf_alpha: float = app_settings.rrf_fusion_alpha,
         **kwargs,
     ):
         """Initialize QdrantUnifiedVectorStore.
@@ -352,7 +352,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         self,
         dense_results: list[Any],
         sparse_results: list[Any],
-        k: int = settings.rrf_k_constant,
+        k: int = app_settings.rrf_k_constant,
     ) -> list[Any]:
         """Apply Reciprocal Rank Fusion to combine dense and sparse results.
 
@@ -490,12 +490,12 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
 def create_unified_qdrant_store(
     url: str = "http://localhost:6333",
     collection_name: str = "docmind_feat002_unified",
-    embedding_dim: int = settings.bge_m3_embedding_dim,
-    rrf_alpha: float = settings.rrf_fusion_alpha,
+    embedding_dim: int = app_settings.bge_m3_embedding_dim,
+    rrf_alpha: float = app_settings.rrf_fusion_alpha,
 ) -> QdrantUnifiedVectorStore:
     """Create unified Qdrant vector store for BGE-M3 embeddings.
 
-    Factory function for easy instantiation with BGE-M3 optimized settings.
+    Factory function for easy instantiation with BGE-M3 optimized app_settings.
 
     Args:
         url: Qdrant server URL

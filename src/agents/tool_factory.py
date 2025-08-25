@@ -28,7 +28,7 @@ Example:
         search_tool = ToolFactory.create_vector_search_tool(vector_index)
 
 Attributes:
-    settings (AppSettings): Global application settings for tool configuration.
+    settings (DocMindSettings): Global application settings for tool configuration.
 """
 
 from typing import Any

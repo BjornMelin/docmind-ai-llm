@@ -42,8 +42,8 @@ def sample_documents():
             metadata={"source": "doc2.md"},
         ),
         Document(
-            text="""BGE-M3 is created by BAAI and supports dense, sparse, and ColBERT 
-            embeddings. It integrates seamlessly with LlamaIndex and is part of 
+            text="""BGE-M3 is created by BAAI and supports dense, sparse, and ColBERT
+            embeddings. It integrates seamlessly with LlamaIndex and is part of
             DocMind AI.""",
             metadata={"source": "doc3.md"},
         ),

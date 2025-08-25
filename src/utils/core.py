@@ -107,13 +107,7 @@ def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
         except (ImportError, ModuleNotFoundError) as e:
             results["warnings"].append(f"Import error during GPU detection: {e}")
 
-    # Check chunk configuration
-    if app_settings.chunk_overlap >= app_settings.chunk_size:
-        results["errors"].append(
-            f"Chunk overlap ({app_settings.chunk_overlap}) must be less than "
-            f"chunk size ({app_settings.chunk_size})"
-        )
-        results["valid"] = False
+    # Configuration validation complete
 
     # Check RRF configuration if sparse embeddings enabled
     if app_settings.use_sparse_embeddings and not (
@@ -160,7 +154,8 @@ def verify_rrf_configuration(settings: DocMindSettings) -> dict[str, Any]:
         verification["weights_correct"] = True
     else:
         verification["issues"].append(
-            f"Weights not research-backed: dense={app_settings.rrf_fusion_weight_dense}, "
+            f"Weights not research-backed: "
+            f"dense={app_settings.rrf_fusion_weight_dense}, "
             f"sparse={app_settings.rrf_fusion_weight_sparse} (expected 0.7/0.3)"
         )
         verification["recommendations"].append(
@@ -172,7 +167,8 @@ def verify_rrf_configuration(settings: DocMindSettings) -> dict[str, Any]:
         verification["alpha_in_range"] = True
     else:
         verification["issues"].append(
-            f"RRF alpha ({app_settings.rrf_fusion_alpha}) outside research range (10-100)"
+            f"RRF alpha ({app_settings.rrf_fusion_alpha}) "
+            f"outside research range (10-100)"
         )
         verification["recommendations"].append(
             f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "

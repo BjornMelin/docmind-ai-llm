@@ -44,13 +44,13 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from langchain_core.messages.utils import trim_messages
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import MessagesState
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 from langgraph_supervisor.handoff import create_forward_message_tool
+
+# Import LlamaIndex Settings for context window access
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
-from pydantic import BaseModel, Field
 
 from src.agents.tools import (
     plan_query,
@@ -59,9 +59,12 @@ from src.agents.tools import (
     synthesize_results,
     validate_response,
 )
-from src.config.settings import settings
+from src.config.app_settings import app_settings
+from src.config.vllm_config import ContextManager, VLLMConfig, create_vllm_manager
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
-from src.vllm_config import ContextManager, VLLMConfig, create_vllm_manager
+
+# Import agent-specific models
+from .models import AgentResponse, MultiAgentState
 
 # Constants
 
@@ -71,65 +74,6 @@ PARALLEL_TOOL_CALLS_ENABLED = True
 OUTPUT_MODE_STRUCTURED = "structured"
 CREATE_FORWARD_MESSAGE_TOOL_ENABLED = True
 ADD_HANDOFF_BACK_MESSAGES_ENABLED = True
-
-
-class AgentResponse(BaseModel):
-    """Response from ADR-compliant multi-agent system."""
-
-    content: str = Field(description="Generated response content")
-    sources: list[dict[str, Any]] = Field(
-        default_factory=list, description="Source documents"
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Agent processing metadata"
-    )
-    validation_score: float = Field(
-        default=0.0, description="Response validation confidence"
-    )
-    processing_time: float = Field(
-        default=0.0, description="Total processing time in seconds"
-    )
-    optimization_metrics: dict[str, Any] = Field(
-        default_factory=dict, description="FP8 and parallel execution metrics"
-    )
-
-
-class MultiAgentState(MessagesState):
-    """Extended state for ADR-compliant multi-agent coordination."""
-
-    # Core state
-    tools_data: dict[str, Any] = Field(default_factory=dict)
-    context: ChatMemoryBuffer | None = None
-
-    # Agent decisions and results
-    routing_decision: dict[str, Any] = Field(default_factory=dict)
-    planning_output: dict[str, Any] = Field(default_factory=dict)
-    retrieval_results: list[dict[str, Any]] = Field(default_factory=list)
-    synthesis_result: dict[str, Any] = Field(default_factory=dict)
-    validation_result: dict[str, Any] = Field(default_factory=dict)
-
-    # Performance tracking (ADR-011)
-    agent_timings: dict[str, float] = Field(default_factory=dict)
-    total_start_time: float = Field(default=0.0)
-    parallel_execution_active: bool = Field(default=False)
-    token_reduction_achieved: float = Field(default=0.0)
-
-    # Context management (ADR-004, ADR-011)
-    context_trimmed: bool = Field(default=False)
-    tokens_trimmed: int = Field(default=0)
-    kv_cache_usage_gb: float = Field(default=0.0)
-
-    # Output mode configuration (ADR-011)
-    output_mode: str = Field(default="structured")
-
-    # Error handling
-    errors: list[str] = Field(default_factory=list)
-    fallback_used: bool = Field(default=False)
-
-    # LangGraph supervisor requirements (ADR-011)
-    remaining_steps: int = Field(
-        default=10, description="Remaining steps for supervisor"
-    )
 
 
 class MultiAgentCoordinator:
@@ -150,10 +94,10 @@ class MultiAgentCoordinator:
     def __init__(
         self,
         model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-        max_context_length: int = settings.context_window_size,  # 128K context
+        max_context_length: int = app_settings.default_token_limit,  # 128K context
         backend: str = "vllm",
         enable_fallback: bool = True,
-        max_agent_timeout: float = settings.default_agent_timeout,  # Reduced from 5.0
+        max_agent_timeout: float = app_settings.default_agent_timeout,  # Reduced
     ):
         """Initialize ADR-compliant multi-agent coordinator.
 
@@ -810,7 +754,7 @@ class MultiAgentCoordinator:
 # Factory function for ADR-compliant coordinator
 def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length: int = settings.context_window_size,
+    max_context_length: int = app_settings.default_token_limit,
     enable_fallback: bool = True,
 ) -> MultiAgentCoordinator:
     """Create ADR-compliant multi-agent coordinator.

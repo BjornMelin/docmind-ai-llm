@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from src.config.app_settings import app_settings
+
 
 class TestImportValidation:
     """Validate all modules can be imported successfully."""

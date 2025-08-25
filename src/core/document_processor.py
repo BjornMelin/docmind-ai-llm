@@ -6,25 +6,27 @@ Handles document ingestion, parsing, chunking, and embedding generation.
 from pathlib import Path
 from typing import Any
 
+from llama_index.core import Settings as LlamaIndexSettings
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import SentenceSplitter
 from loguru import logger
 
-from src.config.settings import Settings
+from src.config.app_settings import DocMindSettings, app_settings
 
 
 class DocumentProcessor:
     """Processes documents for ingestion into the vector store."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: DocMindSettings | None = None) -> None:
         """Initialize the document processor.
 
         Args:
-            settings: Application settings.
+            settings: Application settings. Defaults to global app_settings.
         """
-        self.settings = settings
-        self.chunk_size = settings.chunk_size
-        self.chunk_overlap = settings.chunk_overlap
+        self.settings = settings or app_settings
+        # Use LlamaIndex Settings for chunk configuration
+        self.chunk_size = LlamaIndexSettings.chunk_size
+        self.chunk_overlap = LlamaIndexSettings.chunk_overlap
 
         # Initialize text splitter
         self.text_splitter = SentenceSplitter(
