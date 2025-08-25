@@ -20,7 +20,7 @@ import torch
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
-from src.config.settings import AppSettings, settings
+from src.config.app_settings import DocMindSettings, app_settings
 
 # Constants for validation
 WEIGHT_TOLERANCE = 0.05
@@ -47,7 +47,7 @@ def detect_hardware() -> dict[str, Any]:
             hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
             vram_gb = (
                 torch.cuda.get_device_properties(0).total_memory
-                / settings.bytes_to_gb_divisor
+                / app_settings.bytes_to_gb_divisor
             )
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
@@ -61,7 +61,7 @@ def detect_hardware() -> dict[str, Any]:
     return hardware_info
 
 
-def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
+def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
     """Validate critical startup configuration.
 
     Args:
@@ -79,9 +79,11 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
     try:
         from qdrant_client import QdrantClient
 
-        client = QdrantClient(url=settings.qdrant_url)
+        client = QdrantClient(url=app_settings.qdrant_url)
         client.get_collections()
-        results["info"].append(f"Qdrant connection successful: {settings.qdrant_url}")
+        results["info"].append(
+            f"Qdrant connection successful: {app_settings.qdrant_url}"
+        )
         client.close()
     except ConnectionError as e:
         results["errors"].append(f"Qdrant connection failed: {e}")
@@ -91,7 +93,7 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
         results["valid"] = False
 
     # Check GPU configuration
-    if settings.enable_gpu_acceleration:
+    if app_settings.enable_gpu_acceleration:
         try:
             if torch.cuda.is_available():
                 gpu_name = torch.cuda.get_device_name(0)
@@ -106,19 +108,19 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
             results["warnings"].append(f"Import error during GPU detection: {e}")
 
     # Check chunk configuration
-    if settings.chunk_overlap >= settings.chunk_size:
+    if app_settings.chunk_overlap >= app_settings.chunk_size:
         results["errors"].append(
-            f"Chunk overlap ({settings.chunk_overlap}) must be less than "
-            f"chunk size ({settings.chunk_size})"
+            f"Chunk overlap ({app_settings.chunk_overlap}) must be less than "
+            f"chunk size ({app_settings.chunk_size})"
         )
         results["valid"] = False
 
     # Check RRF configuration if sparse embeddings enabled
-    if settings.use_sparse_embeddings and not (
-        RRF_ALPHA_MIN <= settings.rrf_fusion_alpha <= RRF_ALPHA_MAX
+    if app_settings.use_sparse_embeddings and not (
+        RRF_ALPHA_MIN <= app_settings.rrf_fusion_alpha <= RRF_ALPHA_MAX
     ):
         results["warnings"].append(
-            f"RRF alpha {settings.rrf_fusion_alpha} outside optimal range "
+            f"RRF alpha {app_settings.rrf_fusion_alpha} outside optimal range "
             f"[{RRF_ALPHA_MIN}, {RRF_ALPHA_MAX}]"
         )
 
@@ -129,7 +131,7 @@ def validate_startup_configuration(settings: AppSettings) -> dict[str, Any]:
     return results
 
 
-def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
+def verify_rrf_configuration(settings: DocMindSettings) -> dict[str, Any]:
     """Verify RRF configuration against research recommendations.
 
     Args:
@@ -147,38 +149,39 @@ def verify_rrf_configuration(settings: AppSettings) -> dict[str, Any]:
     }
 
     # Check research-backed weights (0.7 dense, 0.3 sparse)
-    expected_dense = settings.rrf_fusion_weight_dense
-    expected_sparse = settings.rrf_fusion_weight_sparse
+    expected_dense = app_settings.rrf_fusion_weight_dense
+    expected_sparse = app_settings.rrf_fusion_weight_sparse
 
     if (
-        abs(settings.rrf_fusion_weight_dense - expected_dense) < WEIGHT_TOLERANCE
-        and abs(settings.rrf_fusion_weight_sparse - expected_sparse) < WEIGHT_TOLERANCE
+        abs(app_settings.rrf_fusion_weight_dense - expected_dense) < WEIGHT_TOLERANCE
+        and abs(app_settings.rrf_fusion_weight_sparse - expected_sparse)
+        < WEIGHT_TOLERANCE
     ):
         verification["weights_correct"] = True
     else:
         verification["issues"].append(
-            f"Weights not research-backed: dense={settings.rrf_fusion_weight_dense}, "
-            f"sparse={settings.rrf_fusion_weight_sparse} (expected 0.7/0.3)"
+            f"Weights not research-backed: dense={app_settings.rrf_fusion_weight_dense}, "
+            f"sparse={app_settings.rrf_fusion_weight_sparse} (expected 0.7/0.3)"
         )
         verification["recommendations"].append(
             "Update weights to research-backed values: dense=0.7, sparse=0.3"
         )
 
     # Check RRF alpha parameter
-    if RRF_ALPHA_MIN <= settings.rrf_fusion_alpha <= RRF_ALPHA_MAX:
+    if RRF_ALPHA_MIN <= app_settings.rrf_fusion_alpha <= RRF_ALPHA_MAX:
         verification["alpha_in_range"] = True
     else:
         verification["issues"].append(
-            f"RRF alpha ({settings.rrf_fusion_alpha}) outside research range (10-100)"
+            f"RRF alpha ({app_settings.rrf_fusion_alpha}) outside research range (10-100)"
         )
         verification["recommendations"].append(
             f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "
-            f"with {settings.rrf_k_constant} as optimal"
+            f"with {app_settings.rrf_k_constant} as optimal"
         )
 
     # Calculate hybrid alpha for LlamaIndex
-    verification["computed_hybrid_alpha"] = settings.rrf_fusion_weight_dense / (
-        settings.rrf_fusion_weight_dense + settings.rrf_fusion_weight_sparse
+    verification["computed_hybrid_alpha"] = app_settings.rrf_fusion_weight_dense / (
+        app_settings.rrf_fusion_weight_dense + app_settings.rrf_fusion_weight_sparse
     )
 
     return verification

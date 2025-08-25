@@ -25,7 +25,7 @@ from qdrant_client.http.models import (
     VectorParams,
 )
 
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 
 def get_client_config() -> dict[str, Any]:
@@ -35,8 +35,8 @@ def get_client_config() -> dict[str, Any]:
         Dictionary with client configuration
     """
     return {
-        "url": settings.qdrant_url,
-        "timeout": settings.default_qdrant_timeout,
+        "url": app_settings.qdrant_url,
+        "timeout": app_settings.default_qdrant_timeout,
         "prefer_grpc": True,
     }
 
@@ -102,7 +102,7 @@ async def create_async_client():
 async def setup_hybrid_collection_async(
     client: AsyncQdrantClient,
     collection_name: str,
-    dense_embedding_size: int = settings.bge_m3_embedding_dim,
+    dense_embedding_size: int = app_settings.bge_m3_embedding_dim,
     recreate: bool = False,
 ) -> QdrantVectorStore:
     """Setup Qdrant collection for hybrid search (async).
@@ -141,20 +141,20 @@ async def setup_hybrid_collection_async(
         logger.success("Created hybrid collection: %s", collection_name)
 
     # Create sync client for QdrantVectorStore compatibility
-    sync_client = QdrantClient(url=settings.qdrant_url)
+    sync_client = QdrantClient(url=app_settings.qdrant_url)
 
     return QdrantVectorStore(
         client=sync_client,
         collection_name=collection_name,
         enable_hybrid=True,
-        batch_size=settings.default_batch_size,
+        batch_size=app_settings.default_batch_size,
     )
 
 
 def setup_hybrid_collection(
     client: QdrantClient,
     collection_name: str,
-    dense_embedding_size: int = settings.bge_m3_embedding_dim,
+    dense_embedding_size: int = app_settings.bge_m3_embedding_dim,
     recreate: bool = False,
 ) -> QdrantVectorStore:
     """Setup Qdrant collection for hybrid search (sync).
@@ -196,13 +196,13 @@ def setup_hybrid_collection(
         client=client,
         collection_name=collection_name,
         enable_hybrid=True,
-        batch_size=settings.default_batch_size,
+        batch_size=app_settings.default_batch_size,
     )
 
 
 def create_vector_store(
     collection_name: str,
-    dense_embedding_size: int = settings.bge_m3_embedding_dim,
+    dense_embedding_size: int = app_settings.bge_m3_embedding_dim,
     enable_hybrid: bool = True,
 ) -> QdrantVectorStore:
     """Create QdrantVectorStore with standard configuration.
@@ -215,13 +215,13 @@ def create_vector_store(
     Returns:
         Configured QdrantVectorStore
     """
-    client = QdrantClient(url=settings.qdrant_url)
+    client = QdrantClient(url=app_settings.qdrant_url)
 
     return QdrantVectorStore(
         client=client,
         collection_name=collection_name,
         enable_hybrid=enable_hybrid,
-        batch_size=settings.default_batch_size,
+        batch_size=app_settings.default_batch_size,
     )
 
 
@@ -268,7 +268,7 @@ def test_connection() -> dict[str, Any]:
             collections = client.get_collections()
             return {
                 "connected": True,
-                "url": settings.qdrant_url,
+                "url": app_settings.qdrant_url,
                 "collections_count": len(collections.collections),
                 "collections": [c.name for c in collections.collections],
             }
@@ -281,7 +281,7 @@ def test_connection() -> dict[str, Any]:
         logger.error("Qdrant connection test failed: %s", e)
         return {
             "connected": False,
-            "url": settings.qdrant_url,
+            "url": app_settings.qdrant_url,
             "error": str(e),
         }
 

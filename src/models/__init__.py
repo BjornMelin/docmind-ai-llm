@@ -1,13 +1,38 @@
 """Models module for DocMind AI.
 
-This module provides backward compatibility by re-exporting configuration
-and analysis models from the centralized settings system.
+This module provides access to core data models and analysis schemas.
 
-DEPRECATED: Direct imports from this module are deprecated.
-Use `from src.config.settings import Settings, AnalysisOutput, settings` instead.
-"""  # noqa: N999
+Following the hybrid model organization strategy:
+- Shared models (used across modules) are centralized in schemas.py
+- Domain-specific models remain colocated with their usage domains
+- Agent-specific models are in agents.models
+"""
 
-# Re-export from centralized settings for backward compatibility
-from src.config.settings import AnalysisOutput, AppSettings, Settings, settings
+# Shared models (used across multiple modules)
+from .schemas import (
+    AgentDecision,
+    AnalysisOutput,
+    ConversationContext,
+    ConversationTurn,
+    Document,
+    ErrorResponse,
+    PerformanceMetrics,
+    QueryRequest,
+    ValidationResult,
+)
 
-__all__ = ["AnalysisOutput", "AppSettings", "Settings", "settings"]
+__all__ = [
+    # Core data structures
+    "Document",
+    "QueryRequest",
+    # Decision and conversation models
+    "AgentDecision",
+    "ConversationTurn",
+    "ConversationContext",
+    # Performance and validation
+    "PerformanceMetrics",
+    "ValidationResult",
+    # Output models
+    "AnalysisOutput",
+    "ErrorResponse",
+]

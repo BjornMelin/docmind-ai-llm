@@ -25,7 +25,7 @@ except ImportError:
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.bridge.pydantic import Field
 
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 
 class BGEM3Embedding(BaseEmbedding):
@@ -47,10 +47,10 @@ class BGEM3Embedding(BaseEmbedding):
     - 8K context vs 512 in BGE-large
     """
 
-    model_name: str = Field(default=settings.bge_m3_model_name)
-    max_length: int = Field(default=settings.bge_m3_max_length)
+    model_name: str = Field(default=app_settings.bge_m3_model_name)
+    max_length: int = Field(default=app_settings.bge_m3_max_length)
     use_fp16: bool = Field(default=True)
-    batch_size: int = Field(default=settings.bge_m3_batch_size_gpu)
+    batch_size: int = Field(default=app_settings.bge_m3_batch_size_gpu)
     normalize_embeddings: bool = Field(default=True)
     device: str = Field(default="cuda")
 
@@ -71,10 +71,10 @@ class BGEM3Embedding(BaseEmbedding):
     def __init__(
         self,
         *,
-        model_name: str = settings.bge_m3_model_name,
-        max_length: int = settings.bge_m3_max_length,
+        model_name: str = app_settings.bge_m3_model_name,
+        max_length: int = app_settings.bge_m3_max_length,
         use_fp16: bool = True,
-        batch_size: int = settings.bge_m3_batch_size_gpu,
+        batch_size: int = app_settings.bge_m3_batch_size_gpu,
         device: str = "cuda",
         **kwargs,
     ):
@@ -222,14 +222,14 @@ class BGEM3Embedding(BaseEmbedding):
     @property
     def embed_dim(self) -> int:
         """BGE-M3 dense embedding dimension."""
-        return settings.bge_m3_embedding_dim
+        return app_settings.bge_m3_embedding_dim
 
 
 def create_bgem3_embedding(
-    model_name: str = settings.bge_m3_model_name,
+    model_name: str = app_settings.bge_m3_model_name,
     use_fp16: bool = True,
     device: str = "cuda",
-    max_length: int = settings.bge_m3_max_length,
+    max_length: int = app_settings.bge_m3_max_length,
 ) -> BGEM3Embedding:
     """Create BGE-M3 embedding instance with optimal settings for RTX 4090.
 
@@ -247,9 +247,9 @@ def create_bgem3_embedding(
     """
     # RTX 4090 optimized batch size
     batch_size = (
-        settings.bge_m3_batch_size_gpu
+        app_settings.bge_m3_batch_size_gpu
         if device == "cuda"
-        else settings.bge_m3_batch_size_cpu
+        else app_settings.bge_m3_batch_size_cpu
     )
 
     return BGEM3Embedding(

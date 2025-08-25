@@ -12,7 +12,7 @@ from llama_index.core.ingestion import IngestionPipeline
 from llama_index.core.node_parser import SentenceSplitter
 from loguru import logger
 
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 from .embeddings.bge_m3_manager import create_bgem3_embedding
 
@@ -56,28 +56,28 @@ async def create_index_async(
         embedding_model = create_bgem3_embedding(
             use_fp16=use_gpu,
             device=device,
-            max_length=settings.bge_m3_max_length,
+            max_length=app_settings.bge_m3_max_length,
         )
 
         # Configure global settings
         Settings.embed_model = embedding_model
-        Settings.chunk_size = settings.chunk_size
-        Settings.chunk_overlap = settings.chunk_overlap
+        Settings.chunk_size = app_settings.chunk_size
+        Settings.chunk_overlap = app_settings.chunk_overlap
 
         # Initialize unified vector store
         vector_store = create_unified_qdrant_store(
             url=qdrant_url,
             collection_name=collection_name,
-            embedding_dim=settings.bge_m3_embedding_dim,  # BGE-M3 dimension
-            rrf_alpha=settings.rrf_fusion_alpha,  # RRF fusion alpha parameter
+            embedding_dim=app_settings.bge_m3_embedding_dim,  # BGE-M3 dimension
+            rrf_alpha=app_settings.rrf_fusion_alpha,  # RRF fusion alpha parameter
         )
 
         # Create ingestion pipeline with BGE-M3
         pipeline = IngestionPipeline(
             transformations=[
                 SentenceSplitter(
-                    chunk_size=settings.chunk_size,
-                    chunk_overlap=settings.chunk_overlap,
+                    chunk_size=app_settings.chunk_size,
+                    chunk_overlap=app_settings.chunk_overlap,
                     separator=" ",
                 ),
                 embedding_model,
@@ -124,7 +124,7 @@ async def create_index_async(
 def create_hybrid_retriever_compat(
     index: VectorStoreIndex,
     use_reranking: bool = True,
-    similarity_top_k: int = settings.top_k,
+    similarity_top_k: int = app_settings.top_k,
 ) -> Any:
     """Create hybrid retriever using FEAT-002 RouterQueryEngine.
 
@@ -315,7 +315,7 @@ async def create_multimodal_index(
 
 
 def integrate_vllm_with_llamaindex(vllm_config: dict) -> Any:
-    """Integrate vLLM with LlamaIndex settings.
+    """Integrate vLLM with LlamaIndex app_settings.
 
     Args:
         vllm_config: vLLM configuration dictionary

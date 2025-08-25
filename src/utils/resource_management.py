@@ -15,7 +15,7 @@ from typing import Any
 
 import torch
 
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -322,7 +322,7 @@ def get_safe_vram_usage() -> float:
         VRAM usage in GB (0.0 if CUDA unavailable or error)
     """
     return safe_cuda_operation(
-        lambda: torch.cuda.memory_allocated() / settings.bytes_to_gb_divisor
+        lambda: torch.cuda.memory_allocated() / app_settings.bytes_to_gb_divisor
         if torch.cuda.is_available()
         else 0.0,
         "VRAM usage check",
@@ -368,12 +368,12 @@ def get_safe_gpu_info() -> dict[str, Any]:
                 if props:
                     info["compute_capability"] = f"{props.major}.{props.minor}"
                     info["total_memory_gb"] = (
-                        props.total_memory / settings.bytes_to_gb_divisor
+                        props.total_memory / app_settings.bytes_to_gb_divisor
                     )
 
                 info["allocated_memory_gb"] = safe_cuda_operation(
                     lambda: torch.cuda.memory_allocated(0)
-                    / settings.bytes_to_gb_divisor,
+                    / app_settings.bytes_to_gb_divisor,
                     "allocated memory",
                     0.0,
                 )

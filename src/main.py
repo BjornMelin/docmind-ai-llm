@@ -12,9 +12,9 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from src.agents.coordinator import MultiAgentCoordinator
-from src.config.settings import Settings
+from src.agents.models import AgentResponse
+from src.config.app_settings import DocMindSettings, app_settings
 from src.core.document_processor import DocumentProcessor
-from src.models.schemas import AgentResponse
 
 # Load environment variables
 load_dotenv()
@@ -31,7 +31,7 @@ class DocMindApplication:
 
     def __init__(
         self,
-        settings: Settings | None = None,
+        settings: DocMindSettings | None = None,
         enable_multi_agent: bool = True,
     ) -> None:
         """Initialize the DocMind application.
@@ -40,7 +40,7 @@ class DocMindApplication:
             settings: Application settings. Defaults to loading from environment.
             enable_multi_agent: Enable multi-agent coordination system.
         """
-        self.settings = settings or Settings()
+        self.settings = settings or app_settings
         self.enable_multi_agent = enable_multi_agent
 
         # Initialize components

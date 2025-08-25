@@ -33,7 +33,7 @@ from llama_index.core import Document
 from loguru import logger
 
 from src.agents.tool_factory import ToolFactory
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 # Constants
 
@@ -147,7 +147,7 @@ def route_query(
         complexity = "simple"
         strategy = "vector"
         needs_planning = False
-        confidence = settings.default_confidence_threshold
+        confidence = app_settings.default_confidence_threshold
 
         if (
             any(pattern in query_lower for pattern in complex_patterns)
@@ -656,7 +656,7 @@ def synthesize_results(
         )
 
         # Limit to top results
-        max_results = getattr(settings, "synthesis_max_docs", MAX_RETRIEVAL_RESULTS)
+        max_results = getattr(app_settings, "synthesis_max_docs", MAX_RETRIEVAL_RESULTS)
         final_documents = ranked_documents[:max_results]
 
         processing_time = time.perf_counter() - start_time

@@ -28,7 +28,7 @@ from llama_index.core import Document
 from llama_index.readers.file import UnstructuredReader
 from loguru import logger
 
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 # Simple document cache using diskcache
 _document_cache = diskcache.Cache("./cache/documents")
@@ -62,7 +62,7 @@ def _get_cached(file_path: str) -> list[Document] | None:
 def _cache_documents(file_path: str, documents: list[Document]) -> None:
     """Cache documents with 1 hour expiry."""
     file_hash = _get_file_hash(file_path)
-    _document_cache.set(file_hash, documents, expire=settings.cache_expiry_seconds)
+    _document_cache.set(file_hash, documents, expire=app_settings.cache_expiry_seconds)
 
 
 def load_documents_unstructured(file_path: str | Path) -> list[Document]:
@@ -105,7 +105,7 @@ def load_documents_unstructured(file_path: str | Path) -> list[Document]:
         # Load with hi_res strategy for multimodal extraction (ADR-004)
         documents = reader.load_data(
             file=file_path,
-            strategy=getattr(settings, "parse_strategy", "hi_res"),
+            strategy=getattr(app_settings, "parse_strategy", "hi_res"),
             split_documents=True,
         )
 
@@ -118,7 +118,7 @@ def load_documents_unstructured(file_path: str | Path) -> list[Document]:
                     "filename": Path(file_path).name,
                     "source": str(file_path),
                     "loader": "unstructured_reader",
-                    "strategy": getattr(settings, "parse_strategy", "hi_res"),
+                    "strategy": getattr(app_settings, "parse_strategy", "hi_res"),
                 }
             )
 
@@ -215,7 +215,7 @@ def get_document_info(file_path: str | Path) -> dict[str, Any]:
     return {
         "filename": file_path.name,
         "size_bytes": stat.st_size,
-        "size_mb": round(stat.st_size / settings.bytes_to_mb_divisor, 2),
+        "size_mb": round(stat.st_size / app_settings.bytes_to_mb_divisor, 2),
         "extension": file_path.suffix.lower(),
         "modified": stat.st_mtime,
         "is_cached": _is_cached(str(file_path)),
@@ -320,7 +320,7 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
                     check=True,
                     capture_output=True,
                     text=True,
-                    timeout=settings.spacy_download_timeout,
+                    timeout=app_settings.spacy_download_timeout,
                 )
 
                 logger.info("spaCy model '%s' downloaded successfully", model_name)
@@ -378,7 +378,7 @@ def extract_entities_with_spacy(
                     "label": ent.label_,
                     "start": ent.start_char,
                     "end": ent.end_char,
-                    "confidence": settings.default_entity_confidence,  # spaCy default
+                    "confidence": app_settings.default_entity_confidence,  # spaCy
                 }
             )
 

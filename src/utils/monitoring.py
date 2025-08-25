@@ -20,7 +20,7 @@ from typing import Any
 import psutil
 from loguru import logger
 
-from src.config.settings import settings
+from src.config.app_settings import app_settings
 
 # Constants
 
@@ -128,7 +128,7 @@ def performance_timer(operation: str, **context: Any):
     """
     start_time = time.perf_counter()
     process = psutil.Process()
-    start_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
+    start_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -142,7 +142,7 @@ def performance_timer(operation: str, **context: Any):
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
+        end_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
@@ -171,7 +171,7 @@ async def async_performance_timer(operation: str, **context: Any):
     """
     start_time = time.perf_counter()
     process = psutil.Process()
-    start_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
+    start_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -185,7 +185,7 @@ async def async_performance_timer(operation: str, **context: Any):
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = process.memory_info().rss / settings.bytes_to_mb_divisor  # MB
+        end_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
@@ -212,8 +212,8 @@ def get_memory_usage() -> dict[str, float]:
         memory_info = process.memory_info()
 
         return {
-            "rss_mb": round(memory_info.rss / settings.bytes_to_mb_divisor, 2),
-            "vms_mb": round(memory_info.vms / settings.bytes_to_mb_divisor, 2),
+            "rss_mb": round(memory_info.rss / app_settings.bytes_to_mb_divisor, 2),
+            "vms_mb": round(memory_info.vms / app_settings.bytes_to_mb_divisor, 2),
             "percent": round(process.memory_percent(), 2),
         }
     except (OSError, psutil.Error) as e:
@@ -230,7 +230,7 @@ def get_system_info() -> dict[str, Any]:
     try:
         return {
             "cpu_percent": psutil.cpu_percent(
-                interval=settings.cpu_monitoring_interval
+                interval=app_settings.cpu_monitoring_interval
             ),
             "memory_percent": psutil.virtual_memory().percent,
             "disk_percent": psutil.disk_usage("/").percent,
@@ -298,7 +298,9 @@ class SimplePerformanceMonitor:
         return {
             "total_operations": len(metrics),
             "successful_operations": len(successes),
-            "success_rate": len(successes) / len(metrics) * settings.percent_multiplier,
+            "success_rate": len(successes)
+            / len(metrics)
+            * app_settings.percent_multiplier,
             "avg_duration_seconds": sum(durations) / len(durations),
             "min_duration_seconds": min(durations),
             "max_duration_seconds": max(durations),
