@@ -22,7 +22,6 @@ dependencies = [
     "python-dotenv==1.1.1",
     "loguru>=0.7.3",
     "tenacity>=9.1.2",
-    "diskcache==5.6.3",
     # Document processing
     "pymupdf==1.26.3",
     "python-docx==1.2.0",

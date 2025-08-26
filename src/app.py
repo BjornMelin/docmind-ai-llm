@@ -50,10 +50,6 @@ from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
 from src.config.app_settings import app_settings
 from src.prompts import PREDEFINED_PROMPTS
-
-# Removed deprecated imports - ADR-009 clean slate enforcement
-# from src.retrieval.integration import create_index_async  # DELETED
-# from src.utils.document import load_documents_llama  # DELETED
 from src.utils.core import detect_hardware, validate_startup_configuration
 
 # Constants now imported from centralized settings

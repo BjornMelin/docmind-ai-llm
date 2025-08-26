@@ -101,7 +101,8 @@ We will implement **LangGraph Supervisor-Based Orchestration** using the `langgr
 
 - **ADR-001** (Modern Agentic RAG): Defines the core 5-agent architecture patterns orchestrated by this framework
 - **ADR-004** (Local-First LLM Strategy): Provides Qwen3-4B-Instruct-2507-FP8 with 128K context for optimized agent decision-making
-- **ADR-010** (Performance Optimization Strategy): Provides cache coordination between the 5 agents
+- **ADR-010** (Performance Optimization Strategy): Provides FP8 KV cache optimization and parallel tool execution for agent coordination
+- **ADR-025** (Simple Caching Strategy): Provides shared document processing cache across the 5 agents
 - **ADR-012** (Evaluation Strategy): Evaluates the effectiveness of multi-agent coordination
 - **ADR-015** (Deployment Strategy): Deploys the 5-agent orchestration system
 - **ADR-016** (UI State Management): Manages state for multi-agent interactions

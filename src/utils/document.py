@@ -18,7 +18,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.cache.dual_cache import create_dual_cache_manager
+from src.cache import create_cache_manager
 from src.core.infrastructure.spacy_manager import get_spacy_manager
 from src.processing.resilient_processor import create_resilient_processor
 
@@ -153,31 +153,25 @@ def get_document_info(file_path: str | Path) -> dict[str, Any]:
     return info
 
 
-async def clear_document_cache() -> int:
+async def clear_document_cache() -> bool:
     """Clear document processing cache.
 
     Returns:
-        Number of cache entries cleared
+        True if cache was cleared successfully
     """
     logger.info("Clearing document processing cache")
 
-    cache_manager = create_dual_cache_manager()
+    cache_manager = create_cache_manager()
 
-    # Clear both cache layers
-    cleared_count = 0
+    # Simple cache has only one layer
+    success = await cache_manager.clear_cache()
 
-    from src.cache.dual_cache import CacheLayer
+    if success:
+        logger.info("Document cache cleared successfully")
+    else:
+        logger.warning("Failed to clear document cache")
 
-    if await cache_manager.clear_cache(CacheLayer.INGESTION):
-        cleared_count += 1
-        logger.info("Cleared ingestion cache layer")
-
-    if await cache_manager.clear_cache(CacheLayer.SEMANTIC):
-        cleared_count += 1
-        logger.info("Cleared semantic cache layer")
-
-    logger.info(f"Cleared {cleared_count} cache layers")
-    return cleared_count
+    return success
 
 
 async def get_cache_stats() -> dict[str, Any]:
@@ -186,18 +180,12 @@ async def get_cache_stats() -> dict[str, Any]:
     Returns:
         Cache statistics dictionary
     """
-    cache_manager = create_dual_cache_manager()
+    cache_manager = create_cache_manager()
     stats = await cache_manager.get_cache_stats()
 
-    # Convert Pydantic model to dict for compatibility
-    stats_dict = stats.model_dump()
+    logger.debug(f"Cache statistics: type={stats.get('cache_type', 'unknown')}")
 
-    logger.debug(
-        f"Cache statistics: hit_rate={stats_dict['hit_rate']:.2f}, "
-        f"size_mb={stats_dict['size_mb']:.2f}"
-    )
-
-    return stats_dict
+    return stats
 
 
 def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:

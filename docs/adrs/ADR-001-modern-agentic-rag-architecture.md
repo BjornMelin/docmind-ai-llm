@@ -89,7 +89,8 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 
 - **ADR-004** (Local-First LLM Strategy): Provides Qwen3-4B-Instruct-2507-FP8 with 128K context for agent decision-making
 - **ADR-003** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
-- **ADR-010** (Performance Optimization Strategy): Provides dual-cache architecture for efficient multi-agent coordination
+- **ADR-010** (Performance Optimization Strategy): Provides FP8 KV cache optimization and parallel tool execution for efficient LLM performance
+- **ADR-025** (Simple Caching Strategy): Provides document processing cache for multi-agent coordination
 - **ADR-011** (Agent Orchestration Framework): Details the supervisor library implementation with 5-agent architecture
 - **ADR-012** (Evaluation and Quality Assurance): Provides the quality metrics for response validation
 - **ADR-015** (Deployment Strategy): Defines Docker deployment for the complete 5-agent system
@@ -297,6 +298,7 @@ response = result["messages"][-1]["content"]
 - **Performance**: Lightweight decisions add minimal overhead (<200ms) with parallel tool execution reducing token usage by 50-87%
 - **Advanced Optimization**: DSPy provides automatic prompt optimization for 20-30% improvement in retrieval quality
 - **Multi-hop Reasoning**: Optional GraphRAG enables complex relationship queries and thematic analysis
+- **Simple Caching**: Document processing cache (ADR-025) provides 80-95% reduction in re-processing overhead
 
 ### Negative Consequences / Trade-offs
 
@@ -308,7 +310,7 @@ response = result["messages"][-1]["content"]
 ### Mitigation Strategies
 
 - **Fallback Mode**: Automatic fallback to basic RAG if agent decisions fail
-- **Caching**: Cache agent decisions for similar queries to reduce latency
+- **Document Cache**: Simple SQLite-based caching (ADR-025) for document processing efficiency
 - **Monitoring**: Log all agent decisions for debugging and optimization
 - **Graceful Degradation**: Continue with best-effort responses rather than failing
 

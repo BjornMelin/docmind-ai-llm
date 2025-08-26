@@ -167,7 +167,8 @@ vector_store = QdrantVectorStore(
 - **ADR-002** (Unified Embedding Strategy): Stores BGE-M3 unified embeddings efficiently
 - **ADR-003** (Adaptive Retrieval Pipeline): Benefits from optimized vector storage
 - **ADR-008** (Production Observability): Uses DuckDB for analytics storage
-- **ADR-010** (Performance Optimization Strategy): Implements caching layer
+- **ADR-010** (Performance Optimization Strategy): Provides FP8 KV cache optimization for LLM performance
+- **ADR-025** (Simple Caching Strategy): Implements document processing and query result caching
 - **ADR-019** (Optional GraphRAG): Reuses existing Qdrant infrastructure for PropertyGraphIndex storage
 
 ## Design
