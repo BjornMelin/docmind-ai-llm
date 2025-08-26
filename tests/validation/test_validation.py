@@ -3,10 +3,6 @@
 This module validates that all components can be imported and basic functionality
 works correctly. It serves as a health check for the entire test suite and
 system integration.
-
-Note: Many utils modules were removed during cleanup. Only testing existing modules.
-
-Following PyTestQA-Agent standards for comprehensive testing.
 """
 
 import importlib
@@ -68,7 +64,7 @@ class TestImportValidation:
         adr009_modules = [
             "src.processing.resilient_processor",
             "src.processing.chunking.unstructured_chunker",
-            "src.cache.dual_cache",
+            "src.cache.simple_cache",
             "src.processing.embeddings.bgem3_embedder",
         ]
 
@@ -82,8 +78,8 @@ class TestImportValidation:
                     assert hasattr(module, "ResilientDocumentProcessor")
                 elif module_name == "src.processing.chunking.unstructured_chunker":
                     assert hasattr(module, "UnstructuredChunker")
-                elif module_name == "src.cache.dual_cache":
-                    assert hasattr(module, "DualCacheManager")
+                elif module_name == "src.cache.simple_cache":
+                    assert hasattr(module, "SimpleCache")
                 elif module_name == "src.processing.embeddings.bgem3_embedder":
                     assert hasattr(module, "BGEM3Embedder")
 
@@ -139,12 +135,6 @@ class TestImportValidation:
         except (ImportError, AttributeError, TypeError, ValueError) as e:
             pytest.fail(f"validate_startup_configuration failed: {e}")
 
-    def test_spacy_model_function_exists(self):
-        """Test that spaCy model function exists - SKIPPED (legacy function)."""
-        pytest.skip(
-            "ensure_spacy_model function removed with ADR-009 document processing architecture"
-        )
-
     def test_key_file_structure(self):
         """Test that essential files exist in correct locations."""
         base_path = Path(__file__).parent.parent.parent
@@ -159,7 +149,7 @@ class TestImportValidation:
         adr009_files = [
             "src/processing/resilient_processor.py",
             "src/processing/chunking/unstructured_chunker.py",
-            "src/cache/dual_cache.py",
+            "src/cache/simple_cache.py",
             "src/processing/embeddings/bgem3_embedder.py",
         ]
 

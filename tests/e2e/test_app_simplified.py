@@ -138,7 +138,7 @@ def test_no_deleted_utils_references():
     try:
         # Test that ADR-009 components can be imported
         try:
-            import src.cache.dual_cache  # noqa: F401
+            import src.cache.simple_cache  # noqa: F401
             import src.processing.resilient_processor  # noqa: F401
             import src.utils.core  # noqa: F401
         except ImportError:

@@ -157,6 +157,7 @@ def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graph
     """
     
     # NOTE: Document chunking handled by ResilientDocumentProcessor (ADR-009)
+    # Document processing results cached via SimpleCache (src/cache/simple_cache.py)
     # semantic_splitter = SemanticSplitterNodeParser(  # Available for special cases only
     #     embed_model=Settings.embed_model,
     #     breakpoint_percentile_threshold=95,
@@ -534,8 +535,9 @@ class QualityMetrics:
 ## Dependencies
 
 - **Python**: `scikit-learn>=1.3.0` for clustering, `numpy>=1.24.0`
-- **LlamaIndex**: Core retrieval and embedding interfaces
+- **LlamaIndex**: Core retrieval and embedding interfaces, SimpleKVStore for document caching
 - **Models**: BGE-M3 embeddings, Qwen3-4B-Instruct-2507 with 262K context for document summarization
+- **Caching**: SimpleCache implementation (`src/cache/simple_cache.py`) using SQLite for document processing cache
 
 ## Monitoring Metrics
 
@@ -552,6 +554,8 @@ class QualityMetrics:
 ### Completed Components
 
 - **RouterQueryEngine**: `src/retrieval/query_engine/router_engine.py` - Adaptive strategy selection with LLMSingleSelector
+- **Document Processing Cache**: `src/cache/simple_cache.py` - SQLite-based document processing cache using LlamaIndex SimpleKVStore
+- **Cache Testing**: `tests/unit/test_simple_cache.py` - Comprehensive test suite for SimpleCache functionality
 - **Strategy Implementation**:
   - Dense semantic search (BGE-M3 dense vectors)
   - Hybrid search (BGE-M3 dense + sparse with RRF fusion)

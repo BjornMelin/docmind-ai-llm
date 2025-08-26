@@ -13,6 +13,9 @@ import pytest
 
 # These imports will fail until implementation is complete - this is expected
 try:
+    from src.cache.simple_cache import (
+        SimpleCache,
+    )
     from src.core.document_processing.async_document_processor import (
         AsyncDocumentProcessor,
     )
@@ -21,9 +24,6 @@ try:
     )
     from src.core.document_processing.direct_unstructured_processor import (
         DirectUnstructuredProcessor,
-    )
-    from src.core.document_processing.dual_cache_manager import (
-        DualCacheManager,
     )
     from src.core.document_processing.resilient_document_processor import (
         ResilientDocumentProcessor,
@@ -48,8 +48,8 @@ except ImportError:
 
         pass
 
-    class DualCacheManager:
-        """Placeholder DualCacheManager class for failing tests."""
+    class SimpleCache:
+        """Placeholder SimpleCache class for failing tests."""
 
         pass
 
@@ -183,9 +183,7 @@ class TestEndToEndProcessingPipeline:
                 )
             )
 
-            processor.cache_manager.get_cached_processing_result.return_value = (
-                None  # Cache miss
-            )
+            processor.cache_manager.get_document.return_value = None  # Cache miss
 
             # Process document through complete pipeline
             result = await processor.process_complete_pipeline(str(sample_pdf_document))
@@ -220,16 +218,12 @@ class TestEndToEndProcessingPipeline:
         - Data integrity maintained through cache operations
         """
         processor = ResilientDocumentProcessor(integration_settings)
-        cache_manager = DualCacheManager(integration_settings)
+        cache_manager = SimpleCache()
 
         with patch.object(processor, "cache_manager", cache_manager):
-            with patch.multiple(
-                cache_manager, ingestion_cache=Mock(), semantic_cache=Mock()
-            ):
-                # First processing - should populate caches
-                cache_manager.get_cached_processing_result.return_value = (
-                    None  # Cache miss
-                )
+            with patch.object(cache_manager, "cache", Mock()):
+                # First processing - should populate cache
+                cache_manager.get_document.return_value = None  # Cache miss
 
                 # Mock first processing result
                 first_result = Mock(
@@ -245,12 +239,10 @@ class TestEndToEndProcessingPipeline:
                     )
 
                     # Verify cache storage was called
-                    cache_manager.store_processing_result.assert_called_once()
+                    cache_manager.store_document.assert_called_once()
 
                     # Second processing - should hit cache
-                    cache_manager.get_cached_processing_result.return_value = (
-                        first_result
-                    )
+                    cache_manager.get_document.return_value = first_result
 
                     result2 = await processor.process_with_caching(
                         str(sample_pdf_document)
@@ -475,19 +467,15 @@ class TestCacheCoordinationMultiAgent:
         agent_1 = ResilientDocumentProcessor(integration_settings)
         agent_2 = ResilientDocumentProcessor(integration_settings)
 
-        shared_cache = DualCacheManager(integration_settings)
+        shared_cache = SimpleCache()
 
         with (
             patch.object(agent_1, "cache_manager", shared_cache),
             patch.object(agent_2, "cache_manager", shared_cache),
         ):
             # Agent 1 processes first document
-            with patch.multiple(
-                shared_cache, ingestion_cache=Mock(), semantic_cache=Mock()
-            ):
-                shared_cache.get_cached_processing_result.return_value = (
-                    None  # Cache miss
-                )
+            with patch.object(shared_cache, "cache", Mock()):
+                shared_cache.get_document.return_value = None  # Cache miss
 
                 mock_result = Mock(
                     elements=[Mock(text="Shared content")], processing_time=1.0
@@ -499,10 +487,10 @@ class TestCacheCoordinationMultiAgent:
                     await agent_1.process_with_caching(str(complex_document_set[0]))
 
                     # Verify cache was populated
-                    shared_cache.store_processing_result.assert_called()
+                    shared_cache.store_document.assert_called()
 
                     # Agent 2 processes same document - should hit cache
-                    shared_cache.get_cached_processing_result.return_value = mock_result
+                    shared_cache.get_document.return_value = mock_result
 
                     result_2 = await agent_2.process_with_caching(
                         str(complex_document_set[0])
@@ -512,9 +500,8 @@ class TestCacheCoordinationMultiAgent:
                     assert result_2 == mock_result
 
                     # Verify cache coordination
-                    coordination_stats = await shared_cache.get_coordination_stats()
-                    assert coordination_stats["active_agents"] >= 2
-                    assert coordination_stats["cache_sharing_enabled"] is True
+                    cache_stats = await shared_cache.get_cache_stats()
+                    assert cache_stats["cache_type"] == "simple_sqlite"
 
 
 class TestAsyncProcessingConcurrency:
@@ -632,6 +619,6 @@ class TestPerformanceTargetValidation:
 
             # Verify cache performance targets
             cache_stats = await processor.cache_manager.get_cache_stats()
-            if cache_stats.total_requests > 0:
-                assert 0.80 <= cache_stats.ingestion_hit_rate <= 0.95
-                assert 0.60 <= cache_stats.semantic_hit_rate <= 0.70
+            if cache_stats.get("total_requests", 0) > 0:
+                hit_rate = cache_stats.get("hit_rate", 0.0)
+                assert 0.80 <= hit_rate <= 0.95

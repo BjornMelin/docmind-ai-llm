@@ -109,7 +109,7 @@ class TestOptionalDependencyHandling:
         adr009_modules = [
             "src.processing.resilient_processor",
             "src.processing.chunking.unstructured_chunker",
-            "src.cache.dual_cache",
+            "src.cache.simple_cache",
             "src.processing.embeddings.bgem3_embedder",
         ]
 

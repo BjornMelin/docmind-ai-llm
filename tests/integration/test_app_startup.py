@@ -90,7 +90,7 @@ class TestAppStartup:
             ("src.agents.coordinator", "create_multi_agent_coordinator"),
             ("src.utils.core", "detect_hardware"),
             ("src.processing.resilient_processor", "ResilientDocumentProcessor"),
-            ("src.cache.dual_cache", "DualCacheManager"),
+            ("src.cache.simple_cache", "SimpleCache"),
         ]
 
         failed_components = []

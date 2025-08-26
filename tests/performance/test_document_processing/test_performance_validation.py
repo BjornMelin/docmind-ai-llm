@@ -15,14 +15,14 @@ import pytest
 
 # These imports will fail until implementation is complete - this is expected
 try:
+    from src.cache.simple_cache import (
+        SimpleCache,
+    )
     from src.core.document_processing.bgem3_embedding_manager import (
         BGEM3EmbeddingManager,
     )
     from src.core.document_processing.direct_unstructured_processor import (
         DirectUnstructuredProcessor,
-    )
-    from src.core.document_processing.dual_cache_manager import (
-        DualCacheManager,
     )
     from src.core.document_processing.resilient_document_processor import (
         ResilientDocumentProcessor,
@@ -38,7 +38,7 @@ except ImportError:
     class DirectUnstructuredProcessor:
         pass
 
-    class DualCacheManager:
+    class SimpleCache:
         pass
 
     class BGEM3EmbeddingManager:
@@ -195,14 +195,14 @@ class TestThroughputPagePerSecond:
 
 
 class TestCacheReduction80to95Percent:
-    """Performance tests for IngestionCache 80-95% processing reduction validation."""
+    """Performance tests for SimpleCache 80-95% processing reduction validation."""
 
     @pytest.mark.performance
     @pytest.mark.asyncio
     async def test_ingestion_cache_hit_rate_validation(
         self, performance_settings, benchmark_documents
     ):
-        """Test IngestionCache achieves 80-95% processing reduction.
+        """Test SimpleCache achieves 80-95% processing reduction.
 
         Should pass after implementation:
         - Achieves 80-95% cache hit rate for repeated documents
@@ -210,32 +210,26 @@ class TestCacheReduction80to95Percent:
         - Maintains cache consistency and reliability
         - Tracks cache performance metrics accurately
         """
-        cache_manager = DualCacheManager(performance_settings)
+        cache_manager = SimpleCache(performance_settings)
 
-        with patch.multiple(
-            cache_manager,
-            ingestion_cache=Mock(),
-            _calculate_document_hash=Mock(return_value="test_hash"),
-        ):
-            # Simulate cache performance over many requests
-            total_requests = 100
-            cache_hits = 87  # 87% hit rate (within 80-95% target)
+        # Simulate cache performance over many requests
+        total_requests = 100
+        cache_hits = 87  # 87% hit rate (within 80-95% target)
 
-            hit_times = []
-            miss_times = []
+        hit_times = []
+        miss_times = []
 
+        with patch.object(cache_manager, "get_document") as mock_get:
             for i in range(total_requests):
                 if i < cache_hits:
                     # Cache hit - should be very fast
-                    cache_manager.ingestion_cache.get.return_value = Mock(
+                    mock_get.return_value = Mock(
                         elements=[Mock(text="Cached content")],
                         processing_time=0.01,  # Very fast cache retrieval
                     )
 
                     start_time = time.time()
-                    result = await cache_manager.get_cached_processing_result(
-                        "test_doc.pdf"
-                    )
+                    result = await cache_manager.get_document("test_doc.pdf")
                     hit_time = time.time() - start_time
                     hit_times.append(hit_time)
 
@@ -243,12 +237,10 @@ class TestCacheReduction80to95Percent:
 
                 else:
                     # Cache miss - normal processing time
-                    cache_manager.ingestion_cache.get.return_value = None
+                    mock_get.return_value = None
 
                     start_time = time.time()
-                    result = await cache_manager.get_cached_processing_result(
-                        "test_doc.pdf"
-                    )
+                    result = await cache_manager.get_document("test_doc.pdf")
                     miss_time = time.time() - start_time
                     miss_times.append(miss_time)
 
@@ -279,7 +271,7 @@ class TestCacheReduction80to95Percent:
         - Validates sustained cache performance
         - Provides cache optimization insights
         """
-        DualCacheManager(performance_settings)
+        SimpleCache(performance_settings)
 
         # Simulate processing reduction measurement
         without_cache_times = [1.0, 0.9, 1.1, 0.95, 1.05]  # Baseline processing times
@@ -300,6 +292,9 @@ class TestCacheReduction80to95Percent:
 class TestSemanticCache60to70Percent:
     """Performance tests for GPTCache 60-70% semantic similarity hit rate validation."""
 
+    @pytest.mark.skip(
+        reason="Semantic caching removed in SimpleCache architecture (ADR-025)"
+    )
     @pytest.mark.performance
     @pytest.mark.asyncio
     async def test_semantic_cache_hit_rate_validation(self, performance_settings):
@@ -311,7 +306,7 @@ class TestSemanticCache60to70Percent:
         - Provides meaningful similarity-based caching
         - Balances hit rate with relevance quality
         """
-        cache_manager = DualCacheManager(performance_settings)
+        cache_manager = SimpleCache(performance_settings)
 
         with patch.multiple(cache_manager, semantic_cache=Mock(), qdrant_client=Mock()):
             # Simulate semantic cache performance
@@ -352,6 +347,9 @@ class TestSemanticCache60to70Percent:
                 f"Semantic hit rate {actual_hit_rate} outside 60-70% target"
             )
 
+    @pytest.mark.skip(
+        reason="Semantic caching removed in SimpleCache architecture (ADR-025)"
+    )
     @pytest.mark.performance
     @pytest.mark.asyncio
     async def test_semantic_similarity_threshold_performance(
@@ -365,7 +363,7 @@ class TestSemanticCache60to70Percent:
         - Optimizes threshold for target hit rate range
         - Maintains semantic relevance quality
         """
-        cache_manager = DualCacheManager(performance_settings)
+        cache_manager = SimpleCache(performance_settings)
 
         thresholds = [0.7, 0.8, 0.85, 0.9]
         test_results = {}

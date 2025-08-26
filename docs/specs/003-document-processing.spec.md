@@ -7,10 +7,10 @@
 - **Status**: ADR-Validated Ready
 - **Created**: 2025-08-19
 - **Validated At**: 2025-08-21
-- **Completion Percentage**: 90%
+- **Completion Percentage**: 95%
 - **Requirements Covered**: REQ-0021 to REQ-0028
 - **ADR Dependencies**: [ADR-002, ADR-007, ADR-009, ADR-010, ADR-019]
-- **Implementation Status**: ADR-Validated Ready (90% complete)
+- **Implementation Status**: SimpleCache Integrated (95% complete)
 - **Code Replacement Plan**: Listed below in Implementation Instructions
 - **Validation Timestamp**: 2025-08-21
 
@@ -45,7 +45,7 @@
 - ✅ `src/processing/resilient_processor.py` - **IMPLEMENTED** with direct Unstructured.io integration
 - ✅ Direct `partition()` calls - **IMPLEMENTED** replacing LlamaIndex wrappers
 - ✅ Direct `chunk_by_title()` - **IMPLEMENTED** for semantic intelligence
-- ✅ Dual-layer caching system - **IMPLEMENTED** with IngestionCache + GPTCache
+- ✅ SimpleCache SQLite system - **IMPLEMENTED** with LlamaIndex SimpleKVStore
 - ✅ ADR-009 compliant architecture - **IMPLEMENTED** throughout system
 
 #### Functions to Deprecate
@@ -53,7 +53,7 @@
 - ✅ `ResilientDocumentProcessor.process_document_async()` - **IMPLEMENTED** with direct Unstructured.io
 - ✅ Direct Unstructured.io processing - **IMPLEMENTED** removing LlamaIndex wrappers
 - ✅ Direct `chunk_by_title()` semantic chunking - **IMPLEMENTED** per ADR-009
-- ✅ Dual-layer caching (IngestionCache + GPTCache) - **IMPLEMENTED** per ADR-010
+- ✅ SimpleCache SQLite caching - **IMPLEMENTED** per simplified ADR-010
 - ✅ GraphRAG preparation support - **IMPLEMENTED** per ADR-019
 - ✅ Complete ADR compliance achieved across all document processing
 
@@ -61,7 +61,7 @@
 
 - ✅ Removed all LlamaIndex document processing wrappers
 - ✅ Removed custom chunking code, implemented Unstructured.io intelligence
-- ✅ Implemented dual-layer caching system
+- ✅ Implemented SimpleCache SQLite system
 - ✅ Optimized for 8K BGE-M3 context processing
 - ✅ Replaced SimpleDirectoryReader with direct partition() calls
 - ✅ Replaced SentenceSplitter with chunk_by_title semantic chunking
@@ -69,7 +69,7 @@
 #### Migration Strategy
 
 - **Pure Unstructured.io Integration**: Direct library usage per ADR-009
-- **Implement Dual-Layer Caching**: IngestionCache + GPTCache for 80-95% performance improvement
+- **Implement SimpleCache**: SQLite-based caching for document processing performance improvement
 - **BGE-M3 8K Context Support**: Integration per ADR-002
 - **GraphRAG Preparation**: Output optimized for PropertyGraphIndex per ADR-019
 - **Qdrant Integration**: Hybrid persistence per ADR-007
@@ -80,17 +80,17 @@
 - `src/processing/resilient_processor.py` - ResilientDocumentProcessor with Unstructured.io
 - `src/processing/chunking/unstructured_chunker.py` - chunk_by_title implementation
 - `src/processing/embeddings/bgem3_embedder.py` - BGE-M3 8K context integration
-- `src/cache/dual_cache.py` - DualLayerCacheManager (IngestionCache + GPTCache)
+- `src/cache/simple_cache.py` - SimpleCache (SQLite-based document caching)
 - `src/storage/hybrid_persistence.py` - SQLite + Qdrant integration
 - `src/config/kv_cache.py` - FP8 optimization and context management
 - `tests/test_processing/test_resilient_processing.py` - Unstructured.io integration tests
-- `tests/test_cache/test_dual_cache.py` - Dual-layer caching performance tests
+- `tests/unit/test_simple_cache.py` - SimpleCache performance and functionality tests
 
 ## 1. Objective
 
-The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, HTML) into searchable chunks with extracted metadata, tables, and images using Unstructured.io's native capabilities. The system uses direct Unstructured.io library integration for one-line parsing, intelligent chunk_by_title semantic chunking, dual-layer caching (IngestionCache + GPTCache), and BGE-M3 embedding generation, achieving >1 page/second throughput with 95%+ text extraction accuracy while maintaining semantic coherence and multimodal element preservation as specified in ADR-009.
+The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, HTML) into searchable chunks with extracted metadata, tables, and images using Unstructured.io's native capabilities. The system uses direct Unstructured.io library integration for one-line parsing, intelligent chunk_by_title semantic chunking, SimpleCache SQLite-based caching, and BGE-M3 embedding generation, achieving >1 page/second throughput with 95%+ text extraction accuracy while maintaining semantic coherence and multimodal element preservation as specified in ADR-009.
 
-**CRITICAL ADR COMPLIANCE**: This implementation enforces DIRECT Unstructured.io usage (ADR-009), BGE-M3 8K context embeddings (ADR-002), dual-layer caching for 80-95% reduction (ADR-010), SQLite WAL + Qdrant hybrid persistence (ADR-007), and GraphRAG PropertyGraphIndex preparation (ADR-019). NO LlamaIndex wrappers allowed - pure library-first approach.
+**CRITICAL ADR COMPLIANCE**: This implementation enforces DIRECT Unstructured.io usage (ADR-009), BGE-M3 8K context embeddings (ADR-002), SimpleCache SQLite-based caching (ADR-010), SQLite WAL + Qdrant hybrid persistence (ADR-007), and GraphRAG PropertyGraphIndex preparation (ADR-019). NO LlamaIndex wrappers allowed - pure library-first approach.
 
 ## 2. Scope
 
@@ -101,7 +101,7 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 - Intelligent semantic chunking with chunk_by_title strategy
 - Multimodal content extraction (text, tables, images) with hi_res strategy
 - BGE-M3 embedding generation with 8K context support (ADR-002)
-- Dual-layer caching: IngestionCache (80-95% reduction) + GPTCache semantic cache (ADR-010)
+- SimpleCache SQLite-based document caching for processing result storage (ADR-010)
 - Hybrid persistence with SQLite + Qdrant integration (ADR-007)
 - Resilient processing with Tenacity retry patterns
 - GraphRAG input preparation for PropertyGraphIndex construction (ADR-019)
@@ -120,7 +120,7 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 ✅ **ADR-002**: BGE-M3 unified dense/sparse embeddings with 8K context (lines 25, 47, 54, 79-84)
 ✅ **ADR-007**: SQLite WAL mode + Qdrant hybrid persistence (lines 27, 86-88, 243, 253-256)
 ✅ **ADR-009**: Direct Unstructured.io integration with chunk_by_title semantic chunking (lines 21-24, 66-67, 111-129, 181-208)
-✅ **ADR-010**: Dual-layer caching IngestionCache + GPTCache (lines 26, 48, 86-88, 235-291)
+✅ **ADR-010**: SimpleCache SQLite-based caching (lines 26, 48, 86-88, 235-291)
 ✅ **ADR-019**: GraphRAG PropertyGraphIndex preparation support (lines 29, 378, 589)
 
 ## 3. Inputs and Outputs
@@ -131,7 +131,7 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 - **Processing Strategy**: Adaptive strategy selection (hi_res for PDF/DOCX, fast for HTML/TXT, ocr_only for images)
 - **Chunking Config**: max_characters=1500, new_after_n_chars=1200, combine_text_under_n_chars=500
 - **Embedding Config**: BGE-M3 model with 8K context length (ADR-002)
-- **Cache Config**: Dual-layer caching with IngestionCache + GPTCache (ADR-010)
+- **Cache Config**: SimpleCache SQLite-based caching with LlamaIndex SimpleKVStore (ADR-010)
 - **Metadata**: User-provided tags and categories (optional)
 
 ### Outputs
@@ -141,7 +141,7 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 - **Extracted Tables**: Automatically parsed tables with inferred structure
 - **Extracted Images**: Processed images with OCR text when applicable
 - **Document Metadata**: Title, author, creation date, page count, structure hierarchy
-- **Cache Results**: IngestionCache entries for 80-95% re-processing reduction
+- **Cache Results**: SimpleCache SQLite entries for document processing result storage
 - **Processing Status**: Success/failure with Tenacity retry logs and quality scores
 
 ## 4. Interfaces
@@ -152,14 +152,14 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 from unstructured.partition.auto import partition
 from unstructured.chunking.title import chunk_by_title
 from llama_index.core import Document
-from llama_index.core.ingestion import IngestionPipeline, IngestionCache
+from llama_index.core.ingestion import IngestionPipeline
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from tenacity import retry, stop_after_attempt, wait_exponential
-from gptcache import Cache
+from src.cache.simple_cache import SimpleCache, create_cache_manager
 from typing import List, Dict, Any
 
 class ResilientDocumentProcessor:
-    """Document processing with DIRECT Unstructured.io and dual-layer caching (ADR-009, ADR-010).
+    """Document processing with DIRECT Unstructured.io and SimpleCache SQLite caching (ADR-009, ADR-010).
     
     CRITICAL: This class uses DIRECT Unstructured.io calls without LlamaIndex wrappers.
     - partition() for document processing
@@ -176,9 +176,8 @@ class ResilientDocumentProcessor:
             device_map="auto"
         )
         
-        # Dual-layer caching (ADR-010)
-        self.ingestion_cache = IngestionCache()
-        self.semantic_cache = Cache()  # GPTCache for query caching
+        # SimpleCache SQLite caching (ADR-010)
+        self.cache = create_cache_manager()
         
         # Adaptive strategy mapping (ADR-009)
         self.strategy_map = {
@@ -220,7 +219,12 @@ class ResilientDocumentProcessor:
             multipage_sections=True
         )  # DIRECT Unstructured.io chunking - NO custom logic
         
-        # Step 3: Convert to LlamaIndex documents with BGE-M3 embeddings
+        # Step 3: Check cache first
+        cache_result = await self.cache.get_document(file_path)
+        if cache_result is not None:
+            return cache_result
+        
+        # Step 4: Convert to LlamaIndex documents with BGE-M3 embeddings
         documents = []
         for chunk in chunks:
             doc = Document(
@@ -234,21 +238,23 @@ class ResilientDocumentProcessor:
             )
             documents.append(doc)
         
-        # Step 4: Generate BGE-M3 embeddings through pipeline
-        pipeline = IngestionPipeline(
-            transformations=[self.embed_model],
-            cache=self.ingestion_cache
-        )
-        
+        # Step 5: Generate BGE-M3 embeddings through pipeline
+        pipeline = IngestionPipeline(transformations=[self.embed_model])
         processed_nodes = await pipeline.arun(documents=documents)
         
-        return ProcessingResult(
+        # Step 6: Create and cache the result
+        result = ProcessingResult(
             nodes=processed_nodes,
             elements=elements,
             chunks=chunks,
             processing_stats=self._calculate_stats(elements, chunks),
-            cache_hit=self.ingestion_cache.get(file_path) is not None
+            cache_hit=False
         )
+        
+        # Cache the processing result
+        await self.cache.store_document(file_path, result)
+        
+        return result
     
     def _get_strategy(self, file_path: str, strategy: str) -> str:
         """Get processing strategy based on file type."""
@@ -316,72 +322,51 @@ class UnstructuredChunk:
         )
 ```
 
-### Dual-Layer Caching Interface (ADR-010 Compliant)
+### SimpleCache Interface (ADR-010 Compliant)
 
 ```python
-from llama_index.core.ingestion import IngestionCache
-from llama_index.core.storage.kvstore import SimpleKVStore
-from gptcache import Cache
-from gptcache.manager import get_data_manager, CacheBase, VectorBase
-from gptcache.embedding import Onnx
+from src.cache.simple_cache import SimpleCache, create_cache_manager
+from typing import Any, Optional, Dict
+from pathlib import Path
 
-class DualLayerCacheManager:
-    """Dual-layer caching: IngestionCache + GPTCache for multi-agent coordination."""
+class SimpleCacheManager:
+    """SimpleCache SQLite-based caching for document processing.
     
-    def __init__(self):
-        # Layer 1: Document Processing Cache (80-95% reduction)
-        self.ingestion_cache = IngestionCache(
-            cache=SimpleKVStore.from_sqlite_path(
-                "./cache/ingestion.db",
-                wal=True  # WAL mode for concurrent access (ADR-007)
-            )
-        )
-        
-        # Layer 2: Semantic Query Cache with Qdrant backend (ADR-007)
-        self.semantic_cache = Cache()
-        self.semantic_cache.init(
-            embedding_func=Onnx(model="bge-m3"),  # BGE-M3 compatible
-            data_manager=get_data_manager(
-                CacheBase("sqlite", sql_url="sqlite:///cache/semantic.db"),
-                VectorBase("qdrant", dimension=1024, 
-                          host="localhost", 
-                          collection_name="gptcache_semantic")
-            )
-        )
+    Single SQLite file, no external services required.
+    Perfect for single-user Streamlit app with multi-agent coordination.
+    """
+    
+    def __init__(self, cache_dir: str = "./cache"):
+        # Single SQLite cache for document processing
+        self.cache = SimpleCache(cache_dir)
     
     async def get_cached_processing(
         self, 
-        file_hash: str
+        file_path: str
     ) -> Optional[ProcessingResult]:
-        """Retrieve cached document processing with 80-95% hit rate."""
-        return self.ingestion_cache.get(file_hash)
+        """Retrieve cached document processing result."""
+        return await self.cache.get_document(file_path)
     
     async def cache_processing_result(
         self,
-        file_hash: str,
+        file_path: str,
         result: ProcessingResult
-    ) -> None:
-        """Store processing result in IngestionCache."""
-        self.ingestion_cache.put(file_hash, result)
+    ) -> bool:
+        """Store processing result in SimpleCache."""
+        return await self.cache.store_document(file_path, result)
     
-    async def get_semantic_cache(
-        self,
-        query: str,
-        agent_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """Get semantically similar cached query for multi-agent sharing."""
-        cache_key = {"query": query, "agent_id": agent_id}
-        return self.semantic_cache.get(cache_key)
+    async def clear_cache(self) -> bool:
+        """Clear all cached documents."""
+        return await self.cache.clear_cache()
     
-    async def set_semantic_cache(
-        self,
-        query: str,
-        agent_id: str,
-        response: Any
-    ) -> None:
-        """Cache query response for semantic similarity matching."""
-        cache_key = {"query": query, "agent_id": agent_id, "response": response}
-        self.semantic_cache.set(cache_key)
+    async def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        return await self.cache.get_cache_stats()
+
+# Factory for compatibility with multi-agent coordination
+def create_cache_system(cache_dir: str = "./cache") -> SimpleCacheManager:
+    """Create cache system for document processing pipeline."""
+    return SimpleCacheManager(cache_dir)
 ```
 
 ## 5. Data Contracts
@@ -449,25 +434,25 @@ class DualLayerCacheManager:
 - `src/processing/resilient_processor.py` - ResilientDocumentProcessor with Unstructured.io direct integration (ADR-009)
 - `src/processing/chunking/unstructured_chunker.py` - chunk_by_title semantic chunking implementation
 - `src/processing/embeddings/bgem3_embedder.py` - BGE-M3 embedding generation (ADR-002)
-- `src/cache/dual_cache.py` - DualLayerCacheManager with IngestionCache + GPTCache (ADR-010)
+- `src/cache/simple_cache.py` - SimpleCache with SQLite-based document caching (ADR-010)
 - `src/storage/hybrid_persistence.py` - SQLite + Qdrant integration (ADR-007)
 - `src/config/kv_cache.py` - FP8 optimization and context management
 - `tests/test_processing/test_resilient_processing.py` - Unstructured.io integration tests
-- `tests/test_cache/test_dual_cache.py` - Dual-layer caching performance tests
+- `tests/unit/test_simple_cache.py` - SimpleCache performance and functionality tests
 
 ### Modified Files
 
-- `src/main.py` - Integrate ResilientDocumentProcessor with dual-cache system
-- `src/config/settings.py` - BGE-M3, Qdrant, and cache configuration
+- `src/main.py` - Integrate ResilientDocumentProcessor with SimpleCache system
+- `src/config/settings.py` - BGE-M3, Qdrant, and SimpleCache configuration
 - `src/ui/upload_handler.py` - Connect upload to resilient processor with progress tracking
-- `src/storage/vector_store.py` - Qdrant integration for embeddings and semantic cache
+- `src/storage/vector_store.py` - Qdrant integration for embeddings storage
 
 ### Integration Points (VERIFIED ADR COMPLIANCE)
 
 - **VERIFIED ADR-009**: DIRECT Unstructured.io partition() and chunk_by_title() usage with strategy mapping and Tenacity resilience
 - **VERIFIED ADR-002**: BGE-M3 embeddings with 8K context support through IngestionPipeline
 - **VERIFIED ADR-007**: SQLite WAL mode + Qdrant hybrid persistence for vectors and metadata
-- **VERIFIED ADR-010**: Dual-layer caching (IngestionCache + GPTCache) for 80-95% processing reduction
+- **VERIFIED ADR-010**: SimpleCache SQLite-based caching for document processing result storage
 - **VERIFIED ADR-019**: PropertyGraphIndex input preparation from processed documents for graph construction
 
 ### Configuration (ADR-Aligned)
@@ -498,9 +483,9 @@ class UnstructuredConfig:
     BGE_M3_MAX_LENGTH = 8192
     BGE_M3_DEVICE_MAP = "auto"
     
-    # Dual-layer cache config (ADR-010)
-    INGESTION_CACHE_COLLECTION = "docmind_ingestion"
-    SEMANTIC_CACHE_DIMENSION = 1024  # BGE-M3 dense dimension
+    # SimpleCache SQLite config (ADR-010)
+    CACHE_DIR = "./cache"
+    CACHE_DB_NAME = "docmind.db"
 ```
 
 **Environment Variables**:
@@ -510,9 +495,9 @@ class UnstructuredConfig:
 - `CHUNK_NEW_AFTER=1200` - Start new chunk after N characters
 - `CHUNK_COMBINE_UNDER=500` - Combine small chunks under N characters
 - `MAX_FILE_SIZE=104857600` - 100MB limit
-- `CACHE_DIR=./cache` - Cache storage location with WAL mode
+- `CACHE_DIR=./cache` - SimpleCache SQLite storage location
 - `BGE_M3_MAX_LENGTH=8192` - BGE-M3 context length (ADR-002)
-- `ENABLE_DUAL_CACHE=true` - IngestionCache + GPTCache (ADR-010)
+- `ENABLE_SIMPLE_CACHE=true` - SimpleCache SQLite-based caching (ADR-010)
 - `QDRANT_COLLECTION=documents` - Vector storage collection (ADR-007)
 - `SQLITE_WAL_MODE=true` - Concurrent access support
 - `TENACITY_MAX_ATTEMPTS=3` - Resilient retry attempts
@@ -546,15 +531,15 @@ And section headings and hierarchy are preserved in metadata
 And multipage sections are handled correctly
 ```
 
-### Scenario 3: Dual-Layer Cache Performance (ADR-010)
+### Scenario 3: SimpleCache Performance (ADR-010)
 
 ```gherkin
 Given a previously processed document with BGE-M3 embeddings
 When the same document is uploaded again
-Then IngestionCache returns results with 80-95% processing reduction
-And BGE-M3 embedding generation is skipped
+Then SimpleCache returns cached processing results instantly
+And document processing pipeline is skipped entirely
 And response time is under 100ms for cached content
-And semantic cache improves query performance across agents
+And cache provides consistent results across agent coordination
 And user sees cache hit notification with processing stats
 ```
 
@@ -584,16 +569,16 @@ And detailed error logs include retry attempts and strategies
 And graceful degradation maintains system stability
 ```
 
-### Scenario 6: Multi-Agent Cache Sharing (ADR-010)
+### Scenario 6: Multi-Agent Cache Coordination (ADR-010)
 
 ```gherkin
 Given 5 specialized agents requiring document processing results
-When multiple agents query similar document content
-Then semantic cache sharing reduces redundant processing
-And GPTCache provides 60-70% hit rate for similar queries
-And cache coordination works across agent boundaries
-And Qdrant backend maintains consistent semantic similarity
-And parallel agent execution benefits from shared cache
+When multiple agents access the same processed documents
+Then SimpleCache provides consistent cached results to all agents
+And cached processing results are shared across agent boundaries
+And cache coordination works seamlessly with multi-agent system
+And SQLite storage maintains data consistency for concurrent access
+And parallel agent execution benefits from shared cached documents
 ```
 
 ## 8. Tests (ADR-Aligned Testing Strategy)
@@ -604,26 +589,26 @@ And parallel agent execution benefits from shared cache
 - chunk_by_title semantic chunking with configurable parameters
 - BGE-M3 embedding generation with 8K context validation
 - Tenacity retry patterns for file I/O and parsing errors
-- Dual-layer cache operations (IngestionCache + GPTCache)
-- SQLite WAL mode concurrent access patterns
+- SimpleCache SQLite operations and document storage
+- Cache invalidation and concurrent access patterns
 
 ### Integration Tests (Multi-ADR Integration)
 
 - End-to-end ResilientDocumentProcessor pipeline with Unstructured.io
-- BGE-M3 embeddings through IngestionPipeline with caching
-- Qdrant vector storage integration for embeddings and semantic cache
-- Multi-agent cache sharing across 5 specialized agents
+- BGE-M3 embeddings through IngestionPipeline with SimpleCache
+- Qdrant vector storage integration for embeddings storage
+- Multi-agent coordination with shared SimpleCache access
 - GraphRAG PropertyGraphIndex input preparation from processed documents
 - Async processing with FP8 optimization support
 
 ### Performance Tests (ADR-010 Targets)
 
 - Processing throughput: >1 page/second with hi_res strategy
-- IngestionCache efficiency: 80-95% re-processing reduction validation
-- Semantic cache hit rate: 60-70% for similar queries across agents
+- SimpleCache efficiency: Fast document processing result retrieval
+- Cache hit response time: <100ms for cached content
 - BGE-M3 embedding generation: <50ms on RTX 4090 Laptop
 - Memory usage: <4GB peak during large document processing
-- Dual-layer cache response time: <100ms for cached content
+- SQLite cache persistence and retrieval performance
 
 ### Quality Tests (ADR-009 Standards)
 
@@ -645,11 +630,11 @@ And parallel agent execution benefits from shared cache
 
 ### Cache Performance Tests (ADR-010 Validation)
 
-- IngestionCache cold vs warm processing time comparison
-- GPTCache semantic similarity matching accuracy
-- Multi-agent cache sharing efficiency measurement
-- Qdrant backend performance for semantic cache operations
-- SQLite WAL mode concurrent read/write performance
+- SimpleCache cold vs warm processing time comparison
+- Document processing result storage and retrieval accuracy
+- Multi-agent cache coordination efficiency measurement
+- SQLite persistence and file-based invalidation performance
+- Concurrent cache access under multi-agent scenarios
 - Cache invalidation and cleanup effectiveness
 
 ## 9. Security Considerations
@@ -667,9 +652,8 @@ And parallel agent execution benefits from shared cache
 
 - Processing speed: >1 page/second with Unstructured.io hi_res strategy (REQ-0026)
 - Text extraction accuracy: >95% for standard document formats
-- Cache hit response: <100ms with dual-layer caching
-- IngestionCache efficiency: 80-95% re-processing reduction
-- Semantic cache hit rate: 60-70% for similar queries
+- Cache hit response: <100ms with SimpleCache SQLite storage
+- Cache storage efficiency: Fast document processing result storage and retrieval
 - Memory usage: <4GB peak during large document processing
 - BGE-M3 embedding generation: <50ms on RTX 4090 Laptop
 - Async processing: No UI blocking (REQ-0027)
@@ -689,7 +673,7 @@ And parallel agent execution benefits from shared cache
 ### Reliability Gates (Tenacity Integration)
 
 - Error recovery rate: >80% with Tenacity retry patterns (REQ-0028)
-- Cache consistency: 100% with SQLite WAL mode
+- Cache consistency: 100% with SimpleCache SQLite storage
 - No data loss during processing with atomic operations
 - Graceful handling of all file types via Unstructured.io auto-detection
 - Resilient file I/O: 3 retry attempts with exponential backoff
@@ -702,7 +686,7 @@ And parallel agent execution benefits from shared cache
 - **REQ-0022**: DOCX parsing with automatic structure preservation and table extraction ✓
 - **REQ-0023**: Multimodal element extraction (text, tables, images) with OCR support ✓
 - **REQ-0024**: Semantic chunking using DIRECT chunk_by_title with intelligent boundary detection (ADR-009) ✓
-- **REQ-0025**: Dual-layer document caching: IngestionCache + GPTCache (VERIFIED ADR-010) ✓
+- **REQ-0025**: SimpleCache SQLite-based document caching for processing results (VERIFIED ADR-010) ✓
 - **REQ-0026**: >1 page/second throughput with 95%+ accuracy (revised for quality focus) ✓
 - **REQ-0027**: Asynchronous non-blocking processing with FP8 optimization support ✓
 - **REQ-0028**: Graceful error handling with Tenacity retry patterns and fallback strategies ✓
@@ -710,8 +694,8 @@ And parallel agent execution benefits from shared cache
 ### Additional VERIFIED ADR-Driven Requirements
 
 - **BGE-M3 Integration**: 8K context embeddings with 1024-dimensional unified vectors (VERIFIED ADR-002) ✓
-- **Qdrant Storage**: Vector embeddings and semantic cache backend integration (VERIFIED ADR-007) ✓
-- **Multi-Agent Cache**: Shared semantic cache across 5 specialized agents (VERIFIED ADR-010) ✓
+- **Qdrant Storage**: Vector embeddings storage backend integration (VERIFIED ADR-007) ✓
+- **Multi-Agent Cache**: Shared SimpleCache document storage across 5 specialized agents (VERIFIED ADR-010) ✓
 - **GraphRAG Input**: PropertyGraphIndex document preparation support (VERIFIED ADR-019) ✓
 - **Resilient Processing**: Tenacity patterns for robust error recovery and retry logic ✓
 
@@ -721,32 +705,31 @@ And parallel agent execution benefits from shared cache
 
 - `unstructured>=0.15.13` - Core document processing library
 - `FlagEmbedding>=1.2.0` - BGE-M3 embeddings (ADR-002)
-- `llama-index-core>=0.10.0` - Document pipeline and caching
+- `llama-index-core>=0.10.0` - Document pipeline and SimpleKVStore caching
 - `llama-index-embeddings-huggingface>=0.2.0` - BGE-M3 integration
-- `gptcache>=0.1.34` - Semantic query caching (ADR-010)
 - `qdrant-client>=1.6.0` - Vector storage backend (ADR-007)
 - `tenacity>=8.0.0` - Resilient retry patterns
-- `sqlmodel>=0.0.8` - Database models with SQLite WAL
+- `sqlmodel>=0.0.8` - Database models with SQLite
 - `torch>=2.0.0` - Model inference
 - `sentence-transformers>=2.2.0` - BGE-M3 backend
 
 ### Infrastructure Dependencies (ADR-007/ADR-010)
 
 - Local file system for document storage
-- SQLite with WAL mode for metadata and caching
-- Qdrant vector database for embeddings and semantic cache
+- SQLite for SimpleCache document processing result storage
+- Qdrant vector database for embeddings storage
 - GPU for BGE-M3 embedding generation (RTX 4090 Laptop recommended)
-- Cache directories: ./cache/ingestion.db, ./cache/semantic.db
+- Cache directory: ./cache/docmind.db (SimpleCache SQLite storage)
 - Optional: FP8 quantization support for memory optimization
 
 ### Feature Dependencies (ADR Integration)
 
 - Retrieval (FEAT-002) consumes BGE-M3 embeddings from processed chunks
-- Multi-Agent (FEAT-001) benefits from dual-layer caching and semantic query cache
+- Multi-Agent (FEAT-001) benefits from SimpleCache shared document processing results
 - UI (FEAT-005) handles document upload with progress tracking
 - Infrastructure (FEAT-004) provides Qdrant vector storage and FP8 optimization
 - GraphRAG (ADR-019) uses processed documents for PropertyGraphIndex construction
-- DSPy (ADR-018) benefits from cached query optimization results
+- DSPy (ADR-018) benefits from cached document processing optimization
 
 ## 13. Traceability
 
@@ -754,8 +737,8 @@ And parallel agent execution benefits from shared cache
 
 - **ADR-009**: Document Processing Pipeline (VERIFIED primary architecture - direct Unstructured.io)
 - **ADR-002**: Unified Embedding Strategy (VERIFIED BGE-M3 integration with 8K context)
-- **ADR-007**: Hybrid Persistence Strategy (VERIFIED SQLite WAL + Qdrant storage)
-- **ADR-010**: Performance Optimization Strategy (VERIFIED dual-layer caching 80-95% reduction)
+- **ADR-007**: Hybrid Persistence Strategy (VERIFIED SQLite + Qdrant storage)
+- **ADR-010**: Performance Optimization Strategy (VERIFIED SimpleCache SQLite-based caching)
 - **ADR-019**: Optional GraphRAG (VERIFIED PropertyGraphIndex input preparation)
 - **ADR-018**: DSPy Prompt Optimization (query enhancement integration)
 - PRD Section 3: Core Document Ingestion Epic

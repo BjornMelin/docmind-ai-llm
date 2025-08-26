@@ -48,15 +48,12 @@ class DocMindSettings(BaseSettings):
     # Document Processing
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     enable_document_caching: bool = Field(default=True)
-    parse_strategy: str = Field(default="hi_res")
 
     # Document Processing Pipeline (ADR-009 compliant)
     chunk_size: int = Field(default=1500, ge=100, le=10000)
-    chunk_overlap: int = Field(default=200, ge=50, le=2000)
     new_after_n_chars: int = Field(default=1200, ge=100, le=8000)
     combine_text_under_n_chars: int = Field(default=500, ge=50, le=2000)
     multipage_sections: bool = Field(default=True)
-    enable_semantic_boundary_detection: bool = Field(default=True)
 
     # Vector Database Configuration
     vector_store_type: str = Field(default="qdrant")
@@ -232,19 +229,14 @@ class DocMindSettings(BaseSettings):
         """Get document processing pipeline configuration."""
         return {
             "chunk_size": self.chunk_size,
-            "chunk_overlap": self.chunk_overlap,
             "new_after_n_chars": self.new_after_n_chars,
             "combine_text_under_n_chars": self.combine_text_under_n_chars,
             "multipage_sections": self.multipage_sections,
-            "enable_semantic_boundary_detection": (
-                self.enable_semantic_boundary_detection
-            ),
             "max_document_size_mb": self.max_document_size_mb,
-            "parse_strategy": self.parse_strategy,
         }
 
     def get_cache_config(self) -> dict[str, any]:
-        """Get dual-layer cache configuration."""
+        """Get simple cache configuration."""
         return {
             "enable_document_caching": self.enable_document_caching,
             "cache_ttl_seconds": self.cache_ttl_seconds,

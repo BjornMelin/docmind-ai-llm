@@ -13,12 +13,9 @@ __author__ = "Bjorn Melin"
 # Make key components available at package level
 from .config.app_settings import app_settings
 
-# Note: ADR-009 clean slate - removed deprecated imports:
-# - .retrieval.integration (deleted - used SentenceSplitter)
-# - .utils.document (deleted - used UnstructuredReader wrapper)
-# New ADR-009 compliant processing available via:
+# Note: ADR-009 compliant processing available via:
 # from src.processing import ResilientDocumentProcessor
-# from src.cache import DualCacheManager
+# from src.cache import create_cache_manager
 
 __all__ = [
     "app_settings",

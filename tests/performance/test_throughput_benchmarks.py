@@ -668,63 +668,8 @@ class TestDocumentProcessingThroughputBenchmarks:
 
     def test_document_ingestion_throughput(self, throughput_tracker):
         """Test document ingestion and processing throughput - SKIPPED (legacy functions)."""
-        pytest.skip("Legacy document processing functions removed with ADR-009 architecture")
-
-            # Test different batch sizes for document processing
-            batch_sizes = [SMALL_BATCH_SIZE, MEDIUM_BATCH_SIZE, LARGE_BATCH_SIZE]
-            documents_per_batch = 10
-
-            for batch_size in batch_sizes:
-                total_documents = batch_size * documents_per_batch
-                file_paths = [f"test_doc_{i}.pdf" for i in range(total_documents)]
-
-                start_time = time.perf_counter()
-
-                # Process documents in batches
-                from src.config.app_settings import app_settings
-
-                settings = app_settings
-
-                processed_documents = []
-                for i in range(0, len(file_paths), batch_size):
-                    batch_paths = file_paths[i : i + batch_size]
-
-                    # Legacy function removed - would use ADR-009 ResilientDocumentProcessor
-                    mock_docs = [Document(text=f"Content from {path}") for path in batch_paths]
-                    processed_documents.extend(mock_docs)
-
-                total_time = time.perf_counter() - start_time
-                docs_per_second = len(processed_documents) / total_time
-
-                # Record batch processing results
-                throughput_tracker.record_batch_test(
-                    batch_size, len(processed_documents), total_time, docs_per_second
-                )
-
-                throughput_tracker.record_throughput_test(
-                    f"document_processing_batch_{batch_size}",
-                    len(processed_documents),
-                    total_time,
-                    concurrent_operations=1,
-                )
-
-                print(f"Batch size {batch_size}: {docs_per_second:.1f} docs/sec")
-
-                # Verify all documents were processed
-                assert len(processed_documents) == total_documents
-
-        # Check that larger batches are at least as efficient
-        small_batch_result = throughput_tracker.batch_tests[SMALL_BATCH_SIZE]
-        large_batch_result = throughput_tracker.batch_tests[LARGE_BATCH_SIZE]
-
-        efficiency_ratio = (
-            large_batch_result["items_per_second"]
-            / small_batch_result["items_per_second"]
-        )
-
-        assert efficiency_ratio >= 0.8, (
-            f"Large batch processing less efficient: {efficiency_ratio:.2f} vs "
-            f"small batch"
+        pytest.skip(
+            "Legacy document processing functions removed with ADR-009 architecture"
         )
 
     def test_chunk_processing_throughput(self, throughput_tracker):

@@ -453,16 +453,3 @@ class SemanticChunker:
         )
 
         return optimized_parameters
-
-
-# Factory function for easy instantiation
-def create_semantic_chunker(settings: Any | None = None) -> SemanticChunker:
-    """Factory function to create SemanticChunker instance.
-
-    Args:
-        settings: Optional DocMind settings. Uses app_settings if None.
-
-    Returns:
-        Configured SemanticChunker instance
-    """
-    return SemanticChunker(settings)
