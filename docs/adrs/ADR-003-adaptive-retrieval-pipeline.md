@@ -135,9 +135,9 @@ from llama_index.core.retrievers import (
     RecursiveRetriever
 )
 from llama_index.core.node_parser import (
-    SentenceSplitter,
     SemanticSplitterNodeParser
 )
+# NOTE: Document processing uses direct Unstructured.io chunk_by_title() per ADR-009
 from llama_index.core.vector_stores import MetadataFilters
 from llama_index.core import QueryBundle, Settings
 
@@ -145,14 +145,23 @@ from llama_index.core import QueryBundle, Settings
 # LlamaIndex provides RecursiveRetriever for hierarchical retrieval
 
 def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graphrag=False):
-    """Create router-based adaptive retriever using LlamaIndex built-ins with DSPy and GraphRAG integration."""
+    """Create router-based adaptive retriever using LlamaIndex built-ins with DSPy and GraphRAG integration.
     
-    # Use built-in semantic chunking instead of custom
-    semantic_splitter = SemanticSplitterNodeParser(
-        embed_model=Settings.embed_model,
-        breakpoint_percentile_threshold=95,
-        buffer_size=1
-    )
+    IMPORTANT: This retrieval component works with document chunks that have been processed
+    by ResilientDocumentProcessor using direct Unstructured.io integration (ADR-009).
+    Document processing and chunking is handled upstream by:
+    - Direct partition() calls for document processing
+    - Direct chunk_by_title() for semantic chunking
+    
+    This function focuses on retrieval strategy routing and query optimization.
+    """
+    
+    # NOTE: Document chunking handled by ResilientDocumentProcessor (ADR-009)
+    # semantic_splitter = SemanticSplitterNodeParser(  # Available for special cases only
+    #     embed_model=Settings.embed_model,
+    #     breakpoint_percentile_threshold=95,
+    #     buffer_size=1
+    # )
     
     # Initialize DSPy optimization if enabled (ADR-018)
     if enable_dspy:

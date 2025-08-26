@@ -14,7 +14,7 @@ from loguru import logger
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import AgentResponse
 from src.config.app_settings import DocMindSettings, app_settings
-from src.core.document_processor import DocumentProcessor
+from src.processing.resilient_processor import ResilientDocumentProcessor
 
 # Load environment variables
 load_dotenv()
@@ -51,7 +51,7 @@ class DocMindApplication:
     def _initialize_components(self) -> None:
         """Initialize application components."""
         # Document processor for ingestion
-        self.document_processor = DocumentProcessor(settings=self.settings)
+        self.document_processor = ResilientDocumentProcessor(settings=self.settings)
 
         # Initialize retrieval components (handled through agents)
         # Retrieval is managed through the multi-agent coordinator
@@ -213,9 +213,11 @@ class DocMindApplication:
             logger.info("Ingesting document: %s", file_path)
 
             if process_async:
-                result = await self.document_processor.aprocess_document(file_path)
+                result = await self.document_processor.process_document_async(file_path)
             else:
-                result = self.document_processor.process_document(file_path)
+                result = asyncio.run(
+                    self.document_processor.process_document_async(file_path)
+                )
 
             logger.info("Document ingested successfully: %s", file_path)
             return result

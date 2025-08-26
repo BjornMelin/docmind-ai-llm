@@ -82,27 +82,12 @@ def test_coordinator_integration(mock_create_coordinator):
     mock_create_coordinator.assert_called_once()
 
 
-@patch("src.utils.document.load_documents_llama")
-@patch("src.retrieval.integration.create_index_async")
-def test_document_pipeline(mock_create_index, mock_load_docs):
-    """Test document loading and indexing pipeline."""
-    from src.retrieval.integration import create_index_async
-    from src.utils.document import load_documents_llama
-
-    # Setup mocks
-    mock_docs = [MagicMock()]
-    mock_load_docs.return_value = mock_docs
-    mock_index = MagicMock()
-    mock_create_index.return_value = mock_index
-
-    # Test document loading
-    files = [MagicMock()]
-    docs = load_documents_llama(files, False, False)
-    assert docs == mock_docs
-
-    # Test index creation (async function returns coroutine when mocked)
-    create_index_async(docs, True)
-    mock_create_index.assert_called_once_with(docs, True)
+@patch("src.processing.resilient_processor.ResilientDocumentProcessor")
+def test_document_pipeline(mock_processor_class):
+    """Test document processing pipeline with ADR-009 components."""
+    # Skip this test as it was testing deleted legacy functionality
+    # New ADR-009 document processing is tested in dedicated test suites
+    pytest.skip("Legacy document pipeline test - replaced by ADR-009 implementation")
 
 
 def test_models_core_import():
@@ -149,18 +134,32 @@ def test_multi_agent_architecture_compatibility():
 
 
 def test_no_deleted_utils_references():
-    """Ensure no references to deleted root utils directory."""
+    """Ensure ADR-009 components are available and legacy modules are deleted."""
     try:
-        # This should succeed - utils are now in src/utils
-        # Test that the import paths exist by importing modules
+        # Test that ADR-009 components can be imported
+        try:
+            import src.cache.dual_cache  # noqa: F401
+            import src.processing.resilient_processor  # noqa: F401
+            import src.utils.core  # noqa: F401
+        except ImportError:
+            pytest.fail("Should be able to import ADR-009 components")
+
+        # Verify deleted legacy modules cannot be imported
         try:
             import src.retrieval.integration  # noqa: F401
-            import src.utils.core  # noqa: F401
-            import src.utils.document  # noqa: F401
-        except ImportError:
-            pytest.fail("Should be able to import from src.utils")
 
-        # These should not exist
+            pytest.fail("Legacy src.retrieval.integration should be deleted")
+        except ImportError:
+            pass  # Expected - module was deleted for ADR-009 compliance
+
+        try:
+            import src.utils.document  # noqa: F401
+
+            pytest.fail("Legacy src.utils.document should be deleted")
+        except ImportError:
+            pass  # Expected - module was deleted for ADR-009 compliance
+
+        # Root utils should not exist
         try:
             import utils  # noqa: F401
 

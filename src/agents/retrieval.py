@@ -489,20 +489,6 @@ class RetrievalAgent:
         logger.info("Retrieval performance stats reset")
 
 
-# Factory function for backward compatibility
-def create_retrieval_agent(llm: Any, tools_data: dict[str, Any]) -> RetrievalAgent:
-    """Create retrieval agent instance.
-
-    Args:
-        llm: Language model for retrieval decisions
-        tools_data: Dictionary containing indexes and retrieval tools
-
-    Returns:
-        Configured RetrievalAgent instance
-    """
-    return RetrievalAgent(llm, tools_data)
-
-
 # Strategy optimization utilities
 def optimize_query_for_strategy(query: str, strategy: str) -> str:
     """Optimize query based on retrieval strategy.

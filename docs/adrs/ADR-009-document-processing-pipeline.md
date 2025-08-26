@@ -96,7 +96,6 @@ from unstructured.partition.auto import partition
 from unstructured.chunking.title import chunk_by_title
 from llama_index.core import Document
 from llama_index.core.ingestion import IngestionPipeline, IngestionCache
-from llama_index.readers.unstructured import UnstructuredReader
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from typing import List
 import json
@@ -111,13 +110,10 @@ class ResilientDocumentProcessor:
     """
     
     def __init__(self):
-        # Native UnstructuredReader (from ADR-004)
-        self.reader = UnstructuredReader()
-        
         # Native IngestionCache for 80-95% re-processing reduction
         self.cache = IngestionCache()
         
-        # Adaptive strategy based on document type (from ADR-004)
+        # Adaptive strategy based on document type (from ADR-009)
         self.strategy_map = {
             '.pdf': 'hi_res',      # Full multimodal extraction
             '.docx': 'hi_res',     # Tables and images
@@ -157,19 +153,22 @@ class ResilientDocumentProcessor:
         )
         return elements
     
-    def process(self, file_path: str) -> List[Document]:
-        """Process any document format with resilience."""
+    async def process_document_async(self, file_path: str) -> List[Document]:
+        """Process any document format with resilience using direct Unstructured.io."""
         
         # Step 1: Validate file access with retry
         self._read_file(file_path)
         
-        # Step 2: Extract with retry protection
+        # Step 2: DIRECT Unstructured.io extraction with retry protection
         elements = self._extract_with_unstructured(file_path)
         
-        # Step 3: Chunk intelligently (no retry needed - pure computation)
+        # Step 3: DIRECT semantic chunking with chunk_by_title (ADR-009 compliant)
         chunks = chunk_by_title(
             elements,
-            max_characters=1500
+            max_characters=1500,
+            new_after_n_chars=1200,
+            combine_text_under_n_chars=500,
+            multipage_sections=True
         )
         
         # Step 4: Convert to LlamaIndex documents (no retry needed)
@@ -188,19 +187,20 @@ class ResilientDocumentProcessor:
         
         return documents
 
-# Usage:
+# Usage (ADR-009 compliant):
 processor = ResilientDocumentProcessor()
-docs = processor.process("any_file.pdf")  # Works with ANY format, with resilience!
+docs = await processor.process_document_async("any_file.pdf")  # Direct Unstructured.io with resilience!
 ```
 
-## Why This is 95% Better
+## Why Direct Unstructured.io is Superior (ADR-009 Compliance)
 
-- **200 lines → 10 lines** of code
-- **All formats** handled automatically
-- **Tables extracted** without custom code
-- **Images extracted** without custom code  
-- **Metadata preserved** automatically
-- **Production tested** by thousands of users
+- **DIRECT library integration** - no LlamaIndex wrappers
+- **One-line processing** with `partition(filename="document.pdf")`
+- **All formats** handled automatically with strategy selection
+- **Tables extracted** with `hi_res` strategy and structure inference
+- **Images extracted** with OCR via `extract_images_in_pdf=True`
+- **Intelligent chunking** with `chunk_by_title` semantic awareness
+- **Production tested** library with no custom parsing code
 
 ## Design
 

@@ -97,11 +97,10 @@ async def test_managed_gpu_operation_cleanup_on_exception():
 
 
 def test_load_documents_llama_basic():
-    """Test that load_documents_llama function exists and is importable."""
-    from src.utils.document import load_documents_llama
-
-    # Just verify the function exists - proper testing would require mock setup
-    assert callable(load_documents_llama)
+    """Test that load_documents_llama function exists and is importable - SKIPPED (legacy function)."""
+    pytest.skip(
+        "Legacy load_documents_llama function removed with ADR-009 document processing architecture"
+    )
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")

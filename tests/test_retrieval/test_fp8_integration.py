@@ -22,6 +22,7 @@ from src.config.vllm_config import (
 try:
     from src.retrieval.integration import integrate_vllm_with_llamaindex
 except ImportError:
+    # Legacy integration function removed with ADR-009 architecture
     integrate_vllm_with_llamaindex = MagicMock
 
 try:

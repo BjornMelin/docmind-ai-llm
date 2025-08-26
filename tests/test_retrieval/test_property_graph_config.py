@@ -18,11 +18,8 @@ from src.retrieval.graph.property_graph_config import (
     create_property_graph_index_async as create_property_graph_index,
 )
 
-# Mock create_hybrid_retriever if it doesn't exist
-try:
-    from src.retrieval.integration import create_hybrid_retriever
-except ImportError:
-    create_hybrid_retriever = MagicMock
+# Mock create_hybrid_retriever - legacy function removed with ADR-009
+create_hybrid_retriever = MagicMock
 
 
 @pytest.fixture

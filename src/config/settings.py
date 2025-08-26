@@ -1,8 +1,7 @@
-"""Professional configuration compatibility layer for DocMind AI.
+"""Professional configuration interface for DocMind AI.
 
 This module provides a clean, minimal interface to the unified configuration
-architecture while maintaining backward compatibility during the migration
-to the new settings structure.
+architecture with convenient access patterns.
 
 Modern Configuration Architecture:
 - DocMindSettings: App-specific configuration (src.config.app_settings)
@@ -14,7 +13,7 @@ Usage:
     - from src.config.app_settings import app_settings
     - from src.models.schemas import AnalysisOutput
 
-    For existing code, this module provides compatibility:
+    For convenience, this module also provides:
     - from src.config.settings import settings, AnalysisOutput
 """
 
@@ -37,8 +36,8 @@ try:
 except Exception as e:
     logger.error("Failed to initialize LlamaIndex configuration: %s", e)
 
-# Compatibility alias for legacy code migration
-# New code should use app_settings directly
+# Convenient alias for settings access
+# Direct app_settings import is preferred for new code
 settings = app_settings
 
 # Professional module exports - minimal and focused

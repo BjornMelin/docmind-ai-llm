@@ -46,8 +46,6 @@ class TestImportValidation:
         """Test that src.utils modules can be imported."""
         modules = [
             "src.utils.core",
-            "src.utils.document",
-            "src.retrieval.integration",
             "src.utils.database",
             "src.utils.monitoring",
         ]
@@ -61,15 +59,36 @@ class TestImportValidation:
                 if module_name == "src.utils.core":
                     assert hasattr(module, "detect_hardware")
                     assert hasattr(module, "validate_startup_configuration")
-                elif module_name == "src.utils.document":
-                    assert hasattr(module, "load_documents_unstructured")
-                    assert hasattr(module, "ensure_spacy_model")
-                elif module_name == "src.retrieval.integration":
-                    assert hasattr(module, "create_vector_index_async")
-                    assert hasattr(module, "get_embed_model")
 
             except ImportError as e:
                 pytest.fail(f"Failed to import {module_name}: {e}")
+
+    def test_adr009_document_processing_modules_import(self):
+        """Test that ADR-009 compliant document processing modules can be imported."""
+        adr009_modules = [
+            "src.processing.resilient_processor",
+            "src.processing.chunking.unstructured_chunker",
+            "src.cache.dual_cache",
+            "src.processing.embeddings.bgem3_embedder",
+        ]
+
+        for module_name in adr009_modules:
+            try:
+                module = importlib.import_module(module_name)
+                assert module is not None, f"Module {module_name} imported but is None"
+
+                # Test that key classes are available
+                if module_name == "src.processing.resilient_processor":
+                    assert hasattr(module, "ResilientDocumentProcessor")
+                elif module_name == "src.processing.chunking.unstructured_chunker":
+                    assert hasattr(module, "UnstructuredChunker")
+                elif module_name == "src.cache.dual_cache":
+                    assert hasattr(module, "DualCacheManager")
+                elif module_name == "src.processing.embeddings.bgem3_embedder":
+                    assert hasattr(module, "BGEM3Embedder")
+
+            except ImportError as e:
+                pytest.fail(f"Failed to import ADR-009 module {module_name}: {e}")
 
     def test_agents_modules_import(self):
         """Test that agents modules can be imported."""
@@ -121,10 +140,10 @@ class TestImportValidation:
             pytest.fail(f"validate_startup_configuration failed: {e}")
 
     def test_spacy_model_function_exists(self):
-        """Test that spaCy model function exists and is callable."""
-        from src.utils.document import ensure_spacy_model
-
-        assert callable(ensure_spacy_model)
+        """Test that spaCy model function exists - SKIPPED (legacy function)."""
+        pytest.skip(
+            "ensure_spacy_model function removed with ADR-009 document processing architecture"
+        )
 
     def test_key_file_structure(self):
         """Test that essential files exist in correct locations."""
@@ -134,13 +153,23 @@ class TestImportValidation:
             "src/models/core.py",
             "src/agents/tool_factory.py",
             "src/utils/core.py",
-            "src/utils/document.py",
-            "src/retrieval/integration.py",
+        ]
+
+        # ADR-009 compliant file structure
+        adr009_files = [
+            "src/processing/resilient_processor.py",
+            "src/processing/chunking/unstructured_chunker.py",
+            "src/cache/dual_cache.py",
+            "src/processing/embeddings/bgem3_embedder.py",
         ]
 
         for file_path in required_files:
             full_path = base_path / file_path
             assert full_path.exists(), f"Required file missing: {full_path}"
+
+        for file_path in adr009_files:
+            full_path = base_path / file_path
+            assert full_path.exists(), f"ADR-009 file missing: {full_path}"
 
     def test_basic_system_health(self):
         """Test basic system health check."""

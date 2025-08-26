@@ -9,7 +9,6 @@ Key validation points:
 4. Async functionality works correctly
 """
 
-import asyncio
 import subprocess
 import sys
 from pathlib import Path
@@ -89,9 +88,9 @@ class TestAppStartup:
 
         components_to_test = [
             ("src.agents.coordinator", "create_multi_agent_coordinator"),
-            ("src.utils.document", "load_documents_llama"),
-            ("src.retrieval.integration", "create_index_async"),
             ("src.utils.core", "detect_hardware"),
+            ("src.processing.resilient_processor", "ResilientDocumentProcessor"),
+            ("src.cache.dual_cache", "DualCacheManager"),
         ]
 
         failed_components = []
@@ -180,22 +179,10 @@ class TestAsyncFunctionality:
 
     @pytest.mark.asyncio
     async def test_async_document_processing(self):
-        """Test async document processing works."""
-        src_path = str(PROJECT_ROOT / "src")
-        if src_path not in sys.path:
-            sys.path.insert(0, src_path)
-
-        try:
-            from src.retrieval.integration import create_index_async
-
-            # Verify async function (might fail due to missing data)
-            assert asyncio.iscoroutinefunction(create_index_async)
-
-        except ImportError as e:
-            pytest.skip(f"Async functionality failed (missing deps): {e}")
-        finally:
-            if src_path in sys.path:
-                sys.path.remove(src_path)
+        """Test async document processing works - SKIPPED (legacy function)."""
+        pytest.skip(
+            "Legacy async function create_index_async removed with ADR-009 document processing architecture"
+        )
 
     def test_agent_functionality(self):
         """Test agent functionality works correctly."""

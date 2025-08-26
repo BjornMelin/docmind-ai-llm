@@ -685,10 +685,6 @@ def pytest_configure(config):
         "markers", "multimodal: CLIP and multimodal functionality tests"
     )
 
-    # Legacy markers (for backward compatibility)
-    config.addinivalue_line(
-        "markers", "feat_002: Legacy marker for FEAT-002 (use 'retrieval' instead)"
-    )
     config.addinivalue_line("markers", "spec: Specification-based tests")
 
 

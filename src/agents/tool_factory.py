@@ -44,7 +44,7 @@ from src.config.app_settings import app_settings
 
 KG_SIMILARITY_TOP_K = 10
 
-# Re-export settings constants for backward compatibility
+# Tool configuration constants
 DEFAULT_RERANKING_TOP_K = app_settings.reranking_top_k
 DEFAULT_VECTOR_SIMILARITY_TOP_K = app_settings.top_k
 
@@ -350,10 +350,10 @@ class ToolFactory:
 
     @classmethod
     def create_basic_tools(cls, index_data: dict[str, Any]) -> list[QueryEngineTool]:
-        """Create basic tools from index data dictionary (legacy compatibility).
+        """Create basic tools from index data dictionary.
 
-        Provides backward compatibility with existing code that passes
-        index_data as a dictionary. Extracts components and creates tools.
+        Provides a convenient dictionary-based interface for tool creation.
+        Extracts components and creates tools from the provided dictionary.
 
         Args:
             index_data: Dictionary containing indexed components:

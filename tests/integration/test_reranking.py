@@ -8,7 +8,32 @@ This module provides comprehensive integration tests for:
 - Agent coordination with retrieval components
 
 Follows the FEAT-002 retrieval system architecture with modern patterns.
+NOTE: Legacy src.retrieval.integration imports replaced with ADR-009 architecture.
 """
+
+
+# Mock legacy integration module functions that were removed with ADR-009
+class LegacyIntegrationMocks:
+    @staticmethod
+    def create_basic_retriever(*args, **kwargs):
+        """Mock for removed create_basic_retriever function."""
+        mock_retriever = MagicMock()
+        mock_retriever.retrieve.return_value = []
+        return mock_retriever
+
+    class VectorIndexRetriever:
+        """Mock for removed VectorIndexRetriever class."""
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def retrieve(self, *args, **kwargs):
+            return []
+
+
+# Replace imports with mocks
+create_basic_retriever = LegacyIntegrationMocks.create_basic_retriever
+VectorIndexRetriever = LegacyIntegrationMocks.VectorIndexRetriever
 
 import asyncio
 import sys

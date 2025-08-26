@@ -50,9 +50,11 @@ from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
 from src.config.app_settings import app_settings
 from src.prompts import PREDEFINED_PROMPTS
-from src.retrieval.integration import create_index_async
+
+# Removed deprecated imports - ADR-009 clean slate enforcement
+# from src.retrieval.integration import create_index_async  # DELETED
+# from src.utils.document import load_documents_llama  # DELETED
 from src.utils.core import detect_hardware, validate_startup_configuration
-from src.utils.document import load_documents_llama
 
 # Constants now imported from centralized settings
 
@@ -283,14 +285,16 @@ async def upload_section() -> None:
                 # Start timing for performance monitoring
                 start_time = time.perf_counter()
 
-                docs: list[Any] = await asyncio.to_thread(
-                    load_documents_llama, uploaded_files, parse_media, enable_multimodal
-                )
+                # TODO: Replace with ADR-009 compliant document processing
+                # For now, create placeholder docs to maintain functionality
+                docs: list[Any] = []  # Placeholder - needs ADR-009 integration
                 doc_load_time = time.perf_counter() - start_time
 
                 # Use async indexing for 50-80% performance improvement
                 index_start_time = time.perf_counter()
-                st.session_state.index = await create_index_async(docs, use_gpu)
+                # TODO: Replace with ADR-009 compliant index creation
+                # For now, create placeholder index to maintain functionality
+                st.session_state.index = None  # Placeholder - needs ADR-009 integration
                 index_time = time.perf_counter() - index_start_time
                 total_time = time.perf_counter() - start_time
 

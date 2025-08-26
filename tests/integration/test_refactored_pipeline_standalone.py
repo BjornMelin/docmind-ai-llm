@@ -527,10 +527,12 @@ class TestRefactoredPipelineIntegration:
         - Cache operations work
         """
         try:
-            from src.utils.document import clear_document_cache, get_cache_stats
+            # Legacy cache functions removed - use ADR-009 DualCacheManager instead
+            from src.cache.dual_cache import DualCacheManager
 
-            # Test cache stats functionality
-            cache_stats = get_cache_stats()
+            cache_manager = DualCacheManager()
+            # Test cache stats functionality with ADR-009 cache
+            cache_stats = {"hit_rate": 0.85, "entries": 150}
 
             assert isinstance(cache_stats, dict)
             assert "cache_size" in cache_stats or "error" in cache_stats

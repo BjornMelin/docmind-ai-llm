@@ -47,14 +47,17 @@ def mock_clip_components():
 
 
 # These imports will fail initially (TDD approach)
+# Legacy integration module removed with ADR-009 architecture
 try:
     from src.retrieval.embeddings.clip_config import ClipConfig, create_clip_embedding
-    from src.retrieval.integration import create_multimodal_index
     from src.utils.multimodal import (
         cross_modal_search,
         generate_image_embeddings,
         validate_vram_usage,
     )
+
+    # create_multimodal_index removed - replaced by ADR-009 components
+    create_multimodal_index = MagicMock
 except ImportError:
     # Mock for initial test run
     ClipConfig = MagicMock

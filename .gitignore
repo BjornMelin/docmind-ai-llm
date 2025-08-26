@@ -196,7 +196,7 @@ TODO-COMPLETED.md
 TODO.md
 
 # Document processing cache
-cache/
+# cache/
 *.db
 
 # Tool caches
@@ -241,3 +241,4 @@ docs/developers/archived/
 reports/
 docs/research/
 ADR_TEMPLATE.md
+docs/specs/analysis/

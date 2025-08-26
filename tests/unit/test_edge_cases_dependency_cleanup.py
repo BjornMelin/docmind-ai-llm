@@ -34,17 +34,10 @@ class TestOptionalDependencyHandling:
                 # This is expected - GPU packages should be optional
 
     def test_spacy_model_graceful_fallback(self):
-        """Test spaCy model availability gracefully handles missing models."""
-        try:
-            from src.utils.document import ensure_spacy_model
-
-            # This should not crash even if spaCy model is missing
-            result = ensure_spacy_model()
-            # Result can be None if model unavailable, or the model if available
-            assert result is None or callable(result)  # Basic check
-
-        except ImportError:
-            pytest.skip("spaCy utilities not available")
+        """Test spaCy model availability gracefully handles missing models - SKIPPED (legacy)."""
+        pytest.skip(
+            "ensure_spacy_model function removed with ADR-009 document processing architecture"
+        )
 
     def test_torch_optional_graceful_handling(self):
         """Test that PyTorch dependencies are handled gracefully."""
@@ -98,20 +91,33 @@ class TestOptionalDependencyHandling:
                 importlib.import_module(module)
 
     def test_new_src_utils_modules_are_available(self):
-        """Verify that new src.utils modules are available."""
-        new_modules = [
+        """Verify that current src.utils modules are available."""
+        current_modules = [
             "src.utils.core",
-            "src.utils.document",
-            "src.retrieval.integration",
             "src.utils.database",
             "src.utils.monitoring",
         ]
 
-        for module in new_modules:
+        for module in current_modules:
             try:
                 importlib.import_module(module)
             except ImportError as e:
-                pytest.fail(f"New module {module} should be available: {e}")
+                pytest.fail(f"Current module {module} should be available: {e}")
+
+    def test_adr009_modules_are_available(self):
+        """Verify that ADR-009 compliant modules are available."""
+        adr009_modules = [
+            "src.processing.resilient_processor",
+            "src.processing.chunking.unstructured_chunker",
+            "src.cache.dual_cache",
+            "src.processing.embeddings.bgem3_embedder",
+        ]
+
+        for module in adr009_modules:
+            try:
+                importlib.import_module(module)
+            except ImportError as e:
+                pytest.fail(f"ADR-009 module {module} should be available: {e}")
 
 
 class TestGracefulErrorHandling:

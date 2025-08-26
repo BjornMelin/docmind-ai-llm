@@ -20,7 +20,9 @@ from pathlib import Path
 
 import torch
 from llama_index.core import Settings
-from llama_index.core.node_parser import SentenceSplitter
+
+# Removed SentenceSplitter import - ADR-009 requires direct Unstructured.io
+# chunk_by_title
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.ollama import Ollama
 
@@ -81,25 +83,10 @@ def setup_llamaindex() -> None:
         logger.warning("Could not configure embeddings: %s", e)
         Settings.embed_model = None
 
-    # Configure document processing
-    chunk_size = int(os.getenv("DOCMIND_CHUNK_SIZE", "1024"))
-    chunk_overlap = int(os.getenv("DOCMIND_CHUNK_OVERLAP", "100"))
-
-    Settings.chunk_size = chunk_size
-    Settings.chunk_overlap = chunk_overlap
-
-    try:
-        Settings.node_parser = SentenceSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-        logger.info(
-            "Document processing configured: %d chunk size, %d overlap",
-            chunk_size,
-            chunk_overlap,
-        )
-    except Exception as e:
-        logger.warning("Could not configure node parser: %s", e)
+    # Document processing removed - ADR-009 requires direct Unstructured.io
+    # chunk_by_title() semantic intelligence instead of SentenceSplitter
+    # New implementation will use ResilientDocumentProcessor with direct
+    # partition() and chunk_by_title() calls per specification
 
     # Configure context window and performance settings (ADR-004, ADR-010)
     try:

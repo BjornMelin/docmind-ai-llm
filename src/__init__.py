@@ -12,12 +12,14 @@ __author__ = "Bjorn Melin"
 
 # Make key components available at package level
 from .config.app_settings import app_settings
-from .retrieval.integration import create_hybrid_retriever, create_index_async
-from .utils.document import load_documents_unstructured
+
+# Note: ADR-009 clean slate - removed deprecated imports:
+# - .retrieval.integration (deleted - used SentenceSplitter)
+# - .utils.document (deleted - used UnstructuredReader wrapper)
+# New ADR-009 compliant processing available via:
+# from src.processing import ResilientDocumentProcessor
+# from src.cache import DualCacheManager
 
 __all__ = [
     "app_settings",
-    "load_documents_unstructured",
-    "create_index_async",
-    "create_hybrid_retriever",
 ]

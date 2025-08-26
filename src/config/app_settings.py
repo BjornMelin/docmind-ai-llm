@@ -50,10 +50,25 @@ class DocMindSettings(BaseSettings):
     enable_document_caching: bool = Field(default=True)
     parse_strategy: str = Field(default="hi_res")
 
+    # Document Processing Pipeline (ADR-009 compliant)
+    chunk_size: int = Field(default=1500, ge=100, le=10000)
+    chunk_overlap: int = Field(default=200, ge=50, le=2000)
+    new_after_n_chars: int = Field(default=1200, ge=100, le=8000)
+    combine_text_under_n_chars: int = Field(default=500, ge=50, le=2000)
+    multipage_sections: bool = Field(default=True)
+    enable_semantic_boundary_detection: bool = Field(default=True)
+
     # Vector Database Configuration
     vector_store_type: str = Field(default="qdrant")
     qdrant_url: str = Field(default="http://localhost:6333")
     qdrant_collection: str = Field(default="docmind_docs")
+
+    # Dual-Layer Cache Configuration (ADR-009 compliant)
+    cache_ttl_seconds: int = Field(default=3600, ge=300, le=86400)
+    max_cache_size_mb: int = Field(default=1000, ge=100, le=10000)
+    cache_compression: bool = Field(default=True)
+    enable_semantic_cache: bool = Field(default=True)
+    semantic_cache_threshold: float = Field(default=0.85, ge=0.5, le=0.95)
 
     # Retrieval Configuration
     retrieval_strategy: str = Field(default="hybrid")
@@ -111,7 +126,7 @@ class DocMindSettings(BaseSettings):
     enable_performance_logging: bool = Field(default=True)
     enable_wal_mode: bool = Field(default=True)
 
-    # RESTORED: Missing configuration variables for backward compatibility
+    # Core application configuration
     llm_backend: str = Field(default="ollama")
     context_buffer_size: int = Field(default=65536, ge=4096, le=131072)
     enable_conversation_memory: bool = Field(default=True)
@@ -119,7 +134,7 @@ class DocMindSettings(BaseSettings):
     quant_policy: str = Field(default="fp8")
     analysis_modes: list[str] = Field(default=["detailed", "summary", "comparison"])
 
-    # App Constants (for backward compatibility with existing UI code)
+    # Application constants for UI and processing
     default_token_limit: int = Field(default=131072, ge=1024, le=1000000)
     suggested_context_high: int = Field(default=65536, ge=8192, le=131072)
     suggested_context_medium: int = Field(default=32768, ge=8192, le=131072)
@@ -127,7 +142,7 @@ class DocMindSettings(BaseSettings):
     minimum_vram_high_gb: int = Field(default=16, ge=4, le=80)
     minimum_vram_medium_gb: int = Field(default=8, ge=2, le=32)
 
-    # Backend URLs (backward compatibility)
+    # Backend service URLs
     ollama_base_url: str = Field(default="http://localhost:11434")
     lmstudio_base_url: str = Field(default="http://localhost:1234/v1")
     llamacpp_model_path: str = Field(default="/path/to/model.gguf")
@@ -148,7 +163,7 @@ class DocMindSettings(BaseSettings):
     bytes_to_gb_divisor: int = Field(default=1024**3)  # 1073741824
     bytes_to_mb_divisor: int = Field(default=1024 * 1024)  # 1048576
 
-    # BGE-M3 Constants (for backward compatibility)
+    # BGE-M3 embedding model constants
     bge_m3_embedding_dim: int = Field(default=1024, ge=512, le=4096)
     bge_m3_max_length: int = Field(default=8192, ge=512, le=16384)
     bge_m3_model_name: str = Field(default="BAAI/bge-m3")
@@ -211,6 +226,33 @@ class DocMindSettings(BaseSettings):
             "max_token_limit": self.vllm_max_token_limit,
             "kv_cache_memory_per_token": self.vllm_kv_cache_memory_per_token,
             "minimum_vram_gb": self.vllm_minimum_vram_gb,
+        }
+
+    def get_processing_config(self) -> dict[str, any]:
+        """Get document processing pipeline configuration."""
+        return {
+            "chunk_size": self.chunk_size,
+            "chunk_overlap": self.chunk_overlap,
+            "new_after_n_chars": self.new_after_n_chars,
+            "combine_text_under_n_chars": self.combine_text_under_n_chars,
+            "multipage_sections": self.multipage_sections,
+            "enable_semantic_boundary_detection": (
+                self.enable_semantic_boundary_detection
+            ),
+            "max_document_size_mb": self.max_document_size_mb,
+            "parse_strategy": self.parse_strategy,
+        }
+
+    def get_cache_config(self) -> dict[str, any]:
+        """Get dual-layer cache configuration."""
+        return {
+            "enable_document_caching": self.enable_document_caching,
+            "cache_ttl_seconds": self.cache_ttl_seconds,
+            "max_cache_size_mb": self.max_cache_size_mb,
+            "cache_compression": self.cache_compression,
+            "enable_semantic_cache": self.enable_semantic_cache,
+            "semantic_cache_threshold": self.semantic_cache_threshold,
+            "enable_wal_mode": self.enable_wal_mode,
         }
 
 

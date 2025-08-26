@@ -22,7 +22,6 @@ from .models import AgentResponse, MultiAgentState
 from .retrieval import (
     RetrievalAgent,
     RetrievalResult,
-    create_retrieval_agent,
     optimize_query_for_strategy,
     select_optimal_strategy,
 )
@@ -48,7 +47,6 @@ __all__ = [
     # Retrieval Agent
     "RetrievalAgent",
     "RetrievalResult",
-    "create_retrieval_agent",
     "optimize_query_for_strategy",
     "select_optimal_strategy",
     # Tool Factory
