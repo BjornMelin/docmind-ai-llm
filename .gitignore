@@ -242,3 +242,29 @@ reports/
 docs/research/
 ADR_TEMPLATE.md
 docs/specs/analysis/
+
+# Prevent test files in root directory
+/test_*.py
+/tests_*.py
+/Test*.py
+
+# Mock and temporary directories that might be created during development
+*Mock*/
+*MagicMock*/
+*mock*/
+temp_*/
+tmp_*/
+temporary/
+relative/
+
+# Additional cache and runtime patterns
+.streamlit/
+*.sqlite
+*.sqlite3
+*.pickle
+*.pkl
+
+# Development artifacts that shouldn't be tracked
+debug_*.py
+scratch_*.py
+experiment_*.py

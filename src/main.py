@@ -14,7 +14,7 @@ from loguru import logger
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import AgentResponse
 from src.config.app_settings import DocMindSettings, app_settings
-from src.processing.resilient_processor import ResilientDocumentProcessor
+from src.processing.document_processor import DocumentProcessor
 
 # Load environment variables
 load_dotenv()
@@ -51,7 +51,7 @@ class DocMindApplication:
     def _initialize_components(self) -> None:
         """Initialize application components."""
         # Document processor for ingestion
-        self.document_processor = ResilientDocumentProcessor(settings=self.settings)
+        self.document_processor = DocumentProcessor(settings=self.settings)
 
         # Initialize retrieval components (handled through agents)
         # Retrieval is managed through the multi-agent coordinator

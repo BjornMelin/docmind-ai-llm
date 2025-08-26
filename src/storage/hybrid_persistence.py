@@ -394,12 +394,12 @@ class HybridPersistenceManager:
 
                 cursor = self.sqlite_connection.cursor()
                 # Table name is controlled internally, safe from injection
-                select_sql = f"""  # noqa: S608
+                select_sql = f"""
                 SELECT id, file_path, file_hash, file_size, processing_time,
                        strategy_used, element_count, created_at, updated_at, metadata
                 FROM {self.documents_table}
                 WHERE file_hash = ?
-                """
+                """  # noqa: S608
 
                 cursor.execute(select_sql, (file_hash,))
                 row = cursor.fetchone()
@@ -523,12 +523,12 @@ class HybridPersistenceManager:
 
                 cursor = self.sqlite_connection.cursor()
                 # Table name is controlled internally, safe from injection
-                select_sql = f"""  # noqa: S608
+                select_sql = f"""
                 SELECT id, file_path, file_hash, file_size, processing_time,
                        strategy_used, element_count, created_at, updated_at, metadata
                 FROM {self.documents_table}
                 WHERE id = ?
-                """
+                """  # noqa: S608
 
                 cursor.execute(select_sql, (document_id,))
                 row = cursor.fetchone()
@@ -576,16 +576,16 @@ class HybridPersistenceManager:
 
                     # Calculate average processing time
                     # Table name is controlled internally, safe from injection
-                    cursor.execute(  # noqa: S608
-                        f"SELECT AVG(processing_time) FROM {self.documents_table}"
+                    cursor.execute(
+                        f"SELECT AVG(processing_time) FROM {self.documents_table}"  # noqa: S608
                     )
                     avg_time = cursor.fetchone()[0]
                     stats.avg_processing_time = avg_time if avg_time else 0.0
 
                     # Get last indexed timestamp
                     # Table name is controlled internally, safe from injection
-                    cursor.execute(  # noqa: S608
-                        f"SELECT MAX(created_at) FROM {self.documents_table}"
+                    cursor.execute(
+                        f"SELECT MAX(created_at) FROM {self.documents_table}"  # noqa: S608
                     )
                     last_indexed = cursor.fetchone()[0]
                     stats.last_indexed_at = last_indexed
@@ -679,8 +679,8 @@ class HybridPersistenceManager:
                 if self.sqlite_connection is not None:
                     cursor = self.sqlite_connection.cursor()
                     # Table name is controlled internally, safe from injection
-                    cursor.execute(  # noqa: S608
-                        f"SELECT id FROM {self.documents_table} WHERE created_at < ?",
+                    cursor.execute(
+                        f"SELECT id FROM {self.documents_table} WHERE created_at < ?",  # noqa: S608
                         (cutoff_timestamp,),
                     )
                     old_document_ids = [row[0] for row in cursor.fetchall()]

@@ -771,15 +771,12 @@ class TestEdgeCasesAndErrorHandling:
         ):
             DocMindSettings(app_name="")
 
+        # These fields don't exist in the current DocMindSettings model
+        # Testing validation with bge_m3_model_name instead
         with pytest.raises(
-            ValidationError, match="Field cannot be empty or whitespace-only"
+            ValidationError, match="String should have at least 1 character"
         ):
-            DocMindSettings(model_name="")
-
-        with pytest.raises(
-            ValidationError, match="Field cannot be empty or whitespace-only"
-        ):
-            DocMindSettings(embedding_model="")
+            DocMindSettings(bge_m3_model_name="")
 
         # Test whitespace-only strings are also rejected
         with pytest.raises(
@@ -788,9 +785,9 @@ class TestEdgeCasesAndErrorHandling:
             DocMindSettings(app_name="   ")
 
         with pytest.raises(
-            ValidationError, match="Field cannot be empty or whitespace-only"
+            ValidationError, match="String should have at least 1 character"
         ):
-            DocMindSettings(model_name="  \t  ")
+            DocMindSettings(bge_m3_model_name="  \t  ")
 
     def test_extreme_boundary_values(self):
         """Test extreme boundary values."""

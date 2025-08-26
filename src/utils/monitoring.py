@@ -60,7 +60,7 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
             compression="gz",
         )
 
-    logger.info("Logging configured: level=%s, file=%s", log_level, log_file)
+    logger.info("Logging configured: level={}, file={}", log_level, log_file)
 
 
 def log_error_with_context(
@@ -217,7 +217,7 @@ def get_memory_usage() -> dict[str, float]:
             "percent": round(process.memory_percent(), 2),
         }
     except (OSError, psutil.Error) as e:
-        logger.warning("Failed to get memory usage: %s", e)
+        logger.warning("Failed to get memory usage: {}", e)
         return {"rss_mb": 0.0, "vms_mb": 0.0, "percent": 0.0}
 
 
@@ -239,7 +239,7 @@ def get_system_info() -> dict[str, Any]:
             else None,
         }
     except (OSError, psutil.Error) as e:
-        logger.warning("Failed to get system info: %s", e)
+        logger.warning("Failed to get system info: {}", e)
         return {}
 
 

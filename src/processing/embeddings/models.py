@@ -39,9 +39,18 @@ class EmbeddingParameters(BaseModel):
         default=8192, ge=512, le=16384, description="Maximum token length (8K context)"
     )
     batch_size_gpu: int = Field(
-        default=12, ge=1, le=32, description="GPU batch size for RTX 4090"
+        default=12,
+        ge=1,
+        le=32,
+        description="GPU batch size for RTX 4090 "
+        "(deprecated: library handles optimization)",
     )
-    batch_size_cpu: int = Field(default=4, ge=1, le=16, description="CPU batch size")
+    batch_size_cpu: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description="CPU batch size (deprecated: library handles optimization)",
+    )
     use_fp16: bool = Field(default=True, description="Enable FP16 acceleration")
     normalize_embeddings: bool = Field(
         default=True, description="L2 normalize embeddings"
@@ -54,6 +63,16 @@ class EmbeddingParameters(BaseModel):
         default=False, description="Return ColBERT multi-vector embeddings"
     )
     device: str = Field(default="cuda", description="Target device (cuda/cpu/auto)")
+    pooling_method: str = Field(
+        default="cls", description="Pooling method ('cls', 'mean')"
+    )
+    weights_for_different_modes: list[float] = Field(
+        default=[0.4, 0.2, 0.4],
+        description="Weights for [dense, sparse, colbert] fusion",
+    )
+    return_numpy: bool = Field(
+        default=False, description="Return numpy arrays instead of lists"
+    )
 
 
 class EmbeddingResult(BaseModel):

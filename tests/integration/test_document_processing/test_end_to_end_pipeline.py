@@ -25,16 +25,16 @@ try:
     from src.core.document_processing.direct_unstructured_processor import (
         DirectUnstructuredProcessor,
     )
-    from src.core.document_processing.resilient_document_processor import (
-        ResilientDocumentProcessor,
-    )
     from src.core.document_processing.semantic_chunker import (
         SemanticChunker,
     )
+    from src.processing.document_processor import (
+        DocumentProcessor,
+    )
 except ImportError:
     # Create placeholder classes for failing tests
-    class ResilientDocumentProcessor:
-        """Placeholder ResilientDocumentProcessor class for failing tests."""
+    class DocumentProcessor:
+        """Placeholder DocumentProcessor class for failing tests."""
 
         pass
 
@@ -137,7 +137,7 @@ class TestEndToEndProcessingPipeline:
         - Provides comprehensive result with all metadata
         """
         # Create integrated processor
-        processor = ResilientDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch.multiple(
             processor,
@@ -217,7 +217,7 @@ class TestEndToEndProcessingPipeline:
         - Cache hit rates meet performance targets
         - Data integrity maintained through cache operations
         """
-        processor = ResilientDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
         cache_manager = SimpleCache()
 
         with patch.object(processor, "cache_manager", cache_manager):
@@ -316,7 +316,7 @@ class TestEndToEndProcessingPipeline:
         - Maintains partial results when possible
         - Provides comprehensive error reporting
         """
-        processor = ResilientDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch.multiple(
             processor,
@@ -366,7 +366,7 @@ class TestEndToEndProcessingPipeline:
         - Generates unified embeddings for multimodal content
         - Preserves multimodal metadata throughout pipeline
         """
-        processor = ResilientDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch.multiple(
             processor,
@@ -464,8 +464,8 @@ class TestCacheCoordinationMultiAgent:
         - Concurrent cache access handled safely
         """
         # Create multiple agent instances
-        agent_1 = ResilientDocumentProcessor(integration_settings)
-        agent_2 = ResilientDocumentProcessor(integration_settings)
+        agent_1 = DocumentProcessor(integration_settings)
+        agent_2 = DocumentProcessor(integration_settings)
 
         shared_cache = SimpleCache()
 
@@ -579,7 +579,7 @@ class TestPerformanceTargetValidation:
         - Cache hit rates meet 80-95% and 60-70% targets
         - Quality scores consistently >0.9 for standard documents
         """
-        processor = ResilientDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch.multiple(
             processor,

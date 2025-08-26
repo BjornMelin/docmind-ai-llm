@@ -20,7 +20,7 @@ from loguru import logger
 
 from src.cache import create_cache_manager
 from src.core.infrastructure.spacy_manager import get_spacy_manager
-from src.processing.resilient_processor import create_resilient_processor
+from src.processing.document_processor import create_resilient_processor
 
 
 async def load_documents_unstructured(

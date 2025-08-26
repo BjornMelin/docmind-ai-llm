@@ -82,7 +82,7 @@ def test_coordinator_integration(mock_create_coordinator):
     mock_create_coordinator.assert_called_once()
 
 
-@patch("src.processing.resilient_processor.ResilientDocumentProcessor")
+@patch("src.processing.document_processor.DocumentProcessor")
 def test_document_pipeline(mock_processor_class):
     """Test document processing pipeline with ADR-009 components."""
     # Skip this test as it was testing deleted legacy functionality
@@ -139,7 +139,7 @@ def test_no_deleted_utils_references():
         # Test that ADR-009 components can be imported
         try:
             import src.cache.simple_cache  # noqa: F401
-            import src.processing.resilient_processor  # noqa: F401
+            import src.processing.document_processor  # noqa: F401
             import src.utils.core  # noqa: F401
         except ImportError:
             pytest.fail("Should be able to import ADR-009 components")

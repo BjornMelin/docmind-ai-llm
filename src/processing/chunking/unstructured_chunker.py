@@ -236,7 +236,9 @@ class SemanticChunker:
             section_title = None
             if chunk_metadata.get("section_title"):
                 section_title = chunk_metadata["section_title"]
-            elif hasattr(chunk.metadata, "section_title"):
+            elif hasattr(chunk, "metadata") and hasattr(
+                chunk.metadata, "section_title"
+            ):
                 section_title = chunk.metadata.section_title
 
             # Calculate semantic boundary metadata

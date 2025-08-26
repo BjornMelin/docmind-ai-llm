@@ -66,9 +66,7 @@ def mock_settings() -> AppSettings:
     # Individual tests can use MockEmbedding and mock LLMs as needed
 
     return AppSettings(
-        model_name="mock-llm",
-        embedding_model="mock-embedding",
-        sparse_embedding_model="mock-sparse",
+        bge_m3_model_name="mock-embedding",  # Use correct field name
         embedding_dimension=1024,
         ollama_base_url="http://mock:11434",
         use_reranking=False,  # Disable for unit tests
@@ -84,11 +82,7 @@ def integration_settings() -> AppSettings:
     Still validates component integration without full model overhead.
     """
     return AppSettings(
-        model_name="llama3.2:1b",  # Smallest Ollama model for integration
-        embedding_model=(
-            "sentence-transformers/all-MiniLM-L6-v2"  # 80MB lightweight
-        ),
-        sparse_embedding_model="mock-sparse",  # Keep sparse as mock for integration
+        bge_m3_model_name="sentence-transformers/all-MiniLM-L6-v2",  # 80MB lightweight
         embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
         ollama_base_url="http://localhost:11434",
         use_reranking=False,  # Disable expensive operations
@@ -104,9 +98,7 @@ def system_settings() -> AppSettings:
     Only used in system tests marked with @pytest.mark.system.
     """
     return AppSettings(
-        model_name="llama3.2:3b",
-        embedding_model="BAAI/bge-large-en-v1.5",
-        sparse_embedding_model="prithvida/Splade_PP_en_v1",
+        bge_m3_model_name="BAAI/bge-large-en-v1.5",
         embedding_dimension=1024,
         ollama_base_url="http://localhost:11434",
         use_reranking=True,

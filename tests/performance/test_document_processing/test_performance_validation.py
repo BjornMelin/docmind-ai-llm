@@ -24,15 +24,15 @@ try:
     from src.core.document_processing.direct_unstructured_processor import (
         DirectUnstructuredProcessor,
     )
-    from src.core.document_processing.resilient_document_processor import (
-        ResilientDocumentProcessor,
-    )
     from src.core.document_processing.semantic_chunker import (
         SemanticChunker,
     )
+    from src.processing.document_processor import (
+        DocumentProcessor,
+    )
 except ImportError:
     # Create placeholder classes for failing tests
-    class ResilientDocumentProcessor:
+    class DocumentProcessor:
         pass
 
     class DirectUnstructuredProcessor:
@@ -590,7 +590,7 @@ class TestMemoryUsageValidation:
         - Validates memory efficiency
         - Prevents memory leaks and excessive consumption
         """
-        processor = ResilientDocumentProcessor(performance_settings)
+        processor = DocumentProcessor(performance_settings)
 
         # Monitor memory usage
         process = psutil.Process()
@@ -635,7 +635,7 @@ class TestMemoryUsageValidation:
     @pytest.mark.benchmark(group="memory")
     def test_memory_efficiency_benchmark(self, benchmark, performance_settings):
         """Benchmark memory efficiency across processing operations."""
-        processor = ResilientDocumentProcessor(performance_settings)
+        processor = DocumentProcessor(performance_settings)
 
         def measure_memory_usage():
             process = psutil.Process()

@@ -62,7 +62,7 @@ class TestImportValidation:
     def test_adr009_document_processing_modules_import(self):
         """Test that ADR-009 compliant document processing modules can be imported."""
         adr009_modules = [
-            "src.processing.resilient_processor",
+            "src.processing.document_processor",
             "src.processing.chunking.unstructured_chunker",
             "src.cache.simple_cache",
             "src.processing.embeddings.bgem3_embedder",
@@ -74,8 +74,8 @@ class TestImportValidation:
                 assert module is not None, f"Module {module_name} imported but is None"
 
                 # Test that key classes are available
-                if module_name == "src.processing.resilient_processor":
-                    assert hasattr(module, "ResilientDocumentProcessor")
+                if module_name == "src.processing.document_processor":
+                    assert hasattr(module, "DocumentProcessor")
                 elif module_name == "src.processing.chunking.unstructured_chunker":
                     assert hasattr(module, "UnstructuredChunker")
                 elif module_name == "src.cache.simple_cache":
@@ -147,7 +147,7 @@ class TestImportValidation:
 
         # ADR-009 compliant file structure
         adr009_files = [
-            "src/processing/resilient_processor.py",
+            "src/processing/document_processor.py",
             "src/processing/chunking/unstructured_chunker.py",
             "src/cache/simple_cache.py",
             "src/processing/embeddings/bgem3_embedder.py",

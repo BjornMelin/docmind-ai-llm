@@ -3,7 +3,7 @@
 Tests for:
 - BGEM3EmbeddingManager (REQ-0026-v2) - BGE-M3 8K context integration
 - AsyncDocumentProcessor (REQ-0027-v2) - Async processing pipeline
-- ResilientDocumentProcessor (REQ-0028-v2) - Error resilience with Tenacity
+- DocumentProcessor (REQ-0028-v2) - Error resilience with Tenacity
 
 These are FAILING tests that will pass once the implementation is complete.
 """
@@ -26,10 +26,10 @@ try:
         BGEM3EmbeddingManager,
         EmbeddingResult,
     )
-    from src.core.document_processing.resilient_document_processor import (
+    from src.processing.document_processor import (
+        DocumentProcessor,
         QualityAssessment,
         ResilienceStrategy,
-        ResilientDocumentProcessor,
     )
 except ImportError:
     # Create placeholder classes for failing tests
@@ -54,7 +54,7 @@ except ImportError:
     class ConcurrentProcessingResult:
         pass
 
-    class ResilientDocumentProcessor:
+    class DocumentProcessor:
         pass
 
     class ResilienceStrategy:
@@ -318,16 +318,16 @@ class TestAsyncDocumentProcessor:
             assert "chunk_0" in results
 
 
-class TestResilientDocumentProcessor:
-    """Test suite for ResilientDocumentProcessor (REQ-0028-v2).
+class TestDocumentProcessor:
+    """Test suite for DocumentProcessor (REQ-0028-v2).
 
     Tests error resilience with Tenacity retry patterns, graceful degradation,
     quality assessment, and fallback processing strategies.
     """
 
     @pytest.mark.unit
-    def test_resilient_processor_initialization(self, mock_settings):
-        """Test ResilientDocumentProcessor initializes correctly.
+    def test_document_processor_initialization(self, mock_settings):
+        """Test DocumentProcessor initializes correctly.
 
         Should pass after implementation:
         - Sets up Tenacity retry decorators with exponential backoff
@@ -335,12 +335,12 @@ class TestResilientDocumentProcessor:
         - Initializes quality assessment system
         - Sets up graceful degradation patterns
         """
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
-        assert resilient_processor is not None
-        assert hasattr(resilient_processor, "retry_config")
-        assert hasattr(resilient_processor, "fallback_strategies")
-        assert hasattr(resilient_processor, "quality_assessor")
+        assert document_processor is not None
+        assert hasattr(document_processor, "retry_config")
+        assert hasattr(document_processor, "fallback_strategies")
+        assert hasattr(document_processor, "quality_assessor")
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -353,7 +353,7 @@ class TestResilientDocumentProcessor:
         - Implements maximum retry limits to prevent infinite loops
         - Logs retry attempts for debugging
         """
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
         # Mock a method that fails twice then succeeds
         call_count = 0
@@ -367,12 +367,12 @@ class TestResilientDocumentProcessor:
 
         with (
             patch.object(
-                resilient_processor, "_process_with_retry", side_effect=flaky_operation
+                document_processor, "_process_with_retry", side_effect=flaky_operation
             ),
             patch("tenacity.retry"),
         ):
             # Verify retry configuration
-            retry_config = resilient_processor._get_retry_config()
+            retry_config = document_processor._get_retry_config()
             assert retry_config["stop_max_attempt_number"] >= 3
             assert retry_config["wait_exponential_multiplier"] >= 1
             assert retry_config["wait_exponential_max"] <= 10000  # 10 seconds
@@ -388,20 +388,20 @@ class TestResilientDocumentProcessor:
         - Provides meaningful error context
         - Preserves successfully processed content
         """
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
         # Simulate partial processing failure
         partial_elements = [
             Mock(text="Successfully processed content", category="Text")
         ]
 
-        with patch.object(resilient_processor, "_attempt_processing") as mock_process:
+        with patch.object(document_processor, "_attempt_processing") as mock_process:
             mock_process.side_effect = [
                 Exception("Processing failed"),
                 partial_elements,
             ]
 
-            result = await resilient_processor.process_with_resilience("document.pdf")
+            result = await document_processor.process_with_resilience("document.pdf")
 
             # Should return partial results with quality indicators
             assert hasattr(result, "elements")
@@ -420,7 +420,7 @@ class TestResilientDocumentProcessor:
         - Validates content extraction completeness
         - Identifies processing issues and missing content
         """
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
         # Mock processing results with varying quality
         high_quality_result = Mock(
@@ -434,8 +434,8 @@ class TestResilientDocumentProcessor:
         )
 
         # Test quality assessment
-        high_quality_score = resilient_processor._assess_quality(high_quality_result)
-        low_quality_score = resilient_processor._assess_quality(low_quality_result)
+        high_quality_score = document_processor._assess_quality(high_quality_result)
+        low_quality_score = document_processor._assess_quality(low_quality_result)
 
         assert isinstance(high_quality_score, QualityAssessment)
         assert 0.0 <= high_quality_score.overall_score <= 1.0
@@ -453,7 +453,7 @@ class TestResilientDocumentProcessor:
         - Maintains >95% error recovery success rate
         - Provides meaningful fallback results
         """
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
         # Test fallback strategy selection
         strategies = [
@@ -463,7 +463,7 @@ class TestResilientDocumentProcessor:
         ]
 
         for strategy in strategies:
-            fallback_result = await resilient_processor._apply_fallback_strategy(
+            fallback_result = await document_processor._apply_fallback_strategy(
                 "corrupted_document.pdf",
                 Exception("Primary processing failed"),
                 strategy,
@@ -484,7 +484,7 @@ class TestResilientDocumentProcessor:
         - Provides recovery statistics and analytics
         - Maintains recovery performance under load
         """
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
         # Simulate processing 100 documents with various failure scenarios
         total_documents = 100
@@ -496,7 +496,7 @@ class TestResilientDocumentProcessor:
                 if i % 10 == 0:  # 10% failure rate
                     raise Exception(f"Processing failed for document {i}")
 
-                result = await resilient_processor.process_with_resilience(
+                result = await document_processor.process_with_resilience(
                     f"doc_{i}.pdf"
                 )
                 if result is not None:
@@ -504,7 +504,7 @@ class TestResilientDocumentProcessor:
 
             except Exception:
                 # Test recovery mechanism
-                recovery_result = await resilient_processor._attempt_recovery(
+                recovery_result = await document_processor._attempt_recovery(
                     f"doc_{i}.pdf"
                 )
                 if recovery_result is not None:
@@ -569,7 +569,7 @@ class TestGherkinScenariosIntegration:
         And: Quality assessment scores are provided
         And: Exponential backoff retry patterns are used
         """
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
         # Simulate various document processing scenarios
         test_scenarios = [
@@ -583,14 +583,14 @@ class TestGherkinScenariosIntegration:
         total_scenarios = len(test_scenarios)
 
         for scenario in test_scenarios:
-            with patch.object(resilient_processor, "_process_document") as mock_process:
+            with patch.object(document_processor, "_process_document") as mock_process:
                 # First attempt fails, second succeeds with partial results
                 mock_process.side_effect = [
                     Exception(scenario["error"]),
                     Mock(quality_score=0.7, elements=["partial_content"]),
                 ]
 
-                result = await resilient_processor.process_with_resilience(
+                result = await document_processor.process_with_resilience(
                     scenario["file"]
                 )
 
@@ -618,15 +618,15 @@ class TestGherkinScenariosIntegration:
         And: Quality assessment validates complete processing
         """
         # Integration test with all components
-        resilient_processor = ResilientDocumentProcessor(mock_settings)
+        document_processor = DocumentProcessor(mock_settings)
 
         complex_document = "complex_multimodal_document.pdf"
 
         with (
-            patch.object(resilient_processor, "direct_processor") as mock_direct,
-            patch.object(resilient_processor, "semantic_chunker") as mock_chunker,
-            patch.object(resilient_processor, "cache_manager"),
-            patch.object(resilient_processor, "embedding_manager") as mock_embedding,
+            patch.object(document_processor, "direct_processor") as mock_direct,
+            patch.object(document_processor, "semantic_chunker") as mock_chunker,
+            patch.object(document_processor, "cache_manager"),
+            patch.object(document_processor, "embedding_manager") as mock_embedding,
         ):
             # Configure mock responses for complete pipeline
             mock_direct.process_document_async.return_value = Mock(
@@ -643,7 +643,7 @@ class TestGherkinScenariosIntegration:
             )
 
             # Process through complete pipeline
-            result = await resilient_processor.process_complete_pipeline(
+            result = await document_processor.process_complete_pipeline(
                 complex_document
             )
 

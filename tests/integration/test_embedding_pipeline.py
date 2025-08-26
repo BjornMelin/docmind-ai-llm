@@ -177,11 +177,9 @@ def integration_settings():
         DocMindSettings: Test configuration optimized for integration tests
     """
     return DocMindSettings(
-        model_name="mock-llm",
-        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        bge_m3_model_name="sentence-transformers/all-MiniLM-L6-v2",
         embedding_dimension=384,
         chunk_size=512,
-        chunk_overlap=50,
         enable_gpu_acceleration=False,
         use_sparse_embeddings=False,
         qdrant_url="http://localhost:6333",

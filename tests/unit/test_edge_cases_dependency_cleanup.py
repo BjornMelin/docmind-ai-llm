@@ -107,7 +107,7 @@ class TestOptionalDependencyHandling:
     def test_adr009_modules_are_available(self):
         """Verify that ADR-009 compliant modules are available."""
         adr009_modules = [
-            "src.processing.resilient_processor",
+            "src.processing.document_processor",
             "src.processing.chunking.unstructured_chunker",
             "src.cache.simple_cache",
             "src.processing.embeddings.bgem3_embedder",

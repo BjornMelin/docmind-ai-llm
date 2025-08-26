@@ -1,38 +1,29 @@
-"""BGE-M3 8K Context Embedder for Document Processing Pipeline.
+"""BGE-M3 Complete Unified Embedder with Dense AND Sparse Support.
 
-This module implements a specialized BGE-M3 embedder optimized for the document
-processing pipeline with 8K context window, batch processing, and semantic
-caching integration per ADR-009 requirements.
+Uses FlagEmbedding library directly to provide BGE-M3's
+unified dense, sparse, and ColBERT embeddings.
 
 Key Features:
-- BGE-M3 unified dense/sparse embeddings with 8K context window
-- Optimal batch processing for document chunks
-- GPU memory optimization for RTX 4090
-- Semantic similarity caching integration
-- Async processing with memory management
-- Performance targets: <50ms per chunk, <3GB VRAM usage
+- BGE-M3 dense embeddings (1024D) for semantic similarity
+- BGE-M3 sparse embeddings (learned token weights) for keyword matching
+- Optional ColBERT embeddings for late interaction
+- 8K context window support
+- Built-in batch processing and GPU memory optimization
+- Automatic device detection and FP16 acceleration
 """
 
-import asyncio
-import gc
 import time
 from typing import Any
 
-import numpy as np
 import torch
 from loguru import logger
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
-# BGE-M3 model import with fallback
 try:
     from FlagEmbedding import BGEM3FlagModel
 except ImportError:
-    logger.error("FlagEmbedding not available. Install with: uv add FlagEmbedding")
+    logger.error(
+        "FlagEmbedding not available. Install with: uv add FlagEmbedding>=1.3.5"
+    )
     BGEM3FlagModel = None
 
 from src.config.settings import app_settings
@@ -44,429 +35,557 @@ from src.processing.embeddings.models import (
 
 
 class BGEM3Embedder:
-    """BGE-M3 8K context embedder optimized for document processing pipeline.
+    """Complete BGE-M3 embedder with unified dense AND sparse embedding support.
 
-    This embedder is specifically designed for the document processing pipeline
-    with 8K context window support, optimal batch processing, and semantic
-    caching integration. It provides:
+    Provides both dense and sparse embeddings from BGE-M3, enabling true hybrid search.
 
-    - BGE-M3 unified dense/sparse embeddings
-    - 8K context window for large document chunks
-    - GPU memory optimization for RTX 4090
-    - Batch processing with automatic memory management
-    - Semantic similarity caching support
-    - Async processing for non-blocking operations
+    Features:
+    - Dense embeddings (1024D) for semantic similarity
+    - Sparse embeddings (learned token weights) for keyword matching
+    - Optional ColBERT embeddings for late interaction
+    - 8K context window support
+    - FP16 acceleration for RTX 4090 optimization
+    - Batch processing with automatic device detection
     """
 
     def __init__(
         self,
         settings: Any | None = None,
         parameters: EmbeddingParameters | None = None,
+        pooling_method: str = "cls",
+        normalize_embeddings: bool = True,
+        weights_for_different_modes: list[float] | None = None,
+        devices: list[str] | None = None,
+        return_numpy: bool = False,
     ):
-        """Initialize BGEM3Embedder.
+        """Initialize BGE-M3 embedder with full library capabilities.
 
         Args:
-            settings: DocMind configuration settings. Uses app_settings if None.
-            parameters: Embedding parameters. Uses defaults if None.
+            settings: Application settings
+            parameters: Embedding parameters
+            pooling_method: Pooling method ('cls', 'mean'). Default: 'cls'
+            normalize_embeddings: Whether to normalize embeddings. Default: True
+            weights_for_different_modes: Weights for [dense, sparse, colbert] fusion.
+                Default: [0.4, 0.2, 0.4]
+            devices: Specific devices to use. Default: auto-detect
+            return_numpy: Whether to return numpy arrays. Default: False (returns lists)
         """
         self.settings = settings or app_settings
         self.parameters = parameters or EmbeddingParameters()
+        self.pooling_method = pooling_method
+        self.normalize_embeddings = normalize_embeddings
+        self.weights_for_different_modes = weights_for_different_modes or [
+            0.4,
+            0.2,
+            0.4,
+        ]
+        self.return_numpy = return_numpy
 
-        # Model instance will be lazily loaded
-        self._model: Any | None = None
-        self._model_loaded = False
-
-        # Performance tracking
-        self._embedding_count = 0
-        self._total_processing_time = 0.0
-        self._peak_memory_mb = 0.0
-
-        # Device detection and optimization
-        self.device = self._detect_optimal_device()
-        self.parameters.device = self.device
-
-        # Adjust batch size based on device
-        if self.device == "cuda" and torch.cuda.is_available():
-            self.parameters.batch_size_gpu = self._optimize_batch_size()
-
-        logger.info(
-            "BGEM3Embedder initialized: device={}, max_length={}, batch_size={}",
-            self.device,
-            self.parameters.max_length,
-            self._get_optimal_batch_size(),
-        )
-
-    def _detect_optimal_device(self) -> str:
-        """Detect optimal device for BGE-M3 processing.
-
-        Returns:
-            Device string ('cuda', 'cpu', or specific GPU)
-        """
-        if not torch.cuda.is_available():
-            logger.info("CUDA not available, using CPU")
-            return "cpu"
-
-        # Check GPU memory
-        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        if gpu_memory_gb < 8.0:
-            logger.warning(
-                f"GPU has {gpu_memory_gb:.1f}GB memory. BGE-M3 may use CPU fallback."
-            )
-            return "cpu"
-
-        logger.info(f"Using CUDA with {gpu_memory_gb:.1f}GB GPU memory")
-        return "cuda"
-
-    def _optimize_batch_size(self) -> int:
-        """Optimize batch size based on available GPU memory.
-
-        Returns:
-            Optimal batch size for current GPU
-        """
-        if self.device == "cpu":
-            return self.parameters.batch_size_cpu
-
-        try:
-            # Get available GPU memory
-            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-
-            # BGE-M3 with 8K context requires ~2GB base + ~250MB per batch item
-            if gpu_memory_gb >= 16.0:
-                return 12  # RTX 4090 optimal
-            elif gpu_memory_gb >= 12.0:
-                return 8  # RTX 4060 Ti
-            elif gpu_memory_gb >= 8.0:
-                return 4  # RTX 4060
-            else:
-                return 2  # Minimal GPU
-        except Exception:
-            logger.warning("Could not optimize batch size, using default")
-            return self.parameters.batch_size_gpu
-
-    def _get_optimal_batch_size(self) -> int:
-        """Get optimal batch size for current device.
-
-        Returns:
-            Batch size to use for current device
-        """
-        if self.device == "cuda":
-            return self.parameters.batch_size_gpu
-        else:
-            return self.parameters.batch_size_cpu
-
-    def _load_model(self) -> None:
-        """Load BGE-M3 model with error handling and optimization.
-
-        Raises:
-            EmbeddingError: If model loading fails
-        """
-        if self._model_loaded and self._model is not None:
-            return
-
+        # Check FlagEmbedding availability
         if BGEM3FlagModel is None:
             raise EmbeddingError(
                 "FlagEmbedding not available. Install with: uv add FlagEmbedding>=1.3.5"
             )
 
+        # Auto device detection (let FlagEmbedding handle optimization)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device_list = devices or [device]
+
+        # Initialize BGE-M3 FlagModel with full library capabilities
         try:
-            logger.info(f"Loading BGE-M3 model: {self.settings.bge_m3_model_name}")
-
-            # Load model with optimizations
-            self._model = BGEM3FlagModel(
+            self.model = BGEM3FlagModel(
                 model_name_or_path=self.settings.bge_m3_model_name,
-                use_fp16=self.parameters.use_fp16,
-                device=self.device,
+                use_fp16=self.parameters.use_fp16 and device == "cuda",
+                pooling_method=self.pooling_method,
+                devices=device_list,
             )
-
-            self._model_loaded = True
-
-            # Model successfully loaded - log information
+            self.device = device
+            # Remove custom batch size - let library handle optimization
+            self._embedding_count = 0
+            self._total_processing_time = 0.0
 
             logger.info(
-                "BGE-M3 model loaded successfully: device={}, fp16={}, max_length={}",
-                self.device,
-                self.parameters.use_fp16,
-                self.parameters.max_length,
+                "BGE-M3 FlagModel loaded: %s (device=%s, FP16=%s, pooling=%s, "
+                "normalize=%s)",
+                self.settings.bge_m3_model_name,
+                device_list,
+                self.parameters.use_fp16 and device == "cuda",
+                self.pooling_method,
+                self.normalize_embeddings,
             )
-
         except Exception as e:
-            logger.error(f"Failed to load BGE-M3 model: {str(e)}")
-            raise EmbeddingError(f"Model loading failed: {e}") from e
+            raise EmbeddingError(f"BGE-M3 model initialization failed: {e}") from e
 
-    def _track_memory_usage(self) -> float:
-        """Track current GPU memory usage.
-
-        Returns:
-            Current GPU memory usage in MB
-        """
-        if self.device == "cuda" and torch.cuda.is_available():
-            memory_mb = torch.cuda.memory_allocated() / (1024**2)
-            self._peak_memory_mb = max(self._peak_memory_mb, memory_mb)
-            return memory_mb
-        return 0.0
-
-    def _cleanup_memory(self) -> None:
-        """Clean up GPU memory after processing."""
-        if self.device == "cuda" and torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-
-    @retry(
-        retry=retry_if_exception_type(
-            (EmbeddingError, RuntimeError, torch.cuda.OutOfMemoryError)
-        ),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        reraise=True,
-    )
     async def embed_texts_async(
         self, texts: list[str], parameters: EmbeddingParameters | None = None
     ) -> EmbeddingResult:
-        """Embed texts asynchronously with 8K context support.
-
-        Args:
-            texts: List of text strings to embed
-            parameters: Optional embedding parameters override
-
-        Returns:
-            EmbeddingResult with dense/sparse embeddings and metadata
-
-        Raises:
-            EmbeddingError: If embedding processing fails
-        """
-        start_time = time.time()
-        embed_params = parameters or self.parameters
-
-        logger.info(f"Embedding {len(texts)} texts with 8K context window")
-
+        """Embed texts asynchronously with unified BGE-M3 dense + sparse embeddings."""
         if not texts:
-            logger.warning("No texts provided for embedding")
             return EmbeddingResult(
                 dense_embeddings=[],
-                sparse_embeddings=[],
-                processing_time=time.time() - start_time,
+                sparse_embeddings=None,
+                processing_time=0.0,
                 batch_size=0,
                 memory_usage_mb=0.0,
                 model_info={"warning": "No texts provided"},
             )
 
-        try:
-            # Ensure model is loaded
-            if not self._model_loaded:
-                self._load_model()
+        params = parameters or self.parameters
+        start_time = time.time()
 
-            # Process embeddings in thread pool
-            result = await asyncio.to_thread(
-                self._embed_texts_sync, texts, embed_params
+        try:
+            # Use BGE-M3 unified encoding with library optimization
+            embeddings = self.model.encode(
+                texts,
+                max_length=params.max_length,
+                return_dense=params.return_dense,
+                return_sparse=params.return_sparse,
+                return_colbert_vecs=params.return_colbert,
+                # Let library handle batch size optimization
             )
 
-            # Track performance
             processing_time = time.time() - start_time
             self._embedding_count += len(texts)
             self._total_processing_time += processing_time
 
-            # Update result with timing
-            result.processing_time = processing_time
+            # Extract dense embeddings (convert numpy to lists)
+            dense_embeddings = None
+            if params.return_dense and "dense_vecs" in embeddings:
+                dense_embeddings = embeddings["dense_vecs"].tolist()
 
-            logger.info(
-                f"Successfully embedded {len(texts)} texts in {processing_time:.2f}s "
-                f"(avg: {processing_time / len(texts) * 1000:.1f}ms per text)"
+            # Extract sparse embeddings (token weights)
+            sparse_embeddings = None
+            if params.return_sparse and "lexical_weights" in embeddings:
+                sparse_embeddings = embeddings["lexical_weights"]
+
+            # Extract ColBERT embeddings if requested
+            colbert_embeddings = None
+            if params.return_colbert and "colbert_vecs" in embeddings:
+                colbert_embeddings = embeddings["colbert_vecs"]
+
+            memory_usage = (
+                torch.cuda.memory_allocated() / (1024**2)
+                if torch.cuda.is_available()
+                else 0.0
             )
 
-            return result
+            # Convert to numpy if requested
+            if self.return_numpy and dense_embeddings:
+                import numpy as np
 
-        except Exception as e:
-            processing_time = time.time() - start_time
-            logger.error(
-                f"Failed to embed {len(texts)} texts after {processing_time:.2f}s: "
-                f"{str(e)}"
-            )
+                dense_embeddings = np.array(dense_embeddings).tolist()
 
-            # Clean up on error
-            self._cleanup_memory()
-
-            if "out of memory" in str(e).lower() and embed_params.batch_size_gpu > 2:
-                logger.info("Retrying with smaller batch size due to OOM")
-                smaller_params = embed_params.model_copy()
-                smaller_params.batch_size_gpu = max(2, embed_params.batch_size_gpu // 2)
-                return await self.embed_texts_async(texts, smaller_params)
-
-            raise EmbeddingError(f"Text embedding failed: {e}") from e
-
-    def _embed_texts_sync(
-        self, texts: list[str], parameters: EmbeddingParameters
-    ) -> EmbeddingResult:
-        """Synchronous text embedding with BGE-M3.
-
-        Args:
-            texts: List of text strings to embed
-            parameters: Embedding parameters
-
-        Returns:
-            EmbeddingResult with embeddings and metadata
-
-        Raises:
-            EmbeddingError: If embedding fails
-        """
-        try:
-            # Track initial memory
-            initial_memory = self._track_memory_usage()
-
-            batch_size = self._get_optimal_batch_size()
-
-            logger.debug(
-                f"Embedding {len(texts)} texts with batch_size={batch_size}, "
-                f"max_length={parameters.max_length}"
-            )
-
-            # Process in batches for memory efficiency
-            all_dense_embeddings = []
-            all_sparse_embeddings = []
-            all_colbert_embeddings = []
-
-            for i in range(0, len(texts), batch_size):
-                batch_texts = texts[i : i + batch_size]
-
-                # Call BGE-M3 encode with 8K context
-                embeddings = self._model.encode(
-                    batch_texts,
-                    batch_size=len(batch_texts),
-                    max_length=parameters.max_length,
-                    return_dense=parameters.return_dense,
-                    return_sparse=parameters.return_sparse,
-                    return_colbert_vecs=parameters.return_colbert,
-                    request_qid=None,  # Not needed for document processing
-                    request_pid=None,  # Not needed for document processing
-                )
-
-                # Extract embeddings by type
-                if parameters.return_dense and "dense_vecs" in embeddings:
-                    dense_batch = embeddings["dense_vecs"]
-                    if parameters.normalize_embeddings:
-                        # L2 normalize dense embeddings
-                        dense_batch = dense_batch / np.linalg.norm(
-                            dense_batch, axis=1, keepdims=True
-                        )
-                    all_dense_embeddings.extend(dense_batch.tolist())
-
-                if parameters.return_sparse and "lexical_weights" in embeddings:
-                    all_sparse_embeddings.extend(embeddings["lexical_weights"])
-
-                if parameters.return_colbert and "colbert_vecs" in embeddings:
-                    all_colbert_embeddings.extend(embeddings["colbert_vecs"])
-
-                # Track memory usage
-                self._track_memory_usage()
-
-                # Optional memory cleanup between batches for large datasets
-                if len(texts) > 50:
-                    torch.cuda.empty_cache() if self.device == "cuda" else None
-
-            # Track final memory
-            final_memory = self._track_memory_usage()
-            memory_usage_mb = final_memory - initial_memory
-
-            # Build result
-            result = EmbeddingResult(
-                dense_embeddings=all_dense_embeddings
-                if parameters.return_dense
-                else None,
-                sparse_embeddings=all_sparse_embeddings
-                if parameters.return_sparse
-                else None,
-                colbert_embeddings=all_colbert_embeddings
-                if parameters.return_colbert
-                else None,
-                processing_time=0.0,  # Will be set by caller
-                batch_size=batch_size,
-                memory_usage_mb=memory_usage_mb,
+            return EmbeddingResult(
+                dense_embeddings=dense_embeddings,
+                sparse_embeddings=sparse_embeddings,
+                colbert_embeddings=colbert_embeddings,
+                processing_time=processing_time,
+                batch_size=len(texts),  # Use actual batch size
+                memory_usage_mb=memory_usage,
                 model_info={
                     "model_name": self.settings.bge_m3_model_name,
-                    "device": self.device,
-                    "max_length": parameters.max_length,
+                    "device": str(self.device),
                     "embedding_dim": 1024,
-                    "fp16_enabled": parameters.use_fp16,
+                    "library": "FlagEmbedding.BGEM3FlagModel",
+                    "pooling_method": self.pooling_method,
+                    "normalize_embeddings": self.normalize_embeddings,
+                    "dense_enabled": params.return_dense,
+                    "sparse_enabled": params.return_sparse,
+                    "colbert_enabled": params.return_colbert,
+                    "weights_for_modes": self.weights_for_different_modes,
                 },
             )
-
-            # Clean up memory
-            self._cleanup_memory()
-
-            return result
-
         except Exception as e:
-            logger.error(f"BGE-M3 encode failed: {str(e)}")
-            self._cleanup_memory()
-            raise EmbeddingError(f"BGE-M3 embedding failed: {e}") from e
+            raise EmbeddingError(f"BGE-M3 unified embedding failed: {e}") from e
 
     async def embed_single_text_async(self, text: str) -> list[float]:
         """Embed single text and return dense embedding vector.
 
-        Args:
-            text: Text string to embed
-
-        Returns:
-            Dense embedding vector (1024D)
-
-        Raises:
-            EmbeddingError: If embedding fails
+        Note: This method only returns dense embeddings for backward compatibility.
+        Use embed_texts_async() to get both dense and sparse embeddings.
         """
-        result = await self.embed_texts_async([text])
-        if result.dense_embeddings:
-            return result.dense_embeddings[0]
-        else:
-            raise EmbeddingError("No dense embeddings returned")
+        try:
+            result = await self.embed_texts_async([text])
+            if result.dense_embeddings and len(result.dense_embeddings) > 0:
+                return result.dense_embeddings[0]
+            raise EmbeddingError("No dense embeddings generated")
+        except Exception as e:
+            raise EmbeddingError(f"Single text embedding failed: {e}") from e
 
     def get_performance_stats(self) -> dict[str, Any]:
-        """Get performance statistics for the embedder.
-
-        Returns:
-            Dictionary with performance metrics
-        """
+        """Get performance statistics."""
         avg_time_per_text = (
             self._total_processing_time / self._embedding_count
             if self._embedding_count > 0
             else 0.0
         )
-
         return {
             "total_texts_embedded": self._embedding_count,
             "total_processing_time": self._total_processing_time,
             "avg_time_per_text_ms": avg_time_per_text * 1000,
-            "peak_memory_usage_mb": self._peak_memory_mb,
             "device": self.device,
-            "model_loaded": self._model_loaded,
-            "optimal_batch_size": self._get_optimal_batch_size(),
+            "model_library": "FlagEmbedding.BGEM3FlagModel",
+            "unified_embeddings_enabled": True,
+            "pooling_method": self.pooling_method,
+            "normalize_embeddings": self.normalize_embeddings,
+            "weights_for_modes": self.weights_for_different_modes,
+            "library_optimization": True,
         }
 
     def reset_stats(self) -> None:
         """Reset performance statistics."""
         self._embedding_count = 0
         self._total_processing_time = 0.0
-        self._peak_memory_mb = 0.0
-        logger.info("Performance statistics reset")
+
+    def get_sparse_embeddings(self, texts: list[str]) -> list[dict[int, float]] | None:
+        """Get sparse embeddings only for the provided texts.
+
+        Args:
+            texts: List of texts to get sparse embeddings for
+
+        Returns:
+            List of sparse embedding dictionaries (token_id -> weight)
+        """
+        try:
+            embeddings = self.model.encode(
+                texts,
+                max_length=self.parameters.max_length,
+                return_dense=False,
+                return_sparse=True,
+                return_colbert_vecs=False,
+            )
+
+            if "lexical_weights" in embeddings:
+                return embeddings["lexical_weights"]
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get sparse embeddings: {e}")
+            return None
+
+    def get_dense_embeddings(self, texts: list[str]) -> list[list[float]] | None:
+        """Get dense embeddings only for the provided texts.
+
+        Args:
+            texts: List of texts to get dense embeddings for
+
+        Returns:
+            List of 1024-dimensional dense embedding vectors
+        """
+        try:
+            embeddings = self.model.encode(
+                texts,
+                max_length=self.parameters.max_length,
+                return_dense=True,
+                return_sparse=False,
+                return_colbert_vecs=False,
+            )
+
+            if "dense_vecs" in embeddings:
+                return embeddings["dense_vecs"].tolist()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get dense embeddings: {e}")
+            return None
+
+    def compute_sparse_similarity(
+        self, sparse1: dict[int, float], sparse2: dict[int, float]
+    ) -> float:
+        """Compute lexical matching score between two sparse embeddings.
+
+        Args:
+            sparse1: First sparse embedding
+            sparse2: Second sparse embedding
+
+        Returns:
+            Sparse similarity score
+        """
+        try:
+            return self.model.compute_lexical_matching_score(sparse1, sparse2)
+        except Exception as e:
+            logger.error(f"Failed to compute sparse similarity: {e}")
+            return 0.0
+
+    async def encode_queries(
+        self, queries: list[str], parameters: EmbeddingParameters | None = None
+    ) -> EmbeddingResult:
+        """Encode queries using BGEM3FlagModel's optimized query encoding.
+
+        Uses FlagEmbedding's encode_queries() for query-optimized encoding.
+        This method applies query-specific optimizations for better retrieval
+        performance.
+
+        Args:
+            queries: List of query texts to encode
+            parameters: Optional embedding parameters
+
+        Returns:
+            EmbeddingResult with query-optimized embeddings
+        """
+        if not queries:
+            return EmbeddingResult(
+                dense_embeddings=[],
+                sparse_embeddings=None,
+                processing_time=0.0,
+                batch_size=0,
+                memory_usage_mb=0.0,
+                model_info={"warning": "No queries provided"},
+            )
+
+        params = parameters or self.parameters
+        start_time = time.time()
+
+        try:
+            # Use library's query-optimized encoding
+            embeddings = self.model.encode_queries(
+                queries,
+                max_length=params.max_length,
+                return_dense=params.return_dense,
+                return_sparse=params.return_sparse,
+                return_colbert_vecs=params.return_colbert,
+            )
+
+            processing_time = time.time() - start_time
+            self._embedding_count += len(queries)
+            self._total_processing_time += processing_time
+
+            # Process embeddings same as embed_texts_async
+            dense_embeddings = None
+            if params.return_dense and "dense_vecs" in embeddings:
+                dense_embeddings = embeddings["dense_vecs"].tolist()
+
+            sparse_embeddings = None
+            if params.return_sparse and "lexical_weights" in embeddings:
+                sparse_embeddings = embeddings["lexical_weights"]
+
+            colbert_embeddings = None
+            if params.return_colbert and "colbert_vecs" in embeddings:
+                colbert_embeddings = embeddings["colbert_vecs"]
+
+            memory_usage = (
+                torch.cuda.memory_allocated() / (1024**2)
+                if torch.cuda.is_available()
+                else 0.0
+            )
+
+            return EmbeddingResult(
+                dense_embeddings=dense_embeddings,
+                sparse_embeddings=sparse_embeddings,
+                colbert_embeddings=colbert_embeddings,
+                processing_time=processing_time,
+                batch_size=len(queries),
+                memory_usage_mb=memory_usage,
+                model_info={
+                    "model_name": self.settings.bge_m3_model_name,
+                    "device": str(self.device),
+                    "embedding_dim": 1024,
+                    "library": "FlagEmbedding.BGEM3FlagModel.encode_queries",
+                    "optimization": "query-optimized",
+                    "pooling_method": self.pooling_method,
+                },
+            )
+        except Exception as e:
+            raise EmbeddingError(f"BGE-M3 query encoding failed: {e}") from e
+
+    async def encode_corpus(
+        self, corpus: list[str], parameters: EmbeddingParameters | None = None
+    ) -> EmbeddingResult:
+        """Encode corpus using BGEM3FlagModel's optimized corpus encoding.
+
+        Uses FlagEmbedding's encode_corpus() for document-optimized encoding.
+        This method applies corpus-specific optimizations for better indexing
+        performance.
+
+        Args:
+            corpus: List of corpus texts to encode
+            parameters: Optional embedding parameters
+
+        Returns:
+            EmbeddingResult with corpus-optimized embeddings
+        """
+        if not corpus:
+            return EmbeddingResult(
+                dense_embeddings=[],
+                sparse_embeddings=None,
+                processing_time=0.0,
+                batch_size=0,
+                memory_usage_mb=0.0,
+                model_info={"warning": "No corpus provided"},
+            )
+
+        params = parameters or self.parameters
+        start_time = time.time()
+
+        try:
+            # Use library's corpus-optimized encoding
+            embeddings = self.model.encode_corpus(
+                corpus,
+                max_length=params.max_length,
+                return_dense=params.return_dense,
+                return_sparse=params.return_sparse,
+                return_colbert_vecs=params.return_colbert,
+            )
+
+            processing_time = time.time() - start_time
+            self._embedding_count += len(corpus)
+            self._total_processing_time += processing_time
+
+            # Process embeddings same as embed_texts_async
+            dense_embeddings = None
+            if params.return_dense and "dense_vecs" in embeddings:
+                dense_embeddings = embeddings["dense_vecs"].tolist()
+
+            sparse_embeddings = None
+            if params.return_sparse and "lexical_weights" in embeddings:
+                sparse_embeddings = embeddings["lexical_weights"]
+
+            colbert_embeddings = None
+            if params.return_colbert and "colbert_vecs" in embeddings:
+                colbert_embeddings = embeddings["colbert_vecs"]
+
+            memory_usage = (
+                torch.cuda.memory_allocated() / (1024**2)
+                if torch.cuda.is_available()
+                else 0.0
+            )
+
+            return EmbeddingResult(
+                dense_embeddings=dense_embeddings,
+                sparse_embeddings=sparse_embeddings,
+                colbert_embeddings=colbert_embeddings,
+                processing_time=processing_time,
+                batch_size=len(corpus),
+                memory_usage_mb=memory_usage,
+                model_info={
+                    "model_name": self.settings.bge_m3_model_name,
+                    "device": str(self.device),
+                    "embedding_dim": 1024,
+                    "library": "FlagEmbedding.BGEM3FlagModel.encode_corpus",
+                    "optimization": "corpus-optimized",
+                    "pooling_method": self.pooling_method,
+                },
+            )
+        except Exception as e:
+            raise EmbeddingError(f"BGE-M3 corpus encoding failed: {e}") from e
+
+    def compute_similarity(
+        self,
+        texts1: list[str],
+        texts2: list[str],
+        mode: str = "hybrid",
+        max_passage_length: int = 8192,
+    ) -> dict[str, list[float]]:
+        """Compute similarity using BGEM3FlagModel's built-in similarity computation.
+
+        Uses the library's compute_score() method for comprehensive similarity analysis.
+
+        Args:
+            texts1: First set of texts (queries)
+            texts2: Second set of texts (passages)
+            mode: Similarity mode ('dense', 'sparse', 'colbert', 'hybrid')
+            max_passage_length: Maximum passage length for latency control
+
+        Returns:
+            Dictionary with similarity scores for different modes
+        """
+        try:
+            # Create sentence pairs for compute_score
+            sentence_pairs = [[q, p] for q in texts1 for p in texts2]
+
+            # Use library's comprehensive similarity computation
+            scores = self.model.compute_score(
+                sentence_pairs,
+                max_passage_length=max_passage_length,
+                weights_for_different_modes=self.weights_for_different_modes,
+            )
+
+            return scores
+        except Exception as e:
+            logger.error(f"Failed to compute similarity: {e}")
+            return {"error": [0.0] * (len(texts1) * len(texts2))}
+
+    def compute_colbert_similarity(
+        self, colbert_vecs1: list, colbert_vecs2: list
+    ) -> list[float]:
+        """Compute ColBERT late-interaction similarity scores.
+
+        Uses library's colbert_score() method for multi-vector similarity.
+
+        Args:
+            colbert_vecs1: First set of ColBERT vectors
+            colbert_vecs2: Second set of ColBERT vectors
+
+        Returns:
+            List of ColBERT similarity scores
+        """
+        try:
+            scores = []
+            for vec1 in colbert_vecs1:
+                for vec2 in colbert_vecs2:
+                    score = self.model.colbert_score(vec1, vec2)
+                    scores.append(float(score))
+            return scores
+        except Exception as e:
+            logger.error(f"Failed to compute ColBERT similarity: {e}")
+            return [0.0] * (len(colbert_vecs1) * len(colbert_vecs2))
+
+    def get_sparse_embedding_tokens(
+        self, sparse_embeddings: list[dict[int, float]]
+    ) -> list[dict[str, float]]:
+        """Convert sparse embedding IDs to tokens for debugging.
+
+        Uses library's convert_id_to_token() method for token inspection.
+
+        Args:
+            sparse_embeddings: List of sparse embeddings with token IDs
+
+        Returns:
+            List of sparse embeddings with human-readable tokens
+        """
+        try:
+            return self.model.convert_id_to_token(sparse_embeddings)
+        except Exception as e:
+            logger.error(f"Failed to convert sparse tokens: {e}")
+            return [{} for _ in sparse_embeddings]
 
     def unload_model(self) -> None:
-        """Unload model to free GPU memory."""
-        if self._model is not None:
-            del self._model
-            self._model = None
-            self._model_loaded = False
-            self._cleanup_memory()
-            logger.info("BGE-M3 model unloaded and memory cleaned")
+        """Unload BGE-M3 model and reset statistics."""
+        self.reset_stats()
+        if hasattr(self.model, "model") and hasattr(self.model.model, "to"):
+            # Move model to CPU to free GPU memory
+            self.model.model.to("cpu")
+        logger.info("BGE-M3 model unloaded")
 
 
-# Factory function for easy instantiation
 def create_bgem3_embedder(
-    settings: Any | None = None, parameters: EmbeddingParameters | None = None
+    settings: Any | None = None,
+    parameters: EmbeddingParameters | None = None,
+    pooling_method: str = "cls",
+    normalize_embeddings: bool = True,
+    weights_for_different_modes: list[float] | None = None,
+    devices: list[str] | None = None,
+    return_numpy: bool = False,
 ) -> BGEM3Embedder:
-    """Factory function to create BGEM3Embedder instance.
+    """Factory function to create BGEM3Embedder instance with full library capabilities.
 
     Args:
-        settings: Optional DocMind settings. Uses app_settings if None.
-        parameters: Optional embedding parameters. Uses defaults if None.
+        settings: Application settings
+        parameters: Embedding parameters
+        pooling_method: Pooling method ('cls', 'mean'). Default: 'cls'
+        normalize_embeddings: Whether to normalize embeddings. Default: True
+        weights_for_different_modes: Weights for [dense, sparse, colbert] fusion.
+            Default: [0.4, 0.2, 0.4]
+        devices: Specific devices to use. Default: auto-detect
+        return_numpy: Whether to return numpy arrays. Default: False (returns lists)
 
     Returns:
         Configured BGEM3Embedder instance
     """
-    return BGEM3Embedder(settings, parameters)
+    return BGEM3Embedder(
+        settings=settings,
+        parameters=parameters,
+        pooling_method=pooling_method,
+        normalize_embeddings=normalize_embeddings,
+        weights_for_different_modes=weights_for_different_modes,
+        devices=devices,
+        return_numpy=return_numpy,
+    )
