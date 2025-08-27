@@ -30,7 +30,9 @@ from typing import Any
 
 import ollama
 import streamlit as st
+from llama_index.core import VectorStoreIndex
 from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.core.vector_stores import SimpleVectorStore
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.openai import OpenAI
 from loguru import logger
@@ -51,8 +53,7 @@ from src.agents.tool_factory import ToolFactory
 from src.config.app_settings import app_settings
 from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
-
-# Constants now imported from centralized settings
+from src.utils.document import load_documents_unstructured
 
 
 # Simple wrapper functions for Ollama API calls
@@ -281,16 +282,27 @@ async def upload_section() -> None:
                 # Start timing for performance monitoring
                 start_time = time.perf_counter()
 
-                # TODO: Replace with ADR-009 compliant document processing
-                # For now, create placeholder docs to maintain functionality
-                docs: list[Any] = []  # Placeholder - needs ADR-009 integration
+                # ADR-009 compliant document processing
+                docs = await load_documents_unstructured(uploaded_files, app_settings)
                 doc_load_time = time.perf_counter() - start_time
+
+                # Progress tracking for document processing
+                progress_bar = st.progress(0)
+                for i, _doc in enumerate(docs):
+                    progress_bar.progress((i + 1) / len(docs))
 
                 # Use async indexing for 50-80% performance improvement
                 index_start_time = time.perf_counter()
-                # TODO: Replace with ADR-009 compliant index creation
-                # For now, create placeholder index to maintain functionality
-                st.session_state.index = None  # Placeholder - needs ADR-009 integration
+                try:
+                    # Create vector store and index with documents
+                    vector_store = SimpleVectorStore()
+                    st.session_state.index = VectorStoreIndex.from_documents(
+                        docs, vector_store=vector_store
+                    )
+                except Exception as e:
+                    st.error(f"Document processing failed: {e}")
+                    logger.error("Index creation failed: %s", str(e))
+                    return
                 index_time = time.perf_counter() - index_start_time
                 total_time = time.perf_counter() - start_time
 

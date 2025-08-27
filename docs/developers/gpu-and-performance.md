@@ -104,8 +104,8 @@ uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
 uv pip install vllm --extra-index-url https://download.pytorch.org/whl/cu128
 uv sync --extra gpu
 
-# Configure for standard CUDA backend
-export VLLM_ATTENTION_BACKEND=XFORMERS  # or FLASH_ATTN
+# Configure for standard CUDA backend  
+export VLLM_ATTENTION_BACKEND=FLASHINFER  # Recommended backend
 ```
 
 ## Manual Installation Steps
@@ -534,7 +534,7 @@ python -c "import torch; torch.cuda.empty_cache()"
 
 ## GPU Resource Management and Error Handling
 
-### Overview
+### Overview - GPU Resource Management
 
 DocMind AI implements comprehensive GPU resource management to prevent crashes, memory leaks, and ensure robust operation with ML workloads. The system provides automatic cleanup, error handling, and graceful fallbacks for all GPU operations.
 
@@ -555,6 +555,7 @@ with gpu_memory_context():
 ```
 
 **Key Features:**
+
 - Automatic cleanup on success or failure
 - Support for both sync and async operations
 - Comprehensive error handling with proper logging
@@ -629,6 +630,7 @@ def safe_gpu_operation(operation_name: str):
 ```
 
 **Error Categories:**
+
 - **RuntimeError**: CUDA errors vs other runtime errors
 - **OSError/AttributeError**: System-level issues (drivers, hardware)
 - **Exception**: Catch-all with detailed logging
@@ -665,6 +667,7 @@ batch_size = get_recommended_batch_size(
 ```
 
 **Improvements Made:**
+
 - Safe defaults on any GPU error (0.0 for VRAM, CPU defaults for batch sizes)
 - Detailed error logging with categorization
 - Graceful fallbacks to CPU operations
@@ -690,6 +693,7 @@ def _get_vram_usage(self) -> float:
 ```
 
 **Key Improvements:**
+
 - Comprehensive error handling with logging in `_get_vram_usage()`
 - Safe GPU device detection for FP8 setup in `_setup_environment()`
 - Improved CUDA/memory error categorization in `test_128k_context_support()`
@@ -780,6 +784,7 @@ python demo_resource_management.py
 ```
 
 **Test Coverage:**
+
 - Resource management context managers: ✅ All passing
 - Hardware detection robustness: ✅ 30/33 passing (improvements made safer)
 - Error handling patterns: ✅ All passing

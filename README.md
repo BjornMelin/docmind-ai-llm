@@ -112,6 +112,10 @@
       - [3. Model Download Issues](#3-model-download-issues)
       - [4. Memory Issues](#4-memory-issues)
       - [5. Document Processing Errors](#5-document-processing-errors)
+      - [6. vLLM FlashInfer Installation Issues](#6-vllm-flashinfer-installation-issues)
+      - [7. PyTorch 2.7.1 Compatibility Issues](#7-pytorch-271-compatibility-issues)
+      - [8. GPU Memory Issues (16GB RTX 4090)](#8-gpu-memory-issues-16gb-rtx-4090)
+      - [9. Performance Validation](#9-performance-validation)
     - [Performance Optimization](#performance-optimization)
     - [Getting Help](#getting-help)
   - [📖 How to Cite](#-how-to-cite)
@@ -234,7 +238,7 @@
 **Locally:**
 
 ```bash
-streamlit run app.py
+streamlit run src/app.py
 ```
 
 **With Docker:**

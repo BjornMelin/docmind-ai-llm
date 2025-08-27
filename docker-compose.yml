@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   app:
     build: .
@@ -14,7 +12,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=0
       - VLLM_TORCH_BACKEND=cu128
-      - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
       - FASTEMBED_CACHE_PATH=/tmp/fastembed_cache
       - ONNXRUNTIME_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider
@@ -27,13 +25,6 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     runtime: nvidia
     ipc: host
     shm_size: '2gb'
@@ -57,13 +48,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     runtime: nvidia
 
 volumes:

@@ -21,20 +21,20 @@ python scripts/validate_requirements.py
 
 ```python
 import asyncio
-from src.agents.supervisor_graph import initialize_supervisor_graph
+from src.agents.coordinator import MultiAgentCoordinator
 
 async def main():
     # Initialize the multi-agent system
-    supervisor = await initialize_supervisor_graph()
+    coordinator = MultiAgentCoordinator()
     
     # Process a query
-    response = await supervisor.process_query(
+    response = coordinator.process_query(
         "What are the key benefits of machine learning in healthcare?"
     )
     
-    print(f"Response: {response['response']}")
-    print(f"Confidence: {response['confidence']:.2f}")
-    print(f"Processing time: {response['processing_time_ms']:.2f}ms")
+    print(f"Response: {response.content}")
+    print(f"Validation score: {response.validation_score:.2f}")
+    print(f"Processing time: {response.processing_time:.3f}s")
 
 # Run the example
 asyncio.run(main())
@@ -44,13 +44,13 @@ asyncio.run(main())
 
 ### Core Components
 
-1. **vLLM Backend** (`src/utils/vllm_llm.py`)
+1. **vLLM Backend** (`src/config/vllm_config.py`)
    - Qwen3-4B-Instruct-2507 with FP8 quantization
    - 128K context window support
    - FlashInfer attention optimization
    - Memory-efficient KV cache
 
-2. **Multi-Agent Supervisor** (`src/agents/supervisor_graph.py`)
+2. **Multi-Agent Supervisor** (`src/agents/coordinator.py`)
    - LangGraph-based workflow coordination
    - 5-agent pipeline: Router → Planner → Retrieval → Synthesis → Validator
    - Error handling and fallback mechanisms
@@ -124,57 +124,74 @@ DOCMIND_MAX_AGENT_RETRIES=2
 ### Custom Agent Configuration
 
 ```python
-from src.agents.supervisor_graph import SupervisorGraph, SupervisorConfig
+from src.agents.coordinator import MultiAgentCoordinator
+from llama_index.core.memory import ChatMemoryBuffer
 
-# Custom configuration
-config = SupervisorConfig(
-    max_processing_time_ms=500,
-    enable_parallel_execution=True,
-    max_retries=3
+# Create coordinator with custom configuration
+coordinator = MultiAgentCoordinator(
+    model_path="Qwen/Qwen3-4B-Instruct-2507-FP8",
+    max_context_length=131072,  # 128K context
+    enable_fallback=True,
+    max_agent_timeout=5.0  # 5 second timeout
 )
 
-# Create supervisor with custom config
-supervisor = SupervisorGraph(config)
-await supervisor.compile_graph()
+# Create context for conversation continuity
+context = ChatMemoryBuffer.from_defaults()
 
-# Process query with custom context
-response = await supervisor.process_query(
+# Process query with context
+response = coordinator.process_query(
     query="Compare different ML algorithms",
-    context={"domain": "healthcare", "complexity": "high"}
+    context=context,
+    settings_override={"domain": "healthcare", "complexity": "high"}
 )
 ```
 
 ### Direct vLLM Backend Usage
 
 ```python
-from src.utils.vllm_llm import initialize_vllm_backend
+from src.config.vllm_config import create_vllm_manager, VLLMConfig
 
-# Initialize backend
-backend = initialize_vllm_backend()
-
-# Generate responses
-responses = backend.generate(
-    "Explain the benefits of FP8 quantization",
-    temperature=0.1,
-    max_tokens=512
+# Initialize vLLM manager
+vllm_manager = create_vllm_manager(
+    model_path="Qwen/Qwen3-4B-Instruct-2507-FP8",
+    max_context_length=131072
 )
 
-print(responses[0])
+# Initialize the engine
+if vllm_manager.initialize_engine():
+    # Create LlamaIndex instance for generation
+    llm_instance = vllm_manager.create_vllm_instance()
+    
+    # Generate response
+    response = llm_instance.complete(
+        "Explain the benefits of FP8 quantization"
+    )
+    
+    print(response.text)
 ```
 
 ### Streaming Responses
 
 ```python
 import asyncio
-from src.utils.vllm_llm import initialize_vllm_backend_async
+from src.config.vllm_config import create_vllm_manager
 
 async def stream_example():
-    backend = await initialize_vllm_backend_async()
+    # Create vLLM manager
+    vllm_manager = create_vllm_manager()
     
-    async for chunk in backend.generate_stream(
-        "Explain machine learning in detail:"
-    ):
-        print(chunk, end="", flush=True)
+    # Initialize engine
+    if vllm_manager.initialize_engine():
+        # Create LlamaIndex instance
+        llm_instance = vllm_manager.create_vllm_instance()
+        
+        # Stream response
+        response = llm_instance.stream_complete(
+            "Explain machine learning in detail:"
+        )
+        
+        for chunk in response:
+            print(chunk.delta, end="", flush=True)
 
 asyncio.run(stream_example())
 ```
@@ -236,11 +253,11 @@ except Exception as e:
 
 ```python
 async def process_batch(queries: list[str]):
-    supervisor = await initialize_supervisor_graph()
+    coordinator = MultiAgentCoordinator()
     results = []
     
     for query in queries:
-        response = await supervisor.process_query(query)
+        response = coordinator.process_query(query)
         results.append(response)
     
     return results
@@ -260,24 +277,28 @@ results = await process_batch(queries)
 ```python
 from src.utils import (
     load_documents_from_directory,
-    create_vector_index,
+    create_vector_store,
     setup_hybrid_collection
 )
 
 async def setup_document_pipeline(doc_directory: str):
     # Load documents
-    documents = load_documents_from_directory(doc_directory)
+    documents = await load_documents_from_directory(doc_directory)
     
-    # Create vector index
-    index = await create_vector_index(documents)
+    # Setup hybrid collection for vector storage
+    await setup_hybrid_collection("documents")
     
-    # Setup hybrid collection
-    await setup_hybrid_collection()
+    # Create vector store with documents
+    vector_store = create_vector_store("documents")
     
-    return index
+    return vector_store
 
 # Use in multi-agent system
-index = await setup_document_pipeline("./data/documents")
+vector_store = await setup_document_pipeline("./data/documents")
+
+# Initialize coordinator with document processing capability
+coordinator = MultiAgentCoordinator()
+# Note: Document vector store integration is handled through the retrieval agent tools
 ```
 
 ## Troubleshooting
@@ -365,8 +386,8 @@ setup_logging()
 # Log performance metrics
 @log_performance
 async def tracked_query(query: str):
-    supervisor = await initialize_supervisor_graph()
-    return await supervisor.process_query(query)
+    coordinator = MultiAgentCoordinator()
+    return coordinator.process_query(query)
 ```
 
 ### Health Checks
@@ -375,21 +396,26 @@ async def tracked_query(query: str):
 async def health_check():
     try:
         # Check vLLM backend
-        backend = get_vllm_backend()
-        model_info = backend.get_model_info()
+        vllm_manager = create_vllm_manager()
+        if vllm_manager.initialize_engine():
+            performance_metrics = vllm_manager.get_performance_metrics()
+        else:
+            raise RuntimeError("vLLM engine initialization failed")
         
         # Check agent system
-        supervisor = get_supervisor_graph()
+        coordinator = MultiAgentCoordinator()
         
         # Test query
-        response = await supervisor.process_query("Test query")
+        response = coordinator.process_query("Test query")
         
         return {
             "status": "healthy",
-            "model": model_info["model_name"],
-            "quantization": model_info["quantization"],
+            "model": performance_metrics["config"]["model"],
+            "quantization": "fp8",
             "agents": "operational",
-            "latency_ms": response.get("processing_time_ms", 0)
+            "processing_time_s": response.processing_time,
+            "validation_score": response.validation_score,
+            "adr_compliance": coordinator.validate_adr_compliance()
         }
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
