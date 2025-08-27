@@ -41,6 +41,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from dependency_injector.wiring import Provide, inject
 from langchain_core.messages import HumanMessage
 from langchain_core.messages.utils import trim_messages
 from langgraph.checkpoint.memory import InMemorySaver
@@ -798,17 +799,20 @@ class MultiAgentCoordinator:
 
 
 # Factory function for ADR-compliant coordinator
+@inject
 def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
     max_context_length: int = settings.default_token_limit,
     enable_fallback: bool = True,
+    container=Provide["ApplicationContainer"],
 ) -> MultiAgentCoordinator:
-    """Create ADR-compliant multi-agent coordinator.
+    """Create ADR-compliant multi-agent coordinator with dependency injection.
 
     Args:
         model_path: FP8 quantized model path
         max_context_length: Maximum context in tokens (128K)
         enable_fallback: Whether to enable fallback to basic RAG
+        container: Dependency injection container
 
     Returns:
         Configured MultiAgentCoordinator instance with ADR compliance

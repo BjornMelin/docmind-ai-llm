@@ -33,30 +33,51 @@ from src.processing.chunking.models import (
     SemanticChunk,
 )
 
-
-class MockMetadata:
-    """Mock metadata class for unstructured element compatibility."""
-
-    def __init__(self) -> None:
-        """Initialize mock metadata."""
-        self.page_number = 1
-        self.element_id = None
-        self.parent_id = None
-        self.filename = None
-        self.coordinates = None
-        self.section_title = None
-        self.text_as_html = None
-        self.image_path = None
+try:
+    from dataclasses import dataclass
+except ImportError:
+    # Fallback for older Python versions
+    def dataclass(cls):
+        """Fallback dataclass decorator for compatibility."""
+        return cls
 
 
-class MockElement:
-    """Mock element class for unstructured compatibility."""
+@dataclass
+class ElementMetadata:
+    """Metadata adapter for unstructured element compatibility.
 
-    def __init__(self) -> None:
-        """Initialize mock element."""
-        self.text = ""
-        self.category = "NarrativeText"
-        self.metadata = MockMetadata()
+    This adapter provides metadata attributes expected by unstructured.io's
+    chunk_by_title function. It converts DocumentElement metadata to the
+    format required by the unstructured library.
+    """
+
+    page_number: int = 1
+    element_id: str | None = None
+    parent_id: str | None = None
+    filename: str | None = None
+    coordinates: Any | None = None
+    section_title: str | None = None
+    text_as_html: str | None = None
+    image_path: str | None = None
+
+
+@dataclass
+class ElementAdapter:
+    """Element adapter for unstructured.io compatibility.
+
+    This adapter wraps DocumentElement objects to provide the interface
+    expected by unstructured.io's chunk_by_title function. It converts
+    internal document representations to unstructured-compatible format.
+    """
+
+    text: str = ""
+    category: str = "NarrativeText"
+    metadata: ElementMetadata | None = None
+
+    def __post_init__(self) -> None:
+        """Initialize metadata if not provided."""
+        if self.metadata is None:
+            self.metadata = ElementMetadata()
 
 
 class BoundaryDetection(str, Enum):
@@ -128,31 +149,32 @@ class SemanticChunker:
         converted_elements = []
 
         for element in elements:
-            # Create mock unstructured element with required attributes
-            mock_element = MockElement()
-
-            # Set required attributes
-            mock_element.text = (
-                element.text if hasattr(element, "text") else str(element)
-            )
-            mock_element.category = (
+            # Extract text and category
+            text = element.text if hasattr(element, "text") else str(element)
+            category = (
                 element.category if hasattr(element, "category") else "NarrativeText"
             )
 
+            # Create metadata adapter
+            metadata = ElementMetadata()
+
             # Set metadata if available
             if hasattr(element, "metadata") and element.metadata:
-                mock_element.metadata = MockMetadata()
-
                 for key, value in element.metadata.items():
-                    setattr(mock_element.metadata, key, value)
+                    if hasattr(metadata, key):
+                        setattr(metadata, key, value)
             else:
                 # Create minimal metadata
-                mock_element.metadata = MockMetadata()
-                mock_element.metadata.page_number = 1
-                mock_element.metadata.element_id = f"elem_{len(converted_elements)}"
-                mock_element.metadata.filename = "document"
+                metadata.page_number = 1
+                metadata.element_id = f"elem_{len(converted_elements)}"
+                metadata.filename = "document"
 
-            converted_elements.append(mock_element)
+            # Create element adapter
+            element_adapter = ElementAdapter(
+                text=text, category=category, metadata=metadata
+            )
+
+            converted_elements.append(element_adapter)
 
         return converted_elements
 

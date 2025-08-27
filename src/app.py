@@ -48,9 +48,12 @@ except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
     LlamaCPP = None
     LLAMACPP_AVAILABLE = False
 
+from dependency_injector.wiring import Provide, inject
+
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
 from src.config import settings
+from src.containers import ApplicationContainer
 from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
@@ -76,15 +79,21 @@ def create_tools_from_index(index: Any) -> list[Any]:
     return ToolFactory.create_basic_tools({"vector": index})
 
 
+@inject
 def get_agent_system(
-    _tools: Any, _llm: Any, _memory: Any
+    _tools: Any,
+    _llm: Any,
+    _memory: Any,
+    multi_agent_coordinator=Provide[ApplicationContainer.multi_agent_coordinator],
 ) -> tuple[MultiAgentCoordinator, str]:
-    """Get agent system using MultiAgentCoordinator.
+    """Get agent system using MultiAgentCoordinator with dependency injection.
 
-    Note: Parameters are currently not used but kept for future compatibility.
+    Note: _tools, _llm, _memory parameters are currently not used but kept for future compatibility.
+
+    Args:
+        multi_agent_coordinator: Injected multi-agent coordinator instance
     """
-    coordinator = MultiAgentCoordinator()
-    return coordinator, "multi_agent"
+    return multi_agent_coordinator, "multi_agent"
 
 
 def process_query_with_agent_system(
@@ -113,6 +122,11 @@ except RuntimeError as e:
         "properly configured."
     )
     st.stop()
+
+# Wire dependency injection container
+from src.containers import wire_container
+
+wire_container([__name__])
 
 st.set_page_config(page_title="DocMind AI", page_icon="🧠")
 
