@@ -71,7 +71,7 @@ xref
 trailer<</Size 6/Root 1 0 R>>
 startxref
 396
-%%EOF"""
+%%EOF"""  # noqa: E501
 
     documents["pdf"] = tmp_path / "integration_test.pdf"
     documents["pdf"].write_bytes(pdf_content)
@@ -284,7 +284,7 @@ class TestHybridProcessorIntegration:
     async def test_pipeline_transformation_chain(
         self, integration_settings, sample_documents
     ):
-        """Test the complete transformation chain from Document to processed elements."""
+        """Test the complete chain from Document to processed elements."""
         processor = DocumentProcessor(integration_settings)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
@@ -357,7 +357,6 @@ class TestHybridProcessorIntegration:
 
             # First processing - should create cache entry
             result1 = await processor.process_document_async(sample_documents["pdf"])
-            first_processing_time = result1.processing_time
 
             # Second processing - should use cache
             result2 = await processor.process_document_async(sample_documents["pdf"])
@@ -495,7 +494,8 @@ class TestHybridProcessorIntegration:
                 await asyncio.sleep(0.1)  # Simulate processing time
                 return [
                     Mock(
-                        text="Performance test content with multiple sentences for chunking. "
+                        text=("Performance test content with multiple sentences for "
+                        "chunking. ")
                         * 10,
                         category="NarrativeText",
                         metadata=Mock(

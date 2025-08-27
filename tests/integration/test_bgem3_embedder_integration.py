@@ -60,11 +60,16 @@ def integration_parameters():
 def sample_texts():
     """Realistic text samples for integration testing."""
     return [
-        "DocMind AI is a powerful document processing system that uses advanced embedding techniques.",
-        "The BGE-M3 model provides unified dense and sparse embeddings for hybrid search capabilities.",
-        "Integration testing validates the complete embedding pipeline with real model behavior.",
-        "Performance optimization ensures efficient processing of large document collections.",
-        "Sparse embeddings enable keyword-based matching while dense embeddings capture semantic similarity.",
+        "DocMind AI is a powerful document processing system that uses advanced "
+        "embedding techniques.",
+        "The BGE-M3 model provides unified dense and sparse embeddings for hybrid "
+        "search capabilities.",
+        "Integration testing validates the complete embedding pipeline with real "
+        "model behavior.",
+        "Performance optimization ensures efficient processing of large "
+        "document collections.",
+        "Sparse embeddings enable keyword-based matching while dense embeddings "
+        "capture semantic similarity.",
     ]
 
 
@@ -130,7 +135,7 @@ class TestBGEM3EmbedderIntegration:
         sample_texts,
         mock_integration_model,
     ):
-        """Test complete unified embedding pipeline with both dense and sparse embeddings."""
+        """Test complete unified embedding pipeline with dense + sparse embeddings."""
         # Mock torch configuration
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.get_device_properties.return_value = MagicMock(
@@ -160,7 +165,7 @@ class TestBGEM3EmbedderIntegration:
         assert len(result.dense_embeddings) == len(sample_texts)
         assert len(result.sparse_embeddings) == len(sample_texts)
 
-        for i, (dense_emb, sparse_emb) in enumerate(
+        for _i, (dense_emb, sparse_emb) in enumerate(
             zip(result.dense_embeddings, result.sparse_embeddings, strict=False)
         ):
             # Dense embedding validation
@@ -487,7 +492,7 @@ class TestBGEM3EmbedderIntegration:
 
         # Create deterministic mock for consistency testing
         def deterministic_encode(texts, **kwargs):
-            batch_size = len(texts)
+            len(texts)
             result = {}
 
             if kwargs.get("return_dense", False):
@@ -561,11 +566,16 @@ class TestBGEM3EmbedderIntegration:
 
         # Simulate document processing workflow
         document_chunks = [
-            "Chapter 1: Introduction to DocMind AI and its capabilities in document processing.",
-            "The system uses BGE-M3 embeddings for unified dense and sparse representation.",
-            "Chapter 2: Technical Architecture - The hybrid processor combines multiple strategies.",
-            "Performance optimization ensures efficient processing of large document collections.",
-            "Chapter 3: Integration Testing - Validates end-to-end functionality and performance.",
+            "Chapter 1: Introduction to DocMind AI and its capabilities in document "
+            "processing.",
+            "The system uses BGE-M3 embeddings for unified dense and sparse "
+            "representation.",
+            "Chapter 2: Technical Architecture - The hybrid processor combines "
+            "multiple strategies.",
+            "Performance optimization ensures efficient processing of large "
+            "document collections.",
+            "Chapter 3: Integration Testing - Validates end-to-end functionality "
+            "and performance.",
         ]
 
         # Process document chunks as they would be in real workflow

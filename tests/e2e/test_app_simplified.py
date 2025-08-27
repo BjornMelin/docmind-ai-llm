@@ -82,14 +82,6 @@ def test_coordinator_integration(mock_create_coordinator):
     mock_create_coordinator.assert_called_once()
 
 
-@patch("src.processing.document_processor.DocumentProcessor")
-def test_document_pipeline(mock_processor_class):
-    """Test document processing pipeline with ADR-009 components."""
-    # Skip this test as it was testing deleted legacy functionality
-    # New ADR-009 document processing is tested in dedicated test suites
-    pytest.skip("Legacy document pipeline test - replaced by ADR-009 implementation")
-
-
 def test_models_core_import():
     """Test that models.core can be imported and contains required classes."""
     try:
