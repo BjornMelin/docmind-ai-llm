@@ -348,9 +348,16 @@ Based on dependency analysis, the recommended implementation sequence is:
 
 ### Supporting Documents
 
-- [TRACE_MATRIX.md](./TRACE_MATRIX.md) - Full requirement traceability
-- [GLOSSARY.md](./GLOSSARY.md) - Technical terms and definitions
+- [trace-matrix.md](./trace-matrix.md) - Full requirement traceability
+- [glossary.md](./glossary.md) - Technical terms and definitions
 - [requirements.json](./requirements.json) - Machine-readable requirements
+- [environment-variable-mapping.md](./environment-variable-mapping.md) - Environment variable configuration specification
+- [adr-compliance-roadmap.md](./adr-compliance-roadmap.md) - ADR compliance status and implementation roadmap
+
+### Project Deliverables
+
+- [task-2-1-2-deliverable.md](./task-2-1-2-deliverable.md) - Environment variable mapping deliverable
+- [template-delta-specification-format.md](./template-delta-specification-format.md) - Delta specification template
 
 ## Document Control
 

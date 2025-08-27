@@ -15,7 +15,7 @@
 
 ### 1. Comprehensive Environment Variable Analysis
 
-**File:** `/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/ENVIRONMENT_VARIABLE_MAPPING.md`
+**File:** `/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/environment-variable-mapping.md`
 
 **Contents:**
 
@@ -128,7 +128,7 @@ This specification enables the next phase (**Task 2.2.1: PYDANTIC SETTINGS V2 Un
 
 ### Files Requiring Updates (7 files identified)
 
-- **Configuration** (3): `app_settings.py`, `llamaindex_setup.py`, `vllm_config.py`
+- **Configuration** (3): `settings.py`, `llamaindex_setup.py`, `vllm_config.py`
 - **Environment** (2): `.env.example`, `docker-compose.yml`
 - **Documentation** (2): `README.md`, `CLAUDE.md`
 
@@ -191,9 +191,9 @@ This specification directly enables **Task 2.2.1: PYDANTIC SETTINGS V2 Unified C
 
 ## Files Created
 
-1. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/ENVIRONMENT_VARIABLE_MAPPING.md`** - Comprehensive analysis and specification
+1. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/environment-variable-mapping.md`** - Comprehensive analysis and specification
 2. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/environment_variable_mappings.json`** - Implementation-ready JSON specification  
-3. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/TASK_2_1_2_DELIVERABLE.md`** - This deliverable summary
+3. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/task-2-1-2-deliverable.md`** - This deliverable summary
 
 **TASK 2.1.2 STATUS: COMPLETED** ✅
 

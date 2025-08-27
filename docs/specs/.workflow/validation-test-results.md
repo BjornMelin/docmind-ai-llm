@@ -23,7 +23,7 @@
 **Project State Management:**
 - **Workflow Directory**: ✅ Created `docs/specs/.workflow/` for state management  
 - **State Files**: Ready for project-local workflow tracking
-- **Existing Tracking**: `requirements.json`, `TRACE_MATRIX.md`, `SPEC_INDEX.md` available
+- **Existing Tracking**: `requirements.json`, `trace-matrix.md`, `spec-index.md` available
 
 ## Enhanced Command Validation
 
@@ -130,7 +130,7 @@
 - ✅ 5 existing specifications with implementation tracking  
 - ✅ Complete project structure with source code and tests
 - ✅ Workflow state directory created and ready
-- ✅ All tracking files (requirements.json, TRACE_MATRIX.md) present
+- ✅ All tracking files (requirements.json, trace-matrix.md) present
 
 ### Validation Conclusion
 

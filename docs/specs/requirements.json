@@ -26,7 +26,7 @@
       "prd": "/home/bjorn/repos/agents/docmind-ai-llm/docs/PRD.md",
       "adrs": "/home/bjorn/repos/agents/docmind-ai-llm/docs/adrs/",
       "total_adrs": 21,
-      "trace_matrix": "/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/TRACE_MATRIX.md"
+      "trace_matrix": "/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/trace-matrix.md"
     },
     "specifications": {
       "total": 5,
