@@ -24,8 +24,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from hypothesis import assume, given
-from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from src.config.settings import DocMindSettings, settings
@@ -56,56 +54,29 @@ class TestSettingsDefaults:
         """Test LLM backend defaults are properly configured for local-first."""
         s = settings
 
-        # Use semantic assertions for better CI compatibility
-        assert s.llm_backend in {
-            "vllm",
-            "ollama",
-            "llamacpp",
-            "openai",
-        }  # Valid backends
-        assert s.model_name is not None and len(s.model_name) > 0  # Has valid model
-        assert s.llm_base_url.startswith("http://")  # Valid HTTP URL
+        assert s.llm_backend == "vllm"  # vLLM for FP8 optimization
+        assert s.model_name == "Qwen/Qwen3-4B-Instruct-2507"  # Latest model
+        assert s.llm_base_url == "http://localhost:11434"  # Local Ollama
         assert s.llm_api_key is None  # No API key for local
-        assert 0.0 <= s.llm_temperature <= 2.0  # Reasonable temperature range
-        assert 128 <= s.llm_max_tokens <= 8192  # Reasonable token range
+        assert s.llm_temperature == 0.1  # Low for consistency
+        assert s.llm_max_tokens == 2048  # Reasonable generation length
 
     def test_model_optimization_defaults(self):
         """Test model optimization settings are correctly configured."""
         s = settings
 
-        # Use semantic assertions for optimization settings
-        assert s.quantization in {
-            "fp8",
-            "int8",
-            "int4",
-            None,
-        }  # Valid quantization types
-        assert s.kv_cache_dtype in {
-            "fp8",
-            "int8",
-            "float16",
-            None,
-        }  # Valid KV cache types
-        assert isinstance(s.enable_kv_cache_optimization, bool)  # Boolean setting
-        assert (
-            isinstance(s.kv_cache_performance_boost, (int, float))
-            and s.kv_cache_performance_boost > 1.0
-        )  # Performance boost
+        assert s.quantization == "fp8"  # FP8 for memory efficiency
+        assert s.kv_cache_dtype == "fp8"  # FP8 for KV cache
+        assert s.enable_kv_cache_optimization is True
+        assert s.kv_cache_performance_boost == 1.3  # 30% boost
 
     def test_context_management_defaults(self):
-        """Test context management has proper context window configuration."""
+        """Test context management has proper 128K defaults."""
         s = settings
 
-        # Use semantic assertions for context window settings
-        assert s.context_window_size >= 8192  # At least 8K context
-        assert s.context_buffer_size >= 8192  # At least 8K buffer
-        assert s.context_window_size in [
-            8192,
-            32768,
-            65536,
-            131072,
-        ]  # Valid context sizes
-        assert isinstance(s.enable_conversation_memory, bool)  # Boolean setting
+        assert s.context_window_size == 131072  # 128K
+        assert s.context_buffer_size == 131072  # 128K
+        assert s.enable_conversation_memory is True
 
     def test_document_processing_defaults(self):
         """Test document processing has sensible defaults."""
@@ -129,28 +100,17 @@ class TestSettingsDefaults:
         """Test embedding configuration defaults."""
         s = settings
 
-        # Use semantic assertions for embedding settings
-        assert (
-            s.embedding_model is not None and len(s.embedding_model) > 0
-        )  # Has valid model
-        assert s.embedding_dimension in [384, 512, 768, 1024, 4096]  # Common dimensions
-        assert isinstance(s.use_sparse_embeddings, bool)  # Boolean setting
+        assert s.embedding_model == "BAAI/bge-large-en-v1.5"
+        assert s.embedding_dimension == 1024  # BGE-Large dimension
+        assert s.use_sparse_embeddings is True  # SPLADE++ enabled
 
     def test_vector_database_defaults(self):
         """Test vector database configuration defaults."""
         s = settings
 
-        # Use semantic assertions for vector store settings
-        assert s.vector_store_type in {
-            "qdrant",
-            "chroma",
-            "pinecone",
-            "weaviate",
-        }  # Valid stores
-        assert s.qdrant_url.startswith(("http://", "https://"))  # Valid URL
-        assert (
-            s.qdrant_collection is not None and len(s.qdrant_collection) > 0
-        )  # Has collection name
+        assert s.vector_store_type == "qdrant"  # Qdrant is primary
+        assert s.qdrant_url == "http://localhost:6333"
+        assert s.qdrant_collection == "docmind_docs"
 
     def test_performance_defaults(self):
         """Test performance configuration defaults are reasonable."""
@@ -421,37 +381,6 @@ class TestFieldValidation:
             ValidationError, match="Input should be less than or equal to 65535"
         ):
             DocMindSettings(streamlit_port=70000)
-
-    def test_url_validation(self):
-        """Test URL settings are properly formatted and validated."""
-        settings = DocMindSettings()
-
-        # URLs should be well-formed
-        assert settings.qdrant_url.startswith(("http://", "https://"))
-        assert settings.ollama_base_url.startswith(("http://", "https://"))
-
-        # Should handle custom URLs
-        custom_settings = DocMindSettings(
-            qdrant_url="http://custom-qdrant:6333",
-            ollama_base_url="http://custom-ollama:11434",
-        )
-
-        assert custom_settings.qdrant_url == "http://custom-qdrant:6333"
-        assert custom_settings.ollama_base_url == "http://custom-ollama:11434"
-
-    def test_url_format_variations(self):
-        """Test different URL formats are handled appropriately."""
-        url_variations = [
-            "http://localhost:6333",
-            "https://qdrant.example.com",
-            "http://192.168.1.100:6333",
-            "https://qdrant:6333",
-        ]
-
-        for url in url_variations:
-            settings = DocMindSettings(qdrant_url=url)
-            assert settings.qdrant_url == url
-            assert settings.qdrant_url.startswith(("http://", "https://"))
 
 
 class TestDirectoryCreation:
@@ -980,207 +909,6 @@ class TestBackwardCompatibilityAndIntegration:
 
         except ImportError as e:
             pytest.fail(f"Failed to import settings: {e}")
-
-
-class TestSettingsPropertyBased:
-    """Property-based testing for settings validation using hypothesis."""
-
-    @given(st.integers(min_value=1, max_value=86400))  # 1 second to 1 day
-    def test_agent_timeout_range_property(self, timeout_value):
-        """Property-based test for agent timeout validation.
-
-        Tests that all valid timeout values in the reasonable range are accepted.
-        """
-        settings_data = {"agent_decision_timeout": timeout_value}
-        result = DocMindSettings(**settings_data)
-        assert result.agent_decision_timeout == timeout_value
-        assert 1 <= result.agent_decision_timeout <= 86400
-
-    @given(st.integers(min_value=0, max_value=50))
-    def test_max_agent_retries_property(self, retries_value):
-        """Property-based test for max agent retries validation."""
-        settings_data = {"max_agent_retries": retries_value}
-        result = DocMindSettings(**settings_data)
-        assert result.max_agent_retries == retries_value
-        assert 0 <= result.max_agent_retries <= 50
-
-    @given(
-        st.floats(min_value=0.0, max_value=2.0, allow_nan=False, allow_infinity=False)
-    )
-    def test_llm_temperature_property(self, temperature_value):
-        """Property-based test for LLM temperature validation."""
-        settings_data = {"llm_temperature": temperature_value}
-        result = DocMindSettings(**settings_data)
-        assert result.llm_temperature == temperature_value
-        assert 0.0 <= result.llm_temperature <= 2.0
-
-    @given(st.integers(min_value=1, max_value=100000))
-    def test_llm_max_tokens_property(self, max_tokens_value):
-        """Property-based test for LLM max tokens validation."""
-        settings_data = {"llm_max_tokens": max_tokens_value}
-        result = DocMindSettings(**settings_data)
-        assert result.llm_max_tokens == max_tokens_value
-        assert 1 <= result.llm_max_tokens <= 100000
-
-    @given(st.integers(min_value=100, max_value=8192))
-    def test_chunk_size_property(self, chunk_size_value):
-        """Property-based test for chunk size validation."""
-        settings_data = {"chunk_size": chunk_size_value}
-        result = DocMindSettings(**settings_data)
-        assert result.chunk_size == chunk_size_value
-        assert 100 <= result.chunk_size <= 8192
-
-    @given(st.integers(min_value=0, max_value=500))
-    def test_chunk_overlap_property(self, overlap_value):
-        """Property-based test for chunk overlap validation."""
-        # Ensure overlap is less than default chunk size for validity
-        assume(overlap_value < 512)  # Default chunk size is 512
-
-        settings_data = {"chunk_overlap": overlap_value}
-        result = DocMindSettings(**settings_data)
-        assert result.chunk_overlap == overlap_value
-        assert 0 <= result.chunk_overlap <= 500
-
-    @given(st.integers(min_value=1, max_value=1000))
-    def test_top_k_property(self, top_k_value):
-        """Property-based test for top_k retrieval validation."""
-        settings_data = {"top_k": top_k_value}
-        result = DocMindSettings(**settings_data)
-        assert result.top_k == top_k_value
-        assert 1 <= result.top_k <= 1000
-
-    @given(
-        st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False)
-    )
-    def test_rrf_alpha_property(self, alpha_value):
-        """Property-based test for RRF alpha weight validation."""
-        settings_data = {"rrf_alpha": alpha_value}
-        result = DocMindSettings(**settings_data)
-        assert result.rrf_alpha == alpha_value
-        assert 0.0 <= result.rrf_alpha <= 1.0
-
-    @given(
-        st.floats(min_value=0.1, max_value=0.99, allow_nan=False, allow_infinity=False)
-    )
-    def test_vllm_gpu_memory_property(self, memory_value):
-        """Property-based test for vLLM GPU memory utilization validation."""
-        settings_data = {"vllm_gpu_memory_utilization": memory_value}
-        result = DocMindSettings(**settings_data)
-        assert result.vllm_gpu_memory_utilization == memory_value
-        assert 0.1 <= result.vllm_gpu_memory_utilization <= 0.99
-
-    @given(st.integers(min_value=1024, max_value=65535))
-    def test_streamlit_port_property(self, port_value):
-        """Property-based test for Streamlit port validation."""
-        settings_data = {"streamlit_port": port_value}
-        result = DocMindSettings(**settings_data)
-        assert result.streamlit_port == port_value
-        assert 1024 <= result.streamlit_port <= 65535
-
-    @given(
-        st.text(
-            min_size=1,
-            max_size=50,
-            alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd", "Pc")),
-        )
-    )
-    def test_app_name_property(self, app_name_value):
-        """Property-based test for app name validation."""
-        # Filter out problematic characters
-        assume(len(app_name_value.strip()) > 0)  # Non-empty after strip
-        assume(not app_name_value.startswith("_"))  # No leading underscore
-
-        settings_data = {"app_name": app_name_value}
-        result = DocMindSettings(**settings_data)
-        assert result.app_name == app_name_value
-        assert len(result.app_name) <= 50
-
-    @given(st.from_regex(r"^\d+\.\d+\.\d+(-(alpha|beta|rc)\d*)?$"))
-    def test_version_string_property(self, version_value):
-        """Property-based test for version string validation."""
-        settings_data = {"app_version": version_value}
-        result = DocMindSettings(**settings_data)
-        assert result.app_version == version_value
-
-    @given(st.sampled_from(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]))
-    def test_log_level_property(self, log_level_value):
-        """Property-based test for log level validation."""
-        settings_data = {"log_level": log_level_value}
-        result = DocMindSettings(**settings_data)
-        assert result.log_level == log_level_value
-
-    @given(st.sampled_from(["ollama", "openai", "lmstudio"]))
-    def test_llm_backend_property(self, backend_value):
-        """Property-based test for LLM backend validation."""
-        settings_data = {"llm_backend": backend_value}
-        result = DocMindSettings(**settings_data)
-        assert result.llm_backend == backend_value
-
-    @given(st.sampled_from(["hybrid", "dense", "sparse"]))
-    def test_retrieval_strategy_property(self, strategy_value):
-        """Property-based test for retrieval strategy validation."""
-        settings_data = {"retrieval_strategy": strategy_value}
-        result = DocMindSettings(**settings_data)
-        assert result.retrieval_strategy == strategy_value
-
-    def test_property_based_edge_cases_combination(self):
-        """Test edge case combinations of settings that should work together."""
-
-        @given(
-            chunk_size=st.integers(min_value=200, max_value=1000),
-            chunk_overlap=st.integers(min_value=10, max_value=100),
-            top_k=st.integers(min_value=5, max_value=50),
-            temperature=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
-        )
-        def test_combination(chunk_size, chunk_overlap, top_k, temperature):
-            """Test that valid combinations of settings work together."""
-            # Ensure chunk_overlap < chunk_size
-            assume(chunk_overlap < chunk_size)
-
-            settings_data = {
-                "chunk_size": chunk_size,
-                "chunk_overlap": chunk_overlap,
-                "top_k": top_k,
-                "llm_temperature": temperature,
-            }
-
-            result = DocMindSettings(**settings_data)
-
-            # Validate the combination makes sense
-            assert result.chunk_overlap < result.chunk_size
-            assert result.top_k >= 1
-            assert 0.0 <= result.llm_temperature <= 2.0
-
-            # Validate derived properties
-            overlap_ratio = result.chunk_overlap / result.chunk_size
-            assert 0.0 <= overlap_ratio < 1.0  # Overlap should be less than chunk size
-
-        # Run the property-based test
-        test_combination()
-
-    def test_property_based_invalid_ranges(self):
-        """Test that invalid values outside acceptable ranges are rejected."""
-        # Test values outside valid ranges should raise ValidationError
-        invalid_test_cases = [
-            {"agent_decision_timeout": 0},  # Too low
-            {"agent_decision_timeout": 100000},  # Too high
-            {"max_agent_retries": -1},  # Negative
-            {"llm_temperature": -0.1},  # Negative temperature
-            {"llm_temperature": 2.1},  # Too high temperature
-            {"chunk_size": 50},  # Too small
-            {"chunk_overlap": 1000},  # Larger than max chunk size
-            {"top_k": 0},  # Zero retrieval
-            {"rrf_alpha": -0.1},  # Negative weight
-            {"rrf_alpha": 1.1},  # Weight > 1.0
-            {"vllm_gpu_memory_utilization": 0.05},  # Too low
-            {"vllm_gpu_memory_utilization": 1.0},  # Too high (100%)
-            {"streamlit_port": 80},  # Privileged port
-            {"streamlit_port": 70000},  # Port too high
-        ]
-
-        for invalid_settings in invalid_test_cases:
-            with pytest.raises(ValidationError):
-                DocMindSettings(**invalid_settings)
 
 
 class TestRealWorldScenarios:

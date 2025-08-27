@@ -38,7 +38,7 @@ def setup_llamaindex() -> None:
             request_timeout=120.0,
         )
         logger.info("LLM configured: %s", Settings.llm.model)
-    except (KeyError, ValueError, ConnectionError, ImportError) as e:
+    except Exception as e:
         logger.warning("Could not configure LLM: %s", e)
         Settings.llm = None
 
@@ -60,6 +60,7 @@ def setup_llamaindex() -> None:
             max_length=embedding_config["max_length"],
             embed_batch_size=embedding_config["batch_size"],
             trust_remote_code=embedding_config["trust_remote_code"],
+            torch_dtype=torch_dtype,
         )
         logger.info(
             "Embedding model configured: %s (device=%s, dtype=%s)",
@@ -67,7 +68,7 @@ def setup_llamaindex() -> None:
             embedding_config["device"],
             torch_dtype,
         )
-    except (KeyError, ValueError, OSError, ImportError, RuntimeError) as e:
+    except Exception as e:
         logger.warning("Could not configure embeddings: %s", e)
         Settings.embed_model = None
 
@@ -81,7 +82,7 @@ def setup_llamaindex() -> None:
             Settings.context_window,
             Settings.num_output,
         )
-    except (AttributeError, ValueError) as e:
+    except Exception as e:
         logger.warning("Could not set context configuration: %s", e)
 
 
@@ -136,43 +137,6 @@ def get_vllm_server_command() -> list[str]:
     return cmd
 
 
-def validate_fp8_requirements() -> dict[str, bool]:
-    """Validate FP8 requirements for vLLM optimization.
-
-    Checks hardware and software requirements needed for FP8
-    quantization support in vLLM.
-
-    Returns:
-        Dict containing validation results for FP8 requirements
-    """
-    requirements = {
-        "cuda_available": torch.cuda.is_available(),
-        "torch_available": True,  # We can import torch if we're here
-        "vllm_available": False,
-        "sufficient_vram": False,
-    }
-
-    # Check for vLLM availability
-    try:
-        import importlib.util
-
-        vllm_spec = importlib.util.find_spec("vllm")
-        requirements["vllm_available"] = vllm_spec is not None
-    except (ImportError, AttributeError):
-        logger.warning("vLLM not available for FP8 validation")
-
-    # Check VRAM if CUDA is available
-    if requirements["cuda_available"]:
-        try:
-            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            requirements["sufficient_vram"] = vram_gb >= 12.0  # Minimum 12GB for FP8
-            requirements["vram_gb"] = vram_gb
-        except (RuntimeError, AttributeError):
-            logger.warning("Could not determine VRAM for FP8 validation")
-
-    return requirements
-
-
 def initialize_integrations() -> None:
     """Initialize all integrations.
 
@@ -189,6 +153,5 @@ __all__ = [
     "setup_llamaindex",
     "setup_vllm_env",
     "get_vllm_server_command",
-    "validate_fp8_requirements",
     "initialize_integrations",
 ]

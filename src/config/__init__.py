@@ -17,26 +17,23 @@ Usage:
     from src.config import setup_llamaindex, initialize_integrations
 """
 
-# Initialize LlamaIndex automatically on import (skip in test environment)
-import os
-
 from .integrations import initialize_integrations, setup_llamaindex
 from .settings import settings
 
-if not (os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("TESTING")):
-    try:
-        setup_llamaindex()
-        import logging
+# Initialize LlamaIndex automatically on import
+try:
+    setup_llamaindex()
+    import logging
 
-        logging.getLogger(__name__).info(
-            "LlamaIndex configuration initialized successfully"
-        )
-    except (ImportError, AttributeError, ValueError, ConnectionError, OSError) as e:
-        import logging
+    logging.getLogger(__name__).info(
+        "LlamaIndex configuration initialized successfully"
+    )
+except Exception as e:
+    import logging
 
-        logging.getLogger(__name__).error(
-            "Failed to initialize LlamaIndex configuration: %s", e
-        )
+    logging.getLogger(__name__).error(
+        "Failed to initialize LlamaIndex configuration: %s", e
+    )
 
 __all__ = [
     "settings",

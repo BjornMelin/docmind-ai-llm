@@ -83,7 +83,7 @@ class TestToolFactoryReranker:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
@@ -100,7 +100,7 @@ class TestToolFactoryReranker:
         """Test reranker creation when no model is configured."""
         test_settings = DocMindSettings(reranker_model=None)
 
-        with patch("src.agents.tool_factory.settings", test_settings):
+        with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory._create_reranker()
 
             assert result is None
@@ -109,7 +109,7 @@ class TestToolFactoryReranker:
         """Test reranker creation with empty model string."""
         test_settings = DocMindSettings(reranker_model="")
 
-        with patch("src.agents.tool_factory.settings", test_settings):
+        with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory._create_reranker()
 
             assert result is None
@@ -121,7 +121,7 @@ class TestToolFactoryReranker:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
@@ -142,7 +142,7 @@ class TestToolFactoryReranker:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch(
                 "agents.tool_factory.ColbertRerank",
                 side_effect=RuntimeError("Model not found"),
@@ -161,7 +161,7 @@ class TestToolFactoryReranker:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch(
                 "agents.tool_factory.ColbertRerank",
                 side_effect=ImportError("ColbertRerank not installed"),
@@ -185,7 +185,7 @@ class TestToolFactoryVectorSearch:
 
         test_settings = DocMindSettings(top_k=5, debug_mode=False, reranker_model=None)
 
-        with patch("src.agents.tool_factory.settings", test_settings):
+        with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_vector_search_tool(mock_index)
 
             assert isinstance(result, QueryEngineTool)
@@ -212,7 +212,7 @@ class TestToolFactoryVectorSearch:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
@@ -247,7 +247,7 @@ class TestToolFactoryVectorSearch:
             reranker_model=None,
         )
 
-        with patch("src.agents.tool_factory.settings", test_settings):
+        with patch("agents.tool_factory.settings", test_settings):
             ToolFactory.create_vector_search_tool(mock_index)
 
             # Should use default similarity_top_k of 5
@@ -267,7 +267,7 @@ class TestToolFactoryKnowledgeGraph:
 
         test_settings = DocMindSettings(debug_mode=False, reranker_model=None)
 
-        with patch("src.agents.tool_factory.settings", test_settings):
+        with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_kg_search_tool(mock_kg_index)
 
             assert isinstance(result, QueryEngineTool)
@@ -295,7 +295,7 @@ class TestToolFactoryKnowledgeGraph:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
@@ -338,13 +338,13 @@ class TestToolFactoryHybridSearch:
         """Test successful hybrid search tool creation."""
         mock_retriever = MagicMock()
 
-        with patch("src.agents.tool_factory.RetrieverQueryEngine") as mock_engine_class:
+        with patch("agents.tool_factory.RetrieverQueryEngine") as mock_engine_class:
             mock_query_engine = MagicMock()
             mock_engine_class.return_value = mock_query_engine
 
             test_settings = DocMindSettings(reranker_model=None)
 
-            with patch("src.agents.tool_factory.settings", test_settings):
+            with patch("agents.tool_factory.settings", test_settings):
                 result = ToolFactory.create_hybrid_search_tool(mock_retriever)
 
                 assert isinstance(result, QueryEngineTool)
@@ -362,7 +362,7 @@ class TestToolFactoryHybridSearch:
         """Test hybrid search tool creation with ColBERT reranker."""
         mock_retriever = MagicMock()
 
-        with patch("src.agents.tool_factory.RetrieverQueryEngine") as mock_engine_class:
+        with patch("agents.tool_factory.RetrieverQueryEngine") as mock_engine_class:
             mock_query_engine = MagicMock()
             mock_engine_class.return_value = mock_query_engine
 
@@ -371,7 +371,7 @@ class TestToolFactoryHybridSearch:
             )
 
             with (
-                patch("src.agents.tool_factory.settings", test_settings),
+                patch("src.agents.tool_factory.app_settings", test_settings),
                 patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
             ):
                 mock_reranker = MagicMock()
@@ -395,7 +395,7 @@ class TestToolFactoryHybridSearch:
         """Test that hybrid search tool has comprehensive description."""
         mock_retriever = MagicMock()
 
-        with patch("src.agents.tool_factory.RetrieverQueryEngine"):
+        with patch("agents.tool_factory.RetrieverQueryEngine"):
             result = ToolFactory.create_hybrid_search_tool(mock_retriever)
 
             description = result.metadata.description.lower()
@@ -419,7 +419,7 @@ class TestToolFactoryHybridVector:
 
         test_settings = DocMindSettings(top_k=7, debug_mode=True, reranker_model=None)
 
-        with patch("src.agents.tool_factory.settings", test_settings):
+        with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_hybrid_vector_tool(mock_index)
 
             assert isinstance(result, QueryEngineTool)
@@ -448,7 +448,7 @@ class TestToolFactoryHybridVector:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker = MagicMock()
@@ -502,7 +502,7 @@ class TestToolFactoryFromIndexes:
             mock_kg.return_value = mock_kg_tool
             mock_vector.return_value = mock_vector_tool
 
-            with patch("src.agents.tool_factory.logging") as mock_logging:
+            with patch("agents.tool_factory.logging") as mock_logging:
                 result = ToolFactory.create_tools_from_indexes(
                     vector_index=mock_vector_index,
                     kg_index=mock_kg_index,
@@ -539,7 +539,7 @@ class TestToolFactoryFromIndexes:
                 ToolFactory, "create_hybrid_vector_tool"
             ) as mock_hybrid_vector,
             patch.object(ToolFactory, "create_vector_search_tool") as mock_vector,
-            patch("src.agents.tool_factory.logging") as mock_logging,
+            patch("agents.tool_factory.logging") as mock_logging,
         ):
             mock_hybrid_vector_tool = MagicMock()
             mock_vector_tool = MagicMock()
@@ -572,7 +572,7 @@ class TestToolFactoryFromIndexes:
 
     def test_create_tools_from_indexes_no_vector_index(self):
         """Test tool creation with no vector index (error case)."""
-        with patch("src.agents.tool_factory.logging") as mock_logging:
+        with patch("agents.tool_factory.logging") as mock_logging:
             result = ToolFactory.create_tools_from_indexes(
                 vector_index=None, kg_index=MagicMock(), retriever=MagicMock()
             )
@@ -787,7 +787,7 @@ class TestToolFactoryEdgeCases:
 
         test_settings = DocMindSettings(top_k=5, debug_mode=True, reranker_model=None)
 
-        with patch("src.agents.tool_factory.settings", test_settings):
+        with patch("agents.tool_factory.settings", test_settings):
             # Create two tools from different indexes
             tool1 = ToolFactory.create_vector_search_tool(mock_index1)
             tool2 = ToolFactory.create_kg_search_tool(mock_index2)
@@ -822,7 +822,7 @@ class TestToolFactoryPerformanceScenarios:
                 ToolFactory, "create_hybrid_vector_tool"
             ) as mock_hybrid_vector,
             patch.object(ToolFactory, "create_vector_search_tool") as mock_vector,
-            patch("src.agents.tool_factory.logging") as mock_logging,
+            patch("agents.tool_factory.logging") as mock_logging,
         ):
             mock_hybrid_vector.return_value = MagicMock()
             mock_vector.return_value = MagicMock()
@@ -839,7 +839,7 @@ class TestToolFactoryPerformanceScenarios:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
         ):
             mock_reranker1 = MagicMock()
@@ -866,7 +866,7 @@ class TestToolFactoryPerformanceScenarios:
 
         with (
             patch("agents.tool_factory.RetrieverQueryEngine", return_value=MagicMock()),
-            patch("src.agents.tool_factory.logging"),
+            patch("agents.tool_factory.logging"),
         ):
             # Create many tool sets
             for _i in range(10):
@@ -907,7 +907,7 @@ class TestToolFactoryIntegration:
         )
 
         with (
-            patch("src.agents.tool_factory.settings", test_settings),
+            patch("src.agents.tool_factory.app_settings", test_settings),
             patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
             patch("agents.tool_factory.RetrieverQueryEngine", return_value=MagicMock()),
         ):
@@ -960,7 +960,7 @@ class TestToolFactoryIntegration:
         for config in configurations:
             test_settings = DocMindSettings(**config)
 
-            with patch("src.agents.tool_factory.settings", test_settings):
+            with patch("agents.tool_factory.settings", test_settings):
                 if config.get("reranker_model"):
                     with patch(
                         "agents.tool_factory.ColbertRerank", return_value=MagicMock()
