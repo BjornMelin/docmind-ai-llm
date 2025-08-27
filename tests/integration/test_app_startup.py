@@ -24,14 +24,33 @@ APP_PATH = PROJECT_ROOT / "src" / "app.py"
 class TestAppStartup:
     """Test suite for validating app startup after dependency cleanup."""
 
-    def test_app_imports_successfully(self):
+    @patch("ollama.pull")
+    @patch("ollama.list")
+    @patch("qdrant_client.QdrantClient")
+    @patch("src.core.infrastructure.hardware_utils.detect_hardware")
+    def test_app_imports_successfully(
+        self, mock_hardware, mock_qdrant, mock_ollama_list, mock_ollama_pull
+    ):
         """Test that the app module can be imported without dependency errors."""
+        # Mock external dependencies
+        mock_qdrant.return_value = MagicMock()
+        mock_hardware.return_value = {"cpu_count": 4, "memory_gb": 16}
+        # Mock Ollama API to return realistic model list
+        mock_ollama_list.return_value = {
+            "models": [
+                {"name": "qwen2.5:4b", "size": 2500000000, "digest": "abc123"},
+                {"name": "llama3.1:8b", "size": 4700000000, "digest": "def456"},
+            ]
+        }
+        # Mock Ollama pull to prevent actual model downloads
+        mock_ollama_pull.return_value = {"status": "success"}
+
         src_path = str(PROJECT_ROOT / "src")
         if src_path not in sys.path:
             sys.path.insert(0, src_path)
 
         try:
-            # Test basic import
+            # Test basic import with mocked dependencies
             import src.app
 
             assert src.app is not None
@@ -143,12 +162,35 @@ class TestStreamlitUIComponents:
         except ImportError as e:
             pytest.skip(f"Streamlit not available: {e}")
 
+    @patch("ollama.pull")
+    @patch("ollama.list")
+    @patch("qdrant_client.QdrantClient")
+    @patch("src.core.infrastructure.hardware_utils.detect_hardware")
     @patch("streamlit.set_page_config")
     @patch("streamlit.session_state", new_callable=lambda: MagicMock())
     def test_app_ui_initialization_mocked(
-        self, mock_session_state, mock_set_page_config
+        self,
+        mock_session_state,
+        mock_set_page_config,
+        mock_hardware,
+        mock_qdrant,
+        mock_ollama_list,
+        mock_ollama_pull,
     ):
         """Test app UI initialization with mocked Streamlit components."""
+        # Mock external dependencies
+        mock_qdrant.return_value = MagicMock()
+        mock_hardware.return_value = {"cpu_count": 4, "memory_gb": 16}
+        # Mock Ollama API to return realistic model list
+        mock_ollama_list.return_value = {
+            "models": [
+                {"name": "qwen2.5:4b", "size": 2500000000, "digest": "abc123"},
+                {"name": "llama3.1:8b", "size": 4700000000, "digest": "def456"},
+            ]
+        }
+        # Mock Ollama pull to prevent actual model downloads
+        mock_ollama_pull.return_value = {"status": "success"}
+
         src_path = str(PROJECT_ROOT / "src")
         if src_path not in sys.path:
             sys.path.insert(0, src_path)

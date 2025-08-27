@@ -1,37 +1,63 @@
 """System tests for BGE-M3 Embedder with real GPU models and hardware validation.
 
 This module provides system-level tests for BGEM3Embedder that require actual
-GPU hardware, real model loading, and FlagEmbedding library integration.
+hardware, real model loading, and FlagEmbedding library integration.
 These tests validate the complete embedding system under realistic conditions.
 
 HARDWARE REQUIREMENTS:
-- RTX 4090 (16GB VRAM) or equivalent
-- 32GB RAM recommended
-- CUDA 12.8+ support
-- BGE-M3 model download (~2GB)
+- GPU: RTX 3060 (8GB) minimum, RTX 4060/4090 recommended
+- RAM: 16GB minimum, 32GB recommended
+- CUDA: 11.8+ support
+- Storage: ~3GB for BGE-M3 model download
+- Network: Initial model download required
 
 Test Coverage:
 - Real BGE-M3 model loading with FlagEmbedding
 - Actual GPU-accelerated embedding generation
 - BOTH dense AND sparse embeddings validation (ADR-002)
-- Performance benchmarks with real models
+- Performance benchmarks with realistic targets
 - Memory management under sustained load
-- Batch processing optimization with real hardware
+- Batch processing optimization with available hardware
 - Integration with document processing workflows
+- GPU memory monitoring and cleanup validation
 
 Following 3-tier testing strategy:
 - Tier 3 (System): End-to-end tests with real models (<5min each)
 - Requires GPU hardware and actual model loading
-- Tests real performance targets and memory constraints
+- Tests realistic performance targets based on available hardware
 - Validates ADR-002 compliance with live models
+- Includes proper cleanup and resource management
 """
 
 import time
+from contextlib import asynccontextmanager
 
 import pytest
+import torch
+from loguru import logger
 
-from src.models.embeddings import EmbeddingParameters, EmbeddingResult
-from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+# Import models and classes with proper error handling
+try:
+    from src.config.settings import DocMindSettings
+    from src.core.infrastructure.gpu_monitor import (
+        GPUMetrics,
+        gpu_performance_monitor,
+    )
+    from src.models.embeddings import EmbeddingParameters, EmbeddingResult
+    from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+except ImportError as e:
+    logger.error(f"Import error in system tests: {e}")
+    pytest.skip(f"Required modules not available: {e}", allow_module_level=True)
+
+# Check for FlagEmbedding availability
+try:
+    from FlagEmbedding import BGEM3FlagModel
+except ImportError:
+    pytest.skip("FlagEmbedding not available for system tests", allow_module_level=True)
+
+# Skip all tests if no GPU available
+if not torch.cuda.is_available():
+    pytest.skip("GPU not available for system tests", allow_module_level=True)
 
 
 @pytest.fixture
@@ -81,6 +107,55 @@ def system_test_texts():
         "Error handling mechanisms ensure graceful degradation under memory pressure "
         "with automatic fallback strategies and retry logic.",
     ]
+
+
+@asynccontextmanager
+async def gpu_memory_tracker():
+    """Track GPU memory usage during test execution with proper cleanup.
+
+    Yields:
+        dict: Memory statistics including initial, peak, and final memory usage
+    """
+    if not torch.cuda.is_available():
+        yield {"available": False}
+        return
+
+    # Clear cache before starting
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+
+    initial_memory = torch.cuda.memory_allocated()
+    initial_reserved = torch.cuda.memory_reserved()
+
+    stats = {
+        "available": True,
+        "initial_memory_gb": initial_memory / (1024**3),
+        "initial_reserved_gb": initial_reserved / (1024**3),
+    }
+
+    try:
+        yield stats
+    finally:
+        final_memory = torch.cuda.memory_allocated()
+        final_reserved = torch.cuda.memory_reserved()
+        peak_memory = torch.cuda.max_memory_allocated()
+
+        stats.update(
+            {
+                "final_memory_gb": final_memory / (1024**3),
+                "final_reserved_gb": final_reserved / (1024**3),
+                "peak_memory_gb": peak_memory / (1024**3),
+                "memory_used_gb": (final_memory - initial_memory) / (1024**3),
+            }
+        )
+
+        logger.info(
+            f"GPU Memory Stats - Used: {stats['memory_used_gb']:.2f}GB, "
+            f"Peak: {stats['peak_memory_gb']:.2f}GB"
+        )
+
+        # Cleanup
+        torch.cuda.empty_cache()
 
 
 class TestBGEM3EmbedderSystemGPU:

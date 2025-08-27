@@ -80,19 +80,21 @@ def mock_integration_model():
 
     # Mock realistic embedding generation with proper shapes and types
     def mock_encode(texts, **kwargs):
-        batch_size = len(texts)
+        if not texts:
+            return {}
 
+        batch_size = len(texts)
         result = {}
 
-        if kwargs.get("return_dense", False):
-            # Generate realistic dense embeddings (1024D)
+        if kwargs.get("return_dense", True):  # Default to True for BGE-M3
+            # Generate realistic dense embeddings (1024D) as numpy array
             result["dense_vecs"] = np.random.rand(batch_size, 1024).astype(np.float32)
 
-        if kwargs.get("return_sparse", False):
+        if kwargs.get("return_sparse", True):  # Default to True for BGE-M3
             # Generate realistic sparse embeddings (token weights)
             result["lexical_weights"] = [
                 {
-                    np.random.randint(1, 1000): np.random.rand()
+                    int(np.random.randint(1, 1000)): float(np.random.rand())
                     for _ in range(np.random.randint(5, 20))
                 }
                 for _ in range(batch_size)
@@ -105,10 +107,10 @@ def mock_integration_model():
                 for _ in range(batch_size)
             ]
 
-        # Simulate processing time
+        # Simulate minimal processing time for integration tests
         import time
 
-        time.sleep(0.1)  # Realistic model inference delay
+        time.sleep(0.01)  # Reduced for faster integration tests
 
         return result
 
@@ -183,7 +185,7 @@ class TestBGEM3EmbedderIntegration:
 
         # Verify performance metrics
         assert result.processing_time > 0
-        assert result.batch_size == 4  # Integration test batch size
+        assert result.batch_size == len(sample_texts)  # Should match input batch size
         assert result.memory_usage_mb > 0
 
         # Verify model information

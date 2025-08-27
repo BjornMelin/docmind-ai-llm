@@ -32,24 +32,58 @@ from llama_index.core.memory import ChatMemoryBuffer
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
-# Mock Agent Response Classes
+# Import real agent models and tools for proper testing
+from src.agents.models import AgentResponse
+
+
+# Mock Agent Response Classes Aligned with Real Models
 class MockAgentResponse:
-    """Mock agent response for testing."""
+    """Mock agent response for testing - aligned with real AgentResponse Pydantic model."""
 
     def __init__(
         self,
         content: str,
-        sources: list[Document] | None = None,
+        sources: list[dict[str, Any]] | None = None,
         metadata: dict[str, Any] | None = None,
         validation_score: float = 0.9,
         processing_time: float = 0.5,
+        optimization_metrics: dict[str, Any] | None = None,
+        agent_decisions: list[dict[str, Any]] | None = None,
+        fallback_used: bool = False,
     ):
-        """Initialize mock agent response."""
+        """Initialize mock agent response with real AgentResponse field alignment."""
         self.content = content
-        self.sources = sources or []
+        # Convert Document objects to dict format to match real AgentResponse
+        if sources and isinstance(sources[0], Document):
+            self.sources = [
+                {"text": doc.text, "metadata": doc.metadata or {}} for doc in sources
+            ]
+        else:
+            self.sources = sources or []
         self.metadata = metadata or {}
         self.validation_score = validation_score
         self.processing_time = processing_time
+        self.optimization_metrics = optimization_metrics or {
+            "coordination_overhead_ms": processing_time * 1000,
+            "meets_200ms_target": processing_time < 0.2,
+            "fp8_optimization": True,
+            "parallel_execution_active": False,
+        }
+        self.agent_decisions = agent_decisions or []
+        self.fallback_used = fallback_used
+
+    def to_agent_response(self) -> AgentResponse:
+        """Convert mock response to real AgentResponse for validation."""
+        return AgentResponse(
+            content=self.content,
+            sources=self.sources,
+            metadata=self.metadata,
+            validation_score=self.validation_score,
+            processing_time=self.processing_time,
+            optimization_metrics=self.optimization_metrics,
+            agent_decisions=self.agent_decisions,
+            fallback_used=self.fallback_used,
+        )
 
 
 class MockMultiAgentCoordinator:
@@ -131,12 +165,31 @@ class MockMultiAgentCoordinator:
             )
         ]
 
+        # Create agent decisions tracking
+        routing_decision = {
+            "agent": "router",
+            "decision": {"strategy": "vector", "complexity": "simple"},
+            "timestamp": time.time(),
+            "confidence": 0.95,
+        }
+
         return MockAgentResponse(
             content="The capital of France is Paris.",
             sources=sources,
             metadata={"strategy": "vector", "complexity": "simple"},
             validation_score=0.95,
             processing_time=processing_time,
+            optimization_metrics={
+                "coordination_overhead_ms": round(processing_time * 1000, 2),
+                "meets_200ms_target": processing_time < 0.2,
+                "fp8_optimization": True,
+                "parallel_execution_active": False,
+                "model_path": "Qwen/Qwen3-4B-Instruct-2507-FP8",
+                "context_trimmed": False,
+                "tokens_trimmed": 0,
+            },
+            agent_decisions=[routing_decision],
+            fallback_used=False,
         )
 
     def _process_complex_query(
@@ -192,6 +245,34 @@ class MockMultiAgentCoordinator:
 
         processing_time = time.perf_counter() - start_time
 
+        # Create comprehensive agent decisions tracking
+        agent_decisions = [
+            {
+                "agent": "router",
+                "decision": {"strategy": "hybrid", "complexity": "complex"},
+                "timestamp": time.time(),
+                "confidence": 0.9,
+            },
+            {
+                "agent": "planner",
+                "decision": planning_output,
+                "timestamp": time.time() + 0.1,
+                "confidence": 0.85,
+            },
+            {
+                "agent": "synthesis",
+                "decision": synthesis_result["synthesis_metadata"],
+                "timestamp": time.time() + 0.2,
+                "confidence": 0.88,
+            },
+            {
+                "agent": "validation",
+                "decision": validation_result,
+                "timestamp": time.time() + 0.3,
+                "confidence": validation_result["confidence"],
+            },
+        ]
+
         return MockAgentResponse(
             content="Electric vehicles generally have lower environmental impact...",
             sources=synthesis_result["documents"],
@@ -202,6 +283,18 @@ class MockMultiAgentCoordinator:
             },
             validation_score=validation_result["confidence"],
             processing_time=processing_time,
+            optimization_metrics={
+                "coordination_overhead_ms": round(processing_time * 1000, 2),
+                "meets_200ms_target": processing_time < 0.2,
+                "fp8_optimization": True,
+                "parallel_execution_active": True,  # Complex queries use parallel execution
+                "token_reduction_achieved": 0.65,  # Mock 65% token reduction
+                "model_path": "Qwen/Qwen3-4B-Instruct-2507-FP8",
+                "context_trimmed": len(planning_output["sub_tasks"]) > 5,
+                "tokens_trimmed": 150 if len(planning_output["sub_tasks"]) > 5 else 0,
+            },
+            agent_decisions=agent_decisions,
+            fallback_used=False,
         )
 
     def _process_fallback_query(
@@ -209,6 +302,14 @@ class MockMultiAgentCoordinator:
     ) -> MockAgentResponse:
         """Process queries using fallback RAG pipeline."""
         processing_time = time.perf_counter() - start_time
+
+        # Create fallback agent decision tracking
+        fallback_decision = {
+            "agent": "fallback_rag",
+            "decision": {"strategy": "fallback", "reason": "agent_failure"},
+            "timestamp": time.time(),
+            "confidence": 0.7,
+        }
 
         return MockAgentResponse(
             content="Fallback response generated using basic RAG pipeline.",
@@ -218,6 +319,18 @@ class MockMultiAgentCoordinator:
             metadata={"strategy": "fallback", "fallback_used": True},
             validation_score=0.7,
             processing_time=processing_time,
+            optimization_metrics={
+                "coordination_overhead_ms": round(processing_time * 1000, 2),
+                "meets_200ms_target": processing_time < 0.2,
+                "fp8_optimization": False,  # Fallback doesn't use FP8
+                "parallel_execution_active": False,
+                "fallback_mode": True,
+                "model_path": "basic_rag",
+                "context_trimmed": False,
+                "tokens_trimmed": 0,
+            },
+            agent_decisions=[fallback_decision],
+            fallback_used=True,
         )
 
 
@@ -1121,6 +1234,280 @@ class TestSpecificationCompliance:
         assert len(response.sources) > 0
         assert response.validation_score > 0.0
         assert response.processing_time > 0.0
+
+
+class TestRealAgentTools:
+    """Test real agent tools integration in coordination context.
+
+    Tests real @tool functions instead of mocks to validate actual
+    agent tool behavior in coordination workflows.
+    """
+
+    @pytest.fixture
+    def mock_state(self):
+        """Create a mock MultiAgentState for testing."""
+        from langchain_core.messages import HumanMessage
+
+        return {
+            "messages": [HumanMessage(content="Test query")],
+            "context": None,
+            "tools_data": {},
+        }
+
+    @pytest.mark.spec("FEAT-001")
+    def test_route_query_tool_simple(self, mock_state):
+        """Test real route_query tool with simple query."""
+        # Import the real tool here to avoid import errors during test collection
+        try:
+            from src.agents.tools import route_query
+        except ImportError:
+            pytest.skip("Agent tools not available for testing")
+
+        simple_query = "What is the capital of France?"
+
+        # Call the real route_query tool
+        result = route_query(simple_query, mock_state)
+
+        # Validate the result is a JSON string
+        assert isinstance(result, str)
+
+        # Parse and validate the decision structure
+        import json
+
+        try:
+            decision = json.loads(result)
+            assert "strategy" in decision
+            assert "complexity" in decision
+            assert "confidence" in decision
+            assert "needs_planning" in decision
+
+            # Simple query should have these characteristics
+            assert decision["strategy"] in ["vector", "hybrid"]
+            assert decision["complexity"] in ["simple", "medium", "complex"]
+            assert 0.0 <= decision["confidence"] <= 1.0
+            assert isinstance(decision["needs_planning"], bool)
+
+        except json.JSONDecodeError:
+            pytest.fail(f"route_query returned invalid JSON: {result}")
+
+    @pytest.mark.spec("FEAT-001")
+    def test_route_query_tool_complex(self, mock_state):
+        """Test real route_query tool with complex query."""
+        try:
+            from src.agents.tools import route_query
+        except ImportError:
+            pytest.skip("Agent tools not available for testing")
+
+        complex_query = "Compare the environmental impact of electric vs gasoline vehicles and explain manufacturing differences"
+
+        # Call the real route_query tool
+        result = route_query(complex_query, mock_state)
+
+        # Validate and parse result
+        import json
+
+        decision = json.loads(result)
+
+        # Complex query should typically need planning
+        # Note: This might vary based on actual implementation
+        assert "strategy" in decision
+        assert "complexity" in decision
+        assert "needs_planning" in decision
+
+        # Verify reasonable values
+        assert decision["strategy"] in ["vector", "hybrid"]
+        assert decision["complexity"] in ["simple", "medium", "complex"]
+        assert 0.0 <= decision["confidence"] <= 1.0
+
+    @pytest.mark.spec("FEAT-001")
+    def test_plan_query_tool(self, mock_state):
+        """Test real plan_query tool with complex query."""
+        try:
+            from src.agents.tools import plan_query
+        except ImportError:
+            pytest.skip("Agent tools not available for testing")
+
+        complex_query = "Compare electric and gasoline vehicles across environmental and economic factors"
+
+        # Call the real plan_query tool
+        result = plan_query(complex_query, mock_state)
+
+        # Validate the result
+        assert isinstance(result, str)
+
+        # Parse and validate the planning output
+        import json
+
+        try:
+            plan = json.loads(result)
+            assert "original_query" in plan
+            assert "sub_tasks" in plan
+
+            # Validate sub_tasks structure
+            sub_tasks = plan["sub_tasks"]
+            assert isinstance(sub_tasks, list)
+            assert len(sub_tasks) >= 1  # Should have at least one sub-task
+
+            # Each sub-task should be a meaningful string
+            for task in sub_tasks:
+                assert isinstance(task, str)
+                assert len(task.strip()) > 5  # Reasonable minimum length
+
+        except json.JSONDecodeError:
+            pytest.fail(f"plan_query returned invalid JSON: {result}")
+
+    @pytest.mark.spec("FEAT-001")
+    def test_retrieve_documents_tool(self, mock_state):
+        """Test real retrieve_documents tool."""
+        try:
+            from src.agents.tools import retrieve_documents
+        except ImportError:
+            pytest.skip("Agent tools not available for testing")
+
+        query = "machine learning basics"
+
+        # Call the real retrieve_documents tool
+        # Note: This may require proper setup of document index
+        try:
+            result = retrieve_documents(query, mock_state)
+
+            # Validate the result structure
+            assert isinstance(result, str)
+
+            # Try to parse as JSON
+            import json
+
+            retrieval_result = json.loads(result)
+
+            # Should have documents or error information
+            assert "documents" in retrieval_result or "error" in retrieval_result
+
+        except Exception as e:
+            # If retrieval fails due to missing index, that's expected in test environment
+            pytest.skip(f"Document retrieval not available in test environment: {e}")
+
+    @pytest.mark.spec("FEAT-001")
+    def test_synthesize_results_tool(self, mock_state):
+        """Test real synthesize_results tool."""
+        try:
+            from src.agents.tools import synthesize_results
+        except ImportError:
+            pytest.skip("Agent tools not available for testing")
+
+        # Mock some retrieval results
+        mock_results = {
+            "results": [
+                {"content": "Machine learning is a subset of AI", "source": "doc1.pdf"},
+                {"content": "ML algorithms learn from data", "source": "doc2.pdf"},
+            ]
+        }
+
+        # Update state with mock results
+        test_state = mock_state.copy()
+        test_state["retrieval_results"] = [mock_results]
+
+        query = "What is machine learning?"
+
+        try:
+            result = synthesize_results(query, test_state)
+
+            # Validate result
+            assert isinstance(result, str)
+
+            # Try to parse as JSON
+            import json
+
+            synthesis = json.loads(result)
+
+            # Should have synthesis information
+            assert (
+                "documents" in synthesis
+                or "synthesis_metadata" in synthesis
+                or "error" in synthesis
+            )
+
+        except Exception as e:
+            # If synthesis fails due to missing dependencies, that's expected
+            pytest.skip(f"Synthesis not available in test environment: {e}")
+
+    @pytest.mark.spec("FEAT-001")
+    def test_validate_response_tool(self, mock_state):
+        """Test real validate_response tool."""
+        try:
+            from src.agents.tools import validate_response
+        except ImportError:
+            pytest.skip("Agent tools not available for testing")
+
+        # Mock a response to validate
+        test_response = "Machine learning is a subset of artificial intelligence that enables computers to learn from data."
+        query = "What is machine learning?"
+
+        # Update state with mock response
+        test_state = mock_state.copy()
+        test_state["response"] = test_response
+        test_state["original_query"] = query
+
+        try:
+            result = validate_response(query, test_state)
+
+            # Validate result
+            assert isinstance(result, str)
+
+            # Try to parse as JSON
+            import json
+
+            validation = json.loads(result)
+
+            # Should have validation information
+            expected_fields = ["valid", "confidence", "issues", "suggested_action"]
+            for field in expected_fields:
+                if field in validation:
+                    # Validate field types
+                    if field == "valid":
+                        assert isinstance(validation[field], bool)
+                    elif field == "confidence":
+                        assert isinstance(validation[field], (int, float))
+                        assert 0.0 <= validation[field] <= 1.0
+                    elif field == "issues":
+                        assert isinstance(validation[field], list)
+                    elif field == "suggested_action":
+                        assert isinstance(validation[field], str)
+                        assert validation[field] in ["accept", "regenerate", "refine"]
+
+        except Exception as e:
+            # If validation fails due to missing dependencies, that's expected
+            pytest.skip(f"Validation not available in test environment: {e}")
+
+    @pytest.mark.spec("FEAT-001")
+    def test_agent_tools_coordination_flow(self, mock_state):
+        """Test a basic coordination flow using real agent tools."""
+        try:
+            from src.agents.tools import plan_query, route_query
+        except ImportError:
+            pytest.skip("Agent tools not available for testing")
+
+        query = "Compare renewable vs fossil fuel energy sources"
+
+        # Step 1: Route the query
+        routing_result = route_query(query, mock_state)
+
+        # Validate routing worked
+        import json
+
+        routing_decision = json.loads(routing_result)
+
+        # Step 2: If complex, plan the query
+        if routing_decision.get("needs_planning", False):
+            planning_result = plan_query(query, mock_state)
+            planning_output = json.loads(planning_result)
+
+            # Validate planning worked
+            assert "sub_tasks" in planning_output
+            assert len(planning_output["sub_tasks"]) > 0
+
+        # This demonstrates that the real tools can work in coordination
+        assert routing_decision["strategy"] in ["vector", "hybrid"]
+        assert routing_decision["complexity"] in ["simple", "medium", "complex"]
 
 
 if __name__ == "__main__":

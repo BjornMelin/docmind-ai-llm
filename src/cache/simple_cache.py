@@ -12,8 +12,10 @@ from typing import Any
 from llama_index.core.storage.kvstore import SimpleKVStore
 from loguru import logger
 
+from src.interfaces import CacheInterface
 
-class SimpleCache:
+
+class SimpleCache(CacheInterface):
     """LlamaIndex SimpleKVStore cache for document processing.
 
     Single SQLite file, no external services required.

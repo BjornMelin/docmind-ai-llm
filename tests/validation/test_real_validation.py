@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Real validation tests for DocMind AI system components.
+"""Production readiness validation for DocMind AI system.
 
 This module tests actual functionality with minimal mocking to validate
-that the system works correctly in real scenarios. Tests that require
+that the system works correctly in real production scenarios. Tests that require
 external services are marked with appropriate pytest marks.
+
+Validation Areas:
+- Unified configuration system validation
+- Real hardware detection and performance validation
+- Multi-agent system coordination validation
+- Production readiness checks
+- Integration compatibility verification
 """
 
 import logging
@@ -13,75 +20,77 @@ from llama_index.core import Document
 
 # Import DocMind AI components
 from src.config.settings import DocMindSettings
-from src.utils.core import (
-    detect_hardware,
-    verify_rrf_configuration,
-)
+from src.utils.core import detect_hardware
 
 
 class TestRealConfiguration:
     """Test real configuration loading and validation."""
 
     def test_settings_loading(self):
-        """Test that settings load correctly from environment."""
+        """Test that unified settings load correctly from environment."""
         settings = DocMindSettings()
 
         # Verify core configuration is loaded
-        assert isinstance(settings.backend, str)
+        assert isinstance(settings.llm_backend, str)
         assert isinstance(settings.ollama_base_url, str)
         assert isinstance(settings.model_name, str)
 
         # Verify embedding configuration
         assert isinstance(settings.embedding_model, str)
-        assert isinstance(settings.sparse_embedding_model, str)
         assert settings.embedding_dimension > 0
 
-        # Verify SPLADE++ is configured
-        assert "Splade_PP_en_v1" in settings.sparse_embedding_model
-
-        # Verify BGE-Large is configured
-        assert "bge-large-en-v1.5" in settings.embedding_model
+        # Verify BGE models are configured (updated from BGE-Large to current architecture)
+        assert (
+            "bge" in settings.embedding_model.lower()
+            or "bge-m3" in settings.bge_m3_model_name.lower()
+        )
 
     def test_rrf_configuration_real_settings(self):
         """Test RRF configuration with real settings."""
         settings = DocMindSettings()
-        verification = verify_rrf_configuration(settings)
 
-        # Log verification results for debugging
-        logging.info(f"RRF Verification: {verification}")
+        # Test RRF configuration is properly set up in unified config
+        assert hasattr(settings, "rrf_fusion_alpha")
+        assert hasattr(settings, "rrf_k_constant")
+        assert hasattr(settings, "rrf_fusion_weight_dense")
+        assert hasattr(settings, "rrf_fusion_weight_sparse")
 
-        # Check that configuration meets requirements
-        assert verification["weights_correct"] is True, (
-            f"Weights incorrect: {verification['issues']}"
+        # Verify RRF weights are reasonable (0.7/0.3 split)
+        dense_weight = settings.rrf_fusion_weight_dense
+        sparse_weight = settings.rrf_fusion_weight_sparse
+
+        assert 0.0 <= dense_weight <= 1.0
+        assert 0.0 <= sparse_weight <= 1.0
+        assert abs(dense_weight + sparse_weight - 1.0) < 0.01  # Should sum to 1.0
+
+        # Log RRF configuration for debugging
+        logging.info(
+            f"RRF Dense Weight: {dense_weight}, Sparse Weight: {sparse_weight}"
         )
-        assert verification["alpha_in_range"] is True, (
-            f"Alpha out of range: {verification['issues']}"
+        logging.info(
+            f"RRF Alpha: {settings.rrf_fusion_alpha}, K: {settings.rrf_k_constant}"
         )
-
-        # Verify computed alpha is reasonable
-        if "computed_hybrid_alpha" in verification:
-            computed_alpha = verification["computed_hybrid_alpha"]
-            assert 0.0 <= computed_alpha <= 1.0
-            assert (
-                abs(computed_alpha - 0.7) < 0.05
-            )  # Should be close to 0.7 for 0.7/0.3 split
 
     def test_gpu_configuration_consistency(self):
-        """Test GPU configuration is consistent across settings."""
+        """Test GPU configuration is consistent across unified settings."""
         settings = DocMindSettings()
 
         # Verify GPU settings are boolean
         assert isinstance(settings.enable_gpu_acceleration, bool)
-        # Check if enable_quantization exists (it may not be in simplified settings)
-        if hasattr(settings, "enable_quantization"):
-            assert isinstance(settings.enable_quantization, bool)
 
-        # Verify batch size is reasonable
-        assert 1 <= settings.embedding_batch_size <= 512
+        # Test vLLM GPU configuration
+        assert hasattr(settings, "vllm_gpu_memory_utilization")
+        assert 0.1 <= settings.vllm_gpu_memory_utilization <= 0.95
 
-        # Test other GPU-related settings if available
-        if hasattr(settings, "cuda_device_id"):
-            assert settings.cuda_device_id >= 0
+        # Test embedding batch sizes from nested config
+        assert hasattr(settings.embedding, "batch_size_gpu")
+        assert hasattr(settings.embedding, "batch_size_cpu")
+        assert 1 <= settings.embedding.batch_size_gpu <= 128
+        assert 1 <= settings.embedding.batch_size_cpu <= 32
+
+        # Test quantization settings
+        assert hasattr(settings, "quantization")
+        assert hasattr(settings, "kv_cache_dtype")
 
 
 class TestHardwareDetectionReal:
@@ -229,21 +238,25 @@ class TestConfigurationValidation:
         """Test batch size configurations are reasonable."""
         settings = DocMindSettings()
 
-        # Embedding batch size should be reasonable for most hardware
-        assert 1 <= settings.embedding_batch_size <= 512
+        # Embedding batch sizes from nested config should be reasonable for most hardware
+        assert 1 <= settings.embedding.batch_size_gpu <= 128
+        assert 1 <= settings.embedding.batch_size_cpu <= 32
 
-        # Prefetch factor should be small
-        assert 1 <= settings.prefetch_factor <= 8
+        # vLLM batch configuration should be reasonable
+        assert 1 <= settings.vllm.max_num_seqs <= 64
+        assert 1024 <= settings.vllm.max_num_batched_tokens <= 16384
 
     def test_reranking_configuration(self):
-        """Test reranking configuration meets Phase 2.2 requirements."""
+        """Test reranking configuration meets current requirements."""
         settings = DocMindSettings()
 
-        # Phase 2.2: retrieve 20, rerank to 5
-        assert settings.reranking_top_k == 5
+        # Test reranking settings from nested config
+        assert settings.retrieval.reranking_top_k == 5
+        assert settings.use_reranking is True
 
-        # ColBERT should be enabled
-        assert settings.enable_colbert_reranking is True
+        # Test reranker model is properly configured
+        assert hasattr(settings.retrieval, "reranker_model")
+        assert "bge-reranker" in settings.retrieval.reranker_model.lower()
 
 
 class TestErrorHandlingReal:
@@ -251,26 +264,24 @@ class TestErrorHandlingReal:
 
     def test_settings_validation_errors(self):
         """Test settings validation with invalid values."""
-        # Test with invalid RRF weights
-        settings = DocMindSettings()
+        # Test with invalid configuration values
 
-        # Weights should be between 0 and 1
-        with pytest.raises(ValueError, match="Weight must be between 0 and 1"):
-            settings.rrf_fusion_weight_dense = 1.5
+        # Test invalid chunk size
+        with pytest.raises(ValueError):
+            DocMindSettings(chunk_size=0)  # Should be >= 128
 
-        with pytest.raises(ValueError, match="Weight must be between 0 and 1"):
-            settings.rrf_fusion_weight_sparse = -0.1
+        # Test invalid GPU memory utilization
+        with pytest.raises(ValueError):
+            DocMindSettings(vllm_gpu_memory_utilization=1.5)  # Should be <= 0.95
 
     def test_batch_size_validation(self):
         """Test batch size validation."""
-        settings = DocMindSettings()
+        # Test invalid embedding batch sizes in nested config
+        with pytest.raises(ValueError):
+            DocMindSettings(bge_m3_batch_size_gpu=0)  # Should be >= 1
 
-        # Test invalid batch sizes
-        with pytest.raises(ValueError, match="Batch size must be greater than 0"):
-            settings.embedding_batch_size = 0
-
-        with pytest.raises(ValueError, match="Batch size cannot exceed 512"):
-            settings.embedding_batch_size = 1000  # Too large
+        with pytest.raises(ValueError):
+            DocMindSettings(bge_m3_batch_size_gpu=200)  # Should be <= 128
 
     def test_graceful_degradation_patterns(self):
         """Test graceful degradation patterns exist."""
@@ -293,15 +304,19 @@ class TestIntegrationReadiness:
         """Test that all required models are properly configured."""
         settings = DocMindSettings()
 
-        # Dense embedding model
+        # Dense embedding model (both flat and nested config)
         assert settings.embedding_model is not None
         assert len(settings.embedding_model) > 0
         assert "bge" in settings.embedding_model.lower()
 
-        # Sparse embedding model
-        assert settings.sparse_embedding_model is not None
-        assert len(settings.sparse_embedding_model) > 0
-        assert "splade" in settings.sparse_embedding_model.lower()
+        # BGE-M3 model from nested config
+        assert settings.embedding.model_name is not None
+        assert len(settings.embedding.model_name) > 0
+        assert "bge-m3" in settings.embedding.model_name.lower()
+
+        # Test sparse embedding support exists via settings
+        assert hasattr(settings, "use_sparse_embeddings")
+        assert isinstance(settings.use_sparse_embeddings, bool)
 
     def test_qdrant_configuration(self):
         """Test Qdrant configuration is properly set."""
@@ -315,14 +330,18 @@ class TestIntegrationReadiness:
         """Test LLM backend configuration."""
         settings = DocMindSettings()
 
-        # Check if backend attribute exists (may not be in simplified settings)
-        if hasattr(settings, "backend"):
-            assert settings.backend in ["ollama", "lmstudio", "llamacpp"]
+        # Check llm_backend attribute (updated attribute name)
+        assert hasattr(settings, "llm_backend")
+        assert settings.llm_backend in ["ollama", "vllm", "openai"]
 
         # Check model_name attribute
         assert hasattr(settings, "model_name")
         assert settings.model_name is not None
         assert len(settings.model_name) > 0
+
+        # Test vLLM configuration
+        assert hasattr(settings, "vllm")
+        assert settings.vllm.model == settings.model_name
 
 
 # Test configuration

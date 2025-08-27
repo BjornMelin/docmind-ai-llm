@@ -177,7 +177,7 @@ class ConversationContext(BaseModel):
             accurate token counting.
         """
         # Simple implementation - would be more sophisticated in production
-        result = []
+        result: list[ConversationTurn] = []
         current_tokens = 0
 
         for turn in reversed(self.turns):
