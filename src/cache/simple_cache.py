@@ -40,6 +40,10 @@ class SimpleCache:
         # Store persistence path for later saves
         self._persist_path = str(db_path)
 
+        # Hit/miss tracking for real cache metrics
+        self._hits = 0
+        self._misses = 0
+
         logger.info(f"SimpleCache initialized at {cache_path}")
 
     async def get_document(self, path: str) -> Any | None:
@@ -48,13 +52,20 @@ class SimpleCache:
             key = self._hash(path)
             try:
                 result = self.cache.get(key)
-                logger.debug(f"Cache hit for: {Path(path).name}")
-                return result
+                if result is not None:
+                    self._hits += 1
+                    logger.debug(f"Cache hit for: {Path(path).name}")
+                    return result
+                else:
+                    self._misses += 1
+                    return None
             except (KeyError, ValueError):
                 # Key not found in cache
+                self._misses += 1
                 return None
         except (OSError, ValueError, RuntimeError, AttributeError) as e:
             logger.error(f"Cache get failed: {e}")
+            self._misses += 1
             return None
 
     async def store_document(self, path: str, result: Any) -> bool:
@@ -88,7 +99,10 @@ class SimpleCache:
             db_file = Path(self._persist_path)
             if db_file.exists():
                 db_file.unlink()
-            logger.info("Cleared document cache")
+            # Reset hit/miss counters
+            self._hits = 0
+            self._misses = 0
+            logger.info("Cleared document cache and reset metrics")
             return True
         except (OSError, ValueError, RuntimeError, AttributeError) as e:
             logger.error(f"Cache clear failed: {e}")
@@ -97,16 +111,34 @@ class SimpleCache:
     async def get_cache_stats(self) -> dict[str, Any]:
         """Get simple cache statistics."""
         try:
-            # Get basic cache information - use get_all() to get all stored items
-            all_keys = self.cache.get_all()
-            total_documents = len(all_keys)
+            # Calculate hit rate
+            total_requests = self._hits + self._misses
+            hit_rate = (self._hits / total_requests) if total_requests > 0 else 0.0
+
+            # Get document count safely - SimpleKVStore may not have get_all()
+            try:
+                if hasattr(self.cache, "store") and hasattr(
+                    self.cache.store, "__len__"
+                ):
+                    total_documents = len(self.cache.store)
+                elif hasattr(self.cache, "_data") and hasattr(
+                    self.cache._data, "__len__"
+                ):
+                    total_documents = len(self.cache._data)
+                else:
+                    # Fallback: estimate from hits (cache entries accessed)
+                    total_documents = self._hits
+            except (AttributeError, TypeError):
+                total_documents = self._hits  # Fallback estimate
 
             return {
                 "cache_type": "simple_sqlite",
                 "total_documents": total_documents,
-                "hit_rate": 0.8,  # Mock hit rate for compatibility
+                "hit_rate": round(hit_rate, 3),
                 "size_mb": total_documents * 0.1,  # Rough size estimate
-                "total_requests": total_documents,
+                "total_requests": total_requests,
+                "hits": self._hits,
+                "misses": self._misses,
             }
         except (OSError, ValueError, RuntimeError, AttributeError) as e:
             logger.error(f"Cache stats failed: {e}")

@@ -65,6 +65,50 @@ from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 # Import agent-specific models
 from .models import AgentResponse, MultiAgentState
 
+
+class ContextManager:
+    """Context manager for 128K context handling and token estimation."""
+
+    def __init__(self, max_context_tokens: int = 131072):
+        """Initialize context manager with 128K context support."""
+        self.max_context_tokens = max_context_tokens
+        self.trim_threshold = int(max_context_tokens * 0.9)  # 90% threshold
+        self.kv_cache_memory_per_token = 1024  # bytes per token for FP8
+
+    def estimate_tokens(self, messages: list[dict] | list[Any]) -> int:
+        """Estimate token count for messages (4 chars per token average)."""
+        if not messages:
+            return 0
+
+        total_chars = 0
+        for msg in messages:
+            if hasattr(msg, "content"):
+                content = str(msg.content)
+            elif isinstance(msg, dict) and "content" in msg:
+                content = str(msg["content"])
+            else:
+                content = str(msg)
+            total_chars += len(content)
+
+        return total_chars // 4  # 4 chars per token estimate
+
+    def calculate_kv_cache_usage(self, state: dict) -> float:
+        """Calculate KV cache memory usage in GB."""
+        messages = state.get("messages", [])
+        tokens = self.estimate_tokens(messages)
+        usage_bytes = tokens * self.kv_cache_memory_per_token
+        return usage_bytes / (1024**3)  # Convert to GB
+
+    def structure_response(self, response: Any) -> dict[str, Any]:
+        """Structure response with metadata."""
+        return {
+            "content": str(response),
+            "structured": True,
+            "generated_at": time.time(),
+            "context_optimized": True,
+        }
+
+
 # Constants
 
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
@@ -97,7 +141,7 @@ class MultiAgentCoordinator:
         max_context_length: int = settings.default_token_limit,  # 128K context
         backend: str = "vllm",
         enable_fallback: bool = True,
-        max_agent_timeout: float = settings.default_agent_timeout,  # Reduced
+        max_agent_timeout: float = settings.agents.decision_timeout,
     ):
         """Initialize ADR-compliant multi-agent coordinator.
 
@@ -114,16 +158,19 @@ class MultiAgentCoordinator:
         self.enable_fallback = enable_fallback
         self.max_agent_timeout = max_agent_timeout
 
-        # ADR-004: vLLM Configuration with unified settings
+        # vLLM Configuration with unified settings
         self.vllm_config = {
             "model": model_path,
             "max_model_len": max_context_length,
             **settings.get_vllm_env_vars(),
         }
 
-        # Context management simplified with unified settings
-        self.context_window = settings.vllm.context_window
-        self.max_tokens = settings.vllm.max_tokens
+        # Context management with unified settings
+        self.context_window = settings.context_window_size
+        self.max_tokens = settings.llm_max_tokens
+        self.context_manager = ContextManager(
+            max_context_tokens=self.max_context_length
+        )
 
         # Performance tracking (ADR-011)
         self.total_queries = 0

@@ -30,6 +30,7 @@ from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import MultiAgentState
 from src.config import settings
 from src.dspy_integration import DSPyLlamaIndexRetriever
+from tests._mocks.vllm import MockVLLMConfig, MockVLLMManager
 
 # Note: event_loop_policy removed - use fixture from main conftest.py
 
@@ -40,22 +41,33 @@ class MockVLLMConfig:
 
     def __init__(self, **kwargs):
         """Initialize mock VLLMConfig with optional parameters."""
-        self.model = kwargs.get("model", settings.vllm.model)
-        self.max_model_len = kwargs.get("max_model_len", settings.vllm.context_window)
-        self.kv_cache_dtype = kwargs.get("kv_cache_dtype", settings.vllm.kv_cache_dtype)
+        self.model = kwargs.get("model", settings.model_name)
+        self.max_model_len = kwargs.get("max_model_len", settings.context_window_size)
+        self.kv_cache_dtype = kwargs.get("kv_cache_dtype", settings.kv_cache_dtype)
         self.attention_backend = kwargs.get(
-            "attention_backend", settings.vllm.attention_backend
+            "attention_backend", settings.vllm_attention_backend
         )
         self.gpu_memory_utilization = kwargs.get(
-            "gpu_memory_utilization", settings.vllm.gpu_memory_utilization
+            "gpu_memory_utilization", settings.vllm_gpu_memory_utilization
         )
         self.enable_chunked_prefill = kwargs.get(
-            "enable_chunked_prefill", settings.vllm.enable_chunked_prefill
+            "enable_chunked_prefill", settings.vllm_enable_chunked_prefill
         )
-        self.max_num_seqs = kwargs.get("max_num_seqs", settings.vllm.max_num_seqs)
+        self.max_num_seqs = kwargs.get("max_num_seqs", settings.vllm_max_num_seqs)
         self.max_num_batched_tokens = kwargs.get(
-            "max_num_batched_tokens", settings.vllm.max_num_batched_tokens
+            "max_num_batched_tokens", settings.vllm_max_num_batched_tokens
         )
+
+        # Additional attributes expected by tests
+        self.trust_remote_code = kwargs.get("trust_remote_code", True)
+        self.calculate_kv_scales = kwargs.get("calculate_kv_scales", True)
+        self.use_cudnn_prefill = kwargs.get("use_cudnn_prefill", True)
+        self.target_decode_throughput = kwargs.get("target_decode_throughput", 130)
+        self.target_prefill_throughput = kwargs.get("target_prefill_throughput", 1050)
+        self.vram_usage_target_gb = kwargs.get("vram_usage_target_gb", 13.5)
+        self.host = kwargs.get("host", "0.0.0.0")
+        self.port = kwargs.get("port", 8000)
+        self.served_model_name = kwargs.get("served_model_name", "docmind-qwen3-fp8")
 
 
 class MockContextManager:
@@ -63,8 +75,11 @@ class MockContextManager:
 
     def __init__(self):
         """Initialize mock ContextManager with default settings."""
-        self.max_context_tokens = settings.vllm.context_window
-        self.trim_threshold = int(settings.vllm.context_window * 0.9)
+        self.max_context_tokens = settings.context_window_size
+        self.trim_threshold = int(settings.context_window_size * 0.9)
+        self.preserve_ratio = 0.3
+        self.kv_cache_memory_per_token = 1024  # bytes per token
+        self.total_kv_cache_gb_at_128k = 8.0
 
     def estimate_tokens(self, messages: list[dict]) -> int:
         """Estimate token count for context management."""
@@ -77,7 +92,65 @@ class MockContextManager:
 
     def post_model_hook(self, state: dict) -> dict:
         """Format response after model generation."""
-        return state
+        try:
+            if state.get("output_mode") == "structured":
+                # Add metadata for structured output
+                state["metadata"] = {
+                    "context_used": self.estimate_tokens(state.get("messages", [])),
+                    "kv_cache_usage_gb": self.calculate_kv_cache_usage(state),
+                    "parallel_execution_active": state.get(
+                        "parallel_tool_calls", False
+                    ),
+                }
+
+                # Structure response if present
+                if "response" in state:
+                    state["response"] = self.structure_response(state["response"])
+
+            return state
+        except Exception:
+            # Return original state on any error
+            return state
+
+    def trim_to_token_limit(self, messages: list[dict], token_limit: int) -> list[dict]:
+        """Trim messages to fit within token limit while preserving structure."""
+        if not messages or self.estimate_tokens(messages) <= token_limit:
+            return messages
+
+        # Always preserve system message if present
+        system_messages = [msg for msg in messages if msg.get("role") == "system"]
+        other_messages = [msg for msg in messages if msg.get("role") != "system"]
+
+        # Start with system messages
+        result = system_messages[:]
+        current_tokens = self.estimate_tokens(result)
+
+        # Add messages from the end (most recent first) until limit is reached
+        for msg in reversed(other_messages):
+            msg_tokens = self.estimate_tokens([msg])
+            if current_tokens + msg_tokens <= token_limit:
+                result.insert(-len(system_messages) if system_messages else 0, msg)
+                current_tokens += msg_tokens
+            else:
+                break
+
+        return result
+
+    def calculate_kv_cache_usage(self, state: dict) -> float:
+        """Calculate KV cache memory usage in GB."""
+        messages = state.get("messages", [])
+        tokens = self.estimate_tokens(messages)
+        usage_bytes = tokens * self.kv_cache_memory_per_token
+        return usage_bytes / (1024**3)
+
+    def structure_response(self, response: str) -> dict:
+        """Structure response with metadata."""
+        return {
+            "content": response,
+            "structured": True,
+            "generated_at": time.time(),
+            "context_optimized": True,
+        }
 
 
 class MockVLLMManager:
@@ -87,7 +160,16 @@ class MockVLLMManager:
         """Initialize mock VLLMManager with configuration."""
         self.config = config
         self.llm = None
+        self.async_engine = None
         self.context_manager = MockContextManager()
+
+        # Performance metrics initialization
+        self._performance_metrics = {
+            "requests_processed": 0,
+            "avg_decode_throughput": 0.0,
+            "avg_prefill_throughput": 0.0,
+            "peak_vram_usage_gb": 0.0,
+        }
 
     def initialize_engine(self) -> bool:
         """Initialize vLLM engine."""
@@ -95,11 +177,81 @@ class MockVLLMManager:
 
     def validate_performance(self) -> dict:
         """Validate performance against targets."""
-        return {"validation_passed": True}
+        if self.llm is None:
+            return {"error": "Engine not initialized"}
+
+        try:
+            # Mock performance validation
+            return {
+                "decode_throughput_estimate": 130.5,
+                "meets_decode_target": True,
+                "generation_time": 0.25,
+                "tokens_generated": 32,
+                "model_loaded": True,
+                "fp8_optimization": True,
+                "context_window": self.config.max_model_len,
+                "meets_context_target": True,
+                "validation_timestamp": time.time(),
+            }
+        except Exception as e:
+            return {
+                "error": str(e),
+                "validation_failed": True,
+            }
+
+    def get_performance_metrics(self) -> dict:
+        """Get performance metrics."""
+        return {
+            **self._performance_metrics,
+            "config": {
+                "model": self.config.model,
+                "max_context": self.config.max_model_len,
+                "kv_cache_dtype": self.config.kv_cache_dtype,
+                "attention_backend": self.config.attention_backend,
+            },
+            "targets": {
+                "decode_throughput_range": (100, 160),
+                "prefill_throughput_range": (800, 1300),
+                "vram_usage_range_gb": (12, 14),
+                "context_window": 131072,
+            },
+        }
+
+    def generate_start_script(self, script_path: str) -> str:
+        """Generate vLLM start script."""
+        import os
+
+        script_content = f"""#!/bin/bash
+# vLLM Server Start Script - Generated for testing
+
+export VLLM_ATTENTION_BACKEND={self.config.attention_backend}
+export VLLM_USE_CUDNN_PREFILL=1
+
+vllm serve {self.config.model} \\
+    --max-model-len {self.config.max_model_len} \\
+    --kv-cache-dtype {self.config.kv_cache_dtype} \\
+    --gpu-memory-utilization {self.config.gpu_memory_utilization} \\
+    --max-num-seqs {self.config.max_num_seqs} \\
+    --max-num-batched-tokens {self.config.max_num_batched_tokens} \\
+    --host {self.config.host} \\
+    --port {self.config.port} \\
+    --served-model-name {self.config.served_model_name} \\
+    --calculate-kv-scales \\
+    --enable-chunked-prefill \\
+    --trust-remote-code
+"""
+
+        with open(script_path, "w") as f:
+            f.write(script_content)
+
+        # Make script executable
+        os.chmod(script_path, 0o755)
+
+        return script_path
 
 
 @pytest.fixture
-def mock_vllm_config() -> MockVLLMConfig:
+def mock_vllm_config():
     """Create mock vLLM configuration for multi-agent testing.
 
     Returns:
@@ -222,29 +374,28 @@ def mock_dspy_retriever() -> DSPyLlamaIndexRetriever:
 
 
 @pytest.fixture
-def mock_vllm_manager(mock_vllm_config: MockVLLMConfig) -> MockVLLMManager:
+def mock_vllm_manager(mock_vllm_config) -> MockVLLMManager:
     """Create mock vLLM manager with performance metrics."""
-    with patch("src.vllm_config.VLLM_AVAILABLE", False):  # Use fallback mode
-        manager = MockVLLMManager(mock_vllm_config)
-        manager.llm = Mock()
-        manager.async_engine = Mock()
+    manager = MockVLLMManager(mock_vllm_config)
+    manager.llm = Mock()
+    manager.async_engine = Mock()
 
-        # Mock performance validation
-        def mock_validate_performance():
-            return {
-                "decode_throughput_estimate": 130.5,
-                "meets_decode_target": True,
-                "generation_time": 0.25,
-                "tokens_generated": 32,
-                "model_loaded": True,
-                "fp8_optimization": True,
-                "context_window": 131072,
-                "meets_context_target": True,
-                "validation_timestamp": time.time(),
-            }
+    # Mock performance validation
+    def mock_validate_performance():
+        return {
+            "decode_throughput_estimate": 130.5,
+            "meets_decode_target": True,
+            "generation_time": 0.25,
+            "tokens_generated": 32,
+            "model_loaded": True,
+            "fp8_optimization": True,
+            "context_window": 131072,
+            "meets_context_target": True,
+            "validation_timestamp": time.time(),
+        }
 
-        manager.validate_performance = mock_validate_performance
-        return manager
+    manager.validate_performance = mock_validate_performance
+    return manager
 
 
 @pytest.fixture
