@@ -1382,6 +1382,7 @@ tests/performance/test_structural_performance_validation.py # Performance test c
 **Production Code Contamination Patterns Identified:**
 
 1. **Test Compatibility Sections** (Line 120-247):
+
    ```python
    # ANTI-PATTERN: Production code with test-specific logic
    # === FLAT ATTRIBUTES FOR TEST COMPATIBILITY ===
@@ -1389,6 +1390,7 @@ tests/performance/test_structural_performance_validation.py # Performance test c
    ```
 
 2. **Backward Compatibility Methods** (Line 293-355):
+
    ```python
    # ANTI-PATTERN: Complex synchronization for test support  
    def _sync_nested_models(self) -> None:
@@ -1397,6 +1399,7 @@ tests/performance/test_structural_performance_validation.py # Performance test c
    ```
 
 3. **Duplicate Field Definitions** (Lines 132, 185):
+
    ```python
    # ANTI-PATTERN: Duplicate fields with conflicting defaults
    llm_backend: str = Field(default="vllm")    # Line 132
@@ -1437,11 +1440,13 @@ def test_settings():
 #### Migration Complexity Assessment
 
 **Low Complexity (4 files)**:
+
 - Simple assertion value updates: `bge-large-en-v1.5` → `bge-m3`
 - Remove explicit `_sync_nested_models()` calls
 - Update documentation examples
 
 **Medium Complexity (2 files)**:
+
 - MockAppSettings class defaults requiring updates
 - Integration test workflow modifications
 
