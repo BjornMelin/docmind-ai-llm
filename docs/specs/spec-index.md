@@ -356,7 +356,7 @@ Based on dependency analysis, the recommended implementation sequence is:
 
 ### Project Deliverables
 
-- [task-2-1-2-deliverable.md](../developers/task-2-1-2-deliverable.md) - Environment variable mapping deliverable
+- [environment-variable-configuration.md](../developers/environment-variable-configuration.md) - Environment variable configuration guide
 - [template-delta-specification-format.md](./template-delta-specification-format.md) - Delta specification template
 
 ## Document Control

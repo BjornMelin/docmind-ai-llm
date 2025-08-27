@@ -47,7 +47,7 @@ This directory contains comprehensive technical specifications that translate Ar
 
 | Document | Status | Description |
 |----------|---------|------------|
-| [task-2-1-2-deliverable.md](../developers/task-2-1-2-deliverable.md) | ✅ **Complete** | Environment variable mapping task deliverable |
+| [environment-variable-configuration.md](../developers/environment-variable-configuration.md) | ✅ **Complete** | Environment variable configuration guide |
 
 ## Templates & Utilities
 
