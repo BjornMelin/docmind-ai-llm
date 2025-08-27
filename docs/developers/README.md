@@ -21,6 +21,7 @@ This directory contains comprehensive documentation for DocMind AI developers. A
 
 ### 📋 Reports and Analysis
 - **[Validation Report](validation-report.md)** - Comprehensive system validation
+- **[Task 2.1.2 Deliverable](task-2-1-2-deliverable.md)** - Environment variable mapping deliverable
 - **[Future Development](future-development.md)** - Roadmap and planned enhancements
 - **[Lessons Learned](lessons-learned.md)** - Project insights and best practices
 - **[Maintenance Procedures](maintenance-procedures.md)** - Operational maintenance

@@ -47,7 +47,7 @@ This directory contains comprehensive technical specifications that translate Ar
 
 | Document | Status | Description |
 |----------|---------|------------|
-| [task-2-1-2-deliverable.md](./task-2-1-2-deliverable.md) | ✅ **Complete** | Environment variable mapping task deliverable |
+| [task-2-1-2-deliverable.md](../developers/task-2-1-2-deliverable.md) | ✅ **Complete** | Environment variable mapping task deliverable |
 
 ## Templates & Utilities
 
@@ -83,9 +83,7 @@ docs/specs/
 ├── 📊 Compliance & Quality
 ├── adr-compliance-roadmap.md
 ├── glossary.md
-├── 
 ├── 📦 Project Deliverables
-├── task-2-1-2-deliverable.md
 ├── 
 ├── 🔧 Templates & Utilities
 ├── template-delta-specification-format.md

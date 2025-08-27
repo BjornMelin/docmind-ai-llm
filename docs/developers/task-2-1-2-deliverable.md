@@ -193,7 +193,7 @@ This specification directly enables **Task 2.2.1: PYDANTIC SETTINGS V2 Unified C
 
 1. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/environment-variable-mapping.md`** - Comprehensive analysis and specification
 2. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/environment_variable_mappings.json`** - Implementation-ready JSON specification  
-3. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/specs/task-2-1-2-deliverable.md`** - This deliverable summary
+3. **`/home/bjorn/repos/agents/docmind-ai-llm/docs/developers/task-2-1-2-deliverable.md`** - This deliverable summary
 
 **TASK 2.1.2 STATUS: COMPLETED** ✅
 
