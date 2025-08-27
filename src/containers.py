@@ -42,7 +42,9 @@ class ApplicationContainer(containers.DeclarativeContainer):
     # Embedding dependencies
     embedding_model = providers.Factory(
         "src.retrieval.embeddings.create_bgem3_embedding",
-        model_name=config.embedding_model.as_(str, default=settings.embedding_model),
+        model_name=config.embedding_model.as_(
+            str, default=settings.embedding.model_name
+        ),
         use_fp16=config.use_fp16.as_(bool, default=True),
         device=config.device.as_(str, default="cuda"),
     )
@@ -56,9 +58,9 @@ class ApplicationContainer(containers.DeclarativeContainer):
     # Multi-agent coordinator (when not in testing mode)
     multi_agent_coordinator = providers.Singleton(
         "src.agents.coordinator.MultiAgentCoordinator",
-        model_path=config.model_path.as_(str, default=settings.model_name),
+        model_path=config.model_path.as_(str, default=settings.vllm.model),
         max_context_length=config.max_context_length.as_(
-            int, default=settings.context_window_size
+            int, default=settings.vllm.context_window
         ),
         enable_fallback=config.enable_fallback.as_(bool, default=True),
     )
@@ -104,12 +106,12 @@ def create_container() -> ApplicationContainer:
         {
             "cache_dir": os.getenv("DOCMIND_CACHE_DIR", "./cache"),
             "embedding_model": os.getenv(
-                "DOCMIND_EMBEDDING_MODEL", settings.embedding_model
+                "DOCMIND_EMBEDDING_MODEL", settings.embedding.model_name
             ),
-            "model_path": os.getenv("DOCMIND_MODEL_NAME", settings.model_name),
+            "model_path": os.getenv("DOCMIND_MODEL_NAME", settings.vllm.model),
             "max_context_length": int(
                 os.getenv(
-                    "DOCMIND_CONTEXT_WINDOW_SIZE", str(settings.context_window_size)
+                    "DOCMIND_CONTEXT_WINDOW_SIZE", str(settings.vllm.context_window)
                 )
             ),
             "device": os.getenv("DOCMIND_DEVICE", "cuda"),

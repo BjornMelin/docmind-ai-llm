@@ -187,7 +187,7 @@ asyncio.run(stream_example())
 
 ```bash
 # Run comprehensive performance validation
-python scripts/vllm_performance_validation.py
+python scripts/performance_validation.py
 
 # Run end-to-end integration test
 python scripts/end_to_end_test.py

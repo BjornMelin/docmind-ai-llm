@@ -420,8 +420,8 @@ class TestUnifiedConfigurationPerformance:
                 bge_m3_model_name="custom-model",
                 vllm_gpu_memory_utilization=0.9,
             )
-            # Force synchronization
-            settings._sync_nested_models()
+            # Synchronization happens automatically in model_post_init
+            # No explicit sync needed
             return settings
 
         # Benchmark nested model sync

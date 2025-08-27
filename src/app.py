@@ -169,18 +169,18 @@ quant_suffix: str = ""
 suggested_model: str = "google/gemma-3n-E4B-it"
 suggested_context: int = 8192
 if vram:
-    if vram >= settings.minimum_vram_high_gb:
+    if vram >= 16:  # 16GB for high-end models
         suggested_model = "nvidia/OpenReasoning-Nemotron-32B"
         quant_suffix = "-Q4_K_M"  # Fits 16GB
-        suggested_context = settings.suggested_context_high
-    elif vram >= settings.minimum_vram_medium_gb:
+        suggested_context = 131072  # 128K context
+    elif vram >= 8:  # 8GB for medium models
         suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
         quant_suffix = "-Q8_0"  # Fits 8GB
-        suggested_context = settings.suggested_context_medium
+        suggested_context = 65536  # 64K context
     else:
         suggested_model = "google/gemma-3n-E4B-it"
         quant_suffix = "-Q4_K_S"  # Minimal
-        suggested_context = settings.suggested_context_low
+        suggested_context = 32768  # 32K context for low VRAM
 st.sidebar.info(
     f"Suggested: {suggested_model}{quant_suffix} with {suggested_context} context"
 )

@@ -24,19 +24,6 @@ class EmbeddingParameters(BaseModel):
     max_length: int = Field(
         default=8192, ge=512, le=16384, description="Maximum token length (8K context)"
     )
-    batch_size_gpu: int = Field(
-        default=12,
-        ge=1,
-        le=32,
-        description="GPU batch size for RTX 4090 "
-        "(deprecated: library handles optimization)",
-    )
-    batch_size_cpu: int = Field(
-        default=4,
-        ge=1,
-        le=16,
-        description="CPU batch size (deprecated: library handles optimization)",
-    )
     use_fp16: bool = Field(default=True, description="Enable FP16 acceleration")
     normalize_embeddings: bool = Field(
         default=True, description="L2 normalize embeddings"

@@ -50,8 +50,10 @@ class MockAppSettings:
         self.embedding_dimension = getattr(self, "embedding_dimension", 1024)
         self.rrf_fusion_weight_dense = getattr(self, "rrf_fusion_weight_dense", 0.7)
         self.rrf_fusion_weight_sparse = getattr(self, "rrf_fusion_weight_sparse", 0.3)
-        self.embedding_model = getattr(
-            self, "embedding_model", "BAAI/bge-large-en-v1.5"
+        self.bge_m3_model_name = getattr(
+            self,
+            "bge_m3_model_name",
+            "BAAI/bge-m3",  # ADR-002 compliant
         )
         self.model_name = getattr(self, "model_name", "gpt-4")
         self.enable_gpu_acceleration = getattr(self, "enable_gpu_acceleration", True)
@@ -406,7 +408,7 @@ class TestRefactoredPipelineIntegration:
             embedding_dimension=1024,
             rrf_fusion_weight_dense=0.7,
             rrf_fusion_weight_sparse=0.3,
-            embedding_model="BAAI/bge-large-en-v1.5",
+            bge_m3_model_name="BAAI/bge-m3",
         )
 
         assert valid_settings.embedding_dimension == 1024

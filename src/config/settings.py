@@ -56,6 +56,14 @@ class AgentConfig(BaseModel):
     max_concurrent_agents: int = Field(default=3, ge=1, le=10)
     enable_fallback_rag: bool = Field(default=True)
 
+    # === ADR-011 AGENT CONTEXT MANAGEMENT ===
+    context_trim_threshold: int = Field(default=122880, ge=65536, le=131072)
+    context_buffer_size: int = Field(default=8192, ge=2048, le=16384)
+    enable_parallel_tool_execution: bool = Field(default=True)
+    max_workflow_depth: int = Field(default=5, ge=2, le=10)
+    enable_agent_state_compression: bool = Field(default=True)
+    chat_memory_limit_tokens: int = Field(default=66560, ge=32768, le=98304)
+
 
 class EmbeddingConfig(BaseModel):
     """BGE-M3 embedding configuration (ADR-002)."""
@@ -137,8 +145,26 @@ class DocMindSettings(BaseSettings):
 
     # Advanced Features
     enable_graphrag: bool = Field(default=False)
-    enable_dspy_optimization: bool = Field(default=True)
+    enable_dspy_optimization: bool = Field(
+        default=False
+    )  # Changed to False per user feedback
     enable_performance_logging: bool = Field(default=True)
+
+    # === ADR-018 DSPY OPTIMIZATION PARAMETERS ===
+    dspy_optimization_iterations: int = Field(default=10, ge=5, le=50)
+    dspy_metric_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
+    enable_dspy_bootstrapping: bool = Field(default=True)
+
+    # === ADR-019 GRAPHRAG CONFIGURATION ===
+    graphrag_relationship_extraction: bool = Field(default=False)
+    graphrag_entity_resolution: str = Field(default="fuzzy")
+    graphrag_max_hops: int = Field(default=2, ge=1, le=5)
+
+    # === ADR-016 UI CONFIGURATION ===
+    ui_theme: str = Field(default="auto")
+    enable_session_persistence: bool = Field(default=True)
+    ui_response_streaming: bool = Field(default=True)
+    max_ui_history_items: int = Field(default=100, ge=10, le=1000)
 
     # Memory conversion constants
     bytes_to_gb_divisor: int = Field(default=1024**3)
@@ -204,81 +230,104 @@ class DocMindSettings(BaseSettings):
         }
 
     # === CONVENIENCE PROPERTIES FOR BACKWARD COMPATIBILITY ===
-    # These properties provide direct access to nested configuration values
-    # for existing code that expects them on the main settings object
-
-    # BGE-M3 embedding constants
     @property
     def bge_m3_embedding_dim(self) -> int:
-        """BGE-M3 embedding dimension."""
         return self.embedding.dimension
 
     @property
     def bge_m3_max_length(self) -> int:
-        """BGE-M3 maximum sequence length."""
         return self.embedding.max_length
 
     @property
     def bge_m3_model_name(self) -> str:
-        """BGE-M3 model name."""
         return self.embedding.model_name
 
     @property
     def bge_m3_batch_size_gpu(self) -> int:
-        """BGE-M3 GPU batch size."""
         return self.embedding.batch_size_gpu
 
     @property
     def bge_m3_batch_size_cpu(self) -> int:
-        """BGE-M3 CPU batch size."""
         return self.embedding.batch_size_cpu
 
-    # RRF fusion constants
     @property
     def rrf_fusion_alpha(self) -> int:
-        """RRF fusion alpha parameter."""
         return self.retrieval.rrf_alpha
 
     @property
     def rrf_k_constant(self) -> int:
-        """RRF k constant."""
         return self.retrieval.rrf_k_constant
 
     @property
     def rrf_fusion_weight_dense(self) -> float:
-        """Dense vector weight in RRF fusion."""
-        return 0.7  # Fixed ratio for dense vectors
+        return 0.7
 
     @property
     def rrf_fusion_weight_sparse(self) -> float:
-        """Sparse vector weight in RRF fusion."""
-        return 0.3  # Fixed ratio for sparse vectors
+        return 0.3
 
-    # Additional convenience properties
     @property
     def default_confidence_threshold(self) -> float:
-        """Default confidence threshold for queries."""
-        return 0.8  # Standard confidence threshold
+        return 0.8
 
     @property
     def reranking_top_k(self) -> int:
-        """Reranking top K results."""
         return self.retrieval.reranking_top_k
 
     @property
     def top_k(self) -> int:
-        """Top K vector similarity results."""
         return self.retrieval.top_k
 
     @property
     def reranker_model(self) -> str:
-        """Reranker model name."""
         return self.retrieval.reranker_model
 
     @property
     def default_token_limit(self) -> int:
-        """Default token limit (context window)."""
         return self.vllm.context_window
+
+    # === ADR COMPLIANCE CONFIGURATION METHODS ===
+
+    def get_agent_orchestration_config(self) -> dict[str, Any]:
+        """Get agent orchestration configuration for ADR-011 compliance."""
+        return {
+            "context_trim_threshold": self.agents.context_trim_threshold,
+            "context_buffer_size": self.agents.context_buffer_size,
+            "enable_parallel_execution": self.agents.enable_parallel_tool_execution,
+            "max_workflow_depth": self.agents.max_workflow_depth,
+            "enable_state_compression": self.agents.enable_agent_state_compression,
+            "chat_memory_limit": self.agents.chat_memory_limit_tokens,
+            "decision_timeout": self.agents.decision_timeout,
+        }
+
+    def get_dspy_config(self) -> dict[str, Any]:
+        """Get DSPy optimization configuration for ADR-018."""
+        return {
+            "enabled": self.enable_dspy_optimization,
+            "iterations": self.dspy_optimization_iterations,
+            "metric_threshold": self.dspy_metric_threshold,
+            "bootstrapping": self.enable_dspy_bootstrapping,
+        }
+
+    def get_graphrag_config(self) -> dict[str, Any]:
+        """Get GraphRAG configuration for ADR-019."""
+        return {
+            "enabled": self.enable_graphrag,
+            "relationship_extraction": self.graphrag_relationship_extraction,
+            "entity_resolution": self.graphrag_entity_resolution,
+            "max_hops": self.graphrag_max_hops,
+        }
+
+    def get_ui_config(self) -> dict[str, Any]:
+        """Get UI configuration for ADR-016."""
+        return {
+            "theme": self.ui_theme,
+            "session_persistence": self.enable_session_persistence,
+            "response_streaming": self.ui_response_streaming,
+            "max_history_items": self.max_ui_history_items,
+            "streamlit_port": self.streamlit_port,
+            "enable_dark_mode": self.enable_ui_dark_mode,
+        }
 
 
 # Global settings instance - primary interface for the application

@@ -272,10 +272,12 @@ docker-compose --profile lmdeploy up
 ## Related Decisions
 
 - **ADR-001** (Modern Agentic RAG Architecture): Deploys the complete 5-agent system architecture
+- **ADR-004** (Local-First LLM Strategy): Configures Qwen3-4B-Instruct-2507-FP8 with 128K context through FP8 KV cache
 - **ADR-010** (Performance Optimization Strategy): Cache configuration affects Docker deployment requirements
 - **ADR-011** (Agent Orchestration Framework): Deploys the langgraph-supervisor 5-agent orchestration
-- **ADR-004** (Local-First LLM Strategy): Configures Qwen3-4B-Instruct-2507-FP8 with 128K context through FP8 KV cache
 - **ADR-016** (UI State Management): Deploys Streamlit UI with proper state management
+- **ADR-024** (Configuration Architecture): Provides unified configuration system for deployment
+- **ADR-026** (Test-Production Separation): Enables clean production deployment without test contamination
 
 ## Configuration Philosophy
 

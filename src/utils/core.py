@@ -110,12 +110,12 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
 
     # Configuration validation complete
 
-    # Check RRF configuration if sparse embeddings enabled
-    if app_settings.use_sparse_embeddings and not (
-        RRF_ALPHA_MIN <= app_settings.rrf_fusion_alpha <= RRF_ALPHA_MAX
+    # Check RRF configuration if hybrid strategy enabled (implies sparse embeddings)
+    if app_settings.retrieval.strategy == "hybrid" and not (
+        RRF_ALPHA_MIN <= app_settings.retrieval.rrf_alpha <= RRF_ALPHA_MAX
     ):
         results["warnings"].append(
-            f"RRF alpha {app_settings.rrf_fusion_alpha} outside optimal range "
+            f"RRF alpha {app_settings.retrieval.rrf_alpha} outside optimal range "
             f"[{RRF_ALPHA_MIN}, {RRF_ALPHA_MAX}]"
         )
 

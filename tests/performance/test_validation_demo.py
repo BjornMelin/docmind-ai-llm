@@ -113,17 +113,19 @@ class TestIntegrationDemo:
             pytest.fail(f"Cross-module import failed: {e}")
 
     def test_nested_configuration_sync(self):
-        """Test that nested configuration synchronization works."""
+        """Test that nested configuration synchronization works automatically."""
         settings = DocMindSettings(
-            chunk_size=1024, agent_decision_timeout=400, bge_m3_model_name="test-model"
+            chunk_size=1024,
+            agent_decision_timeout=200,
+            bge_m3_model_name="test-model",  # ADR-024 compliant timeout
         )
 
-        # Force synchronization
-        settings._sync_nested_models()
+        # Synchronization happens automatically in model_post_init
+        # No need to call _sync_nested_models() explicitly
 
-        # Verify synchronization worked
+        # Verify synchronization worked automatically
         assert settings.processing.chunk_size == 1024
-        assert settings.agents.decision_timeout == 400
+        assert settings.agents.decision_timeout == 200  # ADR-024 compliant
         assert settings.embedding.model_name == "test-model"
 
         print("Nested configuration sync: SUCCESS")

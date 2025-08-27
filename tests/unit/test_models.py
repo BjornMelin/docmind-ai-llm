@@ -64,7 +64,7 @@ def test_settings_default_values():
 
     # Core LLM Configuration (aligned with unified settings)
     assert settings.model_name == "Qwen/Qwen3-4B-Instruct-2507"
-    assert settings.embedding_model == "BAAI/bge-large-en-v1.5"
+    assert settings.bge_m3_model_name == "BAAI/bge-m3"  # ADR-002 compliant
 
     # Search and Retrieval
     assert settings.top_k == 10
@@ -79,7 +79,7 @@ def test_settings_default_values():
 
     # Agent Configuration (updated property names)
     assert settings.max_agent_retries == 2
-    assert settings.agent_decision_timeout == 300
+    assert settings.agent_decision_timeout == 200  # ADR-024 compliant
 
     # Optimization
     assert settings.enable_document_caching is True
@@ -101,7 +101,7 @@ def test_dense_embedding_settings():
     settings = DocMindSettings()
 
     assert settings.embedding_dimension == 1024
-    assert settings.embedding_model == "BAAI/bge-large-en-v1.5"
+    assert settings.bge_m3_model_name == "BAAI/bge-m3"  # ADR-002 compliant
 
 
 def test_sparse_embedding_settings():
@@ -174,10 +174,10 @@ def test_embedding_dimension_validation():
 
 
 def test_bge_model_dimension_compatibility():
-    """Test BGE-Large model dimension compatibility."""
-    # BGE-Large model with compatible dimensions should work
+    """Test BGE-M3 model dimension compatibility."""
+    # BGE-M3 model with compatible dimensions should work
     settings = DocMindSettings(
-        embedding_model="BAAI/bge-large-en-v1.5",
+        bge_m3_model_name="BAAI/bge-m3",
         embedding_dimension=1024,
     )
     assert settings.embedding_dimension == 1024

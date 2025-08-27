@@ -13,9 +13,48 @@ Unified Pydantic BaseSettings Configuration with LlamaIndex Native Integration
 
 Successfully implemented unified configuration approach using simple Pydantic BaseSettings for app-specific settings and LlamaIndex's native Settings for LLM/embedding configuration, achieving 95% complexity reduction while maintaining full functionality and industry standard compliance.
 
+**CRITICAL USER FLEXIBILITY PRESERVED**: DocMind AI is a LOCAL USER APPLICATION supporting diverse hardware configurations. All user choice and flexibility settings have been successfully restored and validated across 5 user scenarios: CPU-only students, mid-range developers, high-end researchers, privacy-focused users, and custom configuration users.
+
 ## Context
 
 Successfully resolved massive over-engineering in DocMind AI's configuration management. Previous monolithic approach used 737 lines of complex configuration where production systems use 27-80 lines total. Implementation based on real-world LlamaIndex projects, Pydantic best practices, and successful LLM frameworks achieved 95% reduction in configuration complexity while retaining all functionality.
+
+### USER APPLICATION REQUIREMENTS
+
+**CRITICAL CONSTRAINT**: DocMind AI is a LOCAL USER APPLICATION with diverse hardware configurations, NOT a server application. Configuration must support all user scenarios without forcing hardware assumptions or backend choices.
+
+**Required User Scenarios** (validated 2025-08-27):
+
+1. **👤 Student with Laptop (CPU-only, 8GB RAM)**
+   - `enable_gpu_acceleration=False` → CPU-only operation
+   - `max_memory_gb=8.0` → Memory-constrained operation
+   - `bge_m3_batch_size_cpu=4` → CPU-optimized batching
+   - `context_window_size=4096` → Modest context window
+
+2. **👤 Developer with RTX 3060 (12GB VRAM)**
+   - `enable_gpu_acceleration=True` → GPU acceleration enabled
+   - `max_vram_gb=12.0` → Mid-range VRAM limit
+   - `llm_backend=vllm` → Performance backend choice
+   - `context_window_size=32768` → Extended context
+
+3. **👤 Researcher with RTX 4090 (24GB VRAM)**
+   - `enable_gpu_acceleration=True` → Full GPU utilization
+   - `max_vram_gb=24.0` → High-end VRAM support
+   - `context_window_size=131072` → Maximum 128K context
+   - `bge_m3_batch_size_gpu=12` → GPU-optimized batching
+
+4. **👤 Privacy User (CPU, local models)**
+   - `enable_gpu_acceleration=False` → CPU-only for privacy
+   - `llm_backend=llama_cpp` → Local model support
+   - `local_model_path=/home/user/models` → Offline operation
+   - `enable_performance_logging=False` → Privacy-focused
+
+5. **👤 Custom Embedding User**
+   - `embedding_model=sentence-transformers/all-MiniLM-L6-v2` → Alternative model choice
+   - `openai_base_url=http://localhost:8080` → Custom endpoint
+   - `llm_backend=openai` → OpenAI-compatible backend
+
+**Configuration Philosophy**: User choice first, no forced assumptions about hardware or backend preferences.
 
 **Issues Resolved**:
 
@@ -95,6 +134,14 @@ graph TD
 - **NFR-1:** **(Maintainability)** Reduce configuration complexity by 95% (737 lines → ~80 lines)
 - **NFR-2:** **(Framework Integration)** Leverage LlamaIndex Settings for native compatibility
 - **NFR-3:** **(Standards Compliance)** Follow industry standard configuration patterns
+
+### User Requirements (CRITICAL - LOCAL APPLICATION CONTEXT)
+
+- **UR-1:** **(Hardware Flexibility)** Support CPU-only (8GB RAM) to high-end GPU (24GB VRAM) configurations
+- **UR-2:** **(Backend Choice)** Enable user selection of LLM backend: ollama, vllm, openai, llama_cpp
+- **UR-3:** **(Model Flexibility)** Allow user override of embedding models and local model paths
+- **UR-4:** **(Memory Adaptation)** Dynamic batch sizes and context windows based on user hardware
+- **UR-5:** **(Privacy Support)** Complete offline operation with local models and CPU-only option
 
 ### Performance Requirements
 
@@ -488,6 +535,8 @@ def test_configuration_simplicity():
 - [ADR-011: Agent Orchestration Framework](ADR-011-agent-orchestration-framework.md) - Supervisor pattern with simplified settings
 
 ## Changelog
+
+- **v2.2 (2025-08-27)**: ✅ **CRITICAL USER FLEXIBILITY PRESERVATION**. Successfully restored ALL user choice settings after Phase 3 implementation nearly removed them. All 5 user scenarios validated: CPU-only students (8GB RAM), mid-range developers (RTX 3060), high-end researchers (RTX 4090), privacy users (offline), and custom configuration users. Key restored settings: `enable_gpu_acceleration`, `llm_backend` (ollama/vllm/openai/llama_cpp), `embedding_model` flexibility, dynamic batch sizes, memory limits, and complete offline capability. Configuration now properly supports LOCAL USER APPLICATION requirements vs server application assumptions.
 
 - **v2.1 (2025-08-25)**: ✅ **Successfully implemented unified architecture**. Achieved 95% complexity reduction from 737 lines to ~80 lines. Resolved VLLMConfig duplication, restored full ADR compliance (BGE-M3, 200ms timeout, FP8 optimization), implemented hybrid model organization, achieved zero linting errors. All configuration tests passing. Production-ready implementation complete.
 

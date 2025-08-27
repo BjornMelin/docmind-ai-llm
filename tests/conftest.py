@@ -55,56 +55,82 @@ def configure_logging():
 
 @pytest.fixture(scope="session")
 def mock_settings() -> AppSettings:
-    """Configure mock LlamaIndex components for unit tests.
+    """Configure test settings for unit tests with the recovered architecture.
 
-    Sets up MagicMock LLM and MockEmbedding with proper dimensions to match BGE-M3.
-    This ensures fast, deterministic unit tests without external dependencies.
+    Uses TestDocMindSettings which provides CPU-only, fast, test-optimized defaults
+    with proper nested configuration structure.
     """
-    # Note: We don't set global Settings here as it expects real LLM instances
-    # Individual tests can use MockEmbedding and mock LLMs as needed
+    # Import here to avoid import issues
+    from tests.fixtures.test_settings import TestDocMindSettings
 
-    return AppSettings(
-        bge_m3_model_name="mock-embedding",  # Use correct field name
-        embedding_dimension=1024,
-        ollama_base_url="http://mock:11434",
-        use_reranking=False,  # Disable for unit tests
-        use_sparse_embeddings=False,  # Disable for unit tests
+    return TestDocMindSettings(
+        debug=True,
+        log_level="DEBUG",
+        enable_gpu_acceleration=False,  # CPU-only for unit tests
+        enable_dspy_optimization=False,  # Disabled for speed
+        enable_performance_logging=False,  # Minimal logging
     )
 
 
 @pytest.fixture(scope="session")
 def integration_settings() -> AppSettings:
-    """Test settings for integration tests using lightweight models.
+    """Test settings for integration tests with the recovered architecture.
 
-    Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB) for faster integration tests.
-    Still validates component integration without full model overhead.
+    Uses IntegrationTestSettings which provides moderate performance settings
+    for realistic component integration testing.
     """
-    return AppSettings(
-        bge_m3_model_name="sentence-transformers/all-MiniLM-L6-v2",  # 80MB lightweight
-        embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
-        ollama_base_url="http://localhost:11434",
-        use_reranking=False,  # Disable expensive operations
-        use_sparse_embeddings=True,  # Test hybrid search logic
+    # Import here to avoid import issues
+    from tests.fixtures.test_settings import IntegrationTestSettings
+
+    return IntegrationTestSettings(
+        debug=False,
+        log_level="INFO",
+        enable_gpu_acceleration=True,  # Realistic for integration tests
+        enable_performance_logging=True,  # Monitor performance
     )
 
 
 @pytest.fixture(scope="session")
 def system_settings() -> AppSettings:
-    """Full system test settings with real models and GPU.
+    """Full system test settings with production configuration.
 
-    Uses production models for full end-to-end validation.
-    Only used in system tests marked with @pytest.mark.system.
+    Uses SystemTestSettings which provides full production defaults
+    for comprehensive end-to-end validation.
     """
-    return AppSettings(
-        bge_m3_model_name="BAAI/bge-large-en-v1.5",
-        embedding_dimension=1024,
-        ollama_base_url="http://localhost:11434",
-        use_reranking=True,
-        use_sparse_embeddings=True,
+    # Import here to avoid import issues
+    from tests.fixtures.test_settings import SystemTestSettings
+
+    return SystemTestSettings(
+        # Uses all production defaults from recovered architecture
+        # This validates the actual production configuration
     )
 
 
-# New centralized settings fixtures
+# New centralized settings fixtures using the recovered architecture
+@pytest.fixture(scope="session")
+def test_settings_factory():
+    """Factory for creating test settings with custom overrides."""
+    from tests.fixtures.test_settings import create_test_settings
+
+    return create_test_settings
+
+
+@pytest.fixture(scope="session")
+def integration_settings_factory():
+    """Factory for creating integration test settings with custom overrides."""
+    from tests.fixtures.test_settings import create_integration_settings
+
+    return create_integration_settings
+
+
+@pytest.fixture(scope="session")
+def system_settings_factory():
+    """Factory for creating system test settings with custom overrides."""
+    from tests.fixtures.test_settings import create_system_settings
+
+    return create_system_settings
+
+
 @pytest.fixture(scope="session")
 def centralized_mock_settings(tmp_path_factory) -> AppSettings:
     """Mock centralized settings for unit tests.

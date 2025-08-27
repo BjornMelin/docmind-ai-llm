@@ -93,7 +93,7 @@ def integration_settings() -> AppSettings:
 def gpu_smoke_config() -> dict:
     """Configuration for manual GPU validation."""
     return {
-        "model_name": "BAAI/bge-large-en-v1.5",  # 1GB
+        "bge_m3_model_name": "BAAI/bge-m3",  # ADR-002 compliant
         "enable_reranking": True,  # Full feature testing
         "gpu_memory_limit": 14.0,  # RTX 4090 target
         ...

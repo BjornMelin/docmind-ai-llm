@@ -496,9 +496,9 @@ class TestConfigurationPropagationIntegration:
             embedding_config["model_name"] == integration_settings.embedding.model_name
         )
 
-        # Test synchronization works
+        # Test synchronization works automatically (no explicit call needed)
         integration_settings.chunk_size = 4096
-        integration_settings._sync_nested_models()
+        # Synchronization happens automatically when settings are accessed
 
         updated_processing_config = integration_settings.get_processing_config()
         assert updated_processing_config["chunk_size"] == 4096

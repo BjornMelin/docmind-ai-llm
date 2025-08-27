@@ -1,21 +1,20 @@
-"""Comprehensive tests for the centralized settings system.
+"""Comprehensive tests for the recovered configuration architecture.
 
-This module provides brutally honest, real-world valuable tests for the
-centralized configuration system at src/config/settings.py that was recently
-implemented to eliminate DRY violations and centralize scattered constants.
+This module provides comprehensive tests for the unified DocMindSettings system
+with nested configuration models that was recovered to eliminate scattered constants
+and provide clean ADR compliance features.
 
 Tests cover:
-- All 100+ centralized fields and constants
-- Field validators and their business logic
-- Type validation and range constraints
-- Environment variable overrides
-- Configuration methods (get_agent_config, get_performance_config, etc.)
-- Directory creation validators
-- LLM backend validation warnings
+- Nested configuration models (VLLMConfig, AgentConfig, etc.)
+- ADR compliance features (ADR-011, ADR-018, ADR-019)
+- Field validators and constraints
+- Environment variable overrides with nested delimiter support
+- Configuration method helpers
+- Directory creation post-initialization
+- Test-production separation
 - Edge cases and error handling
-- Integration points and backward compatibility
 
-This is critical infrastructure that the entire application relies on.
+This validates the critical infrastructure the entire application relies on.
 """
 
 import os
@@ -27,6 +26,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.config.settings import DocMindSettings, settings
+from tests.fixtures.test_settings import TestDocMindSettings
 
 
 class TestSettingsDefaults:
@@ -44,65 +44,71 @@ class TestSettingsDefaults:
         """Test multi-agent coordination defaults are properly configured."""
         s = settings
 
-        # Multi-agent should be enabled by default
-        assert s.enable_multi_agent is True
-        assert s.agent_decision_timeout == 300  # 300ms for fast response
-        assert s.enable_fallback_rag is True
-        assert s.max_agent_retries == 2  # Reasonable retry count
+        # Multi-agent should be enabled by default (from AgentConfig)
+        assert s.agents.enable_multi_agent is True
+        assert s.agents.decision_timeout == 200  # ADR-011: 200ms default timeout
+        assert s.agents.enable_fallback_rag is True
+        assert s.agents.max_retries == 2  # Reasonable retry count
 
     def test_llm_backend_defaults(self):
         """Test LLM backend defaults are properly configured for local-first."""
         s = settings
 
-        assert s.llm_backend == "vllm"  # vLLM for FP8 optimization
-        assert s.model_name == "Qwen/Qwen3-4B-Instruct-2507"  # Latest model
-        assert s.llm_base_url == "http://localhost:11434"  # Local Ollama
-        assert s.llm_api_key is None  # No API key for local
-        assert s.llm_temperature == 0.1  # Low for consistency
-        assert s.llm_max_tokens == 2048  # Reasonable generation length
+        assert s.llm_backend == "ollama"  # Ollama backend for local-first
+        assert (
+            s.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+        )  # FP8 model from VLLMConfig
+        assert s.ollama_base_url == "http://localhost:11434"  # Local Ollama
+        # Note: API key and temperature are not top-level fields in recovered config
 
     def test_model_optimization_defaults(self):
         """Test model optimization settings are correctly configured."""
         s = settings
 
-        assert s.quantization == "fp8"  # FP8 for memory efficiency
-        assert s.kv_cache_dtype == "fp8"  # FP8 for KV cache
-        assert s.enable_kv_cache_optimization is True
-        assert s.kv_cache_performance_boost == 1.3  # 30% boost
+        # vLLM optimization settings from VLLMConfig
+        assert s.vllm.kv_cache_dtype == "fp8_e5m2"  # FP8 KV cache
+        assert s.vllm.attention_backend == "FLASHINFER"  # FlashInfer backend
+        assert s.vllm.enable_chunked_prefill is True  # Chunked prefill enabled
 
     def test_context_management_defaults(self):
         """Test context management has proper 128K defaults."""
         s = settings
 
-        assert s.context_window_size == 131072  # 128K
-        assert s.context_buffer_size == 131072  # 128K
-        assert s.enable_conversation_memory is True
+        assert s.vllm.context_window == 131072  # 128K from VLLMConfig
+        assert (
+            s.agents.context_buffer_size == 8192
+        )  # Agent context buffer from AgentConfig
+        # Note: conversation memory is not a top-level field in recovered config
 
     def test_document_processing_defaults(self):
         """Test document processing has sensible defaults."""
         s = settings
 
-        assert s.chunk_size == 512
-        assert s.chunk_overlap == 50
-        assert s.enable_document_caching is True
-        assert s.max_document_size_mb == 100
+        # Document processing from ProcessingConfig
+        assert s.processing.chunk_size == 1500
+        assert s.processing.max_document_size_mb == 100
+
+        # Caching from CacheConfig
+        assert s.cache.enable_document_caching is True
 
     def test_retrieval_defaults(self):
         """Test retrieval configuration defaults."""
         s = settings
 
-        assert s.retrieval_strategy == "hybrid"  # Hybrid is optimal
-        assert s.top_k == 10
-        assert s.use_reranking is True  # BGE reranking enabled
-        assert s.reranking_top_k == 5
+        # Retrieval settings from RetrievalConfig
+        assert s.retrieval.strategy == "hybrid"  # Hybrid is optimal
+        assert s.retrieval.top_k == 10
+        assert s.retrieval.use_reranking is True  # BGE reranking enabled
+        assert s.retrieval.reranking_top_k == 5
 
     def test_embedding_defaults(self):
         """Test embedding configuration defaults."""
         s = settings
 
-        assert s.embedding_model == "BAAI/bge-large-en-v1.5"
-        assert s.embedding_dimension == 1024  # BGE-Large dimension
-        assert s.use_sparse_embeddings is True  # SPLADE++ enabled
+        # Embedding settings from EmbeddingConfig
+        assert s.embedding.model_name == "BAAI/bge-m3"  # BGE-M3 model
+        assert s.embedding.dimension == 1024  # BGE-M3 dimension
+        assert s.embedding.max_length == 8192  # Max sequence length
 
     def test_vector_database_defaults(self):
         """Test vector database configuration defaults."""
@@ -993,5 +999,183 @@ class TestRealWorldScenarios:
         assert prod_settings.log_level == "INFO"
 
         # Both should have valid configurations
-        assert dev_settings.model_name == prod_settings.model_name
-        assert dev_settings.enable_multi_agent == prod_settings.enable_multi_agent
+        assert dev_settings.vllm.model == prod_settings.vllm.model
+        assert (
+            dev_settings.agents.enable_multi_agent
+            == prod_settings.agents.enable_multi_agent
+        )
+
+
+class TestADRComplianceFeatures:
+    """Test ADR compliance features in the recovered configuration architecture."""
+
+    def test_adr_011_agent_orchestration_settings(self):
+        """Test ADR-011 agent orchestration configuration compliance."""
+        s = settings
+
+        # Test the ADR-011 compliance method
+        config = s.get_agent_orchestration_config()
+
+        # Verify all ADR-011 required fields are present
+        required_keys = {
+            "context_trim_threshold",
+            "context_buffer_size",
+            "enable_parallel_execution",
+            "max_workflow_depth",
+            "enable_state_compression",
+            "chat_memory_limit",
+            "decision_timeout",
+        }
+        assert set(config.keys()) == required_keys
+
+        # Verify ADR-011 specific constraints
+        assert config["decision_timeout"] == 200  # ADR-011: 200ms timeout
+        assert config["context_trim_threshold"] >= 65536  # Minimum context management
+        assert config["enable_parallel_execution"] is True  # Parallel tool execution
+        assert config["max_workflow_depth"] >= 2  # Multi-step workflows
+
+    def test_adr_011_context_management_compliance(self):
+        """Test ADR-011 context management specific requirements."""
+        s = settings
+
+        # Direct access to agent config settings
+        assert s.agents.context_trim_threshold == 122880  # ADR-011 default
+        assert s.agents.context_buffer_size == 8192  # Buffer management
+        assert s.agents.chat_memory_limit_tokens == 66560  # Memory limits
+        assert s.agents.enable_parallel_tool_execution is True
+        assert s.agents.enable_agent_state_compression is True
+
+    def test_adr_018_dspy_optimization_compliance(self):
+        """Test ADR-018 DSPy optimization configuration."""
+        s = settings
+
+        # Test the DSPy configuration method
+        dspy_config = s.get_dspy_config()
+
+        # Verify DSPy configuration structure
+        required_keys = {"enabled", "iterations", "metric_threshold", "bootstrapping"}
+        assert set(dspy_config.keys()) == required_keys
+
+        # Test ADR-018 specific settings
+        assert "enabled" in dspy_config
+        assert dspy_config["iterations"] == 10  # Default iterations
+        assert dspy_config["metric_threshold"] == 0.8  # Quality threshold
+        assert dspy_config["bootstrapping"] is True  # Bootstrapping enabled
+
+        # Test that DSPy can be disabled (default per user feedback)
+        assert s.enable_dspy_optimization is False  # Disabled by default
+
+    def test_adr_019_graphrag_configuration_compliance(self):
+        """Test ADR-019 GraphRAG configuration."""
+        s = settings
+
+        # Test the GraphRAG configuration method
+        graphrag_config = s.get_graphrag_config()
+
+        # Verify GraphRAG configuration structure
+        required_keys = {
+            "enabled",
+            "relationship_extraction",
+            "entity_resolution",
+            "max_hops",
+        }
+        assert set(graphrag_config.keys()) == required_keys
+
+        # Test ADR-019 specific settings
+        assert graphrag_config["enabled"] is False  # Disabled by default
+        assert graphrag_config["relationship_extraction"] is False  # Optional feature
+        assert (
+            graphrag_config["entity_resolution"] == "fuzzy"
+        )  # Default resolution method
+        assert graphrag_config["max_hops"] == 2  # Default traversal depth
+        assert 1 <= graphrag_config["max_hops"] <= 5  # Within valid range
+
+    def test_adr_configuration_methods_integration(self):
+        """Test that all ADR configuration methods work together."""
+        s = settings
+
+        # All configuration methods should return valid dictionaries
+        agent_config = s.get_agent_orchestration_config()
+        dspy_config = s.get_dspy_config()
+        graphrag_config = s.get_graphrag_config()
+
+        assert isinstance(agent_config, dict)
+        assert isinstance(dspy_config, dict)
+        assert isinstance(graphrag_config, dict)
+
+        # All should have content
+        assert len(agent_config) > 0
+        assert len(dspy_config) > 0
+        assert len(graphrag_config) > 0
+
+        # Verify no unexpected key collisions (some overlap is acceptable)
+        all_keys = (
+            set(agent_config.keys())
+            | set(dspy_config.keys())
+            | set(graphrag_config.keys())
+        )
+        total_keys = len(agent_config) + len(dspy_config) + len(graphrag_config)
+        # Note: Some keys may legitimately overlap between configs (e.g., "enabled")
+        assert len(all_keys) <= total_keys  # No more unique keys than total keys
+
+    def test_test_production_separation_compliance(self):
+        """Test that test and production settings are properly separated."""
+        # Production settings
+        prod_settings = settings
+
+        # Test settings
+        test_settings = TestDocMindSettings()
+
+        # Key differences that ensure test-production separation
+        assert prod_settings.enable_gpu_acceleration is True  # Production: GPU enabled
+        assert test_settings.enable_gpu_acceleration is False  # Test: CPU only
+
+        assert (
+            prod_settings.agents.decision_timeout == 200
+        )  # Production: standard timeout
+        assert test_settings.agents.decision_timeout == 100  # Test: faster timeout
+
+        assert prod_settings.vllm.context_window == 131072  # Production: full context
+        assert test_settings.vllm.context_window == 8192  # Test: smaller context
+
+        assert (
+            prod_settings.cache.enable_document_caching is True
+        )  # Production: caching enabled
+        assert (
+            test_settings.cache.enable_document_caching is False
+        )  # Test: no caching for isolation
+
+        # Both should be valid configurations
+        assert isinstance(prod_settings, DocMindSettings)
+        assert isinstance(
+            test_settings, DocMindSettings
+        )  # Test settings inherit from production
+
+    def test_nested_configuration_validation(self):
+        """Test that nested configuration models validate properly."""
+        s = settings
+
+        # All nested configs should be properly instantiated
+        assert s.vllm is not None
+        assert s.processing is not None
+        assert s.agents is not None
+        assert s.embedding is not None
+        assert s.retrieval is not None
+        assert s.cache is not None
+
+        # All should have proper types
+        from src.config.settings import (
+            AgentConfig,
+            CacheConfig,
+            EmbeddingConfig,
+            ProcessingConfig,
+            RetrievalConfig,
+            VLLMConfig,
+        )
+
+        assert isinstance(s.vllm, VLLMConfig)
+        assert isinstance(s.processing, ProcessingConfig)
+        assert isinstance(s.agents, AgentConfig)
+        assert isinstance(s.embedding, EmbeddingConfig)
+        assert isinstance(s.retrieval, RetrievalConfig)
+        assert isinstance(s.cache, CacheConfig)

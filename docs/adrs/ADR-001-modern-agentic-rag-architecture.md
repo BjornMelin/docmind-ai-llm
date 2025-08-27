@@ -90,6 +90,7 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 - **ADR-004** (Local-First LLM Strategy): Provides Qwen3-4B-Instruct-2507-FP8 with 128K context for agent decision-making
 - **ADR-003** (Adaptive Retrieval Pipeline): Implements the retrieval strategies that agents route between
 - **ADR-010** (Performance Optimization Strategy): Provides FP8 KV cache optimization and parallel tool execution for efficient LLM performance
+- **ADR-024** (Configuration Architecture): Provides unified configuration system enabling multi-agent coordination settings
 - **ADR-025** (Simple Caching Strategy): Provides document processing cache for multi-agent coordination
 - **ADR-011** (Agent Orchestration Framework): Details the supervisor library implementation with 5-agent architecture
 - **ADR-012** (Evaluation and Quality Assurance): Provides the quality metrics for response validation

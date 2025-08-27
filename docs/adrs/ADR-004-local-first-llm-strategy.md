@@ -193,17 +193,28 @@ Based on research findings:
 
 ## Design
 
-### Multi-Provider Architecture with Automatic Selection
+### Multi-Provider Architecture with User Choice
 
-DocMind AI supports multiple local LLM providers with automatic hardware-based selection for optimal performance. The architecture leverages LlamaIndex's native provider support without custom abstraction layers.
+DocMind AI supports multiple local LLM providers with **USER-CONFIGURABLE** backend selection supporting diverse hardware configurations. The architecture leverages LlamaIndex's native provider support without custom abstraction layers while prioritizing user choice over automatic selection.
 
-#### Provider Comparison Matrix
+**CRITICAL IMPLEMENTATION NOTE** (2025-08-27): User backend choice is configured via `llm_backend` setting, supporting all validated user scenarios from CPU-only students to high-end researchers. No forced hardware assumptions or automatic provider selection that overrides user preferences.
 
-| Provider | Performance | Setup Complexity | Best For | GGUF Support |
-|----------|------------|------------------|----------|--------------|
-| **llama.cpp** | Excellent (GGUF optimized) | Simple | Production, GGUF models | Excellent |
-| **Ollama** | Good (GGUF support) | Simple | Development, testing | Good |
-| **vLLM** | Excellent | Moderate | Production, AWQ models | Limited |
+#### Provider Comparison Matrix with User Scenarios
+
+| Provider | Performance | Setup Complexity | Best User Scenarios | Hardware Support |
+|----------|------------|------------------|---------------------|------------------|
+| **ollama** | Good (GGUF) | Simple | Students, Privacy users, Development | CPU-only to RTX 4090 |
+| **vllm** | Excellent | Moderate | Developers, Researchers, Performance | RTX 3060+ (GPU required) |
+| **llama_cpp** | Excellent (GGUF) | Simple | Privacy users, Custom models | CPU-only to RTX 4090 |
+| **openai** | Variable | Simple | Custom endpoints, Alternative APIs | Depends on endpoint |
+
+**User Scenario → Provider Recommendations**:
+
+- **👤 Student (CPU-only, 8GB RAM)**: `llm_backend=ollama` or `llm_backend=llama_cpp`
+- **👤 Developer (RTX 3060, 12GB VRAM)**: `llm_backend=vllm` or `llm_backend=ollama`  
+- **👤 Researcher (RTX 4090, 24GB VRAM)**: `llm_backend=vllm` (performance) or `llm_backend=ollama` (simplicity)
+- **👤 Privacy User (CPU, local models)**: `llm_backend=llama_cpp` with `local_model_path`
+- **👤 Custom User (alternative APIs)**: `llm_backend=openai` with `openai_base_url`
 
 #### Performance Benchmarks (RTX 4090 Laptop - 16GB VRAM)
 
@@ -587,18 +598,89 @@ MEMORY_USAGE_128K = {
 }
 ```
 
+## Hardware Adaptability Requirements (USER APPLICATION CONTEXT)
+
+**VALIDATED USER SCENARIO SUPPORT** (2025-08-27):
+
+DocMind AI must support diverse hardware configurations as a LOCAL USER APPLICATION. The following scenarios have been validated and are supported by the multi-provider architecture:
+
+### 1. CPU-Only Users (Limited Resources)
+**Hardware**: 8GB RAM, no dedicated GPU
+**Configuration**:
+```bash
+DOCMIND_ENABLE_GPU_ACCELERATION=false
+DOCMIND_LLM_BACKEND=ollama
+DOCMIND_DEVICE=cpu
+DOCMIND_MAX_MEMORY_GB=8.0
+DOCMIND_CONTEXT_WINDOW_SIZE=4096
+DOCMIND_BGE_M3_BATCH_SIZE_CPU=4
+```
+**Use Cases**: Students, budget-conscious users, low-power systems
+
+### 2. Mid-Range GPU Users (Mainstream)
+**Hardware**: RTX 3060 (12GB VRAM), 16GB RAM
+**Configuration**:
+```bash
+DOCMIND_ENABLE_GPU_ACCELERATION=true
+DOCMIND_LLM_BACKEND=vllm
+DOCMIND_DEVICE=cuda
+DOCMIND_MAX_VRAM_GB=12.0
+DOCMIND_CONTEXT_WINDOW_SIZE=32768
+DOCMIND_BGE_M3_BATCH_SIZE_GPU=12
+```
+**Use Cases**: Developers, prosumer users, mid-range workstations
+
+### 3. High-End GPU Users (Performance)
+**Hardware**: RTX 4090 (24GB VRAM), 32GB+ RAM  
+**Configuration**:
+```bash
+DOCMIND_ENABLE_GPU_ACCELERATION=true
+DOCMIND_LLM_BACKEND=vllm
+DOCMIND_DEVICE=cuda
+DOCMIND_MAX_VRAM_GB=24.0
+DOCMIND_CONTEXT_WINDOW_SIZE=131072
+DOCMIND_BGE_M3_BATCH_SIZE_GPU=12
+```
+**Use Cases**: Researchers, AI enthusiasts, high-performance workstations
+
+### 4. Privacy-Focused Users (Offline)
+**Hardware**: Variable (CPU preferred for privacy)
+**Configuration**:
+```bash
+DOCMIND_ENABLE_GPU_ACCELERATION=false
+DOCMIND_LLM_BACKEND=llama_cpp
+DOCMIND_LOCAL_MODEL_PATH=/path/to/local/models
+DOCMIND_ENABLE_PERFORMANCE_LOGGING=false
+DOCMIND_DEVICE=cpu
+```
+**Use Cases**: Security-conscious users, air-gapped systems, compliance requirements
+
+### 5. Custom Endpoint Users (Alternative APIs)
+**Hardware**: Variable
+**Configuration**:
+```bash
+DOCMIND_LLM_BACKEND=openai
+DOCMIND_OPENAI_BASE_URL=http://localhost:8080
+DOCMIND_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+```
+**Use Cases**: Custom model deployments, alternative inference servers, specialized setups
+
+**Architecture Principle**: User choice first - no automatic hardware detection that overrides user preferences. All provider/hardware combinations must be user-configurable through environment variables.
+
 ## Consequences
 
 ### Positive Outcomes
 
 - **Local Privacy**: All processing occurs locally without external API calls
 - **Cost Effective**: No ongoing API costs after initial setup
-- **Excellent Performance**: 40-60 tokens/sec on RTX 4090 Laptop with 128K context
-- **Extended Context**: 128K tokens with YaRN enables processing entire documents
+- **User Choice Preserved**: Full hardware and backend flexibility across all 5 validated user scenarios
+- **Hardware Inclusive**: Supports CPU-only (8GB RAM) to high-end GPU (24GB VRAM) configurations
+- **Backend Flexibility**: Four LLM backends (ollama, vllm, llama_cpp, openai-compatible) with user control
+- **Offline Capability**: Complete offline operation with local models and CPU-only mode
+- **Performance Scalable**: 40-60 tokens/sec on RTX 4090 to modest performance on CPU-only systems
+- **Extended Context**: 128K tokens enables processing entire documents on capable hardware
 - **Function Calling**: Superior agentic RAG patterns with optimized tool use
-- **Higher Quality**: Q5_K_M/Q6_K quantization provides better accuracy than Q4_K_M
-- **Multi-Provider Support**: Works with llama.cpp, Ollama, vLLM, and transformers
-- **Large Model Viability**: Can run Qwen3-32B-AWQ as primary model
+- **Multi-Provider Support**: Works with llama.cpp, Ollama, vLLM, and transformers without forced selection
 
 ### Negative Consequences / Trade-offs
 
@@ -638,6 +720,8 @@ MEMORY_USAGE_128K = {
 - Multi-stage retrieval quality vs large context baseline
 
 ## Changelog
+
+- **12.0 (2025-08-27)**: **USER SCENARIO VALIDATION & HARDWARE ADAPTABILITY** - Added comprehensive documentation of 5 validated user scenarios: CPU-only students (8GB RAM), mid-range developers (RTX 3060), high-end researchers (RTX 4090), privacy users (offline), and custom endpoint users. Updated multi-provider architecture to emphasize USER CHOICE over automatic selection. Added Hardware Adaptability Requirements section with specific configurations for each user type. Clarified LOCAL USER APPLICATION context vs server application assumptions. All backend choices (ollama/vllm/llama_cpp/openai) validated with user scenarios and hardware constraints.
 
 - **11.1 (2025-08-20)**: **HARDWARE-CONSTRAINED DESIGN RATIONALE** - Clarified that 128K context limit represents sound engineering decision constraining from model's native 262K capability due to RTX 4090 Laptop 16GB VRAM limitation. Added hardware constraint rationale throughout document. Updated vLLM configuration with verified FlashInfer backend support. Context management strategy updated for 128K window with 120K threshold and 8K buffer. This is intentional design balancing capability with available hardware resources.
 - **11.0 (2025-08-19)**: **CRITICAL MODEL CORRECTION** - Updated from non-existent Qwen3-4B-Instruct-2507-AWQ to actual **Qwen/Qwen3-4B-Instruct-2507-FP8**. Context reduced from impossible 262K to realistic **131,072 tokens (128K)**. Changed quantization from AWQ + INT8 to **FP8 weights + FP8 KV cache**. Added complete vLLM configuration with FlashInfer backend. Updated performance metrics to 100-160 tok/s decode, 800-1300 tok/s prefill. Memory usage: <12-14GB VRAM at 128K (within 16GB limit).
