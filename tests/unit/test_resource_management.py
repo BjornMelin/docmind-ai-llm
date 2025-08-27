@@ -96,13 +96,6 @@ async def test_managed_gpu_operation_cleanup_on_exception():
         mock_gc.assert_called_once()
 
 
-def test_load_documents_llama_basic():
-    """Test that load_documents_llama function exists and is importable - SKIPPED (legacy function)."""
-    pytest.skip(
-        "Legacy load_documents_llama function removed with ADR-009 document processing architecture"
-    )
-
-
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 def test_gpu_memory_cleanup_integration():
     """Integration test for GPU memory cleanup (requires CUDA)."""

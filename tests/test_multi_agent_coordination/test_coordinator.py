@@ -23,6 +23,9 @@ from src.agents.coordinator import (
 )
 from src.agents.models import AgentResponse, MultiAgentState
 
+# Import mock classes from conftest.py
+from tests.test_multi_agent_coordination.conftest import MockVLLMConfig
+
 
 class TestMultiAgentCoordinator:
     """Test suite for ADR-011 compliant MultiAgentCoordinator."""

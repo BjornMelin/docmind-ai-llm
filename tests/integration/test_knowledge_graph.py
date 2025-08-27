@@ -16,50 +16,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-# Mock all legacy document processing functions removed with ADR-009
-class LegacyDocumentMocks:
-    @staticmethod
-    def ensure_spacy_model():
-        """Mock for removed ensure_spacy_model function."""
-        mock_nlp = MagicMock()
-        mock_nlp.vocab = MagicMock()
-        return mock_nlp
-
-    @staticmethod
-    def extract_entities_with_spacy(text, nlp_model=None):
-        """Mock for removed extract_entities_with_spacy function."""
-        return [
-            {"text": "Sample Entity", "label": "PERSON", "start": 0, "end": 13},
-            {"text": "Test Company", "label": "ORG", "start": 20, "end": 32},
-        ]
-
-    @staticmethod
-    def extract_relationships_with_spacy(text, nlp_model=None):
-        """Mock for removed extract_relationships_with_spacy function."""
-        return [
-            {
-                "subject": "Sample Entity",
-                "predicate": "works_for",
-                "object": "Test Company",
-            },
-        ]
-
-    @staticmethod
-    def create_knowledge_graph_data(text, nlp_model=None):
-        """Mock for removed create_knowledge_graph_data function."""
-        return {
-            "entities": LegacyDocumentMocks.extract_entities_with_spacy(text),
-            "relationships": LegacyDocumentMocks.extract_relationships_with_spacy(text),
-        }
-
-
-# Replace all legacy imports with mocks
-ensure_spacy_model = LegacyDocumentMocks.ensure_spacy_model
-extract_entities_with_spacy = LegacyDocumentMocks.extract_entities_with_spacy
-extract_relationships_with_spacy = LegacyDocumentMocks.extract_relationships_with_spacy
-create_knowledge_graph_data = LegacyDocumentMocks.create_knowledge_graph_data
-
-
 class TestSpaCyIntegration:
     """Test spaCy model management and integration."""
 

@@ -83,7 +83,9 @@ def mock_unstructured_elements():
                 parent_id=None,
                 filename="test.pdf",
                 coordinates=[(0, 100), (400, 200)],
-                text_as_html="<table><tr><th>Header 1</th><th>Header 2</th></tr></table>",
+                text_as_html=(
+                    "<table><tr><th>Header 1</th><th>Header 2</th></tr></table>"
+                ),
                 image_path=None,
             ),
         ),
@@ -117,7 +119,21 @@ def sample_image_path(tmp_path):
     """Create a sample image file for testing."""
     image_file = tmp_path / "test_image.jpg"
     # Create a minimal JPEG header
-    jpeg_content = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.' \",#\x1c\x1c(7),01444\x1f'9=82<.342\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x01\x01\x11\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00\xb5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05\x05\x04\x04\x00\x00\x01}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07\"q\x142\x81\x91\xa1\x08#B\xb1\xc1\x15R\xd1\xf0$3br\x82\t\n\x16\x17\x18\x19\x1a%&'()*456789:CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x83\x84\x85\x86\x87\x88\x89\x8a\x92\x93\x94\x95\x96\x97\x98\x99\x9a\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xff\xd9"
+    jpeg_content = (
+        b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xdb\x00C\x00"
+        b"\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12"
+        b"\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.' \",#\x1c\x1c(7),01444"
+        b"\x1f'9=82<."
+        b"342\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x01\x01\x11\x00\x02\x11\x01\x03\x11\x01\xff\xc4"
+        b"\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02"
+        b"\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xc4\x00\xb5\x10\x00\x02\x01\x03\x03\x02\x04\x03\x05"
+        b'\x05\x04\x04\x00\x00\x01}\x01\x02\x03\x00\x04\x11\x05\x12!1A\x06\x13Qa\x07"q\x142'
+        b"\x81\x91\xa1\x08#B\xb1\xc1\x15R\xd1\xf0$3br\x82\t\n\x16\x17\x18\x19\x1a%&'()*456789:"
+        b"CDEFGHIJSTUVWXYZcdefghijstuvwxyz\x83\x84\x85\x86\x87\x88\x89\x8a\x92\x93\x94\x95\x96\x97"
+        b"\x98\x99\x9a\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xc2\xc3"
+        b"\xc4\xc5\xc6\xc7\xc8\xc9\xca\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xe1\xe2\xe3\xe4\xe5\xe6\xe7"
+        b"\xe8\xe9\xea\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xff\xd9"
+    )
     image_file.write_bytes(jpeg_content)
     return image_file
 
@@ -448,7 +464,9 @@ class TestDocumentProcessor:
         """Test error handling for unsupported file formats."""
         processor = DocumentProcessor(mock_settings)
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(
+            ValueError, match=r"(unsupported|not supported|unknown).*format"
+        ) as exc_info:
             processor._get_strategy_for_file("document.xyz")
 
         assert "unsupported" in str(exc_info.value).lower()
@@ -595,9 +613,11 @@ class TestDocumentProcessor:
         processor = DocumentProcessor(mock_settings)
 
         # Mock cache miss
-        with patch.object(processor.simple_cache, "get_document", return_value=None):
-            with pytest.raises(ProcessingError) as exc_info:
-                await processor.process_document_async(sample_pdf_path)
+        with (
+            patch.object(processor.simple_cache, "get_document", return_value=None),
+            pytest.raises(ProcessingError) as exc_info,
+        ):
+            await processor.process_document_async(sample_pdf_path)
 
         assert "processing failed" in str(exc_info.value).lower()
 
@@ -613,9 +633,11 @@ class TestDocumentProcessor:
         processor = DocumentProcessor(mock_settings)
 
         # Mock cache miss
-        with patch.object(processor.simple_cache, "get_document", return_value=None):
-            with pytest.raises(ProcessingError) as exc_info:
-                await processor.process_document_async(sample_pdf_path)
+        with (
+            patch.object(processor.simple_cache, "get_document", return_value=None),
+            pytest.raises(ProcessingError) as exc_info,
+        ):
+            await processor.process_document_async(sample_pdf_path)
 
         assert "corrupted" in str(exc_info.value).lower()
 

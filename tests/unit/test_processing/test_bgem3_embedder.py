@@ -960,7 +960,7 @@ class TestLibraryFirstMethods:
         # Test CLS pooling with normalization
         params = EmbeddingParameters(pooling_method="cls", normalize_embeddings=True)
 
-        embedder = BGEM3Embedder(mock_settings, params)
+        BGEM3Embedder(mock_settings, params)
 
         # Verify model initialization with pooling parameters
         mock_flag_model.assert_called_once_with(
@@ -975,7 +975,7 @@ class TestLibraryFirstMethods:
         mock_flag_model.reset_mock()
         params2 = EmbeddingParameters(pooling_method="mean", normalize_embeddings=False)
 
-        embedder2 = BGEM3Embedder(mock_settings, params2)
+        BGEM3Embedder(mock_settings, params2)
 
         mock_flag_model.assert_called_once_with(
             model_name_or_path=mock_settings.bge_m3_model_name,

@@ -49,9 +49,10 @@ def sample_texts():
 def sample_long_text():
     """Long text that approaches 8K context limit."""
     base_text = (
-        "This is a comprehensive document about artificial intelligence and machine learning. "
-        "BGE-M3 provides unified dense and sparse embeddings for enhanced retrieval capabilities. "
-        "The model supports up to 8192 tokens for processing large document chunks effectively. "
+        "This is a comprehensive document about artificial intelligence and machine "
+        "learning. BGE-M3 provides unified dense and sparse embeddings for enhanced "
+        "retrieval capabilities. The model supports up to 8192 tokens for processing "
+        "large document chunks effectively. "
     )
     # Repeat to create ~7K tokens
     return base_text * 100
@@ -403,7 +404,7 @@ class TestBGEM3PerformanceOptimizations:
             mock_settings.pooling_method = "cls"
             mock_settings.normalize_embeddings = True
 
-            embedder = BGEM3Embedder(mock_settings)
+            BGEM3Embedder(mock_settings)
 
             # Verify pooling and normalization parameters
             call_args = mock_model_class.call_args
@@ -412,7 +413,7 @@ class TestBGEM3PerformanceOptimizations:
 
             # Test alternative pooling methods
             mock_settings.pooling_method = "mean"
-            embedder2 = BGEM3Embedder(mock_settings)
+            BGEM3Embedder(mock_settings)
 
             call_args2 = mock_model_class.call_args
             assert call_args2[1]["pooling_method"] == "mean"

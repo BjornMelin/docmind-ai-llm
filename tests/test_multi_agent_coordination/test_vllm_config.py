@@ -18,6 +18,16 @@ from unittest.mock import Mock, patch
 
 from langchain_core.messages import HumanMessage
 
+# Import the validate_fp8_requirements function
+from src.config.integrations import validate_fp8_requirements
+
+# Import mock classes from conftest.py
+from tests.test_multi_agent_coordination.conftest import (
+    MockContextManager,
+    MockVLLMConfig,
+    MockVLLMManager,
+)
+
 
 class TestMockVLLMConfig:
     """Test suite for MockVLLMConfig data model."""

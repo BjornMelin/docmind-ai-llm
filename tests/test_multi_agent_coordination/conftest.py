@@ -28,16 +28,18 @@ from llama_index.core.memory import ChatMemoryBuffer
 # Import the classes we're testing
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import MultiAgentState
+from src.config import settings
 from src.dspy_integration import DSPyLlamaIndexRetriever
 
 # Note: event_loop_policy removed - use fixture from main conftest.py
 
 
 # Mock classes to replace removed backward compatibility classes
-class MockMockVLLMConfig:
-    """Mock MockVLLMConfig for testing."""
+class MockVLLMConfig:
+    """Mock VLLMConfig for testing."""
 
     def __init__(self, **kwargs):
+        """Initialize mock VLLMConfig with optional parameters."""
         self.model = kwargs.get("model", settings.vllm.model)
         self.max_model_len = kwargs.get("max_model_len", settings.vllm.context_window)
         self.kv_cache_dtype = kwargs.get("kv_cache_dtype", settings.vllm.kv_cache_dtype)
@@ -60,6 +62,7 @@ class MockContextManager:
     """Mock ContextManager for testing."""
 
     def __init__(self):
+        """Initialize mock ContextManager with default settings."""
         self.max_context_tokens = settings.vllm.context_window
         self.trim_threshold = int(settings.vllm.context_window * 0.9)
 
@@ -81,6 +84,7 @@ class MockVLLMManager:
     """Mock VLLMManager for testing."""
 
     def __init__(self, config):
+        """Initialize mock VLLMManager with configuration."""
         self.config = config
         self.llm = None
         self.context_manager = MockContextManager()
@@ -95,13 +99,13 @@ class MockVLLMManager:
 
 
 @pytest.fixture
-def mock_vllm_config() -> MockMockVLLMConfig:
+def mock_vllm_config() -> MockVLLMConfig:
     """Create mock vLLM configuration for multi-agent testing.
 
     Returns:
-        MockMockVLLMConfig: Mock vLLM config optimized for FP8 and 128K context.
+        MockVLLMConfig: Mock vLLM config optimized for FP8 and 128K context.
     """
-    return MockMockVLLMConfig(
+    return MockVLLMConfig(
         model="Qwen/Qwen3-4B-Instruct-2507-FP8",
         max_model_len=131072,
         kv_cache_dtype="fp8_e5m2",
@@ -218,7 +222,7 @@ def mock_dspy_retriever() -> DSPyLlamaIndexRetriever:
 
 
 @pytest.fixture
-def mock_vllm_manager(mock_vllm_config: MockMockVLLMConfig) -> MockVLLMManager:
+def mock_vllm_manager(mock_vllm_config: MockVLLMConfig) -> MockVLLMManager:
     """Create mock vLLM manager with performance metrics."""
     with patch("src.vllm_config.VLLM_AVAILABLE", False):  # Use fallback mode
         manager = MockVLLMManager(mock_vllm_config)

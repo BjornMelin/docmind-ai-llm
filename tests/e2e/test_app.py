@@ -219,7 +219,9 @@ def test_end_to_end_workflow(
     app_test,
     tmp_path,
 ):
-    """Test complete end-to-end workflow with MultiAgentCoordinator - SIMPLIFIED for ADR-009.
+    """Test complete end-to-end workflow with MultiAgentCoordinator.
+
+    SIMPLIFIED for ADR-009.
 
     Args:
         mock_create_coordinator: Mock coordinator creation.

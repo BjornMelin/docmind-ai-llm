@@ -33,12 +33,6 @@ class TestOptionalDependencyHandling:
                 print(f"GPU package {pkg} is optional (as expected)")
                 # This is expected - GPU packages should be optional
 
-    def test_spacy_model_graceful_fallback(self):
-        """Test spaCy model availability gracefully handles missing models - SKIPPED (legacy)."""
-        pytest.skip(
-            "ensure_spacy_model function removed with ADR-009 document processing architecture"
-        )
-
     def test_torch_optional_graceful_handling(self):
         """Test that PyTorch dependencies are handled gracefully."""
         try:

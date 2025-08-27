@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 import pytest
 
+from src.config import settings
+
 
 class TestImportValidation:
     """Validate all modules can be imported successfully."""
@@ -125,7 +127,6 @@ class TestImportValidation:
 
         # validate_startup_configuration now requires a settings parameter
         try:
-            settings = settings
             result = validate_startup_configuration(settings)
             # Result should be a dict with validation results
             assert isinstance(result, dict)
@@ -166,7 +167,6 @@ class TestImportValidation:
             from src.utils.core import detect_hardware
 
             # Create basic settings instance
-            settings = settings
             assert settings is not None
 
             # Test hardware detection doesn't crash
@@ -182,7 +182,6 @@ class TestSettingsValidation:
 
     def test_settings_creation(self):
         """Test that settings can be created with defaults."""
-        settings = settings
         assert settings is not None
         # Check for actual attributes that exist in the simplified Settings class
         assert hasattr(settings, "qdrant_url")
@@ -191,8 +190,6 @@ class TestSettingsValidation:
 
     def test_settings_required_fields(self):
         """Test that settings have required fields."""
-        settings = settings
-
         # These should exist and have reasonable defaults
         assert hasattr(settings, "chunk_size")
         assert hasattr(settings, "chunk_overlap")

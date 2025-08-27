@@ -31,6 +31,9 @@ from langchain_core.messages import HumanMessage
 
 from src.agents.coordinator import MultiAgentCoordinator
 
+# Import mock classes from conftest
+from tests.test_multi_agent_coordination.conftest import MockVLLMConfig, MockVLLMManager
+
 
 class TestCoordinationOverheadPerformance:
     """Test coordination overhead performance against <200ms target."""
@@ -200,7 +203,7 @@ class TestCoordinationOverheadPerformance:
 class TestThroughputPerformance:
     """Test throughput performance for FP8 optimization targets."""
 
-    def test_decode_throughput_targets(self, mock_vllm_manager: VLLMManager):
+    def test_decode_throughput_targets(self, mock_vllm_manager: MockVLLMManager):
         """Test decode throughput meets 100-160 tokens/second target."""
         # Mock performance validation with realistic FP8 performance
         mock_performance_result = {
@@ -229,7 +232,7 @@ class TestThroughputPerformance:
         assert result["meets_decode_target"] is True
         assert result["fp8_optimization"] is True
 
-    def test_prefill_throughput_targets(self, mock_vllm_manager: VLLMManager):
+    def test_prefill_throughput_targets(self, mock_vllm_manager: MockVLLMManager):
         """Test prefill throughput meets 800-1300 tokens/second target."""
         # Mock performance validation with prefill metrics
         mock_performance_result = {
@@ -322,7 +325,7 @@ class TestMemoryPerformance:
 
     def test_vram_usage_targets(self, mock_vllm_config: MockVLLMConfig):
         """Test VRAM usage stays under 16GB target."""
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
 
         # Mock VRAM usage metrics
         mock_performance_result = {

@@ -42,7 +42,8 @@ async def test_enhanced_bgem3_embedder():
         print("\n2. Testing query-optimized encoding (encode_queries)...")
         query_result = await embedder.encode_queries(queries)
         print(
-            f"✅ Query encoding successful: {len(query_result.dense_embeddings)} embeddings"
+            f"✅ Query encoding successful: "
+            f"{len(query_result.dense_embeddings)} embeddings"
         )
         print(f"   Model info: {query_result.model_info.get('optimization', 'N/A')}")
 
@@ -50,7 +51,8 @@ async def test_enhanced_bgem3_embedder():
         print("\n3. Testing corpus-optimized encoding (encode_corpus)...")
         corpus_result = await embedder.encode_corpus(corpus)
         print(
-            f"✅ Corpus encoding successful: {len(corpus_result.dense_embeddings)} embeddings"
+            f"✅ Corpus encoding successful: "
+            f"{len(corpus_result.dense_embeddings)} embeddings"
         )
         print(f"   Model info: {corpus_result.model_info.get('optimization', 'N/A')}")
 

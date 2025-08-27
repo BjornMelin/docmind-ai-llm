@@ -24,6 +24,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.config.settings import DocMindSettings
+from tests.shared_fixtures import ensure_settings_dirs
 
 
 class TestCrossModuleIntegration:
@@ -178,6 +179,7 @@ class TestSettingsWithActualFileOperations:
             cache_dir=str(test_cache_dir),
             log_file=str(test_log_file),
         )
+        ensure_settings_dirs(s)
 
         # Settings object should exist
         assert s is not None
@@ -201,6 +203,8 @@ class TestSettingsWithActualFileOperations:
         test_db_path = tmp_path / "db" / "test_integration.db"
 
         s = DocMindSettings(sqlite_db_path=str(test_db_path))
+
+        ensure_settings_dirs(s)
 
         # Parent directory should be created
         assert test_db_path.parent.exists()
@@ -227,6 +231,8 @@ class TestSettingsWithActualFileOperations:
         nested_path = tmp_path / "level1" / "level2" / "level3" / "level4"
 
         s = DocMindSettings(data_dir=str(nested_path))
+
+        ensure_settings_dirs(s)
 
         # Settings object should exist
         assert s is not None

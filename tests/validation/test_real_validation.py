@@ -246,22 +246,6 @@ class TestConfigurationValidation:
         assert settings.enable_colbert_reranking is True
 
 
-class TestAsyncPatterns:
-    """Test async patterns and compatibility."""
-
-    @pytest.mark.asyncio
-    async def test_async_function_availability(self):
-        """Test that async functions are available and callable - SKIPPED (legacy functions)."""
-        pytest.skip(
-            "Legacy async functions removed with ADR-009 document processing architecture"
-        )
-
-    def test_sync_async_compatibility(self):
-        """Test that key functions exist for embedding operations."""
-        # Skip removed embedding functions - replaced with FEAT-002 retrieval system
-        pytest.skip("Embedding utility functions removed from src.utils.embedding")
-
-
 class TestErrorHandlingReal:
     """Test real error handling scenarios."""
 
@@ -339,11 +323,6 @@ class TestIntegrationReadiness:
         assert hasattr(settings, "model_name")
         assert settings.model_name is not None
         assert len(settings.model_name) > 0
-
-    def test_system_components_importable(self):
-        """Test that all system components can be imported."""
-        # Skip removed embedding functions - replaced with FEAT-002 retrieval system
-        pytest.skip("create_vector_index and get_embed_model functions removed")
 
 
 # Test configuration

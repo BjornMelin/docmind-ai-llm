@@ -482,3 +482,34 @@ def shared_mock_qdrant_client() -> Mock:
     across multiple test functions without recreation overhead.
     """
     return MockVectorStoreFactory.create_qdrant_client()
+
+
+# ============================================================================
+# TEST-ONLY HELPER: ensure directories for a DocMindSettings instance
+# ============================================================================
+
+
+def ensure_settings_dirs(s) -> None:  # pragma: no cover
+    """Create filesystem directories for a DocMindSettings instance (test-only).
+
+    Rationale:
+    - Keep src/config/settings.py pure (no side effects).
+    - Tests that assert on real file operations can call this explicitly.
+    """
+    try:
+        # Paths are Path objects on DocMindSettings; tolerate strings if present.
+        from pathlib import Path
+
+        data_dir = Path(s.data_dir)
+        cache_dir = Path(s.cache_dir)
+        log_parent = Path(s.log_file).parent
+        db_parent = Path(s.sqlite_db_path).parent
+
+        data_dir.mkdir(parents=True, exist_ok=True)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        log_parent.mkdir(parents=True, exist_ok=True)
+        db_parent.mkdir(parents=True, exist_ok=True)
+    except Exception:  # noqa: S110
+        # Tests should fail on their own assertions; avoid raising
+        # here to keep helper minimal.
+        pass

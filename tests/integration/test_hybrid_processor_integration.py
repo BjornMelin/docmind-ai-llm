@@ -494,8 +494,10 @@ class TestHybridProcessorIntegration:
                 await asyncio.sleep(0.1)  # Simulate processing time
                 return [
                     Mock(
-                        text=("Performance test content with multiple sentences for "
-                        "chunking. ")
+                        text=(
+                            "Performance test content with multiple sentences for "
+                            "chunking. "
+                        )
                         * 10,
                         category="NarrativeText",
                         metadata=Mock(

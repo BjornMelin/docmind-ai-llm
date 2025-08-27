@@ -3,7 +3,8 @@
 Tests direct Unstructured.io integration with hi-res strategy, strategy mapping,
 multimodal extraction, and performance targets.
 
-Migrated from DirectUnstructuredProcessor to use the working DocumentProcessor implementation.
+Migrated from DirectUnstructuredProcessor to use the working
+DocumentProcessor implementation.
 """
 
 import asyncio
@@ -58,7 +59,10 @@ def mock_unstructured_partition():
                     ),
                 ),
                 Mock(
-                    text="<table><tr><th>Header 1</th><th>Header 2</th></tr><tr><td>Data 1</td><td>Data 2</td></tr></table>",
+                    text=(
+                        "<table><tr><th>Header 1</th><th>Header 2</th></tr>"
+                        "<tr><td>Data 1</td><td>Data 2</td></tr></table>"
+                    ),
                     category="Table",
                     metadata=Mock(
                         page_number=1,
@@ -66,7 +70,10 @@ def mock_unstructured_partition():
                         parent_id=None,
                         element_id="elem_3",
                         filename=actual_filename,
-                        text_as_html="<table><tr><th>Header 1</th><th>Header 2</th></tr><tr><td>Data 1</td><td>Data 2</td></tr></table>",
+                        text_as_html=(
+                            "<table><tr><th>Header 1</th><th>Header 2</th></tr>"
+                            "<tr><td>Data 1</td><td>Data 2</td></tr></table>"
+                        ),
                     ),
                 ),
                 Mock(
@@ -147,7 +154,7 @@ def sample_docx_path(tmp_path):
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>""",
+</Types>""",  # noqa: E501
         )
     return docx_file
 
@@ -474,21 +481,28 @@ class TestDocumentProcessor:
         from src.processing.document_processor import ProcessingError
 
         # The processor may successfully process the "corrupted" file and return content
-        # or it may fail with a ProcessingError
+        # or it may fail with a ProcessingError - both are valid outcomes
+        processing_error_occurred = False
+        error_message = ""
+
         try:
             result = asyncio.run(processor.process_document_async(corrupted_file))
-            # If it processes successfully, it might extract text like "Not a valid PDF file"
+            # If it processes successfully, may extract text like "Not a valid PDF file"
             # This is actually correct behavior - the processor is resilient
             assert isinstance(result, ProcessingResult)
             assert len(result.elements) >= 0  # Could be empty or contain extracted text
         except ProcessingError as e:
-            # If it does raise an exception, verify error is informative
+            processing_error_occurred = True
+            error_message = str(e).lower()
+
+        # If an exception was raised, verify error is informative
+        if processing_error_occurred:
             assert (
-                "corrupted" in str(e).lower()
-                or "invalid" in str(e).lower()
-                or "processing failed" in str(e).lower()
-                or "partition failed" in str(e).lower()
-            )
+                "corrupted" in error_message
+                or "invalid" in error_message
+                or "processing failed" in error_message
+                or "partition failed" in error_message
+            ), f"Expected informative error message, got: {error_message}"
 
     @pytest.mark.unit
     def test_unsupported_file_format(self, mock_settings, tmp_path):
@@ -504,7 +518,9 @@ class TestDocumentProcessor:
 
         processor = DocumentProcessor(mock_settings)
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(
+            ValueError, match=r"(unsupported|not supported|unknown).*format"
+        ) as exc_info:
             processor._get_strategy_for_file(str(unsupported_file))
 
         assert "unsupported" in str(exc_info.value).lower()
@@ -622,13 +638,15 @@ startxref
         for i, result in enumerate(results):
             assert isinstance(result, ProcessingResult)
             assert len(result.elements) > 0
-            # Verify filename is preserved correctly (check if filename contains the document name)
+            # Verify filename is preserved correctly
+            # (check if filename contains the document name)
             expected_filename = f"document_{i}.pdf"
             assert any(
                 str(elem.metadata.get("filename", "")).endswith(expected_filename)
                 for elem in result.elements
             ), (
-                f"Expected filename ending with '{expected_filename}', but found: {[elem.metadata.get('filename', '') for elem in result.elements]}"
+                f"Expected filename ending with '{expected_filename}', but found: "
+                f"{[elem.metadata.get('filename', '') for elem in result.elements]}"
             )
 
     @pytest.mark.unit

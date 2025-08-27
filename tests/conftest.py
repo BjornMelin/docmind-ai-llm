@@ -27,8 +27,11 @@ from llama_index.core.graph_stores import SimplePropertyGraphStore
 
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
+# Set testing environment variable to prevent LlamaIndex initialization
+os.environ["TESTING"] = "1"
+
 # Import new centralized settings for new fixtures
-from src.config.settings import DocMindSettings as AppSettings
+from src.config.settings import DocMindSettings
 
 # Configure pytest-asyncio for proper async handling
 pytest_plugins = ("pytest_asyncio",)
@@ -54,7 +57,7 @@ def configure_logging():
 
 
 @pytest.fixture(scope="session")
-def mock_settings() -> AppSettings:
+def mock_settings() -> DocMindSettings:
     """Configure mock LlamaIndex components for unit tests.
 
     Sets up MagicMock LLM and MockEmbedding with proper dimensions to match BGE-M3.
@@ -63,50 +66,38 @@ def mock_settings() -> AppSettings:
     # Note: We don't set global Settings here as it expects real LLM instances
     # Individual tests can use MockEmbedding and mock LLMs as needed
 
-    return AppSettings(
-        bge_m3_model_name="mock-embedding",  # Use correct field name
-        embedding_dimension=1024,
+    return DocMindSettings(
         ollama_base_url="http://mock:11434",
-        use_reranking=False,  # Disable for unit tests
-        use_sparse_embeddings=False,  # Disable for unit tests
     )
 
 
 @pytest.fixture(scope="session")
-def integration_settings() -> AppSettings:
+def integration_settings() -> DocMindSettings:
     """Test settings for integration tests using lightweight models.
 
     Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB) for faster integration tests.
     Still validates component integration without full model overhead.
     """
-    return AppSettings(
-        bge_m3_model_name="sentence-transformers/all-MiniLM-L6-v2",  # 80MB lightweight
-        embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
+    return DocMindSettings(
         ollama_base_url="http://localhost:11434",
-        use_reranking=False,  # Disable expensive operations
-        use_sparse_embeddings=True,  # Test hybrid search logic
     )
 
 
 @pytest.fixture(scope="session")
-def system_settings() -> AppSettings:
+def system_settings() -> DocMindSettings:
     """Full system test settings with real models and GPU.
 
     Uses production models for full end-to-end validation.
     Only used in system tests marked with @pytest.mark.system.
     """
-    return AppSettings(
-        bge_m3_model_name="BAAI/bge-large-en-v1.5",
-        embedding_dimension=1024,
+    return DocMindSettings(
         ollama_base_url="http://localhost:11434",
-        use_reranking=True,
-        use_sparse_embeddings=True,
     )
 
 
 # New centralized settings fixtures
 @pytest.fixture(scope="session")
-def centralized_mock_settings(tmp_path_factory) -> AppSettings:
+def centralized_mock_settings(tmp_path_factory) -> DocMindSettings:
     """Mock centralized settings for unit tests.
 
     Uses temporary directories and conservative values for fast, deterministic testing.
@@ -115,7 +106,7 @@ def centralized_mock_settings(tmp_path_factory) -> AppSettings:
     # Create temporary directories for testing
     temp_dir = tmp_path_factory.mktemp("settings_test")
 
-    return AppSettings(
+    return DocMindSettings(
         debug=True,  # Debug mode for testing
         log_level="DEBUG",
         # Use temporary directories
@@ -124,31 +115,15 @@ def centralized_mock_settings(tmp_path_factory) -> AppSettings:
         log_file=str(temp_dir / "logs" / "test.log"),
         sqlite_db_path=str(temp_dir / "test.db"),
         # Conservative performance settings for testing
-        max_memory_gb=2.0,
-        max_vram_gb=4.0,
         enable_gpu_acceleration=False,  # Disabled for unit tests
-        # Fast timeouts for testing
-        agent_decision_timeout=100,  # Fast timeout
-        request_timeout_seconds=5.0,
-        streaming_delay_seconds=0.001,  # Minimal delay
-        # Minimal context for speed
-        context_window_size=8192,
-        context_buffer_size=8192,
-        default_token_limit=8192,
-        # Test-optimized batch sizes
-        bge_m3_batch_size_gpu=2,
-        bge_m3_batch_size_cpu=1,
-        default_batch_size=5,
         # Disable expensive operations for unit tests
-        use_reranking=False,
-        use_sparse_embeddings=False,
         enable_dspy_optimization=False,
         enable_performance_logging=False,
     )
 
 
 @pytest.fixture(scope="session")
-def centralized_integration_settings(tmp_path_factory) -> AppSettings:
+def centralized_integration_settings(tmp_path_factory) -> DocMindSettings:
     """Integration test settings for the centralized settings system.
 
     Uses lightweight models and reasonable performance settings for integration tests.
@@ -156,46 +131,28 @@ def centralized_integration_settings(tmp_path_factory) -> AppSettings:
     """
     temp_dir = tmp_path_factory.mktemp("integration_test")
 
-    return AppSettings(
+    return DocMindSettings(
         debug=False,
         log_level="INFO",
         # Test directories
         data_dir=str(temp_dir / "data"),
         cache_dir=str(temp_dir / "cache"),
         # Integration-appropriate settings
-        model_name="llama3.2:1b",  # Lightweight model
         llm_backend="ollama",
-        embedding_model="sentence-transformers/all-MiniLM-L6-v2",  # 80MB model
-        embedding_dimension=384,  # all-MiniLM-L6-v2 dimensions
-        # Moderate performance settings
-        max_memory_gb=4.0,
-        max_vram_gb=8.0,
         enable_gpu_acceleration=True,
-        # Reasonable timeouts
-        agent_decision_timeout=200,
-        max_agent_retries=1,  # Fewer retries for speed
-        # Enable key features for integration testing
-        enable_multi_agent=True,
-        use_reranking=True,
-        use_sparse_embeddings=True,
-        retrieval_strategy="hybrid",
-        # Moderate batch sizes
-        bge_m3_batch_size_gpu=6,
-        bge_m3_batch_size_cpu=2,
         # Enable caching for integration tests
-        enable_document_caching=True,
         enable_performance_logging=True,
     )
 
 
 @pytest.fixture(scope="session")
-def centralized_system_settings() -> AppSettings:
+def centralized_system_settings() -> DocMindSettings:
     """Full system test settings for the centralized settings system.
 
     Production-like configuration for comprehensive system testing.
     Uses default values from the centralized settings system.
     """
-    return AppSettings()  # Use all defaults - production configuration
+    return DocMindSettings()  # Use all defaults - production configuration
 
 
 @pytest.fixture
@@ -220,7 +177,7 @@ def centralized_settings_with_temp_dirs(tmp_path):
     Useful for tests that need to verify directory creation
     and file system integration without affecting real directories.
     """
-    return AppSettings(
+    return DocMindSettings(
         data_dir=str(tmp_path / "data"),
         cache_dir=str(tmp_path / "cache"),
         log_file=str(tmp_path / "logs" / "test.log"),
@@ -250,28 +207,19 @@ def settings_environment_override():
 
 
 @pytest.fixture
-def benchmark_settings() -> AppSettings:
+def benchmark_settings() -> DocMindSettings:
     """Settings optimized for performance benchmarking.
 
     Realistic production settings for accurate performance measurement.
     """
-    return AppSettings(
+    return DocMindSettings(
         debug=False,
         log_level="ERROR",  # Minimal logging
         enable_performance_logging=True,
         # Performance-optimized settings
         enable_gpu_acceleration=True,
-        vllm_gpu_memory_utilization=0.90,
-        enable_kv_cache_optimization=True,
-        # Production batch sizes
-        bge_m3_batch_size_gpu=12,
-        default_batch_size=20,
         # All features enabled for realistic benchmarking
-        enable_multi_agent=True,
-        use_reranking=True,
-        use_sparse_embeddings=True,
         enable_dspy_optimization=True,
-        retrieval_strategy="hybrid",
     )
 
 
@@ -625,6 +573,14 @@ def cleanup_test_artifacts():
         if temp_dir.exists():
             with contextlib.suppress(PermissionError):
                 shutil.rmtree(temp_dir)
+
+    # Remove stray mock-named directories accidentally created in repo root
+    repo_root = Path(__file__).parent.parent
+    mock_prefixes = ("<Mock", "<MagicMock")
+    for item in repo_root.iterdir():
+        if item.is_dir() and any(item.name.startswith(p) for p in mock_prefixes):
+            with contextlib.suppress(PermissionError):
+                shutil.rmtree(item)
 
 
 # Enhanced pytest configuration with tiered testing strategy
