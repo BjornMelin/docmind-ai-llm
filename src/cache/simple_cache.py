@@ -5,6 +5,7 @@ Perfect for single-user Streamlit app with multi-agent coordination.
 """
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +27,13 @@ class SimpleCache:
 
         # Create cache storage - simple KVStore for document caching
         db_path = cache_path / "docmind.db"
-        if db_path.exists():
-            self.cache = SimpleKVStore.from_persist_path(str(db_path))
+        if db_path.exists() and db_path.stat().st_size > 0:
+            try:
+                self.cache = SimpleKVStore.from_persist_path(str(db_path))
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Cache file corrupted, creating new cache: {e}")
+                db_path.unlink()  # Remove corrupted file
+                self.cache = SimpleKVStore()
         else:
             self.cache = SimpleKVStore()
 
