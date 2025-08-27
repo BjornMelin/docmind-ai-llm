@@ -1013,6 +1013,32 @@ wheels = [
 ]
 
 [[package]]
+name = "dependency-injector"
+version = "4.48.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/26/7c/5062c4a7ffd32bf210ff55fab9d279a5beeae350fb09533d3536811e13b6/dependency_injector-4.48.1.tar.gz", hash = "sha256:1805185e4522effad6d5e348c255d27e80d3f8adc89701daf13d743367392978", size = 1100885, upload-time = "2025-06-20T10:21:52.248Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/f9/c9b77652f724aece8856e281f7a71e5af544049b3c068df70c68868e43be/dependency_injector-4.48.1-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:a6f73011d532f3ea59689aad85c7999be6da3f30393041a745d5861cdcdc02e4", size = 1631637, upload-time = "2025-06-20T10:21:24.729Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/f0/d91c9cdabb1f2354762aca588757d1aa341f3cbccbc8636dd2c06acac10b/dependency_injector-4.48.1-cp38-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:ac09f508fa9aee06a036ebf3e3d3b2a210276aba1993e9993cec7f1fdc5fd89e", size = 1855944, upload-time = "2025-06-20T10:21:26.753Z" },
+    { url = "https://files.pythonhosted.org/packages/57/ee/d69c4758a12653edbe6ee15c0bf4195981c9820650a1cfa762cbb838485b/dependency_injector-4.48.1-cp38-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:1b05a4a980096b53ad90a87965c5450183bfbb8bbe36615d7cea97537086d622", size = 1811989, upload-time = "2025-06-20T10:21:28.293Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/6d/d2a257402c8c3f7a9c61f1b8a0482ec4373f1ef7fdfe784a91e883506e3b/dependency_injector-4.48.1-cp38-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:0506e98440ee6c48fe660016d602961b1b3ecc0a8227838a2221048ed11e2fca", size = 1826408, upload-time = "2025-06-20T10:21:29.789Z" },
+    { url = "https://files.pythonhosted.org/packages/65/f9/2a408d460eedb264f7ea919754c526c8f3a18c026496cacb7dd6960766d2/dependency_injector-4.48.1-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:1994622eae8917138626303b176cba4c74e625ba1e588cb09d673ca175d299a2", size = 1863948, upload-time = "2025-06-20T10:21:31.951Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/8a/2edaef77e725dd8b1a625c84cbccb0f445afe58277c7b243cbf58784826a/dependency_injector-4.48.1-cp38-abi3-win32.whl", hash = "sha256:58d4d81f92e3267c331f160cbbb517fd7644b95ee57a0d6e4b01f53a7e437a4a", size = 1516768, upload-time = "2025-06-20T10:21:33.747Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/41/4bf523af7e1b7f367499f8b8709e0e807e9a14c7d1674b0442d7f84403c8/dependency_injector-4.48.1-cp38-abi3-win_amd64.whl", hash = "sha256:572b22b7db9b103718ea52634b5ca1ef763278338310254334f4633a57c9f0e7", size = 1639850, upload-time = "2025-06-20T10:21:35.639Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/b9/203a1cb19cc4ed42748dceb53d9cafe42ee34928f2d5c18cbe5f30d6a573/dependency_injector-4.48.1-pp310-pypy310_pp73-macosx_11_0_arm64.whl", hash = "sha256:9a7862987b3dcab5ac4fd82f6bbda55d3b15af1ca7492757c428deccc3720140", size = 1732856, upload-time = "2025-06-20T10:21:37.459Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/6d/7bea5ea904465b4d04c7e3cddf669079d9abb0902d75b05417b5f884c570/dependency_injector-4.48.1-pp310-pypy310_pp73-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:bb33c6d6b6100564dfaee20f3f76a2756158cceff6499e9d0bca8290f8e5f124", size = 1822529, upload-time = "2025-06-20T10:21:39.363Z" },
+    { url = "https://files.pythonhosted.org/packages/97/3d/7b16ec2cd0f4e7bba380084a713395d1483baa67e7ac63338f7b8a9a30a8/dependency_injector-4.48.1-pp310-pypy310_pp73-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a659380386bd236579b7f82f51e97f6074d0c878a10db5b50086000de6ce3c28", size = 1731129, upload-time = "2025-06-20T10:21:41.241Z" },
+    { url = "https://files.pythonhosted.org/packages/16/26/bf4612e9adf60fdbfd97360663d2b39ab17bd4308c7294dcfcd54546c701/dependency_injector-4.48.1-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:76774369c7268d5dd211af75abfcb4433d972760be90db342c2de325ee4c24a0", size = 1616736, upload-time = "2025-06-20T10:21:43.134Z" },
+    { url = "https://files.pythonhosted.org/packages/04/de/92b98b96742fbc9c04273729cb14c744a97a8dc2ee3e0d12a0d3cc3945e2/dependency_injector-4.48.1-pp311-pypy311_pp73-macosx_11_0_arm64.whl", hash = "sha256:51f8d9d78a1a147908ed7929df628d859251a814e6a001973bd96ae2b5648760", size = 1734103, upload-time = "2025-06-20T10:21:44.748Z" },
+    { url = "https://files.pythonhosted.org/packages/70/b7/31061c32c7d3e1f6c3e1fc71eb37d2ba4134e9bb2e50ad558bbff4aad9fa/dependency_injector-4.48.1-pp311-pypy311_pp73-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:2c23ab17cd3e160de1fc5d78719bf86fbfc81c21c8ea02b43832a6a1e2c8a8d8", size = 1826656, upload-time = "2025-06-20T10:21:46.663Z" },
+    { url = "https://files.pythonhosted.org/packages/57/a7/00b2a6e8769f3a5b248edf0b0d503289eb3516fa192f4e4cb368163f4a71/dependency_injector-4.48.1-pp311-pypy311_pp73-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:79be912a0dedb1341b1400018defca6a9966fcb8d4a84b325623fa57d3c08171", size = 1734610, upload-time = "2025-06-20T10:21:48.271Z" },
+    { url = "https://files.pythonhosted.org/packages/43/b3/aa73fe301cf4dc006d2d6d82b6bf2f9a5776854f20e0aaa1122fa4fd1f2f/dependency_injector-4.48.1-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:65d9cf9f4eb31f837ed387210158e0003a4509478de1cbdc56c8439232f22ecd", size = 1618844, upload-time = "2025-06-20T10:21:50.271Z" },
+]
+
+[[package]]
 name = "deprecated"
 version = "1.2.18"
 source = { registry = "https://pypi.org/simple" }
@@ -1087,8 +1113,10 @@ name = "docmind-ai-llm"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "dependency-injector" },
     { name = "dspy-ai" },
     { name = "flagembedding" },
+    { name = "hypothesis" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "langgraph" },
@@ -1120,6 +1148,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymupdf" },
+    { name = "pytest-benchmark" },
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "qdrant-client" },
@@ -1167,9 +1196,11 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "cmake", marker = "extra == 'gpu'", specifier = ">=3.26.4" },
+    { name = "dependency-injector", specifier = ">=4.48.1" },
     { name = "dspy-ai", specifier = ">=2.5.0" },
     { name = "fastembed-gpu", marker = "extra == 'gpu'", specifier = ">=0.7.0" },
     { name = "flagembedding", specifier = ">=1.3.5" },
+    { name = "hypothesis", specifier = ">=6.137.2" },
     { name = "langchain-core", specifier = ">=0.3.74" },
     { name = "langchain-openai", specifier = ">=0.3.31" },
     { name = "langgraph", specifier = ">=0.6.6" },
@@ -1202,6 +1233,7 @@ requires-dist = [
     { name = "pydantic", specifier = "==2.11.7" },
     { name = "pydantic-settings", specifier = "==2.10.1" },
     { name = "pymupdf", specifier = "==1.26.3" },
+    { name = "pytest-benchmark", specifier = ">=5.1.0" },
     { name = "python-docx", specifier = "==1.2.0" },
     { name = "python-dotenv", specifier = "==1.1.1" },
     { name = "qdrant-client", specifier = "==1.15.1" },

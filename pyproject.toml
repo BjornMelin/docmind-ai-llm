@@ -75,6 +75,9 @@ dependencies = [
     "pydantic==2.11.7",
     "pydantic-settings==2.10.1",
     "vllm[flashinfer]>=0.10.1.1",
+    "dependency-injector>=4.48.1",
+    "pytest-benchmark>=5.1.0",
+    "hypothesis>=6.137.2",
 ]
 
 [project.optional-dependencies]
