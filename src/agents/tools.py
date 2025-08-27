@@ -33,7 +33,7 @@ from llama_index.core import Document
 from loguru import logger
 
 from src.agents.tool_factory import ToolFactory
-from src.config.app_settings import app_settings
+from src.config import settings
 
 # Constants
 
@@ -147,7 +147,7 @@ def route_query(
         complexity = "simple"
         strategy = "vector"
         needs_planning = False
-        confidence = app_settings.default_confidence_threshold
+        confidence = settings.default_confidence_threshold
 
         if (
             any(pattern in query_lower for pattern in complex_patterns)
@@ -221,7 +221,7 @@ def route_query(
 def plan_query(
     query: str,
     complexity: str,
-    state: Annotated[dict, InjectedState] = None,
+    _state: Annotated[dict, InjectedState] = None,
 ) -> str:
     """Decompose complex queries into structured sub-tasks.
 
@@ -464,10 +464,10 @@ def retrieve_documents(
         if strategy == "graphrag" and use_graphrag and kg_index:
             # Use knowledge graph retrieval with optimized queries
             for q in queries_to_process:
-                tool = ToolFactory.create_kg_search_tool(kg_index)
-                if tool:
+                search_tool = ToolFactory.create_kg_search_tool(kg_index)
+                if search_tool:
                     try:
-                        result = tool.call(q)
+                        result = search_tool.call(q)
                         new_docs = _parse_tool_result(result)
                         documents.extend(new_docs)
                         logger.debug(
@@ -486,14 +486,18 @@ def retrieve_documents(
             # Use hybrid or vector retrieval with query variants
             for q in queries_to_process:
                 if strategy == "hybrid" and retriever:
-                    tool = ToolFactory.create_hybrid_search_tool(retriever)
+                    search_tool = ToolFactory.create_hybrid_search_tool(retriever)
                     strategy_used = "hybrid_fusion"
                 elif vector_index:
                     if strategy == "hybrid":
-                        tool = ToolFactory.create_hybrid_vector_tool(vector_index)
+                        search_tool = ToolFactory.create_hybrid_vector_tool(
+                            vector_index
+                        )
                         strategy_used = "hybrid_vector"
                     else:
-                        tool = ToolFactory.create_vector_search_tool(vector_index)
+                        search_tool = ToolFactory.create_vector_search_tool(
+                            vector_index
+                        )
                         strategy_used = "vector"
                 else:
                     logger.error("No vector index available for retrieval")
@@ -507,7 +511,7 @@ def retrieve_documents(
                     )
 
                 try:
-                    result = tool.call(q)
+                    result = search_tool.call(q)
                     new_docs = _parse_tool_result(result)
                     documents.extend(new_docs)
                     logger.debug(
@@ -566,7 +570,7 @@ def retrieve_documents(
 def synthesize_results(
     sub_results: str,
     original_query: str,
-    state: Annotated[dict, InjectedState] = None,
+    _state: Annotated[dict, InjectedState] = None,
 ) -> str:
     """Combine and synthesize results from multiple retrieval operations.
 
@@ -656,7 +660,7 @@ def synthesize_results(
         )
 
         # Limit to top results
-        max_results = getattr(app_settings, "synthesis_max_docs", MAX_RETRIEVAL_RESULTS)
+        max_results = MAX_RETRIEVAL_RESULTS
         final_documents = ranked_documents[:max_results]
 
         processing_time = time.perf_counter() - start_time
@@ -692,7 +696,7 @@ def validate_response(
     query: str,
     response: str,
     sources: str,
-    state: Annotated[dict, InjectedState] = None,
+    _state: Annotated[dict, InjectedState] = None,
 ) -> str:
     """Validate response quality and accuracy against sources.
 
@@ -901,7 +905,7 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
         return [
             {"content": result, "metadata": {"source": "tool_response"}, "score": 1.0}
         ]
-    elif hasattr(result, "response"):
+    if hasattr(result, "response"):
         # LlamaIndex response object
         return [
             {
@@ -910,7 +914,7 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
                 "score": 1.0,
             }
         ]
-    elif isinstance(result, list):
+    if isinstance(result, list):
         # List of documents
         documents = []
         for item in result:
@@ -925,11 +929,8 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
             elif isinstance(item, dict):
                 documents.append(item)
         return documents
-    else:
-        # Fallback - convert to string
-        return [
-            {"content": str(result), "metadata": {"source": "unknown"}, "score": 1.0}
-        ]
+    # Fallback - convert to string
+    return [{"content": str(result), "metadata": {"source": "unknown"}, "score": 1.0}]
 
 
 def _rank_documents_by_relevance(documents: list[dict], query: str) -> list[dict]:

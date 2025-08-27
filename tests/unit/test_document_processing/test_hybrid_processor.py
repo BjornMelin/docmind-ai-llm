@@ -24,13 +24,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 from src.processing.document_processor import (
     DocumentProcessor,
     ProcessingError,
     UnstructuredTransformation,
-    create_document_processor,
 )
-from src.processing.models import DocumentElement, ProcessingResult, ProcessingStrategy
 
 
 @pytest.fixture
@@ -742,26 +741,26 @@ class TestFactoryFunctions:
     """Test factory functions for DocumentProcessor."""
 
     @pytest.mark.unit
-    def test_create_document_processor(self, mock_settings):
-        """Test create_document_processor factory function."""
-        processor = create_document_processor(mock_settings)
+    def test_document_processor_constructor(self, mock_settings):
+        """Test DocumentProcessor constructor."""
+        processor = DocumentProcessor(mock_settings)
 
         assert isinstance(processor, DocumentProcessor)
         assert processor.settings == mock_settings
 
     @pytest.mark.unit
     @patch("src.processing.document_processor.app_settings")
-    def test_create_document_processor_default_settings(self, mock_app_settings):
-        """Test factory function with default settings."""
-        processor = create_document_processor()
+    def test_document_processor_constructor_default_settings(self, mock_app_settings):
+        """Test constructor with default settings."""
+        processor = DocumentProcessor()
 
         assert isinstance(processor, DocumentProcessor)
         assert processor.settings == mock_app_settings
 
     @pytest.mark.unit
-    def test_create_document_processor_compatibility(self, mock_settings):
-        """Test create_document_processor compatibility function."""
-        processor = create_document_processor(mock_settings)
+    def test_document_processor_constructor_compatibility(self, mock_settings):
+        """Test DocumentProcessor constructor compatibility."""
+        processor = DocumentProcessor(mock_settings)
 
         assert isinstance(processor, DocumentProcessor)
         assert processor.settings == mock_settings

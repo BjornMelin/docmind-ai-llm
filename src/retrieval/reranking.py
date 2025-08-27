@@ -246,7 +246,6 @@ def create_bge_cross_encoder_reranker(
     )
 
 
-# Performance monitoring helper
 def benchmark_reranking_latency(
     reranker: BGECrossEncoderRerank,
     query: str,

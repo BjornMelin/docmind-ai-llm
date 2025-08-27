@@ -22,13 +22,12 @@ from src.agents.coordinator import (
     create_multi_agent_coordinator,
 )
 from src.agents.models import AgentResponse, MultiAgentState
-from src.config.vllm_config import VLLMConfig
 
 
 class TestMultiAgentCoordinator:
     """Test suite for ADR-011 compliant MultiAgentCoordinator."""
 
-    def test_initialization_adr_compliance(self, mock_vllm_config: VLLMConfig):
+    def test_initialization_adr_compliance(self, mock_vllm_config: MockVLLMConfig):
         """Test coordinator initialization meets ADR requirements."""
         with patch("src.agents.coordinator.create_vllm_manager"):
             coordinator = MultiAgentCoordinator(

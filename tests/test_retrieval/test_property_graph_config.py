@@ -11,10 +11,10 @@ import pytest
 from llama_index.core.schema import Document, NodeWithScore, TextNode
 
 # Import real implementations
-from src.retrieval.graph.property_graph_config import (
+from src.retrieval.graph_config import (
     PropertyGraphConfig,
 )
-from src.retrieval.graph.property_graph_config import (
+from src.retrieval.graph_config import (
     create_property_graph_index_async as create_property_graph_index,
 )
 
@@ -138,7 +138,7 @@ class TestPropertyGraphConfiguration:
         )
 
         # Extract entities using extended method
-        from src.retrieval.graph.property_graph_config import (
+        from src.retrieval.graph_config import (
             extend_property_graph_index,
         )
 
@@ -172,7 +172,7 @@ class TestPropertyGraphConfiguration:
         )
 
         # Extract relationships using extended method
-        from src.retrieval.graph.property_graph_config import (
+        from src.retrieval.graph_config import (
             extend_property_graph_index,
         )
 
@@ -261,7 +261,7 @@ class TestPropertyGraphConfiguration:
     def test_confidence_scoring_for_entities(self, tech_schema):
         """Test confidence scoring for extracted entities."""
         # This will fail initially - implementation needed
-        from src.retrieval.graph.property_graph_config import (
+        from src.retrieval.graph_config import (
             calculate_entity_confidence,
         )
 
@@ -441,7 +441,7 @@ class TestPropertyGraphQueryEngine:
     ):
         """Test RouterQueryEngine detects and routes relationship queries."""
         # This will fail initially - implementation needed
-        from src.retrieval.query_engine.router_engine import RouterQueryEngine
+        from src.retrieval.query_engine import RouterQueryEngine
 
         index = await create_property_graph_index(
             documents=sample_documents,

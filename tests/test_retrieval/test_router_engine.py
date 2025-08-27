@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.retrieval.query_engine.router_engine import (
+from src.retrieval.query_engine import (
     AdaptiveRouterQueryEngine,
     configure_router_settings,
     create_adaptive_router_engine,

@@ -2,15 +2,7 @@
 
 This module contains data models specifically designed for the hybrid persistence
 architecture combining SQLite document metadata storage with Qdrant vector storage,
-following ADR-009 requirements for unified document storage and efficient retrieval.
-
-HYBRID MODEL ORGANIZATION:
-Following the hybrid model organization strategy, these models are colocated within
-the storage domain because they are:
-- Tightly coupled to SQLite and Qdrant storage operations
-- Specific to hybrid persistence workflows
-- Domain-specific to storage and retrieval systems
-- Used primarily within the storage modules
+following requirements for unified document storage and efficient retrieval.
 
 Models:
     DocumentMetadata: Document metadata stored in SQLite
@@ -18,12 +10,6 @@ Models:
     SearchResult: Unified search result combining relational and vector data
     StorageStats: Storage system statistics
     PersistenceError: Custom exception for persistence operation errors
-
-Architecture Decision:
-    These models are placed within the storage module following domain-driven
-    design principles. They are domain-specific and tightly coupled to the
-    storage system, making this the most appropriate location per
-    the hybrid organization strategy.
 """
 
 from typing import Any
@@ -99,5 +85,3 @@ class StorageStats(BaseModel):
 
 class PersistenceError(Exception):
     """Custom exception for persistence operation errors."""
-
-    pass

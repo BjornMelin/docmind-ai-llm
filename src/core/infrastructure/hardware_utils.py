@@ -128,8 +128,7 @@ def get_optimal_providers(force_cpu: bool = False) -> list[str]:
 
     if torch.cuda.is_available():
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    else:
-        return ["CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
 
 
 def get_recommended_batch_size(model_type: str = "embedding") -> int:
@@ -153,16 +152,16 @@ def get_recommended_batch_size(model_type: str = "embedding") -> int:
         # GPU batch sizes based on available VRAM
         if vram_gb >= HIGH_END_VRAM_THRESHOLD:  # High-end GPU
             return HIGH_END_BATCH_SIZES.get(model_type, HIGH_END_DEFAULT_BATCH)
-        elif vram_gb >= MID_RANGE_VRAM_THRESHOLD:  # Mid-range GPU
+        if vram_gb >= MID_RANGE_VRAM_THRESHOLD:  # Mid-range GPU
             return MID_RANGE_BATCH_SIZES.get(model_type, MID_RANGE_DEFAULT_BATCH)
-        elif vram_gb >= ENTRY_LEVEL_VRAM_THRESHOLD:  # Entry-level GPU
+        if vram_gb >= ENTRY_LEVEL_VRAM_THRESHOLD:  # Entry-level GPU
             return ENTRY_LEVEL_BATCH_SIZES.get(model_type, ENTRY_LEVEL_DEFAULT_BATCH)
-        else:  # Low VRAM
-            return LOW_VRAM_BATCH_SIZES.get(model_type, LOW_VRAM_DEFAULT_BATCH)
+        # Low VRAM case
+        return LOW_VRAM_BATCH_SIZES.get(model_type, LOW_VRAM_DEFAULT_BATCH)
 
-    except (RuntimeError, OSError) as e:
-        logger.warning("Failed to get GPU properties for batch size: %s", e)
-        return cpu_defaults.get(model_type, DEFAULT_BATCH_SIZE_FALLBACK)
-    except (ImportError, AttributeError, ValueError) as e:
-        logger.error("Unexpected error determining batch size: %s", e)
+    except (RuntimeError, OSError, ImportError, AttributeError, ValueError) as e:
+        if isinstance(e, (RuntimeError, OSError)):
+            logger.warning("Failed to get GPU properties for batch size: %s", e)
+        else:
+            logger.error("Unexpected error determining batch size: %s", e)
         return cpu_defaults.get(model_type, DEFAULT_BATCH_SIZE_FALLBACK)

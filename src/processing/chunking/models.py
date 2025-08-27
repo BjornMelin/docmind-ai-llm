@@ -111,5 +111,3 @@ class ChunkingResult(BaseModel):
 
 class ChunkingError(Exception):
     """Custom exception for semantic chunking errors."""
-
-    pass

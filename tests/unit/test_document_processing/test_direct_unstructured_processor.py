@@ -11,12 +11,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-# Import working implementations
-from src.processing.document_processor import DocumentProcessor
-from src.processing.models import (
+from src.models.processing import (
     ProcessingResult,
     ProcessingStrategy,
 )
+
+# Import working implementations
+from src.processing.document_processor import DocumentProcessor
 
 # Alias for backward compatibility during transition
 DirectUnstructuredProcessor = DocumentProcessor

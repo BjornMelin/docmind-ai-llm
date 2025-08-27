@@ -28,7 +28,7 @@ try:
     logging.getLogger(__name__).info(
         "LlamaIndex configuration initialized successfully"
     )
-except Exception as e:
+except (ImportError, AttributeError, ValueError, ConnectionError, OSError) as e:
     import logging
 
     logging.getLogger(__name__).error(

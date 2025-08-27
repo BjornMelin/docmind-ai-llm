@@ -27,12 +27,36 @@ from tenacity import (
 )
 from unstructured.chunking.title import chunk_by_title
 
-from src.config.settings import app_settings
 from src.processing.chunking.models import (
     ChunkingParameters,
     ChunkingResult,
     SemanticChunk,
 )
+
+
+class MockMetadata:
+    """Mock metadata class for unstructured element compatibility."""
+
+    def __init__(self) -> None:
+        """Initialize mock metadata."""
+        self.page_number = 1
+        self.element_id = None
+        self.parent_id = None
+        self.filename = None
+        self.coordinates = None
+        self.section_title = None
+        self.text_as_html = None
+        self.image_path = None
+
+
+class MockElement:
+    """Mock element class for unstructured compatibility."""
+
+    def __init__(self) -> None:
+        """Initialize mock element."""
+        self.text = ""
+        self.category = "NarrativeText"
+        self.metadata = MockMetadata()
 
 
 class BoundaryDetection(str, Enum):
@@ -45,8 +69,6 @@ class BoundaryDetection(str, Enum):
 
 class ChunkingError(Exception):
     """Custom exception for semantic chunking errors."""
-
-    pass
 
 
 class SemanticChunker:
@@ -67,9 +89,11 @@ class SemanticChunker:
         """Initialize SemanticChunker.
 
         Args:
-            settings: DocMind configuration settings. Uses app_settings if None.
+            settings: DocMind configuration settings. Uses default settings if None.
         """
-        self.settings = settings or app_settings
+        from src.config import settings as default_settings
+
+        self.settings = settings or default_settings
 
         # Default chunking parameters from settings
         self.default_parameters = ChunkingParameters(
@@ -105,7 +129,7 @@ class SemanticChunker:
 
         for element in elements:
             # Create mock unstructured element with required attributes
-            mock_element = type("MockElement", (), {})()
+            mock_element = MockElement()
 
             # Set required attributes
             mock_element.text = (
@@ -117,13 +141,13 @@ class SemanticChunker:
 
             # Set metadata if available
             if hasattr(element, "metadata") and element.metadata:
-                mock_element.metadata = type("MockMetadata", (), {})()
+                mock_element.metadata = MockMetadata()
 
                 for key, value in element.metadata.items():
                     setattr(mock_element.metadata, key, value)
             else:
                 # Create minimal metadata
-                mock_element.metadata = type("MockMetadata", (), {})()
+                mock_element.metadata = MockMetadata()
                 mock_element.metadata.page_number = 1
                 mock_element.metadata.element_id = f"elem_{len(converted_elements)}"
                 mock_element.metadata.filename = "document"

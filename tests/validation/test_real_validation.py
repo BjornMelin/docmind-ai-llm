@@ -12,7 +12,7 @@ import pytest
 from llama_index.core import Document
 
 # Import DocMind AI components
-from src.config.app_settings import DocMindSettings
+from src.config.settings import DocMindSettings
 from src.utils.core import (
     detect_hardware,
     verify_rrf_configuration,

@@ -18,9 +18,9 @@ from typing import Any
 
 from loguru import logger
 
-from src.cache import create_cache_manager
+from src.cache.simple_cache import SimpleCache
 from src.core.infrastructure.spacy_manager import get_spacy_manager
-from src.processing.document_processor import create_resilient_processor
+from src.processing.document_processor import DocumentProcessor, ProcessingError
 
 
 async def load_documents_unstructured(
@@ -42,14 +42,14 @@ async def load_documents_unstructured(
         f"Processing {len(file_paths)} documents via ResilientDocumentProcessor"
     )
 
-    processor = create_resilient_processor(settings)
+    processor = DocumentProcessor(settings)
     results = []
 
     for file_path in file_paths:
         try:
             result = await processor.process_document_async(file_path)
             results.append(result)
-        except Exception as e:
+        except (ProcessingError, ValueError, OSError) as e:
             logger.error(f"Failed to process {file_path}: {str(e)}")
             # Continue processing other files
             continue
@@ -141,9 +141,9 @@ def get_document_info(file_path: str | Path) -> dict[str, Any]:
     }
 
     # Determine processing strategy
-    processor = create_resilient_processor()
+    processor = DocumentProcessor()
     try:
-        strategy = processor._get_strategy_for_file(file_path)
+        strategy = processor.get_strategy_for_file(file_path)
         info["processing_strategy"] = strategy.value
         info["supported"] = True
     except ValueError:
@@ -161,7 +161,7 @@ async def clear_document_cache() -> bool:
     """
     logger.info("Clearing document processing cache")
 
-    cache_manager = create_cache_manager()
+    cache_manager = SimpleCache()
 
     # Simple cache has only one layer
     success = await cache_manager.clear_cache()
@@ -180,7 +180,7 @@ async def get_cache_stats() -> dict[str, Any]:
     Returns:
         Cache statistics dictionary
     """
-    cache_manager = create_cache_manager()
+    cache_manager = SimpleCache()
     stats = await cache_manager.get_cache_stats()
 
     logger.debug(f"Cache statistics: type={stats.get('cache_type', 'unknown')}")
@@ -228,8 +228,7 @@ def _run_async_in_sync_context(coro):
                 "Cannot run async function in sync context with running loop"
             )
             return None
-        else:
-            return loop.run_until_complete(coro)
+        return loop.run_until_complete(coro)
     except RuntimeError:
         # No event loop, create one
         return asyncio.run(coro)
@@ -286,7 +285,7 @@ def extract_entities_with_spacy(
         logger.debug(f"Extracted {len(entities)} entities from text")
         return entities
 
-    except Exception as e:
+    except (OSError, ValueError, AttributeError, TypeError) as e:
         logger.error(f"Failed to extract entities: {str(e)}")
         return []
 
@@ -334,7 +333,7 @@ def extract_relationships_with_spacy(
         logger.debug(f"Extracted {len(relationships)} relationships from text")
         return relationships
 
-    except Exception as e:
+    except (OSError, ValueError, AttributeError, TypeError) as e:
         logger.error(f"Failed to extract relationships: {str(e)}")
         return []
 
@@ -375,7 +374,7 @@ def create_knowledge_graph_data(text: str, nlp_model: Any = None) -> dict[str, A
         )
         return result
 
-    except Exception as e:
+    except (OSError, ValueError, AttributeError, TypeError) as e:
         logger.error(f"Failed to create knowledge graph data: {str(e)}")
         return {
             "entities": [],

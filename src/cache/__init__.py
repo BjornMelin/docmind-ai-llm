@@ -7,12 +7,8 @@ Caching implementation:
 
 """
 
-from src.cache.simple_cache import (
-    SimpleCache,
-    create_cache_manager,
-)
+from src.cache.simple_cache import SimpleCache
 
 __all__ = [
     "SimpleCache",
-    "create_cache_manager",
 ]

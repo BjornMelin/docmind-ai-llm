@@ -31,8 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from src.models.processing import ProcessingResult, ProcessingStrategy
 from src.processing.hybrid_processor import HybridDocumentProcessor, ProcessingError
-from src.processing.models import ProcessingResult, ProcessingStrategy
 
 
 @pytest.fixture

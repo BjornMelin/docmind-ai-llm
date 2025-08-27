@@ -22,7 +22,7 @@ import torch
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
 from src.core.infrastructure.gpu_monitor import gpu_performance_monitor
-from src.utils.resource_management import gpu_memory_context
+from src.utils.storage import gpu_memory_context
 
 # Latency test constants
 P50_PERCENTILE = 50
@@ -209,7 +209,7 @@ class TestComponentLatencyBenchmarks:
             mock_bgem3.encode = mock_encode
             mock_model.return_value = mock_bgem3
 
-            from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
+            from src.retrieval.embeddings import BGEM3Embedding
 
             embedding_model = BGEM3Embedding()
 
@@ -267,7 +267,7 @@ class TestComponentLatencyBenchmarks:
             mock_bgem3 = MagicMock()
             mock_model.return_value = mock_bgem3
 
-            from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
+            from src.retrieval.embeddings import BGEM3Embedding
 
             test_documents = [f"Batch test document {i}" for i in range(8)]
 
@@ -340,7 +340,7 @@ class TestComponentLatencyBenchmarks:
             mock_cross_encoder.predict = mock_predict
             mock_cross_encoder.model = MagicMock()
 
-            from src.retrieval.postprocessor.cross_encoder_rerank import (
+            from src.retrieval.reranking import (
                 BGECrossEncoderRerank,
             )
 
@@ -432,11 +432,11 @@ class TestEndToEndLatencyBenchmarks:
             mock_cross_encoder.model = MagicMock()
             mock_ce.return_value = mock_cross_encoder
 
-            from src.retrieval.postprocessor.cross_encoder_rerank import (
-                BGECrossEncoderRerank,
-            )
-            from src.retrieval.query_engine.router_engine import (
+            from src.retrieval.query_engine import (
                 AdaptiveRouterQueryEngine,
+            )
+            from src.retrieval.reranking import (
+                BGECrossEncoderRerank,
             )
 
             # Create pipeline components
@@ -800,7 +800,7 @@ class TestGPUAcceleratedLatencyBenchmarks:
             mock_bgem3.encode = mock_gpu_encode
             mock_embed.return_value = mock_bgem3
 
-            from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
+            from src.retrieval.embeddings import BGEM3Embedding
 
             # Test GPU-accelerated embedding
             embedding_model = BGEM3Embedding(device="cuda")
@@ -865,7 +865,7 @@ class TestGPUAcceleratedLatencyBenchmarks:
                 time.sleep(0.05)  # 50ms with FP32 (slower)
                 return [0.9] * len(pairs)
 
-            from src.retrieval.postprocessor.cross_encoder_rerank import (
+            from src.retrieval.reranking import (
                 BGECrossEncoderRerank,
             )
 

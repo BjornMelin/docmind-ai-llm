@@ -30,7 +30,6 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from src.agents.coordinator import MultiAgentCoordinator
-from src.config.vllm_config import VLLMConfig, VLLMManager
 
 
 class TestCoordinationOverheadPerformance:
@@ -321,7 +320,7 @@ class TestThroughputPerformance:
 class TestMemoryPerformance:
     """Test memory usage and optimization performance."""
 
-    def test_vram_usage_targets(self, mock_vllm_config: VLLMConfig):
+    def test_vram_usage_targets(self, mock_vllm_config: MockVLLMConfig):
         """Test VRAM usage stays under 16GB target."""
         manager = VLLMManager(mock_vllm_config)
 

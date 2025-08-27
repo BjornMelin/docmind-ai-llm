@@ -24,12 +24,12 @@ from unittest.mock import MagicMock, Mock, patch
 import numpy as np
 import pytest
 
-from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
-from src.processing.embeddings.models import (
+from src.models.embeddings import (
     EmbeddingError,
     EmbeddingParameters,
     EmbeddingResult,
 )
+from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
 
 @pytest.fixture

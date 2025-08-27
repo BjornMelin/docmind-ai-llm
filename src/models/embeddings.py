@@ -1,27 +1,13 @@
 """Embedding-specific Pydantic models for DocMind AI BGE-M3 Embedding Pipeline.
 
 This module contains data models specifically designed for the BGE-M3 embedding
-operations, following ADR-009 requirements for 8K context unified embeddings
+operations, following requirements for 8K context unified embeddings
 with dense, sparse, and ColBERT multi-vector representations.
-
-HYBRID MODEL ORGANIZATION:
-Following the hybrid model organization strategy, these models are colocated within
-the embeddings subdomain because they are:
-- Tightly coupled to BGE-M3 embedding operations
-- Specific to FlagEmbedding BGE-M3 model workflows
-- Domain-specific to embedding generation and processing
-- Used primarily within the embeddings modules
 
 Models:
     EmbeddingParameters: Configuration parameters for BGE-M3 embedding operations
     EmbeddingResult: Result of BGE-M3 embedding operations with dense/sparse/colbert
     EmbeddingError: Custom exception for embedding processing errors
-
-Architecture Decision:
-    These models are placed within the embeddings submodule following domain-driven
-    design principles. They are specific to the embeddings domain and tightly coupled
-    to the BGE-M3 embedding system, making this the most appropriate location per
-    the hybrid organization strategy.
 """
 
 from typing import Any
@@ -99,5 +85,3 @@ class EmbeddingResult(BaseModel):
 
 class EmbeddingError(Exception):
     """Custom exception for embedding processing errors."""
-
-    pass

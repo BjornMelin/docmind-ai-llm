@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from src.retrieval.embeddings.bge_m3_manager import (
+from src.retrieval.embeddings import (
     BGEM3Embedding,
     configure_bgem3_settings,
     create_bgem3_embedding,

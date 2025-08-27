@@ -15,14 +15,14 @@ Key Features:
 - WAL mode for concurrent access optimization
 """
 
-from src.storage.hybrid_persistence import HybridPersistenceManager
-from src.storage.models import (
+from src.models.storage import (
     DocumentMetadata,
     PersistenceError,
     SearchResult,
     StorageStats,
     VectorRecord,
 )
+from src.storage.hybrid_persistence import HybridPersistenceManager
 
 __all__ = [
     "HybridPersistenceManager",

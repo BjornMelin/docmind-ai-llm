@@ -28,20 +28,80 @@ from llama_index.core.memory import ChatMemoryBuffer
 # Import the classes we're testing
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import MultiAgentState
-from src.config.vllm_config import ContextManager, VLLMConfig, VLLMManager
 from src.dspy_integration import DSPyLlamaIndexRetriever
 
 # Note: event_loop_policy removed - use fixture from main conftest.py
 
 
+# Mock classes to replace removed backward compatibility classes
+class MockMockVLLMConfig:
+    """Mock MockVLLMConfig for testing."""
+
+    def __init__(self, **kwargs):
+        self.model = kwargs.get("model", settings.vllm.model)
+        self.max_model_len = kwargs.get("max_model_len", settings.vllm.context_window)
+        self.kv_cache_dtype = kwargs.get("kv_cache_dtype", settings.vllm.kv_cache_dtype)
+        self.attention_backend = kwargs.get(
+            "attention_backend", settings.vllm.attention_backend
+        )
+        self.gpu_memory_utilization = kwargs.get(
+            "gpu_memory_utilization", settings.vllm.gpu_memory_utilization
+        )
+        self.enable_chunked_prefill = kwargs.get(
+            "enable_chunked_prefill", settings.vllm.enable_chunked_prefill
+        )
+        self.max_num_seqs = kwargs.get("max_num_seqs", settings.vllm.max_num_seqs)
+        self.max_num_batched_tokens = kwargs.get(
+            "max_num_batched_tokens", settings.vllm.max_num_batched_tokens
+        )
+
+
+class MockContextManager:
+    """Mock ContextManager for testing."""
+
+    def __init__(self):
+        self.max_context_tokens = settings.vllm.context_window
+        self.trim_threshold = int(settings.vllm.context_window * 0.9)
+
+    def estimate_tokens(self, messages: list[dict]) -> int:
+        """Estimate token count for context management."""
+        total_chars = sum(len(str(msg.get("content", ""))) for msg in messages)
+        return total_chars // 4  # 4 chars per token average
+
+    def pre_model_hook(self, state: dict) -> dict:
+        """Trim context before model processing."""
+        return state
+
+    def post_model_hook(self, state: dict) -> dict:
+        """Format response after model generation."""
+        return state
+
+
+class MockVLLMManager:
+    """Mock VLLMManager for testing."""
+
+    def __init__(self, config):
+        self.config = config
+        self.llm = None
+        self.context_manager = MockContextManager()
+
+    def initialize_engine(self) -> bool:
+        """Initialize vLLM engine."""
+        return True
+
+    def validate_performance(self) -> dict:
+        """Validate performance against targets."""
+        return {"validation_passed": True}
+
+
 @pytest.fixture
-def mock_vllm_config() -> VLLMConfig:
+def mock_vllm_config() -> MockMockVLLMConfig:
     """Create mock vLLM configuration for multi-agent testing.
 
     Returns:
-        VLLMConfig: Mock vLLM config optimized for FP8 and 128K context.
+        MockMockVLLMConfig: Mock vLLM config optimized for FP8 and 128K context.
     """
-    return VLLMConfig(
+    return MockMockVLLMConfig(
         model="Qwen/Qwen3-4B-Instruct-2507-FP8",
         max_model_len=131072,
         kv_cache_dtype="fp8_e5m2",
@@ -51,14 +111,14 @@ def mock_vllm_config() -> VLLMConfig:
 
 
 @pytest.fixture
-def mock_context_manager() -> ContextManager:
+def mock_context_manager() -> MockContextManager:
     """Create mock context manager with realistic token handling.
 
     Returns:
-        ContextManager: Mock context manager for testing token estimation and
+        MockContextManager: Mock context manager for testing token estimation and
             context window management.
     """
-    manager = ContextManager()
+    manager = MockContextManager()
 
     # Mock the token estimation to return predictable values
     def mock_estimate_tokens(messages):
@@ -158,10 +218,10 @@ def mock_dspy_retriever() -> DSPyLlamaIndexRetriever:
 
 
 @pytest.fixture
-def mock_vllm_manager(mock_vllm_config: VLLMConfig) -> VLLMManager:
+def mock_vllm_manager(mock_vllm_config: MockMockVLLMConfig) -> MockVLLMManager:
     """Create mock vLLM manager with performance metrics."""
     with patch("src.vllm_config.VLLM_AVAILABLE", False):  # Use fallback mode
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
         manager.llm = Mock()
         manager.async_engine = Mock()
 
@@ -233,7 +293,7 @@ def sample_documents() -> list[Document]:
 
 @pytest_asyncio.fixture
 async def mock_coordinator(
-    mock_llm: Mock, mock_vllm_config: VLLMConfig, mock_memory: InMemorySaver
+    mock_llm: Mock, mock_vllm_config: MockVLLMConfig, mock_memory: InMemorySaver
 ) -> AsyncGenerator[MultiAgentCoordinator, None]:
     """Create mock coordinator with all dependencies mocked."""
     with patch.multiple(
@@ -312,7 +372,7 @@ def adr_compliance_validator() -> dict[str, Any]:
             ),
         }
 
-    def validate_adr_004(config: VLLMConfig) -> dict[str, bool]:
+    def validate_adr_004(config: MockVLLMConfig) -> dict[str, bool]:
         """Validate ADR-004 compliance (Local-First LLM Strategy)."""
         return {
             "fp8_model_used": "FP8" in config.model,
@@ -321,7 +381,7 @@ def adr_compliance_validator() -> dict[str, Any]:
             "vllm_backend_configured": True,
         }
 
-    def validate_adr_010(config: VLLMConfig) -> dict[str, bool]:
+    def validate_adr_010(config: MockVLLMConfig) -> dict[str, bool]:
         """Validate ADR-010 compliance (Performance Optimization)."""
         return {
             "fp8_kv_cache_enabled": config.kv_cache_dtype == "fp8_e5m2",

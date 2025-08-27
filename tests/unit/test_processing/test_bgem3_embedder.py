@@ -32,13 +32,12 @@ from unittest.mock import MagicMock, Mock, patch
 import numpy as np
 import pytest
 
-from src.processing.embeddings.bgem3_embedder import (
-    BGEM3Embedder,
-    create_bgem3_embedder,
-)
-from src.processing.embeddings.models import (
+from src.models.embeddings import (
     EmbeddingError,
     EmbeddingParameters,
+)
+from src.processing.embeddings.bgem3_embedder import (
+    BGEM3Embedder,
 )
 
 
@@ -1085,7 +1084,7 @@ class TestFactoryFunction:
         )
         mock_flag_model.return_value = mock_bgem3_model
 
-        embedder = create_bgem3_embedder(mock_settings)
+        embedder = BGEM3Embedder(settings=mock_settings)
 
         assert isinstance(embedder, BGEM3Embedder)
         assert embedder.settings == mock_settings
@@ -1104,7 +1103,7 @@ class TestFactoryFunction:
         )
         mock_flag_model.return_value = mock_bgem3_model
 
-        embedder = create_bgem3_embedder()
+        embedder = BGEM3Embedder()
 
         assert isinstance(embedder, BGEM3Embedder)
         assert embedder.settings == mock_app_settings
@@ -1127,7 +1126,9 @@ class TestFactoryFunction:
         )
         mock_flag_model.return_value = mock_bgem3_model
 
-        embedder = create_bgem3_embedder(mock_settings, embedding_parameters)
+        embedder = BGEM3Embedder(
+            settings=mock_settings, parameters=embedding_parameters
+        )
 
         assert isinstance(embedder, BGEM3Embedder)
         assert embedder.settings == mock_settings
@@ -1150,7 +1151,7 @@ class TestFactoryFunction:
         )
         mock_flag_model.return_value = mock_bgem3_model
 
-        embedder = create_bgem3_embedder(mock_settings)
+        embedder = BGEM3Embedder(settings=mock_settings)
 
         # Verify it's using FlagEmbedding directly
         assert isinstance(embedder, BGEM3Embedder)

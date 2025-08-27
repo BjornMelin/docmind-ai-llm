@@ -53,8 +53,7 @@ except ImportError:
     Match = None
     QDRANT_AVAILABLE = False
 
-from src.config.settings import app_settings
-from src.storage.models import (
+from src.models.storage import (
     DocumentMetadata,
     PersistenceError,
     SearchResult,
@@ -81,9 +80,9 @@ class HybridPersistenceManager:
         """Initialize HybridPersistenceManager.
 
         Args:
-            settings: DocMind configuration settings. Uses app_settings if None.
+            settings: DocMind configuration settings. Uses settings if None.
         """
-        self.settings = settings or app_settings
+        self.settings = settings or settings
 
         # Storage paths and connections
         self.sqlite_path = Path(self.settings.sqlite_db_path)
@@ -206,7 +205,7 @@ class HybridPersistenceManager:
 
             logger.info(f"Qdrant initialized: {self.settings.qdrant_url}")
 
-        except Exception as e:
+        except (ConnectionError, OSError, ValueError, TimeoutError) as e:
             logger.error(f"Failed to initialize Qdrant: {str(e)}")
             # Continue without Qdrant - storage will work in SQLite-only mode
             self.qdrant_client = None
@@ -241,7 +240,7 @@ class HybridPersistenceManager:
 
                     logger.info(f"Created Qdrant collection: {self.vectors_collection}")
 
-        except Exception as e:
+        except (ConnectionError, OSError, ValueError, TimeoutError) as e:
             logger.error(f"Failed to ensure vector collection: {str(e)}")
 
     @asynccontextmanager
@@ -551,7 +550,7 @@ class HybridPersistenceManager:
                     metadata=metadata,
                 )
 
-        except Exception as e:
+        except (sqlite3.Error, json.JSONDecodeError, ValueError) as e:
             logger.error(f"Failed to get document by ID {document_id}: {str(e)}")
             return None
 
@@ -611,12 +610,12 @@ class HybridPersistenceManager:
                         # 1024 floats * 4 bytes + metadata overhead ≈ 5KB per vector
                         stats.qdrant_size_mb = (stats.total_vectors * 5) / 1024
 
-                except Exception as e:
+                except (ConnectionError, OSError, ValueError, TimeoutError) as e:
                     logger.debug(f"Could not get Qdrant stats: {str(e)}")
 
             return stats
 
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             logger.error(f"Failed to get storage stats: {str(e)}")
             return StorageStats()
 
@@ -657,7 +656,7 @@ class HybridPersistenceManager:
             logger.info(f"Deleted document {document_id} and associated vectors")
             return True
 
-        except Exception as e:
+        except (sqlite3.Error, ConnectionError, OSError, ValueError, TimeoutError) as e:
             logger.error(f"Failed to delete document {document_id}: {str(e)}")
             return False
 
@@ -694,7 +693,7 @@ class HybridPersistenceManager:
             logger.info(f"Cleaned up {deleted_count} old documents")
             return deleted_count
 
-        except Exception as e:
+        except (sqlite3.Error, OSError) as e:
             logger.error(f"Storage cleanup failed: {str(e)}")
             return 0
 
@@ -731,7 +730,7 @@ class HybridPersistenceManager:
                 self.qdrant_client = None
                 logger.info("Qdrant client closed")
 
-        except Exception as e:
+        except (sqlite3.Error, ConnectionError, OSError) as e:
             logger.error(f"Error closing storage connections: {str(e)}")
 
 
@@ -742,7 +741,7 @@ def create_hybrid_persistence_manager(
     """Factory function to create HybridPersistenceManager instance.
 
     Args:
-        settings: Optional DocMind settings. Uses app_settings if None.
+        settings: Optional DocMind settings. Uses settings if None.
 
     Returns:
         Configured HybridPersistenceManager instance

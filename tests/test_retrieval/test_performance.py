@@ -18,12 +18,12 @@ import numpy as np
 import pytest
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
-from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
-from src.retrieval.postprocessor.cross_encoder_rerank import (
+from src.retrieval.embeddings import BGEM3Embedding
+from src.retrieval.query_engine import AdaptiveRouterQueryEngine
+from src.retrieval.reranking import (
     BGECrossEncoderRerank,
     benchmark_reranking_latency,
 )
-from src.retrieval.query_engine.router_engine import AdaptiveRouterQueryEngine
 
 # Test timing constants for deterministic simulation
 SIMULATED_EMBEDDING_SLEEP_SEC = 0.02  # 20ms processing time

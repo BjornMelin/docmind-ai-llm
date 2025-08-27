@@ -41,8 +41,37 @@ from llama_index.core.vector_stores.types import (
     VectorStoreQuery,
     VectorStoreQueryResult,
 )
+from pydantic import BaseModel
 
-from src.config.app_settings import app_settings
+
+# Retrieval configuration constants (moved from src.config to avoid import issues)
+class RetrievalConfig(BaseModel):
+    """Retrieval and reranking configuration."""
+
+    strategy: str = Field(default="hybrid")
+    top_k: int = Field(default=10, ge=1, le=50)
+    use_reranking: bool = Field(default=True)
+    reranking_top_k: int = Field(default=5, ge=1, le=20)
+    reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
+
+    # RRF Fusion Settings - Note: these are actual floats, not int as in original config
+    rrf_alpha: float = Field(default=0.7, ge=0.0, le=1.0)  # Dense/sparse fusion weight
+    rrf_k_constant: int = Field(default=60, ge=10, le=100)
+
+
+class EmbeddingConfig(BaseModel):
+    """BGE-M3 embedding configuration."""
+
+    model_name: str = Field(default="BAAI/bge-m3")
+    dimension: int = Field(default=1024, ge=256, le=4096)
+    max_length: int = Field(default=8192, ge=512, le=16384)
+    batch_size_gpu: int = Field(default=12, ge=1, le=128)
+    batch_size_cpu: int = Field(default=4, ge=1, le=32)
+
+
+# Global settings instances
+retrieval_settings = RetrievalConfig()
+embedding_settings = EmbeddingConfig()
 
 # Qdrant configuration constants
 MAX_FUSION_LIMIT = 50
@@ -85,11 +114,9 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
     collection_name: str
     dense_vector_name: str = Field(default="dense")
     sparse_vector_name: str = Field(default="sparse")
-    embedding_dim: int = Field(
-        default=app_settings.bge_m3_embedding_dim
-    )  # BGE-M3 dimension
+    embedding_dim: int = Field(default=embedding_settings.dimension)  # BGE-M3 dimension
     rrf_alpha: float = Field(
-        default=app_settings.rrf_fusion_alpha
+        default=retrieval_settings.rrf_alpha
     )  # Dense/sparse fusion weight
 
     def __init__(
@@ -98,8 +125,8 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         client: QdrantClient | None = None,
         url: str = "http://localhost:6333",
         collection_name: str = "docmind_feat002_unified",
-        embedding_dim: int = app_settings.bge_m3_embedding_dim,
-        rrf_alpha: float = app_settings.rrf_fusion_alpha,
+        embedding_dim: int = embedding_settings.dimension,
+        rrf_alpha: float = retrieval_settings.rrf_alpha,
         **kwargs,
     ):
         """Initialize QdrantUnifiedVectorStore.
@@ -352,7 +379,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         self,
         dense_results: list[Any],
         sparse_results: list[Any],
-        k: int = app_settings.rrf_k_constant,
+        k: int = retrieval_settings.rrf_k_constant,
     ) -> list[Any]:
         """Apply Reciprocal Rank Fusion to combine dense and sparse results.
 
@@ -490,8 +517,8 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
 def create_unified_qdrant_store(
     url: str = "http://localhost:6333",
     collection_name: str = "docmind_feat002_unified",
-    embedding_dim: int = app_settings.bge_m3_embedding_dim,
-    rrf_alpha: float = app_settings.rrf_fusion_alpha,
+    embedding_dim: int = embedding_settings.dimension,
+    rrf_alpha: float = retrieval_settings.rrf_alpha,
 ) -> QdrantUnifiedVectorStore:
     """Create unified Qdrant vector store for BGE-M3 embeddings.
 

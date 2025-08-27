@@ -30,8 +30,8 @@ import time
 
 import pytest
 
+from src.models.embeddings import EmbeddingParameters, EmbeddingResult
 from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
-from src.processing.embeddings.models import EmbeddingParameters, EmbeddingResult
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ import pytest
 import torch
 
 from src.core.infrastructure.gpu_monitor import gpu_performance_monitor
-from src.utils.resource_management import (
+from src.utils.storage import (
     async_gpu_memory_context,
     get_safe_gpu_info,
     get_safe_vram_usage,

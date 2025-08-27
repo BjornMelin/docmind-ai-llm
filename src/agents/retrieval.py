@@ -174,7 +174,12 @@ class RetrievalAgent:
 
             # Build comprehensive result
             result_data = self._build_retrieval_result(
-                retrieval_data, query, strategy, use_dspy, use_graphrag, processing_time
+                retrieval_data,
+                query,
+                requested_strategy=strategy,
+                use_dspy=use_dspy,
+                use_graphrag=use_graphrag,
+                processing_time=processing_time,
             )
 
             retrieval_result = RetrievalResult(**result_data)
@@ -312,7 +317,7 @@ class RetrievalAgent:
                     }
                 )
             return documents
-        elif isinstance(result, list):
+        if isinstance(result, list):
             # List of documents
             documents = []
             for item in result:
@@ -327,20 +332,20 @@ class RetrievalAgent:
                 elif isinstance(item, dict):
                     documents.append(item)
             return documents
-        else:
-            # Fallback - convert to string
-            return [
-                {
-                    "content": str(result),
-                    "metadata": {"source": "unknown"},
-                    "score": 1.0,
-                }
-            ]
+        # Fallback - convert to string
+        return [
+            {
+                "content": str(result),
+                "metadata": {"source": "unknown"},
+                "score": 1.0,
+            }
+        ]
 
     def _build_retrieval_result(
         self,
         retrieval_data: dict,
         original_query: str,
+        *,
         requested_strategy: str,
         use_dspy: bool,
         use_graphrag: bool,

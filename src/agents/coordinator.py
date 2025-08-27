@@ -59,8 +59,7 @@ from src.agents.tools import (
     synthesize_results,
     validate_response,
 )
-from src.config.app_settings import app_settings
-from src.config.vllm_config import ContextManager, VLLMConfig, create_vllm_manager
+from src.config import settings
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 
 # Import agent-specific models
@@ -94,10 +93,11 @@ class MultiAgentCoordinator:
     def __init__(
         self,
         model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-        max_context_length: int = app_settings.default_token_limit,  # 128K context
+        *,
+        max_context_length: int = settings.default_token_limit,  # 128K context
         backend: str = "vllm",
         enable_fallback: bool = True,
-        max_agent_timeout: float = app_settings.default_agent_timeout,  # Reduced
+        max_agent_timeout: float = settings.default_agent_timeout,  # Reduced
     ):
         """Initialize ADR-compliant multi-agent coordinator.
 
@@ -114,13 +114,16 @@ class MultiAgentCoordinator:
         self.enable_fallback = enable_fallback
         self.max_agent_timeout = max_agent_timeout
 
-        # ADR-004: vLLM Configuration with FP8 optimization
-        self.vllm_config = VLLMConfig(
-            model=model_path, max_model_len=max_context_length
-        )
+        # ADR-004: vLLM Configuration with unified settings
+        self.vllm_config = {
+            "model": model_path,
+            "max_model_len": max_context_length,
+            **settings.get_vllm_env_vars(),
+        }
 
-        # ADR-011: Context management with pre/post hooks
-        self.context_manager = ContextManager()
+        # Context management simplified with unified settings
+        self.context_window = settings.vllm.context_window
+        self.max_tokens = settings.vllm.max_tokens
 
         # Performance tracking (ADR-011)
         self.total_queries = 0
@@ -136,6 +139,8 @@ class MultiAgentCoordinator:
         self.llm = None
         self.dspy_retriever = None
         self.compiled_graph = None
+        self.graph = None
+        self.agents = {}
 
         # Lazy initialization
         self._setup_complete = False
@@ -150,28 +155,23 @@ class MultiAgentCoordinator:
             return True
 
         try:
-            # Initialize vLLM manager for FP8 optimization
-            self.vllm_manager = create_vllm_manager(
-                model_path=self.model_path, max_context_length=self.max_context_length
-            )
+            # Initialize vLLM environment for FP8 optimization
+            from src.config import setup_llamaindex
 
-            # Initialize LLM from vLLM manager (production-ready)
-            if (
-                self.vllm_manager
-                and hasattr(self.vllm_manager, "llm")
-                and self.vllm_manager.llm
-            ):
-                # Use the properly initialized vLLM engine
-                from llama_index.llms.vllm import Vllm
+            setup_llamaindex()
+            logger.info("vLLM configuration applied via unified settings")
 
-                self.llm = Vllm(model=self.vllm_manager.llm)
-                logger.info("LLM initialized from vLLM manager")
+            # Use LLM from unified configuration (LlamaIndex Settings)
+            from llama_index.core import Settings
+
+            if Settings.llm is not None:
+                self.llm = Settings.llm
+                logger.info("LLM initialized from LlamaIndex Settings")
             else:
-                # Raise error if vLLM manager not properly initialized
+                # Raise error if LLM not properly configured
                 raise RuntimeError(
-                    "vLLM manager not properly initialized. "
-                    "Please ensure vLLM is configured before creating "
-                    "MultiAgentCoordinator."
+                    "LLM not properly configured in unified settings. "
+                    "Please ensure LlamaIndex Settings are initialized."
                 )
 
             # Initialize DSPy integration (ADR-018)
@@ -465,8 +465,7 @@ class MultiAgentCoordinator:
             # Fallback to basic RAG if enabled
             if self.enable_fallback:
                 return self._fallback_basic_rag(query, context, start_time)
-            else:
-                return self._create_error_response(str(e), start_time)
+            return self._create_error_response(str(e), start_time)
 
     def _run_agent_workflow(
         self, initial_state: MultiAgentState, thread_id: str
@@ -507,7 +506,7 @@ class MultiAgentCoordinator:
     def _extract_response(
         self,
         final_state: dict[str, Any],
-        original_query: str,
+        _original_query: str,
         start_time: float,
         coordination_time: float,
     ) -> AgentResponse:
@@ -613,7 +612,7 @@ class MultiAgentCoordinator:
     def _fallback_basic_rag(
         self,
         query: str,
-        context: ChatMemoryBuffer | None,
+        _context: ChatMemoryBuffer | None,
         start_time: float,
     ) -> AgentResponse:
         """Fallback to basic RAG when multi-agent system fails."""
@@ -754,7 +753,7 @@ class MultiAgentCoordinator:
 # Factory function for ADR-compliant coordinator
 def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length: int = app_settings.default_token_limit,
+    max_context_length: int = settings.default_token_limit,
     enable_fallback: bool = True,
 ) -> MultiAgentCoordinator:
     """Create ADR-compliant multi-agent coordinator.

@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config.app_settings import DocMindSettings
+from src.config.settings import DocMindSettings
 
 
 class TestCrossModuleIntegration:
@@ -111,11 +111,7 @@ class TestCrossModuleIntegration:
 
         # Values should be valid for vLLM
         assert vllm_config["quantization"] in ["fp8", "int8", "int4", "awq"]
-        assert vllm_config["attention_backend"] in [
-            "FLASHINFER",
-            "FLASH_ATTN",
-            "XFORMERS",
-        ]
+        assert vllm_config["attention_backend"] in ["FLASHINFER"]
         assert 0.1 <= vllm_config["gpu_memory_utilization"] <= 0.95
         assert vllm_config["max_model_len"] >= 8192  # Reasonable context window
 

@@ -59,7 +59,7 @@ class TestOptionalDependencyHandling:
     def test_qdrant_client_import_handling(self):
         """Test that Qdrant client imports are handled gracefully."""
         try:
-            from src.utils.database import create_async_client, create_sync_client
+            from src.utils.storage import create_async_client, create_sync_client
 
             # These functions should exist and be callable
             assert callable(create_async_client)

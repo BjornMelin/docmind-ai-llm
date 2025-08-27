@@ -38,7 +38,7 @@ def setup_llamaindex() -> None:
             request_timeout=120.0,
         )
         logger.info("LLM configured: %s", Settings.llm.model)
-    except Exception as e:
+    except (KeyError, ValueError, ConnectionError, ImportError) as e:
         logger.warning("Could not configure LLM: %s", e)
         Settings.llm = None
 
@@ -60,7 +60,6 @@ def setup_llamaindex() -> None:
             max_length=embedding_config["max_length"],
             embed_batch_size=embedding_config["batch_size"],
             trust_remote_code=embedding_config["trust_remote_code"],
-            torch_dtype=torch_dtype,
         )
         logger.info(
             "Embedding model configured: %s (device=%s, dtype=%s)",
@@ -68,7 +67,7 @@ def setup_llamaindex() -> None:
             embedding_config["device"],
             torch_dtype,
         )
-    except Exception as e:
+    except (KeyError, ValueError, OSError, ImportError, RuntimeError) as e:
         logger.warning("Could not configure embeddings: %s", e)
         Settings.embed_model = None
 
@@ -82,7 +81,7 @@ def setup_llamaindex() -> None:
             Settings.context_window,
             Settings.num_output,
         )
-    except Exception as e:
+    except (AttributeError, ValueError) as e:
         logger.warning("Could not set context configuration: %s", e)
 
 

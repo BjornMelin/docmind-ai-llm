@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from src.config.app_settings import DocMindSettings as Settings
+from src.config.settings import DocMindSettings as Settings
 from src.utils.core import validate_startup_configuration
 
 

@@ -1,6 +1,6 @@
-"""Integration tests for HybridDocumentProcessor.
+"""Integration tests for DocumentProcessor.
 
-This module provides integration tests for HybridDocumentProcessor that test
+This module provides integration tests for DocumentProcessor that test
 the actual integration between Unstructured.io and LlamaIndex IngestionPipeline
 with lightweight models and realistic document processing scenarios.
 
@@ -25,8 +25,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.processing.hybrid_processor import HybridDocumentProcessor
-from src.processing.models import DocumentElement, ProcessingResult, ProcessingStrategy
+from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
+from src.processing.document_processor import DocumentProcessor
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ startxref
     # Text document
     text_content = """# Integration Test Document
 
-This is a sample document for integration testing of the HybridDocumentProcessor.
+This is a sample document for integration testing of the DocumentProcessor.
 
 ## Features Tested
 
@@ -138,7 +138,7 @@ The integration testing validates end-to-end functionality across multiple compo
 
 
 class TestHybridProcessorIntegration:
-    """Integration tests for HybridDocumentProcessor."""
+    """Integration tests for DocumentProcessor."""
 
     @pytest.mark.integration
     @pytest.mark.asyncio
@@ -146,7 +146,7 @@ class TestHybridProcessorIntegration:
         self, integration_settings, sample_documents
     ):
         """Test complete document processing pipeline from file to elements."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         # Test PDF processing (hi_res strategy)
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
@@ -207,7 +207,7 @@ class TestHybridProcessorIntegration:
         self, integration_settings, sample_documents
     ):
         """Test processing different file types with appropriate strategies."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
             # Mock different responses for different strategies
@@ -285,7 +285,7 @@ class TestHybridProcessorIntegration:
         self, integration_settings, sample_documents
     ):
         """Test the complete transformation chain from Document to processed elements."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
             # Create a realistic element that will be split by SentenceSplitter
@@ -336,7 +336,7 @@ class TestHybridProcessorIntegration:
         self, integration_settings, sample_documents
     ):
         """Test cache integration with both LlamaIndex cache and SimpleCache."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
             mock_partition.return_value = [
@@ -378,7 +378,7 @@ class TestHybridProcessorIntegration:
         self, integration_settings, sample_documents
     ):
         """Test processing multiple documents in sequence."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
 
@@ -439,7 +439,7 @@ class TestHybridProcessorIntegration:
         self, integration_settings, sample_documents
     ):
         """Test error recovery mechanisms and retry behavior."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
             # Simulate intermittent failures
@@ -487,7 +487,7 @@ class TestHybridProcessorIntegration:
         self, integration_settings, sample_documents
     ):
         """Test performance characteristics with real pipeline overhead."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
             # Simulate realistic processing delay
@@ -536,16 +536,12 @@ class TestHybridProcessorIntegration:
     ):
         """Test API compatibility with DocumentProcessor."""
         # Test both factory functions work
-        from src.processing.hybrid_processor import (
-            create_document_processor,
-            create_hybrid_processor,
-        )
 
-        processor1 = create_document_processor(integration_settings)
-        processor2 = create_hybrid_processor(integration_settings)
+        processor1 = DocumentProcessor(integration_settings)
+        processor2 = DocumentProcessor(integration_settings)
 
-        assert isinstance(processor1, HybridDocumentProcessor)
-        assert isinstance(processor2, HybridDocumentProcessor)
+        assert isinstance(processor1, DocumentProcessor)
+        assert isinstance(processor2, DocumentProcessor)
 
         with patch("src.processing.hybrid_processor.partition") as mock_partition:
             mock_partition.return_value = [
@@ -574,7 +570,7 @@ class TestHybridProcessorIntegration:
     @pytest.mark.integration
     def test_configuration_override_integration(self, integration_settings):
         """Test configuration override functionality in integration context."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         # Test configuration override
         custom_config = {
@@ -595,7 +591,7 @@ class TestHybridProcessorIntegration:
     @pytest.mark.asyncio
     async def test_cache_management_integration(self, integration_settings):
         """Test cache management operations in integration context."""
-        processor = HybridDocumentProcessor(integration_settings)
+        processor = DocumentProcessor(integration_settings)
 
         # Test cache clearing
         clear_result = await processor.clear_cache()

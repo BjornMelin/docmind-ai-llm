@@ -12,10 +12,9 @@ import pytest
 import torch
 
 # Import real implementations
-from src.config.vllm_config import (
+from src.config.integrations import (
     VLLMConfig,
     VLLMManager,
-    create_vllm_manager,
     validate_fp8_requirements,
 )
 
@@ -152,10 +151,11 @@ class TestVLLMPerformance:
     async def test_decode_throughput(self, vllm_config, sample_prompts):
         """Test decode throughput achieves 120-180 tokens/sec."""
         # This will fail initially - implementation needed
-        manager = create_vllm_manager(
+        config = VLLMConfig(
             model_path=vllm_config["model"],
             max_context_length=vllm_config["max_model_len"],
         )
+        manager = VLLMManager(config)
 
         await manager.initialize_engine()
 
@@ -183,10 +183,11 @@ class TestVLLMPerformance:
     async def test_prefill_throughput(self, vllm_config, long_context_prompt):
         """Test prefill throughput achieves 900-1400 tokens/sec."""
         # This will fail initially - implementation needed
-        manager = create_vllm_manager(
+        config = VLLMConfig(
             model_path=vllm_config["model"],
             max_context_length=vllm_config["max_model_len"],
         )
+        manager = VLLMManager(config)
 
         await manager.initialize_engine()
 
@@ -215,10 +216,11 @@ class TestVLLMPerformance:
     def test_vram_usage_under_14gb(self, vllm_config):
         """Test total VRAM usage stays under 14GB on RTX 4090."""
         # This will fail initially - implementation needed
-        manager = create_vllm_manager(
+        config = VLLMConfig(
             model_path=vllm_config["model"],
             max_context_length=vllm_config["max_model_len"],
         )
+        manager = VLLMManager(config)
 
         manager.initialize_engine_sync()
 
@@ -239,10 +241,11 @@ class TestVLLMPerformance:
     async def test_128k_context_support(self, vllm_config, long_context_prompt):
         """Test 128K context window support with FP8."""
         # This will fail initially - implementation needed
-        manager = create_vllm_manager(
+        config = VLLMConfig(
             model_path=vllm_config["model"],
             max_context_length=131072,  # 128K
         )
+        manager = VLLMManager(config)
 
         await manager.initialize_engine()
 
@@ -371,7 +374,7 @@ class TestEndToEndMultimodal:
     async def test_hybrid_retrieval_with_fp8(self, vllm_config):
         """Test hybrid retrieval combining all components."""
         # This will fail initially - implementation needed
-        from src.retrieval.query_engine.router_engine import create_hybrid_engine
+        from src.retrieval.query_engine import create_hybrid_engine
 
         # Create hybrid engine with FP8 LLM
         hybrid_engine = create_hybrid_engine(

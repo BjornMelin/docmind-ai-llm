@@ -50,7 +50,7 @@ except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
-from src.config.app_settings import app_settings
+from src.config import settings
 from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
@@ -105,7 +105,7 @@ def process_query_with_agent_system(
 
 # Validate configuration at startup
 try:
-    validate_startup_configuration(app_settings)
+    validate_startup_configuration(settings)
 except RuntimeError as e:
     st.error(f"⚠️ Configuration Error: {e}")
     st.error(
@@ -118,7 +118,7 @@ st.set_page_config(page_title="DocMind AI", page_icon="🧠")
 
 if "memory" not in st.session_state:
     st.session_state.memory = ChatMemoryBuffer.from_defaults(
-        token_limit=app_settings.default_token_limit
+        token_limit=settings.default_token_limit
     )
 if "agent_system" not in st.session_state:
     st.session_state.agent_system = None
@@ -155,18 +155,18 @@ quant_suffix: str = ""
 suggested_model: str = "google/gemma-3n-E4B-it"
 suggested_context: int = 8192
 if vram:
-    if vram >= app_settings.minimum_vram_high_gb:
+    if vram >= settings.minimum_vram_high_gb:
         suggested_model = "nvidia/OpenReasoning-Nemotron-32B"
         quant_suffix = "-Q4_K_M"  # Fits 16GB
-        suggested_context = app_settings.suggested_context_high
-    elif vram >= app_settings.minimum_vram_medium_gb:
+        suggested_context = settings.suggested_context_high
+    elif vram >= settings.minimum_vram_medium_gb:
         suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
         quant_suffix = "-Q8_0"  # Fits 8GB
-        suggested_context = app_settings.suggested_context_medium
+        suggested_context = settings.suggested_context_medium
     else:
         suggested_model = "google/gemma-3n-E4B-it"
         quant_suffix = "-Q4_K_S"  # Minimal
-        suggested_context = app_settings.suggested_context_low
+        suggested_context = settings.suggested_context_low
 st.sidebar.info(
     f"Suggested: {suggested_model}{quant_suffix} with {suggested_context} context"
 )
@@ -203,13 +203,13 @@ with st.sidebar.expander("Advanced Settings"):
 
     backend: str = st.selectbox("Backend", backend_options, index=0)
     context_size: int = st.selectbox(
-        "Context Size", app_settings.context_size_options, index=1
+        "Context Size", settings.context_size_options, index=1
     )
 
 model_options: list[str] = []
 if backend == "ollama":
     ollama_url: str = st.sidebar.text_input(
-        "Ollama URL", value=app_settings.ollama_base_url
+        "Ollama URL", value=settings.ollama_base_url
     )
     try:
         # Use sync model listing to avoid asyncio event loop conflicts
@@ -237,7 +237,7 @@ try:
         llm = Ollama(
             base_url=ollama_url,
             model=model_name,
-            request_timeout=app_settings.request_timeout_seconds,
+            request_timeout=settings.request_timeout_seconds,
         )
     elif backend == "llamacpp":
         if not is_llamacpp_available():
@@ -248,13 +248,13 @@ try:
         else:
             n_gpu_layers = -1 if use_gpu else 0
             llm = LlamaCPP(
-                model_path=app_settings.llamacpp_model_path,
+                model_path=settings.llamacpp_model_path,
                 context_window=context_size,
                 n_gpu_layers=n_gpu_layers,
             )
     elif backend == "lmstudio":
         llm = OpenAI(
-            base_url=app_settings.lmstudio_base_url,
+            base_url=settings.lmstudio_base_url,
             api_key="not-needed",
             model=model_name,
             max_tokens=context_size,
@@ -283,7 +283,7 @@ async def upload_section() -> None:
                 start_time = time.perf_counter()
 
                 # ADR-009 compliant document processing
-                docs = await load_documents_unstructured(uploaded_files, app_settings)
+                docs = await load_documents_unstructured(uploaded_files, settings)
                 doc_load_time = time.perf_counter() - start_time
 
                 # Progress tracking for document processing
@@ -459,7 +459,7 @@ if user_input:
                             else:
                                 yield " " + word
                             # Add slight delay for streaming effect
-                            time.sleep(app_settings.streaming_delay_seconds)
+                            time.sleep(settings.streaming_delay_seconds)
                     except (ValueError, TypeError, RuntimeError) as e:
                         yield f"Error processing query: {str(e)}"
 

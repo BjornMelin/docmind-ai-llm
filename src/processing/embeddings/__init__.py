@@ -17,19 +17,17 @@ Key Features:
 - Performance targets: <50ms per chunk, <3GB VRAM usage
 """
 
-from src.processing.embeddings.bgem3_embedder import (
-    BGEM3Embedder,
-    create_bgem3_embedder,
-)
-from src.processing.embeddings.models import (
+from src.models.embeddings import (
     EmbeddingError,
     EmbeddingParameters,
     EmbeddingResult,
 )
+from src.processing.embeddings.bgem3_embedder import (
+    BGEM3Embedder,
+)
 
 __all__ = [
     "BGEM3Embedder",
-    "create_bgem3_embedder",
     "EmbeddingParameters",
     "EmbeddingResult",
     "EmbeddingError",

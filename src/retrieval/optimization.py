@@ -9,11 +9,20 @@ import time
 from enum import Enum
 from typing import Any
 
-import dspy
 import numpy as np
 from llama_index.core import VectorStoreIndex
 from llama_index.core.retrievers import BaseRetriever
+from loguru import logger
 from pydantic import BaseModel, Field
+
+try:
+    import dspy
+except ImportError:
+    logger.warning(
+        "DSPy not available or has compatibility issues. "
+        "DSPy optimization features will be disabled."
+    )
+    dspy = None
 
 
 class OptimizationMode(str, Enum):
@@ -52,8 +61,11 @@ class DSPyConfig(BaseModel):
     a_b_test_sample_size: int = Field(default=100)
 
 
-class DocMindRAG(dspy.Module):
-    """DSPy RAG module for DocMind."""
+class DocMindRAG:
+    """DSPy RAG module for DocMind.
+
+    Note: Falls back to basic functionality when DSPy is not available.
+    """
 
     def __init__(
         self,
@@ -66,59 +78,172 @@ class DocMindRAG(dspy.Module):
             index: LlamaIndex VectorStoreIndex for retrieval
             retriever: Alternative retriever to use instead of index
         """
-        super().__init__()
+        if dspy is not None:
+            super().__init__()
+
         self.index = index
         self.retriever = retriever or (
             index.as_retriever(similarity_top_k=5) if index else None
         )
 
-        # Define DSPy signatures
-        self.generate_answer = dspy.ChainOfThought("context, question -> answer")
-        self.rewrite_query = dspy.ChainOfThought("question -> rewritten_question")
-        self.classify_query = dspy.Predict("question -> strategy")
+        # Define DSPy signatures if available
+        if dspy is not None:
+            self.generate_answer = dspy.ChainOfThought("context, question -> answer")
+            self.rewrite_query = dspy.ChainOfThought("question -> rewritten_question")
+            self.classify_query = dspy.Predict("question -> strategy")
+        else:
+            self.generate_answer = None
+            self.rewrite_query = None
+            self.classify_query = None
 
-    def forward(self, question: str) -> dspy.Prediction:
+    def forward(self, question: str) -> dict[str, Any]:
         """Forward pass for RAG.
 
         Args:
             question: User query
 
         Returns:
-            DSPy prediction with answer
+            Dictionary with answer and metadata (compatible with DSPy when available)
         """
         if not self.retriever:
             # Fallback for testing without real retriever
-            return dspy.Prediction(
-                answer="No retriever configured", context="", question=question
-            )
+            return {
+                "answer": "No retriever configured",
+                "context": "",
+                "question": question,
+                "strategy": "none",
+            }
 
         # Classify query strategy
-        strategy_pred = self.classify_query(question=question)
-        strategy = (
-            strategy_pred.strategy if hasattr(strategy_pred, "strategy") else "factual"
-        )
-
-        # Optionally rewrite query based on strategy
-        if strategy in ["analytical", "comparison"]:
-            rewrite_pred = self.rewrite_query(question=question)
-            search_query = (
-                rewrite_pred.rewritten_question
-                if hasattr(rewrite_pred, "rewritten_question")
-                else question
+        if dspy is not None and self.classify_query is not None:
+            strategy_pred = self.classify_query(question=question)
+            strategy = (
+                strategy_pred.strategy
+                if hasattr(strategy_pred, "strategy")
+                else "factual"
             )
         else:
-            search_query = question
+            # Fallback strategy classification without DSPy
+            strategy = self._classify_query_fallback(question)
+
+        # Optionally rewrite query based on strategy
+        search_query = question
+        if strategy in ["analytical", "comparison"]:
+            if dspy is not None and self.rewrite_query is not None:
+                rewrite_pred = self.rewrite_query(question=question)
+                search_query = (
+                    rewrite_pred.rewritten_question
+                    if hasattr(rewrite_pred, "rewritten_question")
+                    else question
+                )
+            else:
+                # Fallback query rewriting without DSPy
+                search_query = self._rewrite_query_fallback(question, strategy)
 
         # Retrieve context
         nodes = self.retriever.retrieve(search_query)
         context = "\n".join([n.text for n in nodes]) if nodes else ""
 
         # Generate answer
-        pred = self.generate_answer(context=context, question=question)
-        pred.strategy = strategy
-        pred.search_query = search_query
+        if dspy is not None and self.generate_answer is not None:
+            pred = self.generate_answer(context=context, question=question)
+            answer = pred.answer if hasattr(pred, "answer") else str(pred)
+        else:
+            # Fallback answer generation without DSPy
+            answer = self._generate_answer_fallback(context, question)
 
-        return pred
+        result = {
+            "answer": answer,
+            "context": context,
+            "question": question,
+            "strategy": strategy,
+            "search_query": search_query,
+        }
+
+        # Return DSPy Prediction if available, otherwise return dict
+        if dspy is not None:
+            pred = dspy.Prediction(**result)
+            return pred
+        else:
+            return result
+
+    def _classify_query_fallback(self, question: str) -> str:
+        """Fallback query strategy classification without DSPy.
+
+        Args:
+            question: User query
+
+        Returns:
+            Strategy classification
+        """
+        query_lower = question.lower()
+
+        # Pattern matching for strategy classification
+        if any(
+            word in query_lower
+            for word in ["compare", "contrast", "difference", "versus", "vs"]
+        ):
+            return "comparison"
+
+        if any(
+            word in query_lower
+            for word in ["analyze", "explain", "why", "how does", "evaluate"]
+        ):
+            return "analytical"
+
+        if any(
+            word in query_lower
+            for word in ["relationship", "connect", "relate", "link", "between"]
+        ):
+            return "relationship"
+
+        # Default to factual
+        return "factual"
+
+    def _rewrite_query_fallback(self, question: str, strategy: str) -> str:
+        """Fallback query rewriting without DSPy.
+
+        Args:
+            question: Original question
+            strategy: Query strategy
+
+        Returns:
+            Rewritten query
+        """
+        strategy_templates = {
+            "comparison": f"Compare and contrast {question}",
+            "analytical": f"Analyze the key aspects of {question}",
+            "relationship": f"How does {question} relate to other concepts",
+        }
+        return strategy_templates.get(strategy, question)
+
+    def _generate_answer_fallback(self, context: str, question: str) -> str:
+        """Fallback answer generation without DSPy.
+
+        Args:
+            context: Retrieved context
+            question: User question
+
+        Returns:
+            Basic answer based on context
+        """
+        if not context:
+            return "I don't have enough information to answer this question."
+
+        # Basic answer generation - just return the most relevant context
+        context_parts = context.split("\n")
+        relevant_parts = [
+            part
+            for part in context_parts
+            if any(
+                word.lower() in part.lower() for word in question.lower().split()[:3]
+            )
+        ]
+
+        if relevant_parts:
+            return f"Based on the available information: {relevant_parts[0][:500]}..."
+        else:
+            return f"Here's what I found: {context[:500]}..."
 
 
 class DSPyOptimizer:
@@ -131,15 +256,20 @@ class DSPyOptimizer:
             config: DSPy configuration
         """
         self.config = config or DSPyConfig()
-        self._configure_dspy()
         self.optimized_module = None
         self.optimization_history = []
 
+        if dspy is not None:
+            self._configure_dspy()
+        else:
+            logger.warning("DSPy not available - optimization features will be limited")
+
     def _configure_dspy(self) -> None:
         """Configure DSPy settings."""
-        dspy.settings.configure(
-            lm=dspy.LM(model=self.config.lm_model, api_base=self.config.lm_api_base)
-        )
+        if dspy is not None:
+            dspy.settings.configure(
+                lm=dspy.LM(model=self.config.lm_model, api_base=self.config.lm_api_base)
+            )
 
     def zero_shot_optimize(self, module: DocMindRAG) -> DocMindRAG:
         """Zero-shot optimization without training data.
@@ -150,6 +280,11 @@ class DSPyOptimizer:
         Returns:
             Optimized module
         """
+        if dspy is None:
+            logger.warning("DSPy not available - returning module without optimization")
+            self.optimized_module = module
+            return module
+
         from dspy.teleprompt import MIPROv2
 
         # Define simple quality metric
@@ -194,17 +329,22 @@ class DSPyOptimizer:
         return optimized
 
     def few_shot_optimize(
-        self, module: DocMindRAG, examples: list[dspy.Example]
+        self, module: DocMindRAG, examples: list[Any] | None = None
     ) -> DocMindRAG:
         """Few-shot optimization with minimal examples.
 
         Args:
             module: RAG module to optimize
-            examples: Few training examples (5-10)
+            examples: Few training examples (5-10) - can be dspy.Example or dict
 
         Returns:
             Optimized module
         """
+        if dspy is None:
+            logger.warning("DSPy not available - returning module without optimization")
+            self.optimized_module = module
+            return module
+
         from dspy.teleprompt import BootstrapFewShot
 
         # Define evaluation metric
@@ -266,6 +406,11 @@ class DSPyOptimizer:
         Returns:
             Optimized module
         """
+        if dspy is None:
+            logger.warning("DSPy not available - returning module without optimization")
+            self.optimized_module = module
+            return module
+
         # Convert usage data to examples
         examples = []
         for item in usage_data:
@@ -646,17 +791,23 @@ async def progressive_optimization_pipeline(
     optimized_module = optimizer.zero_shot_optimize(base_module)
 
     # Phase 2: Few-shot if examples available
-    if queries and len(queries) >= 5:
+    if queries and len(queries) >= 5 and dspy is not None:
         examples = [
             dspy.Example(question=q, answer="").with_inputs("question")
             for q in queries[:10]
         ]
         optimized_module = optimizer.few_shot_optimize(optimized_module, examples)
+    elif queries and len(queries) >= 5:
+        # Fallback when DSPy not available - just return the module
+        logger.info("DSPy not available - skipping few-shot optimization")
 
     # Phase 3: A/B testing if enabled
     metrics = {}
-    if config.enable_a_b_testing and queries:
+    if config.enable_a_b_testing and queries and dspy is not None:
         ab_test = DSPyABTest(base_module, optimized_module, config)
         metrics = ab_test.run_comparison(queries[: config.a_b_test_sample_size])
+    elif config.enable_a_b_testing and queries:
+        logger.info("DSPy not available - skipping A/B testing")
+        metrics = {"dspy_available": False}
 
     return optimized_module, metrics

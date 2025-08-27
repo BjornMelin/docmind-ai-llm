@@ -1,28 +1,14 @@
 """Processing-specific Pydantic models for DocMind AI Document Processing Pipeline.
 
 This module contains data models specifically designed for the document processing
-pipeline, following ADR-009 requirements for direct Unstructured.io integration,
+pipeline, following requirements for direct Unstructured.io integration,
 semantic chunking, and BGE-M3 embeddings.
-
-HYBRID MODEL ORGANIZATION:
-Following the hybrid model organization strategy, these models are colocated within
-the processing domain because they are:
-- Tightly coupled to document processing workflows
-- Specific to Unstructured.io partition() operations
-- Domain-specific to document processing pipeline
-- Used primarily within the processing modules
 
 Models:
     ProcessingStrategy: Enum for document processing strategies
     DocumentElement: Structured representation of unstructured.io elements
     ProcessingResult: Result of document processing operations
     ProcessingError: Custom exception for processing errors
-
-Architecture Decision:
-    These models are placed within the processing module following domain-driven
-    design principles. They are domain-specific and tightly coupled to the
-    document processing system, making this the most appropriate location per
-    the hybrid organization strategy.
 """
 
 import hashlib
@@ -53,10 +39,6 @@ class DocumentElement(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Complete element metadata"
     )
-
-    def __init__(self, **data):
-        """Initialize DocumentElement from unstructured.io element."""
-        super().__init__(**data)
 
 
 class ProcessingResult(BaseModel):
@@ -102,5 +84,3 @@ class ProcessingResult(BaseModel):
 
 class ProcessingError(Exception):
     """Custom exception for document processing errors."""
-
-    pass

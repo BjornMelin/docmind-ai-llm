@@ -11,12 +11,12 @@ __version__ = "0.1.0"
 __author__ = "Bjorn Melin"
 
 # Make key components available at package level
-from .config.app_settings import app_settings
+from .config import settings
 
 # Note: ADR-009 compliant processing available via:
 # from src.processing import ResilientDocumentProcessor
 # from src.cache import create_cache_manager
 
 __all__ = [
-    "app_settings",
+    "settings",
 ]

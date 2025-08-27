@@ -26,8 +26,7 @@ except ImportError:
     )
     BGEM3FlagModel = None
 
-from src.config.settings import app_settings
-from src.processing.embeddings.models import (
+from src.models.embeddings import (
     EmbeddingError,
     EmbeddingParameters,
     EmbeddingResult,
@@ -52,6 +51,7 @@ class BGEM3Embedder:
         self,
         settings: Any | None = None,
         parameters: EmbeddingParameters | None = None,
+        *,  # Force keyword-only arguments after this point
         pooling_method: str = "cls",
         normalize_embeddings: bool = True,
         weights_for_different_modes: list[float] | None = None,
@@ -70,7 +70,7 @@ class BGEM3Embedder:
             devices: Specific devices to use. Default: auto-detect
             return_numpy: Whether to return numpy arrays. Default: False (returns lists)
         """
-        self.settings = settings or app_settings
+        self.settings = settings
         self.parameters = parameters or EmbeddingParameters()
         self.pooling_method = pooling_method
         self.normalize_embeddings = normalize_embeddings
@@ -258,8 +258,11 @@ class BGEM3Embedder:
             if "lexical_weights" in embeddings:
                 return embeddings["lexical_weights"]
             return None
-        except Exception as e:
+        except (RuntimeError, ValueError, ImportError) as e:
             logger.error(f"Failed to get sparse embeddings: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error getting sparse embeddings: {e}")
             return None
 
     def get_dense_embeddings(self, texts: list[str]) -> list[list[float]] | None:
@@ -283,8 +286,11 @@ class BGEM3Embedder:
             if "dense_vecs" in embeddings:
                 return embeddings["dense_vecs"].tolist()
             return None
-        except Exception as e:
+        except (RuntimeError, ValueError, ImportError) as e:
             logger.error(f"Failed to get dense embeddings: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error getting dense embeddings: {e}")
             return None
 
     def compute_sparse_similarity(
@@ -301,8 +307,11 @@ class BGEM3Embedder:
         """
         try:
             return self.model.compute_lexical_matching_score(sparse1, sparse2)
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError) as e:
             logger.error(f"Failed to compute sparse similarity: {e}")
+            return 0.0
+        except Exception as e:
+            logger.error(f"Unexpected error computing sparse similarity: {e}")
             return 0.0
 
     async def encode_queries(
@@ -499,8 +508,11 @@ class BGEM3Embedder:
             )
 
             return scores
-        except Exception as e:
+        except (RuntimeError, ValueError, ImportError) as e:
             logger.error(f"Failed to compute similarity: {e}")
+            return {"error": [0.0] * (len(texts1) * len(texts2))}
+        except Exception as e:
+            logger.error(f"Unexpected error computing similarity: {e}")
             return {"error": [0.0] * (len(texts1) * len(texts2))}
 
     def compute_colbert_similarity(
@@ -524,8 +536,11 @@ class BGEM3Embedder:
                     score = self.model.colbert_score(vec1, vec2)
                     scores.append(float(score))
             return scores
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError) as e:
             logger.error(f"Failed to compute ColBERT similarity: {e}")
+            return [0.0] * (len(colbert_vecs1) * len(colbert_vecs2))
+        except Exception as e:
+            logger.error(f"Unexpected error computing ColBERT similarity: {e}")
             return [0.0] * (len(colbert_vecs1) * len(colbert_vecs2))
 
     def get_sparse_embedding_tokens(
@@ -543,8 +558,11 @@ class BGEM3Embedder:
         """
         try:
             return self.model.convert_id_to_token(sparse_embeddings)
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(f"Failed to convert sparse tokens: {e}")
+            return [{} for _ in sparse_embeddings]
+        except Exception as e:
+            logger.error(f"Unexpected error converting sparse tokens: {e}")
             return [{} for _ in sparse_embeddings]
 
     def unload_model(self) -> None:
@@ -554,38 +572,3 @@ class BGEM3Embedder:
             # Move model to CPU to free GPU memory
             self.model.model.to("cpu")
         logger.info("BGE-M3 model unloaded")
-
-
-def create_bgem3_embedder(
-    settings: Any | None = None,
-    parameters: EmbeddingParameters | None = None,
-    pooling_method: str = "cls",
-    normalize_embeddings: bool = True,
-    weights_for_different_modes: list[float] | None = None,
-    devices: list[str] | None = None,
-    return_numpy: bool = False,
-) -> BGEM3Embedder:
-    """Factory function to create BGEM3Embedder instance with full library capabilities.
-
-    Args:
-        settings: Application settings
-        parameters: Embedding parameters
-        pooling_method: Pooling method ('cls', 'mean'). Default: 'cls'
-        normalize_embeddings: Whether to normalize embeddings. Default: True
-        weights_for_different_modes: Weights for [dense, sparse, colbert] fusion.
-            Default: [0.4, 0.2, 0.4]
-        devices: Specific devices to use. Default: auto-detect
-        return_numpy: Whether to return numpy arrays. Default: False (returns lists)
-
-    Returns:
-        Configured BGEM3Embedder instance
-    """
-    return BGEM3Embedder(
-        settings=settings,
-        parameters=parameters,
-        pooling_method=pooling_method,
-        normalize_embeddings=normalize_embeddings,
-        weights_for_different_modes=weights_for_different_modes,
-        devices=devices,
-        return_numpy=return_numpy,
-    )

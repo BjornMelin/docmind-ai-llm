@@ -37,8 +37,7 @@ from sentence_transformers import SentenceTransformer
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.agents.tools import retrieve_documents, route_query
-from src.config.app_settings import DocMindSettings
-from src.retrieval.graph.property_graph_config import PropertyGraphConfig
+from src.retrieval.graph_config import PropertyGraphConfig
 
 
 # Lightweight Embedding Fixtures

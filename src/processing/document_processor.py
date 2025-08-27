@@ -38,14 +38,11 @@ from tenacity import (
 from unstructured.partition.auto import partition
 
 from src.cache.simple_cache import SimpleCache
-from src.config.settings import app_settings
-from src.processing.models import DocumentElement, ProcessingResult, ProcessingStrategy
+from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 
 
 class ProcessingError(Exception):
     """Custom exception for document processing errors."""
-
-    pass
 
 
 class UnstructuredTransformation(TransformComponent):
@@ -68,7 +65,7 @@ class UnstructuredTransformation(TransformComponent):
         """
         super().__init__()
         self.strategy = strategy
-        self.settings = settings or app_settings
+        self.settings = settings or settings
         logger.debug(
             f"UnstructuredTransformation initialized with strategy: {strategy}"
         )
@@ -121,8 +118,14 @@ class UnstructuredTransformation(TransformComponent):
                     f"{len(element_nodes)} nodes"
                 )
 
-            except Exception as e:
+            except (OSError, ProcessingError, ValueError) as e:
                 logger.error(f"UnstructuredTransformation failed for node: {str(e)}")
+                # Include original node on error to maintain pipeline flow
+                transformed_nodes.append(node)
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error in UnstructuredTransformation: {str(e)}"
+                )
                 # Include original node on error to maintain pipeline flow
                 transformed_nodes.append(node)
 
@@ -281,9 +284,10 @@ class DocumentProcessor:
         """Initialize DocumentProcessor.
 
         Args:
-            settings: DocMind configuration settings. Uses app_settings if None.
+            settings: DocMind configuration settings. Uses settings if None.
         """
-        self.settings = settings or app_settings
+        self.settings = settings or settings
+        self._config_override = {}
 
         # Strategy mapping based on file extensions
         self.strategy_map = {
@@ -348,6 +352,20 @@ class DocumentProcessor:
         strategy = self.strategy_map[extension]
         logger.debug(f"Selected strategy '{strategy}' for file: {file_path}")
         return strategy
+
+    def get_strategy_for_file(self, file_path: str | Path) -> ProcessingStrategy:
+        """Public method to determine processing strategy based on file extension.
+
+        Args:
+            file_path: Path to the document file
+
+        Returns:
+            ProcessingStrategy enum value
+
+        Raises:
+            ValueError: If file extension is not supported
+        """
+        return self._get_strategy_for_file(file_path)
 
     def _calculate_document_hash(self, file_path: str | Path) -> str:
         """Calculate unique hash for document caching.
@@ -566,9 +584,6 @@ class DocumentProcessor:
             config: Configuration dictionary to apply
         """
         # Store configuration for use in pipeline creation
-        if not hasattr(self, "_config_override"):
-            self._config_override = {}
-
         self._config_override.update(config)
         logger.info(f"Configuration override applied: {config}")
 
@@ -592,8 +607,11 @@ class DocumentProcessor:
 
             logger.info("Processing cache cleared successfully")
             return True
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             logger.error(f"Failed to clear cache: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error clearing cache: {e}")
             return False
 
     async def get_cache_stats(self) -> dict[str, Any]:
@@ -615,36 +633,9 @@ class DocumentProcessor:
                 },
                 "strategy_mappings": len(self.strategy_map),
             }
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             logger.error(f"Failed to get cache stats: {e}")
             return {"error": str(e), "processor_type": "hybrid"}
-
-
-# Factory function for API compatibility
-def create_document_processor(settings: Any | None = None) -> DocumentProcessor:
-    """Factory function to create DocumentProcessor instance.
-
-    Args:
-        settings: Optional DocMind settings. Uses app_settings if None.
-
-    Returns:
-        Configured DocumentProcessor instance
-    """
-    return DocumentProcessor(settings)
-
-
-# Compatibility alias for drop-in replacement
-def create_resilient_processor(settings: Any | None = None) -> DocumentProcessor:
-    """Compatibility factory for drop-in replacement of ResilientDocumentProcessor.
-
-    This function provides a seamless migration path from the legacy
-    ResilientDocumentProcessor to the new DocumentProcessor while maintaining
-    full API compatibility.
-
-    Args:
-        settings: Optional DocMind settings. Uses app_settings if None.
-
-    Returns:
-        DocumentProcessor instance with compatible API
-    """
-    return DocumentProcessor(settings)
+        except Exception as e:
+            logger.error(f"Unexpected error getting cache stats: {e}")
+            return {"error": str(e), "processor_type": "hybrid"}

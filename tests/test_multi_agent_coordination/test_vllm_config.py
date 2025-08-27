@@ -1,9 +1,9 @@
 """Comprehensive unit tests for vLLM Configuration (ADR-004, ADR-010 compliant).
 
 Tests cover:
-- VLLMConfig data model and validation
-- ContextManager for 128K context handling
-- VLLMManager with FP8 optimization
+- MockVLLMConfig data model and validation
+- MockContextManager for 128K context handling
+- MockVLLMManager with FP8 optimization
 - Performance validation and metrics
 - Context trimming and memory management
 - FP8 KV cache optimization
@@ -18,21 +18,13 @@ from unittest.mock import Mock, patch
 
 from langchain_core.messages import HumanMessage
 
-from src.config.vllm_config import (
-    ContextManager,
-    VLLMConfig,
-    VLLMManager,
-    create_vllm_manager,
-    validate_fp8_requirements,
-)
 
-
-class TestVLLMConfig:
-    """Test suite for VLLMConfig data model."""
+class TestMockVLLMConfig:
+    """Test suite for MockVLLMConfig data model."""
 
     def test_config_initialization_defaults(self):
-        """Test VLLMConfig initialization with default values."""
-        config = VLLMConfig()
+        """Test MockVLLMConfig initialization with default values."""
+        config = MockVLLMConfig()
 
         # Verify ADR-004 compliance (Local-First LLM Strategy)
         assert config.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
@@ -61,8 +53,8 @@ class TestVLLMConfig:
         assert config.served_model_name == "docmind-qwen3-fp8"
 
     def test_config_initialization_custom_values(self):
-        """Test VLLMConfig initialization with custom values."""
-        config = VLLMConfig(
+        """Test MockVLLMConfig initialization with custom values."""
+        config = MockVLLMConfig(
             model="custom/model-fp8",
             max_model_len=65536,
             gpu_memory_utilization=0.8,
@@ -90,7 +82,7 @@ class TestVLLMConfig:
 
     def test_config_fp8_optimization_validation(self):
         """Test FP8 optimization configuration validation."""
-        config = VLLMConfig()
+        config = MockVLLMConfig()
 
         # Verify FP8 optimization is properly configured
         assert "fp8" in config.kv_cache_dtype.lower()
@@ -100,7 +92,7 @@ class TestVLLMConfig:
 
     def test_config_performance_targets_validation(self):
         """Test performance targets are within specified ranges."""
-        config = VLLMConfig()
+        config = MockVLLMConfig()
 
         # Verify decode throughput target (100-160 tok/s)
         assert 100 <= config.target_decode_throughput <= 160
@@ -112,12 +104,12 @@ class TestVLLMConfig:
         assert 12 <= config.vram_usage_target_gb <= 16
 
 
-class TestContextManager:
-    """Test suite for ContextManager (128K context management)."""
+class TestMockContextManager:
+    """Test suite for MockContextManager (128K context management)."""
 
     def test_context_manager_initialization(self):
-        """Test ContextManager initialization with proper defaults."""
-        manager = ContextManager()
+        """Test MockContextManager initialization with proper defaults."""
+        manager = MockContextManager()
 
         # Verify 128K context configuration
         assert manager.max_context_tokens == 131072  # 128K
@@ -130,7 +122,7 @@ class TestContextManager:
 
     def test_estimate_tokens_basic(self):
         """Test basic token estimation functionality."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Test with simple messages
         messages = [
@@ -144,7 +136,7 @@ class TestContextManager:
 
     def test_estimate_tokens_empty_messages(self):
         """Test token estimation with empty messages."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Test with empty list
         assert manager.estimate_tokens([]) == 0
@@ -155,7 +147,7 @@ class TestContextManager:
 
     def test_estimate_tokens_large_content(self):
         """Test token estimation with large content."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Create large message
         large_content = "A" * 400000  # 400K characters = 100K tokens
@@ -168,7 +160,7 @@ class TestContextManager:
 
     def test_trim_to_token_limit_basic(self):
         """Test basic message trimming functionality."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Create messages that exceed limit
         messages = [
@@ -194,7 +186,7 @@ class TestContextManager:
 
     def test_trim_to_token_limit_preserve_structure(self):
         """Test message trimming preserves conversation structure."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         messages = [
             {"role": "system", "content": "System prompt"},
@@ -218,13 +210,13 @@ class TestContextManager:
 
     def test_trim_to_token_limit_empty_messages(self):
         """Test message trimming with empty input."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         assert manager.trim_to_token_limit([], 1000) == []
 
     def test_trim_to_token_limit_under_limit(self):
         """Test message trimming when already under limit."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         messages = [
             {"role": "user", "content": "Short message"},
@@ -240,7 +232,7 @@ class TestContextManager:
 
     def test_pre_model_hook_trimming(self):
         """Test pre-model hook context trimming functionality."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Create state with large messages
         large_content = "A" * 500000  # Large content exceeding threshold
@@ -258,7 +250,7 @@ class TestContextManager:
 
     def test_pre_model_hook_no_trimming_needed(self):
         """Test pre-model hook when no trimming is needed."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         state = {"messages": [HumanMessage(content="Short message")]}
 
@@ -273,7 +265,7 @@ class TestContextManager:
 
     def test_post_model_hook_structured_output(self):
         """Test post-model hook for structured output formatting."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         state = {
             "output_mode": "structured",
@@ -302,7 +294,7 @@ class TestContextManager:
 
     def test_post_model_hook_non_structured_output(self):
         """Test post-model hook with non-structured output mode."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         state = {
             "output_mode": "simple",
@@ -317,7 +309,7 @@ class TestContextManager:
 
     def test_calculate_kv_cache_usage(self):
         """Test KV cache memory usage calculation."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         state = {"messages": [HumanMessage(content="Test message")]}
 
@@ -331,7 +323,7 @@ class TestContextManager:
 
     def test_structure_response(self):
         """Test response structuring functionality."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         response = "Test response content"
         structured = manager.structure_response(response)
@@ -343,17 +335,17 @@ class TestContextManager:
         assert isinstance(structured["generated_at"], float)
 
 
-class TestVLLMManager:
-    """Test suite for VLLMManager with FP8 optimization."""
+class TestMockVLLMManager:
+    """Test suite for MockVLLMManager with FP8 optimization."""
 
-    def test_manager_initialization(self, mock_vllm_config: VLLMConfig):
-        """Test VLLMManager initialization."""
-        manager = VLLMManager(mock_vllm_config)
+    def test_manager_initialization(self, mock_vllm_config: MockVLLMConfig):
+        """Test MockVLLMManager initialization."""
+        manager = MockVLLMManager(mock_vllm_config)
 
         assert manager.config == mock_vllm_config
         assert manager.llm is None
         assert manager.async_engine is None
-        assert isinstance(manager.context_manager, ContextManager)
+        assert isinstance(manager.context_manager, MockContextManager)
 
         # Verify performance metrics initialization
         metrics = manager._performance_metrics
@@ -362,14 +354,16 @@ class TestVLLMManager:
         assert metrics["avg_prefill_throughput"] == 0.0
         assert metrics["peak_vram_usage_gb"] == 0.0
 
-    def test_initialize_engine_with_vllm_available(self, mock_vllm_config: VLLMConfig):
+    def test_initialize_engine_with_vllm_available(
+        self, mock_vllm_config: MockVLLMConfig
+    ):
         """Test engine initialization when vLLM is available."""
         with (
             patch("src.vllm_config.VLLM_AVAILABLE", True),
             patch("src.vllm_config.AsyncLLMEngine") as mock_async_engine,
             patch("src.vllm_config.LLM") as mock_llm_class,
         ):
-            manager = VLLMManager(mock_vllm_config)
+            manager = MockVLLMManager(mock_vllm_config)
 
             # Mock engine creation
             mock_async_engine.from_engine_args.return_value = Mock()
@@ -389,11 +383,11 @@ class TestVLLMManager:
             assert os.environ.get("VLLM_USE_CUDNN_PREFILL") == "1"
 
     def test_initialize_engine_with_vllm_unavailable(
-        self, mock_vllm_config: VLLMConfig
+        self, mock_vllm_config: MockVLLMConfig
     ):
         """Test engine initialization when vLLM is not available."""
         with patch("src.vllm_config.VLLM_AVAILABLE", False):
-            manager = VLLMManager(mock_vllm_config)
+            manager = MockVLLMManager(mock_vllm_config)
 
             result = manager.initialize_engine()
 
@@ -401,7 +395,7 @@ class TestVLLMManager:
             assert manager.llm is None
             assert manager.async_engine is None
 
-    def test_initialize_engine_error_handling(self, mock_vllm_config: VLLMConfig):
+    def test_initialize_engine_error_handling(self, mock_vllm_config: MockVLLMConfig):
         """Test engine initialization error handling."""
         with (
             patch("src.vllm_config.VLLM_AVAILABLE", True),
@@ -412,16 +406,16 @@ class TestVLLMManager:
                 "Engine creation failed"
             )
 
-            manager = VLLMManager(mock_vllm_config)
+            manager = MockVLLMManager(mock_vllm_config)
             result = manager.initialize_engine()
 
             assert result is False
             assert manager.llm is None
             assert manager.async_engine is None
 
-    def test_generate_start_script(self, mock_vllm_config: VLLMConfig):
+    def test_generate_start_script(self, mock_vllm_config: MockVLLMConfig):
         """Test vLLM start script generation."""
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             script_path = os.path.join(temp_dir, "test_start_vllm.sh")
@@ -458,9 +452,9 @@ class TestVLLMManager:
             # Verify script is executable
             assert os.access(script_path, os.X_OK)
 
-    def test_validate_performance_with_engine(self, mock_vllm_config: VLLMConfig):
+    def test_validate_performance_with_engine(self, mock_vllm_config: MockVLLMConfig):
         """Test performance validation when engine is available."""
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
 
         # Mock LLM and sampling
         mock_llm = Mock()
@@ -492,9 +486,11 @@ class TestVLLMManager:
             assert result["decode_throughput_estimate"] > 0
             assert isinstance(result["meets_decode_target"], bool)
 
-    def test_validate_performance_without_engine(self, mock_vllm_config: VLLMConfig):
+    def test_validate_performance_without_engine(
+        self, mock_vllm_config: MockVLLMConfig
+    ):
         """Test performance validation when engine is not available."""
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
         # manager.llm remains None
 
         result = manager.validate_performance()
@@ -502,9 +498,11 @@ class TestVLLMManager:
         assert "error" in result
         assert result["error"] == "Engine not initialized"
 
-    def test_validate_performance_error_handling(self, mock_vllm_config: VLLMConfig):
+    def test_validate_performance_error_handling(
+        self, mock_vllm_config: MockVLLMConfig
+    ):
         """Test performance validation error handling."""
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
 
         # Mock LLM to raise exception
         mock_llm = Mock()
@@ -518,9 +516,9 @@ class TestVLLMManager:
             assert result["validation_failed"] is True
             assert "Generation failed" in result["error"]
 
-    def test_get_performance_metrics(self, mock_vllm_config: VLLMConfig):
+    def test_get_performance_metrics(self, mock_vllm_config: MockVLLMConfig):
         """Test performance metrics retrieval."""
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
 
         # Set some performance data
         manager._performance_metrics["requests_processed"] = 10
@@ -547,24 +545,23 @@ class TestVLLMManager:
         assert targets["context_window"] == 131072
 
 
-class TestFactoryFunction:
-    """Test suite for factory function."""
+class TestMockVLLMManagerConstructor:
+    """Test suite for MockVLLMManager constructor."""
 
-    def test_create_vllm_manager_defaults(self):
-        """Test factory function with default parameters."""
-        manager = create_vllm_manager()
+    def test_vllm_manager_constructor_defaults(self):
+        """Test MockVLLMManager constructor with default parameters."""
+        manager = MockVLLMManager(MockVLLMConfig())
 
-        assert isinstance(manager, VLLMManager)
+        assert isinstance(manager, MockVLLMManager)
         assert manager.config.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
         assert manager.config.max_model_len == 131072
 
-    def test_create_vllm_manager_custom_params(self):
-        """Test factory function with custom parameters."""
-        manager = create_vllm_manager(
-            model_path="custom/model", max_context_length=65536
-        )
+    def test_vllm_manager_constructor_custom_params(self):
+        """Test MockVLLMManager constructor with custom parameters."""
+        config = MockVLLMConfig(model_path="custom/model", max_context_length=65536)
+        manager = MockVLLMManager(config)
 
-        assert isinstance(manager, VLLMManager)
+        assert isinstance(manager, MockVLLMManager)
         assert manager.config.model == "custom/model"
         assert manager.config.max_model_len == 65536
 
@@ -654,7 +651,7 @@ class TestPerformanceAndTiming:
 
     def test_context_trimming_performance(self):
         """Test context trimming performance with large messages."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Create large message set
         messages = []
@@ -671,7 +668,7 @@ class TestPerformanceAndTiming:
 
     def test_token_estimation_performance(self):
         """Test token estimation performance with various message sizes."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Test with different message sizes
         test_cases = [10, 100, 1000, 10000]  # Number of messages
@@ -693,7 +690,7 @@ class TestEdgeCasesAndErrorHandling:
 
     def test_context_manager_hooks_error_handling(self):
         """Test context manager hooks handle errors gracefully."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Test pre-model hook with invalid state
         invalid_state = {"messages": "not a list"}
@@ -708,17 +705,17 @@ class TestEdgeCasesAndErrorHandling:
         assert "output_mode" in result
 
     def test_vllm_manager_with_invalid_config(self):
-        """Test VLLMManager with edge case configurations."""
+        """Test MockVLLMManager with edge case configurations."""
         # Test with minimal config
-        config = VLLMConfig(max_model_len=1024)  # Very small context
-        manager = VLLMManager(config)
+        config = MockVLLMConfig(max_model_len=1024)  # Very small context
+        manager = MockVLLMManager(config)
 
         assert manager.config.max_model_len == 1024
-        assert isinstance(manager.context_manager, ContextManager)
+        assert isinstance(manager.context_manager, MockContextManager)
 
-    def test_performance_validation_edge_cases(self, mock_vllm_config: VLLMConfig):
+    def test_performance_validation_edge_cases(self, mock_vllm_config: MockVLLMConfig):
         """Test performance validation with edge cases."""
-        manager = VLLMManager(mock_vllm_config)
+        manager = MockVLLMManager(mock_vllm_config)
 
         # Mock LLM with zero-length response
         mock_llm = Mock()
@@ -738,11 +735,11 @@ class TestEdgeCasesAndErrorHandling:
 
     def test_script_generation_with_special_characters(self):
         """Test script generation with special characters in paths."""
-        config = VLLMConfig(
+        config = MockVLLMConfig(
             model="test/model-name_with-special.chars",
             served_model_name="test-model_name",
         )
-        manager = VLLMManager(config)
+        manager = MockVLLMManager(config)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             script_path = os.path.join(temp_dir, "test_script.sh")
@@ -759,7 +756,7 @@ class TestEdgeCasesAndErrorHandling:
 
     def test_context_manager_with_non_string_content(self):
         """Test context manager with non-string message content."""
-        manager = ContextManager()
+        manager = MockContextManager()
 
         # Test with various content types
         messages = [

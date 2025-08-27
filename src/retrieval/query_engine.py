@@ -430,7 +430,6 @@ def create_adaptive_router_engine(
     )
 
 
-# Integration helper for Settings configuration
 def configure_router_settings(_router_engine: AdaptiveRouterQueryEngine) -> None:
     """Configure LlamaIndex Settings for RouterQueryEngine.
 

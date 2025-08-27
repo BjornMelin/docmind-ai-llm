@@ -13,7 +13,7 @@ from loguru import logger
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import AgentResponse
-from src.config.app_settings import DocMindSettings, app_settings
+from src.config.settings import DocMindSettings, settings
 from src.processing.document_processor import DocumentProcessor
 
 # Load environment variables
@@ -31,16 +31,16 @@ class DocMindApplication:
 
     def __init__(
         self,
-        settings: DocMindSettings | None = None,
+        app_settings: DocMindSettings | None = None,
         enable_multi_agent: bool = True,
     ) -> None:
         """Initialize the DocMind application.
 
         Args:
-            settings: Application settings. Defaults to loading from environment.
+            app_settings: Application settings. Defaults to unified settings.
             enable_multi_agent: Enable multi-agent coordination system.
         """
-        self.settings = settings or app_settings
+        self.settings = app_settings or settings
         self.enable_multi_agent = enable_multi_agent
 
         # Initialize components

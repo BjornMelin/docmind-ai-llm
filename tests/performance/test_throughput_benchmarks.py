@@ -22,7 +22,7 @@ import torch
 from llama_index.core import Document
 
 from src.core.infrastructure.gpu_monitor import gpu_performance_monitor
-from src.utils.resource_management import gpu_memory_context
+from src.utils.storage import gpu_memory_context
 
 # Throughput test constants
 SMALL_LOAD_REQUESTS = 10
@@ -256,7 +256,7 @@ class TestEmbeddingThroughputBenchmarks:
             mock_bgem3.encode = mock_encode
             mock_model.return_value = mock_bgem3
 
-            from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
+            from src.retrieval.embeddings import BGEM3Embedding
 
             embedding_model = BGEM3Embedding()
 
@@ -296,7 +296,7 @@ class TestEmbeddingThroughputBenchmarks:
             mock_bgem3 = MagicMock()
             mock_model.return_value = mock_bgem3
 
-            from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
+            from src.retrieval.embeddings import BGEM3Embedding
 
             batch_sizes = [1, 5, 10, 20]
             total_documents = 40
@@ -386,7 +386,7 @@ class TestEmbeddingThroughputBenchmarks:
             mock_bgem3.encode = mock_concurrent_encode
             mock_model.return_value = mock_bgem3
 
-            from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
+            from src.retrieval.embeddings import BGEM3Embedding
 
             # Test different concurrency levels
             concurrency_levels = [1, 2, 4, 8]
@@ -504,11 +504,11 @@ class TestEndToEndThroughputBenchmarks:
             mock_cross_encoder.model = MagicMock()
             mock_ce.return_value = mock_cross_encoder
 
-            from src.retrieval.postprocessor.cross_encoder_rerank import (
-                BGECrossEncoderRerank,
-            )
-            from src.retrieval.query_engine.router_engine import (
+            from src.retrieval.query_engine import (
                 AdaptiveRouterQueryEngine,
+            )
+            from src.retrieval.reranking import (
+                BGECrossEncoderRerank,
             )
 
             # Create pipeline
@@ -872,7 +872,7 @@ class TestGPUAcceleratedThroughputBenchmarks:
             mock_bgem3.encode = mock_gpu_encode
             mock_model.return_value = mock_bgem3
 
-            from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
+            from src.retrieval.embeddings import BGEM3Embedding
 
             # Test GPU throughput with monitoring
             embedding_model = BGEM3Embedding(device="cuda", batch_size=10)
@@ -930,7 +930,7 @@ class TestGPUAcceleratedThroughputBenchmarks:
         if not torch.cuda.is_available():
             pytest.skip("GPU not available for memory constrained test")
 
-        from src.utils.resource_management import get_safe_vram_usage
+        from src.utils.storage import get_safe_vram_usage
 
         # Simulate memory-intensive operations
         def memory_intensive_operation(data_size: int):

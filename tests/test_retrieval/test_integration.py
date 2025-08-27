@@ -18,9 +18,9 @@ import numpy as np
 import pytest
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
-from src.retrieval.embeddings.bge_m3_manager import BGEM3Embedding
-from src.retrieval.postprocessor.cross_encoder_rerank import BGECrossEncoderRerank
-from src.retrieval.query_engine.router_engine import AdaptiveRouterQueryEngine
+from src.retrieval.embeddings import BGEM3Embedding
+from src.retrieval.query_engine import AdaptiveRouterQueryEngine
+from src.retrieval.reranking import BGECrossEncoderRerank
 
 # Constants for deterministic testing
 DETERMINISTIC_SEED = 42
@@ -448,7 +448,7 @@ class TestSystemConfiguration:
     @patch("llama_index.core.Settings")
     def test_bgem3_settings_configuration(self, mock_settings, mock_flag_model_class):
         """Test BGE-M3 Settings integration replaces old embedding config."""
-        from src.retrieval.embeddings.bge_m3_manager import configure_bgem3_settings
+        from src.retrieval.embeddings import configure_bgem3_settings
 
         mock_bgem3_model = MagicMock()
         mock_flag_model_class.return_value = mock_bgem3_model
@@ -470,12 +470,12 @@ class TestSystemConfiguration:
         self, mock_cross_encoder_class, mock_flag_model_class
     ):
         """Test factory functions create optimally configured components."""
-        from src.retrieval.embeddings.bge_m3_manager import create_bgem3_embedding
-        from src.retrieval.postprocessor.cross_encoder_rerank import (
-            create_bge_cross_encoder_reranker,
-        )
-        from src.retrieval.query_engine.router_engine import (
+        from src.retrieval.embeddings import create_bgem3_embedding
+        from src.retrieval.query_engine import (
             create_adaptive_router_engine,
+        )
+        from src.retrieval.reranking import (
+            create_bge_cross_encoder_reranker,
         )
 
         # Mock models

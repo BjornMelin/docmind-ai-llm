@@ -47,7 +47,7 @@ class SimpleCache:
             except (KeyError, ValueError):
                 # Key not found in cache
                 return None
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError, AttributeError) as e:
             logger.error(f"Cache get failed: {e}")
             return None
 
@@ -60,7 +60,7 @@ class SimpleCache:
             self.cache.persist(self._persist_path)
             logger.debug(f"Cached result for: {Path(path).name}")
             return True
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError, AttributeError) as e:
             logger.error(f"Cache store failed: {e}")
             return False
 
@@ -84,7 +84,7 @@ class SimpleCache:
                 db_file.unlink()
             logger.info("Cleared document cache")
             return True
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError, AttributeError) as e:
             logger.error(f"Cache clear failed: {e}")
             return False
 
@@ -102,15 +102,6 @@ class SimpleCache:
                 "size_mb": total_documents * 0.1,  # Rough size estimate
                 "total_requests": total_documents,
             }
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError, AttributeError) as e:
             logger.error(f"Cache stats failed: {e}")
             return {"error": str(e), "cache_type": "simple_sqlite"}
-
-
-# Factory for compatibility
-def create_cache_manager(settings=None, cache_dir=None) -> SimpleCache:
-    """Factory function for simple cache."""
-    if cache_dir is not None:
-        return SimpleCache(cache_dir)
-    cache_dir = getattr(settings, "cache_dir", "./cache") if settings else "./cache"
-    return SimpleCache(cache_dir)

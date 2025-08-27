@@ -8,10 +8,10 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
+from src.models.embeddings import EmbeddingParameters
 from src.processing.embeddings.bgem3_embedder import (
-    create_bgem3_embedder,
+    BGEM3Embedder,
 )
-from src.processing.embeddings.models import EmbeddingParameters
 
 
 async def test_enhanced_bgem3_embedder():
@@ -29,7 +29,7 @@ async def test_enhanced_bgem3_embedder():
     try:
         # Test 1: Enhanced initialization with new parameters
         print("\n1. Testing enhanced initialization...")
-        embedder = create_bgem3_embedder(
+        embedder = BGEM3Embedder(
             pooling_method="cls",
             normalize_embeddings=True,
             weights_for_different_modes=[0.5, 0.3, 0.2],

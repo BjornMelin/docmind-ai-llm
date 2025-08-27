@@ -20,7 +20,8 @@ import torch
 from loguru import logger
 from qdrant_client import AsyncQdrantClient
 
-from src.config.app_settings import DocMindSettings, app_settings
+from src.config import settings
+from src.config.settings import DocMindSettings
 
 # Constants for validation
 WEIGHT_TOLERANCE = 0.05
@@ -47,7 +48,7 @@ def detect_hardware() -> dict[str, Any]:
             hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
             vram_gb = (
                 torch.cuda.get_device_properties(0).total_memory
-                / app_settings.bytes_to_gb_divisor
+                / settings.bytes_to_gb_divisor
             )
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
@@ -61,11 +62,11 @@ def detect_hardware() -> dict[str, Any]:
     return hardware_info
 
 
-def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
+def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
     """Validate critical startup configuration.
 
     Args:
-        settings: Application settings to validate
+        app_settings: Application settings to validate
 
     Returns:
         Dict with validation results and any errors
@@ -125,11 +126,11 @@ def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
     return results
 
 
-def verify_rrf_configuration(settings: DocMindSettings) -> dict[str, Any]:
+def verify_rrf_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
     """Verify RRF configuration against research recommendations.
 
     Args:
-        settings: Application settings containing RRF configuration
+        app_settings: Application settings containing RRF configuration
 
     Returns:
         Dictionary with verification results and recommendations
@@ -167,8 +168,7 @@ def verify_rrf_configuration(settings: DocMindSettings) -> dict[str, Any]:
         verification["alpha_in_range"] = True
     else:
         verification["issues"].append(
-            f"RRF alpha ({app_settings.rrf_fusion_alpha}) "
-            f"outside research range (10-100)"
+            f"RRF alpha ({app_settings.rrf_fusion_alpha}) outside research range (10-100)"
         )
         verification["recommendations"].append(
             f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "

@@ -20,29 +20,24 @@ Key Features:
 """
 
 # Import document processor and factory functions
-from src.processing.document_processor import (
-    DocumentProcessor,
-    create_document_processor,
-    create_resilient_processor,
-)
-from src.processing.embeddings.models import (
+from src.models.embeddings import (
     EmbeddingError,
     EmbeddingParameters,
     EmbeddingResult,
 )
-from src.processing.models import (
+from src.models.processing import (
     DocumentElement,
     ProcessingError,
     ProcessingResult,
     ProcessingStrategy,
 )
+from src.processing.document_processor import (
+    DocumentProcessor,
+)
 
 __all__ = [
     # Primary implementation
     "DocumentProcessor",
-    # Factory functions
-    "create_document_processor",
-    "create_resilient_processor",  # Compatibility factory
     # Essential models
     "ProcessingStrategy",
     "DocumentElement",
