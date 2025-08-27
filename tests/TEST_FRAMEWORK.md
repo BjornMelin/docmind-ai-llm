@@ -345,12 +345,14 @@ Before creating any new test fixtures:
 ### Detection
 
 If you see directories like these in project root, you have a mock path bug:
+
 - `<Mock name='mock.cache_dir' id='133725091402384'>`
 - `<MagicMock name='app_settings.cache_dir' id='133725128381264'>`
 
 ### Implementation Examples
 
 See these working patterns in the codebase:
+
 - `tests/conftest.py::centralized_settings_with_temp_dirs`
 - `tests/conftest.py::temp_settings_dirs`
 - `tests/unit/test_settings.py::test_cache_directory_creation`

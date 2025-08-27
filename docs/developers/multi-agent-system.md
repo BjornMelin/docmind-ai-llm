@@ -390,7 +390,7 @@ logger.info(
 
 ### Technical Implementation
 
-- **LangGraph Native Components**: Uses `langgraph_supervisor.create_supervisor()`, `langgraph.prebuilt.create_react_agent()`, and `langgraph.graph.MessagesState`
+- **LangGraph Native Components**: Uses `langgraph_supervisor.AgentCoordinator with unified configuration`, `langgraph.prebuilt.ReactAgent with unified configuration`, and `langgraph.graph.MessagesState`
 - **@tool Decorator**: All shared functions use `@tool` with `InjectedState` for proper LangGraph integration
 - **Memory Management**: Uses `langgraph.checkpoint.memory.InMemorySaver` for state persistence
 - **Error Handling**: Comprehensive fallback mechanisms at every level

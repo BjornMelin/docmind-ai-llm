@@ -1,17 +1,93 @@
-# DocMind AI Architecture Overview
+# DocMind AI Architecture Guide
+
+## Overview
+
+DocMind AI is a local-first AI document analysis system implementing a modern agentic
+RAG architecture with multi-agent coordination. This guide provides a comprehensive
+architectural overview of the unified configuration architecture (ADR-024) and the
+production-ready system.
+
+## Table of Contents
+
+1. [High-Level Components](#high-level-components)
+2. [Unified Configuration Architecture](#unified-configuration-architecture-adr-024)
+3. [LangGraph Supervisor Architecture](#langgraph-supervisor-architecture)
+4. [Document Processing Pipeline](#document-processing-pipeline)
+5. [Performance Optimization](#performance-optimization)
+6. [Directory Structure](#directory-structure)
+7. [Data Flow](#data-flow)
+8. [Integration Points](#integration-points)
+9. [Hardware Requirements](#hardware-requirements)
+10. [Security Considerations](#security-considerations)
 
 ## High-Level Components
 
-- **Frontend**: Streamlit UI for document uploads, configuration, results, and chat interface
-- **LLM Backend**: vLLM with FlashInfer attention for Qwen3-4B-Instruct-2507-FP8 model inference
-- **Multi-Agent Orchestration**: 5-agent LangGraph supervisor system with specialized agents
+- **Frontend**: Streamlit UI for document uploads, configuration, results, and chat
+  interface
+- **LLM Backend**: vLLM with FlashInfer attention for Qwen3-4B-Instruct-2507-FP8 model
+  inference
+- **Multi-Agent Orchestration**: 5-agent LangGraph supervisor system with specialized
+  agents
 - **Vector Storage**: Qdrant for hybrid search with dense/sparse embeddings
 - **Context Management**: 128K context window optimization with FP8 KV cache
 - **Performance Layer**: FP8 quantization, parallel tool execution, CUDA 12.8+ optimization
 
+## Unified Configuration Architecture (ADR-024)
+
+### Core Principles
+
+The architecture implements a **single source of truth** configuration approach:
+
+- **Pydantic Settings V2** with nested models for complex areas
+- **DOCMIND_** environment variable prefix for consistency
+- **76% complexity reduction** from previous over-engineered approach
+- **Native LlamaIndex integration** for LLM and embedding configuration
+
+### Configuration Structure
+
+```python
+# Always use this pattern - single import for all configuration
+from src.config import settings
+
+# Access nested configuration
+settings.vllm.model              # "Qwen/Qwen3-4B-Instruct-2507-FP8"
+settings.embedding.model_name    # "BAAI/bge-m3"
+settings.processing.chunk_size   # Document chunking parameters
+settings.agents.decision_timeout # Multi-agent coordination timeout (200ms)
+```
+
+### Key Configuration Models
+
+#### VLLMConfig
+
+- **Model**: Qwen3-4B-Instruct-2507-FP8 with 128K context
+- **FP8 Optimization**: KV cache quantization for 50% memory reduction
+- **FlashInfer Backend**: Advanced attention mechanism
+- **GPU Utilization**: 85% of available VRAM (13.6GB on RTX 4090)
+
+#### EmbeddingConfig  
+
+- **Model**: BGE-M3 unified dense+sparse embeddings (1024D)
+- **Max Length**: 8192 tokens for optimal performance
+- **Batch Processing**: GPU/CPU optimized batch sizes
+
+#### AgentConfig
+
+- **Decision Timeout**: 200ms for real-time responsiveness
+- **Multi-Agent**: Enabled by default with fallback to single-agent RAG
+- **Concurrency**: Up to 3 concurrent agents for parallel processing
+
 ## LangGraph Supervisor Architecture
 
-DocMind AI employs a sophisticated 5-agent coordination system built on LangGraph's supervisor pattern to provide intelligent document analysis with enhanced quality, reliability, and performance. The system leverages the `langgraph-supervisor` library to orchestrate specialized agents while maintaining local-first operation and optimizing for the 128K context capability of Qwen3-4B-Instruct-2507-FP8.
+DocMind AI employs a sophisticated **5-agent coordination system** built on LangGraph's
+supervisor pattern to provide intelligent document analysis with enhanced quality,
+reliability, and performance. The system leverages the `langgraph-supervisor` library
+to orchestrate specialized agents while maintaining local-first operation and optimizing
+for the 128K context capability of Qwen3-4B-Instruct-2507-FP8.
+
+### Agent Architecture (ADR-001, ADR-011)
+
+The system implements a **5-agent supervisor architecture** using LangGraph orchestration:
 
 ### Agent Hierarchy
 
@@ -45,7 +121,7 @@ graph TD
 #### 1. Supervisor Agent (Central Coordinator)
 
 - **Role**: Central orchestrator managing agent workflow and state
-- **Implementation**: Uses `create_supervisor()` from `langgraph-supervisor`
+- **Implementation**: Uses `AgentCoordinator with unified configuration` from `langgraph-supervisor`
 - **Responsibilities**:
   - Route queries to appropriate specialized agents
   - Manage conversation state and context
@@ -120,6 +196,83 @@ graph TD
 - **Shared State**: Context and metadata flow through MessagesState
 - **Tool Integration**: Standardized @tool functions for consistent agent interfaces
 - **Fallback Mechanisms**: Graceful degradation to basic RAG on agent failures
+
+## Document Processing Pipeline
+
+### Processing Architecture (ADR-009)
+
+```mermaid
+graph LR
+    A[Documents] --> B[Unstructured.io Parser]
+    B --> C[Semantic Chunking]
+    C --> D[BGE-M3 Embedding]
+    D --> E[Qdrant Vector Store]
+    E --> F[Hybrid Search]
+    F --> G[BGE-reranker-v2-m3]
+    G --> H[Results]
+```
+
+### Key Components
+
+- **Parser**: Unstructured.io hi-res parsing for PDFs, Word docs, presentations
+- **Chunking**: Semantic-aware chunking with 1500 char chunks, 120 char overlap
+- **Embeddings**: BGE-M3 unified dense+sparse for optimal retrieval performance
+- **Storage**: Qdrant vector database with RRF fusion (α=0.7)
+- **Reranking**: BGE-reranker-v2-m3 with ColBERT late interaction
+
+## Performance Optimization
+
+### FP8 Optimization Strategy (ADR-010)
+
+- **KV Cache**: FP8 quantization reduces memory usage by 50%
+- **Attention Backend**: FlashInfer for optimized attention computation
+- **Chunked Prefill**: Enabled for better throughput with long contexts
+- **Memory Management**: 95% GPU utilization with intelligent overflow handling
+
+### Caching Strategy (ADR-025)
+
+- **Simple Cache**: SQLite-based document processing cache
+- **Semantic Cache**: BGE-M3 embeddings cached for reuse
+- **Session Persistence**: WAL mode SQLite for UI state management
+
+## Directory Structure
+
+### Flattened Organization
+
+The architecture uses a **simplified, flattened directory structure**:
+
+```text
+src/
+├── config/                    # Unified configuration (2 files)
+│   ├── __init__.py           # Exports settings instance
+│   └── settings.py           # Main configuration with nested models
+├── models/                   # Consolidated Pydantic models (4 files)  
+│   ├── embeddings.py         # BGE-M3 embedding parameters
+│   ├── processing.py         # Document processing models
+│   ├── schemas.py           # API and response schemas
+│   └── storage.py           # Database and storage models
+├── retrieval/               # Flattened structure (no subdirectories)
+│   ├── embeddings.py        # BGE-M3 implementation
+│   ├── query_engine.py      # Adaptive routing query engine
+│   ├── reranking.py         # BGE-reranker-v2-m3
+│   └── vector_store.py      # Qdrant integration
+├── utils/                   # Simplified utilities (5 files)
+│   ├── core.py              # Core utilities and helpers
+│   ├── document.py          # Document processing utilities
+│   ├── monitoring.py        # Logging and performance monitoring
+│   ├── multimodal.py        # Multimodal content handling
+│   └── storage.py           # Storage utilities
+├── agents/                  # Multi-agent coordination
+├── cache/                   # Simple caching implementation
+└── processing/              # Document processing pipeline
+```
+
+### Key Simplifications
+
+- **No nested subdirectories** in retrieval/ for easier navigation
+- **Consolidated models** in single directory vs scattered locations
+- **Simplified utils** from 6+ files to 5 focused modules
+- **Single config directory** with clear separation of concerns
 
 ## Technical Implementation
 
@@ -234,11 +387,65 @@ def optimize_context_window(state: AgentState) -> AgentState:
 
 ## Data Flow
 
+### Query Processing Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as Supervisor
+    participant R as Router
+    participant P as Planner
+    participant RE as Retrieval
+    participant SY as Synthesizer
+    participant V as Validator
+    
+    U->>S: Submit Query
+    S->>R: Route Query
+    R->>S: Strategy Decision
+    
+    alt Complex Query
+        S->>P: Plan Decomposition
+        P->>S: Sub-tasks
+    end
+    
+    S->>RE: Execute Retrieval
+    RE->>RE: BGE-M3 Embedding
+    RE->>RE: Qdrant Search
+    RE->>RE: Reranking
+    RE->>S: Retrieved Docs
+    
+    S->>SY: Synthesize Response
+    SY->>S: Draft Response
+    
+    S->>V: Validate Quality
+    V->>S: Validation Result
+    
+    alt Valid Response
+        S->>U: Final Response
+    else Invalid Response
+        S->>RE: Retry Retrieval
+    end
+```
+
+### Document Ingestion Flow
+
+```mermaid
+graph TD
+    A[Upload Document] --> B[Unstructured Parser]
+    B --> C[Text Extraction]
+    C --> D[Semantic Chunking]
+    D --> E[BGE-M3 Embedding]
+    E --> F[Qdrant Storage]
+    F --> G[Metadata Index]
+    G --> H[Ready for Search]
+```
+
 ### Document Processing Flow
 
 1. User uploads docs → Loaded/split in src/utils/.
 2. Indexed in Qdrant with hybrid embeddings (Jina v4 dense, FastEmbed sparse).
-3. Analysis: Multi-agent system processes with specialized agents → Structured via Pydantic.
+3. Analysis: Multi-agent system processes with specialized agents →
+   Structured via Pydantic.
 4. Chat: Multi-agent coordination with context preservation and validation.
 5. GPU: torch.cuda for embeddings/reranking if enabled.
 
@@ -270,7 +477,7 @@ sequenceDiagram
     C->>U: Final response
 ```
 
-## Performance Optimization
+## Multi-Agent Performance Optimization
 
 ### Token Efficiency
 
@@ -370,7 +577,8 @@ async def execute_agent_with_retry(agent: Agent, state: AgentState) -> Dict[str,
 
 - **Multi-Agent Framework**: LangGraph supervisor pattern with specialized agents.
 
-- **Optimization**: PEFT for efficiency, late chunking with NLTK, DSPy for query optimization.
+- **Optimization**: PEFT for efficiency, late chunking with NLTK, DSPy for query
+  optimization.
 
 - **Error Handling**: Tenacity for retry logic with exponential backoff.
 
@@ -381,13 +589,44 @@ async def execute_agent_with_retry(agent: Agent, state: AgentState) -> Dict[str,
 ### Multi-Agent Technologies
 
 - **LangGraph**: Native supervisor pattern for agent orchestration
-- **Tool Integration**: @tool decorator with InjectedState for agent communication  
+- **Tool Integration**: @tool decorator with InjectedState for agent communication
 - **State Management**: MessagesState for context preservation across agents
 - **Memory Systems**: InMemorySaver for conversation continuity
 - **Performance Monitoring**: Built-in timing and quality metrics
 - **Fallback Systems**: Graceful degradation to basic RAG on failures
 
 ## Integration Points
+
+### External Services
+
+**Local Services (100% offline capable):**
+
+- **Ollama**: `http://localhost:11434` - LLM inference server
+- **Qdrant**: `http://localhost:6333` - Vector database
+- **Optional vLLM**: Enhanced performance server for production deployments
+
+### API Integration Patterns
+
+```python
+# Document processing
+from src.utils.document import load_documents_unstructured
+from src.utils.embedding import create_index_async
+
+documents = await load_documents_unstructured(file_paths, settings)
+index = await create_index_async(documents, settings)
+
+# Multi-agent coordination  
+from src.agents.coordinator import get_agent_system
+
+agent_system = get_agent_system(index, settings)
+response = await agent_system.arun(query)
+
+# Direct retrieval (fallback mode)
+from src.retrieval.query_engine import AdaptiveRouterQueryEngine
+
+query_engine = AdaptiveRouterQueryEngine(index, settings)
+response = await query_engine.aquery(query)
+```
 
 ### vLLM Backend Integration
 
@@ -425,9 +664,59 @@ retrieval_expert.vector_store = vector_store
 retrieval_expert.reranker = BGERerank(model="BAAI/bge-reranker-v2-m3")
 ```
 
+## Hardware Requirements
+
+### Minimum Configuration
+
+- **GPU**: RTX 4060 16GB VRAM
+- **RAM**: 16GB system memory
+- **Storage**: 50GB available space
+- **CPU**: Modern x86_64 with AVX2 support
+
+### Recommended Configuration
+
+- **GPU**: RTX 4090 16GB VRAM (tested configuration)
+- **RAM**: 32GB system memory
+- **Storage**: 100GB NVMe SSD
+- **CPU**: Intel i7/i9 or AMD Ryzen 7/9
+
+### Resource Allocation
+
+- **VRAM Usage**: 12-14GB (Qwen3-4B + BGE-M3 + reranker + 128K context)
+- **System RAM**: 8-12GB for document processing and caching
+- **Storage**: 20GB for models, 30GB for document cache and indexes
+
+## Security Considerations
+
+### Data Protection
+
+- **Local-First**: All processing occurs on local hardware
+- **No External APIs**: Zero data transmission to cloud services
+- **Secure Storage**: SQLite with WAL mode for atomic operations
+- **Input Validation**: Pydantic models validate all configuration and inputs
+
+### Resource Management
+
+- **Memory Limits**: Configurable VRAM utilization with overflow protection
+- **File Size Limits**: 100MB default document size limit (configurable)
+- **Rate Limiting**: Agent decision timeouts prevent runaway processing
+- **Error Boundaries**: Comprehensive fallback mechanisms at all levels
+
+### Environment Variables
+
+```bash
+# Critical security settings
+DOCMIND_DEBUG=false                    # Disable debug mode in production
+DOCMIND_MAX_DOCUMENT_SIZE_MB=100      # Limit document sizes
+DOCMIND_AGENT_DECISION_TIMEOUT=200    # Prevent agent timeouts
+DOCMIND_ENABLE_GPU_ACCELERATION=true  # Enable hardware acceleration
+```
+
 ## Advanced Retrieval System Architecture (FEAT-002)
 
-The FEAT-002 Retrieval & Search System represents a complete architectural overhaul of DocMind AI's information retrieval capabilities, implementing a unified BGE-M3 approach with intelligent strategy selection and enhanced performance.
+The FEAT-002 Retrieval & Search System represents a complete architectural overhaul
+of DocMind AI's information retrieval capabilities, implementing a unified BGE-M3
+approach with intelligent strategy selection and enhanced performance.
 
 ### System Architecture Overview
 
@@ -464,7 +753,8 @@ graph TD
 
 #### 1. BGE-M3 Unified Embeddings
 
-**Revolutionary Improvement**: Replaces BGE-large + SPLADE++ with unified dense + sparse embeddings.
+**Revolutionary Improvement**: Replaces BGE-large + SPLADE++ with unified dense +
+sparse embeddings.
 
 ```python
 from src.retrieval.embeddings.bge_m3_manager import BGEM3EmbeddingManager
@@ -496,6 +786,7 @@ class BGEM3EmbeddingManager:
 ```
 
 **Performance Achievements:**
+
 - **16x Context Improvement**: 8K tokens vs 512 in legacy
 - **14% Memory Reduction**: 3.6GB vs 4.2GB
 - **<50ms Generation**: Per chunk embedding generation
@@ -503,7 +794,8 @@ class BGEM3EmbeddingManager:
 
 #### 2. RouterQueryEngine Adaptive Retrieval
 
-**Intelligent Strategy Selection**: Automatically selects optimal retrieval approach based on query analysis.
+**Intelligent Strategy Selection**: Automatically selects optimal retrieval approach
+based on query analysis.
 
 ```python
 from llama_index.core.query_engine import RouterQueryEngine
@@ -540,6 +832,7 @@ class AdaptiveRetrievalEngine:
 ```
 
 **Strategy Selection Logic:**
+
 - **Dense**: Simple semantic queries, focused topics
 - **Hybrid**: Complex queries needing semantic + keyword matching
 - **Multi-Query**: Multi-part questions requiring decomposition
@@ -547,7 +840,8 @@ class AdaptiveRetrievalEngine:
 
 #### 3. Qdrant Unified Vector Store
 
-**Enhanced Vector Storage**: Supports dense + sparse vectors with RRF fusion and resilience patterns.
+**Enhanced Vector Storage**: Supports dense + sparse vectors with RRF fusion and
+resilience patterns.
 
 ```python
 from qdrant_client import QdrantClient
@@ -596,6 +890,7 @@ class QdrantUnifiedVectorStore:
 ```
 
 **Resilience Features:**
+
 - **Tenacity Retry Logic**: Exponential backoff for failed operations
 - **Connection Pooling**: Efficient resource management
 - **Batch Operations**: Optimized bulk processing
@@ -643,6 +938,7 @@ class CrossEncoderRerank(BaseNodePostprocessor):
 ```
 
 **Performance Achievements:**
+
 - **<100ms Reranking**: For 20 documents
 - **FP16 Acceleration**: 50% speedup on RTX 4090
 - **Batch Processing**: Optimized throughput
@@ -813,7 +1109,8 @@ DocMind AI follows modern library-first principles for reliability and maintaina
 
 ### Multi-Agent Design Principles
 
-- **Agent Specialization**: Each agent has a focused responsibility and optimized performance
+- **Agent Specialization**: Each agent has a focused responsibility and optimized
+  performance
 - **Supervisor Coordination**: LangGraph supervisor manages agent interactions and state
 - **Performance Budgets**: Strict timing constraints (<300ms total overhead)
 - **Graceful Degradation**: Automatic fallback to basic RAG when agents fail
@@ -1013,7 +1310,7 @@ async def test_query_router_strategy_selection():
 @pytest.mark.asyncio
 async def test_supervisor_agent_handoff():
     """Test supervisor coordinates agent handoffs"""
-    supervisor = create_test_supervisor()
+    supervisor = test supervisor configuration
     state = {"query": "Complex multi-part question"}
     
     result = await supervisor.execute(state)
@@ -1029,7 +1326,7 @@ async def test_supervisor_agent_handoff():
 @pytest.mark.integration
 async def test_full_agent_pipeline():
     """Test complete agent pipeline with real models"""
-    supervisor = create_production_supervisor()
+    supervisor = production supervisor configuration
     
     state = {
         "query": "Analyze the performance metrics in the quarterly report",
@@ -1069,7 +1366,7 @@ async def test_full_agent_pipeline():
 
 ## Configuration Reference
 
-### Environment Variables
+### Configuration Environment Variables
 
 ```bash
 # LangGraph Configuration
@@ -1131,6 +1428,7 @@ For detailed implementation guides and architectural decisions, see:
 - [Model Configuration](model-configuration.md) - Qwen3-4B-Instruct-2507-FP8 setup and optimization
 - [GPU and Performance](gpu-and-performance.md) - Hardware optimization and performance tuning
 - [Development Guide](development-guide.md) - Development practices and framework usage
-- [Deployment Guide](deployment.md) - Production deployment and scaling
+- [Deployment Guide](deployment.md) - Production deployment and
+  scaling
 
 Additional architectural decision records can be found in [../adrs/](../adrs/), including [ADR-011](../adrs/ADR-011-agent-orchestration-framework.md) for detailed multi-agent design decisions.

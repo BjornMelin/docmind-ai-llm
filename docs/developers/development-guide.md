@@ -4,37 +4,30 @@
 
 This comprehensive guide covers development practices, coding standards, framework usage, and testing procedures for DocMind AI. Follow these guidelines to ensure consistent, high-quality contributions to the project.
 
+> **Prerequisites**: Complete [Developer Setup](developer-setup.md) before following this guide.
+
 ## Getting Started
 
-### Development Environment Setup
+### Prerequisites
 
-1. **Fork and Clone:**
+Ensure you have completed the [Developer Setup](developer-setup.md) guide before proceeding. This includes:
 
-   ```bash
-   git clone https://github.com/<your-username>/docmind-ai.git
-   cd docmind-ai
-   ```
+- Python 3.10+ environment setup
+- Required dependencies installed via `uv sync`
+- Services running (Qdrant, etc.)
+- Configuration validated
 
-2. **Set Up Environment:**
+### Development Environment
 
-   ```bash
-   uv venv
-   source .venv/bin/activate
-   uv sync
-   ```
+With setup complete, you can start development:
 
-   For tests or GPU support:
+```bash
+# Verify setup
+python -c "from src.config import settings; print(f'✅ {settings.app_name} ready')"
 
-   ```bash
-   uv sync --extra test
-   uv sync --extra gpu
-   ```
-
-3. **Run Locally:**
-
-   ```bash
-   streamlit run src/app.py
-   ```
+# Start development server
+streamlit run src/app.py
+```
 
 ### Project Structure
 
@@ -431,7 +424,7 @@ def test_large_document_handling():
 def test_gpu_fallback():
     """Test CPU fallback when GPU unavailable."""
     with patch("torch.cuda.is_available", return_value=False):
-        embeddings = create_embeddings()
+        embeddings = unified embedding configuration
         assert embeddings.device == "cpu"
 
 def test_model_unavailable():
@@ -524,7 +517,128 @@ def test_concurrent_requests():
     assert all(r is not None for r in results)
 ```
 
-## Contribution Workflow
+## Development Workflow
+
+### Before You Start Coding
+
+1. **Read the relevant ADR** - Check `docs/adrs/` for architectural decisions
+2. **Understand the configuration** - Always use `from src.config import settings`
+3. **Check existing patterns** - Look for similar implementations first
+4. **Plan your changes** - Keep it simple (KISS principle)
+
+### Development Cycle
+
+```bash
+# 1. Create feature branch
+git checkout -b feature/your-feature-name
+
+# 2. Make changes following patterns
+# - Use settings for configuration
+# - Follow import patterns
+# - Keep functions simple (<20 lines ideal)
+
+# 3. Test your changes
+uv run python -m pytest tests/unit/test_your_feature.py -v
+
+# 4. Quality checks
+ruff format src tests
+ruff check src tests --fix
+ruff check src tests  # Must show "All checks passed!"
+
+# 5. Integration testing
+uv run python -m pytest tests/integration/ -k your_feature
+
+# 6. Commit and push
+git add .
+git commit -m "feat: add your feature description"
+git push origin feature/your-feature-name
+```
+
+### Code Style Requirements
+
+**Mandatory standards:**
+
+```python
+# 1. Always use type hints
+def process_documents(file_paths: list[str]) -> list[Document]:
+    """Process documents with proper typing."""
+    return documents
+
+# 2. Use Pydantic models for data
+from pydantic import BaseModel, Field
+
+class QueryRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    max_results: int = Field(default=10, ge=1, le=50)
+
+# 3. Configuration access pattern  
+from src.config import settings
+
+def get_model_name() -> str:
+    return settings.vllm.model  # ✅ Correct
+
+# 4. Async when appropriate
+async def process_query(query: str) -> QueryResponse:
+    """Process query asynchronously."""
+    # Use async for I/O operations
+    
+# 5. Error handling
+try:
+    result = process_documents(files)
+except DocumentProcessingError as e:
+    logger.error("Document processing failed: %s", e)
+    raise
+```
+
+### Common Development Tasks
+
+#### Adding a New Feature
+
+Example: Adding a new document format support
+
+```python
+# 1. Add configuration if needed
+# In src/config/settings.py
+class ProcessingConfig(BaseModel):
+    # Existing fields...
+    support_new_format: bool = Field(default=False)
+
+# 2. Create the feature
+# In src/processing/new_format_processor.py
+from src.config import settings
+from src.models.processing import ProcessingResult
+
+class NewFormatProcessor:
+    def __init__(self):
+        self.enabled = settings.processing.support_new_format
+    
+    def process(self, file_path: str) -> ProcessingResult:
+        if not self.enabled:
+            raise ValueError("New format support disabled")
+        # Implementation here...
+
+# 3. Integrate with existing pipeline
+# In src/processing/document_processor.py
+from src.processing.new_format_processor import NewFormatProcessor
+
+class DocumentProcessor:
+    def __init__(self):
+        self.new_format_processor = NewFormatProcessor()
+    
+    def process(self, file_path: str) -> ProcessingResult:
+        if file_path.endswith('.newformat'):
+            return self.new_format_processor.process(file_path)
+        # Existing logic...
+
+# 4. Add tests
+# In tests/unit/test_new_format.py
+def test_new_format_processing():
+    from src.processing.new_format_processor import NewFormatProcessor
+    processor = NewFormatProcessor()
+    # Test implementation...
+```
+
+## Contribution Guidelines
 
 ### Branch Management
 

@@ -7,18 +7,21 @@ DocMind AI's advanced retrieval and search system uses cutting-edge AI technolog
 ## Key Features
 
 ### 🚀 **Enhanced Performance**
+
 - **16x larger context understanding** - Processes up to 8,000 tokens vs 512 in previous versions
 - **14% faster processing** with reduced memory usage
 - **Intelligent strategy selection** - Automatically chooses the best approach for your query
 - **Real-time results** - Most queries complete in under 2 seconds
 
 ### 🎯 **Advanced Search Capabilities**
+
 - **Semantic Search** - Understands meaning and context, not just keywords
 - **Hybrid Search** - Combines semantic understanding with precise keyword matching
 - **Multi-Query Processing** - Breaks down complex questions into manageable parts
 - **Smart Reranking** - Prioritizes the most relevant results using advanced AI
 
 ### 🌍 **Multilingual Support**
+
 - **100+ languages** supported natively
 - **Cross-language search** - Find content regardless of language barriers
 - **Maintained accuracy** across different languages
@@ -56,9 +59,11 @@ graph TD
 ### Search Strategy Types
 
 #### 1. **Dense Search** 🎯
+
 **Best for**: Simple, focused questions about specific topics
 
 **Example queries**:
+
 - "What is the company's revenue?"
 - "Summarize the marketing strategy"
 - "Who are the key stakeholders?"
@@ -66,9 +71,11 @@ graph TD
 **How it works**: Uses semantic understanding to find content with similar meaning, even if different words are used.
 
 #### 2. **Hybrid Search** 🔍
+
 **Best for**: Complex queries requiring both precise terms and semantic understanding
 
 **Example queries**:
+
 - "Find technical specifications for Model X including performance metrics"
 - "What are the compliance requirements mentioned in section 3?"
 - "Show me budget allocations for Q2 marketing campaigns"
@@ -76,18 +83,22 @@ graph TD
 **How it works**: Combines semantic search with keyword matching for comprehensive results.
 
 #### 3. **Multi-Query Search** 📋
+
 **Best for**: Complex, multi-part questions that need to be broken down
 
 **Example queries**:
+
 - "What were the sales figures for 2023, how do they compare to 2022, and what factors contributed to the change?"
 - "Explain the onboarding process, required documents, and first-week schedule for new employees"
 
 **How it works**: Intelligently breaks down complex questions into smaller parts and combines the results.
 
 #### 4. **Graph Search** 🕸️
+
 **Best for**: Questions about relationships, connections, and complex reasoning
 
 **Example queries**:
+
 - "How do the various departments collaborate on product development?"
 - "What is the connection between customer feedback and product improvements?"
 - "Show me the decision-making hierarchy for budget approvals"
@@ -113,18 +124,22 @@ graph TD
 #### Getting Better Results
 
 ✅ **Do**: Use natural, complete questions
+
 - "What are the main risks identified in the financial report?"
 - "How has our customer satisfaction changed over the past year?"
 
 ❌ **Don't**: Use single keywords or fragments
+
 - "risks"
 - "customer satisfaction"
 
 ✅ **Do**: Provide context for ambiguous terms
+
 - "What is the ROI for our digital marketing campaigns?"
 - "How does the new product compare to competitor solutions?"
 
 ❌ **Don't**: Use vague or overly broad queries
+
 - "ROI"
 - "comparison"
 
@@ -177,6 +192,7 @@ Each search result includes:
 #### Memory and Context
 
 The system can process and understand:
+
 - **Up to 8,000 tokens** per query context
 - **Multiple document sources** simultaneously
 - **Cross-document relationships** and references
@@ -227,36 +243,44 @@ The retrieval system is integrated with DocMind AI's multi-agent coordination:
 ### Common Issues and Solutions
 
 #### 1. **No Results Found**
+
 **Symptoms**: "No relevant documents found" or empty results
 
 **Solutions**:
+
 - Try rephrasing your question with different words
 - Use broader terms initially, then refine
 - Check if documents are properly uploaded and processed
 - Ensure your question relates to content in your documents
 
 #### 2. **Irrelevant Results**
+
 **Symptoms**: Results don't match your question intent
 
 **Solutions**:
+
 - Be more specific in your query
 - Add context or qualifiers to your question
 - Try breaking complex questions into simpler parts
 - Use exact terms if you know they appear in documents
 
 #### 3. **Slow Performance**
+
 **Symptoms**: Queries taking longer than expected (>5 seconds)
 
 **Solutions**:
+
 - Check if you have very large documents that might need processing time
 - Simplify complex multi-part questions
 - Ensure your system meets hardware requirements
 - Check for high system resource usage
 
 #### 4. **Inconsistent Quality**
+
 **Symptoms**: Some queries work well, others don't
 
 **Solutions**:
+
 - Review the query patterns that work best (see "Advanced Search Tips")
 - Ensure consistent document quality and formatting
 - Try different phrasings for problematic queries
@@ -309,21 +333,25 @@ The retrieval system is integrated with DocMind AI's multi-agent coordination:
 ### Recent Improvements (FEAT-002 Implementation)
 
 ✅ **Performance Enhancements**
+
 - 16x larger context window (8K vs 512 tokens)
 - 14% memory usage reduction
 - Faster query processing and response times
 
 ✅ **Intelligence Improvements**
+
 - Automatic strategy selection based on query analysis
 - Enhanced multilingual support (100+ languages)
 - Better handling of complex, multi-part questions
 
 ✅ **Quality Enhancements**
+
 - Advanced reranking for more relevant results
 - Improved cross-document relationship understanding
 - Better handling of technical and domain-specific content
 
 ✅ **User Experience**
+
 - More natural language query processing
 - Clearer result presentation with confidence scores
 - Better error handling and user feedback

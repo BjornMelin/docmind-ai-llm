@@ -121,7 +121,7 @@ The unified configuration system provides minimal app-specific settings via Pyda
 
 ### Implementation Details
 
-**In `src/config/app_settings.py`:**
+**In `src/config/settings.py`:**
 
 ```python
 from pathlib import Path
@@ -174,7 +174,7 @@ class DocMindSettings(BaseSettings):
     )
 
 # Global settings instance
-app_settings = DocMindSettings()
+settings = DocMindSettings()
 ```
 
 **In `src/config/llamaindex_setup.py`:**
@@ -188,7 +188,7 @@ from llama_index.core import Settings
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.ollama import Ollama
-from .app_settings import app_settings
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -202,11 +202,11 @@ def setup_llamaindex() -> None:
     try:
         Settings.llm = Ollama(
             model=os.getenv("DOCMIND_MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507-FP8"),
-            base_url=app_settings.ollama_base_url,
+            base_url=settings.ollama_base_url,
             temperature=float(os.getenv("DOCMIND_TEMPERATURE", "0.1")),
             top_p=float(os.getenv("DOCMIND_TOP_P", "0.8")),
             top_k=int(os.getenv("DOCMIND_TOP_K", "40")),
-            request_timeout=app_settings.request_timeout_seconds,
+            request_timeout=settings.request_timeout_seconds,
         )
         logger.info("LLM configured: %s", Settings.llm.model)
     except Exception as e:
@@ -215,8 +215,8 @@ def setup_llamaindex() -> None:
 
     # Configure embeddings with BGE-M3 optimizations (ADR-002)
     try:
-        embedding_model = app_settings.bge_m3_model_name  # BAAI/bge-m3
-        use_gpu = app_settings.enable_gpu_acceleration
+        embedding_model = settings.bge_m3_model_name  # BAAI/bge-m3
+        use_gpu = settings.enable_gpu_acceleration
         
         # BGE-M3 specific configuration from ADR-002
         torch_dtype = (
@@ -227,8 +227,8 @@ def setup_llamaindex() -> None:
             model_name=embedding_model,
             device="cuda" if use_gpu else "cpu",
             cache_folder=str(Path("./embeddings_cache").resolve()),
-            max_length=app_settings.bge_m3_max_length,
-            embed_batch_size=app_settings.bge_m3_batch_size_gpu if use_gpu else app_settings.bge_m3_batch_size_cpu,
+            max_length=settings.bge_m3_max_length,
+            embed_batch_size=settings.bge_m3_batch_size_gpu if use_gpu else settings.bge_m3_batch_size_cpu,
             trust_remote_code=True,  # Required for BGE-M3 (ADR-002)
             torch_dtype=torch_dtype,  # FP16 optimization for GPU (ADR-002)
         )
@@ -342,7 +342,7 @@ DOCMIND_ENABLE_UI_DARK_MODE=true
 
 ```python
 # src/app.py startup
-from src.config.app_settings import app_settings
+from src.config import settings
 from src.config.llamaindex_setup import setup_llamaindex
 import logging
 
@@ -351,17 +351,17 @@ def initialize_app():
     # Setup LlamaIndex Settings with BGE-M3 and Qwen3-FP8
     setup_llamaindex()
     
-    # App-specific configuration available via app_settings
-    if app_settings.debug:
+    # App-specific configuration available via settings
+    if settings.debug:
         logging.getLogger().setLevel(logging.DEBUG)
     
     # Log critical configuration for validation
-    logging.info("Multi-agent enabled: %s", app_settings.enable_multi_agent)
-    logging.info("Agent timeout: %dms", app_settings.agent_decision_timeout)  # 200ms
-    logging.info("BGE-M3 model: %s", app_settings.bge_m3_model_name)  # BAAI/bge-m3
-    logging.info("vLLM FP8 optimization: %s", app_settings.vllm_kv_cache_dtype)  # fp8_e5m2
+    logging.info("Multi-agent enabled: %s", settings.enable_multi_agent)
+    logging.info("Agent timeout: %dms", settings.agent_decision_timeout)  # 200ms
+    logging.info("BGE-M3 model: %s", settings.bge_m3_model_name)  # BAAI/bge-m3
+    logging.info("vLLM FP8 optimization: %s", settings.vllm_kv_cache_dtype)  # fp8_e5m2
     
-    return app_settings
+    return settings
 ```
 
 ## Testing
@@ -371,7 +371,7 @@ def initialize_app():
 ```python
 import pytest
 import os
-from src.config.app_settings import DocMindSettings, app_settings
+from src.config import settings
 from src.config.llamaindex_setup import setup_llamaindex
 from llama_index.core import Settings
 
@@ -387,17 +387,17 @@ def test_docmind_settings_loading():
 def test_adr_compliance():
     """Verify ADR compliance in configuration."""
     # ADR-002: BGE-M3 unified embeddings
-    assert app_settings.bge_m3_model_name == "BAAI/bge-m3"
-    assert app_settings.bge_m3_embedding_dim == 1024
+    assert settings.bge_m3_model_name == "BAAI/bge-m3"
+    assert settings.bge_m3_embedding_dim == 1024
     
     # ADR-001: Multi-agent system with <200ms timeout
-    assert app_settings.agent_decision_timeout == 200
-    assert app_settings.enable_multi_agent is True
+    assert settings.agent_decision_timeout == 200
+    assert settings.enable_multi_agent is True
     
     # ADR-010: vLLM FP8 optimization
-    assert app_settings.vllm_kv_cache_dtype == "fp8_e5m2"
-    assert app_settings.vllm_attention_backend == "FLASHINFER"
-    assert app_settings.vllm_gpu_memory_utilization == 0.95
+    assert settings.vllm_kv_cache_dtype == "fp8_e5m2"
+    assert settings.vllm_attention_backend == "FLASHINFER"
+    assert settings.vllm_gpu_memory_utilization == 0.95
 
 def test_environment_variable_override():
     """Verify environment variables override default settings."""
@@ -429,12 +429,12 @@ def test_llamaindex_settings_integration():
 def test_configuration_simplicity():
     """Verify configuration complexity is minimized."""
     # Simple validation that we don't have over-engineered patterns
-    assert hasattr(app_settings, 'enable_multi_agent')
-    assert not hasattr(app_settings, 'agents')  # No nested config objects
-    assert not hasattr(app_settings, 'llm')     # LLM config handled by LlamaIndex
+    assert hasattr(settings, 'enable_multi_agent')
+    assert not hasattr(settings, 'agents')  # No nested config objects
+    assert not hasattr(settings, 'llm')     # LLM config handled by LlamaIndex
     
     # Verify global instance accessibility
-    assert app_settings.app_name == "DocMind AI"
+    assert settings.app_name == "DocMind AI"
 ```
 
 ## Consequences
@@ -459,7 +459,7 @@ def test_configuration_simplicity():
 
 ### Implementation Achievements
 
-- **Configuration Files**: `src/config/app_settings.py` (DocMindSettings + app_settings), `src/config/llamaindex_setup.py` (BGE-M3 + Qwen3-FP8), `src/config/vllm_config.py` (consolidated)
+- **Configuration Files**: `src/config/settings.py` (DocMindSettings + settings), `src/config/llamaindex_setup.py` (BGE-M3 + Qwen3-FP8)
 - **Code Quality**: Zero production code linting errors, professional logging standards implemented
 - **Test Coverage**: All configuration tests updated and passing, comprehensive validation maintained
 - **ADR Compliance**: All architectural decisions properly implemented and validated

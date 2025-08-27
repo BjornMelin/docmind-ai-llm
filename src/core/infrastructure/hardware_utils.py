@@ -160,7 +160,7 @@ def get_recommended_batch_size(model_type: str = "embedding") -> int:
         return LOW_VRAM_BATCH_SIZES.get(model_type, LOW_VRAM_DEFAULT_BATCH)
 
     except (RuntimeError, OSError, ImportError, AttributeError, ValueError) as e:
-        if isinstance(e, (RuntimeError, OSError)):
+        if isinstance(e, RuntimeError | OSError):
             logger.warning("Failed to get GPU properties for batch size: %s", e)
         else:
             logger.error("Unexpected error determining batch size: %s", e)

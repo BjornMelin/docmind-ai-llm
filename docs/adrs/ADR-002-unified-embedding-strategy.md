@@ -130,7 +130,7 @@ We will adopt **BGE-M3 + CLIP strategy** for 100% local operation:
 ```python
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from FlagEmbedding import BGEM3FlagModel
-from src.config.app_settings import app_settings
+from src.config import settings
 
 class BGEM3Embedding(BaseEmbedding):
     """BGE-M3 unified dense/sparse embedding model for DocMind AI.
@@ -139,8 +139,8 @@ class BGEM3Embedding(BaseEmbedding):
     in a single model, replacing BGE-Large + SPLADE++ combination per ADR-002.
     """
     
-    def __init__(self, *, model_name: str = app_settings.bge_m3_model_name, 
-                 max_length: int = app_settings.bge_m3_max_length,
+    def __init__(self, *, model_name: str = settings.bge_m3_model_name, 
+                 max_length: int = settings.bge_m3_max_length,
                  use_fp16: bool = True, device: str = "cuda", **kwargs):
         super().__init__(
             model_name=model_name, max_length=max_length,
@@ -179,23 +179,17 @@ class BGEM3Embedding(BaseEmbedding):
     @property
     def embed_dim(self) -> int:
         """BGE-M3 dense embedding dimension."""
-        return app_settings.bge_m3_embedding_dim  # 1024
+        return settings.bge_m3_embedding_dim  # 1024
 
-# Factory function for easy instantiation
-def create_bgem3_embedding(
-    model_name: str = app_settings.bge_m3_model_name,
-    use_fp16: bool = True, device: str = "cuda",
-    max_length: int = app_settings.bge_m3_max_length,
-) -> BGEM3Embedding:
-    """Create BGE-M3 embedding instance optimized for RTX 4090."""
-    batch_size = (
-        app_settings.bge_m3_batch_size_gpu if device == "cuda"
-        else app_settings.bge_m3_batch_size_cpu
-    )
-    
+# Direct instantiation using unified configuration
+def get_bgem3_embedding() -> BGEM3Embedding:
+    """Get BGE-M3 embedding instance using unified configuration."""
     return BGEM3Embedding(
-        model_name=model_name, use_fp16=use_fp16,
-        device=device, max_length=max_length, batch_size=batch_size,
+        model_name=settings.bge_m3_model_name,
+        use_fp16=True,
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        max_length=settings.bge_m3_max_length,
+        batch_size=settings.bge_m3_batch_size_gpu if torch.cuda.is_available() else settings.bge_m3_batch_size_cpu,
     )
 
 # Settings integration
@@ -203,7 +197,7 @@ def configure_bgem3_settings() -> None:
     """Configure LlamaIndex Settings for BGE-M3 unified embeddings."""
     from llama_index.core import Settings
     
-    bgem3_model = create_bgem3_embedding()
+    bgem3_model = get_bgem3_embedding()
     Settings.embed_model = bgem3_model
 ```
 
@@ -373,7 +367,7 @@ class OptimizedBGE_M3:
 
 ### Implementation Components
 
-- **BGEM3Embedding**: `src/retrieval/embeddings/bge_m3_manager.py` - Native LlamaIndex BaseEmbedding integration
+- **BGEM3Embedding**: `src/processing/embeddings/bgem3_embedder.py` - Native LlamaIndex BaseEmbedding integration
 - **Direct FlagEmbedding**: Uses BGEM3FlagModel for unified dense/sparse embeddings
 - **Library-First Methods**: `get_unified_embeddings()`, `encode_queries()`, `encode_corpus()`
 - **Performance Achieved**:

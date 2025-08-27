@@ -327,7 +327,7 @@ The ADRs mandate a COMPLETE ARCHITECTURAL OVERHAUL, not an incremental migration
 
 **NEW FILES TO CREATE:**
 
-- `src/retrieval/embeddings/bge_m3_manager.py` - **NEW FILE REQUIRED**
+- `src/retrieval/embeddings.py` - **NEW FILE REQUIRED**
   - IMPLEMENT: `UnifiedEmbeddingManager` using "BAAI/bge-m3" for unified dense/sparse embeddings
   - IMPLEMENT: `FlagEmbedding.BGEM3FlagModel` integration for direct BGE-M3 access
   - IMPLEMENT: 8K context support (vs 512 in old BGE-large)
@@ -412,7 +412,7 @@ class SimpleReranker:
 
 **STEP 2: BGE-M3 Foundation Implementation (BLOCKING - New Architecture Core):**
 
-1. CREATE `src/retrieval/embeddings/bge_m3_manager.py` with unified BGE-M3 implementation
+1. CREATE `src/retrieval/embeddings.py` with unified BGE-M3 implementation
 2. IMPLEMENT `FlagEmbedding.BGEM3FlagModel` wrapper for unified dense/sparse extraction
 3. CONFIGURE model downloads: BGE-M3 (2.27GB) with 8K context support
 4. IMPLEMENT unified embedding generation calls for both indexing and retrieval
@@ -458,7 +458,7 @@ class SimpleReranker:
 ### New Files
 
 - `src/retrieval/adaptive_pipeline.py` - RouterQueryEngine-based adaptive retrieval
-- `src/retrieval/embeddings/bge_m3_manager.py` - BGE-M3 unified embeddings
+- `src/retrieval/embeddings.py` - BGE-M3 unified embeddings
 - `src/retrieval/embeddings/clip_encoder.py` - CLIP image embeddings
 - `src/retrieval/dspy_optimization.py` - DSPy query rewriting and optimization
 - `src/retrieval/simple_reranker.py` - sentence-transformers CrossEncoder reranking
@@ -472,7 +472,7 @@ class SimpleReranker:
 
 - `src/vector_store/qdrant_manager.py` - BGE-M3 collection setup with resilience
 - `src/config/embedding_config.py` - BGE-M3 unified configuration
-- `src/config/app_settings.py` - Feature flags for DSPy and GraphRAG
+- `src/config/settings.py` - Feature flags for DSPy and GraphRAG
 - `src/agents/retrieval.py` - RouterQueryEngine integration for agents
 - `src/pipeline/ingestion.py` - BGE-M3 embedding generation
 
@@ -714,10 +714,10 @@ And retrieval accuracy maintains >80% relevance
 
 **Core Modules:**
 
-- `src/retrieval/embeddings/bge_m3_manager.py` - BGE-M3 unified dense/sparse embeddings
-- `src/retrieval/query_engine/router_engine.py` - RouterQueryEngine with adaptive routing
-- `src/retrieval/postprocessor/cross_encoder_rerank.py` - CrossEncoder reranking
-- `src/retrieval/vector_store/qdrant_unified.py` - Qdrant with resilience patterns
+- `src/retrieval/embeddings.py` - BGE-M3 unified dense/sparse embeddings
+- `src/retrieval/query_engine.py` - RouterQueryEngine with adaptive routing
+- `src/retrieval/reranking.py` - CrossEncoder reranking
+- `src/retrieval/vector_store.py` - Qdrant with resilience patterns
 - `src/retrieval/integration.py` - Integration layer for backward compatibility
 
 **Test Suite:**

@@ -378,7 +378,7 @@
     },
     "implementation_files": {
       "configuration": [
-        "src/config/app_settings.py",
+        "src/config/settings.py",
         "src/config/llamaindex_setup.py",
         "src/config/vllm_config.py"
       ],

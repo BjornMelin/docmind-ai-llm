@@ -83,7 +83,7 @@ We will implement **LangGraph Supervisor-Based Orchestration** using the `langgr
 
 ### Core Components (5 Agents Total)
 
-1. **Supervisor Agent**: Central coordinator using `create_supervisor()` function
+1. **Supervisor Agent**: Central coordinator using `AgentCoordinator with unified configuration` function
 2. **Query Routing Agent**: Analyzes queries and determines retrieval strategy
 3. **Planning Agent**: Decomposes complex queries into manageable sub-tasks
 4. **Retrieval Agent**: Executes optimized retrieval with DSPy query rewriting
@@ -422,7 +422,7 @@ def process_query(query: str) -> str:
 
 # Custom agent classes are no longer needed!
 # The supervisor library handles all agent coordination
-# Agents are created using create_react_agent() with tools
+# Agents are created using ReactAgent with unified configuration with tools
 # All complex state management is handled automatically
 
 # All agent logic is now handled by tools and the supervisor library

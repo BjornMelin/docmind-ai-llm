@@ -209,7 +209,7 @@ class Qwen3FP8Config:
 
 # Usage example
 config = Qwen3FP8Config()
-llm = config.create_llm()
+llm = unified settings configuration
 ```
 
 ### Advanced Configuration with Performance Monitoring
@@ -258,7 +258,7 @@ class Qwen3OptimizedManager:
             
             # Create LLM instance
             start_time = time.time()
-            self.llm = self.config.create_llm()
+            self.llm = self.unified settings configuration
             initialization_time = time.time() - start_time
             
             print(f"✅ Qwen3 model initialized in {initialization_time:.2f}s")

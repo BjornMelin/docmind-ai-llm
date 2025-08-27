@@ -248,8 +248,8 @@ class DocMindVLLMConfig:
         )
 
 # Usage
-config = DocMindVLLMConfig()
-llm = config.create_llm()
+config = unified configuration settings
+llm = unified settings configuration
 ```
 
 ### Advanced Configuration with Performance Monitoring
@@ -287,7 +287,7 @@ class OptimizedVLLMManager:
             os.environ["VLLM_ATTENTION_BACKEND"] = "FLASHINFER"
             os.environ["VLLM_USE_CUDNN_PREFILL"] = "1"
             
-            self.llm = self.config.create_llm()
+            self.llm = self.unified settings configuration
             print("✅ vLLM initialized with FlashInfer backend")
         except Exception as e:
             print(f"❌ vLLM initialization failed: {e}")

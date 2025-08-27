@@ -79,7 +79,7 @@ We will implement a **supervisor-based agentic RAG architecture** using `langgra
 
 **Implementation Strategy:**
 
-- Use `create_supervisor()` from langgraph-supervisor library
+- Use `AgentCoordinator with unified configuration` from langgraph-supervisor library
 - Local LLM for all agent decisions (Qwen3-4B-Instruct-2507-FP8 with 128K context via FP8 KV cache)
 - Supervisor handles state management and agent coordination automatically
 - Built-in error handling and fallback mechanisms

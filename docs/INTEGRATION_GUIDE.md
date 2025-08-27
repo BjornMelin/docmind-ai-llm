@@ -21,11 +21,12 @@ python scripts/validate_requirements.py
 
 ```python
 import asyncio
+from src.config import settings
 from src.agents.coordinator import MultiAgentCoordinator
 
 async def main():
-    # Initialize the multi-agent system
-    coordinator = MultiAgentCoordinator()
+    # Initialize the multi-agent system with unified configuration
+    coordinator = MultiAgentCoordinator(settings)
     
     # Process a query
     response = coordinator.process_query(
@@ -78,23 +79,16 @@ asyncio.run(main())
 Key configuration options in `src/config/settings.py`:
 
 ```python
-# Model Configuration
-llm_backend = "vllm"  # Use vLLM by default
-model_name = "Qwen/Qwen3-4B-Instruct-2507"
-quantization = "fp8"
-kv_cache_dtype = "fp8"
-context_window_size = 131072  # 128K tokens
+# Import unified settings
+from src.config import settings
 
-# Multi-Agent Settings
-enable_multi_agent = True
-agent_decision_timeout = 300  # milliseconds
-enable_fallback_rag = True
-max_agent_retries = 2
-
-# Performance Settings
-max_vram_gb = 14.0  # FP8 optimized
-vllm_gpu_memory_utilization = 0.85
-vllm_attention_backend = "FLASHINFER"
+# Access configuration values
+print(f"LLM Backend: {settings.llm_backend}")
+print(f"Model: {settings.model_name}")
+print(f"Quantization: {settings.quantization}")
+print(f"Context Window: {settings.context_window_size}")
+print(f"Multi-Agent Enabled: {settings.enable_multi_agent}")
+print(f"GPU Memory Util: {settings.vllm_gpu_memory_utilization}")
 ```
 
 ### Environment Variables
@@ -124,16 +118,19 @@ DOCMIND_MAX_AGENT_RETRIES=2
 ### Custom Agent Configuration
 
 ```python
+from src.config import settings
 from src.agents.coordinator import MultiAgentCoordinator
 from llama_index.core.memory import ChatMemoryBuffer
+import os
 
-# Create coordinator with custom configuration
-coordinator = MultiAgentCoordinator(
-    model_path="Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length=131072,  # 128K context
-    enable_fallback=True,
-    max_agent_timeout=5.0  # 5 second timeout
-)
+# Override settings via environment variables
+os.environ["DOCMIND_MODEL_NAME"] = "Qwen/Qwen3-4B-Instruct-2507-FP8"
+os.environ["DOCMIND_CONTEXT_WINDOW_SIZE"] = "131072"
+os.environ["DOCMIND_ENABLE_FALLBACK_RAG"] = "true"
+os.environ["DOCMIND_AGENT_DECISION_TIMEOUT"] = "5000"  # 5 seconds in ms
+
+# Create coordinator with unified configuration
+coordinator = MultiAgentCoordinator(settings)
 
 # Create context for conversation continuity
 context = ChatMemoryBuffer.from_defaults()
@@ -141,57 +138,45 @@ context = ChatMemoryBuffer.from_defaults()
 # Process query with context
 response = coordinator.process_query(
     query="Compare different ML algorithms",
-    context=context,
-    settings_override={"domain": "healthcare", "complexity": "high"}
+    context=context
 )
 ```
 
 ### Direct vLLM Backend Usage
 
 ```python
-from src.config.vllm_config import create_vllm_manager, VLLMConfig
+from src.config import settings
+from src.retrieval.query_engine import get_query_engine
 
-# Initialize vLLM manager
-vllm_manager = create_vllm_manager(
-    model_path="Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length=131072
+# Initialize query engine with unified configuration
+query_engine = get_query_engine(settings)
+
+# Generate response using the configured backend
+response = query_engine.query(
+    "Explain the benefits of FP8 quantization"
 )
 
-# Initialize the engine
-if vllm_manager.initialize_engine():
-    # Create LlamaIndex instance for generation
-    llm_instance = vllm_manager.create_vllm_instance()
-    
-    # Generate response
-    response = llm_instance.complete(
-        "Explain the benefits of FP8 quantization"
-    )
-    
-    print(response.text)
+print(response.response)
 ```
 
 ### Streaming Responses
 
 ```python
 import asyncio
-from src.config.vllm_config import create_vllm_manager
+from src.config import settings
+from src.retrieval.query_engine import get_streaming_query_engine
 
 async def stream_example():
-    # Create vLLM manager
-    vllm_manager = create_vllm_manager()
+    # Create streaming query engine with unified configuration
+    query_engine = get_streaming_query_engine(settings)
     
-    # Initialize engine
-    if vllm_manager.initialize_engine():
-        # Create LlamaIndex instance
-        llm_instance = vllm_manager.create_vllm_instance()
-        
-        # Stream response
-        response = llm_instance.stream_complete(
-            "Explain machine learning in detail:"
-        )
-        
-        for chunk in response:
-            print(chunk.delta, end="", flush=True)
+    # Stream response
+    response_stream = query_engine.query_stream(
+        "Explain machine learning in detail:"
+    )
+    
+    for chunk in response_stream:
+        print(chunk.response_delta, end="", flush=True)
 
 asyncio.run(stream_example())
 ```
@@ -253,7 +238,7 @@ except Exception as e:
 
 ```python
 async def process_batch(queries: list[str]):
-    coordinator = MultiAgentCoordinator()
+    coordinator = MultiAgentCoordinator(settings)
     results = []
     
     for query in queries:
@@ -275,30 +260,27 @@ results = await process_batch(queries)
 ### Document Processing Pipeline
 
 ```python
-from src.utils import (
-    load_documents_from_directory,
-    create_vector_store,
-    setup_hybrid_collection
-)
+from src.config import settings
+from src.utils.document import load_documents_unstructured
+from src.utils.embedding import create_index_async
+from src.agents.coordinator import MultiAgentCoordinator
+from pathlib import Path
 
 async def setup_document_pipeline(doc_directory: str):
-    # Load documents
-    documents = await load_documents_from_directory(doc_directory)
+    # Load documents using unified configuration
+    doc_paths = list(Path(doc_directory).rglob("*.*"))
+    documents = await load_documents_unstructured(doc_paths, settings)
     
-    # Setup hybrid collection for vector storage
-    await setup_hybrid_collection("documents")
+    # Create vector index
+    index = await create_index_async(documents, settings)
     
-    # Create vector store with documents
-    vector_store = create_vector_store("documents")
-    
-    return vector_store
+    return index
 
 # Use in multi-agent system
-vector_store = await setup_document_pipeline("./data/documents")
+index = await setup_document_pipeline("./data/documents")
 
-# Initialize coordinator with document processing capability
-coordinator = MultiAgentCoordinator()
-# Note: Document vector store integration is handled through the retrieval agent tools
+# Initialize coordinator with unified configuration
+coordinator = MultiAgentCoordinator(settings)
 ```
 
 ## Troubleshooting
@@ -319,7 +301,7 @@ coordinator = MultiAgentCoordinator()
 
    ```python
    # Reduce GPU memory utilization
-   from src.config.settings import settings
+   from src.config import settings
    settings.vllm_gpu_memory_utilization = 0.7  # Reduce from 0.85
    ```
 
@@ -395,27 +377,23 @@ async def tracked_query(query: str):
 ```python
 async def health_check():
     try:
-        # Check vLLM backend
-        vllm_manager = create_vllm_manager()
-        if vllm_manager.initialize_engine():
-            performance_metrics = vllm_manager.get_performance_metrics()
-        else:
-            raise RuntimeError("vLLM engine initialization failed")
+        # Check system configuration
+        from src.config import settings
         
         # Check agent system
-        coordinator = MultiAgentCoordinator()
+        coordinator = MultiAgentCoordinator(settings)
         
         # Test query
         response = coordinator.process_query("Test query")
         
         return {
             "status": "healthy",
-            "model": performance_metrics["config"]["model"],
-            "quantization": "fp8",
+            "model": settings.model_name,
+            "quantization": settings.quantization,
             "agents": "operational",
             "processing_time_s": response.processing_time,
             "validation_score": response.validation_score,
-            "adr_compliance": coordinator.validate_adr_compliance()
+            "configuration": "unified"
         }
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}

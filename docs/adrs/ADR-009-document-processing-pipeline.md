@@ -141,7 +141,7 @@ class DocumentProcessor:
     """
     
     def __init__(self, settings: Any | None = None):
-        self.settings = settings or app_settings
+        self.settings = settings or settings
         
         # Strategy mapping based on file extensions (11 file types)
         self.strategy_map = {
@@ -241,7 +241,7 @@ class UnstructuredTransformation(TransformComponent):
     def __init__(self, strategy: ProcessingStrategy, settings: Any | None = None):
         super().__init__()
         self.strategy = strategy
-        self.settings = settings or app_settings
+        self.settings = settings or settings
     
     def __call__(self, nodes: list[BaseNode], **kwargs) -> list[BaseNode]:
         """Transform Document nodes using unstructured.io parsing."""

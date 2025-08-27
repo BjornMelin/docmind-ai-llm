@@ -197,6 +197,8 @@ dev = [
     "pytest-asyncio>=1.1.0",
     "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
+    "bandit>=1.8.6",
+    "mypy>=1.17.1",
 ]
 test = [
     "pytest==8.3.1",

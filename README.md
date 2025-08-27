@@ -381,14 +381,13 @@ Use the chat interface to ask follow-up questions. The LLM leverages hybrid sear
 ```python
 import asyncio
 from pathlib import Path
-from models import AppSettings
+from src.config import settings
 from src.utils.document import load_documents_unstructured
 from src.utils.embedding import create_index_async
-from agent_factory import get_agent_system
+from src.agents.coordinator import get_agent_system
 
 async def analyze_document(file_path: str, query: str):
     """Example: Analyze a document programmatically."""
-    settings = AppSettings()
     
     # Load and process document
     documents = await load_documents_unstructured([Path(file_path)], settings)
@@ -415,15 +414,14 @@ asyncio.run(main())
 ### Custom Configuration
 
 ```python
-from models import AppSettings
+from src.config import settings
 import os
 
 # Override default settings
-os.environ["DEFAULT_MODEL"] = "llama3.2"
-os.environ["GPU_ACCELERATION"] = "true"
-os.environ["ENABLE_COLBERT_RERANKING"] = "true"
+os.environ["DOCMIND_DEFAULT_MODEL"] = "llama3.2"
+os.environ["DOCMIND_GPU_ACCELERATION"] = "true"
+os.environ["DOCMIND_ENABLE_COLBERT_RERANKING"] = "true"
 
-settings = AppSettings()
 print(f"Using model: {settings.default_model}")
 print(f"GPU enabled: {settings.gpu_acceleration}")
 ```
@@ -433,13 +431,12 @@ print(f"GPU enabled: {settings.gpu_acceleration}")
 ```python
 import asyncio
 from pathlib import Path
-from models import AppSettings
+from src.config import settings
 from src.utils.document import load_documents_unstructured
 from src.utils.embedding import create_index_async
 
 async def process_document_folder(folder_path: str):
     """Process all supported documents in a folder."""
-    settings = AppSettings()
     
     # Find all supported documents
     folder = Path(folder_path)
@@ -598,22 +595,22 @@ Key configuration options in `.env`:
 DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507
 DOCMIND_DEVICE=cuda
 DOCMIND_CONTEXT_LENGTH=262144
-LMDEPLOY_HOST=http://localhost:23333
+DOCMIND_LLM_BASE_URL=http://localhost:11434
 
 # Embedding Models (BGE-M3 unified)
-EMBEDDING_MODEL=BAAI/bge-m3
-RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+DOCMIND_EMBEDDING_MODEL=BAAI/bge-m3
+DOCMIND_RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 
 # Feature Flags
-ENABLE_DSPY_OPTIMIZATION=true
-ENABLE_GRAPHRAG=false
-ENABLE_GPU_ACCELERATION=true
-LMDEPLOY_QUANT_POLICY=fp8  # FP8 KV cache
+DOCMIND_ENABLE_DSPY_OPTIMIZATION=true
+DOCMIND_ENABLE_GRAPHRAG=false
+DOCMIND_ENABLE_GPU_ACCELERATION=true
+DOCMIND_QUANT_POLICY=fp8  # FP8 KV cache
 
 # Performance Tuning
-RETRIEVAL_TOP_K=10
-RERANK_TOP_K=5
-CACHE_SIZE_LIMIT=1073741824  # 1GB
+DOCMIND_RETRIEVAL_TOP_K=10
+DOCMIND_RERANK_TOP_K=5
+DOCMIND_CACHE_SIZE_LIMIT=1073741824  # 1GB
 ```
 
 See the complete [.env.example](.env.example) file for all available configuration options.

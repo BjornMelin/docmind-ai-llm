@@ -620,7 +620,7 @@ class EnhancedBGEReranker(RerankerInterface):
 
 ### Completed Components
 
-- **CrossEncoder Reranking**: `src/retrieval/postprocessor/cross_encoder_rerank.py`
+- **CrossEncoder Reranking**: `src/retrieval/reranking.py`
 - **BGE-reranker-v2-m3**: Direct sentence-transformers integration (library-first)
 - **Performance Achieved**:
   - <100ms reranking for 20 documents (target met)

@@ -67,10 +67,10 @@
         "src/retrieval/embeddings/clip_config.py",
         "src/retrieval/graph/property_graph_config.py",
         "src/retrieval/optimization/dspy_progressive.py",
-        "src/retrieval/embeddings/bge_m3_manager.py",
+        "src/retrieval/embeddings.py",
         "src/retrieval/query_engine/router_engine.py",
-        "src/retrieval/postprocessor/cross_encoder_rerank.py",
-        "src/retrieval/vector_store/qdrant_unified.py"
+        "src/retrieval/reranking.py",
+        "src/retrieval/vector_store.py"
       ],
       "protected_requirements": [
         "REQ-0044",

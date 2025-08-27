@@ -812,7 +812,7 @@ class BackupManager:
 
 ### Completed Components
 
-- **QdrantUnifiedVectorStore**: `src/retrieval/vector_store/qdrant_unified.py`
+- **QdrantUnifiedVectorStore**: `src/retrieval/vector_store.py`
 - **Resilience Patterns**: Tenacity retry logic with exponential backoff
 - **Performance Achieved**:
   - Dense + sparse vector support with RRF fusion

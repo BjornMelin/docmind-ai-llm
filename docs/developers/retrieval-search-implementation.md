@@ -2,7 +2,10 @@
 
 ## Overview
 
-The FEAT-002 Retrieval & Search System represents a complete architectural replacement of DocMind AI's information retrieval capabilities. The implementation replaces the legacy BGE-large + SPLADE++ architecture with a unified BGE-M3 approach, achieving significant performance improvements and enhanced functionality.
+The FEAT-002 Retrieval & Search System represents a complete architectural
+replacement of DocMind AI's information retrieval capabilities. The implementation
+replaces the legacy BGE-large + SPLADE++ architecture with a unified BGE-M3
+approach, achieving significant performance improvements and enhanced functionality.
 
 **Implementation Status**: ✅ **100% COMPLETE**  
 **Commit**: c54883d (2025-08-21)  
@@ -40,11 +43,11 @@ graph TD
 
 ## Core Components
 
-### 1. BGE-M3 Unified Embeddings (`src/retrieval/embeddings/bge_m3_manager.py`)
+### 1. BGE-M3 Unified Embeddings (`src/retrieval/embeddings.py`)
 
 **Purpose**: Replaces BGE-large + SPLADE++ with unified dense + sparse embeddings.
 
-#### Key Features
+#### BGE-M3 Key Features
 
 - **Unified Architecture**: Single model for both dense (1024D) and sparse embeddings
 - **Extended Context**: 8K context window (vs 512 in legacy system) - 16x improvement
@@ -52,7 +55,7 @@ graph TD
 - **Multilingual Support**: 100+ languages supported natively
 - **Memory Efficiency**: 14% reduction in memory usage (3.6GB vs 4.2GB)
 
-#### Implementation Details
+#### BGE-M3 Implementation Details
 
 ```python
 from src.retrieval.embeddings.bge_m3_manager import BGEM3EmbeddingManager
@@ -88,22 +91,23 @@ class BGEM3EmbeddingManager:
 ```
 
 **Performance Targets Achieved:**
+
 - Embedding Generation: <50ms per chunk ✅
 - Context Window: 8K tokens ✅ (16x improvement)
 - Memory Usage: 3.6GB ✅ (14% reduction)
 
-### 2. RouterQueryEngine Adaptive Retrieval (`src/retrieval/query_engine/router_engine.py`)
+### 2. RouterQueryEngine Adaptive Retrieval (`src/retrieval/query_engine.py`)
 
 **Purpose**: Intelligent strategy selection replacing QueryFusionRetriever.
 
-#### Key Features
+#### RouterQueryEngine Key Features
 
 - **LLMSingleSelector**: Automatic strategy selection based on query analysis
 - **Multiple Strategies**: Dense, hybrid, multi-query, and graph retrieval support
 - **Fallback Mechanisms**: Robust error handling and strategy fallbacks
 - **Performance Optimization**: <50ms strategy selection overhead
 
-#### Implementation Details
+#### RouterQueryEngine Implementation Details
 
 ```python
 from llama_index.core.query_engine import RouterQueryEngine
@@ -156,23 +160,24 @@ class AdaptiveRetrievalEngine:
 ```
 
 **Strategy Selection Logic:**
+
 - **Dense**: Simple semantic queries, single concepts
 - **Hybrid**: Complex queries requiring both semantic and keyword matching
 - **Multi-Query**: Questions requiring multiple retrieval passes
 - **Graph**: Queries involving relationships and complex reasoning
 
-### 3. CrossEncoder Reranking (`src/retrieval/postprocessor/cross_encoder_rerank.py`)
+### 3. CrossEncoder Reranking (`src/retrieval/reranking.py`)
 
 **Purpose**: Library-first reranking with BGE-reranker-v2-m3.
 
-#### Key Features
+#### CrossEncoder Key Features
 
 - **Direct Integration**: Uses sentence-transformers CrossEncoder library
 - **FP16 Acceleration**: Optimized for RTX 4090 performance
 - **Batch Processing**: Efficient processing of multiple documents
 - **Configurable Top-k**: Flexible result filtering
 
-#### Implementation Details
+#### CrossEncoder Implementation Details
 
 ```python
 from sentence_transformers import CrossEncoder
@@ -233,22 +238,23 @@ class CrossEncoderRerank(BaseNodePostprocessor):
 ```
 
 **Performance Targets Achieved:**
+
 - Reranking Speed: <100ms for 20 documents ✅
 - Batch Processing: Optimized for throughput ✅
 - GPU Acceleration: FP16 optimization ✅
 
-### 4. Qdrant Unified Vector Store (`src/retrieval/vector_store/qdrant_unified.py`)
+### 4. Qdrant Unified Vector Store (`src/retrieval/vector_store.py`)
 
 **Purpose**: Resilient vector storage with unified dense + sparse architecture.
 
-#### Key Features
+#### Qdrant Key Features
 
 - **Dual Vector Support**: Dense + sparse vectors with RRF fusion
 - **Resilience Patterns**: Tenacity retry logic with exponential backoff
 - **Connection Pooling**: Efficient resource management
 - **Batch Operations**: Optimized for bulk operations
 
-#### Implementation Details
+#### Qdrant Implementation Details
 
 ```python
 from qdrant_client import QdrantClient
@@ -339,6 +345,7 @@ class QdrantUnifiedVectorStore:
 ```
 
 **Resilience Features:**
+
 - Exponential backoff retry logic
 - Connection pooling and reuse
 - Automatic collection management
@@ -366,8 +373,12 @@ class RetrievalSystemIntegration:
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.embedding_manager = BGEM3EmbeddingManager(**config.get('embeddings', {}))
-        self.vector_store = QdrantUnifiedVectorStore(**config.get('vector_store', {}))
+        self.embedding_manager = BGEM3EmbeddingManager(
+            **config.get('embeddings', {})
+        )
+        self.vector_store = QdrantUnifiedVectorStore(
+            **config.get('vector_store', {})
+        )
         self.reranker = CrossEncoderRerank(**config.get('reranking', {}))
         self.query_engine = None
     
@@ -402,7 +413,9 @@ class RetrievalSystemIntegration:
             'response': response.response,
             'source_nodes': reranked_nodes[:top_k],
             'metadata': {
-                'strategy_used': getattr(response, 'metadata', {}).get('strategy', 'unknown'),
+                'strategy_used': getattr(response, 'metadata', {}).get(
+                    'strategy', 'unknown'
+                ),
                 'query_time': time.time() - start_time,
                 'total_nodes': len(reranked_nodes)
             }
@@ -433,17 +446,20 @@ class RetrievalSystemIntegration:
 ## Migration from Legacy Architecture
 
 ### Files Removed
+
 - `src/utils/embedding.py` - Legacy BGE-large + SPLADE++ implementation
 
 ### Files Added
-- `src/retrieval/embeddings/bge_m3_manager.py`
-- `src/retrieval/query_engine/router_engine.py`
-- `src/retrieval/postprocessor/cross_encoder_rerank.py`
-- `src/retrieval/vector_store/qdrant_unified.py`
+
+- `src/retrieval/embeddings.py`
+- `src/retrieval/query_engine.py`
+- `src/retrieval/reranking.py`
+- `src/retrieval/vector_store.py`
 - `src/retrieval/integration.py`
 - Complete test suite in `tests/test_retrieval/`
 
 ### Breaking Changes
+
 **None** - Full backward compatibility maintained through integration layer.
 
 ## Test Coverage
@@ -451,6 +467,7 @@ class RetrievalSystemIntegration:
 The implementation includes comprehensive test coverage (>95%):
 
 ### Unit Tests
+
 ```bash
 # BGE-M3 embedding functionality
 python -m pytest tests/test_retrieval/test_bgem3_embeddings.py -v
@@ -463,6 +480,7 @@ python -m pytest tests/test_retrieval/test_cross_encoder_rerank.py -v
 ```
 
 ### Integration Tests
+
 ```bash
 # End-to-end pipeline validation
 python -m pytest tests/test_retrieval/test_integration.py -v
@@ -472,6 +490,7 @@ python -m pytest tests/test_retrieval/test_cross_component.py -v
 ```
 
 ### Performance Tests
+
 ```bash
 # Latency and throughput validation
 python -m pytest tests/test_retrieval/test_performance.py -v
@@ -481,6 +500,7 @@ python -m pytest tests/test_retrieval/test_memory_usage.py -v
 ```
 
 ### Scenario Tests
+
 ```bash
 # BDD scenario validation
 python -m pytest tests/test_retrieval/test_gherkin_scenarios.py -v
@@ -489,24 +509,28 @@ python -m pytest tests/test_retrieval/test_gherkin_scenarios.py -v
 ## ADR Compliance Status
 
 ### ✅ ADR-002: Unified Embedding Strategy
+
 - BGE-M3 successfully replaces BGE-large + SPLADE++
 - Unified dense/sparse embeddings operational
 - CLIP multimodal support integrated
 - Memory reduction achieved (4.2GB → 3.6GB)
 
 ### ✅ ADR-003: Adaptive Retrieval Pipeline
+
 - RouterQueryEngine fully operational
 - Intelligent strategy selection working
 - Multiple retrieval strategies supported
 - PropertyGraphIndex integration ready
 
 ### ✅ ADR-006: Modern Reranking Architecture
+
 - CrossEncoder with BGE-reranker-v2-m3 deployed
 - Library-first approach (sentence-transformers)
 - Performance targets met on RTX 4090
 - Batch processing optimized
 
 ### ✅ ADR-007: Hybrid Persistence Strategy
+
 - Qdrant unified vector store operational
 - Resilience patterns implemented
 - SQLite WAL mode configured
@@ -515,6 +539,7 @@ python -m pytest tests/test_retrieval/test_gherkin_scenarios.py -v
 ## Usage Examples
 
 ### Basic Query Processing
+
 ```python
 from src.retrieval.integration import RetrievalSystemIntegration
 
@@ -540,6 +565,7 @@ async def main():
 ```
 
 ### Advanced Configuration
+
 ```python
 # Custom strategy selection
 result = await retrieval_system.query(
@@ -565,18 +591,21 @@ results = await asyncio.gather(*[
 ### Common Issues
 
 1. **BGE-M3 Model Loading Issues**
+
    ```bash
    # Check model availability
    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
    ```
 
 2. **Qdrant Connection Issues**
+
    ```bash
    # Test Qdrant connectivity
    python -c "from qdrant_client import QdrantClient; QdrantClient().get_collections()"
    ```
 
 3. **Memory Usage Issues**
+
    ```bash
    # Monitor GPU memory during operations
    nvidia-smi --query-gpu=memory.used,memory.total --format=csv --loop=1
@@ -599,11 +628,13 @@ results = await asyncio.gather(*[
 ## Future Enhancements
 
 ### Immediate Opportunities
+
 1. **Semantic Query Cache**: Implement GPTCache integration for repeated queries
 2. **Monitoring Dashboard**: Real-time metrics visualization
 3. **A/B Testing Framework**: Compare retrieval strategies in production
 
 ### Advanced Features
+
 1. **Advanced Caching**: Implement semantic query cache with GPTCache
 2. **Monitoring Integration**: Add Prometheus metrics export
 3. **Strategy Analytics**: Track strategy selection patterns for optimization
@@ -612,7 +643,8 @@ results = await asyncio.gather(*[
 
 - [Architecture Overview](architecture.md) - System architecture details
 - [GPU and Performance](gpu-and-performance.md) - Hardware optimization guide
-- [User Retrieval Guide](../user/retrieval-search-guide.md) - User-facing retrieval features
+- [User Retrieval Guide](../user/retrieval-search-guide.md) - User-facing
+  retrieval features
 - [Multi-Agent System](multi-agent-system.md) - Agent integration details
 
 ---

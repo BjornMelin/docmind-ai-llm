@@ -210,7 +210,7 @@
       "priority": "critical",
       "validation_status": "production_validated",
       "last_updated": "2025-08-25",
-      "implementation_notes": "✅ PRODUCTION VALIDATED: BGE-M3 dense embeddings operational (src/retrieval/embeddings/bge_m3_manager.py)"
+      "implementation_notes": "✅ PRODUCTION VALIDATED: BGE-M3 dense embeddings operational (src/retrieval/embeddings.py)"
     },
     {
       "id": "REQ-0043",
@@ -252,7 +252,7 @@
       "priority": "high",
       "validation_status": "production_validated",
       "last_updated": "2025-08-25",
-      "implementation_notes": "✅ PRODUCTION VALIDATED: CrossEncoder reranking operational (src/retrieval/postprocessor/cross_encoder_rerank.py)"
+      "implementation_notes": "✅ PRODUCTION VALIDATED: CrossEncoder reranking operational (src/retrieval/reranking.py)"
     },
     {
       "id": "REQ-0046",
@@ -280,7 +280,7 @@
       "priority": "critical",
       "validation_status": "production_validated",
       "last_updated": "2025-08-25",
-      "implementation_notes": "✅ PRODUCTION VALIDATED: Qdrant resilience with BGE-M3 collections operational (src/retrieval/vector_store/qdrant_unified.py)"
+      "implementation_notes": "✅ PRODUCTION VALIDATED: Qdrant resilience with BGE-M3 collections operational (src/retrieval/vector_store.py)"
     },
     {
       "id": "REQ-0048",

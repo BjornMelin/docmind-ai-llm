@@ -553,7 +553,7 @@ class QualityMetrics:
 
 ### Completed Components
 
-- **RouterQueryEngine**: `src/retrieval/query_engine/router_engine.py` - Adaptive strategy selection with LLMSingleSelector
+- **RouterQueryEngine**: `src/retrieval/query_engine.py` - Adaptive strategy selection with LLMSingleSelector
 - **Document Processing Cache**: `src/cache/simple_cache.py` - SQLite-based document processing cache using LlamaIndex SimpleKVStore
 - **Cache Testing**: `tests/unit/test_simple_cache.py` - Comprehensive test suite for SimpleCache functionality
 - **Strategy Implementation**:

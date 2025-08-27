@@ -168,7 +168,8 @@ def verify_rrf_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
         verification["alpha_in_range"] = True
     else:
         verification["issues"].append(
-            f"RRF alpha ({app_settings.rrf_fusion_alpha}) outside research range (10-100)"
+            f"RRF alpha ({app_settings.rrf_fusion_alpha}) outside research "
+            f"range (10-100)"
         )
         verification["recommendations"].append(
             f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "

@@ -54,7 +54,7 @@ DOCMIND_VLLM_MAX_NUM_SEQS vs VLLM_MAX_NUM_SEQS
 **Currently Used in Code:**
 
 - `src/config/llamaindex_setup.py`: 6 direct os.getenv() calls
-- `src/config/app_settings.py`: All DOCMIND_* variables via Pydantic Settings
+- `src/config/settings.py`: All DOCMIND_* variables via Pydantic Settings
 - `src/config/vllm_config.py`: 3 VLLM_* variables set directly in os.environ
 
 **Docker vs Python Misalignment:**
@@ -329,7 +329,7 @@ def load_legacy_variables():
 
 ### Configuration Files (3 files)
 
-- `/home/bjorn/repos/agents/docmind-ai-llm/src/config/app_settings.py` - Update to nested structure
+- `/home/bjorn/repos/agents/docmind-ai-llm/src/config/settings.py` - Updated unified structure
 - `/home/bjorn/repos/agents/docmind-ai-llm/src/config/llamaindex_setup.py` - Remove direct os.getenv() calls
 - `/home/bjorn/repos/agents/docmind-ai-llm/src/config/vllm_config.py` - Use unified variables
 
