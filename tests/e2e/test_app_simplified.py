@@ -93,7 +93,7 @@ def test_document_pipeline(mock_processor_class):
 def test_models_core_import():
     """Test that models.core can be imported and contains required classes."""
     try:
-        from src.config.app_settings import app_settings as settings
+        from src.config import settings
         from src.models.schemas import AnalysisOutput
 
         # Test settings instance exists
@@ -146,7 +146,7 @@ def test_no_deleted_utils_references():
 
         # Verify deleted legacy modules cannot be imported
         try:
-            import src.retrieval.integration  # noqa: F401
+            import src.retrieval.integration  # noqa: F401  # pyright: ignore[reportMissingImports]
 
             pytest.fail("Legacy src.retrieval.integration should be deleted")
         except ImportError:

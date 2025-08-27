@@ -20,7 +20,7 @@ from llama_index.core.tools import QueryEngineTool
 
 # Import the module under test
 from src.agents.tool_factory import ToolFactory
-from src.config.app_settings import DocMindSettings as AppSettings
+from src.config.settings import DocMindSettings
 
 
 class TestToolFactoryBasicMethods:
@@ -78,7 +78,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_success(self):
         """Test successful reranker creation."""
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5
         )
 
@@ -98,7 +98,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_no_model_configured(self):
         """Test reranker creation when no model is configured."""
-        test_settings = AppSettings(reranker_model=None)
+        test_settings = DocMindSettings(reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory._create_reranker()
@@ -107,7 +107,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_empty_model_string(self):
         """Test reranker creation with empty model string."""
-        test_settings = AppSettings(reranker_model="")
+        test_settings = DocMindSettings(reranker_model="")
 
         with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory._create_reranker()
@@ -116,7 +116,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_default_top_k(self):
         """Test reranker creation with default top_k when not configured."""
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             reranker_model="colbert-ir/colbertv2.0", reranking_top_k=None
         )
 
@@ -136,7 +136,10 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_exception_handling(self):
         """Test reranker creation exception handling."""
-        test_settings = AppSettings(reranker_model="invalid-model", reranking_top_k=5)
+        test_settings = DocMindSettings(
+            reranker_model="invalid-model",
+            reranking_top_k=5,
+        )
 
         with (
             patch("src.agents.tool_factory.app_settings", test_settings),
@@ -153,7 +156,7 @@ class TestToolFactoryReranker:
 
     def test_create_reranker_import_error_handling(self):
         """Test reranker creation when ColbertRerank is not available."""
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5
         )
 
@@ -180,7 +183,7 @@ class TestToolFactoryVectorSearch:
         mock_query_engine = MagicMock()
         mock_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(top_k=5, debug_mode=False, reranker_model=None)
+        test_settings = DocMindSettings(top_k=5, debug_mode=False, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_vector_search_tool(mock_index)
@@ -201,7 +204,7 @@ class TestToolFactoryVectorSearch:
         mock_query_engine = MagicMock()
         mock_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             top_k=10,
             debug_mode=True,
             reranker_model="colbert-ir/colbertv2.0",
@@ -238,7 +241,7 @@ class TestToolFactoryVectorSearch:
         mock_query_engine = MagicMock()
         mock_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             similarity_top_k=None,  # Should use default
             debug_mode=False,
             reranker_model=None,
@@ -262,7 +265,7 @@ class TestToolFactoryKnowledgeGraph:
         mock_query_engine = MagicMock()
         mock_kg_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(debug_mode=False, reranker_model=None)
+        test_settings = DocMindSettings(debug_mode=False, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_kg_search_tool(mock_kg_index)
@@ -287,7 +290,7 @@ class TestToolFactoryKnowledgeGraph:
         mock_query_engine = MagicMock()
         mock_kg_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             debug_mode=True, reranker_model="colbert-ir/colbertv2.0"
         )
 
@@ -339,7 +342,7 @@ class TestToolFactoryHybridSearch:
             mock_query_engine = MagicMock()
             mock_engine_class.return_value = mock_query_engine
 
-            test_settings = AppSettings(reranker_model=None)
+            test_settings = DocMindSettings(reranker_model=None)
 
             with patch("agents.tool_factory.settings", test_settings):
                 result = ToolFactory.create_hybrid_search_tool(mock_retriever)
@@ -363,7 +366,7 @@ class TestToolFactoryHybridSearch:
             mock_query_engine = MagicMock()
             mock_engine_class.return_value = mock_query_engine
 
-            test_settings = AppSettings(
+            test_settings = DocMindSettings(
                 reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5
             )
 
@@ -414,7 +417,7 @@ class TestToolFactoryHybridVector:
         mock_query_engine = MagicMock()
         mock_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(top_k=7, debug_mode=True, reranker_model=None)
+        test_settings = DocMindSettings(top_k=7, debug_mode=True, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             result = ToolFactory.create_hybrid_vector_tool(mock_index)
@@ -437,7 +440,7 @@ class TestToolFactoryHybridVector:
         mock_query_engine = MagicMock()
         mock_index.as_query_engine.return_value = mock_query_engine
 
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             top_k=5,
             debug_mode=False,
             reranker_model="colbert-ir/colbertv2.0",
@@ -465,7 +468,7 @@ class TestToolFactoryHybridVector:
         mock_index = MagicMock()
         mock_index.as_query_engine.return_value = MagicMock()
 
-        with patch("agents.tool_factory.settings", AppSettings()):
+        with patch("agents.tool_factory.settings", DocMindSettings()):
             result = ToolFactory.create_hybrid_vector_tool(mock_index)
 
             description = result.metadata.description.lower()
@@ -719,11 +722,11 @@ class TestToolFactoryEdgeCases:
         """Test all methods work with various settings configurations."""
         test_cases = [
             # Default settings
-            AppSettings(),
+            DocMindSettings(),
             # Minimal settings
-            AppSettings(top_k=1, debug_mode=False, reranker_model=None),
+            DocMindSettings(top_k=1, debug_mode=False, reranker_model=None),
             # Maximal settings
-            AppSettings(
+            DocMindSettings(
                 top_k=50,
                 debug_mode=True,
                 reranker_model="colbert-ir/colbertv2.0",
@@ -782,7 +785,7 @@ class TestToolFactoryEdgeCases:
         mock_index1.as_query_engine.return_value = mock_query_engine1
         mock_index2.as_query_engine.return_value = mock_query_engine2
 
-        test_settings = AppSettings(top_k=5, debug_mode=True, reranker_model=None)
+        test_settings = DocMindSettings(top_k=5, debug_mode=True, reranker_model=None)
 
         with patch("agents.tool_factory.settings", test_settings):
             # Create two tools from different indexes
@@ -831,7 +834,7 @@ class TestToolFactoryPerformanceScenarios:
 
     def test_reranker_creation_caching_behavior(self):
         """Test that reranker creation behaves consistently across calls."""
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             reranker_model="colbert-ir/colbertv2.0", reranking_top_k=5
         )
 
@@ -896,7 +899,7 @@ class TestToolFactoryIntegration:
         mock_retriever = MagicMock()
 
         # Realistic settings
-        test_settings = AppSettings(
+        test_settings = DocMindSettings(
             top_k=10,
             debug_mode=False,
             reranker_model="colbert-ir/colbertv2.0",
@@ -955,7 +958,7 @@ class TestToolFactoryIntegration:
         ]
 
         for config in configurations:
-            test_settings = AppSettings(**config)
+            test_settings = DocMindSettings(**config)
 
             with patch("agents.tool_factory.settings", test_settings):
                 if config.get("reranker_model"):

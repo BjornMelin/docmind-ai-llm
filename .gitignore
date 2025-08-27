@@ -242,6 +242,7 @@ reports/
 docs/research/
 ADR_TEMPLATE.md
 docs/specs/analysis/
+CLEANUP_TRACKING.md
 
 # Prevent test files in root directory
 /test_*.py

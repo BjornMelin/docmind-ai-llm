@@ -22,7 +22,7 @@ import pytest
 import torch
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
-from src.retrieval.postprocessor.cross_encoder_rerank import (
+from src.retrieval.reranking import (
     BGECrossEncoderRerank,
     benchmark_reranking_latency,
     create_bge_cross_encoder_reranker,

@@ -1,19 +1,42 @@
-"""DocMind AI Configuration Module.
+"""Unified configuration interface for DocMind AI.
 
-This module provides centralized configuration management for DocMind AI,
-including application settings, LlamaIndex setup, vLLM configuration,
-and KV cache optimization.
+This module provides the primary configuration interface following ADR-024
+implementing Task 2.2.2: LlamaIndex Settings Integration Pattern.
 
-Components:
-    settings: Main application settings and configuration
-    app_settings: Application-specific settings
-    llamaindex_setup: LlamaIndex configuration and setup
-    vllm_config: vLLM configuration for inference optimization
-    kv_cache: KV cache configuration for memory optimization
+Key Features:
+- Single source of truth via unified settings object
+- Automatic LlamaIndex Settings integration on import
+- Environment variable support for all configuration
+- Simplified import patterns across codebase
+
+Usage:
+    # Primary pattern (recommended for all code)
+    from src.config import settings
+
+    # LlamaIndex integration functions
+    from src.config import setup_llamaindex, initialize_integrations
 """
 
-from src.config.settings import app_settings
+from .integrations import initialize_integrations, setup_llamaindex
+from .settings import settings
+
+# Initialize LlamaIndex automatically on import
+try:
+    setup_llamaindex()
+    import logging
+
+    logging.getLogger(__name__).info(
+        "LlamaIndex configuration initialized successfully"
+    )
+except Exception as e:
+    import logging
+
+    logging.getLogger(__name__).error(
+        "Failed to initialize LlamaIndex configuration: %s", e
+    )
 
 __all__ = [
-    "app_settings",
+    "settings",
+    "initialize_integrations",
+    "setup_llamaindex",
 ]

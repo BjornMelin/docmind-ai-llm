@@ -16,7 +16,7 @@ from src.agents.tool_factory import (
     KG_SIMILARITY_TOP_K,
     ToolFactory,
 )
-from src.config.app_settings import DocMindSettings
+from src.config.settings import DocMindSettings
 
 
 @pytest.fixture

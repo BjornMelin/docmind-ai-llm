@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.cache.simple_cache import SimpleCache, create_cache_manager
+from src.cache.simple_cache import SimpleCache
 
 
 class TestSimpleCacheBasicOperations:
@@ -344,24 +344,24 @@ class TestSimpleCacheFactoryFunctions:
     """Test factory functions and backward compatibility."""
 
     @pytest.mark.unit
-    def test_create_cache_manager_factory(self):
-        """Test create_cache_manager factory function."""
-        cache = create_cache_manager()
+    def test_simple_cache_constructor(self):
+        """Test SimpleCache constructor."""
+        cache = SimpleCache()
         assert isinstance(cache, SimpleCache)
 
     @pytest.mark.unit
-    def test_create_cache_manager_with_params(self):
-        """Test create_cache_manager with custom parameters."""
+    def test_simple_cache_constructor_with_params(self):
+        """Test SimpleCache constructor with custom parameters."""
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_cache_dir = Path(temp_dir) / "custom_cache"
-            cache = create_cache_manager(cache_dir=custom_cache_dir)
+            cache = SimpleCache(cache_dir=str(custom_cache_dir))
             assert isinstance(cache, SimpleCache)
 
     @pytest.mark.unit
     def test_multiple_cache_managers_share_storage(self):
         """Test multiple cache managers share the same underlying storage."""
-        cache1 = create_cache_manager()
-        cache2 = create_cache_manager()
+        cache1 = SimpleCache()
+        cache2 = SimpleCache()
 
         # Both should be SimpleCache instances
         assert isinstance(cache1, SimpleCache)

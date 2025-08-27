@@ -28,9 +28,7 @@ from llama_index.core.graph_stores import SimplePropertyGraphStore
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 # Import new centralized settings for new fixtures
-from src.config.app_settings import (
-    DocMindSettings as AppSettings,
-)
+from src.config.settings import DocMindSettings as AppSettings
 
 # Configure pytest-asyncio for proper async handling
 pytest_plugins = ("pytest_asyncio",)
