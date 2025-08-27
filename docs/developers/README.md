@@ -1,6 +1,6 @@
 # DocMind AI Developer Documentation
 
-**Streamlined developer documentation following industry best practices with the Divio documentation framework**
+> **Streamlined developer documentation following industry best practices with the Divio documentation framework**
 
 This directory contains comprehensive, consolidated documentation for DocMind AI developers. The documentation has been optimized from 15+ files to 5 core guides, eliminating redundancy while preserving all essential technical content.
 
@@ -29,17 +29,20 @@ Following the **Divio Documentation System** for optimal developer experience:
 ## User Journey Paths
 
 ### New Developer Onboarding
+
 1. **Start Here**: [Getting Started](getting-started.md) - 30-minute setup
 2. **Understand the System**: [System Architecture](system-architecture.md) - Core concepts
 3. **Learn Development Practices**: [Developer Handbook](developer-handbook.md) - Implementation patterns
 4. **Configure for Your Environment**: [Configuration Reference](configuration-reference.md) - Optimization
 
 ### Experienced Developer Quick Access
+
 1. **Implementation Guidance**: [Developer Handbook](developer-handbook.md) - Patterns and practices
 2. **Architecture Reference**: [System Architecture](system-architecture.md) - System design
 3. **Configuration Tuning**: [Configuration Reference](configuration-reference.md) - Performance optimization
 
 ### DevOps/Production Teams
+
 1. **Deployment Procedures**: [Operations Guide](operations-guide.md) - Production deployment
 2. **Configuration Management**: [Configuration Reference](configuration-reference.md) - Environment setup
 3. **Performance Optimization**: [Operations Guide](operations-guide.md) - Production tuning
@@ -47,12 +50,14 @@ Following the **Divio Documentation System** for optimal developer experience:
 ## Key Architectural Principles
 
 ### Unified Configuration Architecture (ADR-024)
+
 - **Single Source of Truth**: `from src.config import settings`
 - **76% Complexity Reduction**: Simplified from legacy over-engineered approach
 - **Pydantic Settings V2**: Nested models with full validation
 - **DOCMIND_ Prefix**: Consistent environment variable naming
 
 ### Development Standards
+
 - **KISS Principle**: Simplicity over complexity
 - **Library-First**: Use established solutions over custom code
 - **Type Safety**: Full type hints and Pydantic validation
@@ -61,6 +66,7 @@ Following the **Divio Documentation System** for optimal developer experience:
 ## Quick Reference
 
 ### Essential Commands
+
 ```bash
 # Setup (detailed in Getting Started guide)
 uv sync && streamlit run src/app.py
@@ -76,6 +82,7 @@ python scripts/performance_validation.py # Performance check
 ```
 
 ### Configuration Pattern
+
 ```python
 # Always use this pattern (detailed in Configuration Reference)
 from src.config import settings

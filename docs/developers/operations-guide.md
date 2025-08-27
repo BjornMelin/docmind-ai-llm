@@ -21,12 +21,14 @@ This comprehensive operations guide covers production deployment, performance op
 ✅ **OVERALL STATUS: PRODUCTION READY**
 
 **Current Achievements:**
+
 - **Phase 1**: ✅ vLLM Backend Integration (FP8 + FlashInfer)
 - **Phase 2**: ✅ LangGraph Supervisor System (5-agent coordination)
 - **Phase 3**: ✅ Performance Validation (all targets met)
 - **Phase 4**: ✅ Production Integration (end-to-end validation)
 
 **Key Metrics:**
+
 - **Architecture**: 76% complexity reduction achieved
 - **Performance**: 120-180 tok/s decode, 900-1400 tok/s prefill
 - **Quality**: 9.88/10 code quality score, zero linting errors
@@ -35,6 +37,7 @@ This comprehensive operations guide covers production deployment, performance op
 ### Local Development Deployment
 
 #### Quick Production Setup
+
 ```bash
 # 1. Clone and install
 git clone https://github.com/BjornMelin/docmind-ai-llm.git
@@ -55,6 +58,7 @@ python scripts/production_validation.py
 #### Production Configuration
 
 **Required Environment Variables:**
+
 ```bash
 # Production-optimized settings
 DOCMIND_DEBUG=false
@@ -75,6 +79,7 @@ VLLM_ENABLE_CHUNKED_PREFILL=1
 #### Complete Docker Setup
 
 **docker-compose.production.yml:**
+
 ```yaml
 version: '3.8'
 
@@ -230,6 +235,7 @@ CMD ["uv", "run", "streamlit", "run", "src/app.py", "--server.port=8501", "--ser
 #### Production Kubernetes Manifests
 
 **deployment.yaml:**
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -320,8 +326,9 @@ spec:
 #### RTX 4090 Optimization (Production Target)
 
 **Performance Targets Achieved:**
+
 - **Decode Speed**: 120-180 tok/s (target: 100-160 tok/s) ✅
-- **Prefill Speed**: 900-1400 tok/s (target: 800-1300 tok/s) ✅ 
+- **Prefill Speed**: 900-1400 tok/s (target: 800-1300 tok/s) ✅
 - **VRAM Usage**: 12-14GB for 128K context (target: <14GB) ✅
 - **Agent Coordination**: <200ms (target: ≤200ms) ✅
 
@@ -840,6 +847,7 @@ async def traced_agent_coordination(query: str) -> str:
 #### GPU Issues
 
 **Problem**: GPU out of memory errors
+
 ```bash
 # Diagnostic steps
 nvidia-smi  # Check current GPU usage
@@ -858,6 +866,7 @@ print(f'Available: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}G
 ```
 
 **Problem**: Slow inference performance
+
 ```bash
 # Check configuration
 python -c "
@@ -878,6 +887,7 @@ python scripts/performance_validation.py
 #### Agent Coordination Issues
 
 **Problem**: Agent timeouts exceeding 200ms
+
 ```bash
 # Check agent configuration
 python -c "
@@ -896,6 +906,7 @@ coordinator = MultiAgentCoordinator(settings)
 ```
 
 **Problem**: High error rates in agent coordination
+
 ```bash
 # Check logs for patterns
 grep -E "(agent|timeout|error)" /app/logs/docmind.log | tail -50
@@ -910,6 +921,7 @@ print(f'Fallback RAG Enabled: {settings.agents.enable_fallback_rag}')
 #### Database Connectivity Issues
 
 **Problem**: Qdrant connection failures
+
 ```bash
 # Check Qdrant status
 curl -f http://localhost:6333/health || echo "Qdrant not responding"
@@ -929,6 +941,7 @@ print(f'Collections: {client.get_collections()}')
 #### Routine Maintenance Checklist
 
 **Daily:**
+
 ```bash
 # Check system health
 curl -f http://localhost:8501/health
@@ -944,6 +957,7 @@ grep -i error /app/logs/docmind.log | tail -20
 ```
 
 **Weekly:**
+
 ```bash
 # Performance validation
 python scripts/performance_validation.py
@@ -959,6 +973,7 @@ find /app/logs -name "*.log" -mtime +7 -exec gzip {} \;
 ```
 
 **Monthly:**
+
 ```bash
 # Full system validation
 python scripts/end_to_end_test.py
@@ -1049,21 +1064,24 @@ class ProductionMaintenance:
 
 ### Integration Validation ✅
 
-**Core System Integration: OPERATIONAL**
+> **Core System Integration: OPERATIONAL**
 
 The unified configuration architecture (ADR-024) has successfully consolidated the application while maintaining full functionality:
 
 #### Configuration System ✅
+
 - **Status**: Full functionality confirmed
 - **Achievement**: 76% configuration consolidation success
 - **Evidence**: All configuration models working correctly
 
 #### Multi-Agent Coordination System ✅
+
 - **Status**: Successfully initializes with ADR-011 compliance  
 - **Evidence**: 5-agent supervisor architecture operational
 - **Performance**: Agent decision timeout compliant (<200ms)
 
 #### Document Processing Pipeline ✅
+
 - **Parser Integration**: Unstructured.io hi-res parsing functional
 - **Embedding System**: BGE-M3 unified dense+sparse embeddings working
 - **Vector Storage**: Qdrant integration with RRF fusion operational
@@ -1071,20 +1089,23 @@ The unified configuration architecture (ADR-024) has successfully consolidated t
 
 ### Performance Validation ✅
 
-**All Critical Performance Baselines Maintained or Exceeded**
+> **All Critical Performance Baselines Maintained or Exceeded**
 
 #### vLLM Backend Performance ✅
+
 - **Decode Speed**: 120-180 tok/s (Target: 100-160 tok/s) ✅
 - **Prefill Speed**: 900-1400 tok/s (Target: 800-1300 tok/s) ✅
 - **Context Window**: 128K tokens supported ✅
 - **VRAM Usage**: 12-14GB (Target: <14GB) ✅
 
 #### Agent Coordination Performance ✅
+
 - **Decision Timeout**: <200ms (ADR-011 compliance) ✅
 - **Multi-Agent Pipeline**: 5-agent coordination functional ✅
 - **Fallback System**: Single-agent RAG operational ✅
 
 #### BGE-M3 Embedding Performance ✅
+
 - **Generation Speed**: <50ms per chunk ✅
 - **Unified Embeddings**: Dense (1024D) + Sparse functional ✅
 - **Batch Processing**: Optimized for RTX 4090 ✅
@@ -1204,7 +1225,8 @@ class ProductionValidator:
 
 #### What Worked Exceptionally Well
 
-**1. Phased Approach with Clear Dependencies**
+**1. Phased Approach with Clear Dependencies:**
+
 - 7 distinct phases with clear deliverables
 - Each phase built upon previous work  
 - Parallel execution where dependencies allowed
@@ -1212,7 +1234,8 @@ class ProductionValidator:
 
 **Key insight**: Breaking complex refactoring into phases prevents overwhelming changes and enables iterative validation.
 
-**2. Library-First Decision Making**
+**2. Library-First Decision Making:**
+
 - Adopted proven libraries (LangGraph, Pydantic V2, vLLM FlashInfer)
 - Eliminated custom implementations where possible
 - Leveraged community-tested solutions
@@ -1220,7 +1243,8 @@ class ProductionValidator:
 
 **Key insight**: Modern libraries often provide better solutions than custom code, with the added benefit of community support and continuous improvement.
 
-**3. Single Source of Truth Configuration**
+**3. Single Source of Truth Configuration:**
+
 - Unified all configuration through `from src.config import settings`
 - Eliminated configuration drift across modules
 - Enabled atomic configuration changes
@@ -1230,19 +1254,22 @@ class ProductionValidator:
 
 #### Technical Success Factors
 
-**1. Performance-First Architecture**
+**1. Performance-First Architecture:**
+
 - FP8 quantization + FlashInfer attention backend
 - Achieved 2x performance improvement over baseline
 - Memory optimization enabled 128K context on RTX 4090
 - Parallel agent execution for sub-200ms coordination
 
-**2. Comprehensive Validation Strategy**  
+**2. Comprehensive Validation Strategy:**  
+
 - Three-tier testing (unit, integration, system)
 - Automated performance benchmarking
 - Continuous ADR compliance monitoring
 - Production-grade error handling
 
-**3. Developer Experience Focus**
+**3. Developer Experience Focus:**
+
 - Clear patterns: `from src.config import settings`
 - Excellent documentation with examples
 - Streamlined onboarding (30-minute setup)
@@ -1250,9 +1277,10 @@ class ProductionValidator:
 
 ### Operational Best Practices
 
-#### Production Deployment
+#### Production Deployment - Best Practices
 
-**1. Infrastructure as Code**
+**1. Infrastructure as Code:**
+
 ```yaml
 # Use declarative infrastructure
 # Docker Compose for local production
@@ -1260,7 +1288,8 @@ class ProductionValidator:
 # Helm charts for configuration management
 ```
 
-**2. Monitoring & Observability**
+**2. Monitoring & Observability:**
+
 ```python
 # Structured logging with correlation IDs
 # Prometheus metrics for business logic
@@ -1268,7 +1297,8 @@ class ProductionValidator:
 # Jaeger tracing for debugging
 ```
 
-**3. Performance Monitoring**
+**3. Performance Monitoring:**
+
 ```python
 # Continuous performance validation
 # Automated alerting on regression
@@ -1278,19 +1308,22 @@ class ProductionValidator:
 
 #### Maintenance & Operations
 
-**1. Proactive Maintenance**
+**1. Proactive Maintenance:**
+
 - Daily health checks with automated alerts
 - Weekly performance validation runs
 - Monthly comprehensive system validation
 - Quarterly dependency security audits
 
-**2. Configuration Management**
+**2. Configuration Management:**
+
 - Version control all configuration
 - Environment-specific config validation
 - Automated migration scripts for changes
 - Rollback procedures for failed deployments
 
-**3. Incident Response**
+**3. Incident Response:**
+
 - Detailed runbooks for common issues
 - Automated diagnostic scripts
 - Clear escalation procedures
@@ -1298,19 +1331,22 @@ class ProductionValidator:
 
 ### Anti-Patterns to Avoid
 
-**1. Configuration Sprawl**
+**1. Configuration Sprawl:**
+
 - ❌ Multiple configuration sources
 - ❌ Hardcoded values in modules
 - ❌ Environment-specific code paths
 - ✅ Single source of truth with validation
 
-**2. Performance Assumptions**
+**2. Performance Assumptions:**
+
 - ❌ Assuming hardware capabilities
 - ❌ Fixed timeout values
 - ❌ Ignoring memory constraints
 - ✅ Adaptive performance based on metrics
 
-**3. Deployment Complexity**
+**3. Deployment Complexity:**
+
 - ❌ Manual deployment steps
 - ❌ Environment-specific scripts
 - ❌ Missing rollback procedures
@@ -1325,18 +1361,21 @@ class ProductionValidator:
 **Detection**: GPU utilization >95% for >5 minutes
 
 **Immediate Actions**:
+
 1. Check current GPU memory: `nvidia-smi`
 2. Identify high-usage processes: `ps aux --sort=-%cpu | head -10`
 3. Review recent queries for complexity
 4. Clear GPU cache: `torch.cuda.empty_cache()`
 
 **Investigation**:
+
 1. Check agent coordination timeout violations
 2. Review document processing queue
 3. Analyze query patterns for resource-intensive operations
 4. Validate model loading and memory management
 
 **Resolution**:
+
 1. Restart application if memory leak detected
 2. Adjust `VLLM_GPU_MEMORY_UTILIZATION` if needed
 3. Implement query complexity limits
@@ -1347,18 +1386,21 @@ class ProductionValidator:
 **Detection**: Health check endpoint returning 503
 
 **Immediate Actions**:
+
 1. Check service status: `curl -f http://localhost:8501/health`
 2. Review application logs: `tail -100 /app/logs/docmind.log`
 3. Verify dependent services: Qdrant, vLLM backend
 4. Check system resources: CPU, memory, disk
 
 **Investigation**:
+
 1. Identify root cause from structured logs
 2. Check for dependency failures
 3. Validate configuration integrity
 4. Review recent deployments or changes
 
 **Resolution**:
+
 1. Restart failed services
 2. Rollback recent changes if applicable
 3. Scale resources if capacity issue

@@ -142,6 +142,7 @@ graph TD
 ### Key Configuration Models
 
 #### VLLMConfig - Model Backend Configuration
+
 ```python
 class VLLMConfig(BaseModel):
     """vLLM backend configuration for Qwen3-4B-FP8."""
@@ -154,6 +155,7 @@ class VLLMConfig(BaseModel):
 ```
 
 #### EmbeddingConfig - BGE-M3 Unified Embeddings
+
 ```python
 class EmbeddingConfig(BaseModel):
     """BGE-M3 unified dense + sparse embedding configuration."""
@@ -165,6 +167,7 @@ class EmbeddingConfig(BaseModel):
 ```
 
 #### AgentConfig - Multi-Agent Coordination
+
 ```python
 class AgentConfig(BaseModel):
     """Multi-agent coordination configuration (ADR-011)."""
@@ -341,6 +344,7 @@ graph LR
 ```
 
 **Key Features:**
+
 - **Hi-res Parsing**: Unstructured.io for PDF, DOCX, HTML, Markdown
 - **NLP Pipeline**: spaCy for entity recognition and linguistic analysis
 - **Intelligent Chunking**: Context-aware chunking with overlap optimization
@@ -394,6 +398,7 @@ class QdrantVectorStore:
 DocMind AI achieves exceptional performance through multiple optimization techniques:
 
 #### FP8 Quantization
+
 ```bash
 # Environment configuration for FP8 optimization
 VLLM_ATTENTION_BACKEND=FLASHINFER        # FlashInfer attention backend
@@ -403,8 +408,9 @@ VLLM_DISABLE_CUSTOM_ALL_REDUCE=1        # Single GPU optimization
 ```
 
 #### Performance Targets Achieved
+
 - **Decode Speed**: 120-180 tok/s (RTX 4090)
-- **Prefill Speed**: 900-1400 tok/s (RTX 4090) 
+- **Prefill Speed**: 900-1400 tok/s (RTX 4090)
 - **Context Window**: 128K tokens supported
 - **VRAM Usage**: 12-14GB for full 128K context
 - **Agent Coordination**: <200ms decision timeout
@@ -485,11 +491,13 @@ sequenceDiagram
 ## Integration Points
 
 ### External Services
+
 - **Ollama**: Local LLM serving (fallback option)
 - **Qdrant**: Vector database for embeddings storage
 - **vLLM**: High-performance LLM inference server
 
 ### Internal Modules
+
 ```python
 # Core integration pattern
 from src.config import settings

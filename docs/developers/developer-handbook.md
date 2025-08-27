@@ -28,6 +28,7 @@ This comprehensive handbook provides practical implementation guidance for devel
 ### Python Code Style
 
 #### Formatting & Linting
+
 ```bash
 # Format and lint (run before commits)
 ruff format . && ruff check . --fix
@@ -41,6 +42,7 @@ ignore = ["D203", "D213", "S301", "S603", "S607", "S108"]
 ```
 
 #### Type Hints & Documentation
+
 ```python
 # Good: Clear function with type hints and docstring
 def process_documents(files: List[Path], chunk_size: int = 1000) -> List[Document]:
@@ -66,6 +68,7 @@ def process_documents(files: List[Path], chunk_size: int = 1000) -> List[Documen
 ```
 
 #### Modern Python Patterns
+
 ```python
 # Use modern Python features
 from pathlib import Path
@@ -509,6 +512,7 @@ def sample_documents(tmp_path):
 ### Code Quality Standards
 
 #### Automated Quality Checks
+
 ```bash
 # Run comprehensive quality checks
 ruff check . --fix          # Linting and auto-fix
@@ -518,6 +522,7 @@ mypy src/                   # Type checking
 ```
 
 #### Pre-commit Hooks
+
 ```yaml
 # .pre-commit-config.yaml
 repos:
@@ -997,6 +1002,7 @@ async def debug_agent_execution(self, query: str) -> str:
 ### Common Issue Resolution
 
 #### Configuration Issues
+
 ```bash
 # Debug configuration loading
 python -c "
@@ -1015,6 +1021,7 @@ print('Embedding Config:', settings.embedding.model_dump())
 ```
 
 #### Performance Issues
+
 ```python
 # Performance profiling
 import cProfile
@@ -1052,6 +1059,7 @@ def memory_profile_processing():
 ```
 
 #### GPU Issues
+
 ```python
 # GPU diagnostics
 def diagnose_gpu_setup():

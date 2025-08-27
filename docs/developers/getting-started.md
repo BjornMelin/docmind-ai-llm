@@ -16,13 +16,15 @@ This complete onboarding guide will get you productive with DocMind AI's unified
 
 ## Quick Start (5 minutes)
 
-### Prerequisites
+### Prerequisites - Quick Start
+
 - Python 3.10+ (tested with 3.11, 3.12)
 - CUDA-compatible GPU (RTX 4060+ recommended)
 - Docker for Qdrant vector database
 - Git
 
 ### Setup Commands
+
 ```bash
 # 1. Clone and enter directory
 git clone https://github.com/BjornMelin/docmind-ai-llm.git
@@ -42,6 +44,7 @@ streamlit run src/app.py
 ```
 
 ### Validate Setup
+
 ```bash
 # Check configuration loads correctly
 python -c "from src.config import settings; print(f'✅ {settings.app_name} v{settings.app_version}')"
@@ -61,6 +64,7 @@ python scripts/performance_validation.py
 ## Prerequisites
 
 ### Required Software
+
 - **Python**: 3.11+ (tested with 3.11, 3.12)
 - **uv**: For package management (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - **Git**: Version control
@@ -70,12 +74,14 @@ python scripts/performance_validation.py
 ### Hardware Requirements
 
 #### Minimum Requirements
+
 - **GPU**: NVIDIA GPU with CUDA Compute Capability 6.0+
 - **VRAM**: 16GB minimum (RTX 4090 recommended)
 - **System RAM**: 16GB minimum
 - **Storage**: 50GB available space
 
 #### Optimal Configuration (RTX 4090)
+
 - **VRAM Usage**: 12-14GB with FP8 optimization
 - **System Memory**: 32GB recommended
 - **CUDA Toolkit**: 12.8+ (required for PyTorch 2.7.1)
@@ -84,6 +90,7 @@ python scripts/performance_validation.py
 ## Installation
 
 ### 1. Clone Repository
+
 ```bash
 git clone https://github.com/BjornMelin/docmind-ai-llm.git
 cd docmind-ai-llm
@@ -92,6 +99,7 @@ cd docmind-ai-llm
 ### 2. Install Dependencies
 
 #### Standard Installation
+
 ```bash
 # Install core dependencies
 uv sync
@@ -121,6 +129,7 @@ uv sync --extra gpu
 ```
 
 ### 3. Start Required Services
+
 ```bash
 # Start Qdrant vector database
 docker-compose up -d qdrant
@@ -132,6 +141,7 @@ curl -f http://localhost:6333/health || echo "Qdrant not ready"
 ## Environment Configuration
 
 ### 1. Basic Configuration Setup
+
 ```bash
 # Copy the example configuration
 cp .env.example .env
@@ -188,6 +198,7 @@ DocMind AI uses a **unified prefix pattern** with **nested configuration support
 ## First Run Validation
 
 ### 1. Configuration Validation
+
 ```bash
 # Test configuration loads correctly
 python -c "
@@ -200,6 +211,7 @@ print(f'✅ Qdrant: {settings.qdrant.url}')
 ```
 
 ### 2. System Health Check
+
 ```bash
 # Comprehensive validation (includes model loading)
 python scripts/performance_validation.py
@@ -209,6 +221,7 @@ SKIP_MODEL_TEST=true python scripts/performance_validation.py
 ```
 
 ### 3. Start the Application
+
 ```bash
 # Start development server
 streamlit run src/app.py
@@ -217,6 +230,7 @@ streamlit run src/app.py
 ```
 
 ### 4. Verify Core Functionality
+
 1. **Upload a document** (PDF, DOCX, TXT)
 2. **Verify document processing** - document should be parsed and chunked
 3. **Test query functionality** - ask a question about the document
@@ -225,6 +239,7 @@ streamlit run src/app.py
 ## Development Environment Setup
 
 ### 1. Essential Development Commands
+
 ```bash
 # Format and lint code (run before commits)
 ruff format . && ruff check . --fix
@@ -241,9 +256,11 @@ python scripts/performance_validation.py
 ### 2. IDE Setup
 
 #### VS Code (Recommended)
+
 1. Install Python extension
 2. Install Pylance for type checking
 3. Configure workspace settings:
+
    ```json
    {
      "python.defaultInterpreterPath": "./.venv/bin/python",
@@ -253,11 +270,13 @@ python scripts/performance_validation.py
    ```
 
 #### PyCharm
+
 1. Set interpreter to project venv
 2. Enable Ruff for code quality
 3. Configure run configurations for streamlit
 
 ### 3. Development Workflow
+
 ```bash
 # 1. Create feature branch
 git checkout -b feature/your-feature-name
@@ -281,6 +300,7 @@ git push origin feature/your-feature-name
 ### GPU Setup Issues
 
 **Issue**: CUDA not detected
+
 ```bash
 # Check CUDA installation
 nvcc --version
@@ -291,6 +311,7 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 ```
 
 **Solution**:
+
 ```bash
 # Reinstall PyTorch with correct CUDA version
 uv pip install torch==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
@@ -299,6 +320,7 @@ uv pip install torch==2.7.1 --extra-index-url https://download.pytorch.org/whl/c
 ### vLLM Installation Issues
 
 **Issue**: vLLM compilation fails
+
 ```bash
 # Check environment
 echo $CUDA_HOME
@@ -306,6 +328,7 @@ echo $PATH | grep cuda
 ```
 
 **Solution**:
+
 ```bash
 # Set CUDA environment variables
 export CUDA_HOME=/usr/local/cuda
@@ -319,6 +342,7 @@ uv pip install --force-reinstall "vllm[flashinfer]>=0.10.1"
 ### Configuration Issues
 
 **Issue**: Configuration not loading
+
 ```bash
 # Debug configuration loading
 python -c "
@@ -328,6 +352,7 @@ print('Config loaded successfully:', hasattr(settings, 'app_name'))
 ```
 
 **Solution**:
+
 1. Verify `.env` file exists and has correct format
 2. Check `DOCMIND_` prefix on all variables
 3. Validate nested delimiter usage (`__`)
@@ -335,6 +360,7 @@ print('Config loaded successfully:', hasattr(settings, 'app_name'))
 ### Service Connection Issues
 
 **Issue**: Cannot connect to Qdrant
+
 ```bash
 # Check Qdrant status
 curl -f http://localhost:6333/health
@@ -342,6 +368,7 @@ docker-compose ps
 ```
 
 **Solution**:
+
 ```bash
 # Restart Qdrant service
 docker-compose restart qdrant
@@ -351,6 +378,7 @@ docker-compose logs qdrant
 ### Performance Issues
 
 **Issue**: Slow model loading or inference
+
 ```bash
 # Check GPU memory usage
 nvidia-smi
@@ -365,6 +393,7 @@ print(f'Attention backend: {settings.vllm.attention_backend}')
 ```
 
 **Solution**:
+
 1. Verify FP8 quantization is enabled
 2. Check FlashInfer backend configuration
 3. Optimize GPU memory utilization settings
@@ -372,6 +401,7 @@ print(f'Attention backend: {settings.vllm.attention_backend}')
 ### Import Errors
 
 **Issue**: Module not found errors
+
 ```bash
 # Check Python path
 python -c "import sys; print('\n'.join(sys.path))"
@@ -381,6 +411,7 @@ uv pip list | grep -E "(vllm|torch|streamlit)"
 ```
 
 **Solution**:
+
 ```bash
 # Reinstall dependencies
 uv sync --force-reinstall

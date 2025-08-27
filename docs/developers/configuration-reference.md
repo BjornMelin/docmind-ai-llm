@@ -91,6 +91,7 @@ graph TD
 | `DOCMIND_APP_VERSION` | str | `"2.0.0"` | Application version |
 
 **Example Configuration:**
+
 ```bash
 # Core application settings
 DOCMIND_DEBUG=false
@@ -113,6 +114,7 @@ DOCMIND_APP_VERSION=2.0.0
 | `DOCMIND_VLLM__DTYPE` | str | `"auto"` | Model precision (auto, fp16, fp8) |
 
 **Example Configuration:**
+
 ```bash
 # vLLM backend optimization for RTX 4090
 DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
@@ -135,6 +137,7 @@ DOCMIND_VLLM__DTYPE=auto
 | `DOCMIND_LLM__MAX_RETRIES` | int | `3` | Maximum retry attempts |
 
 **Example Configuration:**
+
 ```bash
 # LLM backend settings
 DOCMIND_LLM_BACKEND=vllm
@@ -155,6 +158,7 @@ DOCMIND_LLM__MAX_RETRIES=3
 | `DOCMIND_EMBEDDING__USE_FP16` | bool | `true` | Use FP16 precision for GPU acceleration |
 
 **Example Configuration:**
+
 ```bash
 # BGE-M3 unified dense + sparse embeddings
 DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3
@@ -175,6 +179,7 @@ DOCMIND_EMBEDDING__USE_FP16=true
 | `DOCMIND_AGENTS__CONCURRENT_AGENTS` | int | `3` | Maximum concurrent agent execution |
 
 **Example Configuration:**
+
 ```bash
 # Multi-agent coordination (ADR-011 compliance)
 DOCMIND_AGENTS__ENABLE_MULTI_AGENT=true
@@ -195,6 +200,7 @@ DOCMIND_AGENTS__CONCURRENT_AGENTS=3
 | `DOCMIND_PROCESSING__SPACY_MODEL` | str | `"en_core_web_sm"` | spaCy model for NLP processing |
 
 **Example Configuration:**
+
 ```bash
 # Document processing pipeline
 DOCMIND_PROCESSING__CHUNK_SIZE=1500
@@ -215,6 +221,7 @@ DOCMIND_PROCESSING__SPACY_MODEL=en_core_web_sm
 | `DOCMIND_QDRANT__ENABLE_HYBRID_SEARCH` | bool | `true` | Enable dense + sparse hybrid search |
 
 **Example Configuration:**
+
 ```bash
 # Qdrant vector database
 DOCMIND_QDRANT__URL=http://localhost:6333
@@ -280,12 +287,14 @@ export QWEN_TARGET_VRAM_GB=14
 ### Hardware Requirements
 
 #### Minimum Requirements
+
 - **GPU**: RTX 4060 (16GB VRAM) or equivalent
 - **CUDA**: 12.8+ with driver 550.54.14+
 - **System RAM**: 16GB minimum
 - **Storage**: 50GB available space
 
 #### Optimal Configuration (RTX 4090)
+
 - **VRAM**: 16GB with 12-14GB usage for 128K context
 - **CUDA**: 12.8+ with PyTorch 2.7.1 support
 - **System RAM**: 32-64GB for optimal performance
@@ -294,6 +303,7 @@ export QWEN_TARGET_VRAM_GB=14
 ### GPU Optimization Settings
 
 #### vLLM FlashInfer Backend
+
 ```bash
 # Essential environment variables for FP8 optimization
 export VLLM_ATTENTION_BACKEND=FLASHINFER      # FlashInfer attention backend
@@ -308,6 +318,7 @@ export VLLM_CHUNKED_PREFILL_SIZE=4096         # Optimal chunk size for RTX 4090
 ```
 
 #### Memory Management
+
 ```bash
 # PyTorch memory optimization
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128,garbage_collection_threshold:0.8
@@ -321,6 +332,7 @@ export CUDA_MODULE_LOADING=LAZY               # Lazy module loading
 ### Performance Optimization Levels
 
 #### Level 1: Basic Optimization
+
 ```bash
 # Minimum viable performance settings
 VLLM_ATTENTION_BACKEND=FLASHINFER
@@ -329,6 +341,7 @@ VLLM_KV_CACHE_DTYPE=fp16
 ```
 
 #### Level 2: Production Optimization (Recommended)
+
 ```bash
 # Production-ready performance settings
 VLLM_ATTENTION_BACKEND=FLASHINFER
@@ -339,6 +352,7 @@ VLLM_DISABLE_CUSTOM_ALL_REDUCE=1
 ```
 
 #### Level 3: Maximum Performance
+
 ```bash
 # Maximum performance settings (experimental)
 VLLM_ATTENTION_BACKEND=FLASHINFER
@@ -352,7 +366,7 @@ VLLM_DISABLE_CUSTOM_ALL_REDUCE=1
 
 ## Advanced Configuration
 
-### Configuration Validation
+### Configuration Validation - Advanced Configuration
 
 DocMind AI provides comprehensive configuration validation:
 
@@ -408,6 +422,7 @@ class VLLMConfig(BaseModel):
 ### Environment-Specific Configurations
 
 #### Development Configuration
+
 ```bash
 # Development settings - faster startup, more logging
 DOCMIND_DEBUG=true
@@ -418,6 +433,7 @@ DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB=50
 ```
 
 #### Testing Configuration
+
 ```bash
 # Testing settings - lightweight models, fast execution
 DOCMIND_DEBUG=true
@@ -429,6 +445,7 @@ DOCMIND_PROCESSING__CHUNK_SIZE=500
 ```
 
 #### Production Configuration
+
 ```bash
 # Production settings - optimized for performance and reliability
 DOCMIND_DEBUG=false
@@ -721,16 +738,19 @@ if __name__ == "__main__":
 If migrating from an older DocMind AI configuration:
 
 1. **Backup existing configuration:**
+
    ```bash
    cp .env .env.backup
    ```
 
 2. **Use migration script:**
+
    ```bash
    python scripts/migrate_configuration.py .env.backup .env
    ```
 
 3. **Manual migration mapping:**
+
    ```bash
    # Legacy -> New format
    DOCMIND_MODEL_NAME=... -> DOCMIND_VLLM__MODEL=...
@@ -740,6 +760,7 @@ If migrating from an older DocMind AI configuration:
    ```
 
 4. **Validate migration:**
+
    ```bash
    python -c "from src.config import settings; print('✅ Migration successful')"
    ```
