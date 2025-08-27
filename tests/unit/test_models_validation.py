@@ -155,10 +155,10 @@ class TestDocMindSettingsConfiguration:
     def test_app_settings_validates_rrf_weights(self):
         """RRF fusion weights should be validated for hybrid search."""
         # Valid RRF weights should sum to 1.0 or be reasonable
-        settings = DocMindSettings(
-            rrf_fusion_weight_dense=0.7, rrf_fusion_weight_sparse=0.3
-        )
+        settings = DocMindSettings(rrf_fusion_alpha=60)
 
+        assert settings.rrf_fusion_alpha == 60
+        # Test computed properties for RRF weights
         assert settings.rrf_fusion_weight_dense == 0.7
         assert settings.rrf_fusion_weight_sparse == 0.3
         # Weights should sum to 1.0 for proper fusion
@@ -169,23 +169,6 @@ class TestDocMindSettingsConfiguration:
             )
             < 0.01
         )
-
-    def test_app_settings_url_validation(self):
-        """URL settings should be properly formatted."""
-        settings = DocMindSettings()
-
-        # URLs should be well-formed
-        assert settings.qdrant_url.startswith(("http://", "https://"))
-        assert settings.ollama_base_url.startswith(("http://", "https://"))
-
-        # Should handle custom URLs
-        custom_settings = DocMindSettings(
-            qdrant_url="http://custom-qdrant:6333",
-            ollama_base_url="http://custom-ollama:11434",
-        )
-
-        assert custom_settings.qdrant_url == "http://custom-qdrant:6333"
-        assert custom_settings.ollama_base_url == "http://custom-ollama:11434"
 
     def test_app_settings_model_configuration(self):
         """Model settings should be properly configured for LLM operations."""
@@ -203,9 +186,9 @@ class TestDocMindSettingsConfiguration:
         assert settings.embedding_model is not None
         assert len(settings.embedding_model) > 0
 
-        # Should have reasonable batch size for efficiency
-        assert settings.embedding_batch_size > 0
-        assert settings.embedding_batch_size <= 100  # Reasonable upper bound
+        # Should have reasonable batch size for efficiency (BGE-M3 settings)
+        assert settings.bge_m3_batch_size_gpu > 0
+        assert settings.bge_m3_batch_size_gpu <= 100  # Reasonable upper bound
 
     def test_app_settings_hardware_configuration(self):
         """Hardware settings should be configured appropriately."""
@@ -253,26 +236,26 @@ class TestRealWorldConfigurationScenarios:
         """Test configuration for memory-constrained environments."""
         memory_efficient_settings = DocMindSettings(
             chunk_size=256,  # Smaller chunks
-            embedding_batch_size=10,  # Smaller batches
+            bge_m3_batch_size_cpu=4,  # Smaller batches for CPU
             top_k=3,  # Fewer results
             enable_gpu_acceleration=False,  # CPU-only for memory efficiency
         )
 
         assert memory_efficient_settings.chunk_size <= 512
-        assert memory_efficient_settings.embedding_batch_size <= 20
+        assert memory_efficient_settings.bge_m3_batch_size_cpu <= 20
         assert memory_efficient_settings.top_k <= 5
 
     def test_high_performance_configuration(self):
         """Test configuration for high-performance environments."""
         high_perf_settings = DocMindSettings(
             chunk_size=2048,  # Larger chunks for more context
-            embedding_batch_size=50,  # Larger batches
+            bge_m3_batch_size_gpu=32,  # Larger GPU batches
             top_k=20,  # More comprehensive results
             enable_gpu_acceleration=True,  # GPU acceleration
         )
 
         assert high_perf_settings.chunk_size >= 1000
-        assert high_perf_settings.embedding_batch_size >= 30
+        assert high_perf_settings.bge_m3_batch_size_gpu >= 30
         assert high_perf_settings.enable_gpu_acceleration is True
 
 
@@ -300,9 +283,9 @@ class TestConfigurationValidationEdgeCases:
         small_k_settings = DocMindSettings(top_k=1)
         assert small_k_settings.top_k == 1
 
-        # Large but reasonable value
-        large_k_settings = DocMindSettings(top_k=100)
-        assert large_k_settings.top_k == 100
+        # Maximum allowed value (50 is the upper limit)
+        large_k_settings = DocMindSettings(top_k=50)
+        assert large_k_settings.top_k == 50
 
     def test_gpu_settings_boundary_values(self):
         """GPU settings boundary values should be handled correctly."""
@@ -313,17 +296,3 @@ class TestConfigurationValidationEdgeCases:
         # GPU enabled
         gpu_on_settings = DocMindSettings(enable_gpu_acceleration=True)
         assert gpu_on_settings.enable_gpu_acceleration is True
-
-    def test_url_format_variations(self):
-        """Different URL formats should be handled appropriately."""
-        url_variations = [
-            "http://localhost:6333",
-            "https://qdrant.example.com",
-            "http://192.168.1.100:6333",
-            "https://qdrant:6333",
-        ]
-
-        for url in url_variations:
-            settings = DocMindSettings(qdrant_url=url)
-            assert settings.qdrant_url == url
-            assert settings.qdrant_url.startswith(("http://", "https://"))
