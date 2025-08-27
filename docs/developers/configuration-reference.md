@@ -1197,35 +1197,35 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 
 #### Usage-Based Field Classification
 
-**Category 1: Critical Production Fields (100% usage)**
+**Category 1: Critical Production Fields (100% usage)**:
 
 - `model_name` - Model selection and loading
 - `bge_m3_model_name` - Embedding generation  
 - `agent_decision_timeout` - Performance compliance
 - `enable_multi_agent` - Core functionality flag
 
-**Category 2: Performance Optimization Fields (80% usage)**  
+**Category 2: Performance Optimization Fields (80% usage)**:
 
 - `gpu_memory_utilization` - Memory management
 - `vllm_kv_cache_dtype` - KV cache optimization
 - `chunk_size` - Processing efficiency
 - `context_window_size` - Model capacity
 
-**Category 3: Feature Configuration Fields (60% usage)**
+**Category 3: Feature Configuration Fields (60% usage)**:
 
 - `enable_fallback_rag` - Fallback system
 - `enable_dspy_optimization` - Query optimization
 - `use_reranking` - Search enhancement
 - `enable_document_caching` - Performance caching
 
-**Category 4: Infrastructure Fields (40% usage)**
+**Category 4: Infrastructure Fields (40% usage)**:
 
 - `log_level` - Logging configuration
 - `data_dir` - File system paths
 - `cache_dir` - Cache management
 - `sqlite_db_path` - Persistence layer
 
-**Category 5: Development/Debug Fields (20% usage)**
+**Category 5: Development/Debug Fields (20% usage)**:
 
 - `debug` - Development mode
 - `enable_performance_logging` - Detailed metrics
