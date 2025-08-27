@@ -1,41 +1,48 @@
-# Developer Documentation
+# DocMind AI Developer Documentation
 
-This directory contains comprehensive documentation for DocMind AI developers. All guides follow consistent formatting with kebab-case naming conventions and structured content organization.
+**Streamlined developer documentation following industry best practices with the Divio documentation framework**
 
-## Quick Navigation
+This directory contains comprehensive, consolidated documentation for DocMind AI developers. The documentation has been optimized from 15+ files to 5 core guides, eliminating redundancy while preserving all essential technical content.
 
-### 🚀 Getting Started
-- **[Developer Setup](developer-setup.md)** - Complete setup guide (30 min quickstart)
-- **[Architecture Guide](architecture.md)** - System design and components
-- **[Development Guide](development-guide.md)** - Coding standards and practices
+## 🚀 Quick Navigation
 
-### 📊 System Documentation
-- **[Multi-Agent System](multi-agent-system.md)** - Agent coordination and orchestration
-- **[GPU and Performance](gpu-and-performance.md)** - Hardware optimization guides
-- **[Model Configuration](model-configuration.md)** - AI model setup and configuration
+### Core Documentation (5 Essential Guides)
 
-### 🔧 Implementation Guides  
-- **[Retrieval & Search Implementation](retrieval-search-implementation.md)** - Search system details
-- **[Testing Guide](testing.md)** - Testing strategies and frameworks
-- **[Deployment Guide](deployment.md)** - Production deployment procedures
+| Guide | Purpose | Audience | Time to Read |
+|-------|---------|----------|--------------|
+| **[Getting Started](getting-started.md)** | Complete 30-minute onboarding from zero to productive | New developers | 30 min |
+| **[System Architecture](system-architecture.md)** | Deep understanding of multi-agent coordination and system design | Developers needing architectural context | 45 min |
+| **[Developer Handbook](developer-handbook.md)** | Practical implementation guidance, testing, and maintenance | Active developers building features | 60 min |
+| **[Configuration Reference](configuration-reference.md)** | Complete configuration guide with GPU optimization | DevOps, system administrators | 30 min |
+| **[Operations Guide](operations-guide.md)** | Production deployment and operational procedures | DevOps, SRE, production teams | 45 min |
 
-### 📋 Reports and Analysis
-- **[Validation Report](validation-report.md)** - Comprehensive system validation
-- **[Environment Variable Configuration](environment-variable-configuration.md)** - Complete environment variable setup guide
-- **[Future Development](future-development.md)** - Roadmap and planned enhancements
-- **[Lessons Learned](lessons-learned.md)** - Project insights and best practices
-- **[Maintenance Procedures](maintenance-procedures.md)** - Operational maintenance
+### Documentation Framework
 
-## Documentation Structure
+Following the **Divio Documentation System** for optimal developer experience:
 
-Each guide follows this standard structure:
+- **Tutorial** ([Getting Started](getting-started.md)) - Learning-oriented guidance
+- **How-to Guides** ([Developer Handbook](developer-handbook.md)) - Problem-solving oriented
+- **Reference** ([Configuration Reference](configuration-reference.md)) - Information-oriented  
+- **Explanation** ([System Architecture](system-architecture.md)) - Understanding-oriented
+- **Operations** ([Operations Guide](operations-guide.md)) - Production-oriented
 
-- **Purpose**: What this document covers
-- **Audience**: Who should read this
-- **Prerequisites**: Required knowledge or setup
-- **Step-by-step instructions**: Clear, actionable content
-- **Examples**: Runnable code snippets
-- **Troubleshooting**: Common issues and solutions
+## User Journey Paths
+
+### New Developer Onboarding
+1. **Start Here**: [Getting Started](getting-started.md) - 30-minute setup
+2. **Understand the System**: [System Architecture](system-architecture.md) - Core concepts
+3. **Learn Development Practices**: [Developer Handbook](developer-handbook.md) - Implementation patterns
+4. **Configure for Your Environment**: [Configuration Reference](configuration-reference.md) - Optimization
+
+### Experienced Developer Quick Access
+1. **Implementation Guidance**: [Developer Handbook](developer-handbook.md) - Patterns and practices
+2. **Architecture Reference**: [System Architecture](system-architecture.md) - System design
+3. **Configuration Tuning**: [Configuration Reference](configuration-reference.md) - Performance optimization
+
+### DevOps/Production Teams
+1. **Deployment Procedures**: [Operations Guide](operations-guide.md) - Production deployment
+2. **Configuration Management**: [Configuration Reference](configuration-reference.md) - Environment setup
+3. **Performance Optimization**: [Operations Guide](operations-guide.md) - Production tuning
 
 ## Key Architectural Principles
 
@@ -55,22 +62,22 @@ Each guide follows this standard structure:
 
 ### Essential Commands
 ```bash
-# Setup
+# Setup (detailed in Getting Started guide)
 uv sync && streamlit run src/app.py
 
-# Testing  
+# Testing (detailed in Developer Handbook)
 pytest tests/unit/ -v                    # Fast unit tests
 pytest tests/integration/ -v             # Cross-component tests
 python scripts/run_tests.py              # Full test suite
 
-# Code Quality
+# Code Quality (detailed in Developer Handbook)
 ruff format . && ruff check . --fix      # Format and lint
 python scripts/performance_validation.py # Performance check
 ```
 
 ### Configuration Pattern
 ```python
-# Always use this pattern
+# Always use this pattern (detailed in Configuration Reference)
 from src.config import settings
 
 # Access any configuration
@@ -79,39 +86,60 @@ embedding_model = settings.embedding.model_name
 chunk_size = settings.processing.chunk_size
 ```
 
-### Key File Locations
-```
-src/config/settings.py     # All configuration
-src/models/                # Pydantic models  
-src/agents/coordinator.py  # Multi-agent system
-src/retrieval/             # Search and retrieval
-docs/adrs/                 # Architectural decisions
-```
-
 ## Getting Help
 
-1. **Setup Issues**: See [Developer Setup](developer-setup.md) troubleshooting
-2. **Architecture Questions**: Check [Architecture Guide](architecture.md)
-3. **Development Problems**: Review [Development Guide](development-guide.md)
-4. **Performance Issues**: Consult [GPU and Performance](gpu-and-performance.md)
-5. **ADR References**: Check [../adrs/](../adrs/) for architectural decisions
+| Issue Type | Primary Guide | Secondary Resources |
+|------------|---------------|-------------------|
+| **Setup Problems** | [Getting Started](getting-started.md) | [Configuration Reference](configuration-reference.md) |
+| **Architecture Questions** | [System Architecture](system-architecture.md) | [../adrs/](../adrs/) (ADRs) |
+| **Implementation Help** | [Developer Handbook](developer-handbook.md) | [System Architecture](system-architecture.md) |
+| **Configuration Issues** | [Configuration Reference](configuration-reference.md) | [Operations Guide](operations-guide.md) |
+| **Performance Problems** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
+| **Production Deployment** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
 
 ## Contributing
 
-1. **Read**: [Developer Setup](developer-setup.md) → [Development Guide](development-guide.md)
-2. **Understand**: Review relevant [ADRs](../adrs/) for architectural context
-3. **Follow**: Unified configuration patterns and coding standards
-4. **Test**: Comprehensive testing with quality checks
-5. **Document**: Update relevant guides for significant changes
+1. **Read**: [Getting Started](getting-started.md) → [Developer Handbook](developer-handbook.md)
+2. **Understand**: [System Architecture](system-architecture.md) + relevant [ADRs](../adrs/)
+3. **Configure**: [Configuration Reference](configuration-reference.md) for optimal development
+4. **Deploy**: [Operations Guide](operations-guide.md) for production considerations
+
+## Documentation Consolidation
+
+**Major Improvement**: This documentation has been streamlined from **15+ files to 5 core guides** following industry best practices:
+
+### Before & After
+
+| Before (15+ Files) | After (5 Core Guides) | Improvement |
+|-------------------|----------------------|-------------|
+| Complex navigation | Clear user journeys | 📈 Usability |
+| Content duplication | Unified information | 📈 Maintenance |
+| Scattered information | Logical organization | 📈 Discoverability |
+| Inconsistent structure | Divio framework | 📈 Standards |
+
+### Migration Notes
+
+If you're looking for content from the previous documentation structure:
+
+- **Setup/Installation** → [Getting Started](getting-started.md)
+- **Architecture/Multi-Agent** → [System Architecture](system-architecture.md)  
+- **Development/Testing** → [Developer Handbook](developer-handbook.md)
+- **Environment/Model Config** → [Configuration Reference](configuration-reference.md)
+- **Deployment/Performance** → [Operations Guide](operations-guide.md)
+- **Lessons/Validation** → [Operations Guide](operations-guide.md)
+
+### Archived Documentation
+
+Previous documentation files have been moved to the `archived/` directory and remain available for reference, but the consolidated guides above contain all essential information in a better organized format.
 
 ## Documentation Standards
 
 - **Format**: Markdown with proper heading hierarchy
-- **Naming**: kebab-case for all files
-- **Structure**: Table of contents for documents >50 lines
+- **Framework**: Divio documentation system (Tutorial, How-to, Reference, Explanation)
+- **Structure**: Clear table of contents and user journey optimization
 - **Code**: Include imports and ensure examples are runnable
 - **Diagrams**: Use Mermaid for system flows and architecture
-- **Links**: Use relative paths and maintain cross-references
+- **Links**: Maintain cross-references between consolidated guides
 
 ---
 
@@ -119,4 +147,4 @@ docs/adrs/                 # Architectural decisions
 
 This documentation represents a production-ready system with 95% ADR compliance and excellent code quality scores. The unified architecture approach ensures you only need to learn one pattern: `from src.config import settings`.
 
-Start with [Developer Setup](developer-setup.md) to get running in 30 minutes.
+**Start your journey**: [Getting Started Guide](getting-started.md) (30 minutes to productive)
