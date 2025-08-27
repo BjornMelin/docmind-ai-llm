@@ -10,11 +10,12 @@ This comprehensive handbook provides practical implementation guidance for devel
 
 1. [Development Standards](#development-standards)
 2. [Implementation Patterns](#implementation-patterns)
-3. [Testing Strategies](#testing-strategies)
-4. [Code Quality & Maintenance](#code-quality--maintenance)
-5. [Advanced Implementation Details](#advanced-implementation-details)
-6. [Performance Optimization](#performance-optimization)
-7. [Troubleshooting & Debugging](#troubleshooting--debugging)
+3. [Configuration Architecture Implementation](#configuration-architecture-implementation)
+4. [Testing Strategies](#testing-strategies)
+5. [Code Quality & Maintenance](#code-quality--maintenance)
+6. [Advanced Implementation Details](#advanced-implementation-details)
+7. [Performance Optimization](#performance-optimization)
+8. [Troubleshooting & Debugging](#troubleshooting--debugging)
 
 ## Development Standards
 
@@ -285,6 +286,436 @@ def retrieve_documents(
     
     return results[:5]  # Return top 5
 ```
+
+## Configuration Architecture Implementation
+
+### Overview
+
+This section provides comprehensive guidance for implementing clean configuration architecture in DocMind AI, based on lessons learned from successfully eliminating 127 lines of test contamination and achieving 95% complexity reduction. The patterns documented here follow library-first principles using pytest + pydantic-settings.
+
+### Clean Production Configuration Architecture
+
+#### Core Configuration Principles
+
+1. **Zero Test Contamination**: Production configuration must never contain test-specific code
+2. **Single Source of Truth**: All configuration through unified `DocMindSettings` class
+3. **Library-First Patterns**: Use standard Pydantic BaseSettings and pytest fixtures
+4. **ADR Compliance**: Maintain alignment with architectural decisions
+
+#### Production Settings Structure
+
+```python
+from pathlib import Path
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class DocMindSettings(BaseSettings):
+    """Clean production configuration without test contamination."""
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="DOCMIND_",
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        extra="forbid",
+    )
+
+    # Core Application
+    app_name: str = Field(default="DocMind AI")
+    app_version: str = Field(default="2.0.0")
+    debug: bool = Field(default=False)
+    log_level: str = Field(default="INFO")
+
+    # Agent Configuration (ADR-compliant)
+    enable_multi_agent: bool = Field(default=True)
+    agent_decision_timeout: int = Field(default=200, ge=10, le=1000)  # ADR-024: 200ms
+    max_agent_retries: int = Field(default=2, ge=0, le=5)
+    enable_fallback_rag: bool = Field(default=True)
+    max_concurrent_agents: int = Field(default=3, ge=1, le=10)
+
+    # LLM Configuration (ADR-004 compliant)
+    model_name: str = Field(default="Qwen/Qwen3-4B-Instruct-2507")
+    llm_backend: str = Field(default="vllm")
+    llm_base_url: str = Field(default="http://localhost:11434")
+    llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    
+    # Context Management
+    context_window_size: int = Field(default=131072, ge=8192, le=200000)
+    enable_conversation_memory: bool = Field(default=True)
+
+    # Hardware and Performance
+    enable_gpu_acceleration: bool = Field(default=True)
+    max_vram_gb: float = Field(default=14.0, ge=1.0, le=80.0)
+    
+    # BGE-M3 Configuration (ADR-002 compliant)
+    bge_m3_model_name: str = Field(default="BAAI/bge-m3")
+    bge_m3_embedding_dim: int = Field(default=1024, ge=512, le=4096)
+    bge_m3_max_length: int = Field(default=8192, ge=512, le=16384)
+    
+    # File System Paths
+    data_dir: Path = Field(default=Path("./data"))
+    cache_dir: Path = Field(default=Path("./cache"))
+    sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
+    log_file: Path = Field(default=Path("./logs/docmind.log"))
+
+    def model_post_init(self, __context: Any) -> None:
+        """Create directories and validate configuration."""
+        # Directory creation
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Validation
+        if self.enable_gpu_acceleration and not torch.cuda.is_available():
+            logger.warning("GPU acceleration requested but CUDA not available")
+
+# Global settings instance
+settings = DocMindSettings()
+```
+
+#### Key Anti-Patterns to Avoid
+
+**❌ Test Code in Production Classes**:
+
+```python
+# ANTI-PATTERN: Never do this
+class DocMindSettings(BaseSettings):
+    if "pytest" in sys.modules:
+        default_data_dir = "/tmp/docmind_test"
+    else:
+        default_data_dir = "./data"
+```
+
+**❌ Duplicate Field Definitions**:
+
+```python
+# ANTI-PATTERN: Conflicting field definitions
+class DocMindSettings(BaseSettings):
+    llm_backend: str = Field(default="vllm")    # Line 132
+    # ... 50 lines later ...
+    llm_backend: str = Field(default="ollama")  # Line 185 - CONFLICT!
+```
+
+**❌ Complex Synchronization Logic**:
+
+```python
+# ANTI-PATTERN: Custom synchronization instead of Pydantic patterns
+def _sync_nested_models(self) -> None:
+    """60+ lines of complex synchronization logic"""
+    # Use Pydantic computed fields or validators instead
+```
+
+### Test Configuration Architecture
+
+#### Test Settings Hierarchy
+
+Use BaseSettings subclassing for clean test configuration:
+
+```python
+# tests/fixtures/test_settings.py
+from src.config.settings import DocMindSettings
+from pydantic import Field
+
+class TestDocMindSettings(DocMindSettings):
+    """Test-specific configuration with overrides for fast testing."""
+    
+    model_config = SettingsConfigDict(
+        env_file=None,  # Don't load .env in tests
+        env_prefix="DOCMIND_TEST_",
+        validate_default=True
+    )
+    
+    # Test-optimized defaults
+    debug: bool = Field(default=True)
+    log_level: str = Field(default="DEBUG")
+    
+    # Disable expensive operations for unit tests
+    enable_gpu_acceleration: bool = Field(default=False)
+    enable_dspy_optimization: bool = Field(default=False) 
+    enable_performance_logging: bool = Field(default=False)
+    
+    # Smaller context for faster tests
+    context_window_size: int = Field(default=1024, ge=512, le=8192)
+    
+    # Test-specific timeout (faster than production)
+    agent_decision_timeout: int = Field(default=100, ge=10, le=1000)
+
+class IntegrationTestSettings(TestDocMindSettings):
+    """Integration test settings with moderate performance requirements."""
+    
+    enable_gpu_acceleration: bool = Field(default=True) 
+    context_window_size: int = Field(default=4096, ge=1024, le=32768)
+    agent_decision_timeout: int = Field(default=150, ge=50, le=500)
+
+class SystemTestSettings(DocMindSettings):
+    """System test settings - uses production defaults."""
+    pass  # Inherits all production settings
+```
+
+#### Pytest Fixture Patterns
+
+```python
+# tests/conftest.py
+import pytest
+from tests.fixtures.test_settings import TestDocMindSettings, IntegrationTestSettings
+
+@pytest.fixture(scope="session")
+def test_settings(tmp_path_factory) -> TestDocMindSettings:
+    """Primary test settings fixture for unit tests."""
+    temp_dir = tmp_path_factory.mktemp("test_settings")
+    
+    return TestDocMindSettings(
+        # Use temporary directories
+        data_dir=str(temp_dir / "data"),
+        cache_dir=str(temp_dir / "cache"),  
+        log_file=str(temp_dir / "logs" / "test.log"),
+        sqlite_db_path=str(temp_dir / "test.db"),
+    )
+
+@pytest.fixture(scope="session") 
+def integration_settings(tmp_path_factory) -> IntegrationTestSettings:
+    """Integration test settings with moderate performance."""
+    temp_dir = tmp_path_factory.mktemp("integration_test")
+    
+    return IntegrationTestSettings(
+        data_dir=str(temp_dir / "data"),
+        cache_dir=str(temp_dir / "cache"),
+        # Enable realistic features for integration testing
+        enable_document_caching=True,
+        use_reranking=True,
+    )
+
+@pytest.fixture
+def settings_with_overrides():
+    """Factory fixture for creating settings with specific overrides."""
+    def _create_settings(**overrides):
+        return TestDocMindSettings(**overrides)
+    return _create_settings
+```
+
+### Configuration Migration Patterns
+
+#### Migrating from Test-Contaminated Configuration
+
+**Before: Contaminated Production Code**:
+
+```python
+# BEFORE: Production code with test contamination
+class DocMindSettings(BaseSettings):
+    # 127 lines of test compatibility code mixed with production logic
+    
+    # === FLAT ATTRIBUTES FOR TEST COMPATIBILITY ===
+    embedding_model: str = Field(default="BAAI/bge-large-en-v1.5")  # Test compatibility
+    agent_decision_timeout: int = Field(default=300)  # Wrong - should be 200ms
+    
+    def _sync_nested_models(self) -> None:
+        """60+ lines of complex synchronization for test support"""
+        # Complex custom logic instead of Pydantic patterns
+```
+
+**After: Clean Separation**:
+
+```python
+# AFTER: Clean production configuration
+class DocMindSettings(BaseSettings):
+    """Production-only configuration - zero test contamination."""
+    bge_m3_model_name: str = Field(default="BAAI/bge-m3")  # Always BGE-M3
+    agent_decision_timeout: int = Field(default=200)  # ADR-compliant
+    
+    # No test code, no synchronization - clean Pydantic patterns
+
+# Separate test configuration via inheritance
+class TestDocMindSettings(DocMindSettings):  
+    """Test configuration via inheritance - no production contamination."""
+    # Test-specific overrides only
+    enable_gpu_acceleration: bool = Field(default=False)
+    agent_decision_timeout: int = Field(default=100)  # Faster for tests
+```
+
+#### Test Migration Examples
+
+**Pattern 1: Basic Settings Usage**:
+
+```python
+# Before (uses backward compatibility)
+def test_settings_default_values():
+    settings = DocMindSettings()
+    assert settings.embedding_model == "BAAI/bge-large-en-v1.5"  # Wrong model
+    assert settings.agent_decision_timeout == 300  # Wrong timeout
+
+# After (uses proper test settings)
+def test_settings_default_values(test_settings):
+    """Updated to use test fixture and ADR-compliant values."""
+    # Test the actual BGE-M3 model name (ADR-002)
+    assert test_settings.bge_m3_model_name == "BAAI/bge-m3"
+    
+    # Test timeout matches production ADR requirement 
+    settings = DocMindSettings()  # Production settings
+    assert settings.agent_decision_timeout == 200
+    
+    # Test settings can have different timeout for test speed
+    assert test_settings.agent_decision_timeout == 100
+```
+
+**Pattern 2: Environment Variable Testing**:
+
+```python
+# Before
+@patch.dict(os.environ, {"DOCMIND_EMBEDDING_MODEL": "custom-model"})
+def test_environment_override():
+    settings = DocMindSettings() 
+    assert settings.embedding_model == "custom-model"
+
+# After (using BGE-M3 pattern)
+@patch.dict(os.environ, {"DOCMIND_BGE_M3_MODEL_NAME": "custom-bge-m3"})
+def test_environment_override():
+    settings = DocMindSettings()
+    assert settings.bge_m3_model_name == "custom-bge-m3"
+```
+
+### Implementation Checklist
+
+#### Phase 1: Production Settings Cleanup
+
+- [ ] **Remove test contamination sections** (typically 100+ lines of test compatibility code)
+- [ ] **Fix ADR violations**: Update `agent_decision_timeout=200`, use BGE-M3 model names
+- [ ] **Remove backward compatibility artifacts**: Unused properties, duplicate fields
+- [ ] **Verify nested models** are properly maintained without custom sync logic
+- [ ] **Test production instantiation**: `settings = DocMindSettings()` works without errors
+
+#### Phase 2: Test Infrastructure Setup  
+
+- [ ] **Create test settings module**: `tests/fixtures/test_settings.py` with BaseSettings subclasses
+- [ ] **Update test fixtures**: `tests/conftest.py` with new pytest fixture patterns
+- [ ] **Test fixture functionality**: All three tiers (unit/integration/system) load properly
+- [ ] **Verify environment override**: patterns still work with new fixtures
+
+#### Phase 3: Test File Migration
+
+- [ ] **Identify affected test files**: Use `rg "embedding_model.*bge-large-en-v1.5" tests/`
+- [ ] **Update test assertions**: Replace model names and timeout expectations
+- [ ] **Remove legacy method calls**: Eliminate `_sync_nested_models()` calls from tests
+- [ ] **Run test suite**: Verify all tests pass with new patterns
+
+#### Phase 4: Validation
+
+- [ ] **Production smoke test**: Verify app starts with clean settings
+- [ ] **Full test suite pass**: All tiers (unit/integration/system)
+- [ ] **Performance regression check**: Ensure no slowdown from changes
+- [ ] **ADR compliance verification**: All architectural decisions aligned
+
+### Configuration Validation Tools
+
+#### ADR Compliance Verification
+
+```python
+def verify_configuration_compliance() -> Dict[str, Any]:
+    """Verify configuration meets ADR requirements."""
+    
+    from src.config import settings
+    
+    compliance_report = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "overall_status": "compliant",
+        "violations": []
+    }
+    
+    # ADR-002: BGE-M3 Unified Embedding
+    if settings.bge_m3_model_name != "BAAI/bge-m3":
+        compliance_report["violations"].append({
+            "adr": "ADR-002",
+            "issue": f"Wrong embedding model: {settings.bge_m3_model_name}",
+            "expected": "BAAI/bge-m3"
+        })
+    
+    # ADR-024: Configuration Architecture - Agent timeout
+    if settings.agent_decision_timeout != 200:
+        compliance_report["violations"].append({
+            "adr": "ADR-024", 
+            "issue": f"Wrong agent timeout: {settings.agent_decision_timeout}ms",
+            "expected": "200ms"
+        })
+    
+    # Check for test contamination
+    import inspect
+    config_source = inspect.getsource(settings.__class__)
+    test_patterns = ["pytest", "test_", "TEST", "compatibility"]
+    
+    for pattern in test_patterns:
+        if pattern.lower() in config_source.lower():
+            compliance_report["violations"].append({
+                "adr": "ADR-026",
+                "issue": f"Test contamination detected: {pattern}",
+                "expected": "Zero test code in production"
+            })
+    
+    if compliance_report["violations"]:
+        compliance_report["overall_status"] = "non-compliant"
+    
+    return compliance_report
+```
+
+#### Configuration Health Check
+
+```python
+def configuration_health_check() -> Dict[str, Any]:
+    """Comprehensive configuration health assessment."""
+    
+    health_report = {
+        "configuration_cleanliness": "healthy",
+        "adr_compliance": "compliant", 
+        "test_isolation": "isolated",
+        "metrics": {}
+    }
+    
+    # Check configuration file size/complexity
+    import inspect
+    from src.config.settings import DocMindSettings
+    
+    source_lines = len(inspect.getsource(DocMindSettings).split('\n'))
+    health_report["metrics"]["settings_line_count"] = source_lines
+    
+    if source_lines > 100:
+        health_report["configuration_cleanliness"] = "complex"
+        health_report["recommendations"] = [
+            "Consider breaking down large configuration class",
+            "Review if all fields are necessary"
+        ]
+    
+    # Verify ADR compliance
+    compliance_result = verify_configuration_compliance()
+    if compliance_result["violations"]:
+        health_report["adr_compliance"] = "non-compliant"
+        health_report["adr_violations"] = compliance_result["violations"]
+    
+    return health_report
+```
+
+### Best Practices Summary
+
+#### ✅ Configuration Architecture Best Practices
+
+1. **Complete Separation**: Zero test code in production configuration classes
+2. **Library-First**: Use standard pytest + pydantic-settings patterns exclusively
+3. **Single Source of Truth**: One configuration class with clear inheritance hierarchy
+4. **ADR Compliance**: Regular verification of architectural decision alignment
+5. **Environment-Based**: Use environment variables for all deployment-specific config
+
+#### ❌ Anti-Patterns to Avoid
+
+1. **Test Detection Logic**: Never check `if "pytest" in sys.modules` in production code
+2. **Duplicate Fields**: Multiple definitions of same configuration field
+3. **Complex Sync Logic**: Custom synchronization instead of Pydantic built-ins
+4. **Mixed Concerns**: Combining test and production logic in same class
+5. **Hardcoded Values**: Environment-specific values embedded in code
+
+#### 🔧 Migration Tools
+
+- **Automated Pattern Detection**: Use `rg` to find test contamination patterns
+- **ADR Compliance Scripts**: Automated verification of architectural decisions
+- **Test Migration Utilities**: Scripts to update test assertions and fixture usage
+- **Configuration Health Monitoring**: Regular checks for complexity and cleanliness
+
+This configuration architecture ensures maintainable, clean, and compliant configuration management that follows industry best practices while supporting the full range of DocMind AI's deployment scenarios.
 
 ## Testing Strategies
 

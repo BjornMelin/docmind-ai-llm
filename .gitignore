@@ -243,12 +243,6 @@ docs/research/
 ADR_TEMPLATE.md
 docs/specs/analysis/
 CLEANUP_TRACKING.md
-architecture_decisions.json
-dependency_analysis.json
-drift_report.json
-implementation_blueprint.md
-library_recommendations.json
-requirements_map.json
 
 # Prevent test files in root directory
 /test_*.py
