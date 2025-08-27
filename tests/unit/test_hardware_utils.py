@@ -7,7 +7,8 @@ and comprehensive edge case coverage. Tests behavior rather than mock interactio
 from unittest.mock import patch
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
 
 from src.core.infrastructure.hardware_utils import (
     BYTES_TO_GB_FACTOR,

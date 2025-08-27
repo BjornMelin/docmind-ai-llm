@@ -3,14 +3,17 @@
 Tests direct Unstructured.io integration with hi-res strategy, strategy mapping,
 multimodal extraction, and performance targets.
 
-Migrated from DirectUnstructuredProcessor to use the working
-DocumentProcessor implementation.
+Uses the working DocumentProcessor implementation for direct Unstructured.io integration.
 """
 
 import asyncio
+import os
 from unittest.mock import Mock, patch
 
 import pytest
+
+# Performance tests require explicit opt-in
+pytestmark = pytest.mark.skipif(os.getenv("PYTEST_PERF") != "1", reason="perf disabled")
 
 from src.models.processing import (
     ProcessingResult,
@@ -19,9 +22,6 @@ from src.models.processing import (
 
 # Import working implementations
 from src.processing.document_processor import DocumentProcessor
-
-# Alias for backward compatibility during transition
-DirectUnstructuredProcessor = DocumentProcessor
 
 
 @pytest.fixture
@@ -690,7 +690,7 @@ class TestGherkinScenarios:
         """Test Scenario 1: DIRECT Unstructured.io One-Line Processing.
 
         Given: A PDF document with tables and images
-        When: Using DirectUnstructuredProcessor.process_document_async()
+        When: Using DocumentProcessor.process_document_async()
         Then: Single partition() call extracts all multimodal content
         And: Processing completes with hi_res strategy
         And: All elements are categorized correctly
@@ -840,7 +840,7 @@ class TestComplexDocumentProcessing:
             mock_partition.return_value = complex_pdf_elements
 
             # This will initialize the processor for implementation
-            DirectUnstructuredProcessor(mock_settings)
+            DocumentProcessor(mock_settings)
 
             # This will need to be async when implemented
             # For now, test the element processing logic

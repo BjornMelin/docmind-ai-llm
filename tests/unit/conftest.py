@@ -11,7 +11,6 @@ Follows 2025 pytest patterns with proper typing and async support.
 
 import base64
 import io
-import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -19,8 +18,7 @@ from unittest.mock import Mock
 import pytest
 from PIL import Image
 
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Import path handling moved to pytest.ini pythonpath configuration
 
 # Note: mock_settings removed - use fixtures from main conftest.py
 # Note: PDF creation moved to use temp_pdf_file from main conftest.py

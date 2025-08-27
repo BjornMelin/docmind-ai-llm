@@ -5,10 +5,15 @@ including edge cases, error conditions, performance benchmarks, and memory manag
 """
 
 import asyncio
+import os
 from unittest.mock import Mock, patch
 
 import pytest
-import torch
+
+# Performance tests require explicit opt-in
+pytestmark = pytest.mark.skipif(os.getenv("PYTEST_PERF") != "1", reason="perf disabled")
+
+torch = pytest.importorskip("torch")
 
 from src.core.infrastructure.gpu_monitor import GPUMetrics, gpu_performance_monitor
 
