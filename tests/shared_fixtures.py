@@ -118,10 +118,11 @@ class MockLLMFactory:
 class MockLlamaIndexLLM(LLM):
     """Proper LlamaIndex LLM mock that inherits from LLM base class."""
 
+    response_text: str = "Mock LLM response"
+
     def __init__(self, response_text: str = "Mock LLM response", **kwargs):
         """Initialize MockLLM with configurable response text."""
-        super().__init__(**kwargs)
-        self.response_text = response_text
+        super().__init__(response_text=response_text, **kwargs)
 
     @property
     def metadata(self) -> LLMMetadata:
