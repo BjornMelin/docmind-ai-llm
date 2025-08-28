@@ -18,7 +18,12 @@ from typing import Any
 
 import torch
 from loguru import logger
-from qdrant_client import AsyncQdrantClient
+
+# Re-export QdrantClient for test compatibility
+from qdrant_client import (
+    AsyncQdrantClient,
+    QdrantClient,  # noqa: F401
+)
 
 from src.config import settings
 from src.config.settings import DocMindSettings

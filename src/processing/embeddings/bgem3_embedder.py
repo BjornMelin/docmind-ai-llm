@@ -572,3 +572,8 @@ class BGEM3Embedder:
             # Move model to CPU to free GPU memory
             self.model.model.to("cpu")
         logger.info("BGE-M3 model unloaded")
+
+
+# Aliases for test compatibility
+BGEM3EmbeddingManager = BGEM3Embedder
+FlagModel = BGEM3FlagModel

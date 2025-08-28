@@ -63,7 +63,7 @@ def test_settings_default_values():
     settings = DocMindSettings()
 
     # Core LLM Configuration (aligned with unified settings)
-    assert settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507"
+    assert settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
     assert settings.embedding.model_name == "BAAI/bge-m3"  # ADR-002 compliant
 
     # Search and Retrieval
@@ -85,11 +85,11 @@ def test_settings_default_values():
     assert settings.cache.enable_document_caching is True
 
     # Infrastructure
-    assert settings.vector_store_type == "qdrant"
+    assert settings.database.vector_store_type == "qdrant"
     assert settings.retrieval.use_reranking is True
 
 
-@patch.dict(os.environ, {"DOCMIND_QDRANT_URL": "http://test:1234"})
+@patch.dict(os.environ, {"DOCMIND_DATABASE__QDRANT_URL": "http://test:1234"})
 def test_settings_environment_override():
     """Test Settings model respects environment variable overrides."""
     settings = DocMindSettings()
@@ -159,7 +159,7 @@ def test_qdrant_url_configuration():
     )  # Actual default value
 
     # Test environment override
-    with patch.dict(os.environ, {"DOCMIND_QDRANT_URL": "http://qdrant:6333"}):
+    with patch.dict(os.environ, {"DOCMIND_DATABASE__QDRANT_URL": "http://qdrant:6333"}):
         settings = DocMindSettings()
         assert settings.database.qdrant_url == "http://qdrant:6333"
 

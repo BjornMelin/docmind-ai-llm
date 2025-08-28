@@ -265,17 +265,18 @@ class TestHardwareUtilsEdgeCases:
 
     def test_batch_size_model_type_variations(self):
         """Test batch size with various model type inputs."""
-        # Test case insensitivity isn't implemented (should return default)
-        result = get_recommended_batch_size("EMBEDDING")
-        assert result == 8  # Should use default since it's not "embedding"
+        with patch("torch.cuda.is_available", return_value=False):
+            # Test case insensitivity isn't implemented (should return default)
+            result = get_recommended_batch_size("EMBEDDING")
+            assert result == 8  # Should use default since it's not "embedding"
 
-        # Test partial matches don't work
-        result = get_recommended_batch_size("embed")
-        assert result == 8  # Should use default
+            # Test partial matches don't work
+            result = get_recommended_batch_size("embed")
+            assert result == 8  # Should use default
 
-        # Test whitespace doesn't work
-        result = get_recommended_batch_size(" embedding ")
-        assert result == 8  # Should use default
+            # Test whitespace doesn't work
+            result = get_recommended_batch_size(" embedding ")
+            assert result == 8  # Should use default
 
     def test_function_parameter_defaults(self):
         """Test that function parameters have sensible defaults."""

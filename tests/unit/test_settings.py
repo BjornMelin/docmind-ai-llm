@@ -667,9 +667,9 @@ class TestCentralizedConstants:
         """Test default processing value constants."""
         s = settings
 
-        assert s.default_batch_size == 20
-        assert s.default_confidence_threshold == 0.8
-        assert s.default_entity_confidence == 0.8
+        assert s.monitoring.default_batch_size == 20
+        assert s.monitoring.default_confidence_threshold == 0.8
+        assert s.monitoring.default_entity_confidence == 0.8
         assert s.retrieval.top_k == 10
         assert s.retrieval.reranking_top_k == 5
 
@@ -698,8 +698,8 @@ class TestCentralizedConstants:
         """Test performance monitoring constants."""
         s = settings
 
-        assert s.cpu_monitoring_interval == 0.1  # 100ms
-        assert s.percent_multiplier == 100
+        assert s.monitoring.cpu_monitoring_interval == 0.1  # 100ms
+        assert s.monitoring.percent_multiplier == 100
 
 
 class TestGlobalSettingsInstance:

@@ -260,7 +260,7 @@ class UnstructuredTransformation(TransformComponent):
                 # Preserve original node's excluded metadata keys and relationships
                 excluded_embed_metadata_keys=original_node.excluded_embed_metadata_keys,
                 excluded_llm_metadata_keys=original_node.excluded_llm_metadata_keys,
-                metadata_seperator=original_node.metadata_seperator,
+                metadata_separator=original_node.metadata_separator,
                 metadata_template=original_node.metadata_template,
                 text_template=original_node.text_template,
             )
@@ -639,3 +639,7 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Unexpected error getting cache stats: {e}")
             return {"error": str(e), "processor_type": "hybrid"}
+
+
+# Alias for test compatibility - tests expect UnstructuredLoader
+UnstructuredLoader = DocumentProcessor

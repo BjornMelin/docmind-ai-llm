@@ -729,10 +729,10 @@ class TestPerformanceSystemWorkflows:
         for i in range(10):
             settings = DocMindSettings(
                 debug=False,
-                context_window_size=16384,
                 enable_multi_agent=True,
-                use_reranking=True,
             )
+            # Set nested config values
+            settings.retrieval.use_reranking = True
             settings_instances.append(settings)
 
         workload_time = time.perf_counter() - start_time
