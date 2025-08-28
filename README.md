@@ -418,12 +418,13 @@ from src.config import settings
 import os
 
 # Override default settings
-os.environ["DOCMIND_DEFAULT_MODEL"] = "llama3.2"
-os.environ["DOCMIND_GPU_ACCELERATION"] = "true"
-os.environ["DOCMIND_ENABLE_COLBERT_RERANKING"] = "true"
+os.environ["DOCMIND_VLLM__MODEL"] = "qwen3-4b-instruct-2507-FP8"
+os.environ["DOCMIND_ENABLE_GPU_ACCELERATION"] = "true"
+os.environ["DOCMIND_RETRIEVAL__USE_RERANKING"] = "true"
 
-print(f"Using model: {settings.default_model}")
-print(f"GPU enabled: {settings.gpu_acceleration}")
+print(f"Using model: {settings.vllm.model}")
+print(f"GPU enabled: {settings.enable_gpu_acceleration}")
+print(f"Reranking enabled: {settings.retrieval.use_reranking}")
 ```
 
 ### Batch Document Processing

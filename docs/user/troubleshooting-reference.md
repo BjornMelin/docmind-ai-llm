@@ -203,8 +203,8 @@ python scripts/system_validation.py
 python -c "
 from src.config import settings
 print(f'GPU Enabled: {settings.enable_gpu_acceleration}')
-print(f'Multi-Agent: {settings.enable_multi_agent}')
-print(f'Model: {settings.default_model}')
+print(f'Multi-Agent: {settings.agents.enable_multi_agent}')
+print(f'Model: {settings.vllm.model}')
 "
 ```
 

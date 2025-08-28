@@ -84,11 +84,11 @@ from src.config import settings
 
 # Access configuration values
 print(f"LLM Backend: {settings.llm_backend}")
-print(f"Model: {settings.model_name}")
-print(f"Quantization: {settings.quantization}")
-print(f"Context Window: {settings.context_window_size}")
-print(f"Multi-Agent Enabled: {settings.enable_multi_agent}")
-print(f"GPU Memory Util: {settings.vllm_gpu_memory_utilization}")
+print(f"Model: {settings.vllm.model}")
+print(f"Quantization: {settings.vllm.kv_cache_dtype}")
+print(f"Context Window: {settings.vllm.context_window}")
+print(f"Multi-Agent Enabled: {settings.agents.enable_multi_agent}")
+print(f"GPU Memory Util: {settings.vllm.gpu_memory_utilization}")
 ```
 
 ### Environment Variables
@@ -388,8 +388,8 @@ async def health_check():
         
         return {
             "status": "healthy",
-            "model": settings.model_name,
-            "quantization": settings.quantization,
+            "model": settings.vllm.model,
+            "quantization": settings.vllm.kv_cache_dtype,
             "agents": "operational",
             "processing_time_s": response.processing_time,
             "validation_score": response.validation_score,

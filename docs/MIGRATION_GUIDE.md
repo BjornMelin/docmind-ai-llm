@@ -118,7 +118,7 @@ def test_settings(tmp_path_factory) -> TestDocMindSettings:
 
 def test_new_pattern(test_settings):
     # Clean fixture injection with test-optimized defaults
-    assert test_settings.chunk_size == 256  # Test-optimized
+    assert test_settings.processing.chunk_size == 256  # Test-optimized
     assert test_settings.enable_gpu_acceleration is False  # Safe for CI
 ```
 
@@ -389,7 +389,7 @@ def test_production_compatibility():
     # OLD interface still works
     settings = DocMindSettings()
     assert settings.app_name == "DocMind AI"
-    assert settings.enable_multi_agent is True
+    assert settings.agents.enable_multi_agent is True
     
     # NEW features work
     hardware_info = settings.get_user_hardware_info()

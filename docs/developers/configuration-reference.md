@@ -1060,10 +1060,10 @@ model_name: str = Field(default="Qwen/Qwen3-4B-Instruct-2507-FP8")
 **Embedding Configuration**:
 
 ```python
-# bge_m3_model_name - CORE USAGE  
+# embedding.model_name - CORE USAGE  
 # Used in: src/utils/embedding.py, document processing pipeline
 # ADR compliance: ADR-002 Unified Embedding Strategy
-bge_m3_model_name: str = Field(default="BAAI/bge-m3")
+model_name: str = Field(default="BAAI/bge-m3")  # In EmbeddingConfig
 
 # Evidence of usage:
 # Production: Embedding generation, vector storage operations
@@ -1161,7 +1161,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 # Production: "Qwen/Qwen3-4B-Instruct-2507-FP8" 
 # All test tiers: Same model for integration fidelity
 
-# bge_m3_model_name - ADR-002 compliance universal
+# embedding.model_name - ADR-002 compliance universal
 # All contexts: "BAAI/bge-m3" for consistent embedding behavior
 ```
 
@@ -1172,7 +1172,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 | Configuration Field | ADR Reference | Current Value | Compliance Status | Notes |
 |---------------------|---------------|---------------|-------------------|-------|
 | `agent_decision_timeout` | ADR-024 | 200ms | ✅ COMPLIANT | Meets performance requirement |
-| `bge_m3_model_name` | ADR-002 | "BAAI/bge-m3" | ✅ COMPLIANT | Unified embedding strategy |
+| `embedding.model_name` | ADR-002 | "BAAI/bge-m3" | ✅ COMPLIANT | Unified embedding strategy |
 | `model_name` | ADR-004 | "Qwen/Qwen3-4B-Instruct-2507-FP8" | ✅ COMPLIANT | Local-first LLM |
 | `vllm_kv_cache_dtype` | ADR-010 | "fp8_e5m2" | ✅ COMPLIANT | Performance optimization |
 | `enable_multi_agent` | ADR-011 | True | ✅ COMPLIANT | Multi-agent coordination |
@@ -1190,7 +1190,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 
 # RESOLVED: embedding_model was bge-large-en-v1.5 (violated ADR-002)  
 # Before: embedding_model: str = Field(default="BAAI/bge-large-en-v1.5") # ❌ Wrong model
-# After:  bge_m3_model_name: str = Field(default="BAAI/bge-m3") # ✅ ADR-compliant
+# After:  model_name: str = Field(default="BAAI/bge-m3") # ✅ ADR-compliant (in EmbeddingConfig)
 ```
 
 ### Configuration Field Categories
@@ -1200,7 +1200,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 **Category 1: Critical Production Fields (100% usage)**:
 
 - `model_name` - Model selection and loading
-- `bge_m3_model_name` - Embedding generation  
+- `embedding.model_name` - Embedding generation  
 - `agent_decision_timeout` - Performance compliance
 - `enable_multi_agent` - Core functionality flag
 
@@ -1289,7 +1289,7 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
     # Core field validation
     core_fields = {
         "model_name": settings.vllm.model,
-        "bge_m3_model_name": settings.embedding.bge_m3_model_name,
+        "embedding_model": settings.embedding.model_name,
         "agent_decision_timeout": settings.agents.decision_timeout,
         "enable_multi_agent": settings.agents.enable_multi_agent
     }
@@ -1304,7 +1304,7 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
     
     # ADR compliance verification
     adr_checks = {
-        "adr_002_bge_m3": settings.embedding.bge_m3_model_name == "BAAI/bge-m3",
+        "adr_002_bge_m3": settings.embedding.model_name == "BAAI/bge-m3",
         "adr_024_agent_timeout": settings.agents.decision_timeout == 200,
         "adr_010_fp8_cache": settings.vllm.kv_cache_dtype == "fp8_e5m2",
         "adr_011_multi_agent": settings.agents.enable_multi_agent is True
@@ -1349,7 +1349,7 @@ def analyze_configuration_usage_patterns() -> Dict[str, Any]:
     
     # Configuration fields to analyze
     config_fields = [
-        "model_name", "bge_m3_model_name", "agent_decision_timeout",
+        "model_name", "embedding_model", "agent_decision_timeout",
         "enable_multi_agent", "gpu_memory_utilization", "chunk_size",
         "context_window_size", "enable_fallback_rag", "log_level",
         "debug", "enable_performance_logging"
@@ -1386,7 +1386,7 @@ def analyze_configuration_usage_patterns() -> Dict[str, Any]:
                 "usage_count": usage_count,
                 "usage_level": usage_level,
                 "production_critical": field in [
-                    "model_name", "bge_m3_model_name", 
+                    "model_name", "embedding_model", 
                     "agent_decision_timeout", "enable_multi_agent"
                 ]
             }

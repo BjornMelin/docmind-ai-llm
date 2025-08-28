@@ -269,7 +269,7 @@ class TestDocMindSettings(DocMindSettings):
 @pytest.mark.unit
 def test_document_processing(test_settings):
     """Fast unit test with mocked dependencies."""
-    assert test_settings.chunk_size == 256           # Small for speed
+    assert test_settings.processing.chunk_size == 256           # Small for speed
     assert test_settings.enable_gpu_acceleration is False  # CPU-only
     assert test_settings.context_window_size == 1024      # Minimal context
     
@@ -297,7 +297,7 @@ def test_embedding_pipeline(integration_settings):
 def test_full_system(system_settings):
     """Full system test with production models."""
     assert system_settings.context_window_size == 131072  # Full 128K
-    assert system_settings.model_name == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+    assert system_settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
     
     # Performance: <5min per test, 12-14GB VRAM
     # Uses actual production models and GPU

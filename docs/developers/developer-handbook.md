@@ -348,7 +348,7 @@ class DocMindSettings(BaseSettings):
     max_vram_gb: float = Field(default=14.0, ge=1.0, le=80.0)
     
     # BGE-M3 Configuration (ADR-002 compliant)
-    bge_m3_model_name: str = Field(default="BAAI/bge-m3")
+    model_name: str = Field(default="BAAI/bge-m3")  # In EmbeddingConfig
     bge_m3_embedding_dim: int = Field(default=1024, ge=512, le=4096)
     bge_m3_max_length: int = Field(default=8192, ge=512, le=16384)
     
@@ -504,7 +504,7 @@ class DocMindSettings(BaseSettings):
     # 127 lines of test compatibility code mixed with production logic
     
     # === FLAT ATTRIBUTES FOR TEST COMPATIBILITY ===
-    embedding_model: str = Field(default="BAAI/bge-large-en-v1.5")  # Test compatibility
+    model_name: str = Field(default="BAAI/bge-large-en-v1.5")  # Test compatibility (WRONG - should use bge-m3)
     agent_decision_timeout: int = Field(default=300)  # Wrong - should be 200ms
     
     def _sync_nested_models(self) -> None:
@@ -518,7 +518,7 @@ class DocMindSettings(BaseSettings):
 # AFTER: Clean production configuration
 class DocMindSettings(BaseSettings):
     """Production-only configuration - zero test contamination."""
-    bge_m3_model_name: str = Field(default="BAAI/bge-m3")  # Always BGE-M3
+    model_name: str = Field(default="BAAI/bge-m3")  # In EmbeddingConfig  # Always BGE-M3
     agent_decision_timeout: int = Field(default=200)  # ADR-compliant
     
     # No test code, no synchronization - clean Pydantic patterns
@@ -539,14 +539,14 @@ class TestDocMindSettings(DocMindSettings):
 # Before (uses backward compatibility)
 def test_settings_default_values():
     settings = DocMindSettings()
-    assert settings.embedding_model == "BAAI/bge-large-en-v1.5"  # Wrong model
+    assert settings.embedding.model_name == "BAAI/bge-large-en-v1.5"  # Wrong model
     assert settings.agent_decision_timeout == 300  # Wrong timeout
 
 # After (uses proper test settings)
 def test_settings_default_values(test_settings):
     """Updated to use test fixture and ADR-compliant values."""
     # Test the actual BGE-M3 model name (ADR-002)
-    assert test_settings.bge_m3_model_name == "BAAI/bge-m3"
+    assert test_settings.embedding.model_name == "BAAI/bge-m3"
     
     # Test timeout matches production ADR requirement 
     settings = DocMindSettings()  # Production settings
@@ -563,13 +563,13 @@ def test_settings_default_values(test_settings):
 @patch.dict(os.environ, {"DOCMIND_EMBEDDING_MODEL": "custom-model"})
 def test_environment_override():
     settings = DocMindSettings() 
-    assert settings.embedding_model == "custom-model"
+    assert settings.embedding.model_name == "custom-model"
 
-# After (using BGE-M3 pattern)
-@patch.dict(os.environ, {"DOCMIND_BGE_M3_MODEL_NAME": "custom-bge-m3"})
+# After (using modern nested pattern)
+@patch.dict(os.environ, {"DOCMIND_EMBEDDING__MODEL_NAME": "custom-bge-m3"})
 def test_environment_override():
     settings = DocMindSettings()
-    assert settings.bge_m3_model_name == "custom-bge-m3"
+    assert settings.embedding.model_name == "custom-bge-m3"
 ```
 
 ### Implementation Checklist
@@ -620,10 +620,10 @@ def verify_configuration_compliance() -> Dict[str, Any]:
     }
     
     # ADR-002: BGE-M3 Unified Embedding
-    if settings.bge_m3_model_name != "BAAI/bge-m3":
+    if settings.embedding.model_name != "BAAI/bge-m3":
         compliance_report["violations"].append({
             "adr": "ADR-002",
-            "issue": f"Wrong embedding model: {settings.bge_m3_model_name}",
+            "issue": f"Wrong embedding model: {settings.embedding.model_name}",
             "expected": "BAAI/bge-m3"
         })
     
@@ -1019,7 +1019,7 @@ def test_example():
 ```python
 # Modern pattern: Fixture injection
 def test_example(test_settings):
-    assert test_settings.bge_m3_model_name == "BAAI/bge-m3"     # ADR-compliant!
+    assert test_settings.embedding.model_name == "BAAI/bge-m3"     # ADR-compliant!
     
     # Runtime overrides when needed
     custom_settings = test_settings.model_copy(
@@ -1034,10 +1034,10 @@ def test_example(test_settings):
 
    ```python
    # Before
-   settings.embedding_model == "BAAI/bge-large-en-v1.5"
+   settings.embedding.model_name == "BAAI/bge-large-en-v1.5"  # OLD WRONG PATTERN
    
    # After
-   settings.bge_m3_model_name == "BAAI/bge-m3"
+   settings.embedding.model_name == "BAAI/bge-m3"
    ```
 
 2. **Timeout Adjustments** (ADR-024 Compliance):
@@ -1147,7 +1147,7 @@ This implementation experience demonstrates that major architectural migrations 
 @pytest.fixture(scope="session")
 def test_settings():
     """Test-specific settings."""
-    from src.config import DocMindSettings
+    from src.config.settings import DocMindSettings
     
     return DocMindSettings(
         debug=True,

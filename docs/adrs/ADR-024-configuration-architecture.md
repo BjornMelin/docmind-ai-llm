@@ -200,7 +200,7 @@ class DocMindSettings(BaseSettings):
     vllm_attention_backend: str = Field(default="FLASHINFER")
     
     # BGE-M3 Constants (ADR-002 compliant)
-    bge_m3_model_name: str = Field(default="BAAI/bge-m3")  # Fixed: BGE-M3 not bge-large-en-v1.5
+    model_name: str = Field(default="BAAI/bge-m3")  # Fixed: BGE-M3 not bge-large-en-v1.5 (in EmbeddingConfig)
     bge_m3_embedding_dim: int = Field(default=1024, ge=512, le=4096)
     bge_m3_max_length: int = Field(default=8192, ge=512, le=16384)
     
@@ -224,7 +224,7 @@ class DocMindSettings(BaseSettings):
 settings = DocMindSettings()
 ```
 
-**In `src/config/llamaindex_setup.py`:**
+**In `src/config/integrations.py`:**
 
 ```python
 import logging
@@ -262,7 +262,7 @@ def setup_llamaindex() -> None:
 
     # Configure embeddings with BGE-M3 optimizations (ADR-002)
     try:
-        embedding_model = settings.bge_m3_model_name  # BAAI/bge-m3
+        embedding_model = settings.embedding.model_name  # BAAI/bge-m3
         use_gpu = settings.enable_gpu_acceleration
         
         # BGE-M3 specific configuration from ADR-002
@@ -286,10 +286,10 @@ def setup_llamaindex() -> None:
         Settings.embed_model = None
     
     # Configure document processing
-    chunk_size = int(os.getenv("DOCMIND_CHUNK_SIZE", "1024"))
-    chunk_overlap = int(os.getenv("DOCMIND_CHUNK_OVERLAP", "100"))
+    chunk_size = int(os.getenv("DOCMIND_PROCESSING__CHUNK_SIZE", "1024"))
+    chunk_overlap = int(os.getenv("DOCMIND_PROCESSING__CHUNK_OVERLAP", "100"))
     
-    Settings.chunk_size = chunk_size
+    Settings.processing.chunk_size = chunk_size
     Settings.chunk_overlap = chunk_overlap
     Settings.node_parser = SentenceSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     
@@ -314,7 +314,7 @@ DOCMIND_LLM_BACKEND=ollama
 # ============================================================================
 # MULTI-AGENT COORDINATION SYSTEM (ADR-001 compliant)
 # ============================================================================
-DOCMIND_ENABLE_MULTI_AGENT=true
+DOCMIND_AGENTS__ENABLE_MULTI_AGENT=true
 DOCMIND_AGENT_DECISION_TIMEOUT=200  # Fixed: 200ms not 300ms per ADR
 DOCMIND_MAX_AGENT_RETRIES=2
 DOCMIND_ENABLE_FALLBACK_RAG=true
@@ -340,7 +340,7 @@ DOCMIND_BGE_M3_BATCH_SIZE_GPU=12
 DOCMIND_BGE_M3_BATCH_SIZE_CPU=4
 
 # Document processing optimized for BGE-M3 8K context
-DOCMIND_CHUNK_SIZE=1024
+DOCMIND_PROCESSING__CHUNK_SIZE=1024
 DOCMIND_CHUNK_OVERLAP=100
 
 # Hybrid retrieval strategy
@@ -390,7 +390,7 @@ DOCMIND_ENABLE_UI_DARK_MODE=true
 ```python
 # src/app.py startup
 from src.config import settings
-from src.config.llamaindex_setup import setup_llamaindex
+from src.config import setup_llamaindex
 import logging
 
 def initialize_app():
@@ -403,9 +403,9 @@ def initialize_app():
         logging.getLogger().setLevel(logging.DEBUG)
     
     # Log critical configuration for validation
-    logging.info("Multi-agent enabled: %s", settings.enable_multi_agent)
+    logging.info("Multi-agent enabled: %s", settings.agents.enable_multi_agent)
     logging.info("Agent timeout: %dms", settings.agent_decision_timeout)  # 200ms
-    logging.info("BGE-M3 model: %s", settings.bge_m3_model_name)  # BAAI/bge-m3
+    logging.info("BGE-M3 model: %s", settings.embedding.model_name)  # BAAI/bge-m3
     logging.info("vLLM FP8 optimization: %s", settings.vllm_kv_cache_dtype)  # fp8_e5m2
     
     return settings
@@ -419,7 +419,7 @@ def initialize_app():
 import pytest
 import os
 from src.config import settings
-from src.config.llamaindex_setup import setup_llamaindex
+from src.config import setup_llamaindex
 from llama_index.core import Settings
 
 def test_docmind_settings_loading():
@@ -427,19 +427,19 @@ def test_docmind_settings_loading():
     test_settings = DocMindSettings()
     
     assert test_settings.app_name == "DocMind AI"
-    assert test_settings.enable_multi_agent is True
+    assert test_settings.agents.enable_multi_agent is True
     assert test_settings.agent_decision_timeout == 200  # Fixed: 200ms not 300ms
     assert test_settings.streamlit_port == 8501
 
 def test_adr_compliance():
     """Verify ADR compliance in configuration."""
     # ADR-002: BGE-M3 unified embeddings
-    assert settings.bge_m3_model_name == "BAAI/bge-m3"
+    assert settings.embedding.model_name == "BAAI/bge-m3"
     assert settings.bge_m3_embedding_dim == 1024
     
     # ADR-001: Multi-agent system with <200ms timeout
     assert settings.agent_decision_timeout == 200
-    assert settings.enable_multi_agent is True
+    assert settings.agents.enable_multi_agent is True
     
     # ADR-010: vLLM FP8 optimization
     assert settings.vllm_kv_cache_dtype == "fp8_e5m2"
@@ -469,15 +469,15 @@ def test_llamaindex_settings_integration():
         # Verify BGE-M3 model name in embed_model if available
         pass  # Implementation-specific validation
     
-    assert Settings.chunk_size > 0
+    assert Settings.processing.chunk_size > 0
     assert Settings.chunk_overlap >= 0
     assert Settings.context_window == 131072  # 128K context
 
 def test_configuration_simplicity():
     """Verify configuration complexity is minimized."""
     # Simple validation that we don't have over-engineered patterns
-    assert hasattr(settings, 'enable_multi_agent')
-    assert not hasattr(settings, 'agents')  # No nested config objects
+    assert hasattr(settings.agents, 'enable_multi_agent')
+    assert hasattr(settings, 'agents')  # Modern nested config objects
     assert not hasattr(settings, 'llm')     # LLM config handled by LlamaIndex
     
     # Verify global instance accessibility
@@ -506,7 +506,7 @@ def test_configuration_simplicity():
 
 ### Implementation Achievements
 
-- **Configuration Files**: `src/config/settings.py` (DocMindSettings + settings), `src/config/llamaindex_setup.py` (BGE-M3 + Qwen3-FP8)
+- **Configuration Files**: `src/config/settings.py` (DocMindSettings + settings), `src/config/integrations.py` (BGE-M3 + Qwen3-FP8)
 - **Code Quality**: Zero production code linting errors, professional logging standards implemented
 - **Test Coverage**: All configuration tests updated and passing, comprehensive validation maintained
 - **ADR Compliance**: All architectural decisions properly implemented and validated

@@ -81,7 +81,7 @@ from tests.fixtures.test_settings import TestDocMindSettings
 def test_document_chunking_logic(test_settings):
     """Test document chunking algorithm with mocked components."""
     # test_settings provides optimized configuration
-    assert test_settings.chunk_size == 256  # Small for speed
+    assert test_settings.processing.chunk_size == 256  # Small for speed
     assert test_settings.enable_gpu_acceleration is False  # CPU-only
     
     # Test with mocked embedder
@@ -89,9 +89,9 @@ def test_document_chunking_logic(test_settings):
     mock_embedder.get_embeddings.return_value = [[0.1] * 1024]
     
     # Test chunking logic
-    chunks = chunk_document("test content", test_settings.chunk_size)
+    chunks = chunk_document("test content", test_settings.processing.chunk_size)
     assert len(chunks) > 0
-    assert all(len(chunk) <= test_settings.chunk_size for chunk in chunks)
+    assert all(len(chunk) <= test_settings.processing.chunk_size for chunk in chunks)
 ```
 
 ### Tier 2: Integration Tests (Realistic & Moderate)
@@ -115,7 +115,7 @@ from tests.fixtures.test_settings import IntegrationTestSettings
 async def test_embedding_pipeline_integration(integration_settings):
     """Test embedding pipeline with lightweight models."""
     # integration_settings balances performance and realism
-    assert integration_settings.context_window_size == 4096  # Moderate
+    assert integration_settings.vllm.context_window == 4096  # Moderate
     assert integration_settings.enable_gpu_acceleration is True
     
     # Test with actual lightweight model
@@ -151,8 +151,8 @@ from tests.fixtures.test_settings import SystemTestSettings
 async def test_production_workflow_validation(system_settings):
     """Test complete production workflow with real models."""
     # system_settings uses production configuration
-    assert system_settings.context_window_size == 131072  # Full 128K
-    assert system_settings.model_name == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+    assert system_settings.vllm.context_window == 131072  # Full 128K
+    assert system_settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
     
     # Test with production multi-agent coordinator
     coordinator = MultiAgentCoordinator(system_settings)
@@ -199,7 +199,7 @@ class TestDocMindSettings(DocMindSettings):
     
     # Performance optimizations
     enable_gpu_acceleration: bool = Field(default=False)
-    context_window_size: int = Field(default=1024)      # 128x smaller
+    # Note: context_window accessed via settings.vllm.context_window in modern config
     agent_decision_timeout: int = Field(default=100)    # 2x faster
     chunk_size: int = Field(default=256)                # 4x smaller
     
@@ -223,7 +223,7 @@ class IntegrationTestSettings(TestDocMindSettings):
     
     # Realistic features enabled
     enable_gpu_acceleration: bool = Field(default=True)
-    context_window_size: int = Field(default=4096)      # Moderate context
+    # Note: context_window accessed via settings.vllm.context_window in modern config
     agent_decision_timeout: int = Field(default=150)    # Balanced timeout
     
     # Realistic caching and logging
@@ -601,26 +601,26 @@ def test_document_chunking_edge_cases(test_settings):
     """Test document chunking with edge cases and boundary conditions."""
     
     # Test empty document
-    chunks = chunk_document("", test_settings.chunk_size)
+    chunks = chunk_document("", test_settings.processing.chunk_size)
     assert chunks == []
     
     # Test single character
-    chunks = chunk_document("a", test_settings.chunk_size)
+    chunks = chunk_document("a", test_settings.processing.chunk_size)
     assert len(chunks) == 1
     assert chunks[0] == "a"
     
     # Test exact chunk size
-    text = "a" * test_settings.chunk_size
-    chunks = chunk_document(text, test_settings.chunk_size)
+    text = "a" * test_settings.processing.chunk_size
+    chunks = chunk_document(text, test_settings.processing.chunk_size)
     assert len(chunks) == 1
-    assert len(chunks[0]) == test_settings.chunk_size
+    assert len(chunks[0]) == test_settings.processing.chunk_size
     
     # Test chunk size + 1
-    text = "a" * (test_settings.chunk_size + 1)  
-    chunks = chunk_document(text, test_settings.chunk_size)
+    text = "a" * (test_settings.processing.chunk_size + 1)  
+    chunks = chunk_document(text, test_settings.processing.chunk_size)
     assert len(chunks) == 2
-    assert len(chunks[0]) <= test_settings.chunk_size
-    assert len(chunks[1]) <= test_settings.chunk_size
+    assert len(chunks[0]) <= test_settings.processing.chunk_size
+    assert len(chunks[1]) <= test_settings.processing.chunk_size
 ```
 
 ### Writing Effective Integration Tests
@@ -738,7 +738,7 @@ def debug_test_configuration():
         print("✅ TestDocMindSettings loaded successfully")
         
         print(f"GPU acceleration: {settings.enable_gpu_acceleration}")
-        print(f"Context window: {settings.context_window_size}")
+        print(f"Context window: {settings.vllm.context_window}")
         print(f"Agent timeout: {settings.agent_decision_timeout}ms")
         
     except Exception as e:
@@ -851,7 +851,7 @@ def test_settings():
     """Clean test settings fixture."""
     return Settings(
         model_name='test-model',
-        context_window_size=1024,
+        # context_window set via vllm.context_window in nested config
         enable_gpu_acceleration=False
     )
 ```
@@ -874,7 +874,7 @@ class TestSettings(BaseSettings):
     
     # Override production defaults with test values
     model_name: str = 'test-model'
-    context_window_size: int = 1024
+    # context_window: accessed via vllm.context_window in nested config
     enable_gpu_acceleration: bool = False
     
 # Use model_copy for runtime overrides
@@ -885,7 +885,7 @@ def test_dynamic_settings():
         'enable_gpu_acceleration': False
     })
     
-    assert test_settings.model_name == 'test-model'
+    assert test_settings.vllm.model == 'test-model'
     assert test_settings.enable_gpu_acceleration is False
 ```
 
@@ -906,7 +906,7 @@ class SettingsFactory(factory.Factory):
         model = Settings
     
     model_name = 'test-model'
-    context_window_size = 1024
+    # context_window: accessed via vllm.context_window in nested config
     enable_gpu_acceleration = False
     
     class Params:
@@ -999,7 +999,7 @@ class ProductionTestSettings(BaseSettings):
     # Test-optimized defaults based on real-world usage
     model_name: str = "test-embedding-model"
     enable_gpu_acceleration: bool = False
-    context_window_size: int = 1024
+    # context_window: accessed via vllm.context_window in nested config
     
     # Production compatibility maintained
     data_dir: Path = Field(default_factory=lambda: Path(tempfile.mkdtemp()))

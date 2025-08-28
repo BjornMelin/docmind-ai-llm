@@ -229,7 +229,7 @@ def test_gpu_configuration(settings_with_overrides):
     )
     
     assert settings.enable_gpu_acceleration is True
-    assert settings.context_window_size == 4096
+    assert settings.vllm.context_window == 4096
 ```
 
 #### settings_with_temp_dirs (Function-scoped)
@@ -332,9 +332,9 @@ from unittest.mock import MagicMock
 def test_document_processing(test_settings):
     """Test document processing with mocked dependencies."""
     # test_settings is TestDocMindSettings with test optimizations
-    assert test_settings.chunk_size == 256  # Small chunks for speed
+    assert test_settings.processing.chunk_size == 256  # Small chunks for speed
     assert test_settings.enable_gpu_acceleration is False  # CPU-only
-    assert test_settings.context_window_size == 1024  # Small context
+    assert test_settings.vllm.context_window == 1024  # Small context
     
     # Test with mocked components
     mock_embedder = MagicMock()
@@ -374,9 +374,9 @@ from tests.fixtures.test_settings import SystemTestSettings
 def test_production_performance(system_settings):
     """Test with full production configuration."""
     # system_settings uses production DocMindSettings
-    assert system_settings.context_window_size == 131072  # Full 128K context
-    assert system_settings.model_name == "Qwen/Qwen3-4B-Instruct-2507-FP8"
-    assert system_settings.agent_decision_timeout == 200  # Production timing
+    assert system_settings.vllm.context_window == 131072  # Full 128K context
+    assert system_settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+    assert system_settings.agents.decision_timeout == 200  # Production timing
     
     # Test with actual production models and GPU
     # ... full system validation
@@ -461,7 +461,7 @@ def test_old_pattern():
 # NEW PATTERN - Clean BaseSettings subclassing
 def test_new_pattern(test_settings):
     # Clean fixture injection with test-optimized defaults
-    assert test_settings.chunk_size == 256  # Test-optimized
+    assert test_settings.processing.chunk_size == 256  # Test-optimized
     
     # Or runtime customization when needed
 def test_with_customization(settings_with_overrides):
@@ -549,7 +549,7 @@ def test_debug_settings():
     settings = TestDocMindSettings()
     print(f"Debug: {settings.debug}")  # Should be True
     print(f"GPU: {settings.enable_gpu_acceleration}")  # Should be False
-    print(f"Context: {settings.context_window_size}")  # Should be 1024
+    print(f"Context: {settings.vllm.context_window}")  # Should be 1024
 ```
 
 #### Environment Variable Conflicts
@@ -582,7 +582,7 @@ from tests.fixtures.test_settings import TestDocMindSettings
 settings = TestDocMindSettings()
 print('Test settings loaded successfully')
 print(f'GPU disabled: {not settings.enable_gpu_acceleration}')
-print(f'Context size: {settings.context_window_size}')
+print(f'Context size: {settings.vllm.context_window}')
 "
 
 # Run specific test tier

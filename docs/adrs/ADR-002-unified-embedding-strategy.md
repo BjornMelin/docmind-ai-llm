@@ -139,7 +139,7 @@ class BGEM3Embedding(BaseEmbedding):
     in a single model, replacing BGE-Large + SPLADE++ combination per ADR-002.
     """
     
-    def __init__(self, *, model_name: str = settings.bge_m3_model_name, 
+    def __init__(self, *, model_name: str = settings.embedding.model_name, 
                  max_length: int = settings.bge_m3_max_length,
                  use_fp16: bool = True, device: str = "cuda", **kwargs):
         super().__init__(
@@ -185,7 +185,7 @@ class BGEM3Embedding(BaseEmbedding):
 def get_bgem3_embedding() -> BGEM3Embedding:
     """Get BGE-M3 embedding instance using unified configuration."""
     return BGEM3Embedding(
-        model_name=settings.bge_m3_model_name,
+        model_name=settings.embedding.model_name,
         use_fp16=True,
         device="cuda" if torch.cuda.is_available() else "cpu",
         max_length=settings.bge_m3_max_length,

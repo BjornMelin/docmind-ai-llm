@@ -1583,7 +1583,7 @@ class MigrationRiskAssessment:
 # Validate ADR compliance
 python -c "
 from src.config import settings
-assert settings.bge_m3_model_name == 'BAAI/bge-m3'  # ADR-002
+assert settings.embedding.model_name == 'BAAI/bge-m3'  # ADR-002
 assert settings.agent_decision_timeout == 200       # ADR-024  
 print('✅ ADR compliance verified')
 "

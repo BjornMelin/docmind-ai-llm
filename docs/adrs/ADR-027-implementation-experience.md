@@ -269,7 +269,7 @@ def verify_adr_compliance() -> Dict[str, bool]:
     
     return {
         # ADR-002: BGE-M3 Unified Embedding  
-        "bge_m3_compliance": settings.bge_m3_model_name == "BAAI/bge-m3",
+        "bge_m3_compliance": settings.embedding.model_name == "BAAI/bge-m3",
         
         # ADR-024: Configuration Architecture
         "timeout_compliance": settings.agent_decision_timeout == 200,
