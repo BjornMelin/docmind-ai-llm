@@ -30,9 +30,12 @@ from pydantic import BaseModel
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from agents.supervisor_graph import initialize_supervisor_graph
+# Unified configuration and integrations
+from llama_index.core import Settings
+
+from agents.coordinator import MultiAgentCoordinator
+from config.integrations import initialize_integrations
 from config.settings import settings
-from utils.vllm_llm import VLLMBackend, VLLMConfig
 
 
 class PerformanceMetrics(BaseModel):
@@ -66,16 +69,28 @@ class PerformanceMetrics(BaseModel):
         if not self.success:
             return False
 
-        # REQ-0064-v2: Performance targets
-        decode_ok = 100 <= self.decode_throughput_tok_s <= 160
-        prefill_ok = 800 <= self.prefill_throughput_tok_s <= 1300
+        # REQ-0064-v2: Performance targets (only enforce when measured)
+        decode_ok = (
+            True
+            if self.decode_throughput_tok_s <= 0
+            else 100 <= self.decode_throughput_tok_s <= 160
+        )
+        prefill_ok = (
+            True
+            if self.prefill_throughput_tok_s <= 0
+            else 800 <= self.prefill_throughput_tok_s <= 1300
+        )
 
-        # REQ-0069/0070: Memory constraints
-        ram_ok = self.peak_ram_gb <= 4.0
-        vram_ok = self.peak_vram_gb <= 16.0
+        # REQ-0069/0070: Memory constraints (only enforce when non-zero measured)
+        ram_ok = True if self.peak_ram_gb <= 0 else self.peak_ram_gb <= 4.0
+        vram_ok = True if self.peak_vram_gb <= 0 else self.peak_vram_gb <= 16.0
 
-        # REQ-0007: Agent coordination
-        agent_ok = self.agent_coordination_ms <= 300
+        # REQ-0007: Agent coordination (only enforce when measured)
+        agent_ok = (
+            True
+            if self.agent_coordination_ms <= 0
+            else self.agent_coordination_ms <= 300
+        )
 
         return decode_ok and prefill_ok and ram_ok and vram_ok and agent_ok
 
@@ -86,7 +101,8 @@ class PerformanceValidator:
     def __init__(self):
         """Initialize the validator."""
         self.results: list[PerformanceMetrics] = []
-        self.vllm_backend: VLLMBackend = None
+        self.llm = None
+        self.agent_coordinator: MultiAgentCoordinator | None = None
         self.initial_ram_gb = 0.0
         self.initial_vram_gb = 0.0
 
@@ -152,10 +168,10 @@ class PerformanceValidator:
 
     def validate_model_loading(self) -> PerformanceMetrics:
         """Validate model loading with FP8 quantization."""
-        result = PerformanceMetrics(test_name="Model Loading (FP8)", success=False)
+        result = PerformanceMetrics(test_name="Model Setup (Unified)", success=False)
 
         try:
-            print("Loading Qwen3-4B-Instruct-2507-FP8 model with vLLM...")
+            print("Initializing integrations and configuring LLM...")
 
             # Record memory before loading
             ram_before, vram_before = self._get_memory_usage()
@@ -163,20 +179,13 @@ class PerformanceValidator:
             # Load model with timing
             start_time = time.time()
 
-            # Create vLLM backend with FP8 configuration
-            config = VLLMConfig(
-                model_name=settings.model_name,
-                quantization="fp8",
-                kv_cache_dtype="fp8",
-                max_model_len=131072,  # 128K context
-                gpu_memory_utilization=0.85,
-                attention_backend="FLASHINFER",
-                enable_chunked_prefill=True,
-                max_num_batched_tokens=8192,
-            )
-
-            self.vllm_backend = VLLMBackend(config)
-            self.vllm_backend.initialize()
+            # Initialize integrations (sets env + LlamaIndex Settings.llm)
+            initialize_integrations()
+            self.llm = Settings.llm
+            if self.llm is None:
+                raise RuntimeError(
+                    "LLM not configured. Check integrations and settings."
+                )
 
             load_time = time.time() - start_time
 
@@ -188,7 +197,7 @@ class PerformanceValidator:
             result.peak_vram_gb = vram_after
             result.success = True
 
-            print(f"✅ Model loaded in {load_time:.2f}s")
+            print(f"✅ LLM configured in {load_time:.2f}s")
             print(f"✅ RAM usage: {ram_after:.2f}GB (+{ram_after - ram_before:.2f}GB)")
             print(
                 f"✅ VRAM usage: {vram_after:.2f}GB (+{vram_after - vram_before:.2f}GB)"
@@ -206,8 +215,8 @@ class PerformanceValidator:
             test_name="Decode Performance", success=False, max_new_tokens=100
         )
 
-        if not self.vllm_backend:
-            result.error_message = "Model not loaded"
+        if not Settings.llm:
+            result.error_message = "LLM not configured"
             return result
 
         try:
@@ -224,16 +233,16 @@ class PerformanceValidator:
 
             # Generate with timing
             start_time = time.time()
-            responses = self.vllm_backend.generate(
+            completion = Settings.llm.complete(
                 prompt, temperature=0.1, max_tokens=result.max_new_tokens, top_p=0.9
             )
+            response_text = getattr(completion, "text", str(completion))
             end_time = time.time()
 
             # Record memory after generation
             ram_after, vram_after = self._get_memory_usage()
 
-            if responses and responses[0]:
-                response_text = responses[0]
+            if response_text:
 
                 # Calculate metrics
                 generation_time = end_time - start_time
@@ -275,8 +284,8 @@ class PerformanceValidator:
             max_new_tokens=50,
         )
 
-        if not self.vllm_backend:
-            result.error_message = "Model not loaded"
+        if not Settings.llm:
+            result.error_message = "LLM not configured"
             return result
 
         try:
@@ -307,19 +316,19 @@ class PerformanceValidator:
 
             # Generate with timing (focus on prefill)
             start_time = time.time()
-            responses = self.vllm_backend.generate(
+            completion = Settings.llm.complete(
                 long_prompt,
                 temperature=0.1,
                 max_tokens=result.max_new_tokens,
                 top_p=0.9,
             )
+            response_text = getattr(completion, "text", str(completion))
             end_time = time.time()
 
             # Record memory after generation
             ram_after, vram_after = self._get_memory_usage()
 
-            if responses and responses[0]:
-                response_text = responses[0]
+            if response_text:
 
                 # Calculate metrics (prefill is dominant with long context)
                 generation_time = end_time - start_time
@@ -360,8 +369,14 @@ class PerformanceValidator:
         try:
             print("Testing multi-agent coordination latency...")
 
-            # Initialize supervisor graph
-            supervisor = await initialize_supervisor_graph()
+            # Initialize ADR-compliant multi-agent coordinator
+            self.agent_coordinator = MultiAgentCoordinator(
+                model_path=settings.vllm.model,
+                max_context_length=settings.vllm.context_window,
+                backend="vllm",
+                enable_fallback=True,
+                max_agent_timeout=settings.agents.decision_timeout / 1000.0,
+            )
 
             # Test query
             test_query = (
@@ -374,7 +389,7 @@ class PerformanceValidator:
 
             # Process query with timing
             start_time = time.time()
-            response = await supervisor.process_query(test_query)
+            response = self.agent_coordinator.process_query(test_query)
             end_time = time.time()
 
             # Record memory after coordination
@@ -386,16 +401,15 @@ class PerformanceValidator:
             result.peak_ram_gb = max(ram_after, result.peak_ram_gb)
             result.peak_vram_gb = max(vram_after, result.peak_vram_gb)
 
-            if response.get("workflow_complete", False) and not response.get(
-                "error_occurred", False
-            ):
+            # AgentResponse model expected
+            if hasattr(response, "content"):
                 result.success = True
                 print(f"✅ Agent coordination completed in {coordination_time:.2f}ms")
-                print(f"✅ Response confidence: {response.get('confidence', 0.0):.2f}")
-                print(f"✅ Quality score: {response.get('quality_score', 0.0):.2f}")
+                # Use validation_score if available
+                confidence = getattr(response, "validation_score", 0.0)
+                print(f"✅ Validation score: {confidence:.2f}")
             else:
-                error_msg = response.get("error_message", "Unknown error")
-                result.error_message = f"Agent coordination failed: {error_msg}"
+                result.error_message = "Agent coordination failed: invalid response"
 
             return result
 
@@ -412,8 +426,8 @@ class PerformanceValidator:
             max_new_tokens=50,
         )
 
-        if not self.vllm_backend:
-            result.error_message = "Model not loaded"
+        if not Settings.llm:
+            result.error_message = "LLM not configured"
             return result
 
         try:
@@ -423,10 +437,10 @@ class PerformanceValidator:
             # would be very large
             # Instead, test with model's max_model_len configuration
             print(
-                f"✅ Model configured for max context: "
-                f"{self.vllm_backend.config.max_model_len} tokens"
+                "✅ Model configured for max context: "
+                f"{settings.vllm.context_window} tokens"
             )
-            print(f"✅ FP8 KV cache enabled: {self.vllm_backend.config.kv_cache_dtype}")
+            print(f"✅ FP8 KV cache setting: {settings.vllm.kv_cache_dtype}")
 
             # Test with moderate context that's still substantial
             base_context = (
@@ -440,18 +454,19 @@ class PerformanceValidator:
             ram_before, vram_before = self._get_memory_usage()
 
             start_time = time.time()
-            responses = self.vllm_backend.generate(
+            completion = Settings.llm.complete(
                 test_prompt,
                 temperature=0.1,
                 max_tokens=result.max_new_tokens,
                 top_p=0.9,
             )
+            response_text = getattr(completion, "text", str(completion))
             end_time = time.time()
 
             # Record memory after generation
             ram_after, vram_after = self._get_memory_usage()
 
-            if responses and responses[0]:
+            if response_text:
                 generation_time = end_time - start_time
 
                 result.end_to_end_latency_ms = generation_time * 1000
@@ -541,13 +556,12 @@ class PerformanceValidator:
                     print("💥 Critical failure - stopping validation")
                     break
 
-        # Cleanup
-        if self.vllm_backend:
-            self.vllm_backend.cleanup()
+        # Cleanup placeholder (no explicit cleanup needed with unified integrations)
 
         # Force garbage collection
         gc.collect()
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         print(f"\n{'=' * 60}")
         print(
@@ -563,9 +577,9 @@ class PerformanceValidator:
             "DocMind AI vLLM Performance Validation Report",
             "=" * 50,
             f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            f"Model: {settings.model_name}",
-            "Quantization: FP8 weights + FP8 KV cache",
-            "Backend: vLLM 0.10.1 with FlashInfer",
+            f"Model: {settings.vllm.model}",
+            "Quantization: FP8 KV cache (env-configured)",
+            "Backend: Unified via LlamaIndex integrations",
             "",
         ]
 
