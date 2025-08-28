@@ -33,8 +33,8 @@ def test_settings_scenario(name: str, env_vars: dict[str, str]) -> dict[str, Any
         settings = DocMindSettings(_env_file=temp_env_file)
 
         # Test key functionality
-        hardware_info = settings.get_user_hardware_info()
-        scenario_config = settings.get_user_scenario_config()
+        settings.get_user_hardware_info()
+        settings.get_user_scenario_config()
         backend_url = settings._get_backend_url()
         embedding_device = settings._get_embedding_device()
         batch_size = settings._get_embedding_batch_size()
@@ -43,10 +43,11 @@ def test_settings_scenario(name: str, env_vars: dict[str, str]) -> dict[str, Any
         print(f"   Device: {embedding_device}")
         print(f"   Backend: {settings.llm_backend} ({backend_url})")
         print(f"   GPU Acceleration: {settings.enable_gpu_acceleration}")
-        print(f"   Context Window: {settings.context_window_size}")
+        print(f"   Context Window: {settings.vllm.context_window}")
         print(f"   Batch Size: {batch_size}")
         print(
-            f"   Memory Limits: {settings.max_memory_gb}GB RAM, {settings.max_vram_gb}GB VRAM"
+            f"   Memory Limits: {settings.max_memory_gb}GB RAM, "
+            f"{settings.max_vram_gb}GB VRAM"
         )
 
         return {
@@ -56,7 +57,7 @@ def test_settings_scenario(name: str, env_vars: dict[str, str]) -> dict[str, Any
                 "device": embedding_device,
                 "backend": settings.llm_backend,
                 "gpu_enabled": settings.enable_gpu_acceleration,
-                "context_window": settings.context_window_size,
+                "context_window": settings.vllm.context_window,
                 "batch_size": batch_size,
                 "memory_gb": settings.max_memory_gb,
                 "vram_gb": settings.max_vram_gb,

@@ -59,11 +59,11 @@ class DocMindApplication:
         # Multi-agent coordinator if enabled
         if self.enable_multi_agent:
             self.agent_coordinator = MultiAgentCoordinator(
-                model_path=self.settings.model_name,
-                max_context_length=self.settings.context_window_size,
+                model_path=self.settings.vllm.model,
+                max_context_length=self.settings.vllm.context_window,
                 backend="vllm",
-                enable_fallback=self.settings.enable_fallback_rag,
-                max_agent_timeout=self.settings.agent_decision_timeout
+                enable_fallback=self.settings.agents.enable_fallback_rag,
+                max_agent_timeout=self.settings.agents.decision_timeout
                 / AGENT_TIMEOUT_DIVISOR,
             )
         else:

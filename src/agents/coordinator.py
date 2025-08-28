@@ -139,7 +139,7 @@ class MultiAgentCoordinator:
         self,
         model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
         *,
-        max_context_length: int = settings.default_token_limit,  # 128K context
+        max_context_length: int = settings.vllm.context_window,  # 128K context
         backend: str = "vllm",
         enable_fallback: bool = True,
         max_agent_timeout: float = settings.agents.decision_timeout,
@@ -167,8 +167,8 @@ class MultiAgentCoordinator:
         }
 
         # Context management with unified settings
-        self.context_window = settings.context_window_size
-        self.max_tokens = settings.llm_max_tokens
+        self.context_window = settings.vllm.context_window
+        self.max_tokens = settings.vllm.max_tokens
         self.context_manager = ContextManager(
             max_context_tokens=self.max_context_length
         )
@@ -802,7 +802,7 @@ class MultiAgentCoordinator:
 @inject
 def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length: int = settings.default_token_limit,
+    max_context_length: int = settings.vllm.context_window,
     enable_fallback: bool = True,
     container=Provide["ApplicationContainer"],
 ) -> MultiAgentCoordinator:

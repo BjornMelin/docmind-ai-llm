@@ -53,8 +53,8 @@ def get_client_config() -> dict[str, Any]:
         Dictionary with client configuration
     """
     return {
-        "url": settings.qdrant_url,
-        "timeout": settings.default_qdrant_timeout,
+        "url": settings.database.qdrant_url,
+        "timeout": settings.database.qdrant_timeout,
         "prefer_grpc": True,
     }
 
@@ -120,7 +120,7 @@ async def create_async_client():
 async def setup_hybrid_collection_async(
     client: AsyncQdrantClient,
     collection_name: str,
-    dense_embedding_size: int = settings.bge_m3_embedding_dim,
+    dense_embedding_size: int = settings.embedding.dimension,
     recreate: bool = False,
 ) -> QdrantVectorStore:
     """Setup Qdrant collection for hybrid search (async).
@@ -159,20 +159,20 @@ async def setup_hybrid_collection_async(
         logger.success("Created hybrid collection: %s", collection_name)
 
     # Create sync client for QdrantVectorStore compatibility
-    sync_client = QdrantClient(url=settings.qdrant_url)
+    sync_client = QdrantClient(url=settings.database.qdrant_url)
 
     return QdrantVectorStore(
         client=sync_client,
         collection_name=collection_name,
         enable_hybrid=True,
-        batch_size=settings.default_batch_size,
+        batch_size=settings.monitoring.default_batch_size,
     )
 
 
 def setup_hybrid_collection(
     client: QdrantClient,
     collection_name: str,
-    dense_embedding_size: int = settings.bge_m3_embedding_dim,
+    dense_embedding_size: int = settings.embedding.dimension,
     recreate: bool = False,
 ) -> QdrantVectorStore:
     """Setup Qdrant collection for hybrid search (sync).
@@ -214,13 +214,13 @@ def setup_hybrid_collection(
         client=client,
         collection_name=collection_name,
         enable_hybrid=True,
-        batch_size=settings.default_batch_size,
+        batch_size=settings.monitoring.default_batch_size,
     )
 
 
 def create_vector_store(
     collection_name: str,
-    _dense_embedding_size: int = settings.bge_m3_embedding_dim,
+    _dense_embedding_size: int = settings.embedding.dimension,
     enable_hybrid: bool = True,
 ) -> QdrantVectorStore:
     """Create QdrantVectorStore with standard configuration.
@@ -233,13 +233,13 @@ def create_vector_store(
     Returns:
         Configured QdrantVectorStore
     """
-    client = QdrantClient(url=settings.qdrant_url)
+    client = QdrantClient(url=settings.database.qdrant_url)
 
     return QdrantVectorStore(
         client=client,
         collection_name=collection_name,
         enable_hybrid=enable_hybrid,
-        batch_size=settings.default_batch_size,
+        batch_size=settings.monitoring.default_batch_size,
     )
 
 
@@ -286,7 +286,7 @@ def test_connection() -> dict[str, Any]:
             collections = client.get_collections()
             return {
                 "connected": True,
-                "url": settings.qdrant_url,
+                "url": settings.database.qdrant_url,
                 "collections_count": len(collections.collections),
                 "collections": [c.name for c in collections.collections],
             }
@@ -299,7 +299,7 @@ def test_connection() -> dict[str, Any]:
         logger.error("Qdrant connection test failed: %s", e)
         return {
             "connected": False,
-            "url": settings.qdrant_url,
+            "url": settings.database.qdrant_url,
             "error": str(e),
         }
 
@@ -602,7 +602,7 @@ def get_safe_vram_usage() -> float:
         VRAM usage in GB (0.0 if CUDA unavailable or error)
     """
     return safe_cuda_operation(
-        lambda: torch.cuda.memory_allocated() / settings.bytes_to_gb_divisor
+        lambda: torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
         if torch.cuda.is_available()
         else 0.0,
         "VRAM usage check",
@@ -648,12 +648,12 @@ def get_safe_gpu_info() -> dict[str, Any]:
                 if props:
                     info["compute_capability"] = f"{props.major}.{props.minor}"
                     info["total_memory_gb"] = (
-                        props.total_memory / settings.bytes_to_gb_divisor
+                        props.total_memory / settings.monitoring.bytes_to_gb_divisor
                     )
 
                 info["allocated_memory_gb"] = safe_cuda_operation(
                     lambda: torch.cuda.memory_allocated(0)
-                    / settings.bytes_to_gb_divisor,
+                    / settings.monitoring.bytes_to_gb_divisor,
                     "allocated memory",
                     0.0,
                 )

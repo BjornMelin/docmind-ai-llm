@@ -175,7 +175,7 @@ class RequirementValidator:
 
     def _check_fallback_rag(self) -> bool:
         """Check if fallback RAG is configured."""
-        return settings.enable_fallback_rag
+        return settings.agents.enable_fallback_rag
 
     def _check_error_handling(self) -> bool:
         """Check if error handling is implemented."""
@@ -198,11 +198,14 @@ class RequirementValidator:
 
     def _check_text_chunking(self) -> bool:
         """Check if text chunking is configured."""
-        return settings.chunk_size > 0 and settings.chunk_overlap >= 0
+        return (
+            settings.processing.chunk_size > 0
+            and settings.processing.chunk_overlap >= 0
+        )
 
     def _check_document_caching(self) -> bool:
         """Check if document caching is enabled."""
-        return settings.enable_document_caching
+        return settings.cache.enable_document_caching
 
     def _check_multimodal_support(self) -> bool:
         """Check if multimodal processing is available."""
@@ -214,11 +217,11 @@ class RequirementValidator:
 
     def _check_dense_embeddings(self) -> bool:
         """Check if dense embeddings are configured."""
-        return len(settings.embedding_model) > 0
+        return len(settings.embedding.model_name) > 0
 
     def _check_sparse_embeddings(self) -> bool:
         """Check if sparse embeddings are enabled."""
-        return settings.use_sparse_embeddings
+        return settings.retrieval.use_sparse_embeddings
 
     def _check_multimodal_embeddings(self) -> bool:
         """Check if multimodal embeddings are supported."""
@@ -226,11 +229,11 @@ class RequirementValidator:
 
     def _check_reranking(self) -> bool:
         """Check if reranking is enabled."""
-        return settings.use_reranking
+        return settings.retrieval.use_reranking
 
     def _check_hybrid_search(self) -> bool:
         """Check if hybrid search is configured."""
-        return "hybrid" in settings.retrieval_strategy
+        return "hybrid" in settings.retrieval.strategy
 
     def _check_graphrag(self) -> bool:
         """Check if GraphRAG is available."""
@@ -298,7 +301,7 @@ class RequirementValidator:
 
     def _check_context_management(self) -> bool:
         """Check if context management is configured."""
-        return settings.context_window_size > 0
+        return settings.vllm.context_window > 0
 
     def _check_conversation_memory(self) -> bool:
         """Check if conversation memory is enabled."""
@@ -306,7 +309,7 @@ class RequirementValidator:
 
     def _check_agent_latency(self) -> bool:
         """Check if agent latency requirement is configured."""
-        return settings.agent_decision_timeout <= 300
+        return settings.agents.decision_timeout <= 300
 
     def _check_local_execution(self) -> bool:
         """Check if local execution is configured."""
@@ -323,15 +326,15 @@ class RequirementValidator:
 
     def _check_document_throughput(self) -> bool:
         """Check if document throughput requirements are met."""
-        return settings.max_document_size_mb > 0
+        return settings.processing.max_document_size_mb > 0
 
     def _check_retrieval_latency(self) -> bool:
         """Check if retrieval latency requirements are configured."""
-        return settings.top_k > 0
+        return settings.retrieval.top_k > 0
 
     def _check_cache_performance(self) -> bool:
         """Check if cache performance is optimized."""
-        return settings.enable_document_caching
+        return settings.cache.enable_document_caching
 
     def _check_ui_responsiveness(self) -> bool:
         """Check if UI responsiveness requirements are met."""
@@ -359,7 +362,7 @@ class RequirementValidator:
 
     def _check_error_recovery(self) -> bool:
         """Check if error recovery is implemented."""
-        return settings.max_agent_retries > 0
+        return settings.agents.max_retries > 0
 
     def _check_system_monitoring(self) -> bool:
         """Check if system monitoring is implemented."""
@@ -371,7 +374,7 @@ class RequirementValidator:
 
     def _check_model_configuration(self) -> bool:
         """Check if model configuration is correct."""
-        return settings.model_name == "Qwen/Qwen3-4B-Instruct-2507"
+        return settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507"
 
     def _check_gpu_optimization(self) -> bool:
         """Check if GPU optimization is enabled."""

@@ -45,6 +45,7 @@ class SimpleCache(CacheInterface):
         # Hit/miss tracking for real cache metrics
         self._hits = 0
         self._misses = 0
+        self._stored_documents = 0  # Track stored documents count
 
         logger.info(f"SimpleCache initialized at {cache_path}")
 
@@ -72,9 +73,24 @@ class SimpleCache(CacheInterface):
 
     async def store_document(self, path: str, result: Any) -> bool:
         """Store document processing result."""
+        # Validate input parameters
+        if not path or path.isspace():
+            raise ValueError("Document path cannot be empty or whitespace")
+
+        if len(path) > 255:  # Reasonable path length limit
+            raise ValueError("Document path is too long")
+
+        if "\x00" in path:  # Null character check
+            raise ValueError("Document path contains null character")
+
         try:
             key = self._hash(path)
+            # Check if this is a new document
+            is_new = self.cache.get(key) is None
             self.cache.put(key, result)
+            # Increment count for new documents
+            if is_new:
+                self._stored_documents += 1
             # Persist to disk
             self.cache.persist(self._persist_path)
             logger.debug(f"Cached result for: {Path(path).name}")
@@ -101,9 +117,10 @@ class SimpleCache(CacheInterface):
             db_file = Path(self._persist_path)
             if db_file.exists():
                 db_file.unlink()
-            # Reset hit/miss counters
+            # Reset hit/miss counters and document count
             self._hits = 0
             self._misses = 0
+            self._stored_documents = 0
             logger.info("Cleared document cache and reset metrics")
             return True
         except (OSError, ValueError, RuntimeError, AttributeError) as e:
@@ -117,21 +134,8 @@ class SimpleCache(CacheInterface):
             total_requests = self._hits + self._misses
             hit_rate = (self._hits / total_requests) if total_requests > 0 else 0.0
 
-            # Get document count safely - SimpleKVStore may not have get_all()
-            try:
-                if hasattr(self.cache, "store") and hasattr(
-                    self.cache.store, "__len__"
-                ):
-                    total_documents = len(self.cache.store)
-                elif hasattr(self.cache, "_data") and hasattr(
-                    self.cache._data, "__len__"
-                ):
-                    total_documents = len(self.cache._data)
-                else:
-                    # Fallback: estimate from hits (cache entries accessed)
-                    total_documents = self._hits
-            except (AttributeError, TypeError):
-                total_documents = self._hits  # Fallback estimate
+            # Get document count from our tracking
+            total_documents = self._stored_documents
 
             return {
                 "cache_type": "simple_sqlite",

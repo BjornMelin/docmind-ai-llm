@@ -118,12 +118,10 @@ class SemanticChunker:
 
         # Default chunking parameters from settings
         self.default_parameters = ChunkingParameters(
-            max_characters=getattr(settings, "chunk_size", 1500),
-            new_after_n_chars=getattr(settings, "new_after_n_chars", 1200),
-            combine_text_under_n_chars=getattr(
-                settings, "combine_text_under_n_chars", 500
-            ),
-            multipage_sections=getattr(settings, "multipage_sections", True),
+            max_characters=self.settings.processing.chunk_size,
+            new_after_n_chars=self.settings.processing.new_after_n_chars,
+            combine_text_under_n_chars=self.settings.processing.combine_text_under_n_chars,
+            multipage_sections=self.settings.processing.multipage_sections,
             boundary_detection=BoundaryDetection.TITLE_BASED,
         )
 

@@ -85,7 +85,7 @@ class HybridPersistenceManager:
         self.settings = settings or settings
 
         # Storage paths and connections
-        self.sqlite_path = Path(self.settings.sqlite_db_path)
+        self.sqlite_path = Path(self.settings.database.sqlite_db_path)
         self.sqlite_connection: sqlite3.Connection | None = None
         self.qdrant_client: Any | None = None
 
@@ -107,7 +107,7 @@ class HybridPersistenceManager:
         logger.info(
             "HybridPersistenceManager initialized: sqlite={}, qdrant={}",
             self.sqlite_path,
-            self.settings.qdrant_url if QDRANT_AVAILABLE else "disabled",
+            self.settings.database.qdrant_url if QDRANT_AVAILABLE else "disabled",
         )
 
     def _initialize_storage(self) -> None:
@@ -198,12 +198,14 @@ class HybridPersistenceManager:
 
         try:
             # Initialize Qdrant client
-            self.qdrant_client = QdrantClient(url=self.settings.qdrant_url, timeout=30)
+            self.qdrant_client = QdrantClient(
+                url=self.settings.database.qdrant_url, timeout=30
+            )
 
             # Create vectors collection if not exists
             asyncio.create_task(self._ensure_vector_collection())
 
-            logger.info(f"Qdrant initialized: {self.settings.qdrant_url}")
+            logger.info(f"Qdrant initialized: {self.settings.database.qdrant_url}")
 
         except (ConnectionError, OSError, ValueError, TimeoutError) as e:
             logger.error(f"Failed to initialize Qdrant: {str(e)}")

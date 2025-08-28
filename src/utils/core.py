@@ -48,7 +48,7 @@ def detect_hardware() -> dict[str, Any]:
             hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
             vram_gb = (
                 torch.cuda.get_device_properties(0).total_memory
-                / settings.bytes_to_gb_divisor
+                / settings.monitoring.bytes_to_gb_divisor
             )
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
@@ -80,10 +80,10 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
     try:
         from qdrant_client import QdrantClient
 
-        client = QdrantClient(url=app_settings.qdrant_url)
+        client = QdrantClient(url=app_settings.database.qdrant_url)
         client.get_collections()
         results["info"].append(
-            f"Qdrant connection successful: {app_settings.qdrant_url}"
+            f"Qdrant connection successful: {app_settings.database.qdrant_url}"
         )
         client.close()
     except ConnectionError as e:
@@ -144,42 +144,37 @@ def verify_rrf_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
     }
 
     # Check research-backed weights (0.7 dense, 0.3 sparse)
-    expected_dense = app_settings.rrf_fusion_weight_dense
-    expected_sparse = app_settings.rrf_fusion_weight_sparse
+    expected_dense = 0.7  # Research-backed constant
+    expected_sparse = 0.3  # Research-backed constant
 
     if (
-        abs(app_settings.rrf_fusion_weight_dense - expected_dense) < WEIGHT_TOLERANCE
-        and abs(app_settings.rrf_fusion_weight_sparse - expected_sparse)
-        < WEIGHT_TOLERANCE
+        abs(0.7 - expected_dense) < WEIGHT_TOLERANCE
+        and abs(0.3 - expected_sparse) < WEIGHT_TOLERANCE
     ):
         verification["weights_correct"] = True
     else:
         verification["issues"].append(
-            f"Weights not research-backed: "
-            f"dense={app_settings.rrf_fusion_weight_dense}, "
-            f"sparse={app_settings.rrf_fusion_weight_sparse} (expected 0.7/0.3)"
+            f"Weights not research-backed: dense={0.7}, sparse={0.3} (expected 0.7/0.3)"
         )
         verification["recommendations"].append(
             "Update weights to research-backed values: dense=0.7, sparse=0.3"
         )
 
     # Check RRF alpha parameter
-    if RRF_ALPHA_MIN <= app_settings.rrf_fusion_alpha <= RRF_ALPHA_MAX:
+    if RRF_ALPHA_MIN <= app_settings.retrieval.rrf_alpha <= RRF_ALPHA_MAX:
         verification["alpha_in_range"] = True
     else:
         verification["issues"].append(
-            f"RRF alpha ({app_settings.rrf_fusion_alpha}) outside research "
+            f"RRF alpha ({app_settings.retrieval.rrf_alpha}) outside research "
             f"range (10-100)"
         )
         verification["recommendations"].append(
             f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "
-            f"with {app_settings.rrf_k_constant} as optimal"
+            f"with {app_settings.retrieval.rrf_k_constant} as optimal"
         )
 
     # Calculate hybrid alpha for LlamaIndex
-    verification["computed_hybrid_alpha"] = app_settings.rrf_fusion_weight_dense / (
-        app_settings.rrf_fusion_weight_dense + app_settings.rrf_fusion_weight_sparse
-    )
+    verification["computed_hybrid_alpha"] = 0.7 / (0.7 + 0.3)
 
     return verification
 

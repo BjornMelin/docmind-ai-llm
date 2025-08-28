@@ -94,7 +94,7 @@ class BGEM3Embedder:
         # Initialize BGE-M3 FlagModel with full library capabilities
         try:
             self.model = BGEM3FlagModel(
-                model_name_or_path=self.settings.bge_m3_model_name,
+                model_name_or_path=self.settings.embedding.model_name,
                 use_fp16=self.parameters.use_fp16 and device == "cuda",
                 pooling_method=self.pooling_method,
                 devices=device_list,
@@ -107,7 +107,7 @@ class BGEM3Embedder:
             logger.info(
                 "BGE-M3 FlagModel loaded: %s (device=%s, FP16=%s, pooling=%s, "
                 "normalize=%s)",
-                self.settings.bge_m3_model_name,
+                self.settings.embedding.model_name,
                 device_list,
                 self.parameters.use_fp16 and device == "cuda",
                 self.pooling_method,
@@ -183,7 +183,7 @@ class BGEM3Embedder:
                 batch_size=len(texts),  # Use actual batch size
                 memory_usage_mb=memory_usage,
                 model_info={
-                    "model_name": self.settings.bge_m3_model_name,
+                    "model_name": self.settings.embedding.model_name,
                     "device": str(self.device),
                     "embedding_dim": 1024,
                     "library": "FlagEmbedding.BGEM3FlagModel",
@@ -384,7 +384,7 @@ class BGEM3Embedder:
                 batch_size=len(queries),
                 memory_usage_mb=memory_usage,
                 model_info={
-                    "model_name": self.settings.bge_m3_model_name,
+                    "model_name": self.settings.embedding.model_name,
                     "device": str(self.device),
                     "embedding_dim": 1024,
                     "library": "FlagEmbedding.BGEM3FlagModel.encode_queries",
@@ -465,7 +465,7 @@ class BGEM3Embedder:
                 batch_size=len(corpus),
                 memory_usage_mb=memory_usage,
                 model_info={
-                    "model_name": self.settings.bge_m3_model_name,
+                    "model_name": self.settings.embedding.model_name,
                     "device": str(self.device),
                     "embedding_dim": 1024,
                     "library": "FlagEmbedding.BGEM3FlagModel.encode_corpus",

@@ -76,7 +76,9 @@ def validate_vram_usage(
         torch.cuda.empty_cache()
 
         # Measure baseline VRAM
-        baseline_vram = torch.cuda.memory_allocated() / settings.bytes_to_gb_divisor
+        baseline_vram = (
+            torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
+        )
 
         if images:
             # Process images to measure VRAM with load
@@ -101,7 +103,9 @@ def validate_vram_usage(
 
         # Measure current VRAM safely
         try:
-            current_vram = torch.cuda.memory_allocated() / settings.bytes_to_gb_divisor
+            current_vram = (
+                torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
+            )
         except RuntimeError as e:
             logger.warning("Failed to measure current VRAM: %s", e)
             current_vram = baseline_vram
@@ -263,7 +267,7 @@ def create_image_documents(
 def batch_process_images(
     clip_embedding: Any,
     images: list[Image.Image],
-    batch_size: int = settings.default_batch_size,
+    batch_size: int = settings.monitoring.default_batch_size,
 ) -> np.ndarray:
     """Process images in batches for efficiency.
 

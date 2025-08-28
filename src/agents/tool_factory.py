@@ -45,8 +45,8 @@ from src.config import settings
 KG_SIMILARITY_TOP_K = 10
 
 # Tool configuration constants
-DEFAULT_RERANKING_TOP_K = settings.reranking_top_k
-DEFAULT_VECTOR_SIMILARITY_TOP_K = settings.top_k
+DEFAULT_RERANKING_TOP_K = settings.retrieval.reranking_top_k
+DEFAULT_VECTOR_SIMILARITY_TOP_K = settings.retrieval.top_k
 
 
 class ToolFactory:
@@ -99,16 +99,18 @@ class ToolFactory:
         Returns:
             ColbertRerank or None: Configured reranker or None if disabled.
         """
-        if not settings.reranker_model:
+        if not settings.retrieval.reranker_model:
             return None
 
         try:
             reranker = ColbertRerank(
-                top_n=settings.reranking_top_k,
-                model=settings.reranker_model,
+                top_n=settings.retrieval.reranking_top_k,
+                model=settings.retrieval.reranker_model,
                 keep_retrieval_score=True,
             )
-            logger.info("ColBERT reranker created: %s", settings.reranker_model)
+            logger.info(
+                "ColBERT reranker created: %s", settings.retrieval.reranker_model
+            )
             return reranker
         except (RuntimeError, ValueError, AttributeError, ImportError) as e:
             logger.warning("Failed to create ColBERT reranker: %s", e)
@@ -137,7 +139,7 @@ class ToolFactory:
 
         # Configure query engine with optimal settings
         query_engine = index.as_query_engine(
-            similarity_top_k=settings.top_k,
+            similarity_top_k=settings.retrieval.top_k,
             node_postprocessors=postprocessors,
             verbose=False,
         )
@@ -263,7 +265,7 @@ class ToolFactory:
         postprocessors = [reranker] if reranker else []
 
         query_engine = index.as_query_engine(
-            similarity_top_k=settings.top_k,
+            similarity_top_k=settings.retrieval.top_k,
             node_postprocessors=postprocessors,
             verbose=False,
         )

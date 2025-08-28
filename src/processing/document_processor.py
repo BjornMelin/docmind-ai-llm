@@ -408,8 +408,8 @@ class DocumentProcessor:
             UnstructuredTransformation(strategy, self.settings),
             # Second transformation: split into semantic chunks
             SentenceSplitter(
-                chunk_size=getattr(self.settings, "chunk_size", 512),
-                chunk_overlap=getattr(self.settings, "chunk_overlap", 50),
+                chunk_size=self.settings.processing.chunk_size,
+                chunk_overlap=self.settings.processing.chunk_overlap,
                 include_metadata=True,
                 include_prev_next_rel=True,
             ),

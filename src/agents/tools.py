@@ -147,7 +147,7 @@ def route_query(
         complexity = "simple"
         strategy = "vector"
         needs_planning = False
-        confidence = settings.default_confidence_threshold
+        confidence = settings.monitoring.default_confidence_threshold
 
         if (
             any(pattern in query_lower for pattern in complex_patterns)
