@@ -30,7 +30,6 @@ from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import MultiAgentState
 from src.config import settings
 from src.dspy_integration import DSPyLlamaIndexRetriever
-from tests._mocks.vllm import MockVLLMConfig, MockVLLMManager
 
 # Note: event_loop_policy removed - use fixture from main conftest.py
 
@@ -41,8 +40,8 @@ class MockVLLMConfig:
 
     def __init__(self, **kwargs):
         """Initialize mock VLLMConfig with optional parameters."""
-        self.model = kwargs.get("model", settings.model_name)
-        self.max_model_len = kwargs.get("max_model_len", settings.context_window_size)
+        self.model = kwargs.get("model", settings.vllm.model)
+        self.max_model_len = kwargs.get("max_model_len", settings.vllm.context_window)
         self.kv_cache_dtype = kwargs.get("kv_cache_dtype", settings.kv_cache_dtype)
         self.attention_backend = kwargs.get(
             "attention_backend", settings.vllm_attention_backend
@@ -65,7 +64,7 @@ class MockVLLMConfig:
         self.target_decode_throughput = kwargs.get("target_decode_throughput", 130)
         self.target_prefill_throughput = kwargs.get("target_prefill_throughput", 1050)
         self.vram_usage_target_gb = kwargs.get("vram_usage_target_gb", 13.5)
-        self.host = kwargs.get("host", "0.0.0.0")
+        self.host = kwargs.get("host", "0.0.0.0")  # noqa: S104
         self.port = kwargs.get("port", 8000)
         self.served_model_name = kwargs.get("served_model_name", "docmind-qwen3-fp8")
 
@@ -75,8 +74,8 @@ class MockContextManager:
 
     def __init__(self):
         """Initialize mock ContextManager with default settings."""
-        self.max_context_tokens = settings.context_window_size
-        self.trim_threshold = int(settings.context_window_size * 0.9)
+        self.max_context_tokens = settings.vllm.context_window
+        self.trim_threshold = int(settings.vllm.context_window * 0.9)
         self.preserve_ratio = 0.3
         self.kv_cache_memory_per_token = 1024  # bytes per token
         self.total_kv_cache_gb_at_128k = 8.0
@@ -245,7 +244,7 @@ vllm serve {self.config.model} \\
             f.write(script_content)
 
         # Make script executable
-        os.chmod(script_path, 0o755)
+        os.chmod(script_path, 0o755)  # noqa: S103
 
         return script_path
 

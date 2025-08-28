@@ -85,7 +85,7 @@ class TestCrossModuleIntegration:
         # Values should be suitable for retrieval operations
         assert 512 <= s.bge_m3_embedding_dim <= 4096
         assert 1024 <= s.bge_m3_max_length <= 16384
-        assert 10 <= s.rrf_fusion_alpha <= 100
+        assert 10 <= s.retrieval.rrf_alpha <= 100
 
     def test_vllm_module_settings_integration(self):
         """Test vLLM configuration integrates with actual vLLM usage patterns."""
@@ -274,7 +274,7 @@ class TestEnvironmentIntegration:
             assert s.max_memory_gb == 8.0
             assert s.max_vram_gb == 14.0
             assert s.vllm_gpu_memory_utilization == 0.85
-            assert s.enable_document_caching is True
+            assert s.cache.enable_document_caching is True
 
     def test_development_environment_simulation(self):
         """Test settings work in simulated development environment."""
@@ -293,7 +293,7 @@ class TestEnvironmentIntegration:
             assert s.debug is True
             assert s.log_level == "DEBUG"
             assert s.enable_performance_logging is False
-            assert s.agent_decision_timeout == 200
+            assert s.agents.decision_timeout == 200
             assert s.llm_temperature == 0.3
 
     def test_gpu_configuration_environment_simulation(self):
@@ -319,89 +319,22 @@ class TestEnvironmentIntegration:
     def test_hybrid_search_environment_configuration(self):
         """Test hybrid search environment configuration."""
         hybrid_env = {
-            "DOCMIND_RETRIEVAL_STRATEGY": "hybrid",
-            "DOCMIND_USE_SPARSE_EMBEDDINGS": "true",
-            "DOCMIND_USE_RERANKING": "true",
-            "DOCMIND_TOP_K": "15",
-            "DOCMIND_RERANKER_TOP_K": "8",
+            "DOCMIND_RETRIEVAL__STRATEGY": "hybrid",
+            "DOCMIND_RETRIEVAL__USE_SPARSE_EMBEDDINGS": "true",
+            "DOCMIND_RETRIEVAL__USE_RERANKING": "true",
+            "DOCMIND_RETRIEVAL__TOP_K": "15",
+            "DOCMIND_RETRIEVAL__RERANKING_TOP_K": "8",
         }
 
         with patch.dict("os.environ", hybrid_env):
             s = DocMindSettings()
 
             # Hybrid search should be configured
-            assert s.retrieval_strategy == "hybrid"
-            assert s.use_sparse_embeddings is True
-            assert s.use_reranking is True
-            assert s.top_k == 15
-            assert s.reranker_top_k == 8
-
-
-class TestBackwardCompatibilityIntegration:
-    """Test backward compatibility with existing module imports."""
-
-    def test_old_settings_still_work_alongside_new(self):
-        """Test that old settings system still works while new system is active."""
-        # This tests that both settings systems can coexist during migration
-
-        # Both should be importable and instantiable
-        new_settings = DocMindSettings()
-        old_settings = DocMindSettings()
-
-        # Both should have basic functionality
-        assert hasattr(new_settings, "model_name")
-        assert hasattr(old_settings, "model_name")
-
-        # New settings should have more comprehensive configuration
-        new_dict = new_settings.model_dump()
-        old_dict = old_settings.model_dump()
-
-        # New settings should have significantly more fields
-        assert len(new_dict) > len(old_dict) * 2
-
-    def test_modules_can_migrate_from_old_to_new_settings(self):
-        """Test migration path from old to new settings imports."""
-        # Simulate a module migrating from old to new settings
-
-        # Old import pattern (still works)
-        # New import pattern
-        from src.config.settings import settings as new_settings
-        from src.config.settings import settings as old_settings
-
-        # Both should work
-        assert old_settings is not None
-        assert new_settings is not None
-
-        # New settings should have more comprehensive configuration
-        assert hasattr(new_settings, "enable_multi_agent")
-        assert hasattr(new_settings, "vllm_attention_backend")
-        assert hasattr(new_settings, "bge_m3_embedding_dim")
-
-        # These might not be in old settings
-        assert (
-            not hasattr(old_settings, "enable_multi_agent")
-            or old_settings.enable_multi_agent is not None
-        )
-
-    def test_re_exported_constants_accessibility(self):
-        """Test that constants moved to centralized settings are still accessible."""
-        s = DocMindSettings()
-
-        # Constants that were moved from different modules should be accessible
-        moved_constants = [
-            "bytes_to_gb_divisor",  # From various utility modules
-            "bge_m3_embedding_dim",  # From embedding modules
-            "rrf_fusion_alpha",  # From retrieval modules
-            "default_token_limit",  # From app.py
-            "request_timeout_seconds",  # From app.py
-            "minimum_vram_high_gb",  # From performance modules
-        ]
-
-        for constant in moved_constants:
-            assert hasattr(s, constant)
-            value = getattr(s, constant)
-            assert value is not None
-            assert isinstance(value, int | float)
+            assert s.retrieval.strategy == "hybrid"
+            assert s.retrieval.use_sparse_embeddings is True
+            assert s.retrieval.use_reranking is True
+            assert s.retrieval.top_k == 15
+            assert s.retrieval.reranking_top_k == 8
 
 
 class TestConfigurationMethodIntegration:
@@ -515,10 +448,10 @@ class TestRealWorldUsagePatterns:
 
         # Document processing would use these settings
         processing_config = {
-            "chunk_size": s.chunk_size,
-            "chunk_overlap": s.chunk_overlap,
-            "max_doc_size_mb": s.max_document_size_mb,
-            "enable_document_caching": s.enable_document_caching,
+            "chunk_size": s.processing.chunk_size,
+            "chunk_overlap": s.processing.chunk_overlap,
+            "max_doc_size_mb": s.processing.max_document_size_mb,
+            "enable_document_caching": s.cache.enable_document_caching,
             "data_dir": s.data_dir,
             "cache_dir": s.cache_dir,
         }
@@ -536,9 +469,9 @@ class TestRealWorldUsagePatterns:
 
         # Embedding pipeline would use these settings
         embedding_config = {
-            "model_name": s.embedding_model,
-            "dimension": s.embedding_dimension,
-            "use_sparse": s.use_sparse_embeddings,
+            "model_name": s.embedding.model_name,
+            "dimension": s.embedding.dimension,
+            "use_sparse": s.retrieval.use_sparse_embeddings,
             "batch_size_gpu": s.bge_m3_batch_size_gpu,
             "batch_size_cpu": s.bge_m3_batch_size_cpu,
             "max_length": s.bge_m3_max_length,
@@ -558,13 +491,13 @@ class TestRealWorldUsagePatterns:
 
         # Retrieval system would use these settings
         retrieval_config = {
-            "strategy": s.retrieval_strategy,
-            "top_k": s.top_k,
-            "reranker_top_k": s.reranker_top_k,
-            "use_reranking": s.use_reranking,
-            "rrf_alpha": s.rrf_fusion_alpha,
-            "dense_weight": s.rrf_fusion_weight_dense,
-            "sparse_weight": s.rrf_fusion_weight_sparse,
+            "strategy": s.retrieval.strategy,
+            "top_k": s.retrieval.top_k,
+            "reranker_top_k": s.retrieval.reranking_top_k,
+            "use_reranking": s.retrieval.use_reranking,
+            "rrf_alpha": s.retrieval.rrf_alpha,
+            "dense_weight": s.retrieval.rrf_fusion_weight_dense,
+            "sparse_weight": s.retrieval.rrf_fusion_weight_sparse,
             "vector_store": s.vector_store_type,
             "qdrant_url": s.qdrant_url,
             "collection": s.qdrant_collection,
@@ -574,7 +507,7 @@ class TestRealWorldUsagePatterns:
         assert retrieval_config["strategy"] in ["vector", "hybrid", "graphrag"]
         assert retrieval_config["top_k"] > retrieval_config["reranker_top_k"]
         assert isinstance(retrieval_config["use_reranking"], bool)
-        assert 0 < retrieval_config["rrf_alpha"] < 1
+        assert 10 <= retrieval_config["rrf_alpha"] <= 100
         assert (
             retrieval_config["dense_weight"] + retrieval_config["sparse_weight"] == 1.0
         )
@@ -588,13 +521,13 @@ class TestRealWorldUsagePatterns:
 
         # Multi-agent system would use these settings
         coordination_config = {
-            "enabled": s.enable_multi_agent,
-            "timeout_ms": s.agent_decision_timeout,
-            "max_retries": s.max_agent_retries,
-            "fallback_enabled": s.enable_fallback_rag,
+            "enabled": s.agents.enable_multi_agent,
+            "timeout_ms": s.agents.decision_timeout,
+            "max_retries": s.agents.max_retries,
+            "fallback_enabled": s.agents.enable_fallback_rag,
             "llm_backend": s.llm_backend,
-            "model_name": s.model_name,
-            "context_window": s.context_window_size,
+            "model_name": s.vllm.model,
+            "context_window": s.vllm.context_window,
             "performance_logging": s.enable_performance_logging,
         }
 
@@ -664,14 +597,14 @@ class TestSettingsWithMockedComponents:
         mock_model.from_pretrained.return_value = MagicMock()
 
         # Simulate model loading with settings
-        tokenizer = mock_tokenizer.from_pretrained(s.embedding_model)
-        model = mock_model.from_pretrained(s.embedding_model)
+        tokenizer = mock_tokenizer.from_pretrained(s.embedding.model_name)
+        model = mock_model.from_pretrained(s.embedding.model_name)
 
         # Should be able to load with settings model name
         assert tokenizer is not None
         assert model is not None
-        mock_tokenizer.from_pretrained.assert_called_once_with(s.embedding_model)
-        mock_model.from_pretrained.assert_called_once_with(s.embedding_model)
+        mock_tokenizer.from_pretrained.assert_called_once_with(s.embedding.model_name)
+        mock_model.from_pretrained.assert_called_once_with(s.embedding.model_name)
 
     def test_async_integration_patterns(self):
         """Test settings work with async integration patterns."""
@@ -686,8 +619,8 @@ class TestSettingsWithMockedComponents:
             # Return configuration that would be used in async context
             return {
                 "timeout": s.default_agent_timeout,
-                "max_retries": s.max_agent_retries,
-                "context_window": s.context_window_size,
+                "max_retries": s.agents.max_retries,
+                "context_window": s.vllm.context_window,
             }
 
         # Should work in async context
@@ -711,10 +644,10 @@ class TestConcurrentSettingsAccess:
             s = DocMindSettings()
             # Access multiple settings to test thread safety
             config = {
-                "model_name": s.model_name,
-                "context_window": s.context_window_size,
-                "batch_size": s.bge_m3_batch_size_gpu,
-                "timeout": s.agent_decision_timeout,
+                "model_name": s.vllm.model,
+                "context_window": s.vllm.context_window,
+                "batch_size": s.embedding.batch_size_gpu,
+                "timeout": s.agents.decision_timeout,
             }
             results.append(config)
 
@@ -738,8 +671,8 @@ class TestConcurrentSettingsAccess:
     def test_global_settings_singleton_behavior(self):
         """Test global settings instance behaves consistently."""
         # Import settings multiple times
-        from src.config.settings import settings as s1
-        from src.config.settings import settings as s2
+        from src.config import settings as s1
+        from src.config import settings as s2
 
         # Should be the same instance
         assert s1 is s2

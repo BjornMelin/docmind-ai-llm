@@ -9,10 +9,6 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
-
-# Performance tests require explicit opt-in
-pytestmark = pytest.mark.skipif(os.getenv("PYTEST_PERF") != "1", reason="perf disabled")
-
 from llama_index.core.tools import QueryEngineTool
 
 from src.agents.tool_factory import (
@@ -22,6 +18,9 @@ from src.agents.tool_factory import (
     ToolFactory,
 )
 from src.config.settings import DocMindSettings
+
+# Performance tests require explicit opt-in
+pytestmark = pytest.mark.skipif(os.getenv("PYTEST_PERF") != "1", reason="perf disabled")
 
 
 @pytest.fixture

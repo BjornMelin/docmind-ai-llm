@@ -159,7 +159,7 @@ def test_integration_tier_fixtures(integration_settings, lightweight_embedding_m
     """Test that integration-tier fixtures work properly."""
     # Test integration settings
     assert integration_settings.embedding_dimension == 384
-    assert "MiniLM" in integration_settings.embedding_model
+    assert "MiniLM" in integration_settings.embedding.model_name
 
     # Test lightweight model (may be None if not available)
     if lightweight_embedding_model is not None:
@@ -172,8 +172,8 @@ def test_system_tier_fixtures(system_settings):
     """Test that system-tier fixtures work properly."""
     # Test system settings use full models
     assert system_settings.embedding_dimension == 1024
-    assert "bge-large" in system_settings.embedding_model
-    assert system_settings.use_reranking is True
+    assert "bge-large" in system_settings.embedding.model_name
+    assert system_settings.retrieval.use_reranking is True
 
 
 def test_conftest_hierarchy():

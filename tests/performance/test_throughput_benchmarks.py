@@ -28,9 +28,11 @@ try:
 except ImportError:
     # Fallback mocks for consistent testing
     def gpu_performance_monitor():
+        """Mock GPU performance monitor for testing without GPU dependencies."""
         return MagicMock()
 
     def gpu_memory_context():
+        """Mock GPU memory context for testing without GPU dependencies."""
         return MagicMock()
 
 
@@ -45,11 +47,16 @@ LARGE_BATCH_SIZE = 50
 
 # Performance targets (requests/second) - Updated for FP8 and unified architecture
 RTX_4090_THROUGHPUT_TARGETS = {
-    "embedding_rps": 28,  # BGE-M3 embeddings per second (improved from 20)
-    "reranking_rps": 12,  # BGE reranker-v2-m3 operations per second (improved from 10)
-    "query_rps": 8,  # End-to-end queries per second with multi-agent coordination (improved from 5)
-    "document_processing_rps": 150,  # Documents processed per second with optimized pipeline (improved from 100)
-    "concurrent_users": 12,  # Concurrent users supported (improved from 10)
+    # BGE-M3 embeddings per second (improved from 20)
+    "embedding_rps": 28,
+    # BGE reranker-v2-m3 operations per second (improved from 10)
+    "reranking_rps": 12,
+    # End-to-end queries per second with multi-agent coordination (improved from 5)
+    "query_rps": 8,
+    # Documents processed per second with optimized pipeline (improved from 100)
+    "document_processing_rps": 150,
+    # Concurrent users supported (improved from 10)
+    "concurrent_users": 12,
 }
 
 # Scalability thresholds

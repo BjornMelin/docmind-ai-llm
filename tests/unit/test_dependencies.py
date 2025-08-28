@@ -295,7 +295,7 @@ class TestOptionalPackages:
 
         try:
             # Test importing core components
-            from src.config.settings import settings
+            from src.config import settings
 
             # Assert successful import with proper validation
             assert settings is not None, "Settings should be importable"

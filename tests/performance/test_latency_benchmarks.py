@@ -28,9 +28,11 @@ try:
 except ImportError:
     # Fallback mocks for consistent testing without external dependencies
     def gpu_performance_monitor():
+        """Mock GPU performance monitor for testing without GPU dependencies."""
         return MagicMock()
 
     def gpu_memory_context():
+        """Mock GPU memory context for testing without GPU dependencies."""
         return MagicMock()
 
 
@@ -41,11 +43,16 @@ P99_PERCENTILE = 99
 
 # RTX 4090 Performance targets (milliseconds) - Updated for FP8 optimization
 RTX_4090_TARGETS = {
-    "embedding_latency_ms": 35,  # BGE-M3 single chunk with FP8 optimization (down from 50ms)
-    "reranking_latency_ms": 85,  # BGE reranker-v2-m3 20 docs (down from 100ms)
-    "query_p95_latency_ms": 1800,  # End-to-end P95 with multi-agent efficiency (down from 2000ms)
-    "query_p50_latency_ms": 900,  # End-to-end P50 (down from 1000ms)
-    "batch_efficiency_factor": 0.25,  # Improved batch processing efficiency (down from 0.3)
+    # BGE-M3 single chunk with FP8 optimization (down from 50ms)
+    "embedding_latency_ms": 35,
+    # BGE reranker-v2-m3 20 docs (down from 100ms)
+    "reranking_latency_ms": 85,
+    # End-to-end P95 with multi-agent efficiency (down from 2000ms)
+    "query_p95_latency_ms": 1800,
+    # End-to-end P50 (down from 1000ms)
+    "query_p50_latency_ms": 900,
+    # Improved batch processing efficiency (down from 0.3)
+    "batch_efficiency_factor": 0.25,
 }
 
 # Regression detection thresholds

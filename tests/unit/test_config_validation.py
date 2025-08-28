@@ -19,45 +19,47 @@ class TestRRFParameterValidation:
 
     def test_rrf_fusion_alpha_validation_success(self):
         """Test RRF fusion alpha with valid values."""
-        settings = Settings(rrf_fusion_alpha=60)
-        assert settings.rrf_fusion_alpha == 60
+        settings = Settings(retrieval={"rrf_alpha": 60})
+        assert settings.retrieval.rrf_alpha == 60
 
     def test_rrf_fusion_alpha_range_validation(self):
         """Test RRF fusion alpha must be in [10, 100] range."""
         with pytest.raises(ValidationError):
-            Settings(rrf_fusion_alpha=5)  # Invalid: < 10
+            Settings(retrieval={"rrf_alpha": 5})  # Invalid: < 10
 
         with pytest.raises(ValidationError):
-            Settings(rrf_fusion_alpha=150)  # Invalid: > 100
+            Settings(retrieval={"rrf_alpha": 150})  # Invalid: > 100
 
     def test_rrf_k_constant_range_validation(self):
         """Test RRF k constant must be in [10, 100] range."""
         with pytest.raises(ValidationError):
-            Settings(rrf_k_constant=5)  # Invalid: < 10
+            Settings(retrieval={"rrf_k_constant": 5})  # Invalid: < 10
 
         with pytest.raises(ValidationError):
-            Settings(rrf_k_constant=150)  # Invalid: > 100
+            Settings(retrieval={"rrf_k_constant": 150})  # Invalid: > 100
 
     def test_rrf_parameters_boundary_values(self):
         """Test RRF parameters at boundary values."""
         # Test minimum valid values
-        settings_min = Settings(rrf_fusion_alpha=10, rrf_k_constant=10)
-        assert settings_min.rrf_fusion_alpha == 10
-        assert settings_min.rrf_k_constant == 10
+        settings_min = Settings(retrieval={"rrf_alpha": 10, "rrf_k_constant": 10})
+        assert settings_min.retrieval.rrf_alpha == 10
+        assert settings_min.retrieval.rrf_k_constant == 10
 
         # Test maximum valid values
-        settings_max = Settings(rrf_fusion_alpha=100, rrf_k_constant=100)
-        assert settings_max.rrf_fusion_alpha == 100
-        assert settings_max.rrf_k_constant == 100
+        settings_max = Settings(retrieval={"rrf_alpha": 100, "rrf_k_constant": 100})
+        assert settings_max.retrieval.rrf_alpha == 100
+        assert settings_max.retrieval.rrf_k_constant == 100
 
     def test_rrf_parameters_custom_valid_combinations(self):
         """Test various valid RRF parameter combinations."""
         valid_combinations = [(30, 40), (50, 50), (80, 20), (25, 75)]
 
         for alpha, k_const in valid_combinations:
-            settings = Settings(rrf_fusion_alpha=alpha, rrf_k_constant=k_const)
-            assert settings.rrf_fusion_alpha == alpha
-            assert settings.rrf_k_constant == k_const
+            settings = Settings(
+                retrieval={"rrf_alpha": alpha, "rrf_k_constant": k_const}
+            )
+            assert settings.retrieval.rrf_alpha == alpha
+            assert settings.retrieval.rrf_k_constant == k_const
 
 
 class TestTopKValidation:
@@ -65,25 +67,25 @@ class TestTopKValidation:
 
     def test_top_k_valid_range(self):
         """Test top_k with valid values."""
-        settings = Settings(top_k=10)
-        assert settings.top_k == 10
+        settings = Settings(retrieval={"top_k": 10})
+        assert settings.retrieval.top_k == 10
 
     def test_top_k_boundary_validation(self):
         """Test top_k boundary values."""
         # Test minimum valid value
-        settings_min = Settings(top_k=1)
-        assert settings_min.top_k == 1
+        settings_min = Settings(retrieval={"top_k": 1})
+        assert settings_min.retrieval.top_k == 1
 
         # Test maximum valid value
-        settings_max = Settings(top_k=50)
-        assert settings_max.top_k == 50
+        settings_max = Settings(retrieval={"top_k": 50})
+        assert settings_max.retrieval.top_k == 50
 
         # Test invalid values
         with pytest.raises(ValidationError):
-            Settings(top_k=0)  # Invalid: < 1
+            Settings(retrieval={"top_k": 0})  # Invalid: < 1
 
         with pytest.raises(ValidationError):
-            Settings(top_k=51)  # Invalid: > 50
+            Settings(retrieval={"top_k": 51})  # Invalid: > 50
 
 
 class TestRerankerValidation:
@@ -91,25 +93,25 @@ class TestRerankerValidation:
 
     def test_reranking_top_k_valid_range(self):
         """Test reranking_top_k with valid values."""
-        settings = Settings(reranking_top_k=5)
-        assert settings.reranking_top_k == 5
+        settings = Settings(retrieval={"reranking_top_k": 5})
+        assert settings.retrieval.reranking_top_k == 5
 
     def test_reranking_top_k_boundary_validation(self):
         """Test reranking_top_k boundary values."""
         # Test minimum valid value
-        settings_min = Settings(reranking_top_k=1)
-        assert settings_min.reranking_top_k == 1
+        settings_min = Settings(retrieval={"reranking_top_k": 1})
+        assert settings_min.retrieval.reranking_top_k == 1
 
         # Test maximum valid value
-        settings_max = Settings(reranking_top_k=20)
-        assert settings_max.reranking_top_k == 20
+        settings_max = Settings(retrieval={"reranking_top_k": 20})
+        assert settings_max.retrieval.reranking_top_k == 20
 
         # Test invalid values
         with pytest.raises(ValidationError):
-            Settings(reranking_top_k=0)  # Invalid: < 1
+            Settings(retrieval={"reranking_top_k": 0})  # Invalid: < 1
 
         with pytest.raises(ValidationError):
-            Settings(reranking_top_k=21)  # Invalid: > 20
+            Settings(retrieval={"reranking_top_k": 21})  # Invalid: > 20
 
 
 class TestMemoryValidation:
@@ -127,10 +129,10 @@ class TestMemoryValidation:
     def test_memory_boundary_validation(self):
         """Test memory boundary values."""
         # Test vLLM GPU memory utilization boundary values
-        settings_min = Settings(vllm_gpu_memory_utilization=0.5)
+        settings_min = Settings(vllm={"gpu_memory_utilization": 0.5})
         assert settings_min.vllm.gpu_memory_utilization == 0.5
 
-        settings_max = Settings(vllm_gpu_memory_utilization=0.95)
+        settings_max = Settings(vllm={"gpu_memory_utilization": 0.95})
         assert settings_max.vllm.gpu_memory_utilization == 0.95
 
 
@@ -139,25 +141,25 @@ class TestVLLMConfigValidation:
 
     def test_vllm_gpu_memory_utilization_valid_range(self):
         """Test GPU memory utilization with valid values."""
-        settings = Settings(vllm_gpu_memory_utilization=0.95)
+        settings = Settings(vllm={"gpu_memory_utilization": 0.95})
         assert settings.vllm.gpu_memory_utilization == 0.95
 
     def test_vllm_gpu_memory_utilization_boundary_validation(self):
         """Test GPU memory utilization boundary values."""
         # Test minimum valid value
-        settings_min = Settings(vllm_gpu_memory_utilization=0.5)
+        settings_min = Settings(vllm={"gpu_memory_utilization": 0.5})
         assert settings_min.vllm.gpu_memory_utilization == 0.5
 
         # Test maximum valid value
-        settings_max = Settings(vllm_gpu_memory_utilization=0.95)
+        settings_max = Settings(vllm={"gpu_memory_utilization": 0.95})
         assert settings_max.vllm.gpu_memory_utilization == 0.95
 
         # Test invalid values
         with pytest.raises(ValidationError):
-            Settings(vllm_gpu_memory_utilization=0.4)  # Invalid: < 0.5
+            Settings(vllm={"gpu_memory_utilization": 0.4})  # Invalid: < 0.5
 
         with pytest.raises(ValidationError):
-            Settings(vllm_gpu_memory_utilization=0.99)  # Invalid: > 0.95
+            Settings(vllm={"gpu_memory_utilization": 0.99})  # Invalid: > 0.95
 
 
 class TestTokenLimitValidation:
@@ -165,25 +167,25 @@ class TestTokenLimitValidation:
 
     def test_default_token_limit_valid_range(self):
         """Test default token limit with valid values."""
-        settings = Settings(context_window_size=131072)
-        assert settings.default_token_limit == 131072
+        settings = Settings(vllm={"context_window": 131072})
+        assert settings.vllm.context_window == 131072
 
     def test_vllm_max_token_limit_valid_range(self):
         """Test vLLM max token limit with valid values."""
-        settings = Settings(llm_max_tokens=2048)
+        settings = Settings(vllm={"max_tokens": 2048})
         assert settings.vllm.max_tokens == 2048
 
     def test_token_limit_boundary_validation(self):
         """Test token limit boundary values."""
         # Test minimum valid values
-        settings_min = Settings(context_window_size=8192, llm_max_tokens=128)
-        assert settings_min.context_window_size == 8192
-        assert settings_min.llm_max_tokens == 128
+        settings_min = Settings(vllm={"context_window": 8192, "max_tokens": 128})
+        assert settings_min.vllm.context_window == 8192
+        assert settings_min.vllm.max_tokens == 128
 
         # Test maximum valid values
-        settings_max = Settings(context_window_size=200000, llm_max_tokens=8192)
-        assert settings_max.context_window_size == 200000
-        assert settings_max.llm_max_tokens == 8192
+        settings_max = Settings(vllm={"context_window": 200000, "max_tokens": 8192})
+        assert settings_max.vllm.context_window == 200000
+        assert settings_max.vllm.max_tokens == 8192
 
 
 class TestStartupConfigurationValidation:
@@ -237,9 +239,11 @@ class TestValidationIntegration:
         """Test handling multiple validation errors simultaneously."""
         with pytest.raises(ValidationError) as exc_info:
             Settings(
-                rrf_fusion_alpha=5,  # Invalid: < 10
-                top_k=0,  # Invalid: < 1
-                reranking_top_k=25,  # Invalid: > 20
+                retrieval={
+                    "rrf_alpha": 5,  # Invalid: < 10
+                    "top_k": 0,  # Invalid: < 1
+                    "reranking_top_k": 25,  # Invalid: > 20
+                }
             )
 
         # Should contain multiple validation errors
@@ -251,40 +255,42 @@ class TestValidationIntegration:
         settings = Settings()
 
         # Verify some key defaults
-        assert 10 <= settings.rrf_fusion_alpha <= 100
-        assert 1 <= settings.top_k <= 50
-        assert 1 <= settings.reranking_top_k <= 20
-        assert 0.1 <= settings.vllm_gpu_memory_utilization <= 0.95
+        assert 10 <= settings.retrieval.rrf_alpha <= 100
+        assert 1 <= settings.retrieval.top_k <= 50
+        assert 1 <= settings.retrieval.reranking_top_k <= 20
+        assert 0.5 <= settings.vllm.gpu_memory_utilization <= 0.95
 
     def test_environment_override_validation(self):
         """Test that environment variables still respect validation."""
         import os
 
         # Set invalid environment variable for nested config
-        os.environ["DOCMIND_RRF_FUSION_ALPHA"] = "5"  # Invalid: < 10
+        os.environ["DOCMIND_RETRIEVAL__RRF_ALPHA"] = "5"  # Invalid: < 10
 
         try:
             with pytest.raises(ValidationError):
                 Settings()
         finally:
             # Clean up
-            if "DOCMIND_RRF_FUSION_ALPHA" in os.environ:
-                del os.environ["DOCMIND_RRF_FUSION_ALPHA"]
+            if "DOCMIND_RETRIEVAL__RRF_ALPHA" in os.environ:
+                del os.environ["DOCMIND_RETRIEVAL__RRF_ALPHA"]
 
     def test_full_startup_validation_integration(self):
         """Test complete startup validation with realistic configuration."""
         # Create a valid configuration using nested settings
         settings = Settings(
-            rrf_fusion_alpha=60,
-            rrf_k_constant=60,
-            top_k=10,
-            reranking_top_k=5,
-            vllm_gpu_memory_utilization=0.85,
+            retrieval={
+                "rrf_alpha": 60,
+                "rrf_k_constant": 60,
+                "top_k": 10,
+                "reranking_top_k": 5,
+            },
+            vllm={"gpu_memory_utilization": 0.85},
         )
 
         # Verify all values are within expected ranges
-        assert settings.rrf_fusion_alpha == 60
-        assert settings.rrf_k_constant == 60
-        assert settings.top_k == 10
-        assert settings.reranking_top_k == 5
+        assert settings.retrieval.rrf_alpha == 60
+        assert settings.retrieval.rrf_k_constant == 60
+        assert settings.retrieval.top_k == 10
+        assert settings.retrieval.reranking_top_k == 5
         assert settings.vllm.gpu_memory_utilization == 0.85

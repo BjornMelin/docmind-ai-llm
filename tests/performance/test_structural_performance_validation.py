@@ -402,8 +402,8 @@ class TestUnifiedConfigurationPerformance:
         # Verify environment variables were processed correctly
         assert settings.debug is True
         assert settings.log_level == "DEBUG"
-        assert settings.chunk_size == 1024
-        assert settings.top_k == 15
+        assert settings.processing.chunk_size == 1024
+        assert settings.retrieval.top_k == 15
         assert settings.embedding.model_name == "BAAI/bge-m3"
         assert settings.vllm.gpu_memory_utilization == 0.8
         assert settings.agents.enable_multi_agent is True
@@ -518,7 +518,7 @@ class TestModuleIntegrationPerformance:
 
     def _test_settings_embeddings_integration(self):
         """Test settings to embeddings integration."""
-        from src.config.settings import settings
+        from src.config import settings
 
         # Test that settings work with embedding configuration
         embedding_config = settings.get_embedding_config()

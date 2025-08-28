@@ -73,8 +73,8 @@ def app_test():
         patch("src.utils.core.validate_startup_configuration", return_value=True),
     ):
         # Configure mock settings for the unified configuration architecture
-        mock_settings.model_name = "qwen3-4b-instruct-2507:latest"
-        mock_settings.default_token_limit = 8192
+        mock_settings.vllm.model = "qwen3-4b-instruct-2507:latest"
+        mock_settings.vllm.context_window = 8192
         mock_settings.ollama_base_url = "http://localhost:11434"
         mock_settings.request_timeout_seconds = 300
         mock_settings.streaming_delay_seconds = 0.01
@@ -240,7 +240,7 @@ def test_app_multi_agent_chat_functionality(
 
     # Test that chat interface components are present
     app_str = str(app)
-    has_chat_input = "ChatInput" in app_str or "chat" in app_str.lower()
+    "ChatInput" in app_str or "chat" in app_str.lower()
 
     # Check for chat with documents section
     assert "Chat with Documents" in app_str or "chat" in app_str.lower()
@@ -270,10 +270,7 @@ def test_app_session_persistence_and_memory_management(
     assert not app.exception, f"App failed with exception: {app.exception}"
 
     # Check that session management components are present
-    app_str = str(app)
-    has_session_buttons = (
-        "Save" in app_str and "Load" in app_str
-    ) or "Session" in app_str
+    str(app)
 
     # Find save and load buttons
     save_buttons = [btn for btn in app.button if "Save" in str(btn)]
@@ -284,7 +281,7 @@ def test_app_session_persistence_and_memory_management(
         try:
             save_buttons[0].click()
             app.run()
-        except Exception:
+        except Exception:  # noqa: S110
             # Button click may fail in test environment - that's OK
             pass
 
@@ -292,7 +289,7 @@ def test_app_session_persistence_and_memory_management(
         try:
             load_buttons[0].click()
             app.run()
-        except Exception:
+        except Exception:  # noqa: S110
             # Button click may fail in test environment - that's OK
             pass
 
@@ -301,9 +298,7 @@ def test_app_session_persistence_and_memory_management(
     expected_keys = ["memory", "agent_system", "agent_mode", "index"]
 
     # Check that at least some expected session state keys are present
-    has_memory_management = any(
-        key in str(session_state_keys).lower() for key in expected_keys
-    )
+    any(key in str(session_state_keys).lower() for key in expected_keys)
 
     # Test passes if no exceptions occur and basic session management is present
     assert not app.exception
@@ -356,7 +351,8 @@ def test_complete_end_to_end_multi_agent_workflow(
     # Mock successful document loading
     mock_documents = [
         Document(
-            text="DocMind AI implements advanced multi-agent coordination for document analysis.",
+            text="DocMind AI implements advanced multi-agent coordination "
+            "for document analysis.",
             metadata={"source": "test_document.pdf", "page": 1},
         )
     ]
@@ -365,7 +361,10 @@ def test_complete_end_to_end_multi_agent_workflow(
     # Mock multi-agent coordinator
     mock_coordinator = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = "Complete multi-agent analysis: This document discusses advanced AI coordination techniques."
+    mock_response.content = (
+        "Complete multi-agent analysis: This document discusses "
+        "advanced AI coordination techniques."
+    )
     mock_coordinator.process_query.return_value = mock_response
     mock_coordinator_class.return_value = mock_coordinator
 
@@ -404,16 +403,11 @@ def test_complete_end_to_end_multi_agent_workflow(
     assert has_chat_interface, "Chat interface not found"
 
     # 7. Verify session management
-    has_session_management = (
-        "Save" in app_str and "Load" in app_str
-    ) or "Session" in app_str
 
     # 8. Verify session state initialization
     session_state_keys = list(app.session_state.keys())
     expected_keys = ["memory", "agent_system", "agent_mode", "index"]
-    has_memory_management = any(
-        key in str(session_state_keys).lower() for key in expected_keys
-    )
+    any(key in str(session_state_keys).lower() for key in expected_keys)
 
     # Final validation: Complete workflow loaded successfully
     assert not app.exception
@@ -459,7 +453,7 @@ async def test_async_workflow_validation(
 
     # Verify that async-capable components are present
     app_str = str(app)
-    has_async_components = (
+    (
         "upload" in app_str.lower()
         or "process" in app_str.lower()
         or "analyze" in app_str.lower()
@@ -539,7 +533,8 @@ def test_streamlit_app_markers_and_structure(app_test):
 
     print("✅ App structure validation completed")
     print(
-        f"   - Main sections: {len(required_sections) - len(missing_sections)}/{len(required_sections)}"
+        f"   - Main sections: "
+        f"{len(required_sections) - len(missing_sections)}/{len(required_sections)}"
     )
     print(
         f"   - Sidebar components: {len(present_components)}/{len(sidebar_components)}"

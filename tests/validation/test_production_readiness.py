@@ -30,6 +30,7 @@ class ProductionValidationResult:
     """Container for production validation results."""
 
     def __init__(self):
+        """Initialize production validation result container."""
         self.test_results: dict[str, Any] = {}
         self.performance_metrics: dict[str, float] = {}
         self.errors: list[str] = []
@@ -258,10 +259,10 @@ class TestProductionConfiguration:
 
         # Verify model configurations
         model_checks = {
-            "llm_model_set": bool(settings.model_name),
-            "embedding_model_set": bool(settings.embedding_model),
-            "bge_m3_configured": "bge-m3" in settings.bge_m3_model_name.lower(),
-            "context_window_adequate": settings.context_window_size >= 32768,
+            "llm_model_set": bool(settings.vllm.model),
+            "embedding_model_set": bool(settings.embedding.model_name),
+            "bge_m3_configured": "bge-m3" in settings.embedding.model_name.lower(),
+            "context_window_adequate": settings.vllm.context_window >= 32768,
         }
 
         passed = all(model_checks.values())
@@ -312,7 +313,7 @@ class TestProductionPerformance:
 
         # Load settings multiple times to test consistency
         for _ in range(5):
-            settings = DocMindSettings()
+            DocMindSettings()
 
         load_time_ms = (time.time() - start_time) * 1000 / 5  # Average per load
 
@@ -346,8 +347,8 @@ class TestProductionPerformance:
         memory_before = process.memory_info().rss / (1024**2)  # MB
 
         # Load core components
-        settings = DocMindSettings()
-        hardware_info = detect_hardware()
+        DocMindSettings()
+        detect_hardware()
 
         gc.collect()
         memory_after = process.memory_info().rss / (1024**2)  # MB
@@ -417,11 +418,16 @@ class TestProductionIntegration:
             # Test document creation and basic processing
             test_documents = [
                 Document(
-                    text="DocMind AI uses advanced retrieval techniques for document analysis.",
+                    text=(
+                        "DocMind AI uses advanced retrieval techniques for "
+                        "document analysis."
+                    ),
                     metadata={"source": "test.pdf", "page": 1},
                 ),
                 Document(
-                    text="The system implements BGE-M3 embeddings with FP8 optimization.",
+                    text=(
+                        "The system implements BGE-M3 embeddings with FP8 optimization."
+                    ),
                     metadata={"source": "test.pdf", "page": 2},
                 ),
             ]
@@ -463,13 +469,13 @@ class TestProductionHealthChecks:
         settings = DocMindSettings()
 
         # Check configured limits vs actual system resources
-        cpu_count = psutil.cpu_count()
+        psutil.cpu_count()
         memory_gb = psutil.virtual_memory().total / (1024**3)
 
         resource_checks = {
             "max_memory_reasonable": settings.max_memory_gb <= memory_gb,
             "max_vram_reasonable": settings.max_vram_gb <= 80,  # Reasonable upper bound
-            "context_window_reasonable": settings.context_window_size <= 200000,
+            "context_window_reasonable": settings.vllm.context_window <= 200000,
         }
 
         passed = all(resource_checks.values())
@@ -494,8 +500,8 @@ class TestProductionHealthChecks:
         """Test error handling and graceful degradation."""
         try:
             # Test settings with invalid values are handled gracefully
-            with pytest.raises(ValueError):
-                DocMindSettings(chunk_size=0)
+            with pytest.raises(ValueError, match=r"chunk.*size|must.*greater|>=.*100"):
+                DocMindSettings(processing={"chunk_size": 0})
 
             # Test hardware detection doesn't crash
             hardware_info = detect_hardware()

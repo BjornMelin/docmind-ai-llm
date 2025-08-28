@@ -208,14 +208,14 @@ class TestSettingsValidation:
         """Test that unified settings have all required fields."""
         settings = DocMindSettings()
         # These should exist and have reasonable defaults
-        assert hasattr(settings, "chunk_size")
-        assert hasattr(settings, "chunk_overlap")
-        assert isinstance(settings.chunk_size, int)
-        assert isinstance(settings.chunk_overlap, int)
+        # Note: chunk_size moved to nested processing config, chunk_overlap was removed
+        assert hasattr(settings.processing, "chunk_size")
+        assert isinstance(settings.processing.chunk_size, int)
 
         # Test additional key settings that should exist
-        assert hasattr(settings, "embedding_dimension")
-        assert hasattr(settings, "embedding_model")
+        # (now in nested embedding config)
+        assert hasattr(settings.embedding, "dimension")
+        assert hasattr(settings.embedding, "model_name")
         assert hasattr(settings, "top_k")
 
         # Test nested config access

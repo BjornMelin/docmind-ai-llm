@@ -38,7 +38,7 @@ from src.agents.models import AgentResponse
 
 # Mock Agent Response Classes Aligned with Real Models
 class MockAgentResponse:
-    """Mock agent response for testing - aligned with real AgentResponse Pydantic model."""
+    """Mock agent response aligned with real AgentResponse model."""
 
     def __init__(
         self,
@@ -287,7 +287,8 @@ class MockMultiAgentCoordinator:
                 "coordination_overhead_ms": round(processing_time * 1000, 2),
                 "meets_200ms_target": processing_time < 0.2,
                 "fp8_optimization": True,
-                "parallel_execution_active": True,  # Complex queries use parallel execution
+                # Complex queries use parallel execution
+                "parallel_execution_active": True,
                 "token_reduction_achieved": 0.65,  # Mock 65% token reduction
                 "model_path": "Qwen/Qwen3-4B-Instruct-2507-FP8",
                 "context_trimmed": len(planning_output["sub_tasks"]) > 5,
@@ -1298,7 +1299,10 @@ class TestRealAgentTools:
         except ImportError:
             pytest.skip("Agent tools not available for testing")
 
-        complex_query = "Compare the environmental impact of electric vs gasoline vehicles and explain manufacturing differences"
+        complex_query = (
+            "Compare the environmental impact of electric vs gasoline vehicles "
+            "and explain manufacturing differences"
+        )
 
         # Call the real route_query tool
         result = route_query(complex_query, mock_state)
@@ -1327,7 +1331,10 @@ class TestRealAgentTools:
         except ImportError:
             pytest.skip("Agent tools not available for testing")
 
-        complex_query = "Compare electric and gasoline vehicles across environmental and economic factors"
+        complex_query = (
+            "Compare electric and gasoline vehicles across environmental and "
+            "economic factors"
+        )
 
         # Call the real plan_query tool
         result = plan_query(complex_query, mock_state)
@@ -1383,7 +1390,7 @@ class TestRealAgentTools:
             assert "documents" in retrieval_result or "error" in retrieval_result
 
         except Exception as e:
-            # If retrieval fails due to missing index, that's expected in test environment
+            # Retrieval may fail without an index in this test environment
             pytest.skip(f"Document retrieval not available in test environment: {e}")
 
     @pytest.mark.spec("FEAT-001")
@@ -1439,7 +1446,10 @@ class TestRealAgentTools:
             pytest.skip("Agent tools not available for testing")
 
         # Mock a response to validate
-        test_response = "Machine learning is a subset of artificial intelligence that enables computers to learn from data."
+        test_response = (
+            "Machine learning is a subset of artificial intelligence that "
+            "enables computers to learn from data."
+        )
         query = "What is machine learning?"
 
         # Update state with mock response
@@ -1466,7 +1476,7 @@ class TestRealAgentTools:
                     if field == "valid":
                         assert isinstance(validation[field], bool)
                     elif field == "confidence":
-                        assert isinstance(validation[field], (int, float))
+                        assert isinstance(validation[field], int | float)
                         assert 0.0 <= validation[field] <= 1.0
                     elif field == "issues":
                         assert isinstance(validation[field], list)

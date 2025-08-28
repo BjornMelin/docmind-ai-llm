@@ -33,18 +33,23 @@ try:
 except ImportError:
     # Fallback mocks for when GPU modules are not available
     def gpu_performance_monitor():
+        """Mock GPU performance monitor for testing without GPU dependencies."""
         return MagicMock()
 
     def async_gpu_memory_context():
+        """Mock async GPU memory context for testing without GPU dependencies."""
         return MagicMock()
 
     def get_safe_gpu_info():
+        """Mock GPU info getter that returns safe default values."""
         return {"cuda_available": False, "gpu_count": 0}
 
     def get_safe_vram_usage():
+        """Mock VRAM usage getter that returns safe default value."""
         return 0.0
 
     def gpu_memory_context():
+        """Mock GPU memory context for testing without GPU dependencies."""
         return MagicMock()
 
 

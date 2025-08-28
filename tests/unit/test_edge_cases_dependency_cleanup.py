@@ -120,7 +120,7 @@ class TestGracefulErrorHandling:
     def test_app_startup_without_optional_deps(self):
         """Test that app can start without optional dependencies."""
         try:
-            from src.config.settings import settings
+            from src.config import settings
             from src.utils.core import validate_startup_configuration
 
             # Should not crash even if some dependencies are missing

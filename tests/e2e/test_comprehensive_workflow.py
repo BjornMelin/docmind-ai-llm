@@ -101,11 +101,17 @@ async def test_complete_application_workflow():
 
         mock_documents = [
             Document(
-                text="DocMind AI provides comprehensive document analysis using multi-agent coordination.",
+                text=(
+                    "DocMind AI provides comprehensive document analysis using "
+                    "multi-agent coordination."
+                ),
                 metadata={"source": "test_document.pdf", "page": 1},
             ),
             Document(
-                text="The system supports various document formats and provides intelligent insights.",
+                text=(
+                    "The system supports various document formats and provides "
+                    "intelligent insights."
+                ),
                 metadata={"source": "test_document.pdf", "page": 2},
             ),
         ]
@@ -114,7 +120,11 @@ async def test_complete_application_workflow():
         # Mock multi-agent coordinator
         mock_coordinator = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Comprehensive analysis completed using multi-agent coordination. Key insights: Document processing capabilities, AI-powered analysis features, and system architecture overview."
+        mock_response.content = (
+            "Comprehensive analysis completed using multi-agent coordination. "
+            "Key insights: Document processing capabilities, AI-powered analysis "
+            "features, and system architecture overview."
+        )
         mock_coordinator.process_query.return_value = mock_response
         mock_coordinator_class.return_value = mock_coordinator
 
@@ -145,10 +155,11 @@ async def test_complete_application_workflow():
         assert settings is not None
         assert hasattr(settings, "model_name")
         assert hasattr(settings, "ollama_base_url")
-        assert hasattr(settings, "default_token_limit")
+        # Note: default_token_limit was removed - check nested vllm config instead
+        assert hasattr(settings.vllm, "context_window")
 
         # Test startup validation
-        validation_result = validate_startup_configuration(settings)
+        validate_startup_configuration(settings)
         assert mock_validate.called
 
         # Test hardware detection
@@ -188,7 +199,7 @@ async def test_complete_application_workflow():
         assert len(PREDEFINED_PROMPTS) > 0
 
         print("✅ Complete application workflow test passed")
-        print(f"   - Configuration: {settings.model_name}")
+        print(f"   - Configuration: {settings.vllm.model}")
         print(f"   - Hardware: {hardware_info['gpu_name']}")
         print(f"   - Documents processed: {len(documents)}")
         print(f"   - Prompts available: {len(PREDEFINED_PROMPTS)}")
@@ -211,7 +222,7 @@ def test_unified_configuration_architecture():
             settings = DocMindSettings()
 
             # Validate key configuration attributes
-            assert settings.model_name == "qwen3-4b-instruct-2507:latest"
+            assert settings.vllm.model == "qwen3-4b-instruct-2507:latest"
             assert settings.ollama_base_url == "http://localhost:11434"
             assert settings.debug is False
 
@@ -231,7 +242,7 @@ def test_unified_configuration_architecture():
                 )
 
             print("✅ Unified configuration architecture validated")
-            print(f"   - Model: {settings.model_name}")
+            print(f"   - Model: {settings.vllm.model}")
             print(f"   - Base URL: {settings.ollama_base_url}")
             print(f"   - Debug mode: {settings.debug}")
 
@@ -247,7 +258,10 @@ def test_multi_agent_system_integration():
         # Setup mock multi-agent coordinator
         mock_coordinator = MagicMock()
         mock_response = MagicMock()
-        mock_response.content = "Multi-agent system successfully coordinated analysis. Agents collaborated to provide comprehensive insights."
+        mock_response.content = (
+            "Multi-agent system successfully coordinated analysis. Agents "
+            "collaborated to provide comprehensive insights."
+        )
         mock_coordinator.process_query.return_value = mock_response
         mock_coordinator_class.return_value = mock_coordinator
 
@@ -295,7 +309,10 @@ def test_document_processing_pipeline():
                 metadata={"source": "doc1.pdf", "page": 1, "chunk_id": "chunk_1"},
             ),
             Document(
-                text="Multi-modal content extraction and intelligent chunking strategies.",
+                text=(
+                    "Multi-modal content extraction and intelligent "
+                    "chunking strategies."
+                ),
                 metadata={"source": "doc1.pdf", "page": 2, "chunk_id": "chunk_2"},
             ),
             Document(
@@ -318,8 +335,9 @@ def test_document_processing_pipeline():
             assert all(doc.metadata.get("source") == "doc1.pdf" for doc in documents)
 
             # Test that documents have proper structure
-            for i, doc in enumerate(documents):
-                assert doc.text is not None and len(doc.text) > 0
+            for _i, doc in enumerate(documents):
+                assert doc.text is not None
+                assert len(doc.text) > 0
                 assert doc.metadata is not None
                 assert "source" in doc.metadata
                 assert "page" in doc.metadata
@@ -327,7 +345,10 @@ def test_document_processing_pipeline():
 
             # Test analysis output schema
             analysis = AnalysisOutput(
-                summary="Document processing pipeline successfully processed multiple documents",
+                summary=(
+                    "Document processing pipeline successfully processed multiple "
+                    "documents"
+                ),
                 key_insights=[
                     "Unstructured data handling capabilities",
                     "Multi-modal content support",
@@ -349,7 +370,8 @@ def test_document_processing_pipeline():
             print(f"   - Documents processed: {len(documents)}")
             print(f"   - Analysis insights: {len(analysis.key_insights)}")
             print(
-                f"   - Total text length: {sum(len(doc.text) for doc in documents)} chars"
+                f"   - Total text length: "
+                f"{sum(len(doc.text) for doc in documents)} chars"
             )
 
         except ImportError as e:
@@ -360,9 +382,6 @@ def test_document_processing_pipeline():
 async def test_async_workflow_components():
     """Test async workflow components and operations."""
     try:
-        from src.agents.coordinator import MultiAgentCoordinator
-        from src.utils.document import load_documents_unstructured
-
         # Mock async operations
         with (
             patch("src.utils.document.load_documents_unstructured") as mock_load,
@@ -431,7 +450,7 @@ def test_application_structure_and_markers():
 
         print("✅ Application structure and markers validated")
         print(f"   - Available prompts: {len(PREDEFINED_PROMPTS)}")
-        print(f"   - Configuration loaded: {settings.model_name}")
+        print(f"   - Configuration loaded: {settings.vllm.model}")
         print("   - Memory system: Operational")
 
     except ImportError as e:
@@ -480,7 +499,8 @@ def test_legacy_component_cleanup_validation():
 
     print("✅ Legacy component cleanup validated")
     print(
-        f"   - Current modules imported: {len(successful_imports)}/{len(current_modules)}"
+        f"   - Current modules imported: {len(successful_imports)}/"
+        f"{len(current_modules)}"
     )
     print(f"   - Legacy modules properly blocked: {len(legacy_modules)}")
 
@@ -527,7 +547,7 @@ def test_end_to_end_integration_with_mocks():
             assert settings is not None
 
             # 2. Validation
-            is_valid = validate_startup_configuration(settings)
+            validate_startup_configuration(settings)
             assert mock_validate.called
 
             # 3. Hardware detection

@@ -22,6 +22,7 @@ from src.agents.coordinator import (
     create_multi_agent_coordinator,
 )
 from src.agents.models import AgentResponse, MultiAgentState
+from src.config import settings
 
 # Import mock classes from conftest.py
 from tests.test_multi_agent_coordination.conftest import MockVLLMConfig
@@ -49,7 +50,7 @@ class TestMultiAgentCoordinator:
             # Verify ADR-010 compliance (Performance Optimization)
             assert coordinator.vllm_config.get("VLLM_KV_CACHE_DTYPE") == "fp8"
             assert (
-                coordinator.max_agent_timeout == settings.agent_decision_timeout / 1000
+                coordinator.max_agent_timeout == settings.agents.decision_timeout / 1000
             )  # Convert ms to seconds
 
             # Verify performance tracking initialization
@@ -108,8 +109,9 @@ class TestMultiAgentCoordinator:
                 "messages": [HumanMessage(content="A" * 500000)]  # Large message
             }
 
-            # Mock context manager to simulate trimming - need integer return values
-            # The trim_messages function calls token_counter multiple times with different message subsets
+            # Mock context manager to simulate trimming - need integer
+            # return values. The trim_messages function calls token_counter
+            # multiple times with different message subsets.
             def mock_estimate_tokens(messages):
                 if not messages:
                     return 0
@@ -451,8 +453,9 @@ class TestMultiAgentState:
         """Test state initialization with proper defaults."""
         state = MultiAgentState(messages=[HumanMessage(content="Test")])
 
-        # MultiAgentState inherits from MessagesState which behaves like a dict
-        # Verify default values (access as dict or attributes depending on LangGraph behavior)
+        # MultiAgentState inherits from MessagesState which behaves like a dict.
+        # Verify default values (access as dict or attributes depending on
+        # LangGraph behavior).
         if hasattr(state, "tools_data"):
             assert state.tools_data == {}
             assert state.context is None

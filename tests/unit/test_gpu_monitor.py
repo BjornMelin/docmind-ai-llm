@@ -10,12 +10,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src.core.infrastructure.gpu_monitor import GPUMetrics, gpu_performance_monitor
+
+# Check for required dependencies
+try:
+    import torch
+except ImportError:
+    pytest.skip("torch not available", allow_module_level=True)
+
 # Performance tests require explicit opt-in
 pytestmark = pytest.mark.skipif(os.getenv("PYTEST_PERF") != "1", reason="perf disabled")
-
-torch = pytest.importorskip("torch")
-
-from src.core.infrastructure.gpu_monitor import GPUMetrics, gpu_performance_monitor
 
 
 class TestGPUMetricsCore:

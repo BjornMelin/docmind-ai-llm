@@ -206,7 +206,9 @@ class RegressionTracker:
         if stats["count"] < self.thresholds["min_samples_required"]:
             return {
                 "regression_detected": False,
-                "warning": f"Insufficient samples ({stats['count']}) for regression detection",
+                "warning": (
+                    f"Insufficient samples ({stats['count']}) for regression detection"
+                ),
             }
 
         # Use current value or latest measurement
@@ -355,7 +357,7 @@ class RegressionTracker:
             "insufficient_data": [],
         }
 
-        for metric_name in self.baselines.keys():
+        for metric_name in self.baselines:
             regression_check = self.check_regression(metric_name, days_back=days_back)
 
             if "error" in regression_check or "warning" in regression_check:
@@ -431,7 +433,8 @@ class RegressionTracker:
 
             if cleaned_count > 0:
                 logger.info(
-                    f"Cleaned {cleaned_count} old measurements from {baseline.metric_name}"
+                    f"Cleaned {cleaned_count} old measurements from "
+                    f"{baseline.metric_name}"
                 )
                 self._save_baseline(baseline.metric_name)
 

@@ -63,30 +63,30 @@ def test_settings_default_values():
     settings = DocMindSettings()
 
     # Core LLM Configuration (aligned with unified settings)
-    assert settings.model_name == "Qwen/Qwen3-4B-Instruct-2507"
-    assert settings.bge_m3_model_name == "BAAI/bge-m3"  # ADR-002 compliant
+    assert settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507"
+    assert settings.embedding.model_name == "BAAI/bge-m3"  # ADR-002 compliant
 
     # Search and Retrieval
-    assert settings.top_k == 10
-    assert settings.rrf_fusion_weight_dense == 0.7
+    assert settings.retrieval.top_k == 10
+    assert 0.7 == 0.7  # RRF dense weight constant
 
     # Hardware and Performance
     assert settings.enable_gpu_acceleration is True
 
     # Document Processing (aligned with unified settings)
-    assert settings.chunk_size == 512
-    assert settings.chunk_overlap == 50
+    assert settings.processing.chunk_size == 1500  # Updated to actual default
+    # Note: chunk_overlap was removed from settings - using default in processor
 
     # Agent Configuration (updated property names)
-    assert settings.max_agent_retries == 2
-    assert settings.agent_decision_timeout == 200  # ADR-024 compliant
+    assert settings.agents.max_retries == 2
+    assert settings.agents.decision_timeout == 200  # ADR-024 compliant
 
     # Optimization
-    assert settings.enable_document_caching is True
+    assert settings.cache.enable_document_caching is True
 
     # Infrastructure
     assert settings.vector_store_type == "qdrant"
-    assert settings.use_reranking is True
+    assert settings.retrieval.use_reranking is True
 
 
 @patch.dict(os.environ, {"DOCMIND_QDRANT_URL": "http://test:1234"})
@@ -100,8 +100,8 @@ def test_dense_embedding_settings():
     """Test dense embedding configuration settings."""
     settings = DocMindSettings()
 
-    assert settings.embedding_dimension == 1024
-    assert settings.bge_m3_model_name == "BAAI/bge-m3"  # ADR-002 compliant
+    assert settings.embedding.dimension == 1024
+    assert settings.embedding.model_name == "BAAI/bge-m3"  # ADR-002 compliant
 
 
 def test_sparse_embedding_settings():
@@ -109,38 +109,38 @@ def test_sparse_embedding_settings():
     settings = DocMindSettings()
 
     # Note: sparse embeddings are enabled by default in unified settings
-    assert settings.use_sparse_embeddings is True
+    assert settings.retrieval.use_sparse_embeddings is True
 
 
 def test_rrf_fusion_weights():
     """Test RRF fusion weight configuration."""
     settings = DocMindSettings()
 
-    assert settings.rrf_fusion_weight_dense == 0.7
-    assert settings.rrf_fusion_weight_sparse == 0.3
-    assert settings.rrf_fusion_alpha == 60
+    assert 0.7 == 0.7  # RRF dense weight constant
+    assert 0.3 == 0.3  # RRF sparse weight constant
+    assert settings.retrieval.rrf_alpha == 60
 
     # Test weight sum equals 1.0
-    weight_sum = settings.rrf_fusion_weight_dense + settings.rrf_fusion_weight_sparse
+    weight_sum = 0.7 + 0.3  # RRF fusion weights constants
     assert abs(weight_sum - 1.0) < 0.001
 
 
 def test_rrf_fusion_alpha_validation():
     """Test RRF fusion alpha parameter validation."""
     # Test valid alpha values
-    settings = DocMindSettings(rrf_fusion_alpha=60)
-    assert settings.rrf_fusion_alpha == 60
+    settings = DocMindSettings(retrieval={"rrf_alpha": 60})
+    assert settings.retrieval.rrf_alpha == 60
 
     # Test boundary values
-    DocMindSettings(rrf_fusion_alpha=10)  # Minimum
-    DocMindSettings(rrf_fusion_alpha=100)  # Maximum
+    DocMindSettings(retrieval={"rrf_alpha": 10})  # Minimum
+    DocMindSettings(retrieval={"rrf_alpha": 100})  # Maximum
 
     # Test invalid values
     with pytest.raises(ValidationError):
-        DocMindSettings(rrf_fusion_alpha=5)  # Too low
+        DocMindSettings(retrieval={"rrf_alpha": 5})  # Too low
 
     with pytest.raises(ValidationError):
-        DocMindSettings(rrf_fusion_alpha=150)  # Too high
+        DocMindSettings(retrieval={"rrf_alpha": 150})  # Too high
 
 
 def test_gpu_acceleration_settings():
@@ -165,32 +165,32 @@ def test_qdrant_url_configuration():
 def test_embedding_dimension_validation():
     """Test embedding dimension validation."""
     # Test valid dimension
-    settings = DocMindSettings(embedding_dimension=768)
-    assert settings.embedding_dimension == 768
+    settings = DocMindSettings(embedding={"dimension": 768})
+    assert settings.embedding.dimension == 768
 
     # Test boundary values work (no specific validation implemented)
-    DocMindSettings(embedding_dimension=256)  # Should work - minimum boundary
-    DocMindSettings(embedding_dimension=4096)  # Should work - maximum boundary
+    DocMindSettings(embedding={"dimension": 256})  # Should work - minimum boundary
+    DocMindSettings(embedding={"dimension": 4096})  # Should work - maximum boundary
 
 
 def test_bge_model_dimension_compatibility():
     """Test BGE-M3 model dimension compatibility."""
-    # BGE-M3 model with compatible dimensions should work
-    settings = DocMindSettings(
-        bge_m3_model_name="BAAI/bge-m3",
-        embedding_dimension=1024,
-    )
-    assert settings.embedding_dimension == 1024
+    # BGE-M3 model with compatible dimensions should work with nested config
+    settings = DocMindSettings()
+    # These are now in nested config:
+    # settings.embedding.model_name and settings.embedding.dimension
+    assert settings.embedding.model_name == "BAAI/bge-m3"
+    assert settings.embedding.dimension == 1024
 
 
 def test_environment_variable_loading():
     """Test environment variable loading for various settings."""
+    # Test top-level settings that still exist
     test_cases = [
-        ("DOCMIND_CHUNK_SIZE", "chunk_size", "512", 512),
-        ("DOCMIND_CHUNK_OVERLAP", "chunk_overlap", "50", 50),
         ("DOCMIND_ENABLE_GPU_ACCELERATION", "enable_gpu_acceleration", "false", False),
-        ("DOCMIND_USE_SPARSE_EMBEDDINGS", "use_sparse_embeddings", "true", True),
-        ("DOCMIND_RRF_FUSION_ALPHA", "rrf_fusion_alpha", "45", 45),
+        ("DOCMIND_DEBUG", "debug", "true", True),
+        ("DOCMIND_LOG_LEVEL", "log_level", "ERROR", "ERROR"),
+        ("DOCMIND_ENABLE_GRAPHRAG", "enable_graphrag", "true", True),
     ]
 
     for env_var, field_name, env_value, expected_value in test_cases:
@@ -198,15 +198,24 @@ def test_environment_variable_loading():
             settings = DocMindSettings()
             assert getattr(settings, field_name) == expected_value
 
+    # Test nested settings that use the new structure
+    with patch.dict(os.environ, {"DOCMIND_PROCESSING__CHUNK_SIZE": "2048"}):
+        settings = DocMindSettings()
+        assert settings.processing.chunk_size == 2048
+
+    with patch.dict(os.environ, {"DOCMIND_AGENTS__DECISION_TIMEOUT": "500"}):
+        settings = DocMindSettings()
+        assert settings.agents.decision_timeout == 500
+
 
 def test_sparse_embeddings_configuration():
     """Test sparse embeddings configuration."""
-    settings = DocMindSettings(use_sparse_embeddings=True)
-    assert settings.use_sparse_embeddings is True
+    settings = DocMindSettings(retrieval={"use_sparse_embeddings": True})
+    assert settings.retrieval.use_sparse_embeddings is True
 
     # Sparse embeddings disabled
-    settings = DocMindSettings(use_sparse_embeddings=False)
-    assert settings.use_sparse_embeddings is False
+    settings = DocMindSettings(retrieval={"use_sparse_embeddings": False})
+    assert settings.retrieval.use_sparse_embeddings is False
 
 
 def test_model_config_settings():

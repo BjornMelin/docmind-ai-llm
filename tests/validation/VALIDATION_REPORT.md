@@ -125,11 +125,12 @@ tests/validation/
 
 ```python
 # BEFORE - Failed imports and wrong attribute names
-from src.config import settings  # ❌ Old import
+from src.config.settings import settings  # ❌ Old import pattern
 assert settings.backend  # ❌ Wrong attribute name
 
-# AFTER - Unified configuration system
-from src.config.settings import DocMindSettings  # ✅ Correct import
+# AFTER - Unified configuration system  
+from src.config import settings  # ✅ Preferred pattern
+from src.config.settings import DocMindSettings  # ✅ Class-specific import
 settings = DocMindSettings()
 assert settings.llm_backend  # ✅ Correct attribute name
 ```

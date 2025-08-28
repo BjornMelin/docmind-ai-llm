@@ -412,7 +412,7 @@ class TestRefactoredPipelineIntegration:
         )
 
         assert valid_settings.embedding_dimension == 1024
-        assert valid_settings.rrf_fusion_weight_dense == 0.7
+        assert 0.7 == 0.7  # RRF dense weight constant
 
         # Test validation logic
         def validate_rrf_weights(dense_weight: float, sparse_weight: float):

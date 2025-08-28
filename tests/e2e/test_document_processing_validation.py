@@ -88,7 +88,10 @@ def test_document_loading_functionality():
 
         mock_documents = [
             Document(
-                text="This is a test document for validating the document processing pipeline.",
+                text=(
+                    "This is a test document for validating the document "
+                    "processing pipeline."
+                ),
                 metadata={
                     "source": "test_document.pdf",
                     "page": 1,
@@ -97,7 +100,10 @@ def test_document_loading_functionality():
                 },
             ),
             Document(
-                text="The document processing system supports various formats and provides structured output.",
+                text=(
+                    "The document processing system supports various formats and "
+                    "provides structured output."
+                ),
                 metadata={
                     "source": "test_document.pdf",
                     "page": 1,
@@ -122,7 +128,8 @@ def test_document_loading_functionality():
 
             # Validate document structure
             for doc in loaded_documents:
-                assert doc.text is not None and len(doc.text) > 0
+                assert doc.text is not None
+                assert len(doc.text) > 0
                 assert doc.metadata is not None
                 assert "source" in doc.metadata
                 assert "page" in doc.metadata
@@ -136,7 +143,8 @@ def test_document_loading_functionality():
             print("✅ Document loading functionality validated")
             print(f"   - Documents loaded: {len(loaded_documents)}")
             print(
-                f"   - Total text length: {sum(len(doc.text) for doc in loaded_documents)} chars"
+                f"   - Total text length: "
+                f"{sum(len(doc.text) for doc in loaded_documents)} chars"
             )
 
         except ImportError as e:
@@ -205,7 +213,7 @@ def test_configuration_system_integration():
             settings = DocMindSettings()
 
             # Validate configuration attributes
-            assert settings.model_name == "qwen3-4b-instruct-2507:latest"
+            assert settings.vllm.model == "qwen3-4b-instruct-2507:latest"
             assert settings.debug is False
             assert settings.enable_gpu_acceleration is True
 
@@ -227,7 +235,7 @@ def test_configuration_system_integration():
                 )
 
             print("✅ Configuration system integration validated")
-            print(f"   - Model: {settings.model_name}")
+            print(f"   - Model: {settings.vllm.model}")
             print(f"   - Debug Mode: {settings.debug}")
             print(f"   - GPU Acceleration: {settings.enable_gpu_acceleration}")
 
@@ -367,7 +375,9 @@ def test_integrated_document_processing_workflow():
 
         mock_documents = [
             Document(
-                text="Integrated document processing workflow validation test document.",
+                text=(
+                    "Integrated document processing workflow validation test document."
+                ),
                 metadata={"source": "workflow_test.pdf", "page": 1},
             )
         ]
@@ -412,7 +422,7 @@ def test_integrated_document_processing_workflow():
             assert analysis.summary is not None
 
             print("✅ Integrated document processing workflow validated")
-            print(f"   - Configuration: {settings.model_name}")
+            print(f"   - Configuration: {settings.vllm.model}")
             print(f"   - Hardware: {hardware['gpu_name']}")
             print(f"   - Documents: {len(documents)}")
             print("   - Analysis: Generated successfully")

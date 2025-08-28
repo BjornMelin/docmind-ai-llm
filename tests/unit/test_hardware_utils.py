@@ -8,8 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-torch = pytest.importorskip("torch")
-
 from src.core.infrastructure.hardware_utils import (
     BYTES_TO_GB_FACTOR,
     CPU_BATCH_SIZES,
@@ -18,6 +16,12 @@ from src.core.infrastructure.hardware_utils import (
     get_optimal_providers,
     get_recommended_batch_size,
 )
+
+# Check for required dependencies
+try:
+    import torch
+except ImportError:
+    pytest.skip("torch not available", allow_module_level=True)
 
 
 class TestDetectHardware:

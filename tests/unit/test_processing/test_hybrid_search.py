@@ -89,9 +89,9 @@ class HybridSearcher:
 def mock_settings(tmp_path):
     """Mock settings for hybrid search with proper temporary paths."""
     settings = Mock()
-    settings.embedding_model = "BAAI/bge-m3"
-    settings.embedding_dimension = 1024
-    settings.top_k = 10
+    settings.embedding.model_name = "BAAI/bge-m3"
+    settings.embedding.dimension = 1024
+    settings.retrieval.top_k = 10
     settings.rrf_alpha = 0.7  # ADR-002 specified weighting
     settings.dense_weight = 0.7
     settings.sparse_weight = 0.3
