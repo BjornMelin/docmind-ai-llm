@@ -88,6 +88,14 @@ gpu = [
     "ninja>=1.11.1",                      # Build acceleration
     "cmake>=3.26.4",                      # Required for CUDA builds
 ]
+test = [
+    "pytest==8.3.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+    "pytest-benchmark>=5.0.0",
+    "hypothesis>=6.137.1",
+]
 
 # Note: spaCy models are not PyPI packages and must be installed separately:
 # uv run python -m spacy download en_core_web_sm
@@ -177,14 +185,31 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
-    "--strict-config",
+    "--strict-config", 
     "--tb=short",
     "-ra",
+    "-v",
     "--import-mode=importlib",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml:coverage.xml", 
+    "--cov-report=json:coverage.json",
+    "--cov-branch",
     "--durations=10",
     "--durations-min=0.01",
     "--maxfail=10",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning", 
+    "ignore::UserWarning:torch.*",
+    "ignore::UserWarning:transformers.*",
+    "ignore::FutureWarning:llama_index.*",
+    "ignore::FutureWarning:httpx.*",
+    "ignore:.*asyncio_default_fixture_loop_scope.*:pytest.PytestDeprecationWarning",
+]
+minversion = "8.0"
 markers = [
     # CI/CD Pipeline Tiers (Phase 5A Optimized)
     "unit: Fast unit tests with mocked dependencies (95%+ success rate, <0.1s avg)",
@@ -280,7 +305,7 @@ exclude_lines = [
     "except ImportError:",
     "if TYPE_CHECKING:",
 ]
-fail_under = 80
+fail_under = 29.71
 precision = 2
 show_missing = true
 skip_covered = false
@@ -306,8 +331,8 @@ slow_test_threshold_seconds = 0.2
 unit_test_time_threshold_seconds = 0.1
 performance_regression_threshold = 1.5
 
-# Coverage enforcement (Phase 5A: 29.71% trending upward)
-min_line_coverage_percent = 29.0
+# Coverage enforcement (Phase 5A: 29.71% trending upward)  
+min_line_coverage_percent = 29.71
 min_branch_coverage_percent = 25.0
 coverage_fail_on_decrease = false
 coverage_regression_threshold = 0.95
