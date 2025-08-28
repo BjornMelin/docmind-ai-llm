@@ -274,8 +274,8 @@ def setup_llamaindex() -> None:
             model_name=embedding_model,
             device="cuda" if use_gpu else "cpu",
             cache_folder=str(Path("./embeddings_cache").resolve()),
-            max_length=settings.bge_m3_max_length,
-            embed_batch_size=settings.bge_m3_batch_size_gpu if use_gpu else settings.bge_m3_batch_size_cpu,
+            max_length=settings.embedding.max_length,
+            embed_batch_size=settings.embedding.batch_size_gpu if use_gpu else settings.embedding.batch_size_cpu,
             trust_remote_code=True,  # Required for BGE-M3 (ADR-002)
             torch_dtype=torch_dtype,  # FP16 optimization for GPU (ADR-002)
         )
@@ -404,9 +404,9 @@ def initialize_app():
     
     # Log critical configuration for validation
     logging.info("Multi-agent enabled: %s", settings.agents.enable_multi_agent)
-    logging.info("Agent timeout: %dms", settings.agent_decision_timeout)  # 200ms
+    logging.info("Agent timeout: %dms", settings.agents.decision_timeout)  # 200ms
     logging.info("BGE-M3 model: %s", settings.embedding.model_name)  # BAAI/bge-m3
-    logging.info("vLLM FP8 optimization: %s", settings.vllm_kv_cache_dtype)  # fp8_e5m2
+    logging.info("vLLM FP8 optimization: %s", settings.vllm.kv_cache_dtype)  # fp8_e5m2
     
     return settings
 ```
@@ -428,23 +428,23 @@ def test_docmind_settings_loading():
     
     assert test_settings.app_name == "DocMind AI"
     assert test_settings.agents.enable_multi_agent is True
-    assert test_settings.agent_decision_timeout == 200  # Fixed: 200ms not 300ms
+    assert test_settings.agents.decision_timeout == 200  # Fixed: 200ms not 300ms
     assert test_settings.streamlit_port == 8501
 
 def test_adr_compliance():
     """Verify ADR compliance in configuration."""
     # ADR-002: BGE-M3 unified embeddings
     assert settings.embedding.model_name == "BAAI/bge-m3"
-    assert settings.bge_m3_embedding_dim == 1024
+    assert settings.embedding.dimension == 1024
     
     # ADR-001: Multi-agent system with <200ms timeout
-    assert settings.agent_decision_timeout == 200
+    assert settings.agents.decision_timeout == 200
     assert settings.agents.enable_multi_agent is True
     
     # ADR-010: vLLM FP8 optimization
-    assert settings.vllm_kv_cache_dtype == "fp8_e5m2"
-    assert settings.vllm_attention_backend == "FLASHINFER"
-    assert settings.vllm_gpu_memory_utilization == 0.95
+    assert settings.vllm.kv_cache_dtype == "fp8_e5m2"
+    assert settings.vllm.attention_backend == "FLASHINFER"
+    assert settings.vllm.gpu_memory_utilization == 0.95
 
 def test_environment_variable_override():
     """Verify environment variables override default settings."""

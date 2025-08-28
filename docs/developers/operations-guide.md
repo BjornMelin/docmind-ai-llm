@@ -1584,7 +1584,7 @@ class MigrationRiskAssessment:
 python -c "
 from src.config import settings
 assert settings.embedding.model_name == 'BAAI/bge-m3'  # ADR-002
-assert settings.agent_decision_timeout == 200       # ADR-024  
+assert settings.agents.decision_timeout == 200       # ADR-024  
 print('✅ ADR compliance verified')
 "
 
@@ -1648,7 +1648,7 @@ class ConfigurationMigrationTool:
         # Migration patterns
         migration_patterns = [
             (r'assert.*embedding_model.*==.*"BAAI/bge-large-en-v1.5"', 
-             'assert settings.bge_m3_model_name == "BAAI/bge-m3"'),
+             'assert settings.embedding.model_name == "BAAI/bge-m3"'),
             (r'embedding_model="BAAI/bge-large-en-v1.5"',
              'bge_m3_model_name="BAAI/bge-m3"'),
             (r'\._sync_nested_models\(\)',
@@ -1688,9 +1688,9 @@ def production_configuration_health_check() -> Dict[str, Any]:
         from src.config import settings
         
         adr_compliance = {
-            "adr_002_bge_m3": settings.bge_m3_model_name == "BAAI/bge-m3",
-            "adr_024_timeout": settings.agent_decision_timeout == 200,
-            "adr_010_fp8": settings.vllm_kv_cache_dtype == "fp8_e5m2"
+            "adr_002_bge_m3": settings.embedding.model_name == "BAAI/bge-m3",
+            "adr_024_timeout": settings.agents.decision_timeout == 200,
+            "adr_010_fp8": settings.vllm.kv_cache_dtype == "fp8_e5m2"
         }
         
         health_report["checks"]["adr_compliance"] = {

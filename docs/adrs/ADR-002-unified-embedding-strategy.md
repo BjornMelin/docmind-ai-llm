@@ -140,7 +140,7 @@ class BGEM3Embedding(BaseEmbedding):
     """
     
     def __init__(self, *, model_name: str = settings.embedding.model_name, 
-                 max_length: int = settings.bge_m3_max_length,
+                 max_length: int = settings.embedding.max_length,
                  use_fp16: bool = True, device: str = "cuda", **kwargs):
         super().__init__(
             model_name=model_name, max_length=max_length,
@@ -179,7 +179,7 @@ class BGEM3Embedding(BaseEmbedding):
     @property
     def embed_dim(self) -> int:
         """BGE-M3 dense embedding dimension."""
-        return settings.bge_m3_embedding_dim  # 1024
+        return settings.embedding.dimension  # 1024
 
 # Direct instantiation using unified configuration
 def get_bgem3_embedding() -> BGEM3Embedding:
@@ -188,8 +188,8 @@ def get_bgem3_embedding() -> BGEM3Embedding:
         model_name=settings.embedding.model_name,
         use_fp16=True,
         device="cuda" if torch.cuda.is_available() else "cpu",
-        max_length=settings.bge_m3_max_length,
-        batch_size=settings.bge_m3_batch_size_gpu if torch.cuda.is_available() else settings.bge_m3_batch_size_cpu,
+        max_length=settings.embedding.max_length,
+        batch_size=settings.embedding.batch_size_gpu if torch.cuda.is_available() else settings.embedding.batch_size_cpu,
     )
 
 # Settings integration

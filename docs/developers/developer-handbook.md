@@ -540,7 +540,7 @@ class TestDocMindSettings(DocMindSettings):
 def test_settings_default_values():
     settings = DocMindSettings()
     assert settings.embedding.model_name == "BAAI/bge-large-en-v1.5"  # Wrong model
-    assert settings.agent_decision_timeout == 300  # Wrong timeout
+    assert settings.agents.decision_timeout == 300  # Wrong timeout
 
 # After (uses proper test settings)
 def test_settings_default_values(test_settings):
@@ -550,10 +550,10 @@ def test_settings_default_values(test_settings):
     
     # Test timeout matches production ADR requirement 
     settings = DocMindSettings()  # Production settings
-    assert settings.agent_decision_timeout == 200
+    assert settings.agents.decision_timeout == 200
     
     # Test settings can have different timeout for test speed
-    assert test_settings.agent_decision_timeout == 100
+    assert test_settings.agents.decision_timeout == 100
 ```
 
 **Pattern 2: Environment Variable Testing**:
@@ -628,10 +628,10 @@ def verify_configuration_compliance() -> Dict[str, Any]:
         })
     
     # ADR-024: Configuration Architecture - Agent timeout
-    if settings.agent_decision_timeout != 200:
+    if settings.agents.decision_timeout != 200:
         compliance_report["violations"].append({
             "adr": "ADR-024", 
-            "issue": f"Wrong agent timeout: {settings.agent_decision_timeout}ms",
+            "issue": f"Wrong agent timeout: {settings.agents.decision_timeout}ms",
             "expected": "200ms"
         })
     
@@ -1044,11 +1044,11 @@ def test_example(test_settings):
 
    ```python
    # Before
-   settings.agent_decision_timeout == 300
+   settings.agents.decision_timeout == 300
    
    # After  
-   settings.agent_decision_timeout == 200  # Production
-   settings.agent_decision_timeout == 100  # Test optimized
+   settings.agents.decision_timeout == 200  # Production
+   settings.agents.decision_timeout == 100  # Test optimized
    ```
 
 3. **Deprecated Method Removal**:

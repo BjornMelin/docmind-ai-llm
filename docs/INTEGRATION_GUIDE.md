@@ -302,7 +302,7 @@ coordinator = MultiAgentCoordinator(settings)
    ```python
    # Reduce GPU memory utilization
    from src.config import settings
-   settings.vllm_gpu_memory_utilization = 0.7  # Reduce from 0.85
+   settings.vllm.gpu_memory_utilization = 0.7  # Reduce from 0.85
    ```
 
 3. **Performance Issues**

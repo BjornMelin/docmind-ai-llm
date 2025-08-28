@@ -739,7 +739,7 @@ def debug_test_configuration():
         
         print(f"GPU acceleration: {settings.enable_gpu_acceleration}")
         print(f"Context window: {settings.vllm.context_window}")
-        print(f"Agent timeout: {settings.agent_decision_timeout}ms")
+        print(f"Agent timeout: {settings.agents.decision_timeout}ms")
         
     except Exception as e:
         print(f"❌ Failed to load TestDocMindSettings: {e}")

@@ -272,11 +272,11 @@ def verify_adr_compliance() -> Dict[str, bool]:
         "bge_m3_compliance": settings.embedding.model_name == "BAAI/bge-m3",
         
         # ADR-024: Configuration Architecture
-        "timeout_compliance": settings.agent_decision_timeout == 200,
+        "timeout_compliance": settings.agents.decision_timeout == 200,
         "complexity_compliance": get_settings_line_count() < 100,
         
         # ADR-010: Performance Optimization
-        "fp8_compliance": settings.vllm_kv_cache_dtype == "fp8_e5m2",
+        "fp8_compliance": settings.vllm.kv_cache_dtype == "fp8_e5m2",
         
         # Production cleanliness
         "zero_test_contamination": not has_test_code_in_production(),
