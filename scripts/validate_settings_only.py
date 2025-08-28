@@ -32,12 +32,18 @@ def test_settings_scenario(name: str, env_vars: dict[str, str]) -> dict[str, Any
         # Test settings creation
         settings = DocMindSettings(_env_file=temp_env_file)
 
-        # Test key functionality
-        settings.get_user_hardware_info()
-        settings.get_user_scenario_config()
-        backend_url = settings._get_backend_url()
-        embedding_device = settings._get_embedding_device()
-        batch_size = settings._get_embedding_batch_size()
+        # Test key functionality - using current configuration architecture
+        backend_url = (
+            settings.ollama_base_url
+            if settings.llm_backend == "ollama"
+            else settings.vllm.vllm_base_url
+        )
+        embedding_device = "cuda" if settings.enable_gpu_acceleration else "cpu"
+        batch_size = (
+            settings.embedding.batch_size_gpu
+            if settings.enable_gpu_acceleration
+            else settings.embedding.batch_size_cpu
+        )
 
         print(f"✅ {name} - Settings valid!")
         print(f"   Device: {embedding_device}")
@@ -46,8 +52,8 @@ def test_settings_scenario(name: str, env_vars: dict[str, str]) -> dict[str, Any
         print(f"   Context Window: {settings.vllm.context_window}")
         print(f"   Batch Size: {batch_size}")
         print(
-            f"   Memory Limits: {settings.max_memory_gb}GB RAM, "
-            f"{settings.max_vram_gb}GB VRAM"
+            f"   Memory Limits: {settings.monitoring.max_memory_gb}GB RAM, "
+            f"{settings.monitoring.max_vram_gb}GB VRAM"
         )
 
         return {
@@ -59,8 +65,8 @@ def test_settings_scenario(name: str, env_vars: dict[str, str]) -> dict[str, Any
                 "gpu_enabled": settings.enable_gpu_acceleration,
                 "context_window": settings.vllm.context_window,
                 "batch_size": batch_size,
-                "memory_gb": settings.max_memory_gb,
-                "vram_gb": settings.max_vram_gb,
+                "memory_gb": settings.monitoring.max_memory_gb,
+                "vram_gb": settings.monitoring.max_vram_gb,
             },
         }
 
@@ -84,9 +90,8 @@ def main():
             "name": "Student (CPU-only, 8GB RAM)",
             "env_vars": {
                 "DOCMIND_ENABLE_GPU_ACCELERATION": "false",
-                "DOCMIND_DEVICE": "cpu",
-                "DOCMIND_MAX_MEMORY_GB": "8.0",
-                "DOCMIND_CONTEXT_WINDOW_SIZE": "4096",
+                "DOCMIND_MONITORING__MAX_MEMORY_GB": "8.0",
+                "DOCMIND_VLLM__CONTEXT_WINDOW": "4096",
                 "DOCMIND_LLM_BACKEND": "ollama",
             },
         },
@@ -95,10 +100,9 @@ def main():
             "name": "Developer (RTX 3060, 12GB VRAM)",
             "env_vars": {
                 "DOCMIND_ENABLE_GPU_ACCELERATION": "true",
-                "DOCMIND_DEVICE": "cuda",
-                "DOCMIND_MAX_VRAM_GB": "12.0",
+                "DOCMIND_MONITORING__MAX_VRAM_GB": "12.0",
                 "DOCMIND_LLM_BACKEND": "vllm",
-                "DOCMIND_CONTEXT_WINDOW_SIZE": "32768",
+                "DOCMIND_VLLM__CONTEXT_WINDOW": "32768",
             },
         },
         # High-end researcher
@@ -106,10 +110,9 @@ def main():
             "name": "Researcher (RTX 4090, 24GB VRAM)",
             "env_vars": {
                 "DOCMIND_ENABLE_GPU_ACCELERATION": "true",
-                "DOCMIND_DEVICE": "cuda",
-                "DOCMIND_MAX_VRAM_GB": "24.0",
+                "DOCMIND_MONITORING__MAX_VRAM_GB": "24.0",
                 "DOCMIND_LLM_BACKEND": "vllm",
-                "DOCMIND_CONTEXT_WINDOW_SIZE": "131072",
+                "DOCMIND_VLLM__CONTEXT_WINDOW": "131072",
             },
         },
         # Privacy-focused user
@@ -117,17 +120,16 @@ def main():
             "name": "Privacy User (CPU, local models)",
             "env_vars": {
                 "DOCMIND_ENABLE_GPU_ACCELERATION": "false",
-                "DOCMIND_DEVICE": "cpu",
-                "DOCMIND_LLM_BACKEND": "llama_cpp",
-                "DOCMIND_LOCAL_MODEL_PATH": "/home/user/models",
-                "DOCMIND_ENABLE_PERFORMANCE_LOGGING": "false",
+                "DOCMIND_LLM_BACKEND": "llamacpp",
+                "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": "/home/user/models",
+                "DOCMIND_MONITORING__ENABLE_PERFORMANCE_LOGGING": "false",
             },
         },
         # Auto-detection
         {
             "name": "Auto-detection User",
             "env_vars": {
-                "DOCMIND_DEVICE": "auto",
+                "DOCMIND_ENABLE_GPU_ACCELERATION": "true",
                 "DOCMIND_LLM_BACKEND": "ollama",
             },
         },
@@ -135,9 +137,11 @@ def main():
         {
             "name": "Custom Embedding User",
             "env_vars": {
-                "DOCMIND_EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
-                "DOCMIND_LLM_BACKEND": "openai",
-                "DOCMIND_OPENAI_BASE_URL": "http://localhost:8080",
+                "DOCMIND_EMBEDDING__MODEL_NAME": (
+                    "sentence-transformers/all-MiniLM-L6-v2",
+                ),
+                "DOCMIND_LLM_BACKEND": "ollama",
+                "DOCMIND_OLLAMA_BASE_URL": "http://localhost:8080",
             },
         },
     ]
@@ -169,13 +173,13 @@ def main():
         # Summarize key restored features
         print("\n🔑 Key Restored Features:")
         print("✅ enable_gpu_acceleration - Users can disable GPU")
-        print("✅ device selection - 'cpu', 'cuda', or 'auto'")
-        print("✅ llm_backend choice - 'ollama', 'vllm', 'openai', 'llama_cpp'")
-        print("✅ context_window_size - Configurable 1K to 128K")
-        print("✅ Hardware batch sizes - CPU vs GPU optimized")
-        print("✅ Memory limits - max_memory_gb, max_vram_gb")
-        print("✅ Performance tiers - 'low', 'medium', 'high', 'auto'")
-        print("✅ User feature toggles - caching, debug, logging")
+        print("✅ llm_backend choice - 'ollama', 'vllm', 'llamacpp'")
+        print(
+            "✅ context_window_size - Configurable 1K to 128K via vllm.context_window"
+        )
+        print("✅ Hardware batch sizes - CPU vs GPU optimized via embedding config")
+        print("✅ Memory limits - monitoring.max_memory_gb, monitoring.max_vram_gb")
+        print("✅ User feature toggles - caching, debug, logging via nested config")
 
         return 0
     else:
