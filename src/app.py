@@ -53,7 +53,7 @@ from dependency_injector.wiring import Provide, inject
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
 from src.config import settings
-from src.containers import ApplicationContainer
+from src.containers import ApplicationContainer, wire_container
 from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
@@ -88,7 +88,8 @@ def get_agent_system(
 ) -> tuple[MultiAgentCoordinator, str]:
     """Get agent system using MultiAgentCoordinator with dependency injection.
 
-    Note: _tools, _llm, _memory parameters are currently not used but kept for future compatibility.
+    Note: _tools, _llm, _memory parameters are currently not used but kept
+    for future compatibility.
 
     Args:
         multi_agent_coordinator: Injected multi-agent coordinator instance
@@ -124,7 +125,6 @@ except RuntimeError as e:
     st.stop()
 
 # Wire dependency injection container
-from src.containers import wire_container
 
 wire_container([__name__])
 
@@ -132,7 +132,7 @@ st.set_page_config(page_title="DocMind AI", page_icon="🧠")
 
 if "memory" not in st.session_state:
     st.session_state.memory = ChatMemoryBuffer.from_defaults(
-        token_limit=settings.default_token_limit
+        token_limit=settings.vllm.context_window
     )
 if "agent_system" not in st.session_state:
     st.session_state.agent_system = None
@@ -217,7 +217,7 @@ with st.sidebar.expander("Advanced Settings"):
 
     backend: str = st.selectbox("Backend", backend_options, index=0)
     context_size: int = st.selectbox(
-        "Context Size", settings.context_size_options, index=1
+        "Context Size", settings.ui.context_size_options, index=1
     )
 
 model_options: list[str] = []
@@ -251,7 +251,7 @@ try:
         llm = Ollama(
             base_url=ollama_url,
             model=model_name,
-            request_timeout=settings.request_timeout_seconds,
+            request_timeout=settings.ui.request_timeout_seconds,
         )
     elif backend == "llamacpp":
         if not is_llamacpp_available():
@@ -262,13 +262,13 @@ try:
         else:
             n_gpu_layers = -1 if use_gpu else 0
             llm = LlamaCPP(
-                model_path=settings.llamacpp_model_path,
+                model_path=settings.vllm.llamacpp_model_path,
                 context_window=context_size,
                 n_gpu_layers=n_gpu_layers,
             )
     elif backend == "lmstudio":
         llm = OpenAI(
-            base_url=settings.lmstudio_base_url,
+            base_url=settings.vllm.lmstudio_base_url,
             api_key="not-needed",
             model=model_name,
             max_tokens=context_size,
@@ -473,7 +473,7 @@ if user_input:
                             else:
                                 yield " " + word
                             # Add slight delay for streaming effect
-                            time.sleep(settings.streaming_delay_seconds)
+                            time.sleep(settings.ui.streaming_delay_seconds)
                     except (ValueError, TypeError, RuntimeError) as e:
                         yield f"Error processing query: {str(e)}"
 
