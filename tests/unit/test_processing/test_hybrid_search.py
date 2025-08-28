@@ -28,9 +28,9 @@ class HybridSearcher:
     def __init__(self, settings):
         """Initialize mock HybridSearcher with settings."""
         self.settings = settings
-        self.rrf_alpha = getattr(settings, "rrf_alpha", 0.7)
-        self.dense_weight = getattr(settings, "dense_weight", 0.7)
-        self.sparse_weight = getattr(settings, "sparse_weight", 0.3)
+        self.rrf_alpha = settings.retrieval.rrf_alpha / 100  # Convert from 60 to 0.6
+        self.dense_weight = settings.retrieval.rrf_fusion_weight_dense
+        self.sparse_weight = settings.retrieval.rrf_fusion_weight_sparse
         self.embedder = Mock()
 
     def _apply_rrf_fusion(self, dense_results, sparse_results, alpha=0.7):
@@ -89,13 +89,18 @@ class HybridSearcher:
 def mock_settings(tmp_path):
     """Mock settings for hybrid search with proper temporary paths."""
     settings = Mock()
+    settings.embedding = Mock()
     settings.embedding.model_name = "BAAI/bge-m3"
     settings.embedding.dimension = 1024
+    # Use proper nested structure
+    settings.retrieval = Mock()
     settings.retrieval.top_k = 10
-    settings.rrf_alpha = 0.7  # ADR-002 specified weighting
-    settings.dense_weight = 0.7
-    settings.sparse_weight = 0.3
-    settings.similarity_threshold = 0.7
+    settings.retrieval.rrf_alpha = (
+        70  # Settings uses 60-100 range, convert to 0.6-1.0 in usage
+    )
+    settings.retrieval.rrf_fusion_weight_dense = 0.7
+    settings.retrieval.rrf_fusion_weight_sparse = 0.3
+    # Note: similarity_threshold is not part of the nested configuration - removing
     # CRITICAL: Provide real paths instead of mock objects to prevent directory creation
     settings.cache_dir = str(tmp_path / "cache")
     settings.data_dir = str(tmp_path / "data")

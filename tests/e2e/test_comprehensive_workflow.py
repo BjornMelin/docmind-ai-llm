@@ -153,7 +153,7 @@ async def test_complete_application_workflow():
         # Test configuration system
         settings = DocMindSettings()
         assert settings is not None
-        assert hasattr(settings, "model_name")
+        assert hasattr(settings.vllm, "model")
         assert hasattr(settings, "ollama_base_url")
         # Note: default_token_limit was removed - check nested vllm config instead
         assert hasattr(settings.vllm, "context_window")

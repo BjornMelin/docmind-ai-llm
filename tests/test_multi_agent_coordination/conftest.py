@@ -44,17 +44,17 @@ class MockVLLMConfig:
         self.max_model_len = kwargs.get("max_model_len", settings.vllm.context_window)
         self.kv_cache_dtype = kwargs.get("kv_cache_dtype", settings.kv_cache_dtype)
         self.attention_backend = kwargs.get(
-            "attention_backend", settings.vllm_attention_backend
+            "attention_backend", settings.vllm.attention_backend
         )
         self.gpu_memory_utilization = kwargs.get(
-            "gpu_memory_utilization", settings.vllm_gpu_memory_utilization
+            "gpu_memory_utilization", settings.vllm.gpu_memory_utilization
         )
         self.enable_chunked_prefill = kwargs.get(
-            "enable_chunked_prefill", settings.vllm_enable_chunked_prefill
+            "enable_chunked_prefill", settings.vllm.enable_chunked_prefill
         )
-        self.max_num_seqs = kwargs.get("max_num_seqs", settings.vllm_max_num_seqs)
+        self.max_num_seqs = kwargs.get("max_num_seqs", settings.vllm.max_num_seqs)
         self.max_num_batched_tokens = kwargs.get(
-            "max_num_batched_tokens", settings.vllm_max_num_batched_tokens
+            "max_num_batched_tokens", settings.vllm.max_num_batched_tokens
         )
 
         # Additional attributes expected by tests

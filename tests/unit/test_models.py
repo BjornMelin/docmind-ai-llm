@@ -93,7 +93,7 @@ def test_settings_default_values():
 def test_settings_environment_override():
     """Test Settings model respects environment variable overrides."""
     settings = DocMindSettings()
-    assert settings.qdrant_url == "http://test:1234"
+    assert settings.database.qdrant_url == "http://test:1234"
 
 
 def test_dense_embedding_settings():
@@ -154,12 +154,14 @@ def test_qdrant_url_configuration():
     """Test Qdrant URL configuration."""
     settings = DocMindSettings()
 
-    assert settings.qdrant_url == "http://localhost:6333"  # Actual default value
+    assert (
+        settings.database.qdrant_url == "http://localhost:6333"
+    )  # Actual default value
 
     # Test environment override
     with patch.dict(os.environ, {"DOCMIND_QDRANT_URL": "http://qdrant:6333"}):
         settings = DocMindSettings()
-        assert settings.qdrant_url == "http://qdrant:6333"
+        assert settings.database.qdrant_url == "http://qdrant:6333"
 
 
 def test_embedding_dimension_validation():

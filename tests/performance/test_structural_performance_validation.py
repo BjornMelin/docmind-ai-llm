@@ -447,12 +447,10 @@ class TestUnifiedConfigurationPerformance:
         """Test that configuration helper methods are efficient."""
         settings = DocMindSettings()
 
-        # Test various configuration method performance
+        # Test various configuration method performance - use remaining methods only
         methods_to_test = [
             ("get_vllm_env_vars", lambda: settings.get_vllm_env_vars()),
             ("get_model_config", lambda: settings.get_model_config()),
-            ("get_agent_config", lambda: settings.get_agent_config()),
-            ("get_performance_config", lambda: settings.get_performance_config()),
             ("get_embedding_config", lambda: settings.get_embedding_config()),
         ]
 
@@ -463,6 +461,52 @@ class TestUnifiedConfigurationPerformance:
 
             # Configuration methods should be very fast
             assert method_result["duration_ms"] <= 5, (
+                f"{method_name} too slow: {method_result['duration_ms']:.2f}ms"
+            )
+
+            # Should return valid configuration
+            assert isinstance(method_result["result"], dict)
+            assert len(method_result["result"]) > 0
+
+            print(f"{method_name}: {method_result['duration_ms']:.2f}ms")
+
+        # Test direct nested access performance
+        nested_access_tests = [
+            (
+                "direct_vllm_access",
+                lambda: {
+                    "model_name": settings.vllm.model,
+                    "kv_cache_dtype": settings.vllm.kv_cache_dtype,
+                    "max_model_len": settings.vllm.context_window,
+                    "gpu_memory_utilization": settings.vllm.gpu_memory_utilization,
+                },
+            ),
+            (
+                "direct_agent_access",
+                lambda: {
+                    "enable_multi_agent": settings.agents.enable_multi_agent,
+                    "agent_decision_timeout": settings.agents.decision_timeout,
+                    "max_agent_retries": settings.agents.max_retries,
+                    "llm_backend": settings.llm_backend,
+                },
+            ),
+            (
+                "direct_performance_access",
+                lambda: {
+                    "max_query_latency_ms": settings.max_query_latency_ms,
+                    "max_memory_gb": settings.max_memory_gb,
+                    "max_vram_gb": settings.max_vram_gb,
+                },
+            ),
+        ]
+
+        for method_name, method_func in nested_access_tests:
+            performance_tracker.benchmark_operation(method_name, method_func)
+
+            method_result = performance_tracker.measurements[method_name]
+
+            # Direct access should be even faster
+            assert method_result["duration_ms"] <= 2, (
                 f"{method_name} too slow: {method_result['duration_ms']:.2f}ms"
             )
 
@@ -614,9 +658,19 @@ class TestStructuralPerformanceRegression:
             # Load configuration
             settings = DocMindSettings()
 
-            # Get various configurations
-            vllm_config = settings.get_vllm_config()
-            agent_config = settings.get_agent_config()
+            # Get various configurations using direct access
+            vllm_config = {
+                "model_name": settings.vllm.model,
+                "kv_cache_dtype": settings.vllm.kv_cache_dtype,
+                "max_model_len": settings.vllm.context_window,
+                "gpu_memory_utilization": settings.vllm.gpu_memory_utilization,
+            }
+            agent_config = {
+                "enable_multi_agent": settings.agents.enable_multi_agent,
+                "agent_decision_timeout": settings.agents.decision_timeout,
+                "max_agent_retries": settings.agents.max_retries,
+                "llm_backend": settings.llm_backend,
+            }
             embedding_config = settings.get_embedding_config()
 
             # Import key modules

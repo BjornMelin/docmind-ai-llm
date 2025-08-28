@@ -285,9 +285,9 @@ class TestProductionConfiguration:
         fp8_checks = {
             "fp8_quantization": settings.quantization == "fp8",
             "fp8_kv_cache": settings.kv_cache_dtype == "fp8",
-            "flashinfer_backend": settings.vllm_attention_backend == "FLASHINFER",
-            "gpu_memory_optimized": 0.8 <= settings.vllm_gpu_memory_utilization <= 0.9,
-            "chunked_prefill_enabled": settings.vllm_enable_chunked_prefill,
+            "flashinfer_backend": settings.vllm.attention_backend == "FLASHINFER",
+            "gpu_memory_optimized": 0.8 <= settings.vllm.gpu_memory_utilization <= 0.9,
+            "chunked_prefill_enabled": settings.vllm.enable_chunked_prefill,
         }
 
         passed = all(fp8_checks.values())

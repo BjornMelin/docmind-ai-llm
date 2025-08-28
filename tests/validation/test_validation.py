@@ -199,9 +199,9 @@ class TestSettingsValidation:
         # Check for actual attributes that exist in the unified Settings class
         assert hasattr(settings, "qdrant_url")
         assert hasattr(settings, "enable_gpu_acceleration")
-        assert hasattr(settings, "chunk_size")
-        assert hasattr(settings, "model_name")
-        assert hasattr(settings, "embedding_model")
+        assert hasattr(settings.processing, "chunk_size")
+        assert hasattr(settings.vllm, "model")
+        assert hasattr(settings.embedding, "model_name")
         assert hasattr(settings, "llm_backend")
 
     def test_settings_required_fields(self):
@@ -216,7 +216,7 @@ class TestSettingsValidation:
         # (now in nested embedding config)
         assert hasattr(settings.embedding, "dimension")
         assert hasattr(settings.embedding, "model_name")
-        assert hasattr(settings, "top_k")
+        assert hasattr(settings.retrieval, "top_k")
 
         # Test nested config access
         assert hasattr(settings, "vllm")

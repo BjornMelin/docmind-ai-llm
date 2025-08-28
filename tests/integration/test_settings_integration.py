@@ -51,88 +51,68 @@ class TestCrossModuleIntegration:
         """Test tool factory can access all needed settings."""
         s = DocMindSettings()
 
-        # Tool factory needs agent configuration
-        agent_config = s.get_agent_config()
-
-        # Should contain keys needed for tool creation
-        required_keys = [
-            "enable_multi_agent",
-            "agent_decision_timeout",
-            "max_agent_retries",
-            "llm_backend",
-            "model_name",
-        ]
-
-        for key in required_keys:
-            assert key in agent_config
-            assert agent_config[key] is not None
+        # Tool factory needs agent configuration - use nested access
+        # Should contain values needed for tool creation
+        assert s.agents.enable_multi_agent is not None
+        assert s.agents.decision_timeout is not None
+        assert s.agents.max_retries is not None
+        assert s.llm_backend is not None
+        assert s.vllm.model is not None
 
     def test_retrieval_module_settings_integration(self):
         """Test retrieval modules can access BGE-M3 and hybrid search settings."""
         s = DocMindSettings()
 
-        # BGE-M3 constants should be accessible
-        assert hasattr(s, "bge_m3_embedding_dim")
-        assert hasattr(s, "bge_m3_max_length")
-        assert hasattr(s, "bge_m3_batch_size_gpu")
-        assert hasattr(s, "bge_m3_batch_size_cpu")
+        # BGE-M3 constants should be accessible via nested config
+        assert hasattr(s.embedding, "dimension")
+        assert hasattr(s.embedding, "max_length")
+        assert hasattr(s.embedding, "batch_size_gpu")
+        assert hasattr(s.embedding, "batch_size_cpu")
 
         # Hybrid retrieval constants
-        assert hasattr(s, "rrf_fusion_alpha")
-        assert hasattr(s, "rrf_fusion_weight_dense")
-        assert hasattr(s, "rrf_fusion_weight_sparse")
+        assert hasattr(s.retrieval, "rrf_alpha")
+        assert hasattr(s.retrieval, "rrf_fusion_weight_dense")
+        assert hasattr(s.retrieval, "rrf_fusion_weight_sparse")
 
         # Values should be suitable for retrieval operations
-        assert 512 <= s.bge_m3_embedding_dim <= 4096
-        assert 1024 <= s.bge_m3_max_length <= 16384
+        assert 512 <= s.embedding.dimension <= 4096
+        assert 1024 <= s.embedding.max_length <= 16384
         assert 10 <= s.retrieval.rrf_alpha <= 100
 
     def test_vllm_module_settings_integration(self):
         """Test vLLM configuration integrates with actual vLLM usage patterns."""
         s = DocMindSettings()
 
-        vllm_config = s.get_vllm_config()
-
-        # vLLM config should have all required parameters
-        required_vllm_keys = [
-            "model_name",
-            "quantization",
-            "kv_cache_dtype",
-            "max_model_len",
-            "gpu_memory_utilization",
-            "attention_backend",
-            "enable_chunked_prefill",
-            "max_num_batched_tokens",
-            "max_num_seqs",
-        ]
-
-        for key in required_vllm_keys:
-            assert key in vllm_config
-            assert vllm_config[key] is not None
+        # vLLM config should have all required parameters - use nested access
+        assert s.vllm.model is not None
+        assert s.vllm.kv_cache_dtype is not None
+        assert s.vllm.context_window is not None
+        assert s.vllm.gpu_memory_utilization is not None
+        assert s.vllm.attention_backend is not None
+        assert s.vllm.enable_chunked_prefill is not None
+        assert s.vllm.max_num_batched_tokens is not None
+        assert s.vllm.max_num_seqs is not None
 
         # Values should be valid for vLLM
-        assert vllm_config["quantization"] in ["fp8", "int8", "int4", "awq"]
-        assert vllm_config["attention_backend"] in ["FLASHINFER"]
-        assert 0.1 <= vllm_config["gpu_memory_utilization"] <= 0.95
-        assert vllm_config["max_model_len"] >= 8192  # Reasonable context window
+        assert s.vllm.kv_cache_dtype in ["fp8", "fp8_e5m2", "int8", "int4"]
+        assert s.vllm.attention_backend in ["FLASHINFER"]
+        assert 0.1 <= s.vllm.gpu_memory_utilization <= 0.95
+        assert s.vllm.context_window >= 8192  # Reasonable context window
 
     def test_coordinator_settings_integration(self):
         """Test multi-agent coordinator can use settings properly."""
         s = DocMindSettings()
 
-        # Coordinator needs both agent and performance config
-        agent_config = s.get_agent_config()
-        perf_config = s.get_performance_config()
-
+        # Coordinator needs both agent and performance config - use nested access
         # Should have coordination settings
-        assert agent_config["enable_multi_agent"] is not None
-        assert agent_config["agent_decision_timeout"] > 0
-        assert agent_config["max_agent_retries"] >= 0
+        assert s.agents.enable_multi_agent is not None
+        assert s.agents.decision_timeout > 0
+        assert s.agents.max_retries >= 0
 
         # Performance settings for coordination
-        assert perf_config["max_query_latency_ms"] > 0
-        assert perf_config["max_memory_gb"] > 0
-        assert perf_config["max_vram_gb"] > 0
+        assert s.max_query_latency_ms > 0
+        assert s.max_memory_gb > 0
+        assert s.max_vram_gb > 0
 
     def test_database_utils_settings_integration(self):
         """Test database utilities can access persistence settings."""
@@ -283,7 +263,7 @@ class TestEnvironmentIntegration:
             "DOCMIND_LOG_LEVEL": "DEBUG",
             "DOCMIND_ENABLE_PERFORMANCE_LOGGING": "false",
             "DOCMIND_AGENT_DECISION_TIMEOUT": "200",  # Faster for dev
-            "DOCMIND_LLM_TEMPERATURE": "0.3",  # Slightly higher for testing
+            "DOCMIND_VLLM__TEMPERATURE": "0.3",  # Slightly higher for testing
         }
 
         with patch.dict("os.environ", dev_env):
@@ -294,14 +274,14 @@ class TestEnvironmentIntegration:
             assert s.log_level == "DEBUG"
             assert s.enable_performance_logging is False
             assert s.agents.decision_timeout == 200
-            assert s.llm_temperature == 0.3
+            assert s.vllm.temperature == 0.3
 
     def test_gpu_configuration_environment_simulation(self):
         """Test GPU-specific environment configuration."""
         gpu_env = {
             "DOCMIND_ENABLE_GPU_ACCELERATION": "true",
             "DOCMIND_VLLM_ATTENTION_BACKEND": "FLASHINFER",
-            "DOCMIND_QUANTIZATION": "fp8",
+            "DOCMIND_VLLM__KV_CACHE_DTYPE": "fp8_e5m2",
             "DOCMIND_KV_CACHE_DTYPE": "fp8",
             "DOCMIND_VLLM_ENABLE_CHUNKED_PREFILL": "true",
         }
@@ -312,8 +292,7 @@ class TestEnvironmentIntegration:
             # GPU settings should be optimized
             assert s.enable_gpu_acceleration is True
             assert s.vllm_attention_backend == "FLASHINFER"
-            assert s.quantization == "fp8"
-            assert s.kv_cache_dtype == "fp8"
+            assert s.vllm.kv_cache_dtype == "fp8_e5m2"
             assert s.vllm_enable_chunked_prefill is True
 
     def test_hybrid_search_environment_configuration(self):
@@ -344,7 +323,14 @@ class TestConfigurationMethodIntegration:
     def test_agent_config_integrates_with_coordinator(self, mock_coordinator):
         """Test agent configuration integrates with actual coordinator usage."""
         s = DocMindSettings()
-        agent_config = s.get_agent_config()
+        # Create agent config dictionary from nested structure
+        agent_config = {
+            "enable_multi_agent": s.agents.enable_multi_agent,
+            "agent_decision_timeout": s.agents.decision_timeout,
+            "max_agent_retries": s.agents.max_retries,
+            "llm_backend": s.llm_backend,
+            "model_name": s.vllm.model,
+        }
 
         # Simulate coordinator creation with settings
         mock_coordinator.return_value = MagicMock()
@@ -357,16 +343,14 @@ class TestConfigurationMethodIntegration:
     def test_performance_config_integrates_with_monitoring(self):
         """Test performance configuration integrates with monitoring systems."""
         s = DocMindSettings()
-        perf_config = s.get_performance_config()
-
-        # Performance config should have metrics suitable for monitoring
-        assert perf_config["max_query_latency_ms"] > 0
-        assert perf_config["max_memory_gb"] > 0
-        assert perf_config["max_vram_gb"] > 0
+        # Performance config should have metrics suitable for monitoring - use nested access
+        assert s.max_query_latency_ms > 0
+        assert s.max_memory_gb > 0
+        assert s.max_vram_gb > 0
 
         # Should be able to use these for monitoring thresholds
-        memory_threshold = perf_config["max_memory_gb"] * 0.9  # 90% threshold
-        vram_threshold = perf_config["max_vram_gb"] * 0.9
+        memory_threshold = s.max_memory_gb * 0.9  # 90% threshold
+        vram_threshold = s.max_vram_gb * 0.9
 
         assert memory_threshold > 0
         assert vram_threshold > 0
@@ -374,20 +358,17 @@ class TestConfigurationMethodIntegration:
     def test_vllm_config_realistic_integration(self):
         """Test vLLM config works with realistic vLLM usage patterns."""
         s = DocMindSettings()
-        vllm_config = s.get_vllm_config()
-
-        # Simulate vLLM server configuration
+        # Simulate vLLM server configuration - use nested access
         server_config = {
-            "model": vllm_config["model_name"],
-            "quantization": vllm_config["quantization"],
-            "kv_cache_dtype": vllm_config["kv_cache_dtype"],
-            "max_model_len": vllm_config["max_model_len"],
-            "gpu_memory_utilization": vllm_config["gpu_memory_utilization"],
+            "model": s.vllm.model,
+            "kv_cache_dtype": s.vllm.kv_cache_dtype,
+            "max_model_len": s.vllm.context_window,
+            "gpu_memory_utilization": s.vllm.gpu_memory_utilization,
         }
 
         # Configuration should be valid for vLLM
         assert server_config["model"]  # Should have model name
-        assert server_config["quantization"] in ["fp8", "int8", "int4", "awq"]
+        assert server_config["kv_cache_dtype"] in ["fp8", "fp8_e5m2", "int8", "int4"]
         assert server_config["max_model_len"] >= 8192
         assert 0.1 <= server_config["gpu_memory_utilization"] <= 0.95
 
@@ -472,9 +453,9 @@ class TestRealWorldUsagePatterns:
             "model_name": s.embedding.model_name,
             "dimension": s.embedding.dimension,
             "use_sparse": s.retrieval.use_sparse_embeddings,
-            "batch_size_gpu": s.bge_m3_batch_size_gpu,
-            "batch_size_cpu": s.bge_m3_batch_size_cpu,
-            "max_length": s.bge_m3_max_length,
+            "batch_size_gpu": s.embedding.batch_size_gpu,
+            "batch_size_cpu": s.embedding.batch_size_cpu,
+            "max_length": s.embedding.max_length,
         }
 
         # Should be valid for embedding operations

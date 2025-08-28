@@ -61,7 +61,7 @@ def test_document_processing_components_import():
         # Test configuration system
         settings = DocMindSettings()
         assert settings is not None
-        assert hasattr(settings, "model_name")
+        assert hasattr(settings.vllm, "model")
 
         # Test response schema
         analysis = AnalysisOutput(

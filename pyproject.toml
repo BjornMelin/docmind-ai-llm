@@ -212,3 +212,86 @@ test = [
 performance = [
     "numba>=0.61.0",  # Optional JIT compilation for performance
 ]
+quality = [
+    "pre-commit>=4.0.1",
+    "coverage[toml]>=7.6.0",
+    "pytest-xdist>=3.6.0",  # Parallel test execution
+    "pytest-timeout>=2.3.1",  # Test timeout enforcement
+    "pytest-mock>=3.14.0",  # Enhanced mocking support
+]
+
+# Coverage Configuration - Production Ready
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/env/*",
+    "setup.py",
+    "conftest.py",
+    ".pytest_cache/*",
+    "htmlcov/*",
+    "dist/*",
+    "build/*",
+    "*.egg-info/*",
+    "qdrant_storage/*",
+    "embeddings_cache/*",
+    "test_logs/*",
+    "cache/*",
+    "logs/*",
+]
+branch = true
+data_file = "coverage/.coverage"
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+    "except ImportError:",
+    "if TYPE_CHECKING:",
+]
+fail_under = 80
+precision = 2
+show_missing = true
+skip_covered = false
+sort = "Cover"
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "DocMind AI Test Coverage Report"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.json]
+output = "coverage.json"
+pretty_print = true
+
+# Quality Gates and Monitoring
+[tool.pytest-quality]
+# Performance monitoring
+max_test_duration_seconds = 300
+max_collection_time_seconds = 30
+slow_test_threshold_seconds = 5
+
+# Coverage enforcement
+min_line_coverage_percent = 80
+min_branch_coverage_percent = 75
+coverage_fail_on_decrease = true
+
+# Health monitoring
+max_flaky_tests = 5
+flaky_pass_rate_threshold = 0.8
+max_anti_patterns = 10
+enable_performance_regression_detection = true
+enable_health_monitoring = true

@@ -20,7 +20,12 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 # Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+# Add src to path explicitly to fix import resolution
+src_path = project_root / "src"
+sys.path.insert(0, str(src_path))
 
 # Mock problematic imports before app loads - comprehensive mocking strategy
 # This prevents import errors while allowing proper app testing
@@ -43,7 +48,15 @@ sys.modules["llama_index.llms.llama_cpp"] = MagicMock()
 sys.modules["llama_cpp"] = MagicMock()
 sys.modules["sentence_transformers"] = MagicMock()
 sys.modules["transformers"] = MagicMock()
-sys.modules["spacy"] = MagicMock()
+
+# Mock spaCy with proper structure
+mock_spacy = MagicMock()
+mock_spacy.cli.download = MagicMock()
+mock_spacy.load = MagicMock()
+mock_spacy.util.is_package = MagicMock(return_value=True)
+sys.modules["spacy"] = mock_spacy
+sys.modules["spacy.cli"] = mock_spacy.cli
+sys.modules["spacy.util"] = mock_spacy.util
 sys.modules["thinc"] = MagicMock()
 
 # Mock ollama completely to prevent network calls
@@ -52,6 +65,61 @@ mock_ollama.list.return_value = {"models": [{"name": "qwen3-4b-instruct-2507:lat
 mock_ollama.pull.return_value = {"status": "success"}
 mock_ollama.chat.return_value = {"message": {"content": "Test response"}}
 sys.modules["ollama"] = mock_ollama
+
+# Mock dependency injection related modules that cause import failures
+mock_dependency_injector = MagicMock()
+mock_dependency_injector.wiring = MagicMock()
+mock_dependency_injector.wiring.Provide = MagicMock()
+mock_dependency_injector.wiring.inject = MagicMock()
+mock_dependency_injector.containers = MagicMock()
+mock_dependency_injector.providers = MagicMock()
+sys.modules["dependency_injector"] = mock_dependency_injector
+sys.modules["dependency_injector.containers"] = mock_dependency_injector.containers
+sys.modules["dependency_injector.providers"] = mock_dependency_injector.providers
+sys.modules["dependency_injector.wiring"] = mock_dependency_injector.wiring
+
+# Mock all LlamaIndex components
+sys.modules["llama_index.core"] = MagicMock()
+sys.modules["llama_index.core.memory"] = MagicMock()
+sys.modules["llama_index.core.vector_stores"] = MagicMock()
+sys.modules["llama_index.llms.ollama"] = MagicMock()
+sys.modules["llama_index.llms.openai"] = MagicMock()
+
+# Mock additional heavy dependencies
+sys.modules["streamlit_extras"] = MagicMock()
+sys.modules["streamlit_extras.colored_header"] = MagicMock()
+sys.modules["streamlit_extras.add_vertical_space"] = MagicMock()
+# Mock qdrant_client completely
+mock_qdrant = MagicMock()
+mock_qdrant.conversions = MagicMock()
+mock_qdrant.conversions.common_types = MagicMock()
+mock_qdrant.http = MagicMock()
+mock_qdrant.models = MagicMock()
+sys.modules["qdrant_client"] = mock_qdrant
+sys.modules["qdrant_client.conversions"] = mock_qdrant.conversions
+sys.modules["qdrant_client.conversions.common_types"] = (
+    mock_qdrant.conversions.common_types
+)
+sys.modules["qdrant_client.http"] = mock_qdrant.http
+sys.modules["qdrant_client.models"] = mock_qdrant.models
+# Mock unstructured module completely
+mock_unstructured = MagicMock()
+mock_unstructured.partition = MagicMock()
+mock_unstructured.partition.auto = MagicMock()
+mock_unstructured.partition.auto.partition = MagicMock()
+sys.modules["unstructured"] = mock_unstructured
+sys.modules["unstructured.partition"] = mock_unstructured.partition
+sys.modules["unstructured.partition.auto"] = mock_unstructured.partition.auto
+
+# Mock src.containers completely instead of importing to avoid DI complexity
+mock_containers = MagicMock()
+mock_containers.ApplicationContainer = MagicMock()
+mock_containers.wire_container = MagicMock()
+mock_containers.get_cache = MagicMock()
+mock_containers.get_settings = MagicMock()
+mock_containers.get_query_engine = MagicMock()
+mock_containers.get_agent_system = MagicMock()
+sys.modules["src.containers"] = mock_containers
 
 
 @pytest.fixture
@@ -70,20 +138,20 @@ def app_test():
         ),
         # Mock the unified configuration system
         patch("src.config.settings") as mock_settings,
-        patch("src.utils.core.validate_startup_configuration", return_value=True),
+        patch("utils.core.validate_startup_configuration", return_value=True),
     ):
         # Configure mock settings for the unified configuration architecture
         mock_settings.vllm.model = "qwen3-4b-instruct-2507:latest"
         mock_settings.vllm.context_window = 8192
         mock_settings.ollama_base_url = "http://localhost:11434"
-        mock_settings.request_timeout_seconds = 300
-        mock_settings.streaming_delay_seconds = 0.01
+        mock_settings.ui.request_timeout_seconds = 300
+        mock_settings.ui.streaming_delay_seconds = 0.01
         mock_settings.minimum_vram_high_gb = 16
         mock_settings.minimum_vram_medium_gb = 8
         mock_settings.suggested_context_high = 32768
         mock_settings.suggested_context_medium = 16384
         mock_settings.suggested_context_low = 8192
-        mock_settings.context_size_options = [2048, 4096, 8192, 16384, 32768]
+        mock_settings.ui.context_size_options = [2048, 4096, 8192, 16384, 32768]
         mock_settings.llamacpp_model_path = "/path/to/model"
         mock_settings.lmstudio_base_url = "http://localhost:1234/v1"
 
@@ -94,7 +162,7 @@ def app_test():
 
 @patch("ollama.pull", return_value={"status": "success"})
 @patch(
-    "src.utils.core.detect_hardware",
+    "utils.core.detect_hardware",
     return_value={"gpu_name": "RTX 4090", "vram_total_gb": 24, "cuda_available": True},
 )
 def test_app_hardware_detection(mock_detect, mock_pull, app_test):
@@ -171,7 +239,7 @@ def test_app_model_selection_and_backend_configuration(
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-@patch("src.utils.document.load_documents_unstructured")
+@patch("utils.document.load_documents_unstructured")
 def test_app_document_upload_workflow(mock_load_docs, mock_pull, app_test, tmp_path):
     """Test document upload and processing workflow with unified architecture.
 
@@ -250,7 +318,7 @@ def test_app_multi_agent_chat_functionality(
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-@patch("src.utils.core.validate_startup_configuration", return_value=True)
+@patch("utils.core.validate_startup_configuration", return_value=True)
 def test_app_session_persistence_and_memory_management(
     mock_validate, mock_pull, app_test
 ):
@@ -306,15 +374,15 @@ def test_app_session_persistence_and_memory_management(
 
 @patch("ollama.pull", return_value={"status": "success"})
 @patch(
-    "src.utils.core.detect_hardware",
+    "utils.core.detect_hardware",
     return_value={"gpu_name": "RTX 4090", "vram_total_gb": 24, "cuda_available": True},
 )
 @patch(
     "ollama.list", return_value={"models": [{"name": "qwen3-4b-instruct-2507:latest"}]}
 )
 @patch("src.agents.coordinator.MultiAgentCoordinator")
-@patch("src.utils.document.load_documents_unstructured")
-@patch("src.utils.core.validate_startup_configuration", return_value=True)
+@patch("utils.document.load_documents_unstructured")
+@patch("utils.core.validate_startup_configuration", return_value=True)
 def test_complete_end_to_end_multi_agent_workflow(
     mock_validate,
     mock_load_docs,
@@ -424,7 +492,7 @@ def test_complete_end_to_end_multi_agent_workflow(
 @pytest.mark.asyncio
 @patch("ollama.pull", return_value={"status": "success"})
 @patch("src.agents.coordinator.MultiAgentCoordinator")
-@patch("src.utils.core.validate_startup_configuration", return_value=True)
+@patch("utils.core.validate_startup_configuration", return_value=True)
 async def test_async_workflow_validation(
     mock_validate, mock_coordinator_class, mock_pull, app_test
 ):
@@ -463,7 +531,7 @@ async def test_async_workflow_validation(
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-@patch("src.utils.core.validate_startup_configuration", return_value=True)
+@patch("utils.core.validate_startup_configuration", return_value=True)
 def test_unified_configuration_architecture_integration(
     mock_validate, mock_pull, app_test
 ):
