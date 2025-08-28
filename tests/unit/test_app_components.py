@@ -237,9 +237,9 @@ class TestModelInitializationLogic:
         use_gpu = True
 
         # Skip test if LlamaCPP is not available due to BLAS issues
-        try:
-            import llama_index.llms.llama_cpp
-        except (ImportError, RuntimeError, OSError):
+        import importlib.util
+
+        if importlib.util.find_spec("llama_index.llms.llama_cpp") is None:
             pytest.skip("LlamaCPP not available due to BLAS library issues")
 
         # Mock availability check and LlamaCPP class

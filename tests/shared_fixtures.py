@@ -21,27 +21,59 @@ import pytest
 import pytest_asyncio
 from llama_index.core import Document
 from llama_index.core.base.llms.types import CompletionResponse, LLMMetadata
+from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.llms.llm import LLM
+from llama_index.core.llms.mock import MockLLM
 from llama_index.core.schema import NodeWithScore, TextNode
 
 # ============================================================================
-# MOCK FACTORIES
+# LLAMAINDEX MOCK FACTORIES (LIBRARY-FIRST APPROACH)
 # ============================================================================
 
 
-class MockEmbeddingFactory:
-    """Factory for creating consistent embedding mocks."""
+class LlamaIndexMockFactory:
+    """Factory for creating LlamaIndex-native mock objects.
+
+    ELIMINATES custom mock implementations in favor of library patterns.
+    Uses MockEmbedding and MockLLM from LlamaIndex core for consistency.
+    """
+
+    @staticmethod
+    def create_mock_embedding(embed_dim: int = 1024) -> MockEmbedding:
+        """Create LlamaIndex-native MockEmbedding.
+
+        Uses built-in MockEmbedding instead of manual Mock objects.
+        Provides consistent dimensions and deterministic behavior.
+        """
+        return MockEmbedding(embed_dim=embed_dim)
+
+    @staticmethod
+    def create_mock_llm(max_tokens: int = 512) -> MockLLM:
+        """Create LlamaIndex-native MockLLM.
+
+        Uses built-in MockLLM instead of manual Mock objects.
+        Provides realistic completion behavior for testing.
+        """
+        return MockLLM(max_tokens=max_tokens)
 
     @staticmethod
     def create_dense_embeddings(
         dimension: int = 1024, num_docs: int = 3
     ) -> list[list[float]]:
-        """Create mock dense embeddings with specified dimensions."""
+        """Create mock dense embeddings with specified dimensions.
+
+        Kept for backward compatibility with existing tests.
+        Consider migrating to MockEmbedding.get_text_embedding().
+        """
         return [np.random.rand(dimension).tolist() for _ in range(num_docs)]
 
     @staticmethod
     def create_sparse_embeddings(num_docs: int = 3) -> list[dict[int, float]]:
-        """Create mock sparse embeddings with token indices."""
+        """Create mock sparse embeddings with token indices.
+
+        Kept for backward compatibility with existing tests.
+        Used for SPLADE++/BGE-M3 sparse embedding simulation.
+        """
         embeddings = []
         for _i in range(num_docs):
             indices = np.random.choice(1000, size=10, replace=False)
@@ -54,45 +86,31 @@ class MockEmbeddingFactory:
             )
         return embeddings
 
-    @staticmethod
-    def create_mock_embedding_model() -> Mock:
-        """Create a comprehensive mock embedding model."""
-        mock = Mock()
-        mock.get_text_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
-        mock.get_query_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
-        mock.embed_dim = 1024
-        mock.embed_documents.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings()
-        )
-        mock.embed_query.return_value = MockEmbeddingFactory.create_dense_embeddings(
-            num_docs=1
-        )[0]
-        return mock
+
+# DEPRECATED: Legacy factory classes for backward compatibility
+# TODO: Remove these after migrating all tests to LlamaIndex patterns
+class MockEmbeddingFactory:
+    """DEPRECATED: Use LlamaIndexMockFactory.create_mock_embedding() instead."""
 
     @staticmethod
-    def create_async_embedding_model() -> AsyncMock:
-        """Create an async mock embedding model with comprehensive async methods."""
-        mock = AsyncMock()
-        mock.aembed_documents.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings()
-        )
-        mock.aembed_query.return_value = MockEmbeddingFactory.create_dense_embeddings(
-            num_docs=1
-        )[0]
+    def create_dense_embeddings(*args, **kwargs):
+        """DEPRECATED: Use LlamaIndexMockFactory.create_dense_embeddings()."""
+        return LlamaIndexMockFactory.create_dense_embeddings(*args, **kwargs)
 
-        # Add additional async methods commonly used in LlamaIndex
-        mock._aget_query_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
-        mock._aget_text_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
+    @staticmethod
+    def create_sparse_embeddings(*args, **kwargs):
+        """DEPRECATED: Use LlamaIndexMockFactory.create_sparse_embeddings()."""
+        return LlamaIndexMockFactory.create_sparse_embeddings(*args, **kwargs)
 
-        return mock
+    @staticmethod
+    def create_mock_embedding_model(*args, **kwargs):
+        """DEPRECATED: Use LlamaIndexMockFactory.create_mock_embedding()."""
+        return LlamaIndexMockFactory.create_mock_embedding()
+
+    @staticmethod
+    def create_async_embedding_model(*args, **kwargs):
+        """DEPRECATED: Use LlamaIndexMockFactory.create_mock_embedding()."""
+        return LlamaIndexMockFactory.create_mock_embedding()
 
 
 class MockLLMFactory:

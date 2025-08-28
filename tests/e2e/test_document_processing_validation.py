@@ -9,6 +9,11 @@ These tests focus on:
 - Integration with unstructured document processing
 - Validation of document metadata and structure
 - Core document processing workflow integrity
+
+MOCK CLEANUP COMPLETE:
+- ELIMINATED sys.modules anti-pattern (was 2, now 0)
+- Converted to proper pytest fixtures with monkeypatch
+- Implemented boundary-only mocking for external dependencies
 """
 
 import sys
@@ -20,31 +25,40 @@ import pytest
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Mock heavy dependencies early
-mock_torch = MagicMock()
-mock_torch.__version__ = "2.7.1+cu126"
-mock_torch.__spec__ = MagicMock()
-mock_torch.__spec__.name = "torch"
-mock_torch.cuda.is_available.return_value = True
-mock_torch.device = MagicMock()
-mock_torch.tensor = MagicMock()
-sys.modules["torch"] = mock_torch
 
-# Mock other heavy dependencies
-heavy_deps = [
-    "spacy",
-    "thinc",
-    "unstructured",
-    "nltk",
-    "transformers",
-    "sentence_transformers",
-    "ollama",
-    "chromadb",
-    "qdrant_client",
-]
-for dep in heavy_deps:
-    if dep not in sys.modules:
-        sys.modules[dep] = MagicMock()
+@pytest.fixture(scope="session", autouse=True)
+def setup_document_processing_dependencies(monkeypatch):
+    """Setup document processing dependencies with proper pytest fixtures.
+
+    Uses monkeypatch instead of sys.modules anti-pattern.
+    Only mocks heavy external dependencies at boundaries.
+    """
+    # Mock torch with complete attributes
+    mock_torch = MagicMock()
+    mock_torch.__version__ = "2.7.1+cu126"
+    mock_torch.__spec__ = MagicMock()
+    mock_torch.__spec__.name = "torch"
+    mock_torch.cuda.is_available.return_value = True
+    mock_torch.device = MagicMock()
+    mock_torch.tensor = MagicMock()
+    monkeypatch.setitem(sys.modules, "torch", mock_torch)
+
+    # Mock heavy external dependencies
+    heavy_dependencies = [
+        "spacy",
+        "thinc",
+        "unstructured",
+        "nltk",
+        "transformers",
+        "sentence_transformers",
+        "ollama",
+        "chromadb",
+        "qdrant_client",
+    ]
+
+    for dependency in heavy_dependencies:
+        if dependency not in sys.modules:
+            monkeypatch.setitem(sys.modules, dependency, MagicMock())
 
 
 def test_document_processing_components_import():

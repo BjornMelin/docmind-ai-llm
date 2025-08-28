@@ -683,15 +683,6 @@ class TestEndToEndThroughputBenchmarks:
 class TestDocumentProcessingThroughputBenchmarks:
     """Test document processing pipeline throughput."""
 
-    def test_document_ingestion_throughput(self, throughput_tracker):
-        """Test document ingestion and processing throughput.
-
-        SKIPPED (legacy functions).
-        """
-        pytest.skip(
-            "Legacy document processing functions removed with ADR-009 architecture"
-        )
-
     def test_chunk_processing_throughput(self, throughput_tracker):
         """Test document chunking throughput."""
         # Create test documents of varying lengths

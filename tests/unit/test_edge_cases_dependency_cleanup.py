@@ -131,11 +131,6 @@ class TestGracefulErrorHandling:
         except ImportError:
             pytest.skip("Core utilities not available")
 
-    def test_embedding_creation_fallback(self):
-        """Test embedding creation with fallback behavior."""
-        # Skip removed embedding function - replaced with FEAT-002 retrieval system
-        pytest.skip("get_embed_model function removed from src.utils.embedding")
-
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

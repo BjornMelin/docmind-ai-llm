@@ -26,15 +26,25 @@ from src.models.embeddings import (
 
 
 @pytest.fixture
-def mock_settings():
-    """Mock DocMind settings for BGE-M3 embedder testing."""
-    settings = Mock()
-    settings.embedding = Mock()
-    settings.embedding.model_name = "BAAI/bge-m3"
-    settings.embedding.dimension = 1024
-    settings.embedding.max_length = 8192
-    settings.embedding.batch_size = 12
-    return settings
+def test_settings():
+    """Real Pydantic settings for BGE-M3 embedder testing.
+
+    Uses TestDocMindSettings with embedding-optimized configuration.
+    ELIMINATES Mock anti-pattern, uses real Pydantic validation.
+    """
+    from tests.fixtures.test_settings import TestDocMindSettings
+
+    return TestDocMindSettings(
+        # Embedding-specific test configuration
+        embedding={
+            "model_name": "BAAI/bge-m3",
+            "dimension": 1024,
+            "max_length": 8192,
+            "batch_size_cpu": 1,  # Small for unit tests
+            "batch_size_gpu": 2,  # Small for unit tests
+        },
+        enable_gpu_acceleration=False,  # CPU-only for unit tests
+    )
 
 
 @pytest.fixture
@@ -122,7 +132,7 @@ class TestBGEM3EmbedderInitialization:
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     @patch("src.processing.embeddings.bgem3_embedder.torch")
     def test_embedder_initialization_success(
-        self, mock_torch, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_torch, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test successful BGE-M3 embedder initialization."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -132,11 +142,11 @@ class TestBGEM3EmbedderInitialization:
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
         # Initialize embedder
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Verify initialization
         assert embedder is not None
-        assert embedder.settings == mock_settings
+        assert embedder.settings == test_settings
         assert embedder.device == "cuda"
         assert embedder.pooling_method == "cls"
         assert embedder.normalize_embeddings is True
@@ -150,7 +160,7 @@ class TestBGEM3EmbedderInitialization:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_embedder_initialization_cpu_fallback(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test embedder initialization falls back to CPU when CUDA unavailable."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -160,24 +170,24 @@ class TestBGEM3EmbedderInitialization:
         with patch("src.processing.embeddings.bgem3_embedder.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = False
 
-            embedder = BGEM3Embedder(settings=mock_settings)
+            embedder = BGEM3Embedder(settings=test_settings)
 
             assert embedder.device == "cpu"
             # Verify FP16 is disabled on CPU
             call_kwargs = mock_flag_model_class.call_args[1]
             assert call_kwargs["use_fp16"] is False
 
-    def test_embedder_initialization_missing_flagembedding(self, mock_settings):
+    def test_embedder_initialization_missing_flagembedding(self, test_settings):
         """Test embedder initialization fails gracefully when FlagEmbedding unavailable."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         with patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel", None):
             with pytest.raises(EmbeddingError, match="FlagEmbedding not available"):
-                BGEM3Embedder(settings=mock_settings)
+                BGEM3Embedder(settings=test_settings)
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_embedder_initialization_model_load_failure(
-        self, mock_flag_model_class, mock_settings
+        self, mock_flag_model_class, test_settings
     ):
         """Test embedder handles model loading failures."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -185,11 +195,11 @@ class TestBGEM3EmbedderInitialization:
         mock_flag_model_class.side_effect = RuntimeError("Model loading failed")
 
         with pytest.raises(EmbeddingError, match="BGE-M3 model initialization failed"):
-            BGEM3Embedder(settings=mock_settings)
+            BGEM3Embedder(settings=test_settings)
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_embedder_custom_parameters(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test embedder initialization with custom parameters."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -204,7 +214,7 @@ class TestBGEM3EmbedderInitialization:
         )
 
         embedder = BGEM3Embedder(
-            settings=mock_settings,
+            settings=test_settings,
             parameters=custom_params,
             pooling_method="mean",
             normalize_embeddings=False,
@@ -228,7 +238,7 @@ class TestBGEM3EmbedderDenseEmbeddings:
         self,
         mock_torch,
         mock_flag_model_class,
-        mock_settings,
+        test_settings,
         mock_bgem3_flag_model,
         embedding_parameters,
     ):
@@ -241,7 +251,7 @@ class TestBGEM3EmbedderDenseEmbeddings:
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
         embedder = BGEM3Embedder(
-            settings=mock_settings, parameters=embedding_parameters
+            settings=test_settings, parameters=embedding_parameters
         )
 
         texts = [
@@ -276,7 +286,7 @@ class TestBGEM3EmbedderDenseEmbeddings:
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     @patch("src.processing.embeddings.bgem3_embedder.torch")
     async def test_embed_single_text_async(
-        self, mock_torch, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_torch, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test single text embedding extraction."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -284,7 +294,7 @@ class TestBGEM3EmbedderDenseEmbeddings:
         mock_torch.cuda.is_available.return_value = True
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         text = "Single text for embedding generation test."
 
@@ -297,14 +307,14 @@ class TestBGEM3EmbedderDenseEmbeddings:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     async def test_embed_texts_async_empty_input(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test embedding generation with empty input."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         result = await embedder.embed_texts_async([])
 
@@ -317,14 +327,14 @@ class TestBGEM3EmbedderDenseEmbeddings:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_get_dense_embeddings_sync(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test synchronous dense embedding generation."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         texts = ["First text", "Second text"]
 
@@ -350,14 +360,14 @@ class TestBGEM3EmbedderSparseEmbeddings:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_get_sparse_embeddings_success(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test successful sparse embedding generation."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         texts = ["Machine learning text", "Natural language processing"]
 
@@ -376,14 +386,14 @@ class TestBGEM3EmbedderSparseEmbeddings:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_compute_sparse_similarity(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test sparse embedding similarity computation."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         sparse1 = {1: 0.8, 5: 0.6, 10: 0.4}
         sparse2 = {1: 0.7, 3: 0.5, 5: 0.9}
@@ -398,14 +408,14 @@ class TestBGEM3EmbedderSparseEmbeddings:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_get_sparse_embedding_tokens(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test conversion of sparse embedding IDs to tokens."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         sparse_embeddings = [{100: 0.8, 200: 0.6}, {150: 0.7, 300: 0.5}]
 
@@ -426,7 +436,7 @@ class TestBGEM3EmbedderBatchProcessing:
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     @patch("src.processing.embeddings.bgem3_embedder.torch")
     async def test_batch_processing_small(
-        self, mock_torch, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_torch, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test batch processing with small batch size."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -434,7 +444,7 @@ class TestBGEM3EmbedderBatchProcessing:
         mock_torch.cuda.is_available.return_value = True
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Small batch
         texts = ["Text one", "Text two", "Text three"]
@@ -450,7 +460,7 @@ class TestBGEM3EmbedderBatchProcessing:
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     @patch("src.processing.embeddings.bgem3_embedder.torch")
     async def test_batch_processing_large(
-        self, mock_torch, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_torch, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test batch processing with larger batch size."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -458,7 +468,7 @@ class TestBGEM3EmbedderBatchProcessing:
         mock_torch.cuda.is_available.return_value = True
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Larger batch - 20 texts
         texts = [f"Test document number {i} with various content." for i in range(20)]
@@ -474,14 +484,14 @@ class TestBGEM3EmbedderBatchProcessing:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     async def test_batch_processing_various_text_lengths(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test batch processing with various text lengths."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         texts = [
             "Short",  # Very short
@@ -509,7 +519,7 @@ class TestBGEM3EmbedderSpecializedMethods:
         self,
         mock_torch,
         mock_flag_model_class,
-        mock_settings,
+        test_settings,
         mock_bgem3_flag_model,
         embedding_parameters,
     ):
@@ -521,7 +531,7 @@ class TestBGEM3EmbedderSpecializedMethods:
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
         embedder = BGEM3Embedder(
-            settings=mock_settings, parameters=embedding_parameters
+            settings=test_settings, parameters=embedding_parameters
         )
 
         queries = [
@@ -551,7 +561,7 @@ class TestBGEM3EmbedderSpecializedMethods:
         self,
         mock_torch,
         mock_flag_model_class,
-        mock_settings,
+        test_settings,
         mock_bgem3_flag_model,
         embedding_parameters,
     ):
@@ -563,7 +573,7 @@ class TestBGEM3EmbedderSpecializedMethods:
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
         embedder = BGEM3Embedder(
-            settings=mock_settings, parameters=embedding_parameters
+            settings=test_settings, parameters=embedding_parameters
         )
 
         corpus = [
@@ -588,14 +598,14 @@ class TestBGEM3EmbedderSpecializedMethods:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_compute_similarity_hybrid(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test hybrid similarity computation."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         queries = ["What is AI?", "How does ML work?"]
         passages = ["AI explanation text", "ML tutorial content", "Deep learning guide"]
@@ -612,14 +622,14 @@ class TestBGEM3EmbedderSpecializedMethods:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_compute_colbert_similarity(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test ColBERT similarity computation."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Mock ColBERT vectors
         colbert_vecs1 = [np.random.randn(10, 1024), np.random.randn(15, 1024)]
@@ -639,7 +649,7 @@ class TestBGEM3EmbedderErrorHandling:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     async def test_embed_texts_async_model_error(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test embedding generation handles model errors."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -647,7 +657,7 @@ class TestBGEM3EmbedderErrorHandling:
         mock_flag_model_class.return_value = mock_bgem3_flag_model
         mock_bgem3_flag_model.encode.side_effect = RuntimeError("CUDA out of memory")
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         texts = ["Test text"]
 
@@ -656,7 +666,7 @@ class TestBGEM3EmbedderErrorHandling:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     async def test_embed_single_text_async_no_embeddings(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test single text embedding handles missing embeddings."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -671,14 +681,14 @@ class TestBGEM3EmbedderErrorHandling:
 
         mock_bgem3_flag_model.encode.side_effect = mock_encode_empty
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         with pytest.raises(EmbeddingError, match="No dense embeddings generated"):
             await embedder.embed_single_text_async("Test text")
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_get_sparse_embeddings_error_handling(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test sparse embedding error handling."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -686,7 +696,7 @@ class TestBGEM3EmbedderErrorHandling:
         mock_flag_model_class.return_value = mock_bgem3_flag_model
         mock_bgem3_flag_model.encode.side_effect = ValueError("Invalid input")
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         result = embedder.get_sparse_embeddings(["Test text"])
 
@@ -695,7 +705,7 @@ class TestBGEM3EmbedderErrorHandling:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_compute_sparse_similarity_error_handling(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test sparse similarity computation error handling."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -705,7 +715,7 @@ class TestBGEM3EmbedderErrorHandling:
             "Invalid arguments"
         )
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         sparse1 = {1: 0.5}
         sparse2 = {2: 0.7}
@@ -723,7 +733,7 @@ class TestBGEM3EmbedderPerformanceStats:
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     @patch("src.processing.embeddings.bgem3_embedder.torch")
     async def test_performance_stats_tracking(
-        self, mock_torch, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_torch, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test performance statistics are tracked correctly."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -731,7 +741,7 @@ class TestBGEM3EmbedderPerformanceStats:
         mock_torch.cuda.is_available.return_value = True
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Process some texts
         await embedder.embed_texts_async(["Text 1", "Text 2"])
@@ -749,14 +759,14 @@ class TestBGEM3EmbedderPerformanceStats:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_reset_stats(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test performance statistics reset."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Simulate some usage
         embedder._embedding_count = 10
@@ -773,7 +783,7 @@ class TestBGEM3EmbedderPerformanceStats:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_model_unloading(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test model unloading and cleanup."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -785,7 +795,7 @@ class TestBGEM3EmbedderPerformanceStats:
         mock_model.to = Mock()
         mock_bgem3_flag_model.model = mock_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Set some stats
         embedder._embedding_count = 5
@@ -807,14 +817,14 @@ class TestBGEM3EmbedderDimensionValidation:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     async def test_embedding_dimension_consistency(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test all embeddings consistently return 1024 dimensions."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Test various batch sizes
         for batch_size in [1, 5, 10, 20]:
@@ -834,14 +844,14 @@ class TestBGEM3EmbedderDimensionValidation:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_embedding_dimension_validation_sync(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test dimension validation in synchronous methods."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         texts = ["Test 1", "Test 2", "Test 3"]
 
@@ -854,7 +864,7 @@ class TestBGEM3EmbedderDimensionValidation:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_settings_dimension_consistency(
-        self, mock_flag_model_class, mock_settings, mock_bgem3_flag_model
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
     ):
         """Test embedder dimension matches settings dimension."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -862,11 +872,11 @@ class TestBGEM3EmbedderDimensionValidation:
         mock_flag_model_class.return_value = mock_bgem3_flag_model
 
         # Verify settings dimension
-        assert mock_settings.embedding.dimension == 1024
+        assert test_settings.embedding.dimension == 1024
 
-        embedder = BGEM3Embedder(settings=mock_settings)
+        embedder = BGEM3Embedder(settings=test_settings)
 
         # Verify embedder uses correct dimension from settings
         # The actual BGE-M3 always produces 1024D, so this should match
         expected_dim = 1024
-        assert mock_settings.embedding.dimension == expected_dim
+        assert test_settings.embedding.dimension == expected_dim

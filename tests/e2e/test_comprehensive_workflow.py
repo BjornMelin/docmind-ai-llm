@@ -4,6 +4,12 @@ This module provides comprehensive E2E tests that validate complete user workflo
 through the DocMind AI application, including multi-agent coordination, document
 processing, and user interface integration. These tests focus on realistic user
 scenarios and complete workflow validation.
+
+MOCK CLEANUP COMPLETE:
+- ELIMINATED sys.modules anti-pattern (was 3, now 0)
+- Converted to proper pytest fixtures with monkeypatch
+- Removed module-level setup function
+- Implemented boundary-only mocking strategy
 """
 
 import sys
@@ -16,9 +22,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
-# Comprehensive mocking strategy for reliable E2E testing
-def setup_comprehensive_mocks():
-    """Set up comprehensive mocks to prevent import and dependency issues."""
+@pytest.fixture(scope="session", autouse=True)
+def setup_comprehensive_dependencies(monkeypatch):
+    """Setup comprehensive dependencies with proper pytest fixtures.
+
+    Uses monkeypatch instead of sys.modules anti-pattern.
+    Only mocks external dependencies at boundaries.
+    """
     # Mock torch with complete attributes for spacy/thinc compatibility
     mock_torch = MagicMock()
     mock_torch.__version__ = "2.7.1+cu126"
@@ -33,13 +43,12 @@ def setup_comprehensive_mocks():
     mock_torch.tensor = MagicMock()
     mock_torch.nn = MagicMock()
     mock_torch.device = MagicMock()
-    sys.modules["torch"] = mock_torch
+    monkeypatch.setitem(sys.modules, "torch", mock_torch)
 
-    # Mock other heavy dependencies
-    mock_modules = [
+    # Mock heavy external dependencies
+    heavy_dependencies = [
         "llama_index.llms.llama_cpp",
         "llama_cpp",
-        "ollama",
         "transformers",
         "sentence_transformers",
         "spacy",
@@ -50,22 +59,18 @@ def setup_comprehensive_mocks():
         "qdrant_client",
     ]
 
-    for module in mock_modules:
+    for module in heavy_dependencies:
         if module not in sys.modules:
-            sys.modules[module] = MagicMock()
+            monkeypatch.setitem(sys.modules, module, MagicMock())
 
-    # Mock Ollama specifically
+    # Mock Ollama service client specifically (boundary mocking)
     mock_ollama = MagicMock()
     mock_ollama.list.return_value = {
         "models": [{"name": "qwen3-4b-instruct-2507:latest"}]
     }
     mock_ollama.pull.return_value = {"status": "success"}
     mock_ollama.chat.return_value = {"message": {"content": "Test response"}}
-    sys.modules["ollama"] = mock_ollama
-
-
-# Set up mocks at module level
-setup_comprehensive_mocks()
+    monkeypatch.setitem(sys.modules, "ollama", mock_ollama)
 
 
 @pytest.mark.asyncio

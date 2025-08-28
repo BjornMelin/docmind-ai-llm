@@ -219,14 +219,6 @@ class TestStreamlitUIComponents:
 class TestAsyncFunctionality:
     """Test async functionality works correctly."""
 
-    @pytest.mark.asyncio
-    async def test_async_document_processing(self):
-        """Test async document processing works - SKIPPED (legacy function)."""
-        pytest.skip(
-            "Legacy async function create_index_async removed with "
-            "ADR-009 document processing architecture"
-        )
-
     def test_agent_functionality(self):
         """Test agent functionality works correctly."""
         src_path = str(PROJECT_ROOT / "src")
@@ -302,13 +294,6 @@ class TestGracefulDegradation:
         finally:
             if src_path in sys.path:
                 sys.path.remove(src_path)
-
-    def test_embedding_fallback_mechanisms(self):
-        """Test that embedding systems have fallback mechanisms."""
-        # Skip embedding utilities test - functions moved/removed in FEAT-002
-        pytest.skip(
-            "Embedding utilities test skipped - functions moved to retrieval module"
-        )
 
 
 class TestCoreIntegration:
