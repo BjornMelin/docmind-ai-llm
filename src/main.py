@@ -22,8 +22,6 @@ load_dotenv()
 # Constants
 AGENT_TIMEOUT_DIVISOR = 1000.0
 BASIC_VALIDATION_SCORE = 0.8
-DOCUMENT_TEXT_SLICE_SHORT = 500
-DOCUMENT_TEXT_SLICE_LONG = 1000
 
 
 class DocMindApplication:
@@ -132,27 +130,14 @@ class DocMindApplication:
         Returns:
             Basic RAG response.
         """
-        # Implementation of basic RAG pipeline using retrieval components
-        # Note: This is a simplified implementation placeholder
-        try:
-            # Import would be done here, but keeping it safe for now
-            # TODO: Properly integrate with retrieval system once API is stable
-            logger.info("Basic RAG pipeline requested for query: %s", query)
-
-            # Generate a basic informative response
-            content = (
-                f"Basic RAG pipeline received query: '{query}'. "
-                "This functionality requires document indexing and retrieval setup. "
-                "For full functionality, please use multi-agent mode which includes "
-                "comprehensive document analysis and retrieval capabilities."
-            )
-
-        except (ImportError, ValueError, RuntimeError) as e:
-            logger.warning("Basic RAG pipeline setup encountered issues: %s", e)
-            content = (
-                f"Basic RAG pipeline encountered an error for query: '{query}'. "
-                "Please use multi-agent mode or check your configuration."
-            )
+        # Basic RAG is deprecated - multi-agent mode should be used instead
+        logger.warning(
+            "Basic RAG pipeline is deprecated. Use multi-agent mode for full functionality."
+        )
+        content = (
+            "Basic RAG pipeline is no longer supported. "
+            "Please enable multi-agent mode for document analysis and retrieval capabilities."
+        )
 
         return AgentResponse(
             content=content,
@@ -161,39 +146,6 @@ class DocMindApplication:
             validation_score=BASIC_VALIDATION_SCORE,  # Basic confidence
             processing_time=0.0,  # Would be measured
         )
-
-    def _generate_basic_response(
-        self,
-        _query: str,
-        results: list[Any],
-    ) -> str:
-        """Generate basic response from retrieval results.
-
-        Args:
-            _query: Original query (unused in basic implementation).
-            results: Retrieved documents.
-
-        Returns:
-            Generated response text.
-        """
-        if not results:
-            return "I couldn't find relevant information to answer your query."
-
-        # Format context from results
-        context_text = "\n\n".join(
-            [
-                f"Source {i + 1}: {doc.text[:DOCUMENT_TEXT_SLICE_SHORT]}"
-                for i, doc in enumerate(results[:3])
-            ]
-        )
-
-        # Note: In production, this would use the actual LLM
-        response = (
-            f"Based on the retrieved information:\n\n"
-            f"{context_text[:DOCUMENT_TEXT_SLICE_LONG]}..."
-        )
-
-        return response
 
     async def ingest_document(
         self,
@@ -230,13 +182,10 @@ class DocMindApplication:
         """Shutdown application and cleanup resources."""
         logger.info("Shutting down DocMind AI application")
 
-        # Cleanup components
+        # Cleanup agent coordinator if present
         if self.agent_coordinator:
-            # Any cleanup needed for agents
+            # Agent coordinator handles its own cleanup
             pass
-
-        # Close connections handled by agent coordinator
-        # No explicit cleanup needed for current implementation
 
         logger.info("Shutdown complete")
 
