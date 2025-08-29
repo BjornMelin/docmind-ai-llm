@@ -128,7 +128,7 @@ class TestBatchSizeBoundaryConditions:
         # Empty batch should handle gracefully without errors
         try:
             for text in empty_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                mock_llamaindex_embedding_1024d._get_text_embedding(text)
 
             # Should not iterate at all for empty batch
             processed_count = len(empty_batch)
@@ -157,10 +157,10 @@ class TestBatchSizeBoundaryConditions:
         assert len(single_embedding) == 1024, "Both should produce 1024D embeddings"
 
         # Both should be lists of floats
-        assert all(isinstance(x, (int, float)) for x in single_embedding), (
+        assert all(isinstance(x, int | float) for x in single_embedding), (
             "Single embedding should be numeric"
         )
-        assert all(isinstance(x, (int, float)) for x in batch_embedding), (
+        assert all(isinstance(x, int | float) for x in batch_embedding), (
             "Batch embedding should be numeric"
         )
 
@@ -189,7 +189,7 @@ class TestBatchSizeBoundaryConditions:
                 assert len(embedding) == 1024, (
                     f"Item {i} in size-{size} batch should be 1024D"
                 )
-                assert all(isinstance(x, (int, float)) for x in embedding), (
+                assert all(isinstance(x, int | float) for x in embedding), (
                     f"Item {i} should be numeric"
                 )
 
@@ -265,7 +265,7 @@ class TestLargeBatchProcessing:
         # Validate all processed embeddings
         for i, embedding in enumerate(processed_embeddings):
             assert len(embedding) == 1024, f"Large batch item {i} should be 1024D"
-            assert all(isinstance(x, (int, float)) for x in embedding), (
+            assert all(isinstance(x, int | float) for x in embedding), (
                 f"Large batch item {i} should be numeric"
             )
 
@@ -331,7 +331,7 @@ class TestLargeBatchProcessing:
         # Process same batch multiple times
         all_runs = []
 
-        for run in range(3):
+        for _run in range(3):
             run_embeddings = []
             for text in large_batch:
                 embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
@@ -366,7 +366,7 @@ class TestMixedContentBatchProcessing:
         # All embeddings should be 1024D regardless of input length
         for i, embedding in enumerate(embeddings):
             assert len(embedding) == 1024, f"Mixed length item {i} should be 1024D"
-            assert all(isinstance(x, (int, float)) for x in embedding), (
+            assert all(isinstance(x, int | float) for x in embedding), (
                 f"Mixed length item {i} should be numeric"
             )
 
@@ -387,7 +387,7 @@ class TestMixedContentBatchProcessing:
 
         for i, embedding in enumerate(processed_embeddings):
             assert len(embedding) == 1024, f"Special content item {i} should be 1024D"
-            assert all(isinstance(x, (int, float)) for x in embedding), (
+            assert all(isinstance(x, int | float) for x in embedding), (
                 f"Special content item {i} should be numeric"
             )
 
@@ -479,7 +479,7 @@ class TestBatchDimensionValidation:
 
         # Validate embedding content
         embedding = single_batch[0]
-        assert all(isinstance(x, (int, float)) for x in embedding), (
+        assert all(isinstance(x, int | float) for x in embedding), (
             "Embedding values should be numeric"
         )
 
@@ -498,7 +498,7 @@ class TestBatchDimensionValidation:
                 assert len(embedding) == expected_dim, (
                     f"{batch_name} item {i} should be {expected_dim}D"
                 )
-                assert all(isinstance(x, (int, float)) for x in embedding), (
+                assert all(isinstance(x, int | float) for x in embedding), (
                     f"{batch_name} item {i} should be numeric"
                 )
 
@@ -619,7 +619,7 @@ class TestBatchProcessingContracts:
 
         # Process batch multiple times
         results = []
-        for run in range(3):
+        for _run in range(3):
             run_results = []
             for text in test_texts:
                 embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)

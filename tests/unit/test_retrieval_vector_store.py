@@ -185,7 +185,7 @@ class TestQdrantUnifiedVectorStoreInitialization:
         collections_response.collections = []
         mock_qdrant_client.get_collections.return_value = collections_response
 
-        store = QdrantUnifiedVectorStore(collection_name="new_collection")
+        QdrantUnifiedVectorStore(collection_name="new_collection")
 
         # Verify collection creation was called
         mock_qdrant_client.create_collection.assert_called_once()
@@ -210,7 +210,7 @@ class TestQdrantUnifiedVectorStoreInitialization:
         collections_response.collections = [existing_collection]
         mock_qdrant_client.get_collections.return_value = collections_response
 
-        store = QdrantUnifiedVectorStore(collection_name="existing_collection")
+        QdrantUnifiedVectorStore(collection_name="existing_collection")
 
         # Should not create new collection
         mock_qdrant_client.create_collection.assert_not_called()
@@ -232,7 +232,7 @@ class TestQdrantUnifiedVectorStoreInitialization:
             collections_response,
         ]
 
-        store = QdrantUnifiedVectorStore()
+        QdrantUnifiedVectorStore()
 
         # Should have retried
         assert mock_qdrant_client.get_collections.call_count == 2
@@ -917,7 +917,7 @@ class TestVectorStorePerformance:
         dense_embedding = np.random.randn(1024).tolist()
         sparse_embedding = {100: 0.8}
 
-        result = store.query(
+        store.query(
             query=query,
             dense_embedding=dense_embedding,
             sparse_embedding=sparse_embedding,

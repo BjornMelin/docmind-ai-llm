@@ -48,7 +48,7 @@ class TestDocumentProcessorBasics:
         expected_chunk_size = settings.processing.chunk_size
 
         with patch("src.processing.document_processor.UnstructuredLoader"):
-            processor = DocumentProcessor(settings)
+            DocumentProcessor(settings)
 
             # Test that processor respects settings configuration
             assert settings.processing.chunk_size == expected_chunk_size

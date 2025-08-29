@@ -395,9 +395,7 @@ class TestDSPyConfigurationEdgeCases:
                     # Test optimization with edge case configuration
                     if case["max_variants"] == 0:
                         # Should skip variant generation entirely
-                        with patch.object(
-                            retriever, "variant_generator"
-                        ) as mock_variant_gen:
+                        with patch.object(retriever, "variant_generator"):
                             retriever.optimization_enabled = True
                             retriever.query_refiner = Mock(
                                 return_value=Mock(refined_query="refined")

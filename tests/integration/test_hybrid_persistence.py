@@ -347,9 +347,8 @@ class TestHybridPersistenceManagerTransactions:
         # Mock an error during vector storage
         with patch.object(
             manager, "_store_vectors", side_effect=Exception("Vector storage failed")
-        ):
-            with pytest.raises(PersistenceError):
-                await manager.store_document(invalid_metadata, [])
+        ), pytest.raises(PersistenceError):
+            await manager.store_document(invalid_metadata, [])
 
         # Verify document was not stored due to rollback
         cursor = manager.sqlite_connection.cursor()

@@ -245,7 +245,7 @@ class TestPropertyGraphIndexConstruction:
                                 return_value=mock_index
                             )
 
-                            index = create_property_graph_index(
+                            create_property_graph_index(
                                 documents=mock_documents,
                                 llm=mock_llm,
                                 vector_store=mock_vector_store,

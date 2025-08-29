@@ -616,14 +616,14 @@ class TestAdaptiveRouterQueryEngineFactories:
         self, mock_vector_index, mock_llm_for_routing
     ):
         """Test router settings configuration handles failures gracefully."""
-        router_engine = AdaptiveRouterQueryEngine(
+        AdaptiveRouterQueryEngine(
             vector_index=mock_vector_index,
             llm=mock_llm_for_routing,
         )
 
         # Mock a configuration failure scenario
         with (
-            patch("src.retrieval.query_engine.logger.error") as mock_logger_error,
+            patch("src.retrieval.query_engine.logger.error"),
             pytest.raises(Exception),
         ):
             # Force an error during configuration

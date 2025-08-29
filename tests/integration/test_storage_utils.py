@@ -32,23 +32,28 @@ from src.utils.storage import (
     sync_model_context,
     test_connection,
 )
+from tests.fixtures.test_settings import IntegrationTestSettings
 
 
 @pytest.fixture
-def mock_settings():
-    """Create mock settings for testing."""
-    settings = Mock()
-    settings.database.qdrant_url = "http://localhost:6333"
-    settings.database.qdrant_timeout = 30
-    settings.embedding.dimension = 1024
-    settings.monitoring.default_batch_size = 100
-    settings.monitoring.bytes_to_gb_divisor = 1024**3
-    return settings
+def integration_settings():
+    """Create real integration test settings - NO MOCKING.
+
+    MOCK REDUCTION: Real Pydantic object instead of Mock() hierarchy.
+    """
+    return IntegrationTestSettings(
+        database={"qdrant_url": "http://localhost:6333", "qdrant_timeout": 30},
+        embedding={"dimension": 1024},
+        monitoring={"default_batch_size": 100, "bytes_to_gb_divisor": 1024**3},
+    )
 
 
 @pytest.fixture
 def mock_qdrant_client():
-    """Create mock Qdrant client for testing."""
+    """Create mock Qdrant client for testing - BOUNDARY MOCK ONLY.
+
+    MOCK REDUCTION: Kept as boundary mock for external Qdrant service.
+    """
     client = Mock()
     client.close = Mock()
     client.collection_exists = Mock(return_value=False)
@@ -64,17 +69,17 @@ class TestQdrantClientManagement:
 
     @pytest.mark.integration
     @patch("src.utils.storage.QdrantClient")
-    def test_create_sync_client_success(self, mock_client_class, mock_settings):
+    def test_create_sync_client_success(self, mock_client_class, integration_settings):
         """Test successful sync client creation."""
         mock_client = Mock()
         mock_client_class.return_value = mock_client
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             with create_sync_client() as client:
                 assert client == mock_client
                 mock_client_class.assert_called_once_with(
-                    url=mock_settings.database.qdrant_url,
-                    timeout=mock_settings.database.qdrant_timeout,
+                    url=integration_settings.database.qdrant_url,
+                    timeout=integration_settings.database.qdrant_timeout,
                     prefer_grpc=True,
                 )
 
@@ -87,23 +92,22 @@ class TestQdrantClientManagement:
         """Test sync client creation with connection error."""
         mock_client_class.side_effect = ConnectionError("Cannot connect to Qdrant")
 
-        with pytest.raises(ConnectionError):
-            with create_sync_client():
-                pass
+        with pytest.raises(ConnectionError), create_sync_client():
+            pass
 
     @pytest.mark.integration
     @patch("src.utils.storage.QdrantClient")
     def test_create_sync_client_cleanup_on_error(
-        self, mock_client_class, mock_settings
+        self, mock_client_class, integration_settings
     ):
         """Test sync client cleanup when error occurs during context."""
         mock_client = Mock()
         mock_client.close.side_effect = ConnectionError("Close failed")
         mock_client_class.return_value = mock_client
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             try:
-                with create_sync_client() as client:
+                with create_sync_client():
                     raise ValueError("Test error")
             except ValueError:
                 pass
@@ -113,17 +117,19 @@ class TestQdrantClientManagement:
 
     @pytest.mark.integration
     @patch("src.utils.storage.AsyncQdrantClient")
-    async def test_create_async_client_success(self, mock_client_class, mock_settings):
+    async def test_create_async_client_success(
+        self, mock_client_class, integration_settings
+    ):
         """Test successful async client creation."""
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             async with create_async_client() as client:
                 assert client == mock_client
                 mock_client_class.assert_called_once_with(
-                    url=mock_settings.database.qdrant_url,
-                    timeout=mock_settings.database.qdrant_timeout,
+                    url=integration_settings.database.qdrant_url,
+                    timeout=integration_settings.database.qdrant_timeout,
                     prefer_grpc=True,
                 )
 
@@ -147,7 +153,7 @@ class TestHybridCollectionSetup:
     @pytest.mark.integration
     @patch("src.utils.storage.QdrantVectorStore")
     async def test_setup_hybrid_collection_async_new_collection(
-        self, mock_vector_store_class, mock_settings
+        self, mock_vector_store_class, integration_settings
     ):
         """Test async hybrid collection setup for new collection."""
         mock_client = AsyncMock()
@@ -157,8 +163,8 @@ class TestHybridCollectionSetup:
         mock_vector_store = Mock()
         mock_vector_store_class.return_value = mock_vector_store
 
-        with patch("src.utils.storage.settings", mock_settings):
-            with patch("src.utils.storage.QdrantClient") as mock_sync_client:
+        with patch("src.utils.storage.settings", integration_settings):
+            with patch("src.utils.storage.QdrantClient"):
                 result = await setup_hybrid_collection_async(
                     mock_client, "test_collection", dense_embedding_size=1024
                 )
@@ -170,7 +176,7 @@ class TestHybridCollectionSetup:
     @pytest.mark.integration
     @patch("src.utils.storage.QdrantVectorStore")
     async def test_setup_hybrid_collection_async_existing_collection(
-        self, mock_vector_store_class, mock_settings
+        self, mock_vector_store_class, integration_settings
     ):
         """Test async hybrid collection setup for existing collection."""
         mock_client = AsyncMock()
@@ -179,7 +185,7 @@ class TestHybridCollectionSetup:
         mock_vector_store = Mock()
         mock_vector_store_class.return_value = mock_vector_store
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             with patch("src.utils.storage.QdrantClient"):
                 result = await setup_hybrid_collection_async(
                     mock_client, "existing_collection"
@@ -194,7 +200,7 @@ class TestHybridCollectionSetup:
     @pytest.mark.integration
     @patch("src.utils.storage.QdrantVectorStore")
     async def test_setup_hybrid_collection_async_recreate(
-        self, mock_vector_store_class, mock_settings
+        self, mock_vector_store_class, integration_settings
     ):
         """Test async hybrid collection setup with recreation."""
         mock_client = AsyncMock()
@@ -205,7 +211,7 @@ class TestHybridCollectionSetup:
         mock_vector_store = Mock()
         mock_vector_store_class.return_value = mock_vector_store
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             with patch("src.utils.storage.QdrantClient"):
                 result = await setup_hybrid_collection_async(
                     mock_client, "recreate_collection", recreate=True
@@ -219,7 +225,9 @@ class TestHybridCollectionSetup:
 
     @pytest.mark.integration
     @patch("src.utils.storage.QdrantVectorStore")
-    def test_setup_hybrid_collection_sync(self, mock_vector_store_class, mock_settings):
+    def test_setup_hybrid_collection_sync(
+        self, mock_vector_store_class, integration_settings
+    ):
         """Test sync hybrid collection setup."""
         mock_client = Mock()
         mock_client.collection_exists.return_value = False
@@ -227,7 +235,7 @@ class TestHybridCollectionSetup:
         mock_vector_store = Mock()
         mock_vector_store_class.return_value = mock_vector_store
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             result = setup_hybrid_collection(mock_client, "sync_collection")
 
             assert result == mock_vector_store
@@ -284,7 +292,7 @@ class TestDatabaseOperations:
 
     @pytest.mark.integration
     @patch("src.utils.storage.create_sync_client")
-    def test_test_connection_success(self, mock_create_client, mock_settings):
+    def test_test_connection_success(self, mock_create_client, integration_settings):
         """Test successful database connection test."""
         mock_client = Mock()
         mock_collections = Mock()
@@ -299,26 +307,26 @@ class TestDatabaseOperations:
         mock_context_manager.__exit__.return_value = None
         mock_create_client.return_value = mock_context_manager
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             result = test_connection()
 
             assert result["connected"] is True
-            assert result["url"] == mock_settings.database.qdrant_url
+            assert result["url"] == integration_settings.database.qdrant_url
             assert result["collections_count"] == 2
             assert "collection1" in result["collections"]
             assert "collection2" in result["collections"]
 
     @pytest.mark.integration
     @patch("src.utils.storage.create_sync_client")
-    def test_test_connection_failure(self, mock_create_client, mock_settings):
+    def test_test_connection_failure(self, mock_create_client, integration_settings):
         """Test database connection test failure."""
         mock_create_client.side_effect = ConnectionError("Connection failed")
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             result = test_connection()
 
             assert result["connected"] is False
-            assert result["url"] == mock_settings.database.qdrant_url
+            assert result["url"] == integration_settings.database.qdrant_url
             assert "error" in result
 
     @pytest.mark.integration
@@ -619,8 +627,8 @@ class TestCUDAErrorHandling:
         mock_cuda_available.return_value = True
         mock_memory_allocated.return_value = 1024**3  # 1GB
 
-        with patch("src.utils.storage.settings") as mock_settings:
-            mock_settings.monitoring.bytes_to_gb_divisor = 1024**3
+        with patch("src.utils.storage.settings") as integration_settings:
+            integration_settings.monitoring.bytes_to_gb_divisor = 1024**3
             vram = get_safe_vram_usage()
             assert vram == 1.0
 
@@ -659,8 +667,8 @@ class TestCUDAErrorHandling:
 
         mock_memory_allocated.return_value = 12 * 1024**3  # 12GB
 
-        with patch("src.utils.storage.settings") as mock_settings:
-            mock_settings.monitoring.bytes_to_gb_divisor = 1024**3
+        with patch("src.utils.storage.settings") as integration_settings:
+            integration_settings.monitoring.bytes_to_gb_divisor = 1024**3
 
             info = get_safe_gpu_info()
 
@@ -693,7 +701,7 @@ class TestVectorStoreCreation:
     @patch("src.utils.storage.QdrantClient")
     @patch("src.utils.storage.QdrantVectorStore")
     def test_create_vector_store_success(
-        self, mock_vector_store_class, mock_client_class, mock_settings
+        self, mock_vector_store_class, mock_client_class, integration_settings
     ):
         """Test successful vector store creation."""
         mock_client = Mock()
@@ -702,25 +710,25 @@ class TestVectorStoreCreation:
         mock_vector_store = Mock()
         mock_vector_store_class.return_value = mock_vector_store
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             result = create_vector_store("test_collection", enable_hybrid=True)
 
             assert result == mock_vector_store
             mock_client_class.assert_called_once_with(
-                url=mock_settings.database.qdrant_url
+                url=integration_settings.database.qdrant_url
             )
             mock_vector_store_class.assert_called_once_with(
                 client=mock_client,
                 collection_name="test_collection",
                 enable_hybrid=True,
-                batch_size=mock_settings.monitoring.default_batch_size,
+                batch_size=integration_settings.monitoring.default_batch_size,
             )
 
     @pytest.mark.integration
     @patch("src.utils.storage.QdrantClient")
     @patch("src.utils.storage.QdrantVectorStore")
     def test_create_vector_store_hybrid_disabled(
-        self, mock_vector_store_class, mock_client_class, mock_settings
+        self, mock_vector_store_class, mock_client_class, integration_settings
     ):
         """Test vector store creation with hybrid disabled."""
         mock_client = Mock()
@@ -729,7 +737,7 @@ class TestVectorStoreCreation:
         mock_vector_store = Mock()
         mock_vector_store_class.return_value = mock_vector_store
 
-        with patch("src.utils.storage.settings", mock_settings):
+        with patch("src.utils.storage.settings", integration_settings):
             result = create_vector_store("simple_collection", enable_hybrid=False)
 
             assert result == mock_vector_store
@@ -737,5 +745,5 @@ class TestVectorStoreCreation:
                 client=mock_client,
                 collection_name="simple_collection",
                 enable_hybrid=False,
-                batch_size=mock_settings.monitoring.default_batch_size,
+                batch_size=integration_settings.monitoring.default_batch_size,
             )

@@ -49,7 +49,7 @@ class TestBGEM3EmbedderBasics:
         expected_dim = 1024
 
         with patch("src.processing.embeddings.bgem3_embedder.FlagModel"):
-            embedder = BGEM3EmbeddingManager(settings)
+            BGEM3EmbeddingManager(settings)
             # Test that the expected dimension matches settings
             assert settings.embedding.dimension == expected_dim
 

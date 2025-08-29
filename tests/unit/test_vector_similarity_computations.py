@@ -84,7 +84,7 @@ class TestCosineSimilarityComputations:
                     assert -1.0 <= cosine_sim <= 1.0, (
                         f"Cosine similarity should be in [-1,1], got {cosine_sim}"
                     )
-                    assert isinstance(cosine_sim, (int, float, np.number)), (
+                    assert isinstance(cosine_sim, int | float | np.number), (
                         "Cosine similarity should be numeric"
                     )
 
@@ -179,7 +179,7 @@ class TestCosineSimilarityComputations:
             assert -1.0 <= sim <= 1.0, (
                 f"Batch similarity should be in [-1,1], got {sim}"
             )
-            assert isinstance(sim, (int, float, np.number)), (
+            assert isinstance(sim, int | float | np.number), (
                 "Batch similarity should be numeric"
             )
 
@@ -198,7 +198,7 @@ class TestDotProductSimilarityComputations:
 
                 dot_product = np.dot(vec1, vec2)
 
-                assert isinstance(dot_product, (int, float, np.number)), (
+                assert isinstance(dot_product, int | float | np.number), (
                     "Dot product should be numeric"
                 )
 
@@ -239,7 +239,7 @@ class TestDotProductSimilarityComputations:
         assert len(batch_dot_products) == 5, "Should have 5 dot products"
 
         for dot_prod in batch_dot_products:
-            assert isinstance(dot_prod, (int, float, np.number)), (
+            assert isinstance(dot_prod, int | float | np.number), (
                 "Batch dot product should be numeric"
             )
 
@@ -268,7 +268,7 @@ class TestEuclideanDistanceComputations:
                 assert distance >= 0.0, (
                     f"Distance should be non-negative, got {distance}"
                 )
-                assert isinstance(distance, (int, float, np.number)), (
+                assert isinstance(distance, int | float | np.number), (
                     "Distance should be numeric"
                 )
 
@@ -341,9 +341,7 @@ class TestSparseEmbeddingSimilarity:
         )
 
         assert overlap_score > 0.0, "Should have positive overlap"
-        assert isinstance(overlap_score, (int, float)), (
-            "Overlap score should be numeric"
-        )
+        assert isinstance(overlap_score, int | float), "Overlap score should be numeric"
 
     def test_sparse_jaccard_similarity(self, sparse_embedding_samples):
         """Test Jaccard similarity for sparse embeddings."""
@@ -396,7 +394,7 @@ class TestSparseEmbeddingSimilarity:
         # Identical embeddings should have maximum overlap
         overlap_score = sum(
             min(sparse_identical[token], sparse_identical[token])
-            for token in sparse_identical.keys()
+            for token in sparse_identical
         )
         expected_score = sum(sparse_identical.values())
 
@@ -452,7 +450,7 @@ class TestSparseEmbeddingSimilarity:
 
         for sim in similarities:
             assert sim >= 0.0, "Similarities should be non-negative"
-            assert isinstance(sim, (int, float)), "Similarities should be numeric"
+            assert isinstance(sim, int | float), "Similarities should be numeric"
 
 
 @pytest.mark.unit
@@ -618,7 +616,7 @@ class TestPerformanceBounds:
         )
 
         for sim in batch_similarities:
-            assert isinstance(sim, (int, float, np.number)), (
+            assert isinstance(sim, int | float | np.number), (
                 "All similarities should be numeric"
             )
 
@@ -686,7 +684,7 @@ class TestEdgeCaseSimilarityComputations:
         # Compute similarity
         dot_product = np.dot(float32_vector, float64_vector)
 
-        assert isinstance(dot_product, (int, float, np.number)), (
+        assert isinstance(dot_product, int | float | np.number), (
             "Mixed precision should work"
         )
         assert np.isfinite(dot_product), "Mixed precision result should be finite"

@@ -63,11 +63,9 @@ class TestAgentCoordinationPerformance:
                 mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
                 # Simulate agent coordination sequence
-                route_result = route_query(f"Test query {i}", state=mock_state)
-                plan_result = plan_query(f"Test query {i}", state=mock_state)
-                retrieval_result = retrieve_documents(
-                    f"Test query {i}", state=mock_state
-                )
+                route_query(f"Test query {i}", state=mock_state)
+                plan_query(f"Test query {i}", state=mock_state)
+                retrieve_documents(f"Test query {i}", state=mock_state)
 
             coordination_time = (
                 time.perf_counter() - start_time
@@ -275,33 +273,27 @@ class TestAgentCoordinationPerformance:
 
             # Test routing agent latency
             start_time = time.perf_counter()
-            route_result = route_query("Latency test query", state=mock_state)
+            route_query("Latency test query", state=mock_state)
             agent_latencies["routing"] = (time.perf_counter() - start_time) * 1000
 
             # Test planning agent latency
             start_time = time.perf_counter()
-            plan_result = plan_query("Latency test query", state=mock_state)
+            plan_query("Latency test query", state=mock_state)
             agent_latencies["planning"] = (time.perf_counter() - start_time) * 1000
 
             # Test retrieval agent latency
             start_time = time.perf_counter()
-            retrieval_result = retrieve_documents(
-                "Latency test query", state=mock_state
-            )
+            retrieve_documents("Latency test query", state=mock_state)
             agent_latencies["retrieval"] = (time.perf_counter() - start_time) * 1000
 
             # Test synthesis agent latency
             start_time = time.perf_counter()
-            synthesis_result = synthesize_results(
-                "Latency test query", [{"content": "test"}], mock_state
-            )
+            synthesize_results("Latency test query", [{"content": "test"}], mock_state)
             agent_latencies["synthesis"] = (time.perf_counter() - start_time) * 1000
 
             # Test validation agent latency
             start_time = time.perf_counter()
-            validation_result = validate_response(
-                "Latency test query", "Test response", mock_state
-            )
+            validate_response("Latency test query", "Test response", mock_state)
             agent_latencies["validation"] = (time.perf_counter() - start_time) * 1000
 
         # Then: Individual agent latencies meet performance targets
@@ -425,7 +417,6 @@ class TestAsyncCoordinationPerformance:
     async def test_async_coordination_performance_benchmarks(self):
         """Test async coordination performance benchmarks."""
         # Given: Async coordination setup
-        async_operations = []
 
         async def mock_agent_operation(name: str, delay: float):
             """Mock async agent operation with controlled delay."""
@@ -466,7 +457,6 @@ class TestAsyncCoordinationPerformance:
     async def test_async_resource_utilization_efficiency(self):
         """Test async resource utilization efficiency."""
         # Given: Multiple resource-intensive operations
-        resource_operations = []
 
         async def resource_intensive_operation(resource_id: str, duration: float):
             """Simulate resource-intensive async operation."""

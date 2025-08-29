@@ -111,7 +111,7 @@ class TestGenerateImageEmbeddings:
             np.testing.assert_array_equal(result, raw_embedding)
 
     @pytest.mark.parametrize(
-        "embedding_input,expected_shape",
+        ("embedding_input", "expected_shape"),
         [
             (np.random.rand(512), (512,)),
             (np.random.rand(256), (256,)),
@@ -187,7 +187,7 @@ class TestValidateVramUsage:
         assert mock_clip.get_image_embedding.call_count <= MAX_TEST_IMAGES
 
     @pytest.mark.parametrize(
-        "exception_type,expected_result",
+        ("exception_type", "expected_result"),
         [
             (RuntimeError("CUDA out of memory"), 0.0),
             (ValueError("Invalid image"), 0.0),
@@ -337,7 +337,7 @@ class TestCrossModalSearch:
         assert results == []
 
     @pytest.mark.parametrize(
-        "search_type,query,query_image,expected_calls",
+        ("search_type", "query", "query_image", "expected_calls"),
         [
             ("text_to_image", "sunset", None, "as_query_engine"),
             ("image_to_image", None, Mock(spec=Image.Image), "as_retriever"),
@@ -403,11 +403,10 @@ class TestValidateEndToEndPipeline:
         with patch(
             "src.utils.multimodal.generate_image_embeddings",
             return_value=test_embedding,
-        ):
-            with patch("time.perf_counter", side_effect=[0.0, 2.5]):
-                result = await validate_end_to_end_pipeline(
-                    query, mock_query_image, mock_clip, mock_property_graph, mock_llm
-                )
+        ), patch("time.perf_counter", side_effect=[0.0, 2.5]):
+            result = await validate_end_to_end_pipeline(
+                query, mock_query_image, mock_clip, mock_property_graph, mock_llm
+            )
 
         # Verify result structure
         assert "visual_similarity" in result
@@ -436,11 +435,10 @@ class TestValidateEndToEndPipeline:
         with patch(
             "src.utils.multimodal.generate_image_embeddings",
             return_value=test_embedding,
-        ):
-            with patch("time.perf_counter", side_effect=[0.0, 1.0]):
-                result = await validate_end_to_end_pipeline(
-                    query, mock_query_image, mock_clip, mock_property_graph, mock_llm
-                )
+        ), patch("time.perf_counter", side_effect=[0.0, 1.0]):
+            result = await validate_end_to_end_pipeline(
+                query, mock_query_image, mock_clip, mock_property_graph, mock_llm
+            )
 
         # Verify entity relationships
         entities = result["entity_relationships"]["entities_found"]
@@ -462,11 +460,10 @@ class TestValidateEndToEndPipeline:
         with patch(
             "src.utils.multimodal.generate_image_embeddings",
             return_value=np.array([1.0]),
-        ):
-            with patch("time.perf_counter", side_effect=[0.0, 0.5]):
-                result = await validate_end_to_end_pipeline(
-                    query, mock_query_image, mock_clip, mock_property_graph, mock_llm
-                )
+        ), patch("time.perf_counter", side_effect=[0.0, 0.5]):
+            result = await validate_end_to_end_pipeline(
+                query, mock_query_image, mock_clip, mock_property_graph, mock_llm
+            )
 
         # Verify response contains query
         assert query in result["final_response"]
@@ -628,7 +625,7 @@ class TestBatchProcessImages:
         mock_tensor.cpu.assert_called_once()
 
     @pytest.mark.parametrize(
-        "error_type,expected_zero_embeddings",
+        ("error_type", "expected_zero_embeddings"),
         [
             (RuntimeError("CUDA error"), 1),
             (ValueError("Invalid image format"), 1),

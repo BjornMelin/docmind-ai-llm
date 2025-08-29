@@ -45,7 +45,7 @@ class TestCacheInterfaceStructure:
         get_doc_sig = inspect.signature(CacheInterface.get_document)
         assert len(get_doc_sig.parameters) == 2  # self + path
         assert "path" in get_doc_sig.parameters
-        assert get_doc_sig.parameters["path"].annotation == str
+        assert get_doc_sig.parameters["path"].annotation is str
         assert get_doc_sig.return_annotation == Any | None
 
         # Test store_document signature
@@ -53,14 +53,14 @@ class TestCacheInterfaceStructure:
         assert len(store_doc_sig.parameters) == 3  # self + path + result
         assert "path" in store_doc_sig.parameters
         assert "result" in store_doc_sig.parameters
-        assert store_doc_sig.parameters["path"].annotation == str
+        assert store_doc_sig.parameters["path"].annotation is str
         assert store_doc_sig.parameters["result"].annotation == Any
-        assert store_doc_sig.return_annotation == bool
+        assert store_doc_sig.return_annotation is bool
 
         # Test clear_cache signature
         clear_sig = inspect.signature(CacheInterface.clear_cache)
         assert len(clear_sig.parameters) == 1  # self only
-        assert clear_sig.return_annotation == bool
+        assert clear_sig.return_annotation is bool
 
         # Test get_cache_stats signature
         stats_sig = inspect.signature(CacheInterface.get_cache_stats)

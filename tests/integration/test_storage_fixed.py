@@ -318,9 +318,8 @@ class TestHybridPersistenceManagerErrorHandling:
         invalid_settings.database.qdrant_url = "http://localhost:6333"
         invalid_settings.database.qdrant_timeout = 30
 
-        with patch("asyncio.create_task"):
-            with pytest.raises(PersistenceError):
-                HybridPersistenceManager(invalid_settings)
+        with patch("asyncio.create_task"), pytest.raises(PersistenceError):
+            HybridPersistenceManager(invalid_settings)
 
     @pytest.mark.integration
     async def test_connection_error_handling(self, mock_settings):

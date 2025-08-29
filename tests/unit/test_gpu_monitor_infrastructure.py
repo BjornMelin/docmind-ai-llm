@@ -106,7 +106,7 @@ class TestGPUMemoryCalculationEdgeCases:
 
             # Should handle division by zero gracefully
             with pytest.raises(ZeroDivisionError):
-                async with gpu_performance_monitor() as metrics:
+                async with gpu_performance_monitor():
                     pass  # Should raise before yielding
 
     @pytest.mark.unit
@@ -265,7 +265,7 @@ class TestGPUContextManagerLifecycle:
             mock_props.return_value = mock_device
 
             # Create and destroy contexts rapidly
-            for i in range(50):
+            for _i in range(50):
                 async with gpu_performance_monitor() as metrics:
                     assert metrics is not None
                     assert metrics.device_name == "Rapid GPU"
@@ -306,12 +306,11 @@ class TestGPUErrorHandlingScenarios:
         with patch(
             "torch.cuda.current_device",
             side_effect=RuntimeError("CUDA driver not found"),
-        ):
-            with patch("torch.cuda.is_available", return_value=True):
-                # Should propagate CUDA driver errors
-                with pytest.raises(RuntimeError, match="CUDA driver not found"):
-                    async with gpu_performance_monitor() as metrics:
-                        pass
+        ), patch("torch.cuda.is_available", return_value=True):
+            # Should propagate CUDA driver errors
+            with pytest.raises(RuntimeError, match="CUDA driver not found"):
+                async with gpu_performance_monitor():
+                    pass
 
     @pytest.mark.unit
     async def test_out_of_memory_during_monitoring(self):
@@ -333,7 +332,7 @@ class TestGPUErrorHandlingScenarios:
 
             # Should propagate CUDA OOM errors
             with pytest.raises(RuntimeError, match="CUDA out of memory"):
-                async with gpu_performance_monitor() as metrics:
+                async with gpu_performance_monitor():
                     pass
 
     @pytest.mark.unit
@@ -349,7 +348,7 @@ class TestGPUErrorHandlingScenarios:
         ):
             # Should propagate device busy errors
             with pytest.raises(RuntimeError, match="Device busy"):
-                async with gpu_performance_monitor() as metrics:
+                async with gpu_performance_monitor():
                     pass
 
 

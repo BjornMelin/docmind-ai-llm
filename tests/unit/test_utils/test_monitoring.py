@@ -137,7 +137,7 @@ class TestLogErrorWithContext:
             assert call_args["retry_count"] == 3
 
     @pytest.mark.parametrize(
-        "exception_type,expected_type_name",
+        ("exception_type", "expected_type_name"),
         [
             (ValueError("test"), "ValueError"),
             (TypeError("test"), "TypeError"),
@@ -197,7 +197,7 @@ class TestLogPerformance:
             assert call_args["memory_used_mb"] == 45.2
 
     @pytest.mark.parametrize(
-        "duration,expected_seconds,expected_ms",
+        ("duration", "expected_seconds", "expected_ms"),
         [
             (0.001, 0.001, 1.0),
             (0.1234, 0.123, 123.4),
@@ -256,7 +256,7 @@ class TestPerformanceTimer:
 
         with patch("src.utils.monitoring.log_performance") as mock_log_perf:
             with pytest.raises(ValueError, match="test exception"):
-                with performance_timer("failing_operation") as metrics:
+                with performance_timer("failing_operation"):
                     raise ValueError("test exception")
 
             # Should still log performance with error info
@@ -620,10 +620,104 @@ class TestGetPerformanceMonitor:
 
 @pytest.mark.unit
 class TestMonitoringUtilsEdgeCases:
+    """Test edge cases and boundary conditions for monitoring utilities."""
+
+    @pytest.mark.parametrize(
+        ("duration", "expected_ms"),
+        [
+            (0.0, 0.0),
+            (0.0001, 0.1),
+            (1e-6, 0.0),  # Very small duration
+            (3600.0, 3600000.0),  # 1 hour
+            (86400.0, 86400000.0),  # 1 day
+        ],
+    )
+    def test_log_performance_duration_extremes(self, duration, expected_ms):
+        """Test performance logging with extreme duration values."""
+        with patch("src.utils.monitoring.logger") as mock_logger:
+            log_performance("test_op", duration)
+
+            call_args = mock_logger.info.call_args[1]
+            assert call_args["duration_ms"] == expected_ms
+
+    @pytest.mark.parametrize(
+        ("operation", "should_work"),
+        [
+            ("", True),  # Empty string
+            ("test_op", True),  # Normal
+            ("op with spaces", True),  # Spaces
+            ("op/with/slashes", True),  # Special chars
+            ("op" * 1000, True),  # Very long
+            (None, False),  # None value
+        ],
+    )
+    def test_log_performance_operation_names(self, operation, should_work):
+        """Test performance logging with various operation names."""
+        with patch("src.utils.monitoring.logger") as mock_logger:
+            try:
+                log_performance(operation, 1.0)
+                if should_work:
+                    mock_logger.info.assert_called_once()
+                    call_args = mock_logger.info.call_args[1]
+                    assert call_args["operation"] == operation
+            except (TypeError, AttributeError):
+                assert not should_work
+
+    @patch("psutil.Process")
+    def test_get_memory_usage_extreme_values(self, mock_process_class):
+        """Test memory usage with extreme values."""
+        test_cases = [
+            (0, 0.0),  # Zero memory
+            (1024, 0.0),  # 1KB - should round to 0.0
+            (2**63 - 1, 8796093022208.0),  # Max signed 64-bit
+        ]
+
+        for memory_bytes, expected_mb in test_cases:
+            mock_process = Mock()
+            mock_process.memory_info.return_value = Mock(
+                rss=memory_bytes, vms=memory_bytes
+            )
+            mock_process.memory_percent.return_value = 1.0
+            mock_process_class.return_value = mock_process
+
+            result = get_memory_usage()
+            assert result["rss_mb"] == expected_mb
+            assert result["vms_mb"] == expected_mb
+
+    def test_simple_performance_monitor_concurrent_operations(self):
+        """Test performance monitor with many concurrent operations."""
+        monitor = SimplePerformanceMonitor()
+
+        # Record many operations quickly
+        with patch("src.utils.monitoring.log_performance"):
+            for i in range(100):
+                monitor.record_operation(f"op_{i}", i * 0.01, success=(i % 2 == 0))
+
+        summary = monitor.get_summary()
+        assert summary["total_operations"] == 100
+        assert summary["successful_operations"] == 50  # Half should be successful
+
+    @pytest.mark.asyncio
+    async def test_async_performance_timer_nested_context(self):
+        """Test async performance timer with nested context managers."""
+        with patch("time.perf_counter", side_effect=[0.0, 1.0, 2.0, 3.0]):
+            with patch("psutil.Process"):
+                with patch("src.utils.monitoring.log_performance") as mock_log:
+                    async with async_performance_timer("outer") as outer_metrics:
+                        outer_metrics["nested_ops"] = 1
+                        async with async_performance_timer("inner") as inner_metrics:
+                            inner_metrics["test"] = "value"
+
+                    # Both operations should be logged
+                    assert mock_log.call_count == 2
+
+
+@pytest.mark.unit
+class TestMonitoringUtilsExtremeCases:
     """Test edge cases and error scenarios for monitoring utilities."""
 
     @pytest.mark.parametrize(
-        "operation,duration",
+        ("operation", "duration"),
         [
             ("", 0.0),  # Empty operation name
             (None, 1.0),  # None operation name

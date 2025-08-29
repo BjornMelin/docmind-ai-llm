@@ -304,7 +304,7 @@ class TestQueryEngineRerankingIntegration:
 
         reranker = BGECrossEncoderRerank(top_n=5, batch_size=16)
 
-        router_engine = AdaptiveRouterQueryEngine(
+        AdaptiveRouterQueryEngine(
             vector_index=mock_vector_index,
             hybrid_retriever=mock_hybrid_retriever,
             reranker=reranker,
@@ -354,7 +354,7 @@ class TestQueryEngineRerankingIntegration:
 
         reranker = BGECrossEncoderRerank(top_n=3)
 
-        router_engine = AdaptiveRouterQueryEngine(
+        AdaptiveRouterQueryEngine(
             vector_index=mock_vector_index,
             reranker=reranker,
             llm=mock_llm_for_routing,
@@ -431,7 +431,7 @@ class TestQueryEngineRerankingIntegration:
 
         reranker = BGECrossEncoderRerank(top_n=3)
 
-        router_engine = AdaptiveRouterQueryEngine(
+        AdaptiveRouterQueryEngine(
             vector_index=mock_vector_index,
             hybrid_retriever=mock_hybrid_retriever,
             reranker=reranker,
@@ -630,7 +630,7 @@ class TestQueryEngineRerankingMemoryEfficiency:
         )
 
         # Monitor memory during reranking
-        initial_memory = mock_memory_monitor.get_memory_usage()["used_gb"]
+        mock_memory_monitor.get_memory_usage()["used_gb"]
 
         result = reranker._postprocess_nodes(large_nodes, query_bundle)
 

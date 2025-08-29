@@ -477,7 +477,7 @@ class TestFactoryFunctions:
             device="cuda",
         )
 
-        embedding = create_clip_embedding(config)
+        create_clip_embedding(config)
 
         # Should be optimized
         call_kwargs = mock_clip_class.call_args[1]
@@ -691,7 +691,7 @@ class TestPerformanceOptimization:
             auto_adjust_batch=True,
         )
 
-        embedding = create_clip_embedding(config)
+        create_clip_embedding(config)
 
         # Should be adjusted down
         call_kwargs = mock_clip_class.call_args[1]

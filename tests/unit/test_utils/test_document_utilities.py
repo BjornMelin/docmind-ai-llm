@@ -10,7 +10,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.models.processing import ProcessingError, ProcessingResult, ProcessingStrategy
+from src.models.processing import ProcessingResult, ProcessingStrategy
+from src.processing.document_processor import ProcessingError
 from src.utils.document import (
     clear_cache,
     clear_document_cache,
@@ -291,12 +292,18 @@ class TestDocumentInfo:
         test_file = tmp_path / "test.txt"
         test_file.write_text("Test content")
 
-        with patch("src.utils.document.get_document_info") as mock_get_info:
-            mock_get_info.return_value = {"test": "result"}
+        with patch("src.utils.document.DocumentProcessor") as mock_processor_class:
+            mock_processor = Mock()
+            mock_processor.get_strategy_for_file.return_value = ProcessingStrategy.FAST
+            mock_processor_class.return_value = mock_processor
 
+            # get_doc_info is an alias for get_document_info, so it should return the actual result
             result = get_doc_info(test_file)
-            assert result == {"test": "result"}
-            mock_get_info.assert_called_once_with(test_file)
+
+            # Verify it's actually calling the underlying function
+            assert result["file_name"] == "test.txt"
+            assert result["file_extension"] == ".txt"
+            assert result["supported"] is True
 
 
 @pytest.mark.unit
@@ -340,11 +347,12 @@ class TestCacheFunctions:
 
     def test_clear_cache_alias(self):
         """Test clear_cache alias function."""
-        with patch("src.utils.document.clear_document_cache_sync") as mock_clear:
+        with patch("src.utils.document.clear_document_cache") as mock_clear:
             mock_clear.return_value = True
 
-            result = clear_cache()
-            mock_clear.assert_called_once()
+            # clear_cache is an alias for clear_document_cache (async function)
+            # Since we're calling it in a sync context, it should reference the async function
+            assert clear_cache is clear_document_cache
 
     @pytest.mark.asyncio
     async def test_get_cache_stats_success(self):
@@ -577,6 +585,134 @@ class TestAsyncSyncWrappers:
             mock_loop.run_until_complete.assert_called_once()
 
 
+@pytest.mark.unit
+class TestDocumentUtilitiesEdgeCases:
+    """Test edge cases and boundary conditions for document utilities."""
+
+    @pytest.mark.parametrize(
+        ("filename", "expected_valid"),
+        [
+            ("file.txt", True),  # Valid file
+            ("file.PDF", True),  # Uppercase extension
+            ("file with spaces.docx", True),  # Spaces in name
+            ("very_long_filename_" + "x" * 100 + ".txt", True),  # Long name
+        ],
+    )
+    def test_get_document_info_filename_edge_cases(
+        self, tmp_path, filename, expected_valid
+    ):
+        """Test document info with various filename edge cases."""
+        test_file = tmp_path / filename
+        test_file.write_text("Test content")
+
+        with patch("src.utils.document.DocumentProcessor") as mock_processor_class:
+            mock_processor = Mock()
+
+            if expected_valid and test_file.suffix.lower() in [".txt", ".pdf", ".docx"]:
+                mock_processor.get_strategy_for_file.return_value = (
+                    ProcessingStrategy.FAST
+                )
+            else:
+                mock_processor.get_strategy_for_file.side_effect = ValueError(
+                    "Unsupported"
+                )
+
+            mock_processor_class.return_value = mock_processor
+
+            info = get_document_info(test_file)
+            assert info["supported"] == (
+                expected_valid and test_file.suffix.lower() in [".txt", ".pdf", ".docx"]
+            )
+
+    @pytest.mark.parametrize(
+        ("file_size", "expected_readable"),
+        [
+            (0, False),  # Empty file - not readable
+            (1, True),  # 1 byte
+            (1024, True),  # 1 KB
+            (1048576, True),  # 1 MB
+        ],
+    )
+    def test_get_document_info_file_size_edge_cases(
+        self, tmp_path, file_size, expected_readable
+    ):
+        """Test document info with various file sizes."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_bytes(b"x" * file_size)
+
+        with patch("src.utils.document.DocumentProcessor") as mock_processor_class:
+            mock_processor = Mock()
+            mock_processor.get_strategy_for_file.return_value = ProcessingStrategy.FAST
+            mock_processor_class.return_value = mock_processor
+
+            info = get_document_info(test_file)
+            assert info["file_size_bytes"] == file_size
+            assert info["is_readable"] == expected_readable
+
+    @pytest.mark.asyncio
+    async def test_load_documents_unstructured_empty_file_list(self):
+        """Test loading documents with empty file list."""
+        results = await load_documents_unstructured([])
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_load_documents_unstructured_duplicate_files(self, tmp_path):
+        """Test loading documents with duplicate file paths."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("Test content")
+
+        duplicate_files = [test_file, test_file, test_file]  # Same file 3 times
+
+        mock_result = ProcessingResult(
+            elements=[],
+            processing_time=1.0,
+            strategy_used=ProcessingStrategy.FAST,
+            metadata={},
+            document_hash="hash",
+        )
+
+        with patch("src.utils.document.DocumentProcessor") as mock_processor_class:
+            mock_processor = Mock()
+            mock_processor.process_document_async = AsyncMock(return_value=mock_result)
+            mock_processor_class.return_value = mock_processor
+
+            results = await load_documents_unstructured(duplicate_files)
+
+            # Should process all instances, even duplicates
+            assert len(results) == 3
+            assert mock_processor.process_document_async.call_count == 3
+
+    @pytest.mark.parametrize(
+        ("text", "expected_entity_count"),
+        [
+            ("", 0),  # Empty text
+            ("   ", 0),  # Whitespace only
+            ("No entities here", 0),  # Text without entities
+            ("A" * 1000, 0),  # Very long text
+        ],
+    )
+    def test_extract_entities_with_spacy_edge_cases(self, text, expected_entity_count):
+        """Test entity extraction with edge case text inputs."""
+        mock_nlp = Mock()
+        mock_doc = Mock()
+        mock_doc.ents = []
+        mock_nlp.return_value = mock_doc
+
+        entities = extract_entities_with_spacy(text, mock_nlp)
+        assert len(entities) == expected_entity_count
+
+    def test_ensure_spacy_model_error_handling(self):
+        """Test spaCy model loading error scenarios."""
+        with patch("src.utils.document.get_spacy_manager") as mock_get_manager:
+            mock_manager = Mock()
+            mock_manager.ensure_model.side_effect = OSError("Model not found")
+            mock_get_manager.return_value = mock_manager
+
+            # Should raise the original exception
+            with pytest.raises(OSError):
+                ensure_spacy_model("nonexistent_model")
+
+
 @pytest.mark.integration
 class TestDocumentUtilitiesIntegration:
     """Integration tests for document utilities with realistic scenarios."""
@@ -593,7 +729,7 @@ class TestDocumentUtilitiesIntegration:
 
         # Mock processing results
         mock_results = []
-        for i, file_path in enumerate(test_files):
+        for i, _file_path in enumerate(test_files):
             mock_result = ProcessingResult(
                 elements=[],
                 processing_time=0.5 + i * 0.1,

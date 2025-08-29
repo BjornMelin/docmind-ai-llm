@@ -69,14 +69,18 @@ class TestAgentErrorRecovery:
 
                 # First attempt should fail and trigger fallback
                 try:
-                    result = route_query("Test query", state=mock_state)
-                    assert False, "Expected LLM failure"
+                    result = route_query.invoke(
+                        {"query": "Test query", "state": mock_state}
+                    )
+                    raise AssertionError("Expected LLM failure")
                 except Exception as e:
                     assert "LLM connection timeout" in str(e)
 
                 # Second attempt should succeed with fallback
                 mock_state["retry_count"] = 1
-                result = route_query("Test query", state=mock_state)
+                result = route_query.invoke(
+                    {"query": "Test query", "state": mock_state}
+                )
 
         # Then: Fallback recovery works correctly
         assert result is not None
@@ -116,7 +120,9 @@ class TestAgentErrorRecovery:
 
             # Should isolate vector tool failure
             with patch("src.agents.tools.logger") as mock_logger:
-                result = retrieve_documents("Multi-tool test query", state=mock_state)
+                result = retrieve_documents.invoke(
+                    {"query": "Multi-tool test query", "state": mock_state}
+                )
 
         # Then: Error is contained and other tools continue working
         assert result is not None
@@ -157,7 +163,9 @@ class TestAgentErrorRecovery:
                 mock_fresh_context = Mock()
                 mock_context_class.from_defaults.return_value = mock_fresh_context
 
-                result = route_query("Context corruption test", state=mock_state)
+                result = route_query.invoke(
+                    {"query": "Context corruption test", "state": mock_state}
+                )
 
         # Then: Context recovery creates fresh context
         assert result is not None
@@ -195,7 +203,9 @@ class TestAgentErrorRecovery:
                 mock_fallback.return_value = fast_fallback_execution()
 
                 try:
-                    result = route_query("Timeout test", state=mock_state)
+                    result = route_query.invoke(
+                        {"query": "Timeout test", "state": mock_state}
+                    )
                 except Exception:
                     # Fallback should be triggered
                     result = mock_fallback.return_value
@@ -252,7 +262,9 @@ class TestAgentErrorRecovery:
             mock_factory.create_tools_from_indexes.side_effect = create_mixed_tools
 
             with patch("src.agents.tools.logger") as mock_logger:
-                result = retrieve_documents("Partial failure test", state=mock_state)
+                result = retrieve_documents.invoke(
+                    {"query": "Partial failure test", "state": mock_state}
+                )
 
         # Then: System continues with available tools
         assert result is not None
@@ -297,7 +309,9 @@ class TestAgentErrorRecovery:
             results = []
             for i in range(5):
                 try:
-                    result = route_query(f"Test query {i}", state=mock_state.copy())
+                    result = route_query.invoke(
+                        {"query": f"Test query {i}", "state": mock_state.copy()}
+                    )
                     results.append(("success", result))
                 except Exception as e:
                     results.append(("failure", str(e)))
@@ -312,7 +326,7 @@ class TestAgentErrorRecovery:
 
         # First few should fail, then circuit breaker should prevent further attempts
         failure_results = [r for r in results if r[0] == "failure"]
-        success_results = [r for r in results if r[0] == "success"]
+        [r for r in results if r[0] == "success"]
 
         # Should have some failures followed by successes once circuit breaker logic is applied
         assert len(failure_results) >= 2  # At least threshold failures
@@ -344,8 +358,10 @@ class TestAgentErrorRecovery:
 
             # First execution corrupts state
             try:
-                result = route_query("State corruption test", state=mock_state)
-                assert False, "Expected state validation error"
+                result = route_query.invoke(
+                    {"query": "State corruption test", "state": mock_state}
+                )
+                raise AssertionError("Expected state validation error")
             except (KeyError, AttributeError, Exception):
                 # Expected due to corrupted state
                 pass
@@ -356,7 +372,9 @@ class TestAgentErrorRecovery:
             # Second execution should work with recovered state
             mock_factory.create_tools_from_indexes.side_effect = None
             mock_factory.create_tools_from_indexes.return_value = [Mock()]
-            result = route_query("State recovery test", state=mock_state)
+            result = route_query.invoke(
+                {"query": "State recovery test", "state": mock_state}
+            )
 
         # Then: State recovery allows continued execution
         assert result is not None
@@ -388,8 +406,10 @@ class TestAgentErrorRecovery:
             )
 
             try:
-                result = route_query("Memory test", state=mock_state)
-                assert False, "Expected memory error"
+                result = route_query.invoke(
+                    {"query": "Memory test", "state": mock_state}
+                )
+                raise AssertionError("Expected memory error")
             except MemoryError:
                 # Memory cleanup and retry with reduced context
                 mock_factory.create_tools_from_indexes.side_effect = None
@@ -444,7 +464,9 @@ class TestAgentErrorRecovery:
             )
 
             start_time = time.perf_counter()
-            result = route_query("Network failure test", state=mock_state)
+            result = route_query.invoke(
+                {"query": "Network failure test", "state": mock_state}
+            )
             execution_time = time.perf_counter() - start_time
 
         # Then: Network recovery succeeds after retries
@@ -481,12 +503,24 @@ class TestAgentErrorRecovery:
             side_effect=validation_failure_simulation,
         ):
             # First validation attempt fails
-            result1 = validate_response(
-                "Test query", "Low quality response", mock_state
+            result1 = validate_response.invoke(
+                {
+                    "query": "Test query",
+                    "response": "Low quality response",
+                    "sources": "[]",
+                    "_state": mock_state,
+                }
             )
 
             # Second validation attempt succeeds
-            result2 = validate_response("Test query", "Improved response", mock_state)
+            result2 = validate_response.invoke(
+                {
+                    "query": "Test query",
+                    "response": "Improved response",
+                    "sources": "[]",
+                    "_state": mock_state,
+                }
+            )
 
         # Then: Validation recovery produces acceptable result
         import json

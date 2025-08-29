@@ -533,7 +533,7 @@ class TestErrorHandlingBoundaryIntegration:
 
         # Test error boundary handling
         with pytest.raises(ImportError, match="BGE-M3 model not found"):
-            embedder = mock_embedder()
+            mock_embedder()
 
         mock_embedder.assert_called_once()
 

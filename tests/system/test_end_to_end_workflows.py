@@ -17,6 +17,7 @@ the complete system architecture and ensure all components work together.
 """
 
 import asyncio
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -243,7 +244,7 @@ class TestCompleteDocumentWorkflows:
             assert all(len(embedding) == 1024 for embedding in all_embeddings)
 
             # Verify embeddings are unique (not all the same)
-            unique_embeddings = set(tuple(emb) for emb in all_embeddings)
+            unique_embeddings = {tuple(emb) for emb in all_embeddings}
             assert len(unique_embeddings) > 40  # Most embeddings should be unique
 
 
@@ -635,14 +636,14 @@ class TestErrorHandlingSystemWorkflows:
 
                 try:
                     # First attempt - should fail
-                    embedder = mock_embedder()
+                    mock_embedder()
                     recovery_results[error_name] = "failed_as_expected"
                 except type(error):
                     recovery_results[error_name] = "error_caught"
 
                 try:
                     # Retry attempt - should succeed
-                    embedder = mock_embedder()
+                    mock_embedder()
                     recovery_results[error_name] = "recovered_successfully"
                 except Exception:
                     recovery_results[error_name] = "recovery_failed"
@@ -726,7 +727,7 @@ class TestPerformanceSystemWorkflows:
 
         # Create multiple settings instances (simulates app usage)
         settings_instances = []
-        for i in range(10):
+        for _i in range(10):
             settings = DocMindSettings(
                 debug=False,
                 enable_multi_agent=True,

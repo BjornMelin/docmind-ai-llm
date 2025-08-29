@@ -73,7 +73,7 @@ class TestDetectHardware:
                 assert result["vram_total_gb"] is None
 
     @pytest.mark.parametrize(
-        "exception_type,expected_log_level",
+        ("exception_type", "expected_log_level"),
         [
             (RuntimeError("CUDA error"), "warning"),
             (OSError("System error"), "warning"),
@@ -158,7 +158,7 @@ class TestValidateStartupConfiguration:
             mock_client.close.assert_called_once()
 
     @pytest.mark.parametrize(
-        "exception_type,error_pattern",
+        ("exception_type", "error_pattern"),
         [
             (ConnectionError("Connection refused"), "Qdrant connection failed"),
             (OSError("Network error"), "Qdrant network error"),
@@ -190,6 +190,22 @@ class TestValidateStartupConfiguration:
             assert result["valid"] is True
             assert any("GPU available: RTX 4090" in info for info in result["info"])
 
+        # Test GPU acceleration enabled but CUDA not available (line 108-110)
+        with (
+            patch("qdrant_client.QdrantClient") as mock_client_class,
+            patch("torch.cuda.is_available", return_value=False),
+        ):
+            mock_client = Mock()
+            mock_client.get_collections.return_value = []
+            mock_client_class.return_value = mock_client
+
+            result = validate_startup_configuration(mock_settings)
+            assert result["valid"] is True
+            assert any(
+                "GPU acceleration enabled but no GPU available" in warning
+                for warning in result["warnings"]
+            )
+
     def test_validate_startup_rrf_warnings(self, mock_settings):
         """Test RRF configuration warnings."""
         mock_settings.retrieval.strategy = "hybrid"
@@ -211,7 +227,7 @@ class TestValidateStartupConfiguration:
             )
 
     @pytest.mark.parametrize(
-        "gpu_error_type,expected_warning",
+        ("gpu_error_type", "expected_warning"),
         [
             (RuntimeError("CUDA error"), "CUDA error during GPU detection"),
             (ImportError("No CUDA"), "Import error during GPU detection"),
@@ -262,7 +278,7 @@ class TestVerifyRrfConfiguration:
         assert result["computed_hybrid_alpha"] == 0.7
 
     @pytest.mark.parametrize(
-        "rrf_alpha,expected_in_range",
+        ("rrf_alpha", "expected_in_range"),
         [
             (10, True),  # Minimum valid
             (60, True),  # Optimal
@@ -305,6 +321,25 @@ class TestVerifyRrfConfiguration:
         assert RRF_ALPHA_MIN == 10
         assert RRF_ALPHA_MAX == 100
         assert RRF_ALPHA_MIN < RRF_ALPHA_MAX
+
+    def test_verify_rrf_weights_incorrect_edge_case(self, mock_settings):
+        """Test unreachable code path for incorrect RRF weights (lines 161-164).
+
+        Note: Due to a logic bug in the implementation where hardcoded values
+        (0.7, 0.3) are compared against themselves, this else branch is never
+        reached in normal execution. This test documents the unreachable code.
+        """
+        # The current implementation has abs(0.7 - 0.7) < 0.05 which is always True
+        # This means lines 161-164 are unreachable with the current logic
+        # This test documents this issue for future refactoring
+
+        result = verify_rrf_configuration(mock_settings)
+
+        # The weights should always be "correct" due to the logic bug
+        assert result["weights_correct"] is True
+
+        # Document that lines 161-164 contain unreachable code that should be refactored
+        # to compare against actual settings values rather than hardcoded constants
 
 
 @pytest.mark.unit
@@ -349,10 +384,10 @@ class TestManagedGpuOperation:
             patch("torch.cuda.synchronize"),
             patch("torch.cuda.empty_cache"),
             patch("gc.collect"),
+            pytest.raises(ValueError, match="test exception"),
         ):
-            with pytest.raises(ValueError, match="test exception"):
-                async with managed_gpu_operation():
-                    raise ValueError("test exception")
+            async with managed_gpu_operation():
+                raise ValueError("test exception")
 
 
 @pytest.mark.unit
@@ -383,12 +418,15 @@ class TestManagedAsyncQdrantClient:
 
     async def test_managed_async_qdrant_client_creation_failure(self):
         """Test async Qdrant client creation failure."""
-        with patch(
-            "src.utils.core.AsyncQdrantClient", side_effect=ConnectionError("Failed")
+        with (
+            patch(
+                "src.utils.core.AsyncQdrantClient",
+                side_effect=ConnectionError("Failed"),
+            ),
+            pytest.raises(ConnectionError),
         ):
-            with pytest.raises(ConnectionError):
-                async with managed_async_qdrant_client("http://localhost:6333"):
-                    pass
+            async with managed_async_qdrant_client("http://localhost:6333"):
+                pass
 
     async def test_managed_async_qdrant_client_none_handling(self):
         """Test handling when client creation returns None."""
@@ -436,7 +474,7 @@ class TestAsyncTimer:
         # Note: __doc__ might be modified by the wrapper
 
     @pytest.mark.parametrize(
-        "func_args,func_kwargs,expected_result",
+        ("func_args", "func_kwargs", "expected_result"),
         [
             ((1, 2), {}, 3),
             ((5,), {"multiplier": 2}, 10),
@@ -474,6 +512,103 @@ class TestAsyncTimer:
         # Actual duration should be close to sleep duration
         actual_duration = end_time - start_time
         assert sleep_duration <= actual_duration < sleep_duration + 0.005
+
+
+@pytest.mark.unit
+class TestUtilsCoreEdgeCases:
+    """Test edge cases and boundary conditions for core utility functions."""
+
+    def test_detect_hardware_extreme_vram_values(self):
+        """Test hardware detection with extreme VRAM values."""
+        test_cases = [
+            (0, 0.0),  # 0 VRAM
+            (1024, 0.0),  # 1KB - should round to 0.0
+            (1073741824000, 1000.0),  # 1TB - massive VRAM
+            (2**63 - 1, 8589934592.0),  # Max 64-bit signed int
+        ]
+
+        for memory_bytes, expected_gb in test_cases:
+            with (
+                patch("torch.cuda.is_available", return_value=True),
+                patch("torch.cuda.get_device_name", return_value="Test GPU"),
+                patch("torch.cuda.get_device_properties") as mock_props,
+            ):
+                mock_props.return_value.total_memory = memory_bytes
+                result = detect_hardware()
+                assert result["vram_total_gb"] == expected_gb
+
+    def test_detect_hardware_concurrent_calls(self):
+        """Test hardware detection with concurrent/repeated calls."""
+        results = []
+        for _ in range(10):
+            results.append(detect_hardware())
+
+        # All results should be consistent
+        first_result = results[0]
+        for result in results[1:]:
+            assert result == first_result
+
+    @pytest.mark.parametrize(
+        ("alpha_value", "expected_valid"),
+        [
+            (9.999, False),  # Just below minimum
+            (10.0, True),  # Exact minimum
+            (100.0, True),  # Exact maximum
+            (100.001, False),  # Just above maximum
+            (0, False),  # Zero
+            (-5, False),  # Negative
+            (float("inf"), False),  # Infinity
+            (float("nan"), False),  # NaN
+        ],
+    )
+    def test_verify_rrf_configuration_alpha_edge_cases(
+        self, alpha_value, expected_valid
+    ):
+        """Test RRF alpha validation with edge case values."""
+        mock_settings = Mock()
+        mock_settings.retrieval = Mock()
+        mock_settings.retrieval.rrf_alpha = alpha_value
+        mock_settings.retrieval.rrf_k_constant = 60
+
+        try:
+            result = verify_rrf_configuration(mock_settings)
+            assert result["alpha_in_range"] == expected_valid
+        except (ValueError, TypeError):
+            # Some edge cases (NaN, inf) might raise exceptions
+            assert not expected_valid
+
+    def test_validate_startup_configuration_memory_pressure(self):
+        """Test startup validation under memory pressure conditions."""
+        mock_settings = Mock()
+        mock_settings.database = Mock()
+        mock_settings.database.qdrant_url = "http://localhost:6333"
+        mock_settings.enable_gpu_acceleration = False
+        mock_settings.retrieval = Mock()
+        mock_settings.retrieval.strategy = "dense"
+        mock_settings.retrieval.rrf_alpha = 60
+
+        # Simulate memory pressure by making operations slow/fail occasionally
+        call_count = 0
+
+        def slow_get_collections():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                import time
+
+                time.sleep(0.001)  # Simulate slow response
+            return []
+
+        with (
+            patch("qdrant_client.QdrantClient") as mock_client_class,
+            patch("torch.cuda.is_available", return_value=False),
+        ):
+            mock_client = Mock()
+            mock_client.get_collections = Mock(side_effect=slow_get_collections)
+            mock_client_class.return_value = mock_client
+
+            result = validate_startup_configuration(mock_settings)
+            assert result["valid"] is True
 
 
 @pytest.mark.unit

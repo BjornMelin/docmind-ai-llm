@@ -30,7 +30,7 @@ class TestPredefinedPrompts:
         assert set(PREDEFINED_PROMPTS.keys()) == expected_keys
 
     @pytest.mark.parametrize(
-        "key,expected_type",
+        ("key", "expected_type"),
         [
             ("Comprehensive Document Analysis", str),
             ("Extract Key Insights and Action Items", str),

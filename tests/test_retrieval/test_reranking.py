@@ -102,18 +102,17 @@ class TestBGECrossEncoderRerankUnit:
         mock_model.model.half = MagicMock()
         mock_cross_encoder_class.return_value = mock_model
 
-        reranker = BGECrossEncoderRerank(use_fp16=True)
+        BGECrossEncoderRerank(use_fp16=True)
 
         # FP16 should not be enabled when CUDA is unavailable
         mock_model.model.half.assert_not_called()
 
     def test_init_fails_without_sentence_transformers(self):
         """Test initialization fails gracefully when sentence-transformers unavailable."""
-        with patch("src.retrieval.reranking.CrossEncoder", None):
-            with pytest.raises(
-                ImportError, match="sentence-transformers not available"
-            ):
-                BGECrossEncoderRerank()
+        with patch("src.retrieval.reranking.CrossEncoder", None), pytest.raises(
+            ImportError, match="sentence-transformers not available"
+        ):
+            BGECrossEncoderRerank()
 
     @patch("src.retrieval.reranking.CrossEncoder")
     def test_init_handles_model_loading_errors(self, mock_cross_encoder_class):
@@ -346,7 +345,7 @@ class TestBGECrossEncoderRerankFactoryFunctions:
         mock_reranker = MagicMock()
         mock_reranker_class.return_value = mock_reranker
 
-        reranker = create_bge_cross_encoder_reranker(
+        create_bge_cross_encoder_reranker(
             model_name="custom/model",
             top_n=10,
             use_fp16=False,

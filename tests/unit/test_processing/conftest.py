@@ -487,7 +487,7 @@ def batch_test_documents(tmp_path, performance_test_data):
     batch_dir.mkdir()
 
     document_paths = []
-    for i, (size_name, content) in enumerate(performance_test_data.items()):
+    for _i, (size_name, content) in enumerate(performance_test_data.items()):
         for j in range(3):  # 3 documents per size category
             file_path = batch_dir / f"{size_name}_{j}.txt"
             file_path.write_text(content)

@@ -25,9 +25,9 @@ def mock_app_startup():
     """Mock all app.py startup code and external connections."""
     with (
         patch("src.app.validate_startup_configuration") as mock_validate,
-        patch("src.app.wire_container") as mock_wire,
-        patch("streamlit.set_page_config") as mock_page_config,
-        patch("streamlit.session_state", {}) as mock_session_state,
+        patch("src.app.wire_container"),
+        patch("streamlit.set_page_config"),
+        patch("streamlit.session_state", {}),
     ):
         # Mock successful validation
         mock_validate.return_value = True
@@ -283,8 +283,8 @@ class TestConfigurationValidation:
         """Test startup configuration validation failure handling."""
         with (
             patch("src.app.validate_startup_configuration") as mock_validate,
-            patch("streamlit.error") as mock_st_error,
-            patch("streamlit.stop") as mock_st_stop,
+            patch("streamlit.error"),
+            patch("streamlit.stop"),
         ):
             mock_validate.side_effect = RuntimeError("Configuration error")
 
@@ -312,7 +312,7 @@ class TestHardwareDetection:
 
         # Logic from app.py for model suggestion
         vram = hardware_status.get("vram_total_gb")
-        gpu_name = hardware_status.get("gpu_name", "No GPU")
+        hardware_status.get("gpu_name", "No GPU")
 
         suggested_model = "google/gemma-3n-E4B-it"
         suggested_context = 8192
@@ -344,11 +344,9 @@ class TestHardwareDetection:
         vram = hardware_status.get("vram_total_gb")
         suggested_model = "google/gemma-3n-E4B-it"
         suggested_context = 8192
-        quant_suffix = ""
 
         if vram and vram >= 8:
             suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
-            quant_suffix = "-Q8_0"
             suggested_context = 65536
 
         assert suggested_model == "nvidia/OpenReasoning-Nemotron-14B"
@@ -358,7 +356,7 @@ class TestHardwareDetection:
         """Test hardware detection with no GPU."""
         hardware_status = {"vram_total_gb": None, "gpu_name": "No GPU"}
 
-        vram = hardware_status.get("vram_total_gb")
+        hardware_status.get("vram_total_gb")
         suggested_model = "google/gemma-3n-E4B-it"
         suggested_context = 8192
 
@@ -459,7 +457,7 @@ class TestModelInitialization:
             try:
                 from src.app import Ollama
 
-                llm = Ollama(
+                Ollama(
                     base_url="http://localhost:11434",
                     model="test:latest",
                     request_timeout=60,
@@ -522,7 +520,7 @@ class TestDocumentUploadSection:
 
     def test_document_upload_error_handling(self):
         """Test error handling in document upload processing."""
-        mock_files = [MagicMock(name="corrupted.pdf")]
+        [MagicMock(name="corrupted.pdf")]
 
         with patch(
             "src.app.load_documents_unstructured",

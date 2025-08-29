@@ -77,7 +77,7 @@ class TestToolFactory:
         """Test ColBERT reranker creation with configured model."""
         # Given: Settings with reranker model configured
         with patch.object(
-            settings.retrieval, "reranking_model", "BAAI/bge-reranker-v2-m3"
+            settings.retrieval, "reranker_model", "BAAI/bge-reranker-v2-m3"
         ):
             # When: Creating reranker
             reranker = ToolFactory._create_reranker()
@@ -89,7 +89,7 @@ class TestToolFactory:
     def test_create_reranker_without_model_returns_none(self):
         """Test reranker creation returns None when no model configured."""
         # Given: Settings without reranker model
-        with patch.object(settings.retrieval, "reranking_model", ""):
+        with patch.object(settings.retrieval, "reranker_model", ""):
             # When: Creating reranker
             reranker = ToolFactory._create_reranker()
 
@@ -99,7 +99,7 @@ class TestToolFactory:
     def test_create_reranker_handles_initialization_error(self):
         """Test graceful handling of reranker initialization errors."""
         # Given: Settings with invalid reranker configuration
-        with patch.object(settings.retrieval, "reranking_model", "invalid/model"):
+        with patch.object(settings.retrieval, "reranker_model", "invalid/model"):
             with patch(
                 "llama_index.postprocessor.colbert_rerank.ColbertRerank",
                 side_effect=Exception("Model not found"),
@@ -325,7 +325,6 @@ class TestToolFactory:
         # Given: Check current settings integration
 
         # When: Accessing settings-based constants
-        reranking_top_k = ToolFactory._create_reranker.__defaults__
 
         # Then: Settings are properly integrated
         assert settings.retrieval.reranking_top_k >= 1

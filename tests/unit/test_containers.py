@@ -319,7 +319,7 @@ class TestContainerWiring:
         container_instance = get_container()
 
         # Should return the global container (either Application or Test based on environment)
-        assert isinstance(container_instance, (ApplicationContainer, TestContainer))
+        assert isinstance(container_instance, ApplicationContainer | TestContainer)
 
 
 @pytest.mark.unit

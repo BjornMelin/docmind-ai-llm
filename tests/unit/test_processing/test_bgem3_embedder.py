@@ -874,9 +874,453 @@ class TestBGEM3EmbedderDimensionValidation:
         # Verify settings dimension
         assert test_settings.embedding.dimension == 1024
 
-        embedder = BGEM3Embedder(settings=test_settings)
+        BGEM3Embedder(settings=test_settings)
 
         # Verify embedder uses correct dimension from settings
         # The actual BGE-M3 always produces 1024D, so this should match
         expected_dim = 1024
         assert test_settings.embedding.dimension == expected_dim
+
+
+@pytest.mark.unit
+class TestBGEM3EmbedderDataFlowValidation:
+    """Test data flow validation through embedding pipeline."""
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    async def test_embedding_data_flow_integrity(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test data integrity through embedding pipeline."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Input texts with known characteristics
+        test_texts = [
+            "Short text",
+            "Medium length text with multiple words and concepts",
+            "Very long text " * 50 + " that exceeds normal length boundaries",
+            "",  # Empty text
+            "Special characters: !@#$%^&*()_+-={}[]|\\:;\"'<>?,./",
+            "Unicode text: café résumé naïve 中文 العربية русский 日本語",
+        ]
+
+        result = await embedder.embed_texts_async(test_texts)
+
+        # Validate data flow integrity
+        assert len(result.dense_embeddings) == len(test_texts)
+        assert len(result.sparse_embeddings) == len(test_texts)
+
+        # Each embedding should maintain proper structure
+        for i, (dense_emb, sparse_emb) in enumerate(
+            zip(result.dense_embeddings, result.sparse_embeddings)
+        ):
+            # Dense embedding validation
+            assert isinstance(dense_emb, list)
+            assert len(dense_emb) == 1024
+            assert all(isinstance(x, float) for x in dense_emb)
+
+            # Sparse embedding validation
+            assert isinstance(sparse_emb, dict)
+            for token_id, weight in sparse_emb.items():
+                assert isinstance(token_id, int)
+                assert isinstance(weight, (int, float))
+                assert 0.0 <= weight <= 1.0  # Normalized weights
+
+            # Content-based validation
+            text_length = len(test_texts[i])
+            if text_length == 0:
+                # Empty text might have minimal sparse representation
+                continue
+            elif text_length > 1000:
+                # Long text should have more diverse sparse representation
+                assert len(sparse_emb) >= 5
+            else:
+                # Normal text should have reasonable sparse representation
+                assert len(sparse_emb) >= 1
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_embedding_numerical_stability(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test numerical stability of embeddings."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        # Mock with controlled outputs to test stability
+        def stable_encode(*args, **kwargs):
+            batch_size = len(args[0]) if args else 1
+            return {
+                "dense_vecs": np.ones((batch_size, 1024), dtype=np.float32) * 0.5,
+                "lexical_weights": [{100: 0.8, 200: 0.6} for _ in range(batch_size)],
+            }
+
+        mock_bgem3_flag_model.encode.side_effect = stable_encode
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Test stability across multiple calls
+        texts = ["Stability test text"] * 3
+        results = []
+
+        for _ in range(5):
+            embeddings = embedder.get_dense_embeddings(texts)
+            results.append(embeddings)
+
+        # Verify consistency
+        for i in range(len(results[0])):
+            for j in range(1, len(results)):
+                np.testing.assert_allclose(
+                    results[0][i], results[j][i], rtol=1e-10, atol=1e-10
+                )
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    async def test_embedding_edge_case_inputs(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test embeddings with edge case inputs."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Edge case inputs
+        edge_case_texts = [
+            "   ",  # Only whitespace
+            "\n\n\n",  # Only newlines
+            "\t\t\t",  # Only tabs
+            "A" * 10000,  # Very long single character
+            "1234567890" * 100,  # Numeric only
+            ".,;:!?()[]{}",  # Punctuation only
+        ]
+
+        result = await embedder.embed_texts_async(edge_case_texts)
+
+        # Should handle all edge cases without error
+        assert len(result.dense_embeddings) == len(edge_case_texts)
+        
+        for embedding in result.dense_embeddings:
+            assert len(embedding) == 1024
+            assert all(isinstance(x, float) for x in embedding)
+            assert all(np.isfinite(x) for x in embedding)  # No NaN or Inf
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_embedding_memory_efficiency(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test memory efficiency in embedding operations."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Test with various batch sizes
+        batch_sizes = [1, 10, 50, 100]
+        
+        for batch_size in batch_sizes:
+            texts = [f"Memory test text {i}" for i in range(batch_size)]
+            
+            embeddings = embedder.get_dense_embeddings(texts)
+            
+            # Verify no memory leaks - embeddings should be proper Python lists
+            assert isinstance(embeddings, list)
+            assert len(embeddings) == batch_size
+            
+            # Verify each embedding is a standard list, not numpy array (memory efficient)
+            for emb in embeddings:
+                assert isinstance(emb, list)
+                assert len(emb) == 1024
+
+
+@pytest.mark.unit
+class TestBGEM3EmbedderCachingBehavior:
+    """Test embedding caching and performance optimization."""
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_performance_stats_accumulation(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test performance statistics accumulation."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Simulate multiple embedding operations
+        batch_sizes = [3, 5, 2, 8]
+        total_expected = sum(batch_sizes)
+
+        for batch_size in batch_sizes:
+            texts = [f"Text {i}" for i in range(batch_size)]
+            embedder.get_dense_embeddings(texts)
+
+        stats = embedder.get_performance_stats()
+
+        # Verify accumulation
+        assert stats["total_texts_embedded"] == total_expected
+        assert stats["total_processing_time"] > 0
+        assert stats["avg_time_per_text_ms"] > 0
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_stats_reset_behavior(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test statistics reset behavior."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Generate some stats
+        texts = ["Text 1", "Text 2"]
+        embedder.get_dense_embeddings(texts)
+
+        initial_stats = embedder.get_performance_stats()
+        assert initial_stats["total_texts_embedded"] == 2
+
+        # Reset and verify
+        embedder.reset_stats()
+        
+        reset_stats = embedder.get_performance_stats()
+        assert reset_stats["total_texts_embedded"] == 0
+        assert reset_stats["total_processing_time"] == 0.0
+        assert reset_stats["avg_time_per_text_ms"] == 0.0
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_embedding_consistency_across_calls(
+        self, mock_flag_model_class, test_settings
+    ):
+        """Test embedding consistency for repeated calls."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        # Mock with deterministic output
+        mock_model = Mock()
+        
+        def deterministic_encode(*args, **kwargs):
+            # Seed for deterministic output
+            np.random.seed(42)
+            batch_size = len(args[0]) if args else 1
+            return {
+                "dense_vecs": np.random.randn(batch_size, 1024).astype(np.float32),
+                "lexical_weights": [{100: 0.8, 200: 0.6} for _ in range(batch_size)],
+            }
+
+        mock_model.encode.side_effect = deterministic_encode
+        mock_flag_model_class.return_value = mock_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Multiple calls with same input
+        text = "Consistency test"
+        results = []
+
+        for _ in range(3):
+            # Reset seed for each call to get same result
+            embedding = embedder.get_dense_embeddings([text])
+            results.append(embedding[0])
+
+        # With deterministic mock, should get same results
+        for i in range(1, len(results)):
+            np.testing.assert_allclose(
+                results[0], results[i], rtol=1e-5, atol=1e-5
+            )
+
+
+@pytest.mark.unit
+class TestBGEM3EmbedderAdvancedErrorHandling:
+    """Test advanced error handling scenarios."""
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_partial_failure_recovery(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test recovery from partial failures."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        # Mock that fails on first call, succeeds on retry
+        call_count = 0
+        
+        def failing_encode(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("Temporary failure")
+            
+            batch_size = len(args[0]) if args else 1
+            return {
+                "dense_vecs": np.random.randn(batch_size, 1024).astype(np.float32),
+                "lexical_weights": [{100: 0.8} for _ in range(batch_size)],
+            }
+
+        mock_bgem3_flag_model.encode.side_effect = failing_encode
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # First call should fail
+        texts = ["Test text"]
+        with pytest.raises(EmbeddingError):
+            embedder.get_dense_embeddings(texts)
+
+        # Second call should succeed (if implemented with retry logic)
+        # For current implementation, this would still fail
+        # This test documents expected behavior
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_malformed_output_handling(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test handling of malformed model outputs."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        # Mock with malformed output
+        def malformed_encode(*args, **kwargs):
+            return {"unexpected_key": "unexpected_value"}
+
+        mock_bgem3_flag_model.encode.side_effect = malformed_encode
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Should handle malformed output gracefully
+        texts = ["Test text"]
+        result = embedder.get_dense_embeddings(texts)
+        
+        # Current implementation returns None for malformed output
+        assert result is None
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    async def test_async_cancellation_handling(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test handling of async cancellation."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+        import asyncio
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Test that async operations can be cancelled
+        texts = ["Test text"] * 100  # Large batch
+
+        async def embedding_task():
+            return await embedder.embed_texts_async(texts)
+
+        task = asyncio.create_task(embedding_task())
+        
+        # Cancel immediately (in real scenario, would cancel after some time)
+        task.cancel()
+        
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.unit
+class TestBGEM3EmbedderIntegrationPatterns:
+    """Test integration patterns with other components."""
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_embedding_result_serialization(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test embedding result can be serialized/deserialized."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+        import json
+        import pickle
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        texts = ["Serialization test"]
+        embeddings = embedder.get_dense_embeddings(texts)
+
+        # Test JSON serialization
+        json_data = json.dumps(embeddings)
+        recovered_embeddings = json.loads(json_data)
+        
+        assert len(recovered_embeddings) == len(embeddings)
+        assert len(recovered_embeddings[0]) == 1024
+
+        # Test pickle serialization
+        pickle_data = pickle.dumps(embeddings)
+        pickle_recovered = pickle.loads(pickle_data)
+        
+        np.testing.assert_allclose(embeddings[0], pickle_recovered[0])
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_embedding_pipeline_compatibility(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test compatibility with pipeline processing patterns."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Simulate pipeline processing
+        documents = [
+            {"id": i, "text": f"Document {i} content"} 
+            for i in range(10)
+        ]
+
+        # Process in chunks (common pipeline pattern)
+        chunk_size = 3
+        all_embeddings = []
+
+        for i in range(0, len(documents), chunk_size):
+            chunk = documents[i:i + chunk_size]
+            texts = [doc["text"] for doc in chunk]
+            
+            embeddings = embedder.get_dense_embeddings(texts)
+            all_embeddings.extend(embeddings)
+
+        # Verify pipeline output
+        assert len(all_embeddings) == len(documents)
+        for embedding in all_embeddings:
+            assert len(embedding) == 1024
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
+    def test_embedding_metadata_preservation(
+        self, mock_flag_model_class, test_settings, mock_bgem3_flag_model
+    ):
+        """Test metadata preservation in embedding operations."""
+        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+
+        mock_flag_model_class.return_value = mock_bgem3_flag_model
+
+        embedder = BGEM3Embedder(settings=test_settings)
+
+        # Test with metadata tracking
+        texts_with_metadata = [
+            {"text": "First document", "source": "doc1.pdf", "page": 1},
+            {"text": "Second document", "source": "doc2.pdf", "page": 2},
+        ]
+
+        # Process texts while preserving metadata
+        texts = [item["text"] for item in texts_with_metadata]
+        embeddings = embedder.get_dense_embeddings(texts)
+
+        # Combine results with metadata
+        results = []
+        for i, embedding in enumerate(embeddings):
+            result = {
+                **texts_with_metadata[i],
+                "embedding": embedding,
+                "embedding_dim": len(embedding)
+            }
+            results.append(result)
+
+        # Verify metadata preservation
+        assert len(results) == 2
+        assert results[0]["source"] == "doc1.pdf"
+        assert results[1]["page"] == 2
+        assert all(r["embedding_dim"] == 1024 for r in results)

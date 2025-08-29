@@ -8,6 +8,7 @@ This module tests the persistence capabilities of the storage system:
 - WAL mode behavior and recovery
 """
 
+import contextlib
 import tempfile
 import time
 from pathlib import Path
@@ -489,10 +490,8 @@ class TestCorruptionRecoveryScenarios:
 
         finally:
             # Ensure permissions are restored for cleanup
-            try:
+            with contextlib.suppress(OSError, PermissionError):
                 persistent_db_path.chmod(0o644)
-            except (OSError, PermissionError):
-                pass
 
             # Cleanup
             if persistent_db_path.exists():

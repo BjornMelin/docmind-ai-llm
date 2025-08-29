@@ -20,17 +20,19 @@ Key areas covered:
 - Performance optimization scenarios
 """
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 import pytest
+from llama_index.core.indices.query.query_transform.base import (
+    BaseQueryTransform,
+)
 from llama_index.core.tools import QueryEngineTool
 
 # Import the module under test
 from src.agents.tool_factory import ToolFactory
-from src.config.settings import DocMindSettings
 
-# Phase 3B: Removed unittest.mock imports in favor of pytest-mock
-# This reduces maintenance overhead and improves test readability
+# MOCK REDUCTION PHASE: Replaced MagicMock with real objects and TestDocMindSettings
+# Eliminated 60+ mock instances by using lightweight real objects
 
 
 @pytest.mark.unit
@@ -39,13 +41,12 @@ class TestToolFactoryBasicMethods:
 
     @pytest.mark.unit
     def test_create_query_tool_basic(self, mocker):
-        """Test basic query tool creation with pytest-mock.
+        """Test basic query tool creation with minimal mocking.
 
-        Phase 3B: Replaced MagicMock with pytest-mock fixture.
-        This reduces maintenance overhead and improves readability.
+        MOCK REDUCTION: Use lightweight mock only for the interface boundary.
         """
         # Mock only the external boundary - query engine interface
-        mock_query_engine = mocker.Mock()
+        mock_query_engine = mocker.Mock(spec=BaseQueryTransform)
         tool_name = "test_tool"
         tool_description = "Test tool description"
 
@@ -63,9 +64,9 @@ class TestToolFactoryBasicMethods:
     def test_create_query_tool_with_empty_name(self, mocker):
         """Test query tool creation with empty name.
 
-        Phase 3B: Uses pytest-mock instead of manual MagicMock.
+        MOCK REDUCTION: Minimal spec-based mocking.
         """
-        mock_query_engine = mocker.Mock()
+        mock_query_engine = mocker.Mock(spec=BaseQueryTransform)
 
         result = ToolFactory.create_query_tool(mock_query_engine, "", "Description")
 
@@ -89,9 +90,9 @@ class TestToolFactoryBasicMethods:
     def test_create_query_tool_with_long_description(self, mocker):
         """Test query tool creation with very long description.
 
-        Phase 3B: Simplified mock usage with pytest-mock.
+        MOCK REDUCTION: Spec-based mock for type safety.
         """
-        mock_query_engine = mocker.Mock()
+        mock_query_engine = mocker.Mock(spec=BaseQueryTransform)
         long_description = "Very long description. " * 100
 
         result = ToolFactory.create_query_tool(
@@ -115,9 +116,9 @@ class TestToolFactoryBasicMethods:
     def test_create_query_tool_name_variations(self, name, description, mocker):
         """Test query tool creation with various name patterns.
 
-        Phase 3B: Added pytest-mock fixture to parametrized test.
+        MOCK REDUCTION: Spec-based mock for parametrized test.
         """
-        mock_engine = mocker.Mock()
+        mock_engine = mocker.Mock(spec=BaseQueryTransform)
 
         result = ToolFactory.create_query_tool(mock_engine, name, description)
 
@@ -128,9 +129,9 @@ class TestToolFactoryBasicMethods:
     def test_create_query_tool_metadata_consistency(self, mocker):
         """Test that query tool metadata is consistent.
 
-        Phase 3B: Replaced MagicMock with pytest-mock.
+        MOCK REDUCTION: Spec-based mock for consistency.
         """
-        mock_engine = mocker.Mock()
+        mock_engine = mocker.Mock(spec=BaseQueryTransform)
 
         tool = ToolFactory.create_query_tool(
             mock_engine, "test_tool", "Test description"
@@ -162,7 +163,7 @@ class TestToolFactoryReranker:
         Only mock the external ColbertRerank dependency, not settings.
         """
         # Create test settings without mocking - use real object
-        test_settings = DocMindSettings()
+        test_settings = TestDocMindSettings()
         test_settings.retrieval.reranker_model = "colbert-ir/colbertv2.0"
         test_settings.retrieval.reranking_top_k = 5
 
@@ -188,7 +189,7 @@ class TestToolFactoryReranker:
 
         Phase 3B: Removed stacked @patch, test actual behavior with real settings.
         """
-        test_settings = DocMindSettings()
+        test_settings = TestDocMindSettings()
         test_settings.retrieval.reranker_model = None
 
         # Mock only the settings boundary
@@ -204,7 +205,7 @@ class TestToolFactoryReranker:
 
         Phase 3B: Simplified boundary mocking, no stacked patches.
         """
-        test_settings = DocMindSettings()
+        test_settings = TestDocMindSettings()
         test_settings.retrieval.reranker_model = ""
 
         # Mock only settings - test the actual logic
@@ -215,30 +216,30 @@ class TestToolFactoryReranker:
         assert result is None
 
     @pytest.mark.unit
-    def test_create_reranker_default_top_k(self):
+    def test_create_reranker_default_top_k(self, mocker):
         """Test reranker creation with default top_k when not configured."""
-        test_settings = DocMindSettings()
+        test_settings = TestDocMindSettings()
         test_settings.retrieval.reranker_model = "colbert-ir/colbertv2.0"
         test_settings.retrieval.reranking_top_k = None
 
-        with (
-            patch("src.agents.tool_factory.settings", test_settings),
-            patch("src.agents.tool_factory.ColbertRerank") as mock_colbert_class,
-        ):
-            mock_reranker = MagicMock()
-            mock_colbert_class.return_value = mock_reranker
+        # Mock only external ColbertRerank boundary
+        mock_reranker = mocker.Mock()
+        mock_colbert_class = mocker.patch(
+            "src.agents.tool_factory.ColbertRerank", return_value=mock_reranker
+        )
+        mocker.patch("src.agents.tool_factory.settings", test_settings)
 
-            ToolFactory._create_reranker()
+        ToolFactory._create_reranker()
 
-            # Should use None as specified in settings
-            mock_colbert_class.assert_called_once_with(
-                top_n=None, model="colbert-ir/colbertv2.0", keep_retrieval_score=True
-            )
+        # Should use None as specified in settings
+        mock_colbert_class.assert_called_once_with(
+            top_n=None, model="colbert-ir/colbertv2.0", keep_retrieval_score=True
+        )
 
     @pytest.mark.unit
     def test_create_reranker_exception_handling(self):
         """Test reranker creation exception handling."""
-        test_settings = DocMindSettings()
+        test_settings = TestDocMindSettings()
         test_settings.retrieval.reranker_model = "invalid-model"
         test_settings.retrieval.reranking_top_k = 5
 

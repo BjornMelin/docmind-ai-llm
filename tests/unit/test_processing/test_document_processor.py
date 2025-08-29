@@ -289,7 +289,7 @@ class TestDocumentProcessor:
         self, mock_settings, sample_text_file
     ):
         """Test successful document processing without cache."""
-        mock_elements = [
+        [
             DocumentElement(
                 text="Processed content", category="NarrativeText", metadata={"page": 1}
             )

@@ -175,11 +175,9 @@ class TestHardwareDetectionLogic:
         vram = hardware_status.get("vram_total_gb")
         suggested_model = "google/gemma-3n-E4B-it"
         suggested_context = 8192
-        quant_suffix = ""
 
         if vram and vram >= 8:
             suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
-            quant_suffix = "-Q8_0"
             suggested_context = 65536
 
         assert suggested_model == "nvidia/OpenReasoning-Nemotron-14B"
@@ -189,7 +187,7 @@ class TestHardwareDetectionLogic:
         """Test hardware detection with no GPU."""
         hardware_status = {"vram_total_gb": None, "gpu_name": "No GPU"}
 
-        vram = hardware_status.get("vram_total_gb")
+        hardware_status.get("vram_total_gb")
         suggested_model = "google/gemma-3n-E4B-it"
         suggested_context = 8192
 

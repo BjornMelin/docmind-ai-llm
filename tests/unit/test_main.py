@@ -208,7 +208,7 @@ class TestDocMindApplicationQueryProcessing:
     async def test_basic_rag_with_import_error(self, mock_app):
         """Test basic RAG pipeline handles import errors gracefully."""
         # Mock an import error scenario
-        with patch("src.main.logger") as mock_logger:
+        with patch("src.main.logger"):
             query = "Test query"
             result = await mock_app._process_basic_rag(query)
 
@@ -343,7 +343,7 @@ class TestDocMindApplicationResourceManagement:
         """Test shutdown with active agent coordinator."""
         with (
             patch("src.main.DocumentProcessor"),
-            patch("src.main.MultiAgentCoordinator") as mock_coordinator,
+            patch("src.main.MultiAgentCoordinator"),
         ):
             app = DocMindApplication(app_settings=mock_settings)
 
@@ -499,7 +499,7 @@ class TestConstants:
             patch("src.main.DocumentProcessor"),
             patch("src.main.MultiAgentCoordinator") as mock_coordinator,
         ):
-            app = DocMindApplication(app_settings=mock_settings)
+            DocMindApplication(app_settings=mock_settings)
 
             # Verify timeout divisor is used in coordinator initialization
             mock_coordinator.assert_called_once_with(

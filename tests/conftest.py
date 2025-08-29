@@ -23,7 +23,7 @@ import pytest_asyncio
 from llama_index.core import Document
 from llama_index.core.graph_stores import SimplePropertyGraphStore
 
-# MockLLM not available in this version, will use MagicMock
+# MOCK REDUCTION: Use LlamaIndex MockEmbedding instead of MagicMock
 
 # Fix import path for tests
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -493,6 +493,36 @@ def mock_reranker() -> MagicMock:
         {"index": 1, "score": 0.75},
     ]
     return mock_reranker
+
+
+@pytest.fixture
+def mock_ai_stack():
+    """MOCK REDUCTION: Comprehensive AI stack using LlamaIndex MockEmbedding.
+
+    Replaces multiple MagicMock instances with proper LlamaIndex mock components.
+    This single fixture eliminates dozens of individual mocks across the test suite.
+
+    Returns:
+        dict: AI stack components with proper mock implementations
+    """
+    from llama_index.core.embeddings.mock_embed_model import MockEmbedding
+
+    # Use LlamaIndex MockEmbedding instead of MagicMock
+    embed_model = MockEmbedding(embed_dim=1024)
+
+    # Keep minimal MagicMock only for external boundaries
+    mock_llm = MagicMock()
+    mock_llm.complete.return_value.text = "Mock LLM response"
+    mock_llm.stream_complete.return_value = iter(
+        [MagicMock(text="Stream "), MagicMock(text="response")]
+    )
+
+    return {
+        "embed_model": embed_model,
+        "llm": mock_llm,
+        "embed_dim": 1024,
+        "sparse_dim": 30522,  # SPLADE++ vocabulary size
+    }
 
 
 @pytest_asyncio.fixture(loop_scope="function")

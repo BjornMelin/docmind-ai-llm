@@ -96,7 +96,7 @@ class TestCriticalPathRegression:
             gc.collect()  # Clean state for each iteration
 
             start_time = time.perf_counter()
-            result = func(*args, **kwargs)
+            func(*args, **kwargs)
             end_time = time.perf_counter()
 
             execution_times.append((end_time - start_time) * 1000)  # Convert to ms
@@ -122,7 +122,7 @@ class TestCriticalPathRegression:
             gc.collect()
 
             start_time = time.perf_counter()
-            result = await async_func(*args, **kwargs)
+            await async_func(*args, **kwargs)
             end_time = time.perf_counter()
 
             execution_times.append((end_time - start_time) * 1000)
@@ -306,7 +306,7 @@ class TestCriticalPathRegression:
 
         # Simulate typical application operations
         settings_instances = []
-        for i in range(10):
+        for _i in range(10):
             # Create settings instances to test for memory leaks
             settings = DocMindSettings(debug=True)
             settings_instances.append(settings)
@@ -429,7 +429,7 @@ class TestPerformanceRegressionIntegration:
         execution_times = []
         for _ in range(3):
             start_time = time.perf_counter()
-            result = await process_embedding_batch()
+            await process_embedding_batch()
             end_time = time.perf_counter()
             execution_times.append((end_time - start_time) * 1000)
 
