@@ -110,7 +110,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
     stores_text: bool = True
     is_embedding_query: bool = False
 
-    qdrant_client: QdrantClient = Field(exclude=True)
+    qdrant_client: Any = Field(exclude=True)
     collection_name: str
     dense_vector_name: str = Field(default="dense")
     sparse_vector_name: str = Field(default="sparse")
@@ -144,17 +144,24 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
                 "qdrant-client not available. Install with: uv add qdrant-client"
             )
 
-        self.qdrant_client = client or QdrantClient(url=url)
-        self.collection_name = collection_name
-        self.embedding_dim = embedding_dim
-        self.dense_vector_name = "dense"
-        self.sparse_vector_name = "sparse"
-        self.rrf_alpha = rrf_alpha
-
-        super().__init__(**kwargs)
+        # Initialize Pydantic model with all fields
+        super().__init__(
+            qdrant_client=client or QdrantClient(url=url),
+            collection_name=collection_name,
+            embedding_dim=embedding_dim,
+            rrf_alpha=rrf_alpha,
+            dense_vector_name="dense",
+            sparse_vector_name="sparse",
+            **kwargs,
+        )
 
         # Initialize unified collection with resilience
         self._init_collection_with_retry()
+
+    @property
+    def client(self) -> QdrantClient:
+        """Get the Qdrant client instance."""
+        return self.qdrant_client
 
     @retry(
         stop=stop_after_attempt(RETRY_ATTEMPTS),
@@ -230,31 +237,30 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
                 if dense_embeddings and i < len(dense_embeddings):
                     vectors[self.dense_vector_name] = dense_embeddings[i]
 
-                # Sparse vector (BGE-M3 token weights)
-                named_sparse_vectors = {}
+                # Sparse vector (BGE-M3 token weights) - add to vectors dict
                 if sparse_embeddings and i < len(sparse_embeddings):
                     sparse_dict = sparse_embeddings[i]
                     if sparse_dict:
                         indices = list(sparse_dict.keys())
                         values = list(sparse_dict.values())
-                        named_sparse_vectors[self.sparse_vector_name] = SparseVector(
+                        vectors[self.sparse_vector_name] = SparseVector(
                             indices=indices, values=values
                         )
 
                 # Prepare payload with node data and metadata
+                metadata = node.metadata or {}
                 payload = {
                     "text": node.get_content(),
-                    "metadata": node.metadata or {},
+                    "metadata": metadata,
                     "node_id": node_id,
-                    "doc_id": getattr(node, "doc_id", ""),
-                    "chunk_id": getattr(node, "chunk_id", ""),
+                    "doc_id": metadata.get("doc_id", getattr(node, "doc_id", "")),
+                    "chunk_id": metadata.get("chunk_id", getattr(node, "chunk_id", "")),
                 }
 
                 points.append(
                     PointStruct(
                         id=node_id,
                         vector=vectors,
-                        sparse_vector=named_sparse_vectors,
                         payload=payload,
                     )
                 )

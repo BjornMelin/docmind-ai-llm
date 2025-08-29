@@ -10,5 +10,4 @@ functionality from storage.py.
 # Import all functionality from storage for backward compatibility
 from src.utils.storage import *  # noqa: F401, F403
 
-# Ensure the module can be imported as expected by tests
-__all__ = ["storage"]
+# All exports are handled by the star import above
