@@ -76,7 +76,7 @@ class HybridPersistenceManager:
     - Multi-agent concurrent access support
     """
 
-    def __init__(self, settings: Any | None = None):
+    def __init__(self, settings: Any | None = None) -> None:
         """Initialize HybridPersistenceManager.
 
         Args:

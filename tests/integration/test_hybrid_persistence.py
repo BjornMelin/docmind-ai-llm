@@ -104,20 +104,20 @@ class TestHybridPersistenceManagerInitialization:
     @pytest.mark.integration
     def test_initialization_with_valid_settings(self, mock_settings):
         """Test successful initialization with valid settings."""
-        with patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True):
-            with patch("src.storage.hybrid_persistence.QdrantClient") as mock_client:
-                with patch("asyncio.create_task"):  # Mock async task creation
-                    mock_client.return_value = Mock()
+        with (
+            patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True),
+            patch("src.storage.hybrid_persistence.QdrantClient") as mock_client,
+            patch("asyncio.create_task"),  # Mock async task creation
+        ):
+            mock_client.return_value = Mock()
 
-                    manager = HybridPersistenceManager(mock_settings)
+            manager = HybridPersistenceManager(mock_settings)
 
-                    assert manager.settings == mock_settings
-                    assert manager.sqlite_path == Path(
-                        mock_settings.database.sqlite_db_path
-                    )
-                    assert manager.sqlite_connection is not None
-                    assert manager.documents_table == "documents"
-                    assert manager.vectors_collection == "document_vectors"
+            assert manager.settings == mock_settings
+            assert manager.sqlite_path == Path(mock_settings.database.sqlite_db_path)
+            assert manager.sqlite_connection is not None
+            assert manager.documents_table == "documents"
+            assert manager.vectors_collection == "document_vectors"
 
     @pytest.mark.integration
     def test_initialization_without_qdrant(self, mock_settings):
@@ -186,36 +186,38 @@ class TestHybridPersistenceManagerCRUDOperations:
         self, mock_settings, sample_document_metadata, sample_vector_records
     ):
         """Test successful document storage with vectors."""
-        with patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True):
-            with patch("src.storage.hybrid_persistence.QdrantClient") as mock_client:
-                mock_qdrant = Mock()
-                mock_client.return_value = mock_qdrant
+        with (
+            patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True),
+            patch("src.storage.hybrid_persistence.QdrantClient") as mock_client,
+        ):
+            mock_qdrant = Mock()
+            mock_client.return_value = mock_qdrant
 
-                manager = HybridPersistenceManager(mock_settings)
-                manager.qdrant_client = mock_qdrant
+            manager = HybridPersistenceManager(mock_settings)
+            manager.qdrant_client = mock_qdrant
 
-                # Mock async operations
-                with patch("asyncio.to_thread") as mock_to_thread:
-                    mock_to_thread.return_value = None
+            # Mock async operations
+            with patch("asyncio.to_thread") as mock_to_thread:
+                mock_to_thread.return_value = None
 
-                    result = await manager.store_document(
-                        sample_document_metadata, sample_vector_records
-                    )
+                result = await manager.store_document(
+                    sample_document_metadata, sample_vector_records
+                )
 
-                    assert result is True
+                assert result is True
 
-                    # Verify document was stored in SQLite
-                    cursor = manager.sqlite_connection.cursor()
-                    cursor.execute(
-                        "SELECT * FROM documents WHERE id = ?",
-                        (sample_document_metadata.id,),
-                    )
-                    row = cursor.fetchone()
-                    assert row is not None
-                    assert row[0] == sample_document_metadata.id
+                # Verify document was stored in SQLite
+                cursor = manager.sqlite_connection.cursor()
+                cursor.execute(
+                    "SELECT * FROM documents WHERE id = ?",
+                    (sample_document_metadata.id,),
+                )
+                row = cursor.fetchone()
+                assert row is not None
+                assert row[0] == sample_document_metadata.id
 
-                    # Verify vector storage was attempted
-                    mock_to_thread.assert_called()
+                # Verify vector storage was attempted
+                mock_to_thread.assert_called()
 
     @pytest.mark.integration
     async def test_store_document_sqlite_only(
@@ -274,37 +276,39 @@ class TestHybridPersistenceManagerCRUDOperations:
         self, mock_settings, sample_document_metadata, sample_vector_records
     ):
         """Test successful document deletion."""
-        with patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True):
-            with patch("src.storage.hybrid_persistence.QdrantClient") as mock_client:
-                mock_qdrant = Mock()
-                mock_client.return_value = mock_qdrant
+        with (
+            patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True),
+            patch("src.storage.hybrid_persistence.QdrantClient") as mock_client,
+        ):
+            mock_qdrant = Mock()
+            mock_client.return_value = mock_qdrant
 
-                manager = HybridPersistenceManager(mock_settings)
-                manager.qdrant_client = mock_qdrant
+            manager = HybridPersistenceManager(mock_settings)
+            manager.qdrant_client = mock_qdrant
 
-                # Store document first
-                with patch("asyncio.to_thread"):
-                    await manager.store_document(
-                        sample_document_metadata, sample_vector_records
-                    )
+            # Store document first
+            with patch("asyncio.to_thread"):
+                await manager.store_document(
+                    sample_document_metadata, sample_vector_records
+                )
 
-                # Delete document
-                with patch("asyncio.to_thread") as mock_to_thread:
-                    result = await manager.delete_document(sample_document_metadata.id)
+            # Delete document
+            with patch("asyncio.to_thread") as mock_to_thread:
+                result = await manager.delete_document(sample_document_metadata.id)
 
-                    assert result is True
+                assert result is True
 
-                    # Verify document was deleted from SQLite
-                    cursor = manager.sqlite_connection.cursor()
-                    cursor.execute(
-                        "SELECT * FROM documents WHERE id = ?",
-                        (sample_document_metadata.id,),
-                    )
-                    row = cursor.fetchone()
-                    assert row is None
+                # Verify document was deleted from SQLite
+                cursor = manager.sqlite_connection.cursor()
+                cursor.execute(
+                    "SELECT * FROM documents WHERE id = ?",
+                    (sample_document_metadata.id,),
+                )
+                row = cursor.fetchone()
+                assert row is None
 
-                    # Verify vector deletion was attempted
-                    mock_to_thread.assert_called()
+                # Verify vector deletion was attempted
+                mock_to_thread.assert_called()
 
     @pytest.mark.integration
     async def test_get_storage_stats(self, mock_settings, sample_document_metadata):
@@ -345,9 +349,14 @@ class TestHybridPersistenceManagerTransactions:
         )
 
         # Mock an error during vector storage
-        with patch.object(
-            manager, "_store_vectors", side_effect=Exception("Vector storage failed")
-        ), pytest.raises(PersistenceError):
+        with (
+            patch.object(
+                manager,
+                "_store_vectors",
+                side_effect=Exception("Vector storage failed"),
+            ),
+            pytest.raises(PersistenceError),
+        ):
             await manager.store_document(invalid_metadata, [])
 
         # Verify document was not stored due to rollback
@@ -440,59 +449,63 @@ class TestHybridPersistenceManagerVectorOperations:
         self, mock_settings, sample_document_metadata
     ):
         """Test successful vector similarity search."""
-        with patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True):
-            with patch("src.storage.hybrid_persistence.QdrantClient") as mock_client:
-                mock_qdrant = Mock()
-                mock_client.return_value = mock_qdrant
+        with (
+            patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True),
+            patch("src.storage.hybrid_persistence.QdrantClient") as mock_client,
+        ):
+            mock_qdrant = Mock()
+            mock_client.return_value = mock_qdrant
 
-                manager = HybridPersistenceManager(mock_settings)
-                manager.qdrant_client = mock_qdrant
+            manager = HybridPersistenceManager(mock_settings)
+            manager.qdrant_client = mock_qdrant
 
-                # Store document first for metadata lookup
-                await manager.store_document(sample_document_metadata, [])
+            # Store document first for metadata lookup
+            await manager.store_document(sample_document_metadata, [])
 
-                # Mock search results
-                mock_search_result = Mock()
-                mock_search_result.id = "vec_001"
-                mock_search_result.score = 0.85
-                mock_search_result.payload = {
-                    "document_id": sample_document_metadata.id,
-                    "text": "Test search result text",
-                    "metadata": {"page": 1},
-                }
+            # Mock search results
+            mock_search_result = Mock()
+            mock_search_result.id = "vec_001"
+            mock_search_result.score = 0.85
+            mock_search_result.payload = {
+                "document_id": sample_document_metadata.id,
+                "text": "Test search result text",
+                "metadata": {"page": 1},
+            }
 
-                with patch("asyncio.to_thread", return_value=[mock_search_result]):
-                    query_vector = [0.1, 0.2] * 512  # 1024 dimensions
-                    results = await manager.search_similar_vectors(
-                        query_vector=query_vector, limit=5, score_threshold=0.7
-                    )
+            with patch("asyncio.to_thread", return_value=[mock_search_result]):
+                query_vector = [0.1, 0.2] * 512  # 1024 dimensions
+                results = await manager.search_similar_vectors(
+                    query_vector=query_vector, limit=5, score_threshold=0.7
+                )
 
-                    assert len(results) == 1
-                    assert isinstance(results[0], SearchResult)
-                    assert results[0].document_id == sample_document_metadata.id
-                    assert results[0].score == 0.85
-                    assert results[0].text == "Test search result text"
+                assert len(results) == 1
+                assert isinstance(results[0], SearchResult)
+                assert results[0].document_id == sample_document_metadata.id
+                assert results[0].score == 0.85
+                assert results[0].text == "Test search result text"
 
     @pytest.mark.integration
     async def test_search_similar_vectors_with_filter(self, mock_settings):
         """Test vector search with document filtering."""
-        with patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True):
-            with patch("src.storage.hybrid_persistence.QdrantClient") as mock_client:
-                mock_qdrant = Mock()
-                mock_client.return_value = mock_qdrant
+        with (
+            patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True),
+            patch("src.storage.hybrid_persistence.QdrantClient") as mock_client,
+        ):
+            mock_qdrant = Mock()
+            mock_client.return_value = mock_qdrant
 
-                manager = HybridPersistenceManager(mock_settings)
-                manager.qdrant_client = mock_qdrant
+            manager = HybridPersistenceManager(mock_settings)
+            manager.qdrant_client = mock_qdrant
 
-                with patch("asyncio.to_thread", return_value=[]):
-                    query_vector = [0.1, 0.2] * 512
-                    results = await manager.search_similar_vectors(
-                        query_vector=query_vector,
-                        limit=5,
-                        document_filter="specific_doc_id",
-                    )
+            with patch("asyncio.to_thread", return_value=[]):
+                query_vector = [0.1, 0.2] * 512
+                results = await manager.search_similar_vectors(
+                    query_vector=query_vector,
+                    limit=5,
+                    document_filter="specific_doc_id",
+                )
 
-                    assert isinstance(results, list)
+                assert isinstance(results, list)
 
     @pytest.mark.integration
     async def test_search_similar_vectors_no_qdrant(self, mock_settings):
@@ -510,22 +523,24 @@ class TestHybridPersistenceManagerVectorOperations:
         self, mock_settings, sample_vector_records
     ):
         """Test batch vector storage operation."""
-        with patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True):
-            with patch("src.storage.hybrid_persistence.QdrantClient") as mock_client:
-                mock_qdrant = Mock()
-                mock_client.return_value = mock_qdrant
+        with (
+            patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True),
+            patch("src.storage.hybrid_persistence.QdrantClient") as mock_client,
+        ):
+            mock_qdrant = Mock()
+            mock_client.return_value = mock_qdrant
 
-                manager = HybridPersistenceManager(mock_settings)
-                manager.qdrant_client = mock_qdrant
+            manager = HybridPersistenceManager(mock_settings)
+            manager.qdrant_client = mock_qdrant
 
-                with patch("asyncio.to_thread") as mock_to_thread:
-                    await manager._store_vectors(sample_vector_records)
+            with patch("asyncio.to_thread") as mock_to_thread:
+                await manager._store_vectors(sample_vector_records)
 
-                    # Verify batch upsert was called
-                    mock_to_thread.assert_called_once()
-                    call_args = mock_to_thread.call_args
-                    assert call_args[0][0] == mock_qdrant.upsert
-                    assert "points" in call_args[1]
+                # Verify batch upsert was called
+                mock_to_thread.assert_called_once()
+                call_args = mock_to_thread.call_args
+                assert call_args[0][0] == mock_qdrant.upsert
+                assert "points" in call_args[1]
 
 
 class TestHybridPersistenceManagerErrorHandling:
@@ -546,14 +561,16 @@ class TestHybridPersistenceManagerErrorHandling:
     @pytest.mark.integration
     async def test_qdrant_connection_error_handling(self, mock_settings):
         """Test handling of Qdrant connection errors."""
-        with patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True):
-            with patch("src.storage.hybrid_persistence.QdrantClient") as mock_client:
-                # Simulate connection error
-                mock_client.side_effect = ConnectionError("Qdrant unavailable")
+        with (
+            patch("src.storage.hybrid_persistence.QDRANT_AVAILABLE", True),
+            patch("src.storage.hybrid_persistence.QdrantClient") as mock_client,
+        ):
+            # Simulate connection error
+            mock_client.side_effect = ConnectionError("Qdrant unavailable")
 
-                # Should still initialize successfully but without Qdrant
-                manager = HybridPersistenceManager(mock_settings)
-                assert manager.qdrant_client is None
+            # Should still initialize successfully but without Qdrant
+            manager = HybridPersistenceManager(mock_settings)
+            assert manager.qdrant_client is None
 
     @pytest.mark.integration
     async def test_json_serialization_error_handling(self, mock_settings):

@@ -22,7 +22,7 @@ class SimpleCache(CacheInterface):
     Perfect for single-user Streamlit app with multi-agent coordination.
     """
 
-    def __init__(self, cache_dir: str = "./cache"):
+    def __init__(self, cache_dir: str = "./cache") -> None:
         """Initialize with SQLite-based cache."""
         cache_path = Path(cache_dir)
         cache_path.mkdir(parents=True, exist_ok=True)

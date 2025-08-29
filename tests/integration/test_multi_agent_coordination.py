@@ -411,7 +411,7 @@ class TestMultiAgentCoordinatorPerformance:
 
             start_time = time.perf_counter()
             response = coordinator.process_query("Test query")
-            elapsed = time.perf_counter() - start_time
+            time.perf_counter() - start_time
 
             # Verify coordination overhead is tracked
             assert "coordination_overhead_ms" in response.optimization_metrics

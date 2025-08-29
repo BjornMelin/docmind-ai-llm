@@ -218,7 +218,7 @@ class TestSettingsModuleIntegration:
                     assert isinstance(settings.agents.enable_multi_agent, bool)
 
                 if hasattr(settings.agents, "decision_timeout"):
-                    assert isinstance(settings.agents.decision_timeout, (int, float))
+                    assert isinstance(settings.agents.decision_timeout, int | float)
                     assert settings.agents.decision_timeout > 0
 
 
@@ -337,13 +337,11 @@ class TestSettingsErrorHandling:
         }
 
         with patch.dict(os.environ, invalid_env):
-            try:
-                settings = DocMindSettings()
-                # Should not crash, should use defaults
-                assert settings is not None
-            except Exception as e:
-                # If it fails, it should be a validation error, not a crash
-                assert "validation" in str(e).lower() or "invalid" in str(e).lower()
+            # Test that invalid values are handled gracefully
+            # (should use defaults, not crash)
+            settings = DocMindSettings()
+            assert settings is not None
+            # Should have created settings object, using defaults for invalid values
 
     def test_settings_with_missing_directories(self, temp_settings_env):
         """Test settings work when specified directories don't exist."""

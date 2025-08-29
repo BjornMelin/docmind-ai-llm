@@ -56,7 +56,9 @@ class UnstructuredTransformation(TransformComponent):
     strategy: ProcessingStrategy = None
     settings: Any = None
 
-    def __init__(self, strategy: ProcessingStrategy, settings: Any | None = None):
+    def __init__(
+        self, strategy: ProcessingStrategy, settings: Any | None = None
+    ) -> None:
         """Initialize UnstructuredTransformation.
 
         Args:
@@ -280,7 +282,7 @@ class DocumentProcessor:
     - Full API compatibility with ResilientDocumentProcessor
     """
 
-    def __init__(self, settings: Any | None = None):
+    def __init__(self, settings: Any | None = None) -> None:
         """Initialize DocumentProcessor.
 
         Args:

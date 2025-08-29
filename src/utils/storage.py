@@ -60,7 +60,7 @@ def get_client_config() -> dict[str, Any]:
 
 
 @contextmanager
-def create_sync_client():
+def create_sync_client() -> Generator[QdrantClient, None, None]:
     """Create sync Qdrant client with proper cleanup.
 
     Yields:
@@ -89,7 +89,7 @@ def create_sync_client():
 
 
 @asynccontextmanager
-async def create_async_client():
+async def create_async_client() -> AsyncGenerator[AsyncQdrantClient, None]:
     """Create async Qdrant client with proper cleanup.
 
     Yields:

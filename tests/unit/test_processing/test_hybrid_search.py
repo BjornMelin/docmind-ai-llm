@@ -16,7 +16,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 # Note: HybridSearcher is a test class for functionality that will be implemented
-# from src.retrieval.hybrid_searcher import HybridSearcher
 
 
 class HybridSearcher:

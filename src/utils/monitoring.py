@@ -14,6 +14,7 @@ Key features:
 
 import sys
 import time
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
@@ -114,7 +115,9 @@ def log_performance(
 
 
 @contextmanager
-def performance_timer(operation: str, **context: Any):
+def performance_timer(
+    operation: str, **context: Any
+) -> Generator[dict[str, Any], None, None]:
     """Context manager for timing operations.
 
     Args:
@@ -161,7 +164,9 @@ def performance_timer(operation: str, **context: Any):
 
 
 @asynccontextmanager
-async def async_performance_timer(operation: str, **context: Any):
+async def async_performance_timer(
+    operation: str, **context: Any
+) -> AsyncGenerator[dict[str, Any], None]:
     """Async context manager for timing operations.
 
     Args:
@@ -256,7 +261,7 @@ def get_system_info() -> dict[str, Any]:
 class SimplePerformanceMonitor:
     """Simple performance monitor for tracking operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the performance monitor with empty metrics list."""
         self.metrics: list[dict[str, Any]] = []
 

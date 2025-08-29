@@ -26,6 +26,7 @@ Attributes:
 
 import asyncio
 import time
+from collections.abc import Generator
 from typing import Any
 
 import ollama
@@ -449,7 +450,7 @@ if user_input:
                 # Using single ReActAgent for all queries
 
                 # Process query with appropriate agent system using streaming
-                def stream_response():
+                def stream_response() -> Generator[str, None, None]:
                     """Stream response from agent system."""
                     try:
                         response = process_query_with_agent_system(

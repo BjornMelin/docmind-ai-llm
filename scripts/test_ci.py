@@ -59,7 +59,7 @@ def run_command(command: list[str], description: str) -> tuple[int, str]:
         return -1, str(e)
 
 
-def main():
+def main() -> None:
     """Main CI test runner."""
     parser = argparse.ArgumentParser(description="DocMind AI CI Test Runner")
     parser.add_argument(

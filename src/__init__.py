@@ -13,9 +13,7 @@ __author__ = "Bjorn Melin"
 # Make key components available at package level
 from .config import settings
 
-# Note: ADR-009 compliant processing available via:
-# from src.processing import ResilientDocumentProcessor
-# from src.cache import create_cache_manager
+# Note: ADR-009 compliant processing available via src.processing and src.cache modules
 
 __all__ = [
     "settings",
