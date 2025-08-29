@@ -11,9 +11,9 @@
 [![GitHub](https://img.shields.io/badge/GitHub-BjornMelin-181717?logo=github)](https://github.com/BjornMelin)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Bjorn%20Melin-0077B5?logo=linkedin)](https://www.linkedin.com/in/bjorn-melin/)
 
-**DocMind AI** transforms how you analyze documents locally with zero cloud dependency. This system combines hybrid search (dense + sparse embeddings), knowledge graph extraction, and a sophisticated 5-agent coordination system to extract and analyze information from your PDFs, Office docs, and multimedia content. Built on LlamaIndex pipelines with LangGraph supervisor orchestration and Qwen3-4B-Instruct-2507's FULL 262K context capability through INT8 KV cache optimization, it delivers production-ready document intelligence that runs entirely on your hardware—with GPU acceleration for enhanced performance and specialized agent coordination for improved query quality.
+**DocMind AI** provides local document analysis with zero cloud dependency. This system combines hybrid search (dense + sparse embeddings), knowledge graph extraction, and a 5-agent coordination system to extract and analyze information from your PDFs, Office docs, and multimedia content. Built on LlamaIndex pipelines with LangGraph supervisor orchestration and Qwen3-4B-Instruct-2507's FULL 262K context capability through INT8 KV cache optimization, it provides document intelligence that runs entirely on your hardware—with GPU acceleration and agent coordination.
 
-**Why DocMind AI?** Traditional document analysis tools either send your data to the cloud (privacy risk) or provide basic keyword search (limited intelligence). DocMind AI gives you the best of both worlds: AI reasoning with complete data privacy. Process complex queries that require multiple reasoning strategies, extract entities and relationships, and get contextual answers—all while your sensitive documents never leave your machine.
+**Architecture**: Traditional document analysis tools either send your data to the cloud (privacy risk) or provide basic keyword search (limited intelligence). DocMind AI provides AI reasoning with complete data privacy. Process complex queries that require multiple reasoning strategies, extract entities and relationships, and get contextual answers—all while your sensitive documents never leave your machine.
 
 ## ✨ Features of DocMind AI
 
@@ -39,13 +39,13 @@
 
 - **LlamaIndex RAG Pipeline:** QueryPipeline with async/parallel processing, ingestion pipelines, and caching.
 
-- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-Large dense and SPLADE++ sparse embeddings for 15-20% better recall.
+- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-Large dense and SPLADE++ sparse embeddings for improved recall.
 
 - **Knowledge Graph Integration:** spaCy entity extraction with relationship mapping for complex queries.
 
 - **Multimodal Processing:** Unstructured hi-res parsing for PDFs with text, tables, and images using Jina v4 embeddings.
 
-- **ColBERT Reranking:** Late-interaction reranking improves context quality by 20-30%.
+- **ColBERT Reranking:** Late-interaction reranking for improved context quality.
 
 - **Offline-First Design:** 100% local processing with no external API dependencies.
 
@@ -231,7 +231,7 @@
    uv sync --extra gpu
    ```
 
-   See [GPU Setup Guide](docs/developers/gpu-setup.md) for detailed configuration and troubleshooting.
+   See [GPU Setup Guide](docs/developers/archived/gpu-setup.md) for detailed configuration and troubleshooting.
 
 ### ▶️ Running the App
 
@@ -550,7 +550,7 @@ graph TD
   - **Result Synthesizer:** Combines and reconciles results from multiple retrieval passes with deduplication
   - **Response Validator:** Validates response quality, accuracy, and completeness before final output
 
-- **Enhanced Capabilities:** DSPy automatic query optimization (20-30% quality improvement) and optional GraphRAG for multi-hop reasoning
+- **Enhanced Capabilities:** DSPy automatic query optimization and optional GraphRAG for multi-hop reasoning
 
 - **Workflow Coordination:** Supervisor automatically routes between agents based on query complexity with <300ms coordination overhead
 
@@ -562,7 +562,7 @@ graph TD
 
 - **GPU Acceleration:** CUDA support with FP8 quantization via vLLM FlashInfer backend and torch.compile optimization
 
-- **Async Processing:** QueryPipeline with parallel execution and intelligent caching
+- **Async Processing:** QueryPipeline with parallel execution and caching
 
 - **Reranking:** ColBERT late-interaction model improves top-5 results from top-20 prefetch
 
@@ -637,6 +637,8 @@ maxUploadSize = 200
 
 ## 📊 Performance Benchmarks
 
+> **Note**: The following performance metrics are estimates based on hardware specifications and typical usage patterns. Actual performance may vary depending on hardware configuration, model size, document complexity, and system load. For measured test suite performance, see [Testing Guide](docs/testing/current-testing-guide.md).
+
 ### Performance Metrics
 
 | Operation | Performance | Notes |
@@ -647,7 +649,7 @@ maxUploadSize = 200
 | **5-Agent System Response** | 3-8 seconds | LangGraph supervisor coordination with <200ms overhead |
 | **128K Context Processing** | 1.5-3 seconds | 128K context with FP8 KV cache |
 | **Vector Search** | <500ms | Qdrant in-memory with GPU embeddings |
-| **Test Suite (99 tests)** | ~40 seconds | Comprehensive coverage |
+| **Test Suite (1,779 tests)** | Varies by tier | Unit/integration/system testing - 3.51% measured coverage |
 | **Memory Usage (Idle)** | 400-500MB | Base application |
 | **Memory Usage (Processing)** | 1.2-2.1GB | During document analysis |
 | **GPU Memory Usage** | ~12-14GB | Model + 128K context + embedding cache |
@@ -656,7 +658,7 @@ maxUploadSize = 200
 
 **Document Processing Cache:**
 
-- **Cache hit ratio**: 85-90% for repeated documents
+- **Cache hit ratio**: High rate for repeated documents
 
 - **Storage efficiency**: ~1GB handles 1000+ documents
 
@@ -668,9 +670,9 @@ maxUploadSize = 200
 
 **Retrieval Quality Metrics:**
 
-- **Dense + Sparse RRF**: 15-20% better recall vs single-vector
+- **Dense + Sparse RRF**: Improved recall vs single-vector
 
-- **ColBERT Reranking**: 20-30% context quality improvement
+- **ColBERT Reranking**: Enhanced context quality
 
 - **Top-K Retrieval**: <2 seconds for 10K document corpus
 
@@ -870,7 +872,7 @@ python scripts/performance_validation.py
 
 - Check logs in `logs/` directory for detailed errors
 
-- Review [troubleshooting guide](docs/user/troubleshooting.md)
+- Review [troubleshooting guide](docs/user/troubleshooting-reference.md)
 
 - Search existing [GitHub Issues](https://github.com/BjornMelin/docmind-ai-llm/issues)
 
@@ -926,7 +928,7 @@ Contributions are welcome! Please follow these steps:
 
 - Update documentation as needed
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed guidelines.
 
 ## 📃 License
 
