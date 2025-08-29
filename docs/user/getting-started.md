@@ -1,274 +1,424 @@
 # Getting Started with DocMind AI
 
-Welcome to DocMind AI - a local-first AI document analysis system. This guide will help you go from zero to analyzing your first document in under 15 minutes.
+DocMind AI is a local-first AI document analysis system that runs entirely on your machine with zero cloud dependencies. This guide will get you from installation to analyzing your first document in under 15 minutes.
 
 ## What You'll Accomplish
 
 By the end of this guide, you'll have:
 
 - ✅ DocMind AI running on your system
-- ✅ Your first documents uploaded and analyzed
-- ✅ A working understanding of the multi-agent system
-- ✅ Confidence to explore advanced features
+- ✅ Your first documents uploaded and analyzed  
+- ✅ Understanding of the 5-agent coordination system
+- ✅ Confidence to explore advanced capabilities
 
-## Before You Start
+## Hardware Requirements
 
-### Minimum System Requirements
+### Minimum Setup (CPU-Only)
+- **CPU**: Any modern processor
+- **RAM**: 8GB system memory
+- **Storage**: 20GB free space for models
+- **OS**: Linux, macOS, or Windows 10/11
 
-**Essential Hardware:**
+### Recommended Setup  
+- **CPU**: Modern multi-core processor
+- **RAM**: 16GB system memory
+- **GPU**: RTX 4060 (12GB VRAM) or better
+- **Storage**: 50GB SSD space
 
-- **GPU**: NVIDIA RTX 4090 (16GB+ VRAM)
-- **RAM**: 32GB system memory
-- **Storage**: 50GB+ free space
-- **OS**: Linux (Ubuntu 20.04+) or Windows 10/11 with WSL2
+### Optimal Performance
+- **CPU**: High-end desktop processor
+- **RAM**: 32GB+ system memory
+- **GPU**: RTX 4090 (16GB+ VRAM) 
+- **Storage**: 100GB+ NVMe SSD
 
-**Software Prerequisites:**
-
-- **Python**: 3.10-3.12
-- **CUDA**: Version 12.8+
-- **NVIDIA Driver**: 550.54.14+
-
-> **💡 New to GPU setup?** Don't worry - we'll guide you through the essentials below. For detailed GPU configuration, see [Advanced Features](advanced-features.md#gpu-optimization).
-
-### Quick Hardware Check
-
-```bash
-# Check if you have the minimum requirements
-nvidia-smi  # Should show your GPU and VRAM
-python --version  # Should show 3.10-3.12
-```
-
-If these commands work, you're ready to proceed!
+> **Hardware Check**: Run `nvidia-smi` and `python --version` to verify GPU and Python availability.
 
 ## Step 1: Installation (5 minutes)
 
-### Clone and Setup
+### Clone and Install Dependencies
 
 ```bash
 # Get the code
 git clone https://github.com/BjornMelin/docmind-ai-llm.git
 cd docmind-ai-llm
 
-# Install dependencies (this will take a few minutes)
+# Install Python dependencies
+uv sync
+
+# Install spaCy language model (required for document processing)
+uv run python -m spacy download en_core_web_sm
+```
+
+### Install Ollama (Local AI Backend)
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+```
+
+**Windows:** Download from [ollama.com](https://ollama.com/download)
+
+**Start Ollama and download the recommended model:**
+```bash
+# Start the Ollama service
+ollama serve
+
+# In a new terminal, download the model (this may take 10-15 minutes)
+ollama pull qwen3-4b-instruct-2507
+```
+
+### GPU Support (Optional but Recommended)
+
+**For NVIDIA GPUs with 12GB+ VRAM:**
+
+```bash
+# Verify CUDA installation
+nvidia-smi  # Should show your GPU
+nvcc --version  # Should show CUDA 12.8+
+
+# Install GPU-optimized dependencies
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
+    --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install "vllm[flashinfer]>=0.10.1" \
+    --extra-index-url https://download.pytorch.org/whl/cu128
 uv sync --extra gpu
 ```
 
-### Essential Configuration
-
+**Verify GPU setup:**
 ```bash
-# Create your configuration file
-cp .env.example .env
-
-# Set minimal required variables
-echo 'DOCMIND_GPU_MEMORY_UTILIZATION=0.85' >> .env
-echo 'DOCMIND_ENABLE_MULTI_AGENT=true' >> .env
+python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
 ```
 
-## Step 2: Start DocMind AI (2 minutes)
+## Step 2: Configuration (2 minutes)
 
-### Launch the Application
+### Basic Configuration
 
 ```bash
-# Start DocMind AI
+# Create configuration file
+cp .env.example .env
+
+# For CPU-only setups
+echo 'DOCMIND_ENABLE_GPU_ACCELERATION=false' >> .env
+echo 'DOCMIND_CONTEXT_WINDOW_SIZE=32768' >> .env
+
+# For GPU setups (RTX 4060/4070)
+echo 'DOCMIND_ENABLE_GPU_ACCELERATION=true' >> .env
+echo 'DOCMIND_GPU_MEMORY_UTILIZATION=0.85' >> .env
+echo 'DOCMIND_CONTEXT_WINDOW_SIZE=65536' >> .env
+
+# For high-end GPUs (RTX 4090)
+echo 'DOCMIND_ENABLE_GPU_ACCELERATION=true' >> .env
+echo 'DOCMIND_GPU_MEMORY_UTILIZATION=0.85' >> .env
+echo 'DOCMIND_CONTEXT_WINDOW_SIZE=131072' >> .env
+echo 'VLLM_ATTENTION_BACKEND=FLASHINFER' >> .env
+```
+
+### Enable Multi-Agent System
+
+```bash
+# Enable the 5-agent coordination system
+echo 'ENABLE_MULTI_AGENT=true' >> .env
+echo 'AGENT_TIMEOUT_SECONDS=30' >> .env
+```
+
+## Step 3: Launch DocMind AI (1 minute)
+
+```bash
+# Start the application
 uv run streamlit run src/app.py
 ```
 
-You should see:
-
-```text
+**You should see:**
+```
 You can now view your Streamlit app in your browser.
 Local URL: http://localhost:8501
 ```
 
-### Verify System Status
+Open [http://localhost:8501](http://localhost:8501) in your browser.
 
-1. Open <http://localhost:8501> in your browser
-2. Check the sidebar for:
-   - ✅ **GPU Status**: Should show "GPU: NVIDIA GeForce RTX 4090"
-   - ✅ **Model Status**: Should show "Model: Ready"
-   - ✅ **Multi-Agent**: Should show "5 Agents Active"
+## Step 4: Verify System Status (1 minute)
 
-> **⚠️ Issues?** If you see red error messages, check our [Troubleshooting Quick Fixes](#troubleshooting-quick-fixes) below.
+Check the sidebar for system indicators:
 
-## Step 3: Your First Document Analysis (5 minutes)
+- ✅ **GPU Status**: Shows your GPU model (or "CPU Only")
+- ✅ **Model Status**: Shows "Model: Ready" 
+- ✅ **Multi-Agent**: Shows "5 Agents Active"
+- ✅ **Ollama**: Shows "Connected" with model name
 
-### Upload Documents
+If you see any red error indicators, check the [Common Issues](#common-issues) section below.
 
-1. **Click "Upload Documents"** in the sidebar
-2. **Select files** - try a PDF, Word doc, or text file
-3. **Wait for processing** - you'll see a progress bar
-4. **Confirm success** - uploaded files appear in the document list
+## Step 5: Analyze Your First Document (5 minutes)
+
+### Upload a Document
+
+1. Click **"Upload Documents"** in the sidebar
+2. Select a PDF, Word doc, or text file (start with something under 10 pages)
+3. Wait for the processing indicator to complete
+4. Verify the document appears in the document list
 
 ### Ask Your First Question
 
-**Try this example query:**
-
-```text
-What are the main topics covered in my documents?
+Try this example query:
+```
+What are the main topics and key insights in this document?
 ```
 
 **Watch the multi-agent system work:**
-
-- 🔄 **Query Router** analyzes your question
-- 🔍 **Retrieval Agent** searches your documents  
-- 🔧 **Synthesis Agent** combines findings
-- ✅ **Validator** ensures response quality
+- 🎯 **Query Router** analyzes your question  
+- 📋 **Query Planner** breaks down the task
+- 🔍 **Retrieval Expert** searches your documents
+- 🔧 **Result Synthesizer** combines findings
+- ✅ **Response Validator** ensures quality
 
 ### Interpret Your Results
 
 Your response will include:
-
 - **Main Answer**: Direct response to your question
-- **Sources**: Which documents were referenced
+- **Sources**: Referenced document sections  
 - **Confidence Score**: Quality indicator (aim for >0.8)
 - **Processing Time**: Should be 1-3 seconds
 
-## Step 4: Explore Key Features (3 minutes)
+## Understanding DocMind AI
+
+### The 5-Agent System
+
+DocMind AI uses specialized AI agents that coordinate automatically:
+
+1. **Query Router**: Analyzes query complexity and routes to appropriate agents
+2. **Query Planner**: Breaks complex questions into manageable sub-tasks  
+3. **Retrieval Expert**: Finds relevant content using hybrid search (semantic + keyword)
+4. **Result Synthesizer**: Combines information from multiple sources
+5. **Response Validator**: Ensures response quality and accuracy
+
+### Document Processing
+
+- **Supported Formats**: PDF, DOCX, TXT, XLSX, CSV, JSON, XML, MD, RTF, MSG, PPTX, ODT, EPUB, and code files
+- **Processing**: Unstructured.io hi-res parsing extracts text, tables, and images
+- **Intelligence**: spaCy NLP for entity extraction and relationship mapping
+- **Search**: BGE-M3 unified embeddings with hybrid dense + sparse retrieval
+
+### Privacy and Local Operation
+
+- **100% Local**: No data ever leaves your machine
+- **Offline Capable**: Works without internet after initial setup
+- **No API Keys**: Uses local models through Ollama
+- **Secure**: All processing happens on your hardware
+
+## Next Steps
 
 ### Try Different Query Types
 
-**Simple Lookup:**
-
-```text
+**Simple Information Lookup:**
+```
 What is the budget mentioned in the financial report?
+Who are the key stakeholders identified?
 ```
 
-**Comparison Analysis:**
-
-```text
-Compare the methodologies between document A and document B.
+**Comparative Analysis:**
+```
+Compare the Q1 and Q2 performance metrics.
+How do the proposed solutions differ in approach?
 ```
 
-**Multi-step Question:**
-
-```text
-What are the risks identified, how severe are they, and what mitigation strategies are proposed?
+**Multi-Step Reasoning:**
+```
+What risks are identified, how severe are they, and what mitigation strategies are proposed?
 ```
 
-### Understanding System Responses
+### Explore Advanced Features
 
-Pay attention to:
+- **Large Context**: Process entire documents (up to 128K tokens) without chunking
+- **Multiple Documents**: Upload related files for cross-document analysis
+- **Conversation History**: Build on previous questions for deeper analysis
+- **Export Results**: Save responses as JSON or Markdown
 
-- **Response Time**: Simple queries ~1s, complex ~3s
-- **Agent Coordination**: Which agents were activated
-- **Source Attribution**: Clear document references
-- **Quality Scores**: Higher scores indicate better responses
+## Common Issues
 
-## Essential Configuration Options
+### DocMind AI Won't Start
 
-### Performance Tuning (For Your Hardware)
+**Problem**: Application crashes or won't launch
 
+**Quick Fix:**
 ```bash
-# In your .env file - adjust based on your GPU
-DOCMIND_GPU_MEMORY_UTILIZATION=0.85  # Lower to 0.75 if memory issues
-DOCMIND_MAX_CONTEXT_LENGTH=131072    # Full 128K context window
-VLLM_ATTENTION_BACKEND=FLASHINFER    # Fastest attention mechanism
+# Check Python version (should be 3.10-3.12)
+python --version
+
+# Reinstall dependencies
+uv sync
+
+# Check for port conflicts
+lsof -i :8501  # Kill any process using port 8501
 ```
-
-### Multi-Agent Settings
-
-```bash
-# Agent coordination settings
-ENABLE_MULTI_AGENT=true              # Use 5-agent coordination
-AGENT_TIMEOUT_SECONDS=30             # Agent response timeout
-MAX_CONTEXT_TOKENS=65000             # Context preservation limit
-```
-
-## Troubleshooting Quick Fixes
 
 ### GPU Not Detected
 
-**Symptoms:** "GPU: CPU Only" in the sidebar
+**Problem**: Shows "CPU Only" despite having GPU
 
 **Quick Fix:**
-
 ```bash
-# Verify CUDA installation
-nvidia-smi && nvcc --version
+# Verify GPU detection
+nvidia-smi
+python -c "import torch; print(torch.cuda.is_available())"
 
-# If missing, install CUDA 12.8
-# Ubuntu: sudo apt install cuda-toolkit-12-8
-# Then restart DocMind AI
+# Force GPU in configuration
+echo 'DOCMIND_DEVICE=cuda' >> .env
+echo 'DOCMIND_ENABLE_GPU_ACCELERATION=true' >> .env
 ```
 
 ### Out of Memory Errors
 
-**Symptoms:** CUDA out of memory errors
+**Problem**: CUDA out of memory or system crashes
 
 **Quick Fix:**
-
 ```bash
 # Reduce GPU memory usage
 echo 'DOCMIND_GPU_MEMORY_UTILIZATION=0.75' >> .env
+echo 'DOCMIND_CONTEXT_WINDOW_SIZE=32768' >> .env
 
-# Clear GPU cache and restart
+# Clear GPU cache
 python -c "import torch; torch.cuda.empty_cache()"
 ```
 
 ### Slow Performance
 
-**Symptoms:** Queries taking >10 seconds
+**Problem**: Queries take >10 seconds
 
 **Quick Fix:**
-
 ```bash
 # Enable performance optimizations
 echo 'VLLM_ATTENTION_BACKEND=FLASHINFER' >> .env
 echo 'VLLM_USE_CUDNN_PREFILL=1' >> .env
 
-# Restart the application
+# Check system resources
+nvidia-smi  # GPU utilization should be <90%
+htop        # Monitor CPU and RAM usage
 ```
 
-### Model Won't Load
+### Ollama Connection Failed
 
-**Symptoms:** "Model: Error" in sidebar
+**Problem**: Can't connect to Ollama service
 
 **Quick Fix:**
-
 ```bash
-# Check model accessibility
-python -c "from transformers import AutoTokenizer; print('Model available')"
+# Check if Ollama is running
+curl http://localhost:11434/api/version
 
-# If this fails, check your internet connection
-# Models download automatically on first use
+# If not running, start it
+ollama serve
+
+# Verify model is installed
+ollama list
+ollama pull qwen3-4b-instruct-2507  # If missing
 ```
 
-## What's Next?
+### Document Upload Fails
 
-Congratulations! You now have DocMind AI running successfully. Here's your learning path:
+**Problem**: Documents won't upload or process
 
-### Immediate Next Steps
+**Quick Fix:**
+```bash
+# Check file format support
+echo "Supported: PDF, DOCX, TXT, XLSX, CSV, JSON, XML, MD, RTF, MSG, PPTX, ODT, EPUB"
 
-1. **📖 [User Guide](user-guide.md)** - Master daily workflows and core features
-2. **🔧 [Advanced Features](advanced-features.md)** - Unlock power-user capabilities
-3. **🆘 [Troubleshooting Reference](troubleshooting-reference.md)** - Solve any issues you encounter
+# Check file size (should be <100MB)
+ls -lh your_file.pdf
 
-### Explore Advanced Capabilities
+# Try with a simple text file first
+echo "Test document content" > test.txt
+```
 
-- **Multi-Agent Coordination**: Let 5 specialized agents handle complex queries
-- **Hybrid Search**: Semantic + keyword search for better results
-- **128K Context**: Analyze very large documents in full
-- **Multi-Language**: Work with documents in 100+ languages
+## Configuration Reference
 
-## Success Indicators
+### Performance Profiles
 
-You've successfully set up DocMind AI when you see:
+**Speed Optimized (Fast responses):**
+```bash
+DOCMIND_CONTEXT_WINDOW_SIZE=32768
+AGENT_TIMEOUT_SECONDS=15
+MIN_VALIDATION_SCORE=0.6
+RETRIEVAL_TOP_K=10
+```
 
-- ✅ **System Status**: All green indicators in sidebar
-- ✅ **Document Processing**: Files upload and process without errors
-- ✅ **Query Responses**: Receive relevant answers in 1-3 seconds
-- ✅ **Agent Coordination**: See multi-agent workflow in action
-- ✅ **Performance**: Decode speed >100 tokens/second
+**Balanced (Default):**
+```bash
+DOCMIND_CONTEXT_WINDOW_SIZE=65536
+AGENT_TIMEOUT_SECONDS=30
+MIN_VALIDATION_SCORE=0.7
+RETRIEVAL_TOP_K=20
+```
+
+**Quality Optimized (Best accuracy):**
+```bash
+DOCMIND_CONTEXT_WINDOW_SIZE=131072
+AGENT_TIMEOUT_SECONDS=60
+MIN_VALIDATION_SCORE=0.85
+RETRIEVAL_TOP_K=30
+ENABLE_DSPY_OPTIMIZATION=true
+```
+
+### Hardware-Specific Settings
+
+**RTX 4060 (12GB VRAM):**
+```bash
+DOCMIND_GPU_MEMORY_UTILIZATION=0.85
+DOCMIND_CONTEXT_WINDOW_SIZE=65536
+DOCMIND_MAX_DOCUMENT_SIZE_MB=50
+```
+
+**RTX 4080 (16GB VRAM):**
+```bash
+DOCMIND_GPU_MEMORY_UTILIZATION=0.85
+DOCMIND_CONTEXT_WINDOW_SIZE=131072
+DOCMIND_MAX_DOCUMENT_SIZE_MB=100
+VLLM_ATTENTION_BACKEND=FLASHINFER
+```
+
+**RTX 4090 (24GB VRAM):**
+```bash
+DOCMIND_GPU_MEMORY_UTILIZATION=0.90
+DOCMIND_CONTEXT_WINDOW_SIZE=131072
+DOCMIND_MAX_DOCUMENT_SIZE_MB=200
+VLLM_ATTENTION_BACKEND=FLASHINFER
+VLLM_KV_CACHE_DTYPE=fp8_e5m2
+```
 
 ## Getting Help
 
-If you encounter issues:
+### Built-in Diagnostics
 
-1. **Check Logs**: Look at `logs/app.log` for detailed error information
-2. **Try Quick Fixes**: Use the troubleshooting section above
-3. **Consult References**: Check [Troubleshooting Reference](troubleshooting-reference.md)
-4. **Report Issues**: GitHub issues with logs and system details
+```bash
+# Check system health
+python scripts/system_validation.py
+
+# Run performance tests
+python scripts/performance_validation.py
+
+# Analyze logs
+tail -f logs/app.log | grep "ERROR\|WARNING"
+```
+
+### Documentation Resources
+
+- **Configuration Options**: [configuration.md](configuration.md)
+- **Common Problems**: [troubleshooting.md](troubleshooting.md) 
+- **Quick Answers**: [faq.md](faq.md)
+
+### Support Channels
+
+- **GitHub Issues**: Bug reports and feature requests
+- **GitHub Discussions**: Community Q&A and best practices
+- **Log Analysis**: Check `logs/app.log` for detailed error information
+
+### When Reporting Issues
+
+Include in your report:
+- System specifications (GPU, RAM, OS)
+- Complete error messages and logs
+- Steps to reproduce the problem
+- Configuration settings (`.env` file, remove any sensitive data)
 
 ---
 
-**Ready to dive deeper?** Continue to the [User Guide](user-guide.md) to master DocMind AI's powerful document analysis capabilities.
+**Success!** You now have DocMind AI running locally with complete privacy and powerful AI-driven document analysis capabilities. Your sensitive documents never leave your machine, and you have access to advanced multi-agent coordination for complex queries.
+
+Ready to explore more? Check out [configuration.md](configuration.md) for advanced settings and [troubleshooting.md](troubleshooting.md) for detailed problem resolution.

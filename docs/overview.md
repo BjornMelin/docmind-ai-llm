@@ -1,6 +1,6 @@
 # DocMind AI Documentation Overview
 
-Welcome to the documentation for **DocMind AI**, a high-performance local LLM-powered document analysis system built with vLLM, LangGraph, and LlamaIndex. This documentation is organized into sections for users, developers, API reference, and architectural decision records (ADRs).
+Welcome to the documentation for **DocMind AI**, a local LLM document analysis system using vLLM, LangGraph, and LlamaIndex with 100-160 tok/s decode performance on RTX 4090. This documentation is organized into sections for users, developers, API reference, and architectural decision records (ADRs).
 
 ## Project Summary
 

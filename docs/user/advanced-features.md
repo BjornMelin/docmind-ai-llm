@@ -343,13 +343,13 @@ KEYWORD_TRANSLATION_FALLBACK=enabled
 
 - **RTX 4090** (24GB VRAM) - Full feature set, maximum performance
 - **RTX 4090 Laptop** (16GB VRAM) - Validated configuration, optimized settings
-- **RTX A6000** (48GB VRAM) - Professional workstation, enterprise features
+- **RTX A6000** (48GB VRAM) - Professional workstation with high VRAM capacity
 
 **Compatible Hardware:**
 
 - **RTX 4080** (16GB VRAM) - Requires memory optimization
 - **RTX 3090** (24GB VRAM) - Legacy support with performance tuning
-- **H100** (80GB VRAM) - Research/enterprise deployment
+- **H100** (80GB VRAM) - High-performance computing and research applications
 
 #### Performance Targets and Optimization
 

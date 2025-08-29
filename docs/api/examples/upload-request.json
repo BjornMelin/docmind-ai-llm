@@ -1,0 +1,37 @@
+{
+  "files": [
+    {
+      "name": "Q4_2024_Financial_Report.pdf",
+      "content": "JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAovTGVuZ3RoIDYgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCj4+CnN0cmVhbQ...",
+      "content_type": "application/pdf"
+    },
+    {
+      "name": "Healthcare_Division_Analysis.xlsx",
+      "content": "UEsDBBQABgAIAAAAIQDfpNJsWgEAACAFAAATAAgCW0NvbnRlbnRfVHlwZXNdLnhtbCCiBAIooAA...",
+      "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    },
+    {
+      "name": "Technology_Metrics_Q4.docx",
+      "content": "UEsDBBQABgAIAAAAIQDbIMmi/wAAABwCAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLSRQU7DMBBF7...",
+      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  ],
+  "session_id": "sess_financial_analysis_2024",
+  "processing_options": {
+    "parse_images": true,
+    "extract_tables": true,
+    "enable_ocr": true,
+    "chunk_strategy": "semantic",
+    "chunk_size": 1500,
+    "chunk_overlap": 150,
+    "preserve_formatting": true,
+    "extract_metadata": true
+  },
+  "metadata": {
+    "project": "Q4_2024_Financial_Analysis",
+    "department": "Finance",
+    "analyst": "financial_team",
+    "priority": "high",
+    "tags": ["financial", "quarterly", "2024", "analysis"]
+  }
+}

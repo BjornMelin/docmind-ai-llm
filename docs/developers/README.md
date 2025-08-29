@@ -2,7 +2,7 @@
 
 > **Streamlined developer documentation following industry best practices with the Divio documentation framework**
 
-This directory contains comprehensive, consolidated documentation for DocMind AI developers. The documentation has been optimized from 15+ files to 5 core guides, eliminating redundancy while preserving all essential technical content.
+This directory contains comprehensive, consolidated documentation for DocMind AI developers. The documentation has been organized into **5 core guides** plus specialized references, eliminating redundancy while preserving all essential technical content.
 
 ## 🚀 Quick Navigation
 
@@ -15,6 +15,15 @@ This directory contains comprehensive, consolidated documentation for DocMind AI
 | **[Developer Handbook](developer-handbook.md)** | Practical implementation guidance, testing, and maintenance | Active developers building features | 60 min |
 | **[Configuration Reference](configuration-reference.md)** | Complete configuration guide with GPU optimization | DevOps, system administrators | 30 min |
 | **[Operations Guide](operations-guide.md)** | Production deployment and operational procedures | DevOps, SRE, production teams | 45 min |
+
+### Specialized References
+
+| Guide | Purpose | Audience |
+|-------|---------|----------|
+| **[Architecture Overview](architecture-overview.md)** | Executive technical summary with performance specs | Technical leads, architects |
+| **[Implementation Guide](implementation-guide.md)** | Detailed code patterns and library usage examples | Developers needing specific implementation details |
+| **[Testing Guide](testing-guide.md)** | Comprehensive testing strategies and execution | QA engineers, developers writing tests |
+| **[CI/CD Pipeline](ci-cd-pipeline.md)** | Continuous integration and deployment workflows | DevOps engineers, release managers |
 
 ### Documentation Framework
 
@@ -40,6 +49,7 @@ Following the **Divio Documentation System** for optimal developer experience:
 1. **Implementation Guidance**: [Developer Handbook](developer-handbook.md) - Patterns and practices
 2. **Architecture Reference**: [System Architecture](system-architecture.md) - System design
 3. **Configuration Tuning**: [Configuration Reference](configuration-reference.md) - Performance optimization
+4. **Specific Examples**: [Implementation Guide](implementation-guide.md) - Code patterns
 
 ### DevOps/Production Teams
 
@@ -98,42 +108,51 @@ chunk_size = settings.processing.chunk_size
 | Issue Type | Primary Guide | Secondary Resources |
 |------------|---------------|-------------------|
 | **Setup Problems** | [Getting Started](getting-started.md) | [Configuration Reference](configuration-reference.md) |
-| **Architecture Questions** | [System Architecture](system-architecture.md) | [../adrs/](../adrs/) (ADRs) |
-| **Implementation Help** | [Developer Handbook](developer-handbook.md) | [System Architecture](system-architecture.md) |
+| **Architecture Questions** | [System Architecture](system-architecture.md) | [Architecture Overview](architecture-overview.md), [ADRs](adrs/) |
+| **Implementation Help** | [Developer Handbook](developer-handbook.md) | [Implementation Guide](implementation-guide.md) |
 | **Configuration Issues** | [Configuration Reference](configuration-reference.md) | [Operations Guide](operations-guide.md) |
 | **Performance Problems** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
 | **Production Deployment** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
+| **Testing Issues** | [Developer Handbook](developer-handbook.md) | [Testing Guide](testing-guide.md) |
 
 ## Contributing
 
 1. **Read**: [Getting Started](getting-started.md) → [Developer Handbook](developer-handbook.md)
-2. **Understand**: [System Architecture](system-architecture.md) + relevant [ADRs](../adrs/)
+2. **Understand**: [System Architecture](system-architecture.md) + relevant [ADRs](adrs/)
 3. **Configure**: [Configuration Reference](configuration-reference.md) for optimal development
 4. **Deploy**: [Operations Guide](operations-guide.md) for production considerations
 
-## Documentation Consolidation
+## Architecture Decision Records (ADRs)
 
-**Major Improvement**: This documentation has been streamlined from **15+ files to 5 core guides** following industry best practices:
+All architectural decisions are documented in the [adrs/](adrs/) directory. Key ADRs include:
 
-### Before & After
+- **[ADR-001](adrs/ADR-001-modern-agentic-rag-architecture.md)**: Modern Agentic RAG Architecture
+- **[ADR-024](adrs/ADR-024-configuration-architecture.md)**: Configuration Architecture (Unified Settings)
+- **[ADR-011](adrs/ADR-011-agent-orchestration-framework.md)**: Agent Orchestration Framework
+- **[All ADRs](adrs/)**: Complete list of 26 architectural decisions
 
-| Before (15+ Files) | After (5 Core Guides) | Improvement |
-|-------------------|----------------------|-------------|
-| Complex navigation | Clear user journeys | 📈 Usability |
-| Content duplication | Unified information | 📈 Maintenance |
-| Scattered information | Logical organization | 📈 Discoverability |
-| Inconsistent structure | Divio framework | 📈 Standards |
+## Documentation Organization
+
+**Structure**: This documentation follows a **5 core guides + specialized references** approach:
+
+| Category | Files | Purpose |
+|----------|-------|---------|
+| **Core Guides** (5) | Essential documentation covering 90% of developer needs | Primary navigation |
+| **Specialized References** (4) | Deep-dive topics for specific use cases | Secondary resources |
+| **ADRs** (26) | Architectural decisions and technical rationale | Reference material |
+| **Archived** | Historical documentation preserved for reference | Legacy content |
 
 ### Migration Notes
 
 If you're looking for content from the previous documentation structure:
 
 - **Setup/Installation** → [Getting Started](getting-started.md)
-- **Architecture/Multi-Agent** → [System Architecture](system-architecture.md)  
-- **Development/Testing** → [Developer Handbook](developer-handbook.md)
+- **Architecture/Multi-Agent** → [System Architecture](system-architecture.md) + [Architecture Overview](architecture-overview.md)
+- **Development/Testing** → [Developer Handbook](developer-handbook.md) + [Testing Guide](testing-guide.md)
 - **Environment/Model Config** → [Configuration Reference](configuration-reference.md)
 - **Deployment/Performance** → [Operations Guide](operations-guide.md)
-- **Lessons/Validation** → [Operations Guide](operations-guide.md)
+- **Implementation Examples** → [Implementation Guide](implementation-guide.md)
+- **Historical Content** → [archived/](archived/) directory
 
 ### Archived Documentation
 

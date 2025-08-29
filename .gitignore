@@ -51,6 +51,7 @@ coverage.json
 .hypothesis/
 .pytest_cache/
 cover/
+coverage_badge.svg
 
 # Translations
 *.mo
