@@ -175,6 +175,7 @@ cython_debug/
 
 # Project specific
 CLAUDE.md
+AGENTS.md
 logs/
 docmind_ai.log
 repomix-output.md
