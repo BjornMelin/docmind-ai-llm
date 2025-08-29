@@ -303,10 +303,13 @@ class TestGPUErrorHandlingScenarios:
     @pytest.mark.unit
     async def test_cuda_driver_not_found(self):
         """Test handling when CUDA driver is not found."""
-        with patch(
-            "torch.cuda.current_device",
-            side_effect=RuntimeError("CUDA driver not found"),
-        ), patch("torch.cuda.is_available", return_value=True):
+        with (
+            patch(
+                "torch.cuda.current_device",
+                side_effect=RuntimeError("CUDA driver not found"),
+            ),
+            patch("torch.cuda.is_available", return_value=True),
+        ):
             # Should propagate CUDA driver errors
             with pytest.raises(RuntimeError, match="CUDA driver not found"):
                 async with gpu_performance_monitor():

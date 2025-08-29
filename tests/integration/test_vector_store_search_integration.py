@@ -178,7 +178,7 @@ def test_documents():
 @pytest.fixture
 def test_embeddings():
     """Create realistic embeddings using MockEmbedding for consistency."""
-    mock_embedding = MockEmbedding(embed_dim=1024)
+    MockEmbedding(embed_dim=1024)
 
     # Create diverse embeddings that will produce different similarity scores
     dense_embeddings = []

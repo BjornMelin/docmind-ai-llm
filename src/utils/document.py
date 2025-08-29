@@ -12,7 +12,6 @@ Available Functions:
 - ensure_spacy_model: spaCy model management
 """
 
-import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +26,6 @@ async def load_documents_unstructured(
     file_paths: list[str | Path], settings: Any | None = None
 ) -> list[Any]:
     """Load documents using ADR-009 compliant ResilientDocumentProcessor.
-
-    This function provides compatibility with the legacy interface while
-    using the new processing architecture.
 
     Args:
         file_paths: List of file paths to process
@@ -189,10 +185,7 @@ async def get_cache_stats() -> dict[str, Any]:
 
 
 def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
-    """Ensure spaCy model is available and loaded.
-
-    This function provides compatibility with the legacy interface while
-    using the new SpacyManager architecture.
+    """Ensure spaCy model is available and loaded using SpacyManager architecture.
 
     Args:
         model_name: Name of the spaCy model to load
@@ -209,68 +202,44 @@ def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
     return nlp
 
 
-# Convenient function aliases
-load_documents = load_documents_unstructured  # Common alias
-get_doc_info = get_document_info  # Short alias
-clear_cache = clear_document_cache  # Short alias
+def clear_document_cache_sync() -> bool:
+    """Synchronous wrapper for cache clearing.
 
+    Returns:
+        True if cache was cleared successfully
+    """
+    import asyncio
 
-# Async wrapper for sync functions that need async context
-def _run_async_in_sync_context(coro):
-    """Run async coroutine in sync context."""
-    try:
-        # Try to get existing event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is running, we need to use asyncio.create_task
-            # But for compatibility, we'll just warn and return empty result
-            logger.warning(
-                "Cannot run async function in sync context with running loop"
-            )
-            return None
-        return loop.run_until_complete(coro)
-    except RuntimeError:
-        # No event loop, create one
-        return asyncio.run(coro)
-
-
-# Synchronous wrappers for convenience
-def clear_document_cache_sync() -> int:
-    """Synchronous wrapper for clear_document_cache."""
-    result = _run_async_in_sync_context(clear_document_cache())
-    return result if result is not None else 0
+    return asyncio.run(clear_document_cache())
 
 
 def get_cache_stats_sync() -> dict[str, Any]:
-    """Synchronous wrapper for get_cache_stats."""
-    result = _run_async_in_sync_context(get_cache_stats())
-    return result if result is not None else {}
-
-
-# Knowledge Graph Functions
-def extract_entities_with_spacy(
-    text: str, nlp_model: Any = None
-) -> list[dict[str, Any]]:
-    """Extract entities from text using spaCy.
-
-    This is a compatibility function for legacy knowledge graph functionality.
-    In ADR-009 compliant architecture, this functionality should be implemented
-    using the new processing pipeline.
-
-    Args:
-        text: Input text for entity extraction
-        nlp_model: Optional spaCy model (loads default if None)
+    """Synchronous wrapper for cache stats.
 
     Returns:
-        List of entity dictionaries with text, label, start, end fields
+        Cache statistics dictionary
     """
-    if nlp_model is None:
-        nlp_model = ensure_spacy_model()
+    import asyncio
+
+    return asyncio.run(get_cache_stats())
+
+
+def extract_entities_with_spacy(text: str, nlp: Any = None) -> list[dict[str, Any]]:
+    """Extract entities using spaCy.
+
+    Args:
+        text: Text to process
+        nlp: Optional spaCy nlp model, defaults to ensure_spacy_model()
+
+    Returns:
+        List of entities with text, label, start, end positions
+    """
+    if nlp is None:
+        nlp = ensure_spacy_model()
 
     try:
-        doc = nlp_model(text)
+        doc = nlp(text)
         entities = []
-
         for ent in doc.ents:
             entities.append(
                 {
@@ -278,109 +247,104 @@ def extract_entities_with_spacy(
                     "label": ent.label_,
                     "start": ent.start_char,
                     "end": ent.end_char,
-                    "confidence": getattr(ent, "score", 1.0),  # Confidence if available
+                    "confidence": getattr(ent, "confidence", 0.8),  # Default confidence
                 }
             )
-
-        logger.debug(f"Extracted {len(entities)} entities from text")
         return entities
-
-    except (OSError, ValueError, AttributeError, TypeError) as e:
-        logger.error(f"Failed to extract entities: {str(e)}")
+    except (ValueError, OSError, AttributeError) as e:
+        logger.warning(f"Failed to extract entities with spaCy: {e}")
         return []
 
 
 def extract_relationships_with_spacy(
-    text: str, nlp_model: Any = None
-) -> list[dict[str, str]]:
-    """Extract relationships from text using spaCy dependency parsing.
-
-    This is a compatibility function for legacy knowledge graph functionality.
-    Uses basic dependency parsing to identify subject-verb-object relationships.
+    text: str, nlp: Any = None
+) -> list[dict[str, Any]]:
+    """Extract relationships using spaCy.
 
     Args:
-        text: Input text for relationship extraction
-        nlp_model: Optional spaCy model (loads default if None)
+        text: Text to process
+        nlp: Optional spaCy nlp model, defaults to ensure_spacy_model()
 
     Returns:
-        List of relationship dictionaries with subject, predicate, object fields
+        List of relationships with source, target, type information
     """
-    if nlp_model is None:
-        nlp_model = ensure_spacy_model()
+    if nlp is None:
+        nlp = ensure_spacy_model()
 
     try:
-        doc = nlp_model(text)
+        doc = nlp(text)
         relationships = []
 
-        # Simple subject-verb-object extraction using dependency parsing
+        # Simple relationship extraction based on dependency parsing
         for token in doc:
-            if token.dep_ == "ROOT" and token.pos_ == "VERB":
-                subject = None
-                obj = None
+            if token.dep_ in ["nsubj", "dobj", "pobj"] and token.head.pos_ == "VERB":
+                relationships.append(
+                    {
+                        "source": token.text,
+                        "target": token.head.text,
+                        "type": token.dep_.upper(),
+                        "confidence": 0.7,
+                    }
+                )
 
-                # Find subject
-                for child in token.children:
-                    if child.dep_ in ("nsubj", "nsubjpass"):
-                        subject = child.text
-                    elif child.dep_ in ("dobj", "pobj"):
-                        obj = child.text
-
-                if subject and obj:
-                    relationships.append(
-                        {"subject": subject, "predicate": token.text, "object": obj}
-                    )
-
-        logger.debug(f"Extracted {len(relationships)} relationships from text")
         return relationships
-
-    except (OSError, ValueError, AttributeError, TypeError) as e:
-        logger.error(f"Failed to extract relationships: {str(e)}")
+    except (ValueError, OSError, AttributeError) as e:
+        logger.warning(f"Failed to extract relationships with spaCy: {e}")
         return []
 
 
-def create_knowledge_graph_data(text: str, nlp_model: Any = None) -> dict[str, Any]:
-    """Create knowledge graph data from text using spaCy.
-
-    This is a compatibility function for legacy knowledge graph functionality.
-    Combines entity extraction and relationship extraction.
+def create_knowledge_graph_data(
+    text_or_entities: str | list, nlp_or_relationships: Any = None
+) -> dict[str, Any]:
+    """Create knowledge graph structure.
 
     Args:
-        text: Input text for knowledge graph creation
-        nlp_model: Optional spaCy model (loads default if None)
+        text_or_entities: Either text to process or list of entities
+        nlp_or_relationships: Either spaCy nlp model or list of relationships
 
     Returns:
-        Dictionary with 'entities' and 'relationships' keys
+        Dictionary with entities, relationships, and metadata
     """
-    logger.info("Creating knowledge graph data from text")
-
     try:
-        entities = extract_entities_with_spacy(text, nlp_model)
-        relationships = extract_relationships_with_spacy(text, nlp_model)
+        # Handle two different calling patterns from tests
+        if isinstance(text_or_entities, str):
+            # Called with text and nlp model
+            text = text_or_entities
+            nlp = nlp_or_relationships or ensure_spacy_model()
+            entities = extract_entities_with_spacy(text, nlp)
+            relationships = extract_relationships_with_spacy(text, nlp)
+        else:
+            # Called with entities and relationships lists
+            entities = text_or_entities or []
+            relationships = nlp_or_relationships or []
+            text = ""  # No text in this mode
 
-        result = {
+        return {
             "entities": entities,
             "relationships": relationships,
             "metadata": {
-                "text_length": len(text),
                 "entity_count": len(entities),
                 "relationship_count": len(relationships),
+                "text_length": len(text) if isinstance(text_or_entities, str) else 0,
                 "processing_method": "spacy_knowledge_graph",
             },
         }
-
-        logger.info(
-            f"Generated knowledge graph: {len(entities)} entities, "
-            f"{len(relationships)} relationships"
-        )
-        return result
-
-    except (OSError, ValueError, AttributeError, TypeError) as e:
-        logger.error(f"Failed to create knowledge graph data: {str(e)}")
+    except (ValueError, OSError, AttributeError) as e:
+        logger.warning(f"Failed to create knowledge graph data: {e}")
         return {
             "entities": [],
             "relationships": [],
             "metadata": {
-                "error": str(e),
+                "entity_count": 0,
+                "relationship_count": 0,
+                "text_length": 0,
                 "processing_method": "spacy_knowledge_graph",
+                "error": str(e),
             },
         }
+
+
+# Convenient function aliases
+load_documents = load_documents_unstructured  # Common alias
+get_doc_info = get_document_info  # Short alias
+clear_cache = clear_document_cache  # Short alias

@@ -41,29 +41,17 @@ from src.processing.document_processor import (
     DocumentProcessor,
     UnstructuredTransformation,
 )
-
-
-class ProcessingConfig:
-    """Minimal processing configuration for tests."""
-
-    def __init__(self):
-        self.chunk_size = 1000
-        self.chunk_overlap = 100
-
-
-class TestDocMindSettings:
-    """Minimal test settings that don't require complex setup."""
-
-    def __init__(self):
-        self.processing = ProcessingConfig()
-        self.cache_dir = "./test_cache"
-        self.max_document_size_mb = 100
+from tests.fixtures.test_settings import TestDocMindSettings
 
 
 @pytest.fixture
 def test_settings():
     """Create lightweight test settings."""
-    return TestDocMindSettings()
+    return TestDocMindSettings(
+        cache_dir="./test_cache",
+        max_document_size_mb=100,
+        processing={"chunk_size": 1000, "chunk_overlap": 100},
+    )
 
 
 @pytest.fixture
@@ -609,7 +597,7 @@ class TestDocumentProcessingConfiguration:
                 pipeline_instance = Mock()
                 mock_pipeline.return_value = pipeline_instance
 
-                result_pipeline = processor._create_pipeline(strategy)
+                processor._create_pipeline(strategy)
 
                 # Verify pipeline was created with correct configuration
                 mock_pipeline.assert_called_once()

@@ -153,19 +153,23 @@ def unwire_container() -> None:
 
 # Example dependency injection functions
 @inject
-def get_cache(cache=Provide[ApplicationContainer.cache]):
+def get_cache(cache=Provide[ApplicationContainer.cache]) -> Any:
     """Get cache instance with dependency injection."""
     return cache
 
 
 @inject
-def get_embedding_model(embedding_model=Provide[ApplicationContainer.embedding_model]):
+def get_embedding_model(
+    embedding_model=Provide[ApplicationContainer.embedding_model],
+) -> Any:
     """Get embedding model with dependency injection."""
     return embedding_model
 
 
 @inject
-def get_document_processor(processor=Provide[ApplicationContainer.document_processor]):
+def get_document_processor(
+    processor=Provide[ApplicationContainer.document_processor],
+) -> Any:
     """Get document processor with dependency injection."""
     return processor
 
@@ -173,7 +177,7 @@ def get_document_processor(processor=Provide[ApplicationContainer.document_proce
 @inject
 def get_multi_agent_coordinator(
     coordinator=Provide[ApplicationContainer.multi_agent_coordinator],
-):
+) -> Any:
     """Get multi-agent coordinator with dependency injection."""
     return coordinator
 

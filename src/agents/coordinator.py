@@ -70,7 +70,7 @@ from .models import AgentResponse, MultiAgentState
 class ContextManager:
     """Context manager for 128K context handling and token estimation."""
 
-    def __init__(self, max_context_tokens: int = 131072):
+    def __init__(self, max_context_tokens: int = 131072) -> None:
         """Initialize context manager with 128K context support."""
         self.max_context_tokens = max_context_tokens
         self.trim_threshold = int(max_context_tokens * 0.9)  # 90% threshold

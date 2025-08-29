@@ -389,7 +389,7 @@ import importlib
 
 modules = [
     'src.models.core', 'src.utils.core', 'src.utils.document',
-    'src.utils.database', 'src.utils.monitoring',
+    'src.utils.monitoring',
     'src.agents.coordinator', 'src.agents.tool_factory', 'src.agents.tools'
 ]
 

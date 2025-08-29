@@ -32,7 +32,6 @@ if src_path not in sys.path:
 
 # Import with graceful fallback
 try:
-    from src.config.settings import DocMindSettings
     from src.processing.document_processor import DocumentProcessor, ProcessingError
     from src.utils.document import load_documents_unstructured
 

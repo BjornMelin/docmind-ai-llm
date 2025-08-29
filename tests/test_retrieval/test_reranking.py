@@ -109,8 +109,9 @@ class TestBGECrossEncoderRerankUnit:
 
     def test_init_fails_without_sentence_transformers(self):
         """Test initialization fails gracefully when sentence-transformers unavailable."""
-        with patch("src.retrieval.reranking.CrossEncoder", None), pytest.raises(
-            ImportError, match="sentence-transformers not available"
+        with (
+            patch("src.retrieval.reranking.CrossEncoder", None),
+            pytest.raises(ImportError, match="sentence-transformers not available"),
         ):
             BGECrossEncoderRerank()
 

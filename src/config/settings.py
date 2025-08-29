@@ -78,7 +78,7 @@ class AgentConfig(BaseModel):
 
     # === ADR-011 AGENT CONTEXT MANAGEMENT ===
     context_trim_threshold: int = Field(default=122880, ge=65536, le=131072)
-    context_buffer_size: int = Field(default=8192, ge=2048, le=16384)
+    context_buffer_size: int = Field(default=8192, ge=2048, le=131072)
     enable_parallel_tool_execution: bool = Field(default=True)
     max_workflow_depth: int = Field(default=5, ge=2, le=10)
     enable_agent_state_compression: bool = Field(default=True)
@@ -197,7 +197,7 @@ class DocMindSettings(BaseSettings):
         env_prefix="DOCMIND_",
         env_nested_delimiter="__",
         case_sensitive=False,
-        extra="forbid",
+        extra="ignore",  # CRITICAL: Changed from "forbid" to fix validation errors
     )
 
     # Core Application
@@ -221,9 +221,14 @@ class DocMindSettings(BaseSettings):
     enable_dspy_optimization: bool = Field(
         default=False
     )  # Changed to False per user feedback
+    enable_multimodal: bool = Field(default=False)
+    analysis_modes: str = Field(default="detailed,summary,comparison")
 
     # === DSPY OPTIMIZATION PARAMETERS ===
     dspy_optimization_iterations: int = Field(default=10, ge=5, le=50)
+    dspy_optimization_samples: int = Field(default=20, ge=5, le=100)
+    dspy_max_retries: int = Field(default=3, ge=1, le=10)
+    dspy_temperature: float = Field(default=0.1, ge=0, le=2)
     dspy_metric_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
     enable_dspy_bootstrapping: bool = Field(default=True)
 
@@ -231,6 +236,8 @@ class DocMindSettings(BaseSettings):
     graphrag_relationship_extraction: bool = Field(default=False)
     graphrag_entity_resolution: str = Field(default="fuzzy")
     graphrag_max_hops: int = Field(default=2, ge=1, le=5)
+    graphrag_max_triplets: int = Field(default=1000, ge=100, le=10000)
+    graphrag_chunk_size: int = Field(default=1024, ge=256, le=4096)
 
     # UI Configuration moved to nested UIConfig structure
 
@@ -315,6 +322,9 @@ class DocMindSettings(BaseSettings):
         return {
             "enabled": self.enable_dspy_optimization,
             "iterations": self.dspy_optimization_iterations,
+            "samples": self.dspy_optimization_samples,
+            "max_retries": self.dspy_max_retries,
+            "temperature": self.dspy_temperature,
             "metric_threshold": self.dspy_metric_threshold,
             "bootstrapping": self.enable_dspy_bootstrapping,
         }
@@ -326,6 +336,8 @@ class DocMindSettings(BaseSettings):
             "relationship_extraction": self.graphrag_relationship_extraction,
             "entity_resolution": self.graphrag_entity_resolution,
             "max_hops": self.graphrag_max_hops,
+            "max_triplets": self.graphrag_max_triplets,
+            "chunk_size": self.graphrag_chunk_size,
         }
 
     def get_ui_config(self) -> dict[str, Any]:

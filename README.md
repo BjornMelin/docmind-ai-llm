@@ -39,7 +39,7 @@
 
 - **LlamaIndex RAG Pipeline:** QueryPipeline with async/parallel processing, ingestion pipelines, and caching.
 
-- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-Large dense and SPLADE++ sparse embeddings for improved recall.
+- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-M3 unified dense/sparse embeddings for improved recall.
 
 - **Knowledge Graph Integration:** spaCy entity extraction with relationship mapping for complex queries.
 
@@ -372,7 +372,7 @@ Results include summaries, insights, action items, and open questions, exportabl
 
 ### 💬 Interacting with the LLM
 
-Use the chat interface to ask follow-up questions. The LLM leverages hybrid search (Jina v4 dense + FastEmbed SPLADE++ sparse) with submodular-optimized reranking for context-aware, high-quality responses.
+Use the chat interface to ask follow-up questions. The LLM leverages hybrid search (BGE-M3 unified dense + sparse embeddings) with BGE-reranker-v2-m3 ColBERT reranking for context-aware, high-quality responses.
 
 ## 🔧 API Usage Examples
 
@@ -478,7 +478,7 @@ graph TD
     E --> G[Multi-Modal Embeddings]
     F --> H[Knowledge Graph Builder<br/>Entity Relations]
     
-    G --> I[Dense: BGE-Large 1024D<br/>Sparse: SPLADE++ FastEmbed<br/>Multimodal: Jina v4 512D]
+    G --> I[BGE-M3 Unified: Dense + Sparse 1024D<br/>Multimodal: CLIP ViT-B/32 512D]
     I --> J[Qdrant Vector Store<br/>RRF Fusion α=0.7]
     
     H --> K[Knowledge Graph Index<br/>NetworkX Relations]
@@ -529,11 +529,9 @@ graph TD
 
 ### Hybrid Retrieval Architecture
 
-- **Dense Embeddings:** BGE-Large 1024D (BAAI/bge-large-en-v1.5) for semantic similarity
+- **Unified Text Embeddings:** BGE-M3 (BAAI/bge-m3) provides both dense (1024D) and sparse embeddings in a single model for semantic similarity and neural lexical matching
 
-- **Sparse Embeddings:** SPLADE++ with FastEmbed for neural lexical matching and term expansion
-
-- **Multimodal:** Jina v4 512D embeddings for images and mixed content with int8 quantization
+- **Multimodal:** CLIP ViT-B/32 (512D) embeddings for images and mixed content with FP16 acceleration
 
 - **Fusion:** RRF (Reciprocal Rank Fusion) with α=0.7 weighting for optimal dense/sparse balance
 
@@ -649,7 +647,7 @@ maxUploadSize = 200
 | **5-Agent System Response** | 3-8 seconds | LangGraph supervisor coordination with <200ms overhead |
 | **128K Context Processing** | 1.5-3 seconds | 128K context with FP8 KV cache |
 | **Vector Search** | <500ms | Qdrant in-memory with GPU embeddings |
-| **Test Suite (1,779 tests)** | Varies by tier | Unit/integration/system testing - 3.51% measured coverage |
+| **Test Suite (2,263 tests)** | Varies by tier | Unit/integration/system testing - 3.51% measured coverage |
 | **Memory Usage (Idle)** | 400-500MB | Base application |
 | **Memory Usage (Processing)** | 1.2-2.1GB | During document analysis |
 | **GPU Memory Usage** | ~12-14GB | Model + 128K context + embedding cache |

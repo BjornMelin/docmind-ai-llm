@@ -247,7 +247,7 @@ class TestFileUploadWorkflows:
         self, app_test_instance, mock_external_dependencies
     ):
         """Test document upload triggers processing workflow."""
-        app = app_test_instance.run()
+        app_test_instance.run()
 
         # Simulate file upload (in real app this would trigger async processing)
         # We test the processing logic is properly connected
@@ -285,7 +285,7 @@ class TestFileUploadWorkflows:
 
         if not has_feedback:
             # Check for elements that would show feedback
-            elements = str(app.get("progress", [])) + str(app.get("status", []))
+            str(app.get("progress", [])) + str(app.get("status", []))
             # This is acceptable as UI elements might not be visible without active processing
 
     def test_document_processing_error_handling_ui(
@@ -380,9 +380,7 @@ class TestChatInterfaceWorkflows:
 
         # The streaming infrastructure should be present
         # This tests that the UI is configured for streaming
-        has_streaming_setup = any(
-            indicator in app_str for indicator in streaming_indicators
-        )
+        any(indicator in app_str for indicator in streaming_indicators)
 
         # Note: Streaming components might not be visible without active chat
         # The test validates the infrastructure exists
@@ -468,7 +466,7 @@ class TestSettingsWorkflows:
         if not has_advanced:
             # Check for expandable components
             expandable_elements = [elem for elem in app.get("expander", []) if elem]
-            has_expandable = len(expandable_elements) > 0
+            len(expandable_elements) > 0
             # This is acceptable as advanced settings might be collapsed
 
     def test_gpu_acceleration_toggle(self, app_test_instance):
@@ -606,9 +604,7 @@ class TestErrorHandlingWorkflows:
                 app_str = str(app)
                 # Should show error message to user
                 error_indicators = ["error", "Error", "⚠️", "warning"]
-                has_error_display = any(
-                    indicator in app_str for indicator in error_indicators
-                )
+                any(indicator in app_str for indicator in error_indicators)
                 # This is acceptable as errors might be handled internally
         except Exception as e:
             # Configuration errors should be handled by the app
@@ -638,9 +634,7 @@ class TestErrorHandlingWorkflows:
                 "failed",
                 "Connection",
             ]
-            has_error_feedback = any(
-                indicator in app_str for indicator in error_indicators
-            )
+            any(indicator in app_str for indicator in error_indicators)
             # This is acceptable as the app might handle errors internally
 
     def test_document_processing_error_feedback(
@@ -656,7 +650,7 @@ class TestErrorHandlingWorkflows:
 
         # App should handle document errors gracefully
         # Error feedback might not be visible without active processing
-        app_str = str(app)
+        str(app)
 
         # Check that error handling infrastructure exists
         error_elements = ["error", "Error", "failed", "Failed", "invalid"]
@@ -685,7 +679,7 @@ class TestErrorHandlingWorkflows:
         assert "DocMind AI" in app_str, "Basic UI not functional during degradation"
 
         # Should handle missing models gracefully
-        sidebar_str = str(app.sidebar)
+        str(app.sidebar)
         # Model selection might show empty or default options
 
 

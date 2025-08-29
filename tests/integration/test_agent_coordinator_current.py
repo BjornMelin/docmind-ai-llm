@@ -34,7 +34,6 @@ if src_path not in sys.path:
 try:
     from src.agents.coordinator import MultiAgentCoordinator
     from src.agents.tool_factory import AgentToolFactory
-    from src.config.settings import DocMindSettings
 
     COMPONENTS_AVAILABLE = True
 except ImportError as e:
@@ -171,7 +170,7 @@ class TestAgentCoordinatorIntegration:
             mock_get_agent_system.return_value = Mock()
 
             try:
-                coordinator = MultiAgentCoordinator(settings=mock_settings)
+                MultiAgentCoordinator(settings=mock_settings)
 
                 # Verify supervisor was created
                 assert mock_create_supervisor.called
@@ -432,7 +431,7 @@ class TestAgentCoordinatorPerformance:
         coordinators = []
 
         try:
-            for i in range(3):  # Small number for integration test
+            for _i in range(3):  # Small number for integration test
                 with (
                     patch(
                         "src.agents.coordinator.create_supervisor"

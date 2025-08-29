@@ -400,10 +400,13 @@ class TestValidateEndToEndPipeline:
         # Mock image embedding
         test_embedding = np.array([0.5, 0.5, 0.707, 0.0])  # Normalized
 
-        with patch(
-            "src.utils.multimodal.generate_image_embeddings",
-            return_value=test_embedding,
-        ), patch("time.perf_counter", side_effect=[0.0, 2.5]):
+        with (
+            patch(
+                "src.utils.multimodal.generate_image_embeddings",
+                return_value=test_embedding,
+            ),
+            patch("time.perf_counter", side_effect=[0.0, 2.5]),
+        ):
             result = await validate_end_to_end_pipeline(
                 query, mock_query_image, mock_clip, mock_property_graph, mock_llm
             )
@@ -432,10 +435,13 @@ class TestValidateEndToEndPipeline:
         test_embedding = np.random.rand(10)
         test_embedding = test_embedding / np.linalg.norm(test_embedding)
 
-        with patch(
-            "src.utils.multimodal.generate_image_embeddings",
-            return_value=test_embedding,
-        ), patch("time.perf_counter", side_effect=[0.0, 1.0]):
+        with (
+            patch(
+                "src.utils.multimodal.generate_image_embeddings",
+                return_value=test_embedding,
+            ),
+            patch("time.perf_counter", side_effect=[0.0, 1.0]),
+        ):
             result = await validate_end_to_end_pipeline(
                 query, mock_query_image, mock_clip, mock_property_graph, mock_llm
             )
@@ -457,10 +463,13 @@ class TestValidateEndToEndPipeline:
         mock_property_graph = Mock()
         mock_llm = Mock()
 
-        with patch(
-            "src.utils.multimodal.generate_image_embeddings",
-            return_value=np.array([1.0]),
-        ), patch("time.perf_counter", side_effect=[0.0, 0.5]):
+        with (
+            patch(
+                "src.utils.multimodal.generate_image_embeddings",
+                return_value=np.array([1.0]),
+            ),
+            patch("time.perf_counter", side_effect=[0.0, 0.5]),
+        ):
             result = await validate_end_to_end_pipeline(
                 query, mock_query_image, mock_clip, mock_property_graph, mock_llm
             )

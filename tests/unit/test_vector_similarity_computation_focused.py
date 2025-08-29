@@ -75,7 +75,9 @@ class TestVectorSimilarityComputation:
         vec1 = [1.0, 2.0, 3.0]
         vec2 = [4.0, 5.0, 6.0]
 
-        euclidean_dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(vec1, vec2, strict=False)))
+        euclidean_dist = math.sqrt(
+            sum((a - b) ** 2 for a, b in zip(vec1, vec2, strict=False))
+        )
         expected = math.sqrt(
             (4 - 1) ** 2 + (5 - 2) ** 2 + (6 - 3) ** 2
         )  # sqrt(9 + 9 + 9) = sqrt(27)
@@ -177,7 +179,9 @@ class TestVectorSimilarityEdgeCases:
         assert -1.0 <= cosine_sim <= 1.0
 
         # Euclidean distance (always non-negative)
-        euclidean_dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(vec1, vec2, strict=False)))
+        euclidean_dist = math.sqrt(
+            sum((a - b) ** 2 for a, b in zip(vec1, vec2, strict=False))
+        )
         assert euclidean_dist >= 0.0
 
 
@@ -266,7 +270,7 @@ class TestDenseVectorValidation:
         assert len(embedding) == 1024
 
         # All values should be float
-        assert all(isinstance(x, (int, float)) for x in embedding)
+        assert all(isinstance(x, int | float) for x in embedding)
 
     def test_embedding_normalization_validation(self):
         """Test embedding normalization correctness."""
@@ -322,7 +326,7 @@ class TestDenseVectorValidation:
         # All should have correct dimensions
         for embedding in batch_embeddings:
             assert len(embedding) == embedding_dim
-            assert all(isinstance(x, (int, float)) for x in embedding)
+            assert all(isinstance(x, int | float) for x in embedding)
 
         # Pairwise similarities should be in valid range
         for i in range(batch_size):
@@ -433,13 +437,11 @@ class TestVectorValidationUtils:
 
         def validate_vector_dimension(vector, expected_dim):
             """Validate vector has expected dimensions."""
-            if not isinstance(vector, (list, tuple)):
+            if not isinstance(vector, list | tuple):
                 return False
             if len(vector) != expected_dim:
                 return False
-            if not all(isinstance(x, (int, float)) for x in vector):
-                return False
-            return True
+            return all(isinstance(x, int | float) for x in vector)
 
         # Valid cases
         assert validate_vector_dimension([0.1] * 1024, 1024) is True
@@ -455,12 +457,12 @@ class TestVectorValidationUtils:
 
         def validate_similarity_score(score, similarity_type="cosine"):
             """Validate similarity score is in expected range."""
-            if not isinstance(score, (int, float)):
+            if not isinstance(score, int | float):
                 return False
             if similarity_type == "cosine":
                 return -1.0 <= score <= 1.0
             elif similarity_type == "dot_product":
-                return isinstance(score, (int, float))  # No bounds
+                return isinstance(score, int | float)  # No bounds
             elif similarity_type == "euclidean":
                 return score >= 0.0  # Non-negative distance
             return False

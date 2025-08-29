@@ -43,7 +43,7 @@ def mock_qdrant_client():
 
     # Mock search operations
     def mock_search(**kwargs):
-        collection_name = kwargs.get("collection_name")
+        kwargs.get("collection_name")
         limit = kwargs.get("limit", 10)
 
         # Generate mock search results
@@ -562,7 +562,7 @@ class TestQdrantUnifiedVectorStoreRRFFusion:
         assert result_ids == {"doc_0", "doc_1"}
 
         # Verify no duplicates
-        assert len(set(r.id for r in fused_results)) == len(fused_results)
+        assert len({r.id for r in fused_results}) == len(fused_results)
 
 
 @pytest.mark.unit
@@ -594,7 +594,7 @@ class TestQdrantUnifiedVectorStoreSearchStrategies:
         query = VectorStoreQuery(similarity_top_k=4)
         sparse_embedding = {10: 0.8, 20: 0.6, 30: 0.9}
 
-        result = vector_store._sparse_search(query, sparse_embedding)
+        vector_store._sparse_search(query, sparse_embedding)
 
         # Verify search call
         vector_store.qdrant_client.search.assert_called_once()

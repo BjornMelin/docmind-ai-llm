@@ -108,7 +108,8 @@ class TestAppInitializationWorkflows:
         # Verify app has session state structure
         assert hasattr(app, "session_state"), "Missing session state"
 
-        # Test accessing session state indirectly (SafeSessionState doesn't have .keys())
+        # Test accessing session state indirectly
+        # (SafeSessionState doesn't have .keys())
         session_state_str = str(app.session_state)
         assert len(session_state_str) > 10, "Session state appears empty"
 
@@ -191,9 +192,7 @@ class TestUIComponentStructure:
         expected_buttons = ["Analyze", "Save", "Load"]
 
         # At least some expected buttons should be present
-        found_buttons = [
-            btn for btn in expected_buttons if any(btn in text for text in button_texts)
-        ]
+        [btn for btn in expected_buttons if any(btn in text for text in button_texts)]
         # This is flexible since button availability depends on app state
 
     def test_file_uploader_exists(self, app_under_test):
@@ -201,7 +200,7 @@ class TestUIComponentStructure:
         app = app_under_test.run()
 
         # Should have file uploader components
-        uploaders = getattr(app, "file_uploader", [])
+        getattr(app, "file_uploader", [])
         # File uploader might be implemented differently, so we test flexibly
 
         # The app should have upload capability (may be implemented via fragments)
@@ -251,7 +250,7 @@ class TestUserInteractionWorkflows:
             gpu_checkbox = gpu_checkboxes[0]
 
             # Test toggling GPU setting
-            current_value = getattr(gpu_checkbox, "value", False)
+            getattr(gpu_checkbox, "value", False)
             if hasattr(gpu_checkbox, "check"):
                 # Test checkbox interaction (API may vary)
                 try:
@@ -272,7 +271,7 @@ class TestUserInteractionWorkflows:
         streamlit_mock_environment["ollama_list"].assert_called()
 
         # Find model selection components
-        model_selectboxes = [
+        [
             elem
             for elem in app.selectbox
             if any(term in str(elem).lower() for term in ["model", "qwen", "llama"])
@@ -350,7 +349,7 @@ class TestErrorHandlingWorkflows:
         if app.exception:
             error_str = str(app.exception).lower()
             connection_errors = ["connection", "failed", "timeout", "network"]
-            has_connection_error = any(err in error_str for err in connection_errors)
+            any(err in error_str for err in connection_errors)
             # If there's an exception, it should be connection-related
         else:
             # App handled error gracefully - also acceptable
@@ -369,12 +368,11 @@ class TestStateManagementWorkflows:
         buttons = app.button
         button_texts = [str(btn).lower() for btn in buttons]
 
-        has_save = any("save" in text for text in button_texts)
-        has_load = any("load" in text for text in button_texts)
+        any("save" in text for text in button_texts)
+        any("load" in text for text in button_texts)
 
         # Session persistence interface should be available
         # (Exact implementation may vary)
-        persistence_available = has_save or has_load
 
         # This is a structural test - persistence interface should exist
         # Even if buttons aren't visible, the capability should be there

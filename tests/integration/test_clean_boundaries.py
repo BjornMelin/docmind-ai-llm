@@ -357,7 +357,7 @@ class TestDatabaseVectorStoreBoundaryIntegration:
         assert len(search_results) == 2
         assert all(result["score"] > 0.8 for result in search_results)
 
-    @patch("src.utils.database.SQLiteManager")
+    @patch("src.utils.storage.SQLiteManager")
     def test_sqlite_database_boundary_integration(
         self, mock_sqlite, integration_settings
     ):

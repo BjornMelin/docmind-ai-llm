@@ -748,3 +748,183 @@ def benchmark_config():
         "disable_gc": True,
         "timer": time.perf_counter,
     }
+
+
+# MODERN TESTING PATTERNS: Library-first boundary testing fixtures
+
+
+@pytest.fixture
+def mock_http_client():
+    """Clean HTTP mocking with responses library.
+
+    Replaces @patch('requests.get') patterns with declarative HTTP mocking.
+    Modern pattern for testing HTTP boundaries without manual mock setup.
+    """
+    import responses
+
+    with responses.RequestsMock() as rsps:
+        # Pre-configure common successful responses
+        rsps.add(
+            responses.GET,
+            "http://test.example.com/api/health",
+            json={"status": "ok"},
+            status=200,
+        )
+        rsps.add(
+            responses.POST,
+            "http://test.example.com/api/data",
+            json={"id": 123, "created": True},
+            status=201,
+        )
+        yield rsps
+
+
+@pytest_asyncio.fixture
+async def mock_async_http_client():
+    """Async HTTP testing with pytest-httpx.
+
+    Clean async HTTP mocking without manual AsyncMock setup.
+    Modern pattern for testing async HTTP boundaries.
+    """
+    from pytest_httpx import HTTPXMock
+
+    with HTTPXMock() as httpx_mock:
+        # Pre-configure common responses
+        httpx_mock.add_response(
+            method="GET",
+            url="http://test.example.com/api/status",
+            json={"healthy": True, "version": "1.0.0"},
+        )
+        httpx_mock.add_response(
+            method="POST",
+            url="http://test.example.com/api/metrics",
+            json={"recorded": True, "timestamp": "2025-08-29T10:00:00Z"},
+        )
+        yield httpx_mock
+
+
+@pytest.fixture
+def system_resource_boundary():
+    """Boundary testing fixture for system resource operations.
+
+    Replaces multiple @patch('psutil.*') with clean resource mocking.
+    Provides realistic system resource data for boundary testing.
+    """
+    from unittest.mock import Mock, patch
+
+    # Create realistic system resource mocks
+    memory_info = Mock()
+    memory_info.rss = 100 * 1024 * 1024  # 100MB RSS
+    memory_info.vms = 150 * 1024 * 1024  # 150MB VMS
+
+    virtual_memory = Mock()
+    virtual_memory.percent = 65.0
+
+    disk_usage = Mock()
+    disk_usage.percent = 45.0
+
+    # Patch system resource calls at boundary
+    with (
+        patch("psutil.Process") as mock_process_class,
+        patch("psutil.cpu_percent", return_value=35.5),
+        patch("psutil.virtual_memory", return_value=virtual_memory),
+        patch("psutil.disk_usage", return_value=disk_usage),
+        patch("psutil.getloadavg", return_value=(1.2, 1.5, 1.1), create=True),
+    ):
+        mock_process = Mock()
+        mock_process.memory_info.return_value = memory_info
+        mock_process.memory_percent.return_value = 15.0
+        mock_process_class.return_value = mock_process
+
+        yield {
+            "process": mock_process,
+            "memory_info": memory_info,
+            "virtual_memory": virtual_memory,
+            "disk_usage": disk_usage,
+        }
+
+
+@pytest.fixture
+def performance_boundary():
+    """Boundary testing fixture for performance monitoring.
+
+    Replaces @patch('time.perf_counter') with structured timing control.
+    Modern pattern for deterministic performance testing.
+    """
+    from unittest.mock import patch
+
+    # Provide controlled timing progression
+    timing_sequence = [0.0, 1.5, 3.0, 4.5, 6.0]
+
+    with patch("time.perf_counter", side_effect=timing_sequence):
+        yield {
+            "timing_sequence": timing_sequence,
+            "expected_durations": [1.5, 1.5, 1.5, 1.5],  # Differences between calls
+        }
+
+
+@pytest.fixture
+def logging_boundary():
+    """Boundary testing fixture for logging operations.
+
+    Replaces @patch('src.utils.monitoring.logger') with structured logging testing.
+    Modern pattern for testing logging boundaries without manual mocks.
+    """
+    from unittest.mock import Mock, patch
+
+    mock_logger = Mock()
+
+    with patch("src.utils.monitoring.logger", mock_logger):
+        yield {
+            "logger": mock_logger,
+            "assert_info_called": lambda msg=None: mock_logger.info.assert_called()
+            if msg is None
+            else mock_logger.info.assert_called_with(msg),
+            "assert_error_called": lambda msg=None: mock_logger.error.assert_called()
+            if msg is None
+            else mock_logger.error.assert_called_with(msg),
+            "assert_warning_called": lambda msg=None: mock_logger.warning.assert_called()
+            if msg is None
+            else mock_logger.warning.assert_called_with(msg),
+        }
+
+
+@pytest.fixture
+def ai_stack_boundary():
+    """Boundary testing fixture for AI components.
+
+    Modern replacement for scattered AI component mocks.
+    Uses proper LlamaIndex MockEmbedding and structured LLM mocking.
+    """
+    from unittest.mock import Mock
+
+    from llama_index.core import Settings
+    from llama_index.core.embeddings.mock_embed_model import MockEmbedding
+
+    # Use LlamaIndex MockEmbedding instead of MagicMock
+    embed_model = MockEmbedding(embed_dim=1024)
+
+    # Structured LLM mock with common patterns
+    llm = Mock()
+    llm.complete.return_value.text = "Mock LLM response for testing"
+    llm.stream_complete.return_value = iter(
+        [Mock(text="Streaming "), Mock(text="response "), Mock(text="chunk")]
+    )
+
+    # Configure LlamaIndex Settings at boundary
+    original_embed = Settings.embed_model
+    original_llm = Settings.llm
+
+    Settings.embed_model = embed_model
+    Settings.llm = llm
+
+    yield {
+        "embed_model": embed_model,
+        "llm": llm,
+        "embed_dim": 1024,
+        "sparse_dim": 30522,
+    }
+
+    # Restore original settings
+    Settings.embed_model = original_embed
+    Settings.llm = original_llm

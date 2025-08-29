@@ -33,7 +33,7 @@ from pathlib import Path
 class QualityGateResult:
     """Container for quality gate evaluation results."""
 
-    def __init__(self, gate_name: str):
+    def __init__(self, gate_name: str) -> None:
         """Initialize quality gate result.
 
         Args:
@@ -96,7 +96,7 @@ class Phase5AQualityGates:
 class QualityGateEnforcer:
     """CI/CD Quality Gate Enforcement based on Phase 5A test results."""
 
-    def __init__(self, project_root: Path, ci_mode: str = "default"):
+    def __init__(self, project_root: Path, ci_mode: str = "default") -> None:
         """Initialize the quality gate enforcer.
 
         Args:
@@ -462,7 +462,7 @@ class QualityGateEnforcer:
         print(f"📄 Quality gate report saved to: {output_file}")
 
 
-def main():
+def main() -> None:
     """Main entry point for quality gate enforcement."""
     parser = argparse.ArgumentParser(
         description="DocMind AI Quality Gate Enforcer (Phase 5A Optimized)",

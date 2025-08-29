@@ -88,7 +88,6 @@ class TestOptionalDependencyHandling:
         """Verify that current src.utils modules are available."""
         current_modules = [
             "src.utils.core",
-            "src.utils.database",
             "src.utils.monitoring",
         ]
 
