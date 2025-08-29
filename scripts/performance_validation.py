@@ -243,7 +243,6 @@ class PerformanceValidator:
             ram_after, vram_after = self._get_memory_usage()
 
             if response_text:
-
                 # Calculate metrics
                 generation_time = end_time - start_time
                 # Rough token count estimate (actual would need tokenizer)
@@ -329,7 +328,6 @@ class PerformanceValidator:
             ram_after, vram_after = self._get_memory_usage()
 
             if response_text:
-
                 # Calculate metrics (prefill is dominant with long context)
                 generation_time = end_time - start_time
                 # Estimate prefill tokens (~4K input + output)

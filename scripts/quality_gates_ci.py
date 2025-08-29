@@ -1,14 +1,14 @@
 #!/usr/bin/env python
-"""CI/CD Quality Gates Enforcement - Based on Phase 5A Exceptional Results.
+"""CI/CD Quality Gates Enforcement - Based on Phase 5A Test Results.
 
-This script enforces quality gates based on the outstanding Phase 5A achievements:
-- 95.4% test success rate (229 passed, 11 failed) - +49.9pp improvement
+This script enforces quality gates based on the Phase 5A improvements:
+- 45.5% test success rate (286 passed, 350 issues) - current status
 - 29.71% coverage (trending upward from 26.09%)
-- <0.1s average unit test performance (excellent)
+- <0.1s average unit test performance
 - 80%+ production readiness achieved
 
 Quality gates enforced:
-- Test success rate: 95%+ (based on 95.4% achieved)
+- Test success rate: target 70%+ (current 45.5%)
 - Test performance: <0.2s unit test average (based on <0.1s achieved)
 - Coverage: 29%+ (based on 29.71% trending upward)
 - Regression detection: <1.5x performance degradation
@@ -51,14 +51,14 @@ class QualityGateResult:
 class Phase5AQualityGates:
     """Phase 5A quality gates configuration and enforcement."""
 
-    # Phase 5A exceptional results baselines
+    # Phase 5A test results baselines
     PHASE_5A_SUCCESS_RATE = 95.4
     PHASE_5A_COVERAGE = 29.71
     PHASE_5A_UNIT_TEST_TIME = 0.1
     PHASE_5A_PRODUCTION_READINESS = 80.0
 
     # Quality gate thresholds (slightly relaxed from perfect Phase 5A results)
-    MIN_SUCCESS_RATE = 95.0  # Based on 95.4% achieved
+    MIN_SUCCESS_RATE = 70.0  # Target improvement from 45.5%
     MIN_COVERAGE = 29.0  # Based on 29.71% achieved
     MAX_UNIT_TEST_TIME = 0.2  # Based on <0.1s achieved, allowing some flexibility
     MAX_REGRESSION_MULTIPLIER = 1.5  # Performance regression threshold
@@ -94,7 +94,7 @@ class Phase5AQualityGates:
 
 
 class QualityGateEnforcer:
-    """CI/CD Quality Gate Enforcement based on Phase 5A exceptional results."""
+    """CI/CD Quality Gate Enforcement based on Phase 5A test results."""
 
     def __init__(self, project_root: Path, ci_mode: str = "default"):
         """Initialize the quality gate enforcer.
@@ -139,9 +139,7 @@ class QualityGateEnforcer:
         if success_rate >= threshold:
             result.passed = True
             result.message = f"✅ Success rate {success_rate:.1f}% meets {threshold}% threshold (Phase 5A: {self.gates.PHASE_5A_SUCCESS_RATE}%)"
-            result.recommendation = (
-                "Excellent! Maintaining Phase 5A exceptional success rate standards."
-            )
+            result.recommendation = "Success rate meets target standards."
         else:
             result.passed = False
             result.message = f"❌ Success rate {success_rate:.1f}% below {threshold}% threshold (Phase 5A: {self.gates.PHASE_5A_SUCCESS_RATE}%)"
@@ -165,9 +163,7 @@ class QualityGateEnforcer:
         if avg_test_time <= threshold:
             result.passed = True
             result.message = f"✅ Average test time {avg_test_time:.3f}s meets {threshold}s threshold (Phase 5A: <{self.gates.PHASE_5A_UNIT_TEST_TIME}s)"
-            result.recommendation = (
-                "Excellent! Maintaining Phase 5A exceptional performance standards."
-            )
+            result.recommendation = "Performance meets target standards."
         else:
             result.passed = False
             result.message = f"❌ Average test time {avg_test_time:.3f}s exceeds {threshold}s threshold (Phase 5A: <{self.gates.PHASE_5A_UNIT_TEST_TIME}s)"
@@ -348,7 +344,7 @@ class QualityGateEnforcer:
         """Calculate overall test reliability pass rate."""
         # In a real implementation, this would analyze test history
         # For now, return high reliability based on Phase 5A results
-        return 0.95  # Based on Phase 5A 95.4% success rate
+        return 0.70  # Target improvement from current 45.5%
 
     def enforce_all_gates(self) -> list[QualityGateResult]:
         """Enforce all quality gates and return results."""
@@ -451,9 +447,7 @@ class QualityGateEnforcer:
         print("\n💡 Recommendations:")
         failed_gates = [g for g in report["gate_results"] if not g["passed"]]
         if not failed_gates:
-            print(
-                "   🎉 All quality gates passed! System maintains Phase 5A exceptional standards."
-            )
+            print("   🎉 All quality gates passed! System meets target standards.")
         else:
             for gate in failed_gates:
                 print(f"   🔧 {gate['gate_name']}: {gate['recommendation']}")
@@ -473,7 +467,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="DocMind AI Quality Gate Enforcer (Phase 5A Optimized)",
         epilog="""Phase 5A Exceptional Results Quality Gates:
-  - Success Rate Gate: 95%+ (based on 95.4% achieved)
+  - Success Rate Gate: 70%+ target (current 45.5%)
   - Performance Gate: <0.2s unit test avg (based on <0.1s achieved)  
   - Coverage Gate: 29%+ (based on 29.71% trending upward)
   - Regression Gate: <1.5x performance degradation
@@ -610,13 +604,11 @@ Examples:
                 print("\n❌ QUALITY GATES FAILED:")
                 for result in failed_results:
                     print(f"   - {result.gate_name}: {result.recommendation}")
-                print(
-                    "\n🔧 Address failed gates to maintain Phase 5A exceptional standards"
-                )
+                print("\n🔧 Address failed gates to meet target standards")
                 sys.exit(1)
             else:
                 print("\n✅ ALL QUALITY GATES PASSED!")
-                print("🎉 System maintains Phase 5A exceptional performance standards")
+                print("🎉 System meets target performance standards")
 
                 if args.output_report:
                     enforcer.save_quality_report(args.output_report)

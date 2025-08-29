@@ -413,14 +413,10 @@ class PerformanceMonitor:
                     f"{self.results.get('total_duration', 0):.2f}s",
                     f"  Collection Time:     "
                     f"{self.results.get('collection_time', 0):.2f}s",
-                    f"  Tests Collected:     "
-                    f"{self.results.get('test_count', 0)}",
-                    f"  Tests Passed:        "
-                    f"{self.results.get('passed_count', 0)}",
-                    f"  Tests Failed:        "
-                    f"{self.results.get('failed_count', 0)}",
-                    f"  Tests Skipped:       "
-                    f"{self.results.get('skipped_count', 0)}",
+                    f"  Tests Collected:     {self.results.get('test_count', 0)}",
+                    f"  Tests Passed:        {self.results.get('passed_count', 0)}",
+                    f"  Tests Failed:        {self.results.get('failed_count', 0)}",
+                    f"  Tests Skipped:       {self.results.get('skipped_count', 0)}",
                     "",
                 ]
             )
