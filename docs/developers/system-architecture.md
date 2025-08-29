@@ -521,18 +521,32 @@ src/
 │   └── settings.py           # Unified configuration (single source of truth)
 ├── agents/                   # Multi-agent coordination system
 │   ├── coordinator.py        # LangGraph supervisor orchestration
-│   ├── router.py            # Query routing agent
-│   ├── planner.py           # Query planning agent
-│   ├── retrieval.py         # Retrieval expert agent
-│   ├── synthesis.py         # Result synthesis agent
-│   └── validator.py         # Response validation agent
+│   ├── tools.py             # Shared agent tool functions (@tool decorators)
+│   ├── tool_factory.py      # Agent tool creation and management
+│   ├── retrieval.py         # Retrieval agent implementation
+│   └── models.py            # Agent data models and schemas
+├── cache/                    # Caching system
+│   └── simple_cache.py      # SQLite-based document cache (ADR-025)
 ├── core/                     # Core processing modules
+│   └── infrastructure/      # System infrastructure
+├── interfaces/               # Abstract interfaces for dependency injection
+│   └── cache.py             # Cache interface definitions
+├── processing/               # Document processing pipeline
 │   ├── document_processor.py # Document loading and chunking
-│   └── infrastructure/       # System infrastructure
+│   ├── chunking/            # Document chunking strategies
+│   └── embeddings/          # BGE-M3 embedding implementation
+├── retrieval/                # Retrieval system components
+│   ├── vector_store.py      # Qdrant vector storage
+│   ├── embeddings.py        # Embedding utilities
+│   ├── reranking.py         # BGE-reranker-v2-m3 implementation
+│   └── query_engine.py      # LlamaIndex query pipeline
+├── storage/                  # Persistence layer
+│   └── hybrid_persistence.py # SQLite + Qdrant hybrid storage
 ├── utils/                    # Utility modules
-│   ├── embedding.py         # BGE-M3 embedding utilities
-│   ├── database.py          # SQLite persistence layer
-│   └── monitoring.py        # Performance monitoring
+│   ├── core.py              # Core utilities
+│   ├── document.py          # Document processing utilities
+│   ├── monitoring.py        # Performance monitoring
+│   └── multimodal.py        # CLIP multimodal processing
 └── models/                   # Pydantic data models
     └── schemas.py           # API and response schemas
 ```

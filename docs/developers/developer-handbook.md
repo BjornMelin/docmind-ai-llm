@@ -504,7 +504,7 @@ class DocMindSettings(BaseSettings):
     # 127 lines of test compatibility code mixed with production logic
     
     # === FLAT ATTRIBUTES FOR TEST COMPATIBILITY ===
-    model_name: str = Field(default="BAAI/bge-large-en-v1.5")  # Test compatibility (WRONG - should use bge-m3)
+    model_name: str = Field(default="BAAI/bge-m3")  # Correct: BGE-M3 unified embedding model
     agent_decision_timeout: int = Field(default=300)  # Wrong - should be 200ms
     
     def _sync_nested_models(self) -> None:
@@ -539,7 +539,7 @@ class TestDocMindSettings(DocMindSettings):
 # Before (uses backward compatibility)
 def test_settings_default_values():
     settings = DocMindSettings()
-    assert settings.embedding.model_name == "BAAI/bge-large-en-v1.5"  # Wrong model
+    assert settings.embedding.model_name == "BAAI/bge-m3"  # Correct BGE-M3 model
     assert settings.agents.decision_timeout == 300  # Wrong timeout
 
 # After (uses proper test settings)
@@ -591,7 +591,7 @@ def test_environment_override():
 
 #### Phase 3: Test File Migration
 
-- [ ] **Identify affected test files**: Use `rg "embedding_model.*bge-large-en-v1.5" tests/`
+- [ ] **Identify affected test files**: Use `rg "embedding_model.*bge-large-en-v1.5" tests/` (to find legacy references for update)
 - [ ] **Update test assertions**: Replace model names and timeout expectations
 - [ ] **Remove legacy method calls**: Eliminate `_sync_nested_models()` calls from tests
 - [ ] **Run test suite**: Verify all tests pass with new patterns
@@ -1011,7 +1011,7 @@ def settings_with_overrides(test_settings):
 # Anti-pattern: Direct settings instantiation
 def test_example():
     settings = DocMindSettings(enable_gpu_acceleration=False)
-    assert settings.embedding_model == "BAAI/bge-large-en-v1.5"  # Wrong!
+    assert settings.embedding.model_name == "BAAI/bge-m3"  # Correct!
 ```
 
 **After (Clean Pattern)**:
@@ -1034,7 +1034,7 @@ def test_example(test_settings):
 
    ```python
    # Before
-   settings.embedding.model_name == "BAAI/bge-large-en-v1.5"  # OLD WRONG PATTERN
+   settings.embedding.model_name == "BAAI/bge-m3"  # CORRECT PATTERN
    
    # After
    settings.embedding.model_name == "BAAI/bge-m3"

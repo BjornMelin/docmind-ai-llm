@@ -1386,7 +1386,7 @@ tests/performance/test_structural_performance_validation.py # Performance test c
    ```python
    # ANTI-PATTERN: Production code with test-specific logic
    # === FLAT ATTRIBUTES FOR TEST COMPATIBILITY ===
-   embedding_model: str = Field(default="BAAI/bge-large-en-v1.5")  # Test compatibility
+   embedding_model: str = Field(default="BAAI/bge-m3")  # BGE-M3 unified model
    ```
 
 2. **Backward Compatibility Methods** (Line 293-355):
@@ -1441,7 +1441,7 @@ def test_settings():
 
 **Low Complexity (4 files)**:
 
-- Simple assertion value updates: `bge-large-en-v1.5` → `bge-m3`
+- Simple assertion value updates: `bge-large-en-v1.5` → `bge-m3` (legacy to current)
 - Remove explicit `_sync_nested_models()` calls
 - Update documentation examples
 
@@ -1457,7 +1457,7 @@ def test_settings():
 class DocMindSettings(BaseSettings):
     # 127 lines of test compatibility code mixed with production logic
     if "pytest" in sys.modules:
-        default_embedding_model = "BAAI/bge-large-en-v1.5"
+        default_embedding_model = "BAAI/bge-m3"
     else:
         default_embedding_model = "BAAI/bge-m3"
 
@@ -1521,7 +1521,7 @@ def validate_configuration_cleanliness() -> Dict[str, Any]:
 
 ```bash
 # Identify affected test files  
-rg "embedding_model.*bge-large-en-v1.5" tests/ --type py
+rg "embedding_model.*bge-large-en-v1.5" tests/ --type py  # Find legacy references
 
 # Find sync method dependencies
 rg "_sync_nested_models" tests/ --type py
@@ -1650,7 +1650,7 @@ class ConfigurationMigrationTool:
             (r'assert.*embedding_model.*==.*"BAAI/bge-large-en-v1.5"', 
              'assert settings.embedding.model_name == "BAAI/bge-m3"'),
             (r'embedding_model="BAAI/bge-large-en-v1.5"',
-             'bge_m3_model_name="BAAI/bge-m3"'),
+             'embedding.model_name="BAAI/bge-m3"'),
             (r'\._sync_nested_models\(\)',
              '# Sync handled automatically by Pydantic'),
             (r'agent_decision_timeout.*==.*300',
