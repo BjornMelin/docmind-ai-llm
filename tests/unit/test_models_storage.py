@@ -672,7 +672,10 @@ class TestSearchResult:
         result = SearchResult(
             document_id="doc_rich",
             chunk_id="chunk_rich_007",
-            text="Advanced techniques for neural network optimization in distributed systems.",
+            text=(
+                "Advanced techniques for neural network optimization in "
+                "distributed systems."
+            ),
             score=0.94,
             document_metadata=rich_doc_meta,
             chunk_metadata={
@@ -960,14 +963,19 @@ class TestPersistenceError:
     @pytest.mark.unit
     def test_persistence_error_chaining(self):
         """Test PersistenceError exception chaining."""
-        try:
+
+        def _raise_persistence_error():
             try:
                 raise ConnectionError("Network timeout")
-            except ConnectionError as e:
-                raise PersistenceError("Failed to persist document") from e
-        except PersistenceError as persistence_error:
-            assert isinstance(persistence_error.__cause__, ConnectionError)
-            assert str(persistence_error.__cause__) == "Network timeout"
+            except ConnectionError as err:
+                raise PersistenceError("Failed to persist document") from err
+
+        with pytest.raises(PersistenceError) as exc_info:
+            _raise_persistence_error()
+
+        persistence_error = exc_info.value
+        assert isinstance(persistence_error.__cause__, ConnectionError)
+        assert str(persistence_error.__cause__) == "Network timeout"
 
     @pytest.mark.unit
     def test_persistence_error_in_storage_context(self):

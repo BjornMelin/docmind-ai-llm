@@ -1,7 +1,6 @@
-"""Comprehensive test suite for Pydantic models in processing.py.
+"""Unit tests for Pydantic models in processing.py.
 
-This module provides thorough testing of all models in src/models/processing.py,
-focusing on document processing strategies, elements, results, and hash generation.
+Covers document processing strategies, elements, results, and hash generation.
 """
 
 import tempfile
@@ -16,6 +15,55 @@ from src.models.processing import (
     ProcessingResult,
     ProcessingStrategy,
 )
+
+# --- merged from test_models_processing_coverage.py ---
+
+
+class TestProcessingResultHashMethodCoverage:
+    """Additional coverage for ProcessingResult.create_hash_for_document (merged)."""
+
+    @pytest.mark.unit
+    def test_create_hash_for_document_path_conversion(self):
+        """Test hash creation for document path conversion."""
+        test_content = b"Path conversion test content"
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(test_content)
+            p = tmp.name
+        try:
+            h1 = ProcessingResult.create_hash_for_document(p)
+            h2 = ProcessingResult.create_hash_for_document(Path(p))
+            assert isinstance(h1, str)
+            assert len(h1) == 64
+            assert h1 == h2
+        finally:
+            Path(p).unlink()
+
+    @pytest.mark.unit
+    def test_create_hash_for_document_chunked_reading(self):
+        """Test hash creation for document chunked reading."""
+        import hashlib
+        import tempfile
+        from pathlib import Path
+
+        large = b"x" * (8192 * 3 + 1000)
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(large)
+            p = tmp.name
+        try:
+            got = ProcessingResult.create_hash_for_document(p)
+            manual = hashlib.sha256()
+            with open(p, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
+                    manual.update(chunk)
+            stat = Path(p).stat()
+            meta = f"{Path(p).name}:{stat.st_size}:{stat.st_mtime}".encode()
+            manual.update(meta)
+            assert got == manual.hexdigest()
+        finally:
+            Path(p).unlink()
 
 
 class TestProcessingStrategy:
@@ -67,7 +115,7 @@ class TestProcessingStrategy:
     @pytest.mark.unit
     def test_processing_strategy_invalid_value(self):
         """Test ProcessingStrategy with invalid value."""
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match="invalid_strategy") as exc_info:
             ProcessingStrategy("invalid_strategy")
 
         assert "invalid_strategy" in str(exc_info.value)
@@ -434,7 +482,7 @@ class TestProcessingResult:
 
     @pytest.mark.unit
     def test_processing_result_create_hash_for_document_different_files(self):
-        """Test ProcessingResult.create_hash_for_document produces different hashes for different files."""
+        """Hashes differ for different files in create_hash_for_document."""
         content1 = b"First file content"
         content2 = b"Second file content"
 
@@ -587,14 +635,19 @@ class TestProcessingError:
     @pytest.mark.unit
     def test_processing_error_chaining(self):
         """Test ProcessingError exception chaining."""
-        try:
+
+        def _raise_processing_error():
             try:
                 raise OSError("File read error")
-            except OSError as e:
-                raise ProcessingError("Document processing failed") from e
-        except ProcessingError as processing_error:
-            assert isinstance(processing_error.__cause__, IOError)
-            assert str(processing_error.__cause__) == "File read error"
+            except OSError as err:
+                raise ProcessingError("Document processing failed") from err
+
+        with pytest.raises(ProcessingError) as exc_info:
+            _raise_processing_error()
+
+        processing_error = exc_info.value
+        assert isinstance(processing_error.__cause__, IOError)
+        assert str(processing_error.__cause__) == "File read error"
 
     @pytest.mark.unit
     def test_processing_error_in_context(self):

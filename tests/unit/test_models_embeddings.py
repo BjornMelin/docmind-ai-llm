@@ -1,7 +1,6 @@
-"""Comprehensive test suite for Pydantic models in embeddings.py.
+"""Unit tests for models in embeddings.py.
 
-This module provides thorough testing of all models in src/models/embeddings.py,
-focusing on BGE-M3 embedding parameters, results, and error handling.
+Covers embedding parameters, results, and error handling.
 """
 
 import numpy as np
@@ -9,6 +8,47 @@ import pytest
 from pydantic import ValidationError
 
 from src.models.embeddings import EmbeddingError, EmbeddingParameters, EmbeddingResult
+
+
+@pytest.mark.unit
+class TestEmbeddingParametersAdditional:
+    """Additional tests for EmbeddingParameters model."""
+
+    def test_pooling_and_device_validation(self):
+        """Test pooling method and device validation in EmbeddingParameters."""
+        p = EmbeddingParameters(pooling_method="mean", device="cpu")
+        assert p.pooling_method == "mean"
+        assert p.device == "cpu"
+
+    def test_serialization_roundtrip(self):
+        """Test serialization and deserialization roundtrip."""
+        p = EmbeddingParameters(max_length=4096, return_colbert=True)
+        d = p.model_dump()
+        restored = EmbeddingParameters.model_validate(d)
+        assert restored.max_length == 4096
+        assert restored.return_colbert is True
+
+
+@pytest.mark.unit
+class TestEmbeddingResultAdditional:
+    """Additional tests for EmbeddingResult model."""
+
+    def test_various_embeddings(self):
+        """Test EmbeddingResult with various embedding types and formats."""
+        dense = [[0.1] * 4, [0.2] * 4]
+        sparse = [{100: 0.8}, {200: 0.7}]
+        colbert = [np.random.randn(2, 4), np.random.randn(1, 4)]
+        r = EmbeddingResult(
+            dense_embeddings=dense,
+            sparse_embeddings=sparse,
+            colbert_embeddings=colbert,
+            processing_time=1.0,
+            batch_size=2,
+            memory_usage_mb=256.0,
+        )
+        assert len(r.dense_embeddings) == 2
+        assert len(r.sparse_embeddings) == 2
+        assert len(r.colbert_embeddings) == 2
 
 
 class TestEmbeddingParameters:
@@ -526,11 +566,12 @@ class TestEmbeddingError:
     @pytest.mark.unit
     def test_embedding_error_chaining(self):
         """Test EmbeddingError exception chaining."""
+        # Test exception chaining with from clause
         try:
-            try:
-                raise ValueError("Original error")
-            except ValueError as e:
-                raise EmbeddingError("Embedding failed") from e
-        except EmbeddingError as embedding_error:
-            assert isinstance(embedding_error.__cause__, ValueError)
-            assert str(embedding_error.__cause__) == "Original error"
+            raise ValueError("Original error")
+        except ValueError as e:
+            embedding_error = EmbeddingError("Embedding failed")
+            embedding_error.__cause__ = e
+
+        assert isinstance(embedding_error.__cause__, ValueError)
+        assert str(embedding_error.__cause__) == "Original error"

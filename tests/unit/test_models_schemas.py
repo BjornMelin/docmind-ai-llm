@@ -1,7 +1,6 @@
-"""Comprehensive test suite for Pydantic models in schemas.py.
+"""Unit tests for Pydantic models in schemas.py.
 
-This module provides thorough testing of all models in src/models/schemas.py,
-focusing on field validation, constraints, custom methods, and business logic.
+Focus on field validation, constraints, custom methods, and business logic.
 """
 
 from datetime import UTC, datetime
@@ -20,6 +19,31 @@ from src.models.schemas import (
     QueryRequest,
     ValidationResult,
 )
+
+# --- merged from test_models_schemas_coverage.py ---
+
+
+@pytest.mark.unit
+class TestConversationContextCoverage:
+    """Additional coverage for ConversationContext methods (merged)."""
+
+    def test_add_turn_and_token_counting(self):
+        """Test adding conversation turns and token counting."""
+        ctx = ConversationContext(session_id="s")
+        t = ConversationTurn(id="t1", role="user", content="one two three four")
+        ctx.add_turn(t)
+        assert len(ctx.turns) == 1
+        assert ctx.total_tokens == len(t.content.split()) * 2
+
+    def test_get_context_window_exact_limit(self):
+        """Test context window handling at exact limit."""
+        ctx = ConversationContext(session_id="s2")
+        t1 = ConversationTurn(id="a", role="user", content="Two words")  # 4
+        t2 = ConversationTurn(id="b", role="assistant", content="Three words here")  # 6
+        ctx.add_turn(t1)
+        ctx.add_turn(t2)
+        win = ctx.get_context_window(max_tokens=10)
+        assert win == [t1, t2]
 
 
 class TestDocument:

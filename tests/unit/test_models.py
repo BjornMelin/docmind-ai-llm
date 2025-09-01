@@ -73,8 +73,11 @@ def test_settings_default_values():
     # Hardware and Performance
     assert settings.enable_gpu_acceleration is True
 
-    # Document Processing (aligned with unified settings)
-    assert settings.processing.chunk_size == 1500  # Updated to actual default
+    # Document Processing (env may override via DOCMIND_PROCESSING__CHUNK_SIZE)
+    import os
+
+    expected_chunk = int(os.getenv("DOCMIND_PROCESSING__CHUNK_SIZE", "1500"))
+    assert settings.processing.chunk_size == expected_chunk
     # Note: chunk_overlap was removed from settings - using default in processor
 
     # Agent Configuration (updated property names)

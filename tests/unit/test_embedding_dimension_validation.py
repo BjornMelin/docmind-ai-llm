@@ -24,7 +24,7 @@ from llama_index.core.embeddings import MockEmbedding
 from src.models.embeddings import EmbeddingParameters
 
 # MOCK REDUCTION: Import real test settings instead of Mock
-from tests.fixtures.test_settings import TestDocMindSettings
+from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
 
 
 @pytest.fixture
@@ -42,10 +42,14 @@ def test_settings_1024d():
     REDUCTION: -6 mock instances per test using this fixture
     """
     return TestDocMindSettings(
-        embedding_model="BAAI/bge-m3",
-        embedding_dimension=1024,
-        embedding_max_length=8192,
-        embedding_batch_size_gpu=12,
+        embedding={
+            "model_name": "BAAI/bge-m3",
+            "dimension": 1024,
+            "max_length": 8192,
+            "batch_size_gpu": 12,
+            "batch_size_cpu": 4,
+        },
+        enable_gpu_acceleration=True,
         # Real validation catches configuration errors
         debug=True,  # Test-optimized setting
     )
@@ -91,7 +95,7 @@ class TestLlamaIndexMockEmbeddingIntegration:
 
         # Test query embedding
         for text in test_texts:
-            embedding = mock_llamaindex_embedding._get_query_embedding(text)
+            embedding = mock_llamaindex_embedding.get_query_embedding(text)
             assert len(embedding) == 1024, (
                 f"Expected 1024 dimensions, got {len(embedding)}"
             )
@@ -101,7 +105,7 @@ class TestLlamaIndexMockEmbeddingIntegration:
 
         # Test text embedding
         for text in test_texts:
-            embedding = mock_llamaindex_embedding._get_text_embedding(text)
+            embedding = mock_llamaindex_embedding.get_text_embedding(text)
             assert len(embedding) == 1024, (
                 f"Expected 1024 dimensions, got {len(embedding)}"
             )
@@ -118,7 +122,7 @@ class TestLlamaIndexMockEmbeddingIntegration:
         ]
 
         for query in test_queries:
-            embedding = await mock_llamaindex_embedding._aget_query_embedding(query)
+            embedding = await mock_llamaindex_embedding.aget_query_embedding(query)
             assert len(embedding) == 1024, (
                 f"Async embedding should be 1024D, got {len(embedding)}"
             )
@@ -136,7 +140,7 @@ class TestLlamaIndexMockEmbeddingIntegration:
             test_texts = [f"Batch test text {i}" for i in range(batch_size)]
 
             for text in test_texts:
-                embedding = mock_llamaindex_embedding._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding.get_text_embedding(text)
                 assert len(embedding) == 1024, (
                     f"Batch embedding should be 1024D, got {len(embedding)}"
                 )
@@ -156,7 +160,7 @@ class TestLlamaIndexMockEmbeddingIntegration:
 
         embeddings = []
         for _ in range(10):
-            embedding = mock_llamaindex_embedding._get_query_embedding(test_text)
+            embedding = mock_llamaindex_embedding.get_query_embedding(test_text)
             embeddings.append(embedding)
             assert len(embedding) == 1024, "All embeddings should be 1024D"
 
@@ -296,17 +300,12 @@ class TestVectorSimilarityDimensionValidation:
         )
 
         # Attempting similarity with mismatched dimensions should be detectable
-        try:
-            vec1_np = np.array(valid_1024)
-            vec2_np = np.array(invalid_512)
+        vec1_np = np.array(valid_1024)
+        vec2_np = np.array(invalid_512)
 
-            # This should fail due to dimension mismatch
-            with pytest.raises((ValueError, RuntimeError)):
-                np.dot(vec1_np, vec2_np)
-
-        except Exception as e:
-            # Expected behavior - dimension mismatch should cause error
-            assert "shape" in str(e).lower() or "dimension" in str(e).lower()
+        # This should fail due to dimension mismatch
+        with pytest.raises((ValueError, RuntimeError)):
+            np.dot(vec1_np, vec2_np)
 
     def test_batch_similarity_dimension_consistency(self, sample_embeddings_1024d):
         """Test batch similarity computations require dimension consistency."""
@@ -431,7 +430,7 @@ class TestInterfaceContractValidation:
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
     def test_bgem3_embedder_dimension_contract(
-        self, mock_flag_model_class, mock_settings_1024d, bgem3_parameters_1024d
+        self, mock_flag_model_class, test_settings_1024d, bgem3_parameters_1024d
     ):
         """Test BGE-M3 embedder maintains 1024D contract."""
         from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
@@ -447,7 +446,7 @@ class TestInterfaceContractValidation:
         mock_flag_model_class.return_value = mock_model
 
         embedder = BGEM3Embedder(
-            settings=mock_settings_1024d, parameters=bgem3_parameters_1024d
+            settings=test_settings_1024d, parameters=bgem3_parameters_1024d
         )
 
         # Test single embedding contract
@@ -484,7 +483,7 @@ class TestInterfaceContractValidation:
         assert embedding.embed_dim == 1024, "embed_dim should be 1024 for BGE-M3"
 
         # Test query embedding contract
-        query_result = embedding._get_query_embedding("Test query")
+        query_result = embedding.get_query_embedding("Test query")
         assert isinstance(query_result, list), "Query embedding should be list"
         assert len(query_result) == 1024, "Query embedding should be 1024D"
 
@@ -528,7 +527,7 @@ class TestBatchProcessingEdgeCases:
         # Empty batch should handle gracefully
         try:
             for text in empty_texts:
-                mock_llamaindex_embedding._get_text_embedding(text)
+                mock_llamaindex_embedding.get_text_embedding(text)
         except Exception as e:
             pytest.fail(f"Empty batch processing should not raise exception: {e}")
 
@@ -536,7 +535,7 @@ class TestBatchProcessingEdgeCases:
         """Test single-item batch processing."""
         single_batch = ["Single test text"]
 
-        embedding = mock_llamaindex_embedding._get_text_embedding(single_batch[0])
+        embedding = mock_llamaindex_embedding.get_text_embedding(single_batch[0])
         assert len(embedding) == 1024, (
             "Single item batch should produce 1024D embedding"
         )
@@ -546,7 +545,7 @@ class TestBatchProcessingEdgeCases:
         large_batch = [f"Large batch text item {i}" for i in range(100)]
 
         for i, text in enumerate(large_batch):
-            embedding = mock_llamaindex_embedding._get_text_embedding(text)
+            embedding = mock_llamaindex_embedding.get_text_embedding(text)
             assert len(embedding) == 1024, f"Large batch item {i} should be 1024D"
 
     def test_batch_size_boundary_conditions(self, sample_embeddings_1024d):
