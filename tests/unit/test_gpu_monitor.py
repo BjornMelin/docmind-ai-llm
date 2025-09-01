@@ -1,7 +1,6 @@
-"""Comprehensive tests for PyTorch native GPU monitoring.
+"""Unit tests for PyTorch-native GPU monitoring utilities.
 
-This module provides comprehensive test coverage for GPU monitoring functionality,
-including edge cases, error conditions, performance benchmarks, and memory management.
+Covers metrics struct, context manager behavior, error paths, and perf bounds.
 """
 
 import asyncio

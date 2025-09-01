@@ -368,6 +368,185 @@ class TestSimpleCacheFactoryFunctions:
         assert isinstance(cache2, SimpleCache)
 
 
+class TestSimpleCacheEdgeCasesMerged:
+    """Merged edge/corruption/path/exception tests from legacy suites.
+
+    Note: Limited protected access to _hash is documented and intentional.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_readonly_cache_directory(self, tmp_path):
+        """Handles read-only cache directory gracefully."""
+        cache_dir = tmp_path / "readonly_cache"
+        cache_dir.mkdir()
+        cache = SimpleCache(cache_dir=str(cache_dir))
+        await cache.store_document("test.pdf", {"content": "test"})
+        import stat as _stat
+
+        cache_dir.chmod(_stat.S_IRUSR | _stat.S_IRGRP | _stat.S_IROTH)
+        try:
+            result = await cache.store_document("readonly.pdf", {"content": "readonly"})
+            assert isinstance(result, bool)
+            existing = await cache.get_document("test.pdf")
+            assert existing is not None
+        finally:
+            cache_dir.chmod(_stat.S_IRWXU | _stat.S_IRWXG | _stat.S_IRWXO)
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_disk_full_simulation(self, tmp_path, mocker):
+        """Handles disk-full condition on persist."""
+        from llama_index.core.storage.kvstore import SimpleKVStore as KVStore
+
+        cache = SimpleCache(cache_dir=str(tmp_path))
+        mocker.patch.object(
+            KVStore,
+            "persist",
+            side_effect=OSError("No space left on device"),
+        )
+        result = await cache.store_document("diskfull.pdf", {"content": "large data"})
+        assert result is False
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_corrupted_cache_file_recovery(self, tmp_path):
+        """Recovers from corrupted cache file by recreating storage."""
+        cache_dir = tmp_path / "corrupted_cache"
+        cache_dir.mkdir()
+        db_path = cache_dir / "docmind.db"
+        db_path.write_text("corrupted json data {invalid")
+        cache = SimpleCache(cache_dir=str(cache_dir))
+        await cache.store_document("recovery.pdf", {"content": "recovered"})
+        result = await cache.get_document("recovery.pdf")
+        assert result is not None
+        assert result["content"] == "recovered"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_unicode_and_special_paths(self):
+        """Supports unicode and special characters in paths."""
+        cache = SimpleCache()
+        paths = [
+            "test_文档.pdf",
+            "тест.pdf",
+            "émoji_😀.pdf",
+            "test with spaces.pdf",
+            "test-with-dashes.pdf",
+            "test_with_underscores.pdf",
+            "test.multiple.dots.pdf",
+            "test(with)parens.pdf",
+            "test[with]brackets.pdf",
+        ]
+        for path in paths:
+            await cache.store_document(path, {"content": path})
+            out = await cache.get_document(path)
+            assert out is not None
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_extremely_long_paths(self):
+        """Raises ValueError for extremely long paths."""
+        cache = SimpleCache()
+        long_filename = "x" * 250 + ".pdf"
+        very_long_path = "/very/long/path/" + "subdir/" * 50 + long_filename
+        with pytest.raises(ValueError, match="too long"):
+            await cache.store_document(very_long_path, {"content": "test"})
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_many_small_documents_and_nested(self):
+        """Stores many small docs and preserves nested structures."""
+        cache = SimpleCache()
+        for i in range(200):
+            await cache.store_document(
+                f"small_{i}.pdf", {"id": i, "content": f"doc {i}"}
+            )
+        for i in [0, 50, 199]:
+            out = await cache.get_document(f"small_{i}.pdf")
+            assert out is not None
+            assert out["id"] == i
+        # Nested
+        nested = {"level_0": {"level_1": {"items": [f"item_{j}" for j in range(5)]}}}
+        await cache.store_document("nested.pdf", nested)
+        assert await cache.get_document("nested.pdf") is not None
+
+    @pytest.mark.unit
+    def test_hashing_edge_cases(self, tmp_path):
+        """Validates hashing behavior for existing and missing paths."""
+        cache = SimpleCache()
+        test_file = tmp_path / "test.pdf"
+        test_file.write_text("original content")
+        original = cache._hash(str(test_file))  # protected access documented
+        test_file.write_text("modified content with different size")
+        assert original != cache._hash(str(test_file))
+        # Non-existent
+        h1 = cache._hash("/nonexistent/file1.pdf")
+        h2 = cache._hash("/nonexistent/file1.pdf")
+        h3 = cache._hash("/nonexistent/file2.pdf")
+        assert h1 == h2
+        assert h1 != h3
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_document_exception_paths(self):
+        """Covers get_document exception branches for coverage."""
+        from unittest.mock import patch as _patch
+
+        cache = SimpleCache()
+        with _patch.object(cache.cache, "get", side_effect=KeyError("x")):
+            assert await cache.get_document("a.pdf") is None
+        with _patch.object(cache.cache, "get", side_effect=ValueError("x")):
+            assert await cache.get_document("a.pdf") is None
+        with _patch.object(cache, "_hash", side_effect=OSError("x")):
+            assert await cache.get_document("a.pdf") is None
+        with _patch.object(cache, "_hash", side_effect=RuntimeError("x")):
+            assert await cache.get_document("a.pdf") is None
+        with _patch.object(cache.cache, "get", side_effect=AttributeError("x")):
+            assert await cache.get_document("a.pdf") is None
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_clear_and_stats_exception_paths(self, tmp_path):
+        """Covers clear_cache and stats exceptions without failing."""
+        from pathlib import Path as _Path
+        from unittest.mock import patch as _patch
+
+        cache_dir = tmp_path / "test_cache"
+        cache = SimpleCache(cache_dir=str(cache_dir))
+        await cache.store_document("test.pdf", {"content": "test"})
+        db_path = _Path(cache._persist_path)
+        assert db_path.exists()
+        assert await cache.clear_cache() is True
+        # Recreate the db file by storing a doc, so exists() is True
+        await cache.store_document("again.pdf", {"content": "x"})
+        with _patch("pathlib.Path.unlink", side_effect=OSError("denied")):
+            assert await cache.clear_cache() is False
+        with _patch("builtins.round", side_effect=ValueError("round")):
+            stats = await cache.get_cache_stats()
+            assert "error" in stats
+            assert stats["cache_type"] == "simple_sqlite"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_cache_init_from_persist_path_error(self, tmp_path):
+        """Handles from_persist_path error by creating new cache."""
+        from unittest.mock import patch as _patch
+
+        cache_dir = tmp_path / "init_test"
+        cache_dir.mkdir()
+        db_path = cache_dir / "docmind.db"
+        db_path.write_text('{"some": "data"}')
+        with _patch(
+            "llama_index.core.storage.kvstore.SimpleKVStore.from_persist_path",
+            side_effect=ValueError("Persistence error"),
+        ):
+            cache = SimpleCache(cache_dir=str(cache_dir))
+        assert isinstance(cache, SimpleCache)
+        stats = await cache.get_cache_stats()
+        assert stats["total_documents"] == 0
+
+
 class TestSimpleCacheErrorHandling:
     """Test error handling and edge cases."""
 
