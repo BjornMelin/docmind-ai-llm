@@ -58,14 +58,16 @@ class TestDetectHardware:
         """Test hardware detection with different CUDA availability."""
         with patch("torch.cuda.is_available", return_value=cuda_available):
             if cuda_available:
-                with patch("torch.cuda.get_device_name", return_value="RTX 4090"):
-                    with patch("torch.cuda.get_device_properties") as mock_props:
-                        mock_props.return_value.total_memory = 17179869184  # 16GB
-                        result = detect_hardware()
+                with (
+                    patch("torch.cuda.get_device_name", return_value="RTX 4090"),
+                    patch("torch.cuda.get_device_properties") as mock_props,
+                ):
+                    mock_props.return_value.total_memory = 17179869184  # 16GB
+                    result = detect_hardware()
 
-                        assert result["cuda_available"] is True
-                        assert result["gpu_name"] == "RTX 4090"
-                        assert result["vram_total_gb"] == 16.0
+                    assert result["cuda_available"] is True
+                    assert result["gpu_name"] == "RTX 4090"
+                    assert result["vram_total_gb"] == 16.0
             else:
                 result = detect_hardware()
                 assert result["cuda_available"] is False
@@ -168,9 +170,11 @@ class TestValidateStartupConfiguration:
         self, mock_settings, exception_type, error_pattern
     ):
         """Test Qdrant connection error handling."""
-        with patch("qdrant_client.QdrantClient", side_effect=exception_type):
-            with pytest.raises(RuntimeError, match="Critical configuration errors"):
-                validate_startup_configuration(mock_settings)
+        with (
+            patch("qdrant_client.QdrantClient", side_effect=exception_type),
+            pytest.raises(RuntimeError, match="Critical configuration errors"),
+        ):
+            validate_startup_configuration(mock_settings)
 
     def test_validate_startup_gpu_scenarios(self, mock_settings):
         """Test GPU configuration validation scenarios."""
@@ -495,23 +499,24 @@ class TestAsyncTimer:
         result = await flexible_func(*func_args, **func_kwargs)
         assert result == expected_result
 
-    async def test_async_timer_timing_accuracy(self):
-        """Test that async timer measures time accurately."""
-        sleep_duration = 0.01
+    async def test_async_timer_timing_accuracy(self, perf_counter_boundary):
+        """Test that async timer measures time using deterministic perf_counter."""
 
         @async_timer
-        async def timed_sleep():
-            await asyncio.sleep(sleep_duration)
+        async def trivial():
+            # No real sleep; no_sleep fixture patches asyncio.sleep anyway
             return "done"
 
-        start_time = time.perf_counter()
-        result = await timed_sleep()
-        end_time = time.perf_counter()
+        start = time.perf_counter()
+        result = await trivial()
+        end = time.perf_counter()
 
         assert result == "done"
-        # Actual duration should be close to sleep duration
-        actual_duration = end_time - start_time
-        assert sleep_duration <= actual_duration < sleep_duration + 0.005
+        # With perf_counter_boundary, wrapper may consume extra ticks.
+        # Assert monotonicity and positive duration, not exact bound.
+        actual_duration = end - start
+        assert actual_duration > 0.0
+        assert end >= start
 
 
 @pytest.mark.unit

@@ -165,7 +165,7 @@ def app_test(tmp_path):
         AppTest: Streamlit app test instance with proper settings.
     """
     # Import test settings from proper fixtures
-    from tests.fixtures.test_settings import TestDocMindSettings
+    from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
 
     # Create real test settings object instead of mocking
     test_settings = TestDocMindSettings(
