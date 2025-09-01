@@ -54,12 +54,8 @@ class TestAdaptiveRouterQueryEngineIntegration:
             hybrid_retriever=mock_hybrid_retriever,
             llm=mock_llm_for_routing,
         )
-        hybrid_tool = next(
-            t
-            for t in router_engine._query_engine_tools
-            if t.metadata.name == "hybrid_search"
-        )
-        hybrid_tool.query_engine.query = MagicMock(
+        # Route through the underlying router, stub its response
+        router_engine.router_engine.query = MagicMock(
             return_value=MagicMock(response="Hybrid search response")
         )
         response = router_engine.query(
@@ -200,5 +196,11 @@ class TestAdaptiveRouterQueryEngineRealism:
         with patch("src.retrieval.query_engine.logger.info") as mock_logger:
             router_engine.query(long_query)
         mock_logger.assert_called()
-        logged_args = mock_logger.call_args[0]
-        assert len(logged_args[1]) == 100
+        # Find the call for the truncated query log and validate length
+        found = False
+        for args, _kwargs in mock_logger.call_args_list:
+            if isinstance(args[0], str) and "Executing adaptive query" in args[0]:
+                assert len(args[1]) == 100
+                found = True
+                break
+        assert found, "Expected truncated query log was not emitted"
