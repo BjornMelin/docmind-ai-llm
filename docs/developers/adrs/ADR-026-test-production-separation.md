@@ -247,7 +247,7 @@ def privacy_test_settings():
         )
 ```
 
-**Test Implementation Patterns (`tests/unit/test_settings.py`)**:
+**Test Implementation Patterns (`tests/unit/config/test_settings.py`)**:
 
 ```python
 import pytest

@@ -444,7 +444,7 @@ uv run python -m pytest tests/performance/ -v -m performance     # Performance b
 uv run python -m pytest tests/validation/ -v                    # Validation tests
 
 # Run specific test files or functions
-uv run python -m pytest tests/unit/test_settings.py -v          # Single test file
+uv run python -m pytest tests/unit/config/test_settings.py -v          # Single test file
 uv run python -m pytest tests/integration/test_embedding_pipeline.py::test_bge_m3 -v  # Single test
 ```
 
@@ -810,7 +810,7 @@ if torch.cuda.is_available():
 "
 
 # Run tests with verbose debugging
-uv run python -m pytest tests/unit/test_settings.py -v -s --tb=long
+uv run python -m pytest tests/unit/config/test_settings.py -v -s --tb=long
 uv run python -m pytest tests/system/ -v -s --capture=no --tb=long
 ```
 

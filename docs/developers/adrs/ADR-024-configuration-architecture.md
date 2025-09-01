@@ -413,7 +413,7 @@ def initialize_app():
 
 ## Testing
 
-**In `tests/unit/test_settings.py`:**
+**In `tests/unit/config/test_settings.py`:**
 
 ```python
 import pytest

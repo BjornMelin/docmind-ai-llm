@@ -555,7 +555,7 @@ class QualityMetrics:
 
 - **RouterQueryEngine**: `src/retrieval/query_engine.py` - Adaptive strategy selection with LLMSingleSelector
 - **Document Processing Cache**: `src/cache/simple_cache.py` - SQLite-based document processing cache using LlamaIndex SimpleKVStore
-- **Cache Testing**: `tests/unit/test_simple_cache.py` - Comprehensive test suite for SimpleCache functionality
+- **Cache Testing**: `tests/unit/cache/test_simple_cache.py` - Comprehensive test suite for SimpleCache functionality
 - **Strategy Implementation**:
   - Dense semantic search (BGE-M3 dense vectors)
   - Hybrid search (BGE-M3 dense + sparse with RRF fusion)

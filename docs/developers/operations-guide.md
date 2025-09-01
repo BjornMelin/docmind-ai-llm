@@ -1371,7 +1371,7 @@ Based on comprehensive dependency analysis, the project successfully eliminated 
 
 ```bash
 # Test files that required migration
-tests/unit/test_models.py                                    # 3 assertion updates
+tests/unit/models/test_models.py                                    # 3 assertion updates
 tests/integration/test_refactored_pipeline_standalone.py     # MockAppSettings class updates  
 tests/TEST_FRAMEWORK.md                                     # Documentation updates
 tests/performance/test_validation_demo.py                   # Remove _sync_nested_models() calls
@@ -1603,7 +1603,7 @@ print('✅ Zero test contamination confirmed')
 
 ```bash
 # Run migrated tests
-pytest tests/unit/test_models.py -v
+pytest tests/unit/models/test_models.py -v
 pytest tests/integration/test_refactored_pipeline_standalone.py -v
 
 # Validate test isolation

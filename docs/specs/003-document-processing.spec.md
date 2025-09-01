@@ -83,8 +83,8 @@
 - `src/cache/simple_cache.py` - SimpleCache (SQLite-based document caching)
 - `src/storage/hybrid_persistence.py` - SQLite + Qdrant integration
 - `src/config/kv_cache.py` - FP8 optimization and context management
-- `tests/test_processing/test_resilient_processing.py` - Unstructured.io integration tests
-- `tests/unit/test_simple_cache.py` - SimpleCache performance and functionality tests
+- `tests/integration/test_document_processing.py` - Unstructured.io integration tests
+- `tests/unit/cache/test_simple_cache.py` - SimpleCache performance and functionality tests
 
 ## 1. Objective
 
@@ -437,8 +437,8 @@ def create_cache_system(cache_dir: str = "./cache") -> SimpleCacheManager:
 - `src/cache/simple_cache.py` - SimpleCache with SQLite-based document caching (ADR-010)
 - `src/storage/hybrid_persistence.py` - SQLite + Qdrant integration (ADR-007)
 - `src/config/kv_cache.py` - FP8 optimization and context management
-- `tests/test_processing/test_resilient_processing.py` - Unstructured.io integration tests
-- `tests/unit/test_simple_cache.py` - SimpleCache performance and functionality tests
+- `tests/integration/test_document_processing.py` - Unstructured.io integration tests
+- `tests/unit/cache/test_simple_cache.py` - SimpleCache performance and functionality tests
 
 ### Modified Files
 
