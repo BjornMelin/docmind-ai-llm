@@ -589,6 +589,27 @@ def mock_multimodal_utilities() -> dict[str, Any]:
     }
 
 
+@pytest.fixture
+def mock_memory_monitor() -> Any:
+    """Lightweight memory monitor stub for integration tests.
+
+    Provides the minimal surface used by memory efficiency tests without
+    introducing external dependencies.
+    """
+
+    class _Monitor:
+        def __init__(self) -> None:  # noqa: D401
+            self._peak = 1.3
+
+        def get_memory_usage(self) -> dict[str, float]:  # noqa: D401
+            return {"used_gb": 1.2}
+
+        def track_peak_usage(self) -> float:  # noqa: D401
+            return self._peak
+
+    return _Monitor()
+
+
 # ============================================================================
 # SESSION-SCOPED FIXTURES FOR PERFORMANCE
 # ============================================================================
