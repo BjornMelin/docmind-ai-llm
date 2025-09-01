@@ -20,6 +20,7 @@ Mocked external dependencies:
 - Numpy array operations
 """
 
+import contextlib
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -554,12 +555,14 @@ class TestCreateImageDocuments:
         """Test image document creation with different error types."""
         image_paths = ["/error/path.jpg"]
 
-        with patch("src.utils.multimodal.ImageDocument", side_effect=exception_type):
-            with patch("src.utils.multimodal.logger") as mock_logger:
-                result = create_image_documents(image_paths)
+        with (
+            patch("src.utils.multimodal.ImageDocument", side_effect=exception_type),
+            patch("src.utils.multimodal.logger") as mock_logger,
+        ):
+            result = create_image_documents(image_paths)
 
-                assert result == []
-                mock_logger.error.assert_called_once()
+            assert result == []
+            mock_logger.error.assert_called_once()
 
 
 @pytest.mark.unit
@@ -727,11 +730,8 @@ class TestMultimodalUtilsEdgeCases:
         mock_clip = Mock()
 
         # Test with None image (should not crash)
-        try:
+        with contextlib.suppress(AttributeError, TypeError):
             await generate_image_embeddings(mock_clip, None)
-        except (AttributeError, TypeError):
-            # Expected to fail with None image
-            pass
 
     def test_batch_process_images_single_image(self):
         """Test batch processing with single image."""

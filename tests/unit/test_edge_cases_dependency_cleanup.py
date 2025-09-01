@@ -73,7 +73,6 @@ class TestOptionalDependencyHandling:
             "utils.logging_utils",
             "utils.memory_utils",
             "utils.model_manager",
-            "utils.monitoring",  # This one was moved to src.utils.monitoring
             "utils.qdrant_utils",
             "utils.retry_utils",
             "utils.utils",  # This was moved to src.utils.core
@@ -119,13 +118,22 @@ class TestGracefulErrorHandling:
     def test_app_startup_without_optional_deps(self):
         """Test that app can start without optional dependencies."""
         try:
+            from unittest.mock import Mock
+            from unittest.mock import patch as _patch
+
             from src.config import settings
             from src.utils.core import validate_startup_configuration
 
-            # Should not crash even if some dependencies are missing
-            result = validate_startup_configuration(settings)
-            # Function should return a dict, not crash
-            assert isinstance(result, dict)
+            # Patch QdrantClient to avoid real network calls in unit tier
+            with _patch("qdrant_client.QdrantClient") as mock_client:
+                client = Mock()
+                client.get_collections.return_value = {"collections": []}
+                mock_client.return_value = client
+
+                # Should not crash even if some dependencies are missing
+                result = validate_startup_configuration(settings)
+                # Function should return a dict, not crash
+                assert isinstance(result, dict)
 
         except ImportError:
             pytest.skip("Core utilities not available")
