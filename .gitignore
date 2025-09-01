@@ -178,13 +178,14 @@ CLAUDE.md
 AGENTS.md
 logs/
 docmind_ai.log
-repomix-output.md
+repomix-output.*
 tests-output.md
 core-files-output.md
 crawled/
 TODO.md.bak
 ai-research/
 .spec-updates/
+agent-logs/
 
 # Model caches and embeddings
 embeddings_cache/
