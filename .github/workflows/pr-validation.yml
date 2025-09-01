@@ -27,7 +27,7 @@ jobs:
           cache-dependency-glob: "**/pyproject.toml"
 
       - name: Install dependencies
-        run: uv sync --group test
+        run: uv sync --group test --group dev
 
       - name: Ruff format (check only)
         run: uv run ruff format --check .
@@ -65,7 +65,7 @@ jobs:
           cache-dependency-glob: "**/pyproject.toml"
 
       - name: Install dependencies
-        run: uv sync --group test
+        run: uv sync --group test --group dev
 
       - name: Run integration tests (no coverage gating)
         env:
