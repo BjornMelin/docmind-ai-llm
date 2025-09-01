@@ -16,6 +16,7 @@ from typing import Any
 
 import torch
 from loguru import logger
+import numpy as np
 
 try:
     from sentence_transformers import CrossEncoder
@@ -163,9 +164,19 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
                 pairs, batch_size=self.batch_size, show_progress_bar=False
             )
 
-            # Apply score normalization if requested
+            # Apply score normalization if requested, avoiding double normalization
             if self.normalize_scores:
-                scores = torch.sigmoid(torch.tensor(scores)).numpy()
+                np_scores = np.asarray(scores)
+                # If scores already appear to be probabilities in [0,1],
+                # skip extra sigmoid to avoid double-normalization.
+                if not (
+                    np_scores.size > 0
+                    and np_scores.min() >= -1e-6
+                    and np_scores.max() <= 1.0 + 1e-6
+                ):
+                    scores = torch.sigmoid(torch.tensor(np_scores)).numpy()
+                else:
+                    scores = np_scores
 
             # Update node scores and create reranked list
             reranked_nodes = []

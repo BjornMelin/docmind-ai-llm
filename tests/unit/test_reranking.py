@@ -337,6 +337,55 @@ class TestBGECrossEncoderRerankPostprocessing:
         assert call_kwargs["batch_size"] == 2
         assert call_kwargs["show_progress_bar"] is False
 
+    @patch("src.retrieval.reranking.CrossEncoder")
+    def test_avoids_double_normalization_when_scores_in_unit_interval(
+        self, mock_cross
+    ):
+        from src.retrieval.reranking import BGECrossEncoderRerank
+
+        mock_model = Mock()
+        mock_model.predict.return_value = np.array([0.9, 0.8, 0.7])
+        mock_cross.return_value = mock_model
+
+        reranker = BGECrossEncoderRerank(top_n=3, normalize_scores=True)
+
+        nodes = [
+            NodeWithScore(node=TextNode(text="a", id_="1"), score=0.1),
+            NodeWithScore(node=TextNode(text="b", id_="2"), score=0.1),
+            NodeWithScore(node=TextNode(text="c", id_="3"), score=0.1),
+        ]
+        qb = QueryBundle(query_str="q")
+
+        result = reranker.postprocess_nodes(nodes, qb)
+        scores = [n.score for n in result]
+        assert scores == [0.9, 0.8, 0.7]
+
+    @patch("src.retrieval.reranking.CrossEncoder")
+    def test_applies_sigmoid_when_logits_returned(self, mock_cross):
+        import torch as _torch
+        from src.retrieval.reranking import BGECrossEncoderRerank
+
+        logits = np.array([2.0, 0.0, -1.0])
+        expected = _torch.sigmoid(_torch.tensor(logits)).numpy().tolist()
+
+        mock_model = Mock()
+        mock_model.predict.return_value = logits
+        mock_cross.return_value = mock_model
+
+        reranker = BGECrossEncoderRerank(top_n=3, normalize_scores=True)
+
+        nodes = [
+            NodeWithScore(node=TextNode(text="a", id_="1"), score=0.1),
+            NodeWithScore(node=TextNode(text="b", id_="2"), score=0.1),
+            NodeWithScore(node=TextNode(text="c", id_="3"), score=0.1),
+        ]
+        qb = QueryBundle(query_str="q")
+
+        result = reranker.postprocess_nodes(nodes, qb)
+        scores = [pytest.approx(float(n.score), rel=1e-6) for n in result]
+        for got, exp in zip(scores, expected, strict=False):
+            assert got == pytest.approx(exp, rel=1e-6)
+
 
 @pytest.mark.unit
 class TestBGECrossEncoderRerankUtilities:
