@@ -1,4 +1,4 @@
-"""Comprehensive batch processing contract tests for embedding operations.
+"""Batch processing contract tests for embedding operations.
 
 This module provides exhaustive testing of batch processing edge cases and interface
 contracts across embedding operations, focusing on:
@@ -28,18 +28,24 @@ from llama_index.core.embeddings import MockEmbedding
 
 @pytest.fixture
 def batch_test_data():
-    """Generate comprehensive batch test data with various characteristics."""
+    """Generate batch test data with various characteristics."""
     np.random.seed(42)  # For reproducible tests
     return {
         "empty_batch": [],
         "single_item": ["Single test document for batch processing validation."],
         "small_batch": [f"Small batch document {i} content." for i in range(5)],
         "medium_batch": [
-            f"Medium batch document {i} with varied content lengths and diverse vocabulary to test processing."
+            (
+                f"Medium batch document {i} with varied content lengths and diverse "
+                f"vocabulary to test processing."
+            )
             for i in range(25)
         ],
         "large_batch": [
-            f"Large batch document {i} containing comprehensive text for processing validation and performance testing."
+            (
+                f"Large batch document {i} with comprehensive content for processing "
+                f"validation and performance testing."
+            )
             for i in range(100)
         ],
         "very_large_batch": [f"Very large batch item {i}" for i in range(500)],
@@ -128,7 +134,7 @@ class TestBatchSizeBoundaryConditions:
         # Empty batch should handle gracefully without errors
         try:
             for text in empty_batch:
-                mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                mock_llamaindex_embedding_1024d.get_text_embedding(text)
 
             # Should not iterate at all for empty batch
             processed_count = len(empty_batch)
@@ -145,10 +151,10 @@ class TestBatchSizeBoundaryConditions:
         text = single_batch[0]
 
         # Process as single item
-        single_embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+        single_embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
 
         # Process as batch with one item
-        batch_embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+        batch_embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
 
         # Should produce identical results
         assert len(single_embedding) == len(batch_embedding), (
@@ -179,7 +185,7 @@ class TestBatchSizeBoundaryConditions:
 
             processed_embeddings = []
             for text in test_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 processed_embeddings.append(embedding)
 
             # Validate batch processing
@@ -204,7 +210,7 @@ class TestBatchSizeBoundaryConditions:
 
             processed_count = 0
             for text in test_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 assert len(embedding) == 1024, (
                     f"Power-of-2 size {size} item should be 1024D"
                 )
@@ -225,7 +231,7 @@ class TestBatchSizeBoundaryConditions:
 
             embeddings = []
             for text in test_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 embeddings.append(embedding)
 
             assert len(embeddings) == size, (
@@ -250,7 +256,7 @@ class TestLargeBatchProcessing:
         # Process large batch and monitor basic memory patterns
         processed_embeddings = []
         for text in large_batch:
-            embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+            embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
             processed_embeddings.append(embedding)
 
             # Basic validation during processing
@@ -283,7 +289,7 @@ class TestLargeBatchProcessing:
             chunk = very_large_batch[i : i + chunk_size]
 
             for text in chunk:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 assert len(embedding) == 1024, "Very large batch chunks should be 1024D"
                 processed_count += 1
 
@@ -308,7 +314,7 @@ class TestLargeBatchProcessing:
             chunk_processed = 0
 
             for text in chunk:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 assert len(embedding) == 1024, "Extreme batch items should be 1024D"
                 chunk_processed += 1
 
@@ -334,7 +340,7 @@ class TestLargeBatchProcessing:
         for _run in range(3):
             run_embeddings = []
             for text in large_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 run_embeddings.append(len(embedding))  # Store dimensions for comparison
             all_runs.append(run_embeddings)
 
@@ -358,7 +364,7 @@ class TestMixedContentBatchProcessing:
 
         embeddings = []
         for text in mixed_batch:
-            embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+            embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
             embeddings.append(embedding)
 
         assert len(embeddings) == 5, "Should process all mixed-length items"
@@ -378,7 +384,7 @@ class TestMixedContentBatchProcessing:
 
         processed_embeddings = []
         for text in special_batch:
-            embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+            embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
             processed_embeddings.append(embedding)
 
         assert len(processed_embeddings) == 5, (
@@ -401,7 +407,7 @@ class TestMixedContentBatchProcessing:
 
         processed_embeddings = []
         for text in batch_with_empty:
-            embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+            embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
             processed_embeddings.append(embedding)
 
         assert len(processed_embeddings) == 3, (
@@ -424,7 +430,7 @@ class TestMixedContentBatchProcessing:
 
         embeddings = []
         for text in whitespace_batch:
-            embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+            embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
             embeddings.append(embedding)
 
         assert len(embeddings) == 6, "Should process all whitespace items"
@@ -562,9 +568,7 @@ class TestBatchProcessingContracts:
         for text in test_batch:
             try:
                 if text is not None:
-                    embedding = mock_llamaindex_embedding_1024d._get_text_embedding(
-                        text
-                    )
+                    embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                     assert len(embedding) == 1024, "Valid embeddings should be 1024D"
                     processed_count += 1
                 else:
@@ -587,7 +591,7 @@ class TestBatchProcessingContracts:
             processed_embeddings = []
 
             for text in test_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 processed_embeddings.append(embedding)
 
             end_time = time.time()
@@ -622,7 +626,7 @@ class TestBatchProcessingContracts:
         for _run in range(3):
             run_results = []
             for text in test_texts:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 run_results.append(len(embedding))  # Store dimensions
             results.append(run_results)
 
@@ -652,7 +656,7 @@ class TestBatchProcessingPerformance:
 
             embeddings = []
             for text in test_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 embeddings.append(embedding)
 
             end_time = time.time()
@@ -705,7 +709,7 @@ class TestBatchProcessingPerformance:
 
             chunk_embeddings = []
             for text in chunk_texts:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 chunk_embeddings.append(embedding)
 
             # Validate chunk processing
@@ -741,7 +745,7 @@ class TestBatchProcessingPerformance:
             thread_embeddings = []
 
             for text in test_batch:
-                embedding = mock_llamaindex_embedding_1024d._get_text_embedding(text)
+                embedding = mock_llamaindex_embedding_1024d.get_text_embedding(text)
                 thread_embeddings.append(embedding)
 
             results[thread_id] = thread_embeddings

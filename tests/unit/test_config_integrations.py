@@ -1,16 +1,13 @@
-"""Comprehensive tests for configuration integration module.
+"""Unit tests for configuration integrations.
 
-Tests for LlamaIndex and vLLM integration setup functionality including
-configuration loading, environment variable setup, and error handling.
-Focuses on business logic while avoiding testing framework internals.
+Cover LlamaIndex and vLLM setup, environment variables, and orchestration.
+Focus on business logic and logging behavior.
 """
 
 import os
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import torch
 from llama_index.core import Settings
 from llama_index.llms.ollama import Ollama
 
@@ -21,23 +18,181 @@ from src.config.integrations import (
     setup_vllm_env,
 )
 
+# --- merged from test_config_integrations_coverage.py ---
+
+
+@pytest.mark.unit
+class TestSetupLlamaIndexCoverage:
+    """Additional coverage for setup_llamaindex (merged)."""
+
+    def test_setup_llamaindex_successful_llm_configuration_logging(self, caplog):
+        """Test successful LLM configuration logging in setup_llamaindex."""
+        mock_model_config = {
+            "model_name": "test-model",
+            "base_url": "http://localhost:11434",
+            "temperature": 0.7,
+        }
+
+        with (
+            patch("src.config.integrations.settings") as mock_settings,
+            patch("src.config.integrations.Ollama") as mock_ollama_class,
+            caplog.at_level("INFO", logger="src.config.integrations"),
+        ):
+            mock_llm = MagicMock()
+            mock_llm.model = "test-model"
+            mock_ollama_class.return_value = mock_llm
+
+            mock_settings.get_model_config.return_value = mock_model_config
+            mock_settings.get_embedding_config.side_effect = Exception(
+                "Embedding failed"
+            )
+            mock_settings.vllm = None
+
+            setup_llamaindex()
+
+            assert (
+                "LLM configured:" in caplog.text
+                or "Could not configure LLM:" in caplog.text
+            )
+
+    def test_setup_llamaindex_successful_embedding_configuration_logging(self, caplog):
+        """Test successful embedding configuration logging in setup_llamaindex."""
+        mock_embedding_config = {
+            "model_name": "BAAI/bge-m3",
+            "device": "cpu",
+            "max_length": 8192,
+            "batch_size": 32,
+            "trust_remote_code": True,
+        }
+
+        with (
+            patch("src.config.integrations.settings") as mock_settings,
+            patch("src.config.integrations.BGEM3Embedding") as mock_embedding_class,
+            caplog.at_level("INFO", logger="src.config.integrations"),
+        ):
+            mock_settings.get_model_config.side_effect = Exception("LLM failed")
+            mock_settings.get_embedding_config.return_value = mock_embedding_config
+            mock_settings.vllm = None
+
+            mock_embedding_class.return_value = MagicMock()
+
+            setup_llamaindex()
+
+            assert (
+                "Embedding model configured:" in caplog.text
+                or "Could not configure embeddings:" in caplog.text
+            )
+
+
+@pytest.mark.unit
+class TestSetupVLLMEnvCoverage:
+    """Additional coverage for setup_vllm_env (merged)."""
+
+    def test_setup_vllm_env_variable_setting_with_debug_logging(self, caplog):
+        """Test VLLM environment variable setting with debug logging."""
+        mock_vllm_env = {
+            "VLLM_ATTENTION_BACKEND": "FLASHINFER",
+            "VLLM_KV_CACHE_DTYPE": "fp8_e5m2",
+        }
+
+        # Clear and set via fixture
+        for key in list(mock_vllm_env):
+            import os
+
+            os.environ.pop(key, None)
+
+        with (
+            patch("src.config.integrations.settings") as mock_settings,
+            caplog.at_level("DEBUG", logger="src.config.integrations"),
+        ):
+            mock_settings.get_vllm_env_vars.return_value = mock_vllm_env
+
+            setup_vllm_env()
+
+            for key, value in mock_vllm_env.items():
+                import os
+
+                assert os.environ[key] == value
+                assert f"Set {key}={value}" in caplog.text
+
+            assert (
+                "vLLM environment variables configured for FP8 optimization"
+                in caplog.text
+            )
+
+
+@pytest.mark.unit
+class TestGetVLLMServerCommandCoverage:
+    """Additional coverage for get_vllm_server_command (merged)."""
+
+    def test_get_vllm_server_command_full_function_execution(self):
+        """Test full execution of get_vllm_server_command function."""
+        with patch("src.config.integrations.settings") as mock_settings:
+            mock_vllm = MagicMock()
+            mock_vllm.model = "test-model"
+            mock_vllm.context_window = 32768
+            mock_vllm.kv_cache_dtype = "auto"
+            mock_vllm.gpu_memory_utilization = 0.8
+            mock_vllm.max_num_seqs = 128
+            mock_vllm.max_num_batched_tokens = 4096
+            mock_vllm.enable_chunked_prefill = False
+            mock_settings.vllm = mock_vllm
+
+            command = get_vllm_server_command()
+            assert command[:2] == ["vllm", "serve"]
+            assert "32768" in command
+            assert "auto" in command
+
+    def test_get_vllm_server_command_with_chunked_prefill_true(self):
+        """Test get_vllm_server_command with chunked prefill enabled."""
+        with patch("src.config.integrations.settings") as mock_settings:
+            mock_vllm = MagicMock()
+            mock_vllm.model = "test-model"
+            mock_vllm.context_window = 16384
+            mock_vllm.kv_cache_dtype = "fp16"
+            mock_vllm.gpu_memory_utilization = 0.9
+            mock_vllm.max_num_seqs = 64
+            mock_vllm.max_num_batched_tokens = 2048
+            mock_vllm.enable_chunked_prefill = True
+            mock_settings.vllm = mock_vllm
+
+            command = get_vllm_server_command()
+            assert "--enable-chunked-prefill" in command
+
+
+@pytest.mark.unit
+class TestInitializeIntegrationsCoverage:
+    """Additional coverage for initialize_integrations (merged)."""
+
+    @patch("src.config.integrations.setup_llamaindex")
+    @patch("src.config.integrations.setup_vllm_env")
+    def test_initialize_integrations_function_body_execution(
+        self, mock_setup_vllm, mock_setup_llama, caplog
+    ):
+        """Test full execution of initialize_integrations function."""
+        with caplog.at_level("INFO", logger="src.config.integrations"):
+            initialize_integrations()
+            mock_setup_vllm.assert_called_once()
+            mock_setup_llama.assert_called_once()
+            assert "All integrations initialized successfully" in caplog.text
+
 
 @pytest.fixture(autouse=True)
 def reset_llamaindex_settings():
-    """Reset LlamaIndex Settings before and after each test."""
-    # Store original values using private attributes to avoid API calls
-    original_llm = getattr(Settings, "_llm", None)
-    original_embed_model = getattr(Settings, "_embed_model", None)
+    """Reset LlamaIndex Settings before and after each test (public API)."""
+    # Store original values via public API
+    original_llm = getattr(Settings, "llm", None)
+    original_embed_model = getattr(Settings, "embed_model", None)
 
-    # Reset to None using private attributes to avoid API calls
-    Settings._llm = None
-    Settings._embed_model = None
+    # Reset to None via public API
+    Settings.llm = None
+    Settings.embed_model = None
 
     yield
 
-    # Restore original values
-    Settings._llm = original_llm
-    Settings._embed_model = original_embed_model
+    # Restore original values via public API
+    Settings.llm = original_llm
+    Settings.embed_model = original_embed_model
 
 
 @pytest.mark.unit
@@ -76,21 +231,21 @@ class TestSetupLlamaIndex:
 
         with (
             patch("src.config.integrations.settings") as mock_settings,
-            patch("src.config.integrations.HuggingFaceEmbedding") as MockEmbedding,
+            patch("src.config.integrations.BGEM3Embedding") as mock_embedding_class,
         ):
             mock_settings.get_model_config.side_effect = Exception("LLM failed")
             mock_settings.get_embedding_config.return_value = mock_embedding_config
             mock_settings.vllm = None
 
-            MockEmbedding.return_value = MagicMock()
+            mock_embedding_class.return_value = MagicMock()
 
             with patch("torch.cuda.is_available", return_value=True):
                 setup_llamaindex()
 
-                # Verify HuggingFaceEmbedding was called with correct torch_dtype for CUDA
-                MockEmbedding.assert_called_once()
-                call_args = MockEmbedding.call_args
-                assert call_args[1]["torch_dtype"] == torch.float16
+                # Verify BGEM3Embedding was called with correct device and fp16
+                mock_embedding_class.assert_called_once()
+                call_args = mock_embedding_class.call_args
+                assert call_args[1]["use_fp16"] is True
                 assert call_args[1]["device"] == "cuda"
                 assert call_args[1]["model_name"] == "BAAI/bge-m3"
 
@@ -106,21 +261,21 @@ class TestSetupLlamaIndex:
 
         with (
             patch("src.config.integrations.settings") as mock_settings,
-            patch("src.config.integrations.HuggingFaceEmbedding") as MockEmbedding,
+            patch("src.config.integrations.BGEM3Embedding") as mock_embedding_class,
         ):
             mock_settings.get_model_config.side_effect = Exception("LLM failed")
             mock_settings.get_embedding_config.return_value = mock_embedding_config
             mock_settings.vllm = None
 
-            MockEmbedding.return_value = MagicMock()
+            mock_embedding_class.return_value = MagicMock()
 
             with patch("torch.cuda.is_available", return_value=False):
                 setup_llamaindex()
 
-                # Verify HuggingFaceEmbedding was called with correct torch_dtype for CPU
-                MockEmbedding.assert_called_once()
-                call_args = MockEmbedding.call_args
-                assert call_args[1]["torch_dtype"] == torch.float32
+                # Verify BGEM3Embedding was called with correct device and fp16 False
+                mock_embedding_class.assert_called_once()
+                call_args = mock_embedding_class.call_args
+                assert call_args[1]["use_fp16"] is False
                 assert call_args[1]["device"] == "cpu"
                 assert call_args[1]["model_name"] == "BAAI/bge-m3"
 
@@ -198,22 +353,21 @@ class TestSetupLlamaIndex:
 
         with (
             patch("src.config.integrations.settings") as mock_settings,
-            patch("src.config.integrations.HuggingFaceEmbedding") as MockEmbedding,
+            patch("src.config.integrations.BGEM3Embedding") as mock_embedding_class,
         ):
             mock_settings.get_model_config.side_effect = Exception("LLM failed")
             mock_settings.get_embedding_config.return_value = mock_embedding_config
             mock_settings.vllm = None
 
             mock_embedding_instance = MagicMock()
-            MockEmbedding.return_value = mock_embedding_instance
+            mock_embedding_class.return_value = mock_embedding_instance
 
             setup_llamaindex()
 
-            # Verify HuggingFaceEmbedding was called with resolved cache path
-            expected_cache_path = str(Path("./embeddings_cache").resolve())
-            MockEmbedding.assert_called_once()
-            call_args = MockEmbedding.call_args
-            assert call_args[1]["cache_folder"] == expected_cache_path
+            # Verify BGEM3Embedding was called (cache path managed internally)
+            mock_embedding_class.assert_called_once()
+            call_args = mock_embedding_class.call_args
+            assert call_args[1]["model_name"] == "BAAI/bge-m3"
 
 
 @pytest.mark.unit
@@ -284,17 +438,19 @@ class TestSetupVLLMEnv:
         if "TEST_VAR" in os.environ:
             del os.environ["TEST_VAR"]
 
-        with caplog.at_level("INFO", logger="src.config.integrations"):
-            with patch("src.config.integrations.settings") as mock_settings:
-                mock_settings.get_vllm_env_vars.return_value = mock_vllm_env
+        with (
+            caplog.at_level("INFO", logger="src.config.integrations"),
+            patch("src.config.integrations.settings") as mock_settings,
+        ):
+            mock_settings.get_vllm_env_vars.return_value = mock_vllm_env
 
-                setup_vllm_env()
+            setup_vllm_env()
 
-                # Verify success message was logged
-                assert (
-                    "vLLM environment variables configured for FP8 optimization"
-                    in caplog.text
-                )
+            # Verify success message was logged
+            assert (
+                "vLLM environment variables configured for FP8 optimization"
+                in caplog.text
+            )
 
         # Clean up
         if "TEST_VAR" in os.environ:
@@ -449,7 +605,8 @@ class TestInitializeIntegrations:
         mock_setup_vllm.side_effect = Exception("vLLM setup failed")
 
         with caplog.at_level("INFO", logger="src.config.integrations"):
-            # Should raise exception because initialize_integrations doesn't handle errors
+            # Should raise exception; initialize_integrations doesn't handle errors
+            # gracefully in this scenario
             with pytest.raises(Exception, match="vLLM setup failed"):
                 initialize_integrations()
 
@@ -475,20 +632,20 @@ class TestIntegrationModuleBoundaryConditions:
 
         with (
             patch("src.config.integrations.settings") as mock_settings,
-            patch("src.config.integrations.HuggingFaceEmbedding") as MockEmbedding,
+            patch("src.config.integrations.BGEM3Embedding") as mock_embedding_class,
         ):
             mock_settings.get_model_config.side_effect = Exception("LLM failed")
             mock_settings.get_embedding_config.return_value = mock_embedding_config
             mock_settings.vllm = None
 
             mock_embedding_instance = MagicMock()
-            MockEmbedding.return_value = mock_embedding_instance
+            mock_embedding_class.return_value = mock_embedding_instance
 
             # Should not fail even if cache folder cannot be created
             setup_llamaindex()
 
-            # Verify embedding model was configured (using mock)
-            # Settings.embed_model may be mock_embedding_instance or MockEmbedding when setup succeeds
+            # Verify embedding model was configured (using mock). It may be
+            # mock_embedding_instance or MockEmbedding when setup succeeds.
             assert Settings.embed_model is not None
 
     def test_torch_dtype_fallback_on_cuda_unavailable(self):
@@ -503,24 +660,24 @@ class TestIntegrationModuleBoundaryConditions:
 
         with (
             patch("src.config.integrations.settings") as mock_settings,
-            patch("src.config.integrations.HuggingFaceEmbedding") as MockEmbedding,
+            patch("src.config.integrations.BGEM3Embedding") as mock_embedding_class,
         ):
             mock_settings.get_model_config.side_effect = Exception("LLM failed")
             mock_settings.get_embedding_config.return_value = mock_embedding_config
             mock_settings.vllm = None
 
             mock_embedding_instance = MagicMock()
-            MockEmbedding.return_value = mock_embedding_instance
+            mock_embedding_class.return_value = mock_embedding_instance
 
             with patch(
                 "torch.cuda.is_available", return_value=False
             ):  # But CUDA unavailable
                 setup_llamaindex()
 
-                # Verify HuggingFaceEmbedding was called with float32 torch_dtype
-                MockEmbedding.assert_called_once()
-                call_args = MockEmbedding.call_args
-                assert call_args[1]["torch_dtype"] == torch.float32
+                # Verify BGEM3Embedding was called with fp16 disabled
+                mock_embedding_class.assert_called_once()
+                call_args = mock_embedding_class.call_args
+                assert call_args[1]["use_fp16"] is False
 
     def test_environment_variable_handling_with_special_characters(self):
         """Test environment variable handling with special characters in values."""

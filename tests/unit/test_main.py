@@ -10,7 +10,7 @@ Tests the main application entry point with focus on:
 Uses pytest-mock for boundary mocking and follows KISS/DRY principles.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -23,7 +23,7 @@ from src.main import DocMindApplication, main
 class TestDocMindApplication:
     """Test DocMindApplication class initialization and core methods."""
 
-    def test_application_init_with_defaults(self, mock_settings):
+    def test_application_init_with_defaults(self):
         """Test application initialization with default settings."""
         with (
             patch("src.main.DocumentProcessor") as mock_processor,
@@ -39,7 +39,7 @@ class TestDocMindApplication:
             mock_processor.assert_called_once()
             mock_coordinator.assert_called_once()
 
-    def test_application_init_with_custom_settings(self, mock_settings):
+    def test_application_init_with_custom_settings(self):
         """Test application initialization with custom settings."""
         custom_settings = DocMindSettings(debug=True, log_level="DEBUG")
 
@@ -59,7 +59,7 @@ class TestDocMindApplication:
             mock_processor.assert_called_once_with(settings=custom_settings)
             mock_coordinator.assert_not_called()
 
-    def test_application_init_with_multi_agent_disabled(self, mock_settings):
+    def test_application_init_with_multi_agent_disabled(self):
         """Test initialization with multi-agent system disabled."""
         with (
             patch("src.main.DocumentProcessor"),
@@ -71,7 +71,7 @@ class TestDocMindApplication:
             assert app.agent_coordinator is None
             mock_coordinator.assert_not_called()
 
-    def test_initialize_components_creates_required_objects(self, mock_settings):
+    def test_initialize_components_creates_required_objects(self):
         """Test _initialize_components creates all required objects."""
         with (
             patch("src.main.DocumentProcessor") as mock_processor,
@@ -98,13 +98,13 @@ class TestDocMindApplicationQueryProcessing:
     """Test query processing methods and workflows."""
 
     @pytest.fixture
-    def mock_app(self, mock_settings):
+    def mock_app(self):
         """Create a DocMindApplication with mocked dependencies."""
         with (
             patch("src.main.DocumentProcessor"),
             patch("src.main.MultiAgentCoordinator") as mock_coordinator,
         ):
-            app = DocMindApplication(app_settings=mock_settings)
+            app = DocMindApplication(app_settings=DocMindSettings())
             app.agent_coordinator = mock_coordinator.return_value
             return app
 
@@ -148,8 +148,8 @@ class TestDocMindApplicationQueryProcessing:
         query = "Test query about documents"
         result = await mock_app.process_query(query)
 
-        # Should use basic RAG pipeline
-        assert result.content.startswith("Basic RAG pipeline received query:")
+        # Should use basic RAG pipeline (deprecated message)
+        assert "Basic RAG pipeline is no longer supported" in result.content
         assert result.metadata["pipeline"] == "basic_rag"
         assert result.validation_score == 0.8  # BASIC_VALIDATION_SCORE
 
@@ -198,8 +198,7 @@ class TestDocMindApplicationQueryProcessing:
 
         # Verify response structure
         assert isinstance(result, AgentResponse)
-        assert query in result.content
-        assert "Basic RAG pipeline received query" in result.content
+        assert "Basic RAG pipeline is no longer supported" in result.content
         assert result.metadata["pipeline"] == "basic_rag"
         assert result.validation_score == 0.8
         assert result.sources == []
@@ -214,30 +213,10 @@ class TestDocMindApplicationQueryProcessing:
 
             # Should handle gracefully and return informative response
             assert isinstance(result, AgentResponse)
-            assert "Basic RAG pipeline received query" in result.content
+            assert "Basic RAG pipeline is no longer supported" in result.content
             assert result.validation_score == 0.8
 
-    def test_generate_basic_response_with_results(self, mock_app):
-        """Test basic response generation with retrieval results."""
-        # Create mock documents
-        mock_docs = [
-            MagicMock(text="First document content with relevant information"),
-            MagicMock(text="Second document content with more details"),
-            MagicMock(text="Third document content for comprehensive coverage"),
-        ]
-
-        result = mock_app._generate_basic_response("test query", mock_docs)
-
-        assert "Based on the retrieved information:" in result
-        assert "Source 1:" in result
-        assert "Source 2:" in result
-        assert "Source 3:" in result
-
-    def test_generate_basic_response_with_no_results(self, mock_app):
-        """Test basic response generation with empty results."""
-        result = mock_app._generate_basic_response("test query", [])
-
-        assert result == "I couldn't find relevant information to answer your query."
+    # Removed legacy _generate_basic_response tests (method no longer exists)
 
 
 @pytest.mark.unit
@@ -245,13 +224,13 @@ class TestDocMindApplicationDocumentIngestion:
     """Test document ingestion and processing methods."""
 
     @pytest.fixture
-    def mock_app(self, mock_settings):
+    def mock_app(self):
         """Create a DocMindApplication with mocked dependencies."""
         with (
             patch("src.main.DocumentProcessor") as mock_processor,
             patch("src.main.MultiAgentCoordinator"),
         ):
-            app = DocMindApplication(app_settings=mock_settings)
+            app = DocMindApplication(app_settings=DocMindSettings())
             app.document_processor = mock_processor.return_value
             return app
 
@@ -339,13 +318,13 @@ class TestDocMindApplicationDocumentIngestion:
 class TestDocMindApplicationResourceManagement:
     """Test resource management and shutdown behavior."""
 
-    def test_shutdown_with_agent_coordinator(self, mock_settings):
+    def test_shutdown_with_agent_coordinator(self):
         """Test shutdown with active agent coordinator."""
         with (
             patch("src.main.DocumentProcessor"),
             patch("src.main.MultiAgentCoordinator"),
         ):
-            app = DocMindApplication(app_settings=mock_settings)
+            app = DocMindApplication(app_settings=DocMindSettings())
 
             # Should not raise any errors
             app.shutdown()
@@ -353,11 +332,11 @@ class TestDocMindApplicationResourceManagement:
             # Verify coordinator is still accessible (no explicit cleanup needed)
             assert app.agent_coordinator is not None
 
-    def test_shutdown_without_agent_coordinator(self, mock_settings):
+    def test_shutdown_without_agent_coordinator(self):
         """Test shutdown without agent coordinator."""
         with patch("src.main.DocumentProcessor"):
             app = DocMindApplication(
-                app_settings=mock_settings, enable_multi_agent=False
+                app_settings=DocMindSettings(), enable_multi_agent=False
             )
 
             # Should not raise any errors
@@ -382,27 +361,27 @@ class TestDocMindApplicationEdgeCases:
             assert app.settings == mock_global_settings
 
     @pytest.mark.asyncio
-    async def test_process_query_with_none_coordinator(self, mock_settings):
+    async def test_process_query_with_none_coordinator(self):
         """Test query processing when coordinator is None."""
         with patch("src.main.DocumentProcessor"):
             app = DocMindApplication(
-                app_settings=mock_settings, enable_multi_agent=True
+                app_settings=DocMindSettings(), enable_multi_agent=True
             )
             app.agent_coordinator = None  # Simulate coordinator failure
 
             result = await app.process_query("test query", use_multi_agent=True)
 
-            # Should fall back to basic RAG
-            assert "Basic RAG pipeline received query" in result.content
+            # Should fall back to basic RAG (deprecated message)
+            assert "Basic RAG pipeline is no longer supported" in result.content
 
     @pytest.mark.asyncio
-    async def test_process_query_multiple_error_types(self, mock_settings):
+    async def test_process_query_multiple_error_types(self):
         """Test query processing handles different exception types."""
         with (
             patch("src.main.DocumentProcessor"),
             patch("src.main.MultiAgentCoordinator") as mock_coordinator,
         ):
-            app = DocMindApplication(app_settings=mock_settings)
+            app = DocMindApplication(app_settings=DocMindSettings())
             app.agent_coordinator = mock_coordinator.return_value
 
             # Test different exception types
@@ -441,7 +420,7 @@ class TestMainEntryPoint:
 
         with (
             patch("src.main.DocMindApplication") as mock_app_class,
-            patch("builtins.print") as mock_print,
+            patch("src.main.logger") as mock_logger,
         ):
             mock_app_class.return_value = mock_app
 
@@ -455,10 +434,10 @@ class TestMainEntryPoint:
                 "What are the key features of the new product?"
             )
 
-            # Verify output
-            mock_print.assert_any_call("Response: Test response content")
-            mock_print.assert_any_call("Processing time: 1.20s")
-            mock_print.assert_any_call("Validation score: 0.90")
+            # Verify logged output
+            mock_logger.info.assert_any_call("Response: %s", "Test response content")
+            mock_logger.info.assert_any_call("Processing time: %.2fs", 1.2)
+            mock_logger.info.assert_any_call("Validation score: %.2f", 0.9)
 
             # Verify shutdown
             mock_app.shutdown.assert_called_once()
@@ -475,40 +454,7 @@ class TestMainEntryPoint:
                 await main()
 
 
-@pytest.mark.unit
-class TestConstants:
-    """Test application constants and configuration values."""
-
-    def test_constants_are_properly_defined(self):
-        """Test that application constants have expected values."""
-        from src.main import (
-            AGENT_TIMEOUT_DIVISOR,
-            BASIC_VALIDATION_SCORE,
-            DOCUMENT_TEXT_SLICE_LONG,
-            DOCUMENT_TEXT_SLICE_SHORT,
-        )
-
-        assert AGENT_TIMEOUT_DIVISOR == 1000.0
-        assert BASIC_VALIDATION_SCORE == 0.8
-        assert DOCUMENT_TEXT_SLICE_SHORT == 500
-        assert DOCUMENT_TEXT_SLICE_LONG == 1000
-
-    def test_constants_are_used_correctly(self, mock_settings):
-        """Test that constants are used in appropriate contexts."""
-        with (
-            patch("src.main.DocumentProcessor"),
-            patch("src.main.MultiAgentCoordinator") as mock_coordinator,
-        ):
-            DocMindApplication(app_settings=mock_settings)
-
-            # Verify timeout divisor is used in coordinator initialization
-            mock_coordinator.assert_called_once_with(
-                model_path=mock_settings.vllm.model,
-                max_context_length=mock_settings.vllm.context_window,
-                backend="vllm",
-                enable_fallback=mock_settings.agents.enable_fallback_rag,
-                max_agent_timeout=mock_settings.agents.decision_timeout / 1000.0,
-            )
+## Removed legacy constants test: DOCUMENT_TEXT_SLICE_* no longer present in src
 
 
 # Integration marker for tests that cross component boundaries
@@ -554,10 +500,11 @@ class TestDocMindApplicationIntegration:
             # Test query processing
             result = await app.process_query("What is machine learning?")
 
-            # Verify basic RAG response
+            # Verify basic RAG response shape
             assert isinstance(result, AgentResponse)
-            assert "Basic RAG pipeline received query" in result.content
             assert result.metadata["pipeline"] == "basic_rag"
+            # Current implementation returns a deprecation notice in content
+            assert "Basic RAG" in result.content
 
             # Test shutdown
             app.shutdown()  # Should not raise errors

@@ -3,7 +3,8 @@
 Tests individual functions and business logic from app.py without triggering
 Streamlit startup code or external service connections.
 
-This approach avoids import-time side effects while still testing the core business logic.
+This approach avoids import-time side effects while still testing the core business
+logic.
 Uses pytest-mock for boundary mocking and focuses on business logic testing.
 """
 
@@ -234,16 +235,14 @@ class TestModelInitializationLogic:
         context_size = 8192
         use_gpu = True
 
-        # Skip test if LlamaCPP is not available due to BLAS issues
-        import importlib.util
+        # Skip test if importing LlamaCPP fails (e.g., missing BLAS libs)
+        try:
+            import llama_index.llms.llama_cpp as llcpp  # noqa: F401
+        except Exception:  # pragma: no cover - environment dependent
+            pytest.skip("LlamaCPP not available due to environment")
 
-        if importlib.util.find_spec("llama_index.llms.llama_cpp") is None:
-            pytest.skip("LlamaCPP not available due to BLAS library issues")
-
-        # Mock availability check and LlamaCPP class
-        with (
-            patch("llama_index.llms.llama_cpp.LlamaCPP") as mock_llamacpp_class,
-        ):
+        # Mock LlamaCPP class to avoid loading shared libs
+        with patch("llama_index.llms.llama_cpp.LlamaCPP") as mock_llamacpp_class:
             mock_llm = MagicMock()
             mock_llamacpp_class.return_value = mock_llm
 
