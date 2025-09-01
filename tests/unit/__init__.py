@@ -1,10 +1,10 @@
 """Unit tests package for DocMind AI.
 
-This package contains comprehensive unit tests for all DocMind AI components
+This package contains unit tests for core DocMind AI components
 including agents, utilities, document processing, indexing, and more.
 
 Test Coverage:
-- Agent factory and utilities comprehensive testing
+- Agent factory and utilities testing
 - Error recovery and exception handling verification
 - Document loading and processing validation
 - Index building and vector store testing
@@ -16,7 +16,7 @@ Test Structure:
 - Each module has dedicated test files following naming convention
 - Tests are organized by functionality and feature sets
 - Mock objects and fixtures for external dependencies
-- Comprehensive coverage targeting 70%+ code coverage
+- Broad coverage targeting 70%+ code coverage
 - Performance benchmarking and regression testing
 
 Usage:
