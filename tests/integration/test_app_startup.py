@@ -25,10 +25,10 @@ import pytest
 # Get project root and ensure src is in path
 PROJECT_ROOT = Path(__file__).parents[2]
 APP_PATH = PROJECT_ROOT / "src" / "app.py"
-src_path = str(PROJECT_ROOT / "src")
+SRC_PATH = str(PROJECT_ROOT / "src")
 
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
+if SRC_PATH not in sys.path:
+    sys.path.insert(0, SRC_PATH)
 
 # Test if core components are importable
 COMPONENTS_AVAILABLE = {}
@@ -88,18 +88,17 @@ class TestAppStartupCore:
     def test_app_file_syntax_validation(self):
         """Test that the app file has valid Python syntax."""
         # Use Python to check syntax without importing
-        result = subprocess.run(
-            [sys.executable, "-m", "py_compile", str(APP_PATH)],
-            capture_output=True,
-            text=True,
-            timeout=30,  # Add timeout for safety
-        )
-
-        if result.returncode != 0:
-            # Don't fail hard, just skip if syntax issues
-            pytest.skip(f"App syntax validation failed: {result.stderr}")
-
-        assert result.returncode == 0
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "py_compile", str(APP_PATH)],
+                capture_output=True,
+                text=True,
+                timeout=30,  # Add timeout for safety
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            pytest.skip(f"App syntax validation failed: {exc.stderr}")
+        assert True
 
     @pytest.mark.skipif(
         not COMPONENTS_AVAILABLE["settings"], reason="Settings not available"
@@ -116,7 +115,7 @@ class TestAppStartupCore:
             assert hasattr(settings, "debug")
             assert hasattr(settings, "data_dir")
 
-        except Exception as e:
+        except (RuntimeError, OSError, AssertionError, ImportError) as e:
             pytest.skip(f"Settings initialization failed: {e}")
 
     @pytest.mark.skipif(
@@ -161,15 +160,15 @@ class TestAppImportIntegration:
     @patch("qdrant_client.QdrantClient")
     @patch("ollama.pull")
     @patch("ollama.list")
-    def test_app_imports_with_mocks(
-        self,
-        mock_ollama_list,
-        mock_ollama_pull,
-        mock_qdrant,
-        mock_validate,
-        mock_hardware,
-    ):
+    def test_app_imports_with_mocks(self, *mocks):
         """Test app can be imported with essential dependencies mocked."""
+        (
+            mock_ollama_list,
+            mock_ollama_pull,
+            mock_qdrant,
+            mock_validate,
+            mock_hardware,
+        ) = mocks
         # Setup realistic mocks
         mock_hardware.return_value = {
             "cpu_count": 4,
@@ -185,19 +184,19 @@ class TestAppImportIntegration:
 
         try:
             # Try to import the app module
-            import src.app as app
+            from src import app as app_module
 
             # Basic validation that import succeeded
-            assert app is not None
+            assert app_module is not None
 
             # Test that key components are accessible
-            if hasattr(app, "settings"):
-                assert app.settings is not None
+            if hasattr(app_module, "settings"):
+                assert app_module.settings is not None
 
         except ImportError as e:
             # If imports fail, it's likely due to missing dependencies
             pytest.skip(f"App import failed (missing dependencies): {e}")
-        except Exception as e:
+        except (RuntimeError, OSError, AssertionError) as e:
             # Other errors might be configuration issues
             pytest.skip(f"App initialization failed (configuration issue): {e}")
 
@@ -238,13 +237,12 @@ class TestAppComponentIntegration:
             assert callable(detect_hardware)
 
             # Test it can be called (might fail gracefully)
-            try:
+            from contextlib import suppress
+
+            with suppress(Exception):
                 hardware_info = detect_hardware()
                 if hardware_info is not None:
                     assert isinstance(hardware_info, dict)
-            except Exception:
-                # Hardware detection can fail gracefully
-                pass
 
         except ImportError as e:
             pytest.skip(f"Hardware detection not available: {e}")
@@ -284,7 +282,7 @@ class TestAppConfigurationIntegration:
                 assert settings.data_dir.exists()
                 assert settings.cache_dir.exists()
 
-            except Exception as e:
+            except (RuntimeError, OSError, AssertionError, ImportError) as e:
                 pytest.skip(f"Configuration integration failed: {e}")
 
     def test_app_graceful_degradation(self):
@@ -302,13 +300,13 @@ class TestAppConfigurationIntegration:
 
         # Test basic utilities
         try:
+            # Should not crash even if hardware detection fails
+            from contextlib import suppress
+
             from src.utils.core import detect_hardware
 
-            # Should not crash even if hardware detection fails
-            try:
+            with suppress(Exception):
                 detect_hardware()
-            except Exception:
-                pass  # Graceful failure is OK
         except ImportError as e:
             critical_failures.append(f"utils: {e}")
 
@@ -349,7 +347,7 @@ class TestAppAsyncIntegration:
                 # Just test that method exists, don't call it without proper setup
                 assert method is not None
 
-        except Exception as e:
+        except (RuntimeError, OSError, AssertionError, ImportError) as e:
             pytest.skip(f"Async coordinator testing failed: {e}")
 
 
@@ -360,11 +358,10 @@ class TestAppErrorHandling:
     def test_import_error_handling(self):
         """Test that import errors are handled gracefully."""
         # Test importing non-existent module doesn't crash pytest
-        try:
-            import nonexistent_module  # noqa: F401
-        except ImportError:
-            # This is expected
-            pass
+        from contextlib import suppress
+
+        with suppress(ImportError):
+            __import__("nonexistent_module")
 
         # Test that our actual imports work or fail gracefully
         import_results = {}
@@ -381,7 +378,7 @@ class TestAppErrorHandling:
                 import_results[module_name] = "success"
             except ImportError:
                 import_results[module_name] = "import_error"
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError, SyntaxError) as e:
                 import_results[module_name] = f"other_error: {e}"
 
         # At least some core modules should be importable

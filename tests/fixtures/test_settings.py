@@ -5,7 +5,7 @@ pattern aligned with the recovered configuration architecture. Properly inherits
 the unified DocMindSettings with nested configuration models.
 
 Architecture:
-- TestDocMindSettings: Fast unit tests with CPU-only, optimized defaults
+- MockDocMindSettings: Fast unit tests with CPU-only, optimized defaults
 - IntegrationTestSettings: Moderate performance for integration tests
 - SystemTestSettings: Production settings for full system tests
 
@@ -33,7 +33,7 @@ from src.config.settings import (
 )
 
 
-class TestVLLMConfig(VLLMConfig):
+class MockVLLMConfig(VLLMConfig):
     """Test-optimized vLLM configuration for fast, minimal resource usage."""
 
     # Small context for speed
@@ -46,7 +46,7 @@ class TestVLLMConfig(VLLMConfig):
     max_num_batched_tokens: int = Field(default=2048, ge=1024, le=16384)
 
 
-class TestProcessingConfig(ProcessingConfig):
+class MockProcessingConfig(ProcessingConfig):
     """Test-optimized processing configuration for small, fast documents."""
 
     # Small chunks for speed
@@ -56,7 +56,7 @@ class TestProcessingConfig(ProcessingConfig):
     max_document_size_mb: int = Field(default=1, ge=1, le=500)
 
 
-class TestAgentConfig(AgentConfig):
+class MockAgentConfig(AgentConfig):
     """Test-optimized agent configuration for fast decisions."""
 
     # Fast timeouts for testing
@@ -74,7 +74,7 @@ class TestAgentConfig(AgentConfig):
     )  # Use minimum allowed
 
 
-class TestEmbeddingConfig(EmbeddingConfig):
+class MockEmbeddingConfig(EmbeddingConfig):
     """Test-optimized embedding configuration for minimal resource usage."""
 
     # Small dimensions and batches for speed
@@ -84,14 +84,14 @@ class TestEmbeddingConfig(EmbeddingConfig):
     batch_size_cpu: int = Field(default=1, ge=1, le=32)  # Single item batches
 
 
-class TestRetrievalConfig(RetrievalConfig):
+class MockRetrievalConfig(RetrievalConfig):
     """Test-optimized retrieval configuration for fast searches."""
 
     top_k: int = Field(default=5, ge=1, le=50)  # Fewer results
     reranking_top_k: int = Field(default=3, ge=1, le=20)  # Fewer reranked results
 
 
-class TestCacheConfig(CacheConfig):
+class MockCacheConfig(CacheConfig):
     """Test-optimized cache configuration - caching disabled for test isolation."""
 
     enable_document_caching: bool = Field(default=False)  # Disabled for test isolation
@@ -104,7 +104,7 @@ class TestCacheConfig(CacheConfig):
     enable_semantic_cache: bool = Field(default=False)  # Disabled for simplicity
 
 
-class TestDocMindSettings(DocMindSettings):
+class MockDocMindSettings(DocMindSettings):
     """Test-specific configuration with overrides for fast, deterministic testing.
 
     Inherits from production settings but provides test-optimized defaults through
@@ -142,12 +142,12 @@ class TestDocMindSettings(DocMindSettings):
     enable_graphrag: bool = Field(default=False)  # Disabled for simplicity
 
     # Override nested configurations with test-optimized versions
-    vllm: TestVLLMConfig = Field(default_factory=TestVLLMConfig)
-    processing: TestProcessingConfig = Field(default_factory=TestProcessingConfig)
-    agents: TestAgentConfig = Field(default_factory=TestAgentConfig)
-    embedding: TestEmbeddingConfig = Field(default_factory=TestEmbeddingConfig)
-    retrieval: TestRetrievalConfig = Field(default_factory=TestRetrievalConfig)
-    cache: TestCacheConfig = Field(default_factory=TestCacheConfig)
+    vllm: MockVLLMConfig = Field(default_factory=MockVLLMConfig)
+    processing: MockProcessingConfig = Field(default_factory=MockProcessingConfig)
+    agents: MockAgentConfig = Field(default_factory=MockAgentConfig)
+    embedding: MockEmbeddingConfig = Field(default_factory=MockEmbeddingConfig)
+    retrieval: MockRetrievalConfig = Field(default_factory=MockRetrievalConfig)
+    cache: MockCacheConfig = Field(default_factory=MockCacheConfig)
 
     def model_post_init(self, __context: Any) -> None:
         """Post-initialization with test-specific optimizations."""
@@ -181,6 +181,17 @@ class IntegrationAgentConfig(AgentConfig):
     max_concurrent_agents: int = Field(default=3, ge=1, le=10)  # Standard concurrency
 
 
+class IntegrationProcessingConfig(ProcessingConfig):
+    """Integration processing config with larger, safer chunk sizes.
+
+    Prevents metadata-length > chunk-size errors in pipeline during tests.
+    """
+
+    chunk_size: int = Field(default=2048, ge=256, le=10000)
+    new_after_n_chars: int = Field(default=1200, ge=200, le=8000)
+    combine_text_under_n_chars: int = Field(default=200, ge=50, le=2000)
+
+
 class IntegrationCacheConfig(CacheConfig):
     """Integration test cache config with caching enabled."""
 
@@ -188,7 +199,7 @@ class IntegrationCacheConfig(CacheConfig):
     ttl_seconds: int = Field(default=1800, ge=300, le=86400)  # 30 min TTL
 
 
-class IntegrationTestSettings(TestDocMindSettings):
+class IntegrationTestSettings(MockDocMindSettings):
     """Integration test settings with moderate performance requirements.
 
     Balances test speed with realistic configuration for component integration.
@@ -212,6 +223,9 @@ class IntegrationTestSettings(TestDocMindSettings):
     # Override with integration-specific nested configs
     vllm: IntegrationVLLMConfig = Field(default_factory=IntegrationVLLMConfig)
     agents: IntegrationAgentConfig = Field(default_factory=IntegrationAgentConfig)
+    processing: IntegrationProcessingConfig = Field(
+        default_factory=IntegrationProcessingConfig
+    )
     cache: IntegrationCacheConfig = Field(default_factory=IntegrationCacheConfig)
 
 
@@ -236,14 +250,14 @@ class SystemTestSettings(DocMindSettings):
     # This ensures system tests validate the actual production setup
 
 
-def create_test_settings(**overrides) -> TestDocMindSettings:
+def create_test_settings(**overrides) -> MockDocMindSettings:
     """Factory function for creating test settings with specific overrides.
 
     Args:
         **overrides: Field overrides for the test settings
 
     Returns:
-        TestDocMindSettings instance with applied overrides
+        MockDocMindSettings instance with applied overrides
 
     Example:
         settings = create_test_settings(
@@ -251,7 +265,7 @@ def create_test_settings(**overrides) -> TestDocMindSettings:
             debug=True
         )
     """
-    return TestDocMindSettings(**overrides)
+    return MockDocMindSettings(**overrides)
 
 
 def create_integration_settings(**overrides) -> IntegrationTestSettings:

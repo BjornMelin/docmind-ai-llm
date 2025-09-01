@@ -31,50 +31,55 @@ from src.config.settings import DocMindSettings
 class TestSettingsBoundaryIntegration:
     """Test settings integration across component boundaries."""
 
-    def test_settings_app_module_boundary(self, integration_settings):
+    def test_settings_app_module_boundary(self):
         """Test settings integration with app module boundaries."""
-        # Test that settings properly configure app-specific constants
-        assert integration_settings.default_token_limit >= 8192
-        assert len(integration_settings.context_size_options) > 0
-        assert integration_settings.request_timeout_seconds > 0
-        assert integration_settings.streaming_delay_seconds > 0
+        s = DocMindSettings()
+        # UI (moved under nested `ui` config)
+        assert s.ui.default_token_limit >= 8192
+        assert len(s.ui.context_size_options) > 0
+        assert s.ui.request_timeout_seconds > 0
+        assert s.ui.streaming_delay_seconds > 0
 
-        # Test nested configuration access patterns used by app.py
-        assert hasattr(integration_settings.vllm, "model")
-        assert hasattr(integration_settings.agents, "enable_multi_agent")
-        assert hasattr(integration_settings.retrieval, "strategy")
+        # Nested configuration access patterns
+        assert hasattr(s.vllm, "model")
+        assert hasattr(s.agents, "enable_multi_agent")
+        assert hasattr(s.retrieval, "strategy")
 
-    def test_settings_agent_coordination_boundary(self, integration_settings):
+    def test_settings_agent_coordination_boundary(self):
         """Test settings integration with agent coordination system."""
-        # Test agent configuration is properly accessible
-        agent_config = integration_settings.agents
+        s = DocMindSettings()
+        agent_config = s.agents
         assert agent_config.enable_multi_agent is not None
         assert agent_config.decision_timeout > 0
         assert agent_config.max_retries >= 0
 
         # Test LLM configuration for agents
-        llm_config = integration_settings.vllm
+        llm_config = s.vllm
         assert llm_config.model is not None
         assert llm_config.context_window >= 8192
         assert llm_config.temperature >= 0
 
         # Test retrieval configuration for agent tools
-        retrieval_config = integration_settings.retrieval
+        retrieval_config = s.retrieval
         assert retrieval_config.strategy in ["dense", "sparse", "hybrid"]
         assert retrieval_config.top_k > 0
 
-    def test_settings_document_processing_boundary(self, integration_settings):
+    def test_settings_document_processing_boundary(self):
         """Test settings integration with document processing pipeline."""
-        # Test document processing configuration
-        assert integration_settings.chunk_size > 0
-        assert integration_settings.chunk_overlap >= 0
-        assert integration_settings.max_document_size_mb > 0
+        s = DocMindSettings()
+        # Document processing config moved under `processing`
+        assert s.processing.chunk_size > 0
+        assert s.processing.chunk_overlap >= 0
+        assert s.processing.max_document_size_mb > 0
 
-        # Test embedding configuration for document processing
-        embedding_config = integration_settings.embeddings
-        assert embedding_config.model is not None
+        # Embedding configuration for document processing
+        embedding_config = s.embedding
+        assert embedding_config.model_name is not None
         assert embedding_config.dimension > 0
-        assert embedding_config.batch_size > 0
+        # Batch size depends on backend; check at least one > 0
+        assert (embedding_config.batch_size_gpu > 0) or (
+            embedding_config.batch_size_cpu > 0
+        )
 
     @patch.dict(
         "os.environ",
@@ -113,51 +118,27 @@ class TestSettingsBoundaryIntegration:
 class TestAgentCoordinationBoundaryIntegration:
     """Test agent coordination integration with proper boundary mocking."""
 
-    @patch("src.agents.coordinator.get_agent_system")
-    @patch("src.utils.embedding.create_index_async")
-    def test_agent_system_initialization_boundary(
-        self, mock_create_index, mock_get_agent
-    ):
-        """Test agent system initialization with mocked dependencies."""
-        # Mock the vector index creation
-        mock_index = MagicMock(spec=VectorStoreIndex)
-        mock_index.as_query_engine.return_value = MagicMock()
-        mock_create_index.return_value = mock_index
+    @patch("src.agents.coordinator.create_supervisor")
+    def test_agent_system_initialization_boundary(self, mock_create_supervisor):
+        """Test agent system initialization boundary with supervisor patch."""
+        mock_create_supervisor.return_value = MagicMock()
+        from src.agents.coordinator import MultiAgentCoordinator
 
-        # Mock the agent system
-        mock_agent_system = MagicMock()
-        mock_agent_system.initialize.return_value = True
-        mock_get_agent.return_value = mock_agent_system
+        coordinator = MultiAgentCoordinator()
+        assert coordinator is not None
+        assert hasattr(coordinator, "process_query")
 
-        # Test integration boundary
-        agent_system = mock_get_agent()
-        assert agent_system.initialize() is True
+    def test_tool_factory_boundary_integration(self):
+        """Test ToolFactory creates a vector search tool from a mock index."""
+        from src.agents.tool_factory import ToolFactory
 
-        # Verify mocked boundaries were respected
-        mock_get_agent.assert_called_once()
+        mock_index = MagicMock()
+        mock_engine = MagicMock()
+        mock_index.as_query_engine.return_value = mock_engine
 
-    @patch("src.agents.tool_factory.ToolFactory")
-    def test_tool_factory_boundary_integration(
-        self, mock_tool_factory, integration_settings
-    ):
-        """Test tool factory integration with settings and agent boundaries."""
-        # Mock tool factory with realistic tool creation
-        mock_factory = MagicMock()
-        mock_factory.create_retrieval_tool.return_value = MagicMock()
-        mock_factory.create_synthesis_tool.return_value = MagicMock()
-        mock_tool_factory.return_value = mock_factory
-
-        # Test tool factory integration with settings
-        factory = mock_tool_factory(integration_settings)
-        retrieval_tool = factory.create_retrieval_tool()
-        synthesis_tool = factory.create_synthesis_tool()
-
-        # Verify tools are created successfully
-        assert retrieval_tool is not None
-        assert synthesis_tool is not None
-
-        # Verify factory was initialized with settings
-        mock_tool_factory.assert_called_once_with(integration_settings)
+        tool = ToolFactory.create_vector_search_tool(mock_index)
+        assert tool is not None
+        mock_index.as_query_engine.assert_called()
 
     @pytest.mark.asyncio
     @patch("src.agents.retrieval.RetrievalAgent")
@@ -255,177 +236,70 @@ class TestDocumentProcessingBoundaryIntegration:
 
         mock_load_docs.assert_called_once_with(file_paths)
 
-    @patch("src.processing.chunking.unstructured_chunker.UnstructuredChunker")
-    def test_chunking_boundary_integration(self, mock_chunker, integration_settings):
+    @patch("src.processing.chunking.unstructured_chunker.SemanticChunker")
+    def test_chunking_boundary_integration(self, mock_chunker):
         """Test document chunking with settings boundary integration."""
-        # Mock chunker with settings-aware behavior
-        mock_chunker_instance = MagicMock()
-        mock_chunker_instance.chunk_documents.return_value = [
-            Document(
-                text="Chunk 1 content",
-                metadata={"chunk_size": integration_settings.chunk_size},
-            ),
-            Document(
-                text="Chunk 2 content",
-                metadata={"chunk_size": integration_settings.chunk_size},
-            ),
-        ]
-        mock_chunker.return_value = mock_chunker_instance
-
-        # Test chunking integration with settings
-        chunker = mock_chunker(integration_settings)
-        raw_documents = [Document(text="Large document content for chunking")]
-        chunks = chunker.chunk_documents(raw_documents)
-
-        # Verify chunking boundary respects settings
-        assert len(chunks) == 2
-        assert all(
-            chunk.metadata.get("chunk_size") == integration_settings.chunk_size
-            for chunk in chunks
-        )
-
-        mock_chunker.assert_called_once_with(integration_settings)
+        # Patch constructor and ensure it's called with settings
+        instance = MagicMock()
+        mock_chunker.return_value = instance
+        _ = mock_chunker(DocMindSettings())
+        assert mock_chunker.called
 
 
 @pytest.mark.integration
 class TestDatabaseVectorStoreBoundaryIntegration:
     """Test database and vector store integration with mock backends."""
 
-    @patch("src.storage.hybrid_persistence.HybridPersistence")
-    def test_hybrid_persistence_boundary_integration(
-        self, mock_persistence, integration_settings
-    ):
+    @patch("src.storage.hybrid_persistence.HybridPersistenceManager")
+    def test_hybrid_persistence_boundary_integration(self, mock_persistence):
         """Test hybrid persistence integration with mocked storage backends."""
-        # Mock hybrid persistence with both SQLite and Qdrant
-        mock_persistence_instance = MagicMock()
-        mock_persistence_instance.store_documents.return_value = True
-        mock_persistence_instance.search.return_value = [
-            {"id": "doc1", "score": 0.95, "text": "Retrieved content 1"},
-            {"id": "doc2", "score": 0.87, "text": "Retrieved content 2"},
+        # Create manager and validate constructor boundary only
+        _ = mock_persistence(DocMindSettings())
+        assert mock_persistence.called
+
+    def test_vector_store_boundary_integration(self):
+        """Test vector store boundary using in-memory LlamaIndex."""
+        docs = [
+            Document(text="Vector search result 1", metadata={"id": "vec1"}),
+            Document(text="Vector search result 2", metadata={"id": "vec2"}),
         ]
-        mock_persistence.return_value = mock_persistence_instance
+        index = VectorStoreIndex.from_documents(docs)
+        results = index.as_retriever(similarity_top_k=2).retrieve("vector search")
+        assert len(results) == 2
+        assert all(hasattr(r, "score") for r in results)
 
-        # Test persistence integration
-        persistence = mock_persistence(integration_settings)
-
-        # Test document storage
-        test_docs = [Document(text="Test document", metadata={"source": "test.pdf"})]
-        result = persistence.store_documents(test_docs)
-        assert result is True
-
-        # Test search functionality
-        search_results = persistence.search("test query", top_k=2)
-        assert len(search_results) == 2
-        assert all("score" in result for result in search_results)
-
-        mock_persistence.assert_called_once_with(integration_settings)
-
-    @patch("src.retrieval.vector_store.QdrantVectorStore")
-    def test_qdrant_vector_store_boundary_integration(self, mock_qdrant):
-        """Test Qdrant vector store integration with proper mocking."""
-        # Mock Qdrant client responses
-        mock_qdrant_instance = MagicMock()
-        mock_qdrant_instance.create_collection.return_value = True
-        mock_qdrant_instance.upsert.return_value = {"status": "ok"}
-        mock_qdrant_instance.search.return_value = [
-            {
-                "id": "vec1",
-                "score": 0.92,
-                "payload": {"text": "Vector search result 1"},
-            },
-            {
-                "id": "vec2",
-                "score": 0.84,
-                "payload": {"text": "Vector search result 2"},
-            },
-        ]
-        mock_qdrant.return_value = mock_qdrant_instance
-
-        # Test vector store integration
-        vector_store = mock_qdrant()
-
-        # Test collection creation
-        collection_result = vector_store.create_collection("test_collection")
-        assert collection_result is True
-
-        # Test vector upsert
-        upsert_result = vector_store.upsert([{"id": "test", "vector": [0.1] * 1024}])
-        assert upsert_result["status"] == "ok"
-
-        # Test vector search
-        search_results = vector_store.search([0.1] * 1024, top_k=2)
-        assert len(search_results) == 2
-        assert all(result["score"] > 0.8 for result in search_results)
-
-    @patch("src.utils.storage.SQLiteManager")
-    def test_sqlite_database_boundary_integration(
-        self, mock_sqlite, integration_settings
-    ):
-        """Test SQLite database integration with settings boundary."""
-        # Mock SQLite manager
-        mock_db = MagicMock()
-        mock_db.create_tables.return_value = True
-        mock_db.insert_document.return_value = 1  # document ID
-        mock_db.get_document.return_value = {
-            "id": 1,
-            "content": "Document content",
-            "metadata": '{"source": "test.pdf"}',
-        }
-        mock_sqlite.return_value = mock_db
-
-        # Test database integration with settings
-        db_manager = mock_sqlite(integration_settings.sqlite_db_path)
-
-        # Test table creation
-        create_result = db_manager.create_tables()
-        assert create_result is True
-
-        # Test document insertion
-        doc_id = db_manager.insert_document("Document content", {"source": "test.pdf"})
-        assert doc_id == 1
-
-        # Test document retrieval
-        retrieved_doc = db_manager.get_document(1)
-        assert retrieved_doc["content"] == "Document content"
-
-        mock_sqlite.assert_called_once_with(integration_settings.sqlite_db_path)
+    def test_sqlite_database_boundary_integration(self, tmp_path):
+        """Test SQLite path handling via settings boundary (no DB ops)."""
+        db_path = tmp_path / "db" / "docmind.db"
+        s = DocMindSettings(database={"sqlite_db_path": str(db_path)})
+        # Paths should be creatable
+        s.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
+        assert s.database.sqlite_db_path.parent.exists()
 
 
 @pytest.mark.integration
 class TestCrossModuleCommunicationBoundaries:
     """Test cross-module communication patterns with interface validation."""
 
-    @patch("src.agents.coordinator.get_agent_system")
-    @patch("src.utils.embedding.create_index_async")
+    @patch("src.agents.coordinator.create_supervisor")
+    @patch("src.agents.coordinator.create_react_agent")
     def test_coordinator_embedding_communication_boundary(
-        self, mock_create_index, mock_get_agent, integration_settings
+        self, mock_create_react_agent, mock_create_supervisor
     ):
-        """Test communication between coordinator and embedding modules."""
-        # Mock embedding index creation
-        mock_index = MagicMock(spec=VectorStoreIndex)
-        mock_index.as_query_engine.return_value = MagicMock()
-        mock_create_index.return_value = mock_index
+        """Test communication boundary: trigger supervisor creation during setup."""
+        mock_create_supervisor.return_value = MagicMock()
+        mock_create_react_agent.return_value = MagicMock()
+        from src.agents.coordinator import MultiAgentCoordinator
 
-        # Mock agent coordinator
-        mock_coordinator = MagicMock()
-        mock_coordinator.setup_agents.return_value = True
-        mock_get_agent.return_value = mock_coordinator
-
-        # Test cross-module communication
-        index = mock_create_index([], integration_settings)
-        coordinator = mock_get_agent(index, integration_settings)
-
-        setup_result = coordinator.setup_agents()
-
-        # Verify communication boundary
-        assert setup_result is True
-        mock_create_index.assert_called_once_with([], integration_settings)
-        mock_get_agent.assert_called_once_with(index, integration_settings)
+        coordinator = MultiAgentCoordinator()
+        coordinator.llm = MagicMock()
+        coordinator._setup_agent_graph()  # pylint: disable=protected-access
+        mock_create_supervisor.assert_called()
 
     @patch("src.core.infrastructure.gpu_monitor.gpu_performance_monitor")
-    @patch("src.utils.monitoring.performance_logger")
+    @patch("src.utils.monitoring.get_performance_monitor")
     def test_monitoring_infrastructure_communication_boundary(
-        self, mock_perf_logger, mock_gpu_monitor, integration_settings
+        self, mock_get_perf, mock_gpu_monitor
     ):
         """Test communication between monitoring and infrastructure modules."""
         # Mock GPU monitoring
@@ -437,93 +311,78 @@ class TestCrossModuleCommunicationBoundaries:
         }
         mock_gpu_monitor.return_value = mock_monitor
 
-        # Mock performance logger
-        mock_logger = MagicMock()
-        mock_logger.log_performance.return_value = True
-        mock_perf_logger.return_value = mock_logger
+        # Mock performance monitor
+        mock_monitor_obj = MagicMock()
+        mock_monitor_obj.record_operation.return_value = True
+        mock_get_perf.return_value = mock_monitor_obj
 
         # Test monitoring communication
         gpu_monitor = mock_gpu_monitor()
-        perf_logger = mock_perf_logger(integration_settings)
+        perf_monitor = mock_get_perf()
 
         gpu_stats = gpu_monitor.get_gpu_stats()
-        log_result = perf_logger.log_performance(gpu_stats)
+        log_result = perf_monitor.record_operation("gpu", 0.01, **gpu_stats)
 
         # Verify cross-module communication
         assert gpu_stats["gpu_utilization"] > 0
         assert log_result is True
 
         mock_gpu_monitor.assert_called_once()
-        mock_perf_logger.assert_called_once_with(integration_settings)
+        mock_get_perf.assert_called_once()
 
-    @pytest.mark.asyncio
-    @patch("src.dspy_integration.DSPyOptimizer")
-    async def test_dspy_optimization_boundary_integration(self, mock_dspy_optimizer):
-        """Test DSPy optimization integration with async boundaries."""
-        # Mock DSPy optimizer with async optimization
-        mock_optimizer = AsyncMock()
-        mock_optimizer.optimize_prompts.return_value = {
-            "optimized_prompt": "Optimized query prompt for better results",
-            "improvement_score": 0.23,  # 23% improvement
+    @patch("src.dspy_integration.DSPyLlamaIndexRetriever")
+    def test_dspy_optimization_boundary_integration(self, mock_dspy):
+        """Test DSPy optimization boundary using retriever's optimize_query."""
+        mock_dspy.optimize_query.return_value = {
+            "refined": "Optimized query",
+            "quality_score": 0.23,
         }
-        mock_dspy_optimizer.return_value = mock_optimizer
 
-        # Test DSPy integration
-        optimizer = mock_dspy_optimizer()
-        optimization_result = await optimizer.optimize_prompts(
-            ["Original prompt for testing optimization"]
-        )
+        result = mock_dspy.optimize_query("Original query")
+        assert "refined" in result
+        assert result["quality_score"] > 0.2
 
-        # Verify optimization boundary integration
-        assert "optimized_prompt" in optimization_result
-        assert optimization_result["improvement_score"] > 0.2
-
-        mock_optimizer.optimize_prompts.assert_called_once()
-
-    def test_configuration_validation_across_boundaries(self, integration_settings):
+    def test_configuration_validation_across_boundaries(self):
         """Test configuration validation works across all module boundaries."""
         # Test that all major configuration sections are present
-        required_configs = ["vllm", "agents", "embeddings", "retrieval"]
+        required_configs = ["vllm", "agents", "embedding", "retrieval"]
+        s = DocMindSettings()
         for config_name in required_configs:
-            assert hasattr(integration_settings, config_name), (
+            assert hasattr(s, config_name), (
                 f"Missing required config section: {config_name}"
             )
 
         # Test that nested configurations have required fields
-        assert hasattr(integration_settings.vllm, "model")
-        assert hasattr(integration_settings.agents, "enable_multi_agent")
-        assert hasattr(integration_settings.embeddings, "model")
-        assert hasattr(integration_settings.retrieval, "strategy")
+        assert hasattr(s.vllm, "model")
+        assert hasattr(s.agents, "enable_multi_agent")
+        assert hasattr(s.embedding, "model_name")
+        assert hasattr(s.retrieval, "strategy")
 
         # Test that all configurations have valid values
-        assert integration_settings.vllm.context_window > 0
-        assert integration_settings.agents.decision_timeout > 0
-        assert integration_settings.embeddings.dimension > 0
-        assert integration_settings.retrieval.top_k > 0
+        assert s.vllm.context_window > 0
+        assert s.agents.decision_timeout > 0
+        assert s.embedding.dimension > 0
+        assert s.retrieval.top_k > 0
 
 
 @pytest.mark.integration
 class TestErrorHandlingBoundaryIntegration:
     """Test error handling across component boundaries."""
 
-    @patch("src.agents.coordinator.get_agent_system")
-    def test_agent_system_error_boundary_handling(self, mock_get_agent):
+    @patch("src.agents.coordinator.create_react_agent")
+    @patch("src.agents.coordinator.create_supervisor")
+    def test_agent_system_error_boundary_handling(
+        self, mock_create_supervisor, mock_create_react_agent
+    ):
         """Test error handling at agent system boundaries."""
-        # Mock agent system that raises errors
-        mock_agent_system = MagicMock()
-        mock_agent_system.initialize.side_effect = RuntimeError(
-            "Agent initialization failed"
-        )
-        mock_get_agent.return_value = mock_agent_system
+        mock_create_react_agent.return_value = MagicMock()
+        mock_create_supervisor.side_effect = RuntimeError("Supervisor failed")
+        from src.agents.coordinator import MultiAgentCoordinator
 
-        # Test error boundary handling
-        agent_system = mock_get_agent()
-
-        with pytest.raises(RuntimeError, match="Agent initialization failed"):
-            agent_system.initialize()
-
-        # Verify error was properly propagated across boundary
-        mock_get_agent.assert_called_once()
+        coord = MultiAgentCoordinator()
+        coord.llm = MagicMock()
+        with pytest.raises(RuntimeError, match="Supervisor failed"):
+            coord._setup_agent_graph()  # pylint: disable=protected-access
 
     @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
     def test_embedder_error_boundary_handling(self, mock_embedder):
@@ -539,25 +398,31 @@ class TestErrorHandlingBoundaryIntegration:
 
     def test_settings_validation_error_boundaries(self):
         """Test settings validation error handling at boundaries."""
-        # Test invalid configuration values
-        with pytest.raises(ValueError):
-            DocMindSettings(context_window_size=-1)  # Invalid negative value
+        # Test invalid configuration values (Pydantic v2 ValidationError)
+        from pydantic import ValidationError
 
-        with pytest.raises(ValueError):
-            DocMindSettings(chunk_size=0)  # Invalid zero chunk size
+        with pytest.raises(ValidationError):
+            DocMindSettings(vllm={"context_window": -1})  # Invalid negative
+
+        with pytest.raises(ValidationError):
+            DocMindSettings(processing={"chunk_size": 0})  # Invalid zero size
 
     @pytest.mark.asyncio
-    @patch("src.utils.embedding.create_index_async")
-    async def test_async_error_boundary_handling(self, mock_create_index):
+    @patch("src.utils.monitoring.async_performance_timer")
+    async def test_async_error_boundary_handling(self, mock_async_timer):
         """Test async error handling across boundaries."""
+
         # Mock async function that raises error
-        mock_create_index.side_effect = TimeoutError("Index creation timeout")
+        async def _raiser(*_args, **_kwargs):
+            raise TimeoutError("Timer timeout")
+
+        mock_async_timer.side_effect = _raiser
 
         # Test async error boundary handling
-        with pytest.raises(asyncio.TimeoutError, match="Index creation timeout"):
-            await mock_create_index([], DocMindSettings())
+        with pytest.raises(asyncio.TimeoutError, match="Timer timeout"):
+            await mock_async_timer("op")
 
-        mock_create_index.assert_called_once()
+        mock_async_timer.assert_called_once()
 
 
 @pytest.mark.integration

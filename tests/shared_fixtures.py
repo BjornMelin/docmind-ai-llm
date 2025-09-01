@@ -13,6 +13,7 @@ Key Components:
 
 import asyncio
 import time
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
@@ -459,6 +460,35 @@ def performance_timer() -> PerformanceTimer:
 async def async_test_utils() -> AsyncTestUtils:
     """Provide async test utilities with proper loop scope."""
     return AsyncTestUtils()
+
+
+@pytest.fixture
+def supervisor_stream_shim() -> Mock:
+    """Provide a deterministic supervisor shim with compile().stream().
+
+    Returns an object mimicking the minimal interface used by
+    MultiAgentCoordinator:
+    - graph.compile(checkpointer=...) -> compiled_graph
+    - compiled_graph.stream(initial_state, config=..., stream_mode="values")
+      yields a final state dict with a response-like message.
+    """
+
+    class _Compiled:
+        def stream(self, initial_state, config=None, stream_mode: str | None = None):
+            del config, stream_mode
+            # Copy initial state and append a deterministic assistant message
+            messages = list(initial_state.get("messages", []))
+            messages.append(SimpleNamespace(content="Shim: processed successfully"))
+            final = dict(initial_state)
+            final["messages"] = messages
+            final["agent_timings"] = {"router_agent": 0.01}
+            yield final
+
+    class _Graph:
+        def compile(self, checkpointer=None):  # noqa: D401, ARG002
+            return _Compiled()
+
+    return _Graph()
 
 
 # ============================================================================

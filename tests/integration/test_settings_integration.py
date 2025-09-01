@@ -26,9 +26,9 @@ import pytest
 
 # Ensure src is in Python path
 PROJECT_ROOT = Path(__file__).parents[2]
-src_path = str(PROJECT_ROOT / "src")
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
+SRC_PATH = str(PROJECT_ROOT / "src")
+if SRC_PATH not in sys.path:
+    sys.path.insert(0, SRC_PATH)
 
 # Import with graceful fallback
 try:
@@ -38,10 +38,12 @@ try:
 except ImportError as e:
     SETTINGS_AVAILABLE = False
     IMPORT_ERROR = str(e)
+else:
+    IMPORT_ERROR = ""
 
 
 @pytest.fixture
-def temp_settings_env(tmp_path):
+def settings_env(tmp_path):
     """Create temporary environment for settings testing."""
     test_data_dir = tmp_path / "data"
     test_cache_dir = tmp_path / "cache"
@@ -72,9 +74,9 @@ def temp_settings_env(tmp_path):
 class TestSettingsRealIntegration:
     """Test settings integration with real workflows."""
 
-    def test_settings_creation_and_basic_access(self, temp_settings_env):
+    def test_settings_creation_and_basic_access(self, settings_env):
         """Test that settings can be created and accessed."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Basic validation - settings object exists
@@ -88,25 +90,23 @@ class TestSettingsRealIntegration:
             assert hasattr(settings, "cache_dir")
             assert isinstance(settings.cache_dir, Path)
 
-    def test_settings_environment_integration(self, temp_settings_env):
+    def test_settings_environment_integration(self, settings_env):
         """Test settings properly integrate with environment variables."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Environment variables should be reflected in settings
             assert (
-                str(settings.data_dir)
-                == temp_settings_env["env_vars"]["DOCMIND_DATA_DIR"]
+                str(settings.data_dir) == settings_env["env_vars"]["DOCMIND_DATA_DIR"]
             )
             assert (
-                str(settings.cache_dir)
-                == temp_settings_env["env_vars"]["DOCMIND_CACHE_DIR"]
+                str(settings.cache_dir) == settings_env["env_vars"]["DOCMIND_CACHE_DIR"]
             )
             assert settings.debug is True  # From DOCMIND_DEBUG=true
 
-    def test_settings_with_file_operations(self, temp_settings_env):
+    def test_settings_with_file_operations(self, settings_env):
         """Test settings work with actual file system operations."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Ensure directories exist
@@ -126,9 +126,9 @@ class TestSettingsRealIntegration:
 
             assert cache_file.exists()
 
-    def test_settings_serialization_integration(self, temp_settings_env):
+    def test_settings_serialization_integration(self, settings_env):
         """Test settings can be serialized (needed for configuration export)."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Test model_dump works (Pydantic v2 method)
@@ -142,9 +142,9 @@ class TestSettingsRealIntegration:
                 assert "cache_dir" in settings_dict
 
     @pytest.mark.asyncio
-    async def test_settings_async_integration(self, temp_settings_env):
+    async def test_settings_async_integration(self, settings_env):
         """Test settings work correctly in async contexts."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Simulate async operations using settings
@@ -157,9 +157,7 @@ class TestSettingsRealIntegration:
 
             result = await async_operation()
 
-            assert (
-                result["data_dir"] == temp_settings_env["env_vars"]["DOCMIND_DATA_DIR"]
-            )
+            assert result["data_dir"] == settings_env["env_vars"]["DOCMIND_DATA_DIR"]
             assert result["debug"] is True
 
 
@@ -178,9 +176,9 @@ class TestSettingsModuleIntegration:
         except ImportError:
             pytest.skip("Config module not available")
 
-    def test_settings_database_configuration(self, temp_settings_env):
+    def test_settings_database_configuration(self, settings_env):
         """Test settings provide valid database configuration."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Database path should be accessible
@@ -191,9 +189,9 @@ class TestSettingsModuleIntegration:
                 settings.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
                 assert settings.sqlite_db_path.parent.exists()
 
-    def test_settings_llm_backend_configuration(self, temp_settings_env):
+    def test_settings_llm_backend_configuration(self, settings_env):
         """Test settings provide valid LLM backend configuration."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Should have LLM backend configuration
@@ -206,9 +204,9 @@ class TestSettingsModuleIntegration:
                 assert isinstance(settings.vllm.model, str)
                 assert settings.vllm.model  # Non-empty
 
-    def test_settings_agent_configuration(self, temp_settings_env):
+    def test_settings_agent_configuration(self, settings_env):
         """Test settings provide valid agent configuration."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Should have agent configuration
@@ -227,10 +225,10 @@ class TestSettingsModuleIntegration:
 class TestSettingsProductionPatterns:
     """Test settings with realistic production usage patterns."""
 
-    def test_production_environment_simulation(self, temp_settings_env):
+    def test_production_environment_simulation(self, settings_env):
         """Test settings in simulated production environment."""
         production_env = {
-            **temp_settings_env["env_vars"],
+            **settings_env["env_vars"],
             "DOCMIND_DEBUG": "false",
             "DOCMIND_LOG_LEVEL": "INFO",
             "DOCMIND_ENABLE_PERFORMANCE_LOGGING": "true",
@@ -248,10 +246,10 @@ class TestSettingsProductionPatterns:
             if hasattr(settings, "enable_performance_logging"):
                 assert settings.enable_performance_logging is True
 
-    def test_development_environment_simulation(self, temp_settings_env):
+    def test_development_environment_simulation(self, settings_env):
         """Test settings in simulated development environment."""
         dev_env = {
-            **temp_settings_env["env_vars"],
+            **settings_env["env_vars"],
             "DOCMIND_DEBUG": "true",
             "DOCMIND_LOG_LEVEL": "DEBUG",
         }
@@ -265,9 +263,9 @@ class TestSettingsProductionPatterns:
             if hasattr(settings, "log_level"):
                 assert settings.log_level == "DEBUG"
 
-    def test_settings_with_mocked_external_services(self, temp_settings_env):
+    def test_settings_with_mocked_external_services(self, settings_env):
         """Test settings integration with mocked external services."""
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             settings = DocMindSettings()
 
             # Mock external service configuration
@@ -280,12 +278,12 @@ class TestSettingsProductionPatterns:
                     client = mock_qdrant(url=settings.qdrant_url)
                     assert client is not None
 
-    def test_concurrent_settings_access(self, temp_settings_env):
+    def test_concurrent_settings_access(self, settings_env):
         """Test settings can be accessed concurrently (thread safety)."""
         import threading
         import time
 
-        with patch.dict(os.environ, temp_settings_env["env_vars"]):
+        with patch.dict(os.environ, settings_env["env_vars"]):
             results = []
             errors = []
 
@@ -299,7 +297,7 @@ class TestSettingsProductionPatterns:
                     }
                     results.append(config)
                     time.sleep(0.01)  # Small delay to test concurrency
-                except Exception as e:
+                except (OSError, RuntimeError, ValueError) as e:
                     errors.append(str(e))
 
             # Create multiple threads
@@ -328,27 +326,25 @@ class TestSettingsProductionPatterns:
 class TestSettingsErrorHandling:
     """Test settings graceful error handling and fallbacks."""
 
-    def test_settings_with_invalid_environment_values(self, temp_settings_env):
-        """Test settings handle invalid environment values gracefully."""
+    def test_settings_with_invalid_environment_values(self, settings_env):
+        """Invalid env values raise ValidationError under Pydantic v2."""
         invalid_env = {
-            **temp_settings_env["env_vars"],
+            **settings_env["env_vars"],
             "DOCMIND_DEBUG": "invalid_boolean",  # Invalid boolean
             "DOCMIND_MAX_MEMORY_GB": "not_a_number",  # Invalid number
         }
 
-        with patch.dict(os.environ, invalid_env):
-            # Test that invalid values are handled gracefully
-            # (should use defaults, not crash)
-            settings = DocMindSettings()
-            assert settings is not None
-            # Should have created settings object, using defaults for invalid values
+        from pydantic import ValidationError
 
-    def test_settings_with_missing_directories(self, temp_settings_env):
+        with patch.dict(os.environ, invalid_env), pytest.raises(ValidationError):
+            _ = DocMindSettings()
+
+    def test_settings_with_missing_directories(self, settings_env):
         """Test settings work when specified directories don't exist."""
         missing_dirs_env = {
-            **temp_settings_env["env_vars"],
-            "DOCMIND_DATA_DIR": str(temp_settings_env["data_dir"]) + "_missing",
-            "DOCMIND_CACHE_DIR": str(temp_settings_env["cache_dir"]) + "_missing",
+            **settings_env["env_vars"],
+            "DOCMIND_DATA_DIR": str(settings_env["data_dir"]) + "_missing",
+            "DOCMIND_CACHE_DIR": str(settings_env["cache_dir"]) + "_missing",
         }
 
         with patch.dict(os.environ, missing_dirs_env):
