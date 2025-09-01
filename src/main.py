@@ -132,11 +132,13 @@ class DocMindApplication:
         """
         # Basic RAG is deprecated - multi-agent mode should be used instead
         logger.warning(
-            "Basic RAG pipeline is deprecated. Use multi-agent mode for full functionality."
+            "Basic RAG pipeline is deprecated. Use multi-agent mode "
+            "for full functionality."
         )
         content = (
             "Basic RAG pipeline is no longer supported. "
-            "Please enable multi-agent mode for document analysis and retrieval capabilities."
+            "Please enable multi-agent mode for document analysis "
+            "and retrieval capabilities."
         )
 
         return AgentResponse(
@@ -199,9 +201,9 @@ async def main() -> None:
     query = "What are the key features of the new product?"
     response = await app.process_query(query)
 
-    print(f"Response: {response.content}")
-    print(f"Processing time: {response.processing_time:.2f}s")
-    print(f"Validation score: {response.validation_score:.2f}")
+    logger.info("Response: %s", response.content)
+    logger.info("Processing time: %.2fs", response.processing_time)
+    logger.info("Validation score: %.2f", response.validation_score)
 
     # Shutdown
     app.shutdown()

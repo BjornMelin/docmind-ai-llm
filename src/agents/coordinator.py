@@ -33,7 +33,7 @@ Example:
             "Compare AI vs ML techniques",
             context=ChatMemoryBuffer.from_defaults()
         )
-        print(response.content)
+        # response.content contains the generated text
 """
 
 import asyncio
@@ -43,7 +43,6 @@ from typing import Any
 
 from dependency_injector.wiring import Provide, inject
 from langchain_core.messages import HumanMessage
-from langchain_core.messages.utils import trim_messages
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
@@ -160,10 +159,12 @@ class MultiAgentCoordinator:
         self.max_agent_timeout = max_agent_timeout
 
         # vLLM Configuration with unified settings
+        env_vars = settings.get_vllm_env_vars()
+
         self.vllm_config = {
             "model": model_path,
             "max_model_len": max_context_length,
-            **settings.get_vllm_env_vars(),
+            **env_vars,
         }
 
         # Context management with unified settings
@@ -361,6 +362,9 @@ class MultiAgentCoordinator:
         def pre_model_hook(state: dict) -> dict:
             """Trim context before model processing with 128K management."""
             try:
+                # Import here so tests patching the function can intercept calls
+                from langchain_core.messages.utils import trim_messages
+
                 messages = state.get("messages", [])
                 total_tokens = self.context_manager.estimate_tokens(messages)
 
@@ -453,10 +457,7 @@ class MultiAgentCoordinator:
 
         Example:
             >>> response = coordinator.process_query("What is machine learning?")
-            >>> print(response.content)
-            >>> print(
-                f"Token reduction: {response.optimization_metrics['token_reduction']}"
-            )
+            >>> response.content  # formatted content string
         """
         start_time = time.perf_counter()
         self.total_queries += 1
@@ -665,6 +666,7 @@ class MultiAgentCoordinator:
     ) -> AgentResponse:
         """Fallback to basic RAG when multi-agent system fails."""
         try:
+            # Update fallback counter (production behavior)
             self.fallback_queries += 1
             logger.info("Using basic RAG fallback")
 
@@ -688,7 +690,7 @@ class MultiAgentCoordinator:
                 optimization_metrics={"fallback_mode": True},
             )
 
-        except (RuntimeError, ValueError, AttributeError) as e:
+        except (RuntimeError, ValueError, AttributeError, Exception) as e:  # pylint: disable=broad-exception-caught
             logger.error("Fallback RAG also failed: %s", e)
             processing_time = time.perf_counter() - start_time
             return AgentResponse(
@@ -804,7 +806,7 @@ def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
     max_context_length: int = settings.vllm.context_window,
     enable_fallback: bool = True,
-    container=Provide["ApplicationContainer"],
+    _container=Provide["ApplicationContainer"],
 ) -> MultiAgentCoordinator:
     """Create ADR-compliant multi-agent coordinator with dependency injection.
 

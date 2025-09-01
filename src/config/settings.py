@@ -1,10 +1,8 @@
 """Unified DocMind AI configuration using Pydantic Settings V2.
 
-This module provides the main configuration architecture implementing Task 2.2.1:
+This module provides the main configuration architecture:
 - Unified Pydantic BaseSettings with environment variable mapping
 - Nested configuration models for complex areas
-- ADR-compliant settings preservation
-- 76% complexity reduction while maintaining functionality
 
 Usage:
     from src.config import settings

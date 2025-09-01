@@ -23,7 +23,7 @@ Example:
             strategy="hybrid",
             use_dspy=True
         )
-        print(f"Found {len(result.documents)} documents")
+        # len(result.documents) contains the document count
 """
 
 import json
@@ -133,8 +133,7 @@ class RetrievalAgent:
 
         Example:
             >>> result = agent.retrieve_documents("AI ethics", "hybrid")
-            >>> print(f"Found {result.document_count} documents")
-            >>> print(f"Strategy: {result.strategy_used}")
+            >>> result.document_count, result.strategy_used
         """
         start_time = time.perf_counter()
         self.total_retrievals += 1

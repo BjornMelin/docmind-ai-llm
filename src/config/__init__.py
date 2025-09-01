@@ -28,7 +28,7 @@ try:
     logging.getLogger(__name__).info(
         "LlamaIndex configuration initialized successfully"
     )
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     import logging
 
     logging.getLogger(__name__).error(

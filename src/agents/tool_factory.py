@@ -317,7 +317,7 @@ class ToolFactory:
             ...     kg_index=kg_idx,
             ...     retriever=fusion_retriever
             ... )
-            >>> print(f"Created {len(tools)} tools")
+            >>> len(tools)  # number of tools created
         """
         tools = []
 

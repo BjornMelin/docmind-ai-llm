@@ -66,39 +66,15 @@ class ApplicationContainer(containers.DeclarativeContainer):
     )
 
 
-class TestContainer(ApplicationContainer):
-    """Test-specific container with mock dependencies.
-
-    Inherits from ApplicationContainer but overrides dependencies
-    with test-friendly mocks and stubs. Used during testing to
-    ensure fast, isolated tests.
-    """
-
-    # Override with mock cache for tests
-    cache = providers.Factory("tests._mocks.cache.MockCache")
-
-    # Override with mock embedding model for tests
-    embedding_model = providers.Factory("tests._mocks.embeddings.MockEmbeddingModel")
-
-    # Override with mock document processor for tests
-    document_processor = providers.Factory(
-        "tests._mocks.processing.MockDocumentProcessor"
-    )
-
 
 def create_container() -> ApplicationContainer:
     """Create and configure the appropriate container.
 
     Returns:
-        ApplicationContainer or TestContainer based on environment
+        ApplicationContainer or MockContainer based on environment
     """
-    # Use test container when in testing mode
-    if os.getenv("TESTING") == "1" or os.getenv("PYTEST_CURRENT_TEST"):
-        container = TestContainer()
-        logger.info("Created TestContainer for testing environment")
-    else:
-        container = ApplicationContainer()
-        logger.info("Created ApplicationContainer for production environment")
+    container = ApplicationContainer()
+    logger.info("Created ApplicationContainer")
 
     # Load configuration from environment
     container.config.from_env("DOCMIND")
@@ -147,7 +123,7 @@ def wire_container(modules: list[str]) -> None:
 
 
 def unwire_container() -> None:
-    """Unwire the container (useful for testing cleanup)."""
+    """Unwire the container."""
     container.unwire()
 
 
