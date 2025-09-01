@@ -8,12 +8,12 @@ variable setup.
 
 import logging
 import os
-from pathlib import Path
 
 import torch
 from llama_index.core import Settings
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.ollama import Ollama
+
+from src.retrieval.embeddings import BGEM3Embedding
 
 from .settings import settings
 
@@ -46,27 +46,21 @@ def setup_llamaindex() -> None:
     try:
         embedding_config = settings.get_embedding_config()
 
-        # Determine torch dtype for FP16 optimization (ADR-002)
-        torch_dtype = (
-            torch.float16
-            if (embedding_config["device"] == "cuda" and torch.cuda.is_available())
-            else torch.float32
-        )
+        # Prefer FP16 when on CUDA; BGEM3 internally handles dtype
+        use_fp16 = embedding_config["device"] == "cuda" and torch.cuda.is_available()
 
-        Settings.embed_model = HuggingFaceEmbedding(
+        Settings.embed_model = BGEM3Embedding(
             model_name=embedding_config["model_name"],
             device=embedding_config["device"],
-            cache_folder=str(Path("./embeddings_cache").resolve()),
             max_length=embedding_config["max_length"],
-            embed_batch_size=embedding_config["batch_size"],
-            trust_remote_code=embedding_config["trust_remote_code"],
-            torch_dtype=torch_dtype,
+            batch_size=embedding_config["batch_size"],
+            use_fp16=use_fp16,
         )
         logger.info(
-            "Embedding model configured: %s (device=%s, dtype=%s)",
+            "Embedding model configured: %s (device=%s, fp16=%s)",
             embedding_config["model_name"],
             embedding_config["device"],
-            torch_dtype,
+            use_fp16,
         )
     except Exception as e:
         logger.warning("Could not configure embeddings: %s", e)
