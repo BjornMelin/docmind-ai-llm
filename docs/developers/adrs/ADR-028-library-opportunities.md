@@ -51,6 +51,7 @@ class BGEM3Embedder:
 ```
 
 **FastEmbed Alternative**:
+
 ```python
 # Simplified with FastEmbed
 from fastembed import TextEmbedding, SparseTextEmbedding
@@ -68,6 +69,7 @@ class UnifiedEmbedder:
 ```
 
 **Potential Benefits**:
+
 - **~60-80% code reduction** in embedding implementation
 - **Automatic optimization**: Batching, device selection, memory management
 - **Unified interface**: Consistent API across different embedding models
@@ -75,6 +77,7 @@ class UnifiedEmbedder:
 - **Built-in caching**: Embedding-level caching included
 
 **Risks**:
+
 - **API compatibility**: May require changes to existing embedding pipeline
 - **Feature parity**: Need to verify BGE-M3's colbert_vecs support in FastEmbed
 - **Performance**: Need to benchmark against direct FlagEmbedding usage
@@ -98,6 +101,7 @@ class TestEmbeddings:
 ```
 
 **With pytest-asyncio**:
+
 ```python
 # Simplified and standardized
 import pytest
@@ -110,6 +114,7 @@ class TestEmbeddings:
 ```
 
 **Benefits**:
+
 - **Standardized async testing**: Consistent pattern across all test files
 - **Better error reporting**: Improved stack traces for async failures
 - **Fixture support**: Async fixtures for test setup/teardown
@@ -121,6 +126,7 @@ class TestEmbeddings:
 **Opportunity**: Further optimization with V2 features
 
 **Current**:
+
 ```python
 class DocMindSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -130,6 +136,7 @@ class DocMindSettings(BaseSettings):
 ```
 
 **Enhanced V2 Pattern**:
+
 ```python
 class DocMindSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -142,6 +149,7 @@ class DocMindSettings(BaseSettings):
 ```
 
 **Benefits**:
+
 - **Enhanced validation**: Better error messages and runtime checks
 - **Auto-documentation**: Settings self-document from docstrings  
 - **Performance**: V2 optimizations for large config objects
@@ -159,6 +167,7 @@ def render_document_table(documents):
 ```
 
 **With streamlit-aggrid**:
+
 ```python
 # Simplified with library
 from st_aggrid import AgGrid
@@ -173,6 +182,7 @@ def render_document_table(documents):
 ```
 
 **Benefits**:
+
 - **~70% UI code reduction**: Pre-built components replace custom implementations
 - **Better UX**: Professional components with advanced features
 - **Maintenance**: Library handles browser compatibility, updates
@@ -183,12 +193,14 @@ def render_document_table(documents):
 **Opportunity**: LangChain community tool ecosystem
 
 **Existing Tools to Evaluate**:
+
 - **Document loaders**: Enhanced PDF, DOCX processing
 - **Text splitters**: Advanced chunking strategies  
 - **Memory modules**: Conversation persistence patterns
 - **Retrieval tools**: Pre-built retrieval augmentation
 
 **Potential Benefits**:
+
 - **Standardized interfaces**: Consistent tool patterns
 - **Community maintenance**: Shared maintenance burden
 - **Feature completeness**: More edge cases handled
@@ -249,15 +261,18 @@ def render_document_table(documents):
 ### Risk Assessment
 
 **Low Risk Opportunities**:
+
 - ✅ pytest-asyncio (testing only, no production impact)
 - ✅ Streamlit components (UI-only, gradual adoption possible)
 - ✅ Pydantic V2 enhancements (backward compatible)
 
 **Medium Risk Opportunities**:
+
 - ⚠️ FastEmbed integration (core functionality, requires thorough testing)
 - ⚠️ LangChain community tools (API compatibility concerns)
 
 **High Risk (Avoid)**:
+
 - ❌ Complete UI framework changes (too much disruption)
 - ❌ LLM serving library changes (performance critical)
 
@@ -330,6 +345,7 @@ The library-first approach has proven highly successful in DocMind AI, achieving
 3. **Low Priority**: UI component libraries (quality of life improvements)
 
 **Key Principles**:
+
 - Always benchmark before adopting
 - Prioritize low-risk, high-impact changes
 - Maintain performance and reliability standards

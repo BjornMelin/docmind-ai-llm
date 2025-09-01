@@ -41,21 +41,25 @@ The cleanup project achieved 77.8% mock reduction (from 7,382 to ~1,600 instance
 ## Alternatives
 
 ### 1. Continue Current Mock-Heavy Approach
+
 - **Description**: Maintain existing 7,382 mock strategy with incremental improvements
 - **Issues**: Proven brittleness, high maintenance cost, poor reliability
 - **Score**: 2/10 (maintainability: 1, reliability: 2, developer experience: 3)
 
 ### 2. Complete Test Rewrite
+
 - **Description**: Discard existing tests and rebuild from scratch
 - **Issues**: Massive effort, loss of existing coverage, business risk
 - **Score**: 4/10 (quality: 8, feasibility: 1, risk: 3)
 
 ### 3. Hybrid Mock Reduction
+
 - **Description**: Gradual mock reduction without systematic boundary approach
 - **Issues**: Inconsistent patterns, unclear migration path, partial benefits
 - **Score**: 6/10 (feasibility: 8, consistency: 4, effectiveness: 6)
 
 ### 4. Boundary Testing with Modern Libraries (Selected)
+
 - **Description**: Systematic adoption of boundary testing with pytest, responses, testcontainers
 - **Benefits**: Proven 77.8% mock reduction success, modern library ecosystem, clear patterns
 - **Score**: 9/10 (maintainability: 9, reliability: 9, feasibility: 8)
@@ -497,24 +501,28 @@ def test_text_chunking_properties(text_content):
 ## Implementation Timeline
 
 ### Phase 1: Foundation (Week 1-2)
+
 - Install and configure modern testing libraries
 - Establish boundary testing guidelines and patterns
 - Create example boundary tests for common scenarios
 - Update CI/CD configuration for new library requirements
 
 ### Phase 2: Critical Module Migration (Week 3-6)
+
 - Migrate core business logic tests (document processing, agent coordination)
 - Remove internal mocks from service layer tests
 - Implement property-based testing for critical algorithms
 - Establish coverage measurement for migrated modules
 
 ### Phase 3: Integration Testing Enhancement (Week 7-10)
+
 - Replace mock-heavy integration tests with testcontainer-based tests
 - Implement boundary mocking for external service dependencies
 - Create comprehensive test fixtures for boundary scenarios
 - Validate integration test reliability and performance
 
 ### Phase 4: Mock Elimination (Week 11-14)
+
 - Systematic removal of remaining unnecessary internal mocks
 - Migration of utility and helper function tests
 - Implementation of property-based testing for edge cases
