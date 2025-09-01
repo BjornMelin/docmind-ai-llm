@@ -153,7 +153,10 @@ def sample_document_elements():
             },
         ),
         DocumentElement(
-            text="This paper presents a comprehensive analysis of document processing techniques.",
+            text=(
+                "This paper presents a comprehensive analysis of document "
+                "processing techniques."
+            ),
             category="NarrativeText",
             metadata={
                 "page_number": 1,
@@ -172,7 +175,10 @@ def sample_document_elements():
             },
         ),
         DocumentElement(
-            text="Document processing has become increasingly important in modern applications.",
+            text=(
+                "Document processing has become increasingly important in modern "
+                "applications."
+            ),
             category="NarrativeText",
             metadata={
                 "page_number": 2,
@@ -181,7 +187,10 @@ def sample_document_elements():
             },
         ),
         DocumentElement(
-            text="The ability to extract meaningful information from documents is crucial.",
+            text=(
+                "The ability to extract meaningful information from documents "
+                "is crucial."
+            ),
             category="NarrativeText",
             metadata={
                 "page_number": 2,
@@ -190,7 +199,10 @@ def sample_document_elements():
             },
         ),
         DocumentElement(
-            text="| Method | Accuracy | Speed |\n| --- | --- | --- |\n| Traditional | 75% | Fast |\n| ML-based | 92% | Medium |",
+            text=(
+                "| Method | Accuracy | Speed |\n| --- | --- | --- |\n| "
+                "Traditional | 75% | Fast |\n| ML-based | 92% | Medium |"
+            ),
             category="Table",
             metadata={
                 "page_number": 3,
@@ -252,7 +264,11 @@ def sample_semantic_chunks():
     """Create sample SemanticChunk objects for testing."""
     return [
         SemanticChunk(
-            text="Research Paper: Advanced Document Processing\n\nThis paper presents a comprehensive analysis of document processing techniques using advanced natural language processing methods.",
+            text=(
+                "Research Paper: Advanced Document Processing\n\nThis paper presents a "
+                "comprehensive analysis of document processing techniques using "
+                "advanced natural language processing methods."
+            ),
             category="CompositeElement",
             metadata={
                 "page_number": 1,
@@ -271,7 +287,11 @@ def sample_semantic_chunks():
             original_elements_count=2,
         ),
         SemanticChunk(
-            text="Introduction\n\nDocument processing has become increasingly important in modern applications. The ability to extract meaningful information from documents is crucial for business and research applications.",
+            text=(
+                "Introduction\n\nDocument processing has become increasingly important "
+                "in modern applications. The ability to extract meaningful information "
+                "from documents is crucial for business and research applications."
+            ),
             category="CompositeElement",
             metadata={
                 "page_number": 2,
@@ -290,7 +310,11 @@ def sample_semantic_chunks():
             original_elements_count=3,
         ),
         SemanticChunk(
-            text="| Method | Accuracy | Speed |\n| --- | --- | --- |\n| Traditional | 75% | Fast |\n| ML-based | 92% | Medium |\n\nFigure 1: Processing Pipeline Architecture",
+            text=(
+                "| Method | Accuracy | Speed |\n| --- | --- | --- |\n| Traditional | "
+                "75% | Fast |\n| ML-based | 92% | Medium |\n\nFigure 1: Processing "
+                "Pipeline Architecture"
+            ),
             category="CompositeElement",
             metadata={
                 "page_number": 3,
@@ -327,11 +351,23 @@ def test_documents_directory(tmp_path):
 
     # Create test files with content
     test_files = {
-        "research_paper.pdf": "This is a sample PDF document about machine learning research.",
-        "user_manual.docx": "User Manual\n\nThis manual provides instructions for using our software.",
-        "meeting_notes.txt": "Meeting Notes - January 2024\n\nDiscussed project timeline and deliverables.",
-        "presentation.pptx": "Slide 1: Project Overview\nSlide 2: Technical Architecture\nSlide 3: Implementation Plan",
-        "webpage.html": "<html><body><h1>Web Content</h1><p>This is web content.</p></body></html>",
+        "research_paper.pdf": (
+            "This is a sample PDF document about machine learning research."
+        ),
+        "user_manual.docx": (
+            "User Manual\n\nThis manual provides instructions for using our software."
+        ),
+        "meeting_notes.txt": (
+            "Meeting Notes - January 2024\n\nDiscussed project timeline and "
+            "deliverables."
+        ),
+        "presentation.pptx": (
+            "Slide 1: Project Overview\nSlide 2: Technical Architecture\nSlide 3: "
+            "Implementation Plan"
+        ),
+        "webpage.html": (
+            "<html><body><h1>Web Content</h1><p>This is web content.</p></body></html>"
+        ),
         "document.rtf": "{\\rtf1 This is RTF content with formatting.}",
         "readme.md": "# Project README\n\n## Installation\n\nRun `pip install package`",
         "diagram.jpg": "JPEG image data (simulated)",

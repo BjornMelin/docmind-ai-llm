@@ -3,7 +3,12 @@
 This test suite covers the hybrid document processor that combines unstructured.io
 with LlamaIndex IngestionPipeline, focusing on strategy-based processing,
 caching, error handling, and format support.
+
+Note: Minimal private helper usage is intentional to validate conversion and
+hashing behavior where no public seam exists yet.
 """
+
+# pylint: disable=protected-access
 
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -159,7 +164,7 @@ class TestDocumentProcessor:
         ):
             processor = DocumentProcessor(mock_settings)
 
-            with pytest.raises(ValueError) as excinfo:
+            with pytest.raises(ValueError, match="Unsupported file format") as excinfo:
                 processor.get_strategy_for_file("document.xyz")
 
             assert "Unsupported file format" in str(excinfo.value)
@@ -211,18 +216,26 @@ class TestDocumentProcessor:
     @pytest.mark.asyncio
     async def test_process_document_async_file_not_found(self, mock_settings):
         """Test error handling for non-existent files."""
+        from unittest.mock import AsyncMock
+
+        from src.processing.document_processor import (
+            ProcessingError as DPProcessingError,
+        )
+
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
             patch("src.processing.document_processor.SimpleCache"),
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             # Mock the getattr calls for settings access
             mock_settings.max_document_size_mb = 50
 
             processor = DocumentProcessor(mock_settings)
 
-            with pytest.raises(ProcessingError) as excinfo:
+            with pytest.raises((ProcessingError, DPProcessingError)) as excinfo:
                 await processor.process_document_async("non_existent_file.pdf")
+            assert "File not found" in str(excinfo.value)
 
             assert "File not found" in str(excinfo.value)
 
@@ -233,23 +246,25 @@ class TestDocumentProcessor:
         large_file = tmp_path / "large_file.pdf"
         large_file.write_text("A" * 2000)  # 2KB file with very small limit
 
+        from unittest.mock import AsyncMock
+
+        from src.processing.document_processor import (
+            ProcessingError as DPProcessingError,
+        )
+
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
             patch("src.processing.document_processor.SimpleCache"),
-            patch("getattr") as mock_getattr,
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
-            # Mock getattr to return small size limit when accessing max_document_size_mb
-            def mock_getattr_side_effect(obj, attr, default=None):
-                if attr == "max_document_size_mb":
-                    return 0.001  # Very small limit for testing
-                return default
-
-            mock_getattr.side_effect = mock_getattr_side_effect
+            # Set a very small size limit to trigger the error
+            mock_settings.max_document_size_mb = 0.0001
             processor = DocumentProcessor(mock_settings)
 
-            with pytest.raises(ProcessingError) as excinfo:
+            with pytest.raises((ProcessingError, DPProcessingError)) as excinfo:
                 await processor.process_document_async(large_file)
+            assert "exceeds limit" in str(excinfo.value)
 
             assert "exceeds limit" in str(excinfo.value)
 
@@ -318,6 +333,8 @@ class TestDocumentProcessor:
                 mock_pipeline = Mock()
                 mock_create_pipeline.return_value = mock_pipeline
                 mock_pipeline.run.return_value = mock_nodes
+                # Provide transformations list so len() works in processor
+                mock_pipeline.transformations = [Mock(), Mock()]
 
                 result = await processor.process_document_async(sample_text_file)
 
@@ -516,13 +533,15 @@ class TestDocumentProcessorIntegration:
         """Integration test for processing a real text file."""
         # Create test file
         test_file = tmp_path / "test.txt"
-        test_content = "This is a test document.\n\nIt has multiple paragraphs.\n\nEach paragraph contains test content."
+        test_content = (
+            "This is a test document.\n\n"
+            "It has multiple paragraphs.\n\n"
+            "Each paragraph contains test content."
+        )
         test_file.write_text(test_content)
 
         # Mock heavy dependencies but test real file processing
         with (
-            patch("src.processing.document_processor.IngestionCache"),
-            patch("src.processing.document_processor.SimpleDocumentStore"),
             patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
             patch("src.processing.document_processor.partition") as mock_partition,
         ):
@@ -538,7 +557,11 @@ class TestDocumentProcessorIntegration:
             mock_element.metadata.page_number = 1
             mock_partition.return_value = [mock_element]
 
-            processor = DocumentProcessor()
+            from src.config.settings import DocMindSettings
+
+            processor = DocumentProcessor(
+                DocMindSettings(debug=True, enable_gpu_acceleration=False)
+            )
             result = await processor.process_document_async(test_file)
 
             assert isinstance(result, ProcessingResult)
