@@ -36,7 +36,7 @@ try:
         Distance,
         FieldCondition,
         Filter,
-        Match,
+        MatchValue,
         PointStruct,
         VectorParams,
     )
@@ -460,7 +460,7 @@ class HybridPersistenceManager:
                 qdrant_filter = Filter(
                     must=[
                         FieldCondition(
-                            key="document_id", match=Match(value=document_filter)
+                            key="document_id", match=MatchValue(value=document_filter)
                         )
                     ]
                 )
@@ -644,7 +644,7 @@ class HybridPersistenceManager:
                     delete_filter = Filter(
                         must=[
                             FieldCondition(
-                                key="document_id", match=Match(value=document_id)
+                                key="document_id", match=MatchValue(value=document_id)
                             )
                         ]
                     )
