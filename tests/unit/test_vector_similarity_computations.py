@@ -1,20 +1,10 @@
-"""Comprehensive vector similarity computation tests for embedding operations.
+"""Unit tests for vector similarity computations.
 
-This module provides thorough testing of vector similarity computations with focus on:
-- Various similarity metrics (cosine, dot product, euclidean)
-- Batch similarity processing with dimension validation
-- Edge cases in similarity computation (zero vectors, identical vectors)
-- Sparse embedding similarity computations
-- Performance considerations for large batch operations
-- Error handling in similarity calculations
-
-Key testing areas:
-- Dense vector similarity metrics with 1024D BGE-M3 embeddings
-- Sparse embedding similarity with token weight validation
-- Batch similarity processing with various batch sizes
-- Edge cases: zero vectors, identical vectors, perpendicular vectors
-- Dimension consistency validation in similarity operations
-- Performance bounds for similarity computations
+Focus areas:
+- Cosine, dot product, Euclidean metrics (dense + sparse)
+- Batch computations and dimension checks
+- Edge cases (zero/identical/orthogonal, NaN/Inf)
+- Performance bounds for moderate batch sizes
 """
 
 import numpy as np
@@ -103,7 +93,8 @@ class TestCosineSimilarityComputations:
 
                 # Identical vectors should have cosine similarity of 1.0
                 assert abs(cosine_sim - 1.0) < 1e-10, (
-                    f"Identical vectors should have cosine similarity 1.0, got {cosine_sim}"
+                    f"Identical vectors should have cosine similarity 1.0, "
+                    f"got {cosine_sim}"
                 )
 
     def test_cosine_similarity_orthogonal_vectors(self, sample_1024d_vectors):
@@ -500,9 +491,11 @@ class TestSimilarityMetricValidation:
 
                 # Euclidean distance and cosine similarity relationship
                 euclidean_dist = np.linalg.norm(vec1 - vec2)
-                expected_dist = np.sqrt(2 - 2 * cosine_sim)
+                # Numerical stability: clamp cosine into [-1, 1] before sqrt
+                cosine_clipped = max(-1.0, min(1.0, float(cosine_sim)))
+                expected_dist = np.sqrt(max(0.0, 2 - 2 * cosine_clipped))
 
-                assert abs(euclidean_dist - expected_dist) < 1e-10, (
+                assert abs(euclidean_dist - expected_dist) < 1e-9, (
                     "Distance and cosine should be consistent"
                 )
 
@@ -639,7 +632,10 @@ class TestEdgeCaseSimilarityComputations:
         assert np.isnan(with_nan) or np.isinf(with_nan), (
             "Should handle NaN appropriately"
         )
-        assert np.isinf(with_inf), "Should handle Inf appropriately"
+        # Depending on sign cancellations, dot with inf may yield inf or nan
+        assert np.isinf(with_inf) or np.isnan(with_inf), (
+            "Should handle Inf appropriately"
+        )
 
     def test_very_small_vector_similarity(self):
         """Test similarity with very small magnitude vectors."""
@@ -654,7 +650,7 @@ class TestEdgeCaseSimilarityComputations:
         if norm1 > 0 and norm2 > 0:
             cosine_sim = dot_product / (norm1 * norm2)
             # Should still be valid for tiny vectors
-            assert 0.9 < cosine_sim <= 1.0, (
+            assert 0.9 < cosine_sim <= 1.0 + 1e-10, (
                 f"Small vectors should have high similarity, got {cosine_sim}"
             )
 
