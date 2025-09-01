@@ -169,10 +169,10 @@ Based on Phase 5A test results, the following baselines are maintained:
 
 ```bash
 # Manual execution
-python scripts/run_tests_ci_optimized.py --pre-commit
+python scripts/run_tests.py --unit --integration
 
 # Quality gate enforcement
-python scripts/quality_gates_ci.py --ci-mode pre-commit
+python scripts/run_quality_gates.py --ci
 ```
 
 **What it does**:
@@ -205,7 +205,7 @@ python scripts/quality_gates_ci.py --ci-mode pre-commit
 **Execution**:
 
 ```bash
-python scripts/run_tests_ci_optimized.py --pr-validation
+python scripts/run_tests.py --unit --integration --coverage
 ```
 
 **What it does**:
@@ -222,8 +222,8 @@ python scripts/run_tests_ci_optimized.py --pr-validation
 **Execution**:
 
 ```bash
-python scripts/performance_monitor_ci.py --dashboard
-python scripts/performance_monitor_ci.py --regression-check
+python scripts/performance_monitor.py --report
+python scripts/performance_monitor.py --check-regressions
 ```
 
 **What it does**:
@@ -239,7 +239,7 @@ python scripts/performance_monitor_ci.py --regression-check
 **Execution**:
 
 ```bash
-python scripts/run_tests_ci_optimized.py --deployment-gate
+python scripts/run_quality_gates.py --ci
 ```
 
 **What it does**:
@@ -328,13 +328,13 @@ The pipeline includes comprehensive performance monitoring:
 
 ```bash
 # Generate performance dashboard
-python scripts/performance_monitor_ci.py --dashboard
+python scripts/performance_monitor.py --report
 
 # Check for regressions
-python scripts/performance_monitor_ci.py --regression-check
+python scripts/performance_monitor.py --check-regressions
 
 # Generate trend analysis
-python scripts/performance_monitor_ci.py --trend-analysis
+python scripts/performance_monitor.py --trend-analysis
 ```
 
 **Dashboard Output**:
@@ -486,13 +486,13 @@ uv run pytest --durations=10
 
 ```bash
 # Comprehensive debugging
-python scripts/run_tests_ci_optimized.py --quality-gates --coverage-report
+python scripts/run_quality_gates.py --coverage
 
 # Performance debugging
-python scripts/performance_monitor_ci.py --dashboard
+python scripts/performance_monitor.py --report
 
 # Quality gate debugging
-python scripts/quality_gates_ci.py --generate-report
+python scripts/run_quality_gates.py --report
 ```
 
 ## Best Practices
@@ -502,19 +502,19 @@ python scripts/quality_gates_ci.py --generate-report
 1. **Pre-commit Validation**: Always run before commits
 
    ```bash
-   python scripts/run_tests_ci_optimized.py --pre-commit
+   python scripts/run_tests.py --unit --integration
    ```
 
 2. **Incremental Development**: Use CI mode for frequent checks
 
    ```bash
-   python scripts/run_tests_ci_optimized.py --ci
+   python scripts/run_tests.py --fast
    ```
 
 3. **PR Preparation**: Validate with full suite
 
    ```bash
-   python scripts/run_tests_ci_optimized.py --pr-validation
+   python scripts/run_tests.py --unit --integration --coverage
    ```
 
 ### Performance Optimization

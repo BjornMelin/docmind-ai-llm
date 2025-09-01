@@ -428,8 +428,12 @@ class PerformanceMonitor:
                     [
                         "SLOWEST TESTS (Top 5):",
                         *(
-                            f"  {test['test'][:60]}{'...' if len(test['test']) > 60 else ''}: "  # noqa: E501
-                            f"{test['duration']:.2f}s"
+                            (
+                                "  "
+                                + test["test"][:60]
+                                + ("..." if len(test["test"]) > 60 else "")
+                                + f": {test['duration']:.2f}s"
+                            )
                             for test in slowest_tests[:5]
                         ),
                         "",

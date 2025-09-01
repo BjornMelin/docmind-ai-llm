@@ -976,7 +976,7 @@ find /app/logs -name "*.log" -mtime +7 -exec gzip {} \;
 
 ```bash
 # Full system validation
-python scripts/end_to_end_test.py
+python scripts/run_tests.py --system
 
 # Model performance benchmark
 python scripts/model_benchmark.py

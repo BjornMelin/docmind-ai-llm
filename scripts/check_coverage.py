@@ -252,14 +252,19 @@ class CoverageAnalyzer:
 
         # Branch coverage (if available)
         if overall["branch_coverage"]["total"] > 0:
+            status = (
+                "✓ PASS" if overall["branch_coverage"]["meets_threshold"] else "✗ FAIL"
+            )
             report_lines.extend(
                 [
-                    f"  Branch Coverage: {overall['branch_coverage']['percent']:.1f}% "
-                    f"({overall['branch_coverage']['covered']}/"
-                    f"{overall['branch_coverage']['total']} branches)",
+                    (
+                        f"  Branch Coverage: "
+                        f"{overall['branch_coverage']['percent']:.1f}% "
+                        f"({overall['branch_coverage']['covered']}/"
+                        f"{overall['branch_coverage']['total']} branches)"
+                    ),
                     f"  Threshold:       {overall['branch_coverage']['threshold']}%",
-                    f"  Status:          "
-                    f"{'✓ PASS' if overall['branch_coverage']['meets_threshold'] else '✗ FAIL'}",  # noqa: E501
+                    f"  Status:          {status}",
                     "",
                 ]
             )

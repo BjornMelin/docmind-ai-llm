@@ -537,11 +537,15 @@ class TestHealthMonitor:
         if "stability" in self.health_data:
             stability_data = self.health_data["stability"]
 
+            exec_status = (
+                "✅ Success"
+                if stability_data.get("execution_successful")
+                else "❌ Failed"
+            )
             report_lines.extend(
                 [
                     "TEST SUITE STABILITY:",
-                    f"  Execution Status:    "
-                    f"{'✅ Success' if stability_data.get('execution_successful') else '❌ Failed'}",  # noqa: E501
+                    f"  Execution Status:    {exec_status}",
                     f"  Pass Rate:           {stability_data.get('pass_rate', 0):.1%}",
                     f"  Tests Passed:        {stability_data.get('tests_passed', 0)}",
                     f"  Tests Failed:        {stability_data.get('tests_failed', 0)}",
