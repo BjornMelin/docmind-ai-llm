@@ -52,9 +52,9 @@ graph TB
 tests/
 ├── unit/                    # Tier 1: Fast unit tests with mocks
 │   ├── conftest.py         # Unit test fixtures
-│   ├── test_agents/        # Agent system unit tests
-│   ├── test_processing/    # Document processing tests
-│   └── test_utils/         # Utility function tests
+│   ├── agents/             # Agent system unit tests
+│   ├── processing/         # Document processing tests
+│   └── utils/              # Utility function tests
 ├── integration/             # Tier 2: Cross-component tests
 │   ├── conftest.py         # Integration fixtures
 │   ├── test_pipelines/     # End-to-end pipeline tests
@@ -389,7 +389,7 @@ def test_chunking_properties(temp_settings, text, chunk_size):
 uv run python -m pytest tests/unit/ -v --tb=short
 
 # Specific test file
-uv run python -m pytest tests/unit/test_settings.py -v
+uv run python -m pytest tests/unit/config/test_settings.py -v
 
 # Run tests by marker
 uv run python -m pytest -m "unit and not slow" -v

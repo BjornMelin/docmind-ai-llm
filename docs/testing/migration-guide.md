@@ -37,7 +37,7 @@ rg "@patch" tests/ --count-matches | sort -nr | head -20
 # Example output:
 tests/unit/test_utils/test_monitoring.py:21
 tests/unit/test_agents/test_coordinator.py:18
-tests/unit/test_processing/test_document.py:15
+tests/unit/processing/test_document.py:15
 tests/unit/test_storage/test_persistence.py:12
 ```
 

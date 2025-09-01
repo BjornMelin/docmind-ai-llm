@@ -16,8 +16,8 @@ This guide provides accurate, measured information about the DocMind AI test sui
 
 ```bash
 # Working test execution commands (verified)
-uv run python -m pytest tests/unit/test_settings.py -v    # 72 tests pass consistently
-uv run python -m pytest --cov=src --cov-report=term-missing tests/unit/test_settings.py -q
+uv run python -m pytest tests/unit/config/test_settings.py -v    # 72 tests pass consistently
+uv run python -m pytest --cov=src --cov-report=term-missing tests/unit/config/test_settings.py -q
 
 # Broader test execution (variable results)
 uv run python -m pytest tests/unit/ -v                   # Mixed results, some tests fail
@@ -101,7 +101,7 @@ tests/                               # 116 test files total
 **Daily Development** (reliable feedback):
 ```bash
 # Focus on working test files for fast feedback
-uv run python -m pytest tests/unit/test_settings.py -v
+uv run python -m pytest tests/unit/config/test_settings.py -v
 uv run python -m pytest tests/validation/ -v  # If validation tests exist
 ```
 
@@ -112,13 +112,13 @@ ruff check . --fix
 ruff format .
 
 # Run basic test validation
-uv run python -m pytest tests/unit/test_settings.py -v
+uv run python -m pytest tests/unit/config/test_settings.py -v
 ```
 
 **Coverage Measurement**:
 ```bash
 # Generate current coverage report
-uv run python -m pytest --cov=src --cov-report=term-missing --cov-report=html tests/unit/test_settings.py
+uv run python -m pytest --cov=src --cov-report=term-missing --cov-report=html tests/unit/config/test_settings.py
 ```
 
 ### Test Development Approach
@@ -195,22 +195,22 @@ def test_internal_implementation():
 ### Coverage Analysis
 ```bash
 # Current coverage measurement
-uv run python -m pytest --cov=src --cov-report=term-missing tests/unit/test_settings.py
+uv run python -m pytest --cov=src --cov-report=term-missing tests/unit/config/test_settings.py
 
 # Coverage with HTML report
-uv run python -m pytest --cov=src --cov-report=html tests/unit/test_settings.py
+uv run python -m pytest --cov=src --cov-report=html tests/unit/config/test_settings.py
 ```
 
 ### Test Execution
 ```bash
 # Reliable test execution
-uv run python -m pytest tests/unit/test_settings.py -v
+uv run python -m pytest tests/unit/config/test_settings.py -v
 
 # Specific test function
-uv run python -m pytest tests/unit/test_settings.py::test_specific_function -v
+uv run python -m pytest tests/unit/config/test_settings.py::test_specific_function -v
 
 # Coverage threshold (will fail - coverage too low)
-uv run python -m pytest --cov=src --cov-fail-under=30 tests/unit/test_settings.py
+uv run python -m pytest --cov=src --cov-fail-under=30 tests/unit/config/test_settings.py
 ```
 
 ### Code Quality

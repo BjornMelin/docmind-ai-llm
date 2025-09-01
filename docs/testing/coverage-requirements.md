@@ -176,7 +176,7 @@ src/core/infrastructure/spacy_manager.py     25%    # Model management
 #### Development Coverage Check
 ```bash
 # Quick coverage check for development
-uv run python -m pytest tests/unit/test_settings.py --cov=src --cov-report=term-missing
+uv run python -m pytest tests/unit/config/test_settings.py --cov=src --cov-report=term-missing
 
 # Coverage for specific module
 uv run python -m pytest tests/unit/test_agents/ --cov=src/agents --cov-report=term-missing
