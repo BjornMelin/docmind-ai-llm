@@ -163,7 +163,7 @@ class TestCriticalPathRegression:
 
         # Check for acceptable variance
         assert timing_stats["std_ms"] < timing_stats["mean_ms"] * 0.3, (
-            f"Settings initialization timing too variable: std={timing_stats['std_ms']:.2f}ms "
+            f"Settings init too variable: std={timing_stats['std_ms']:.2f}ms "
             f"(>{timing_stats['mean_ms'] * 0.3:.2f}ms threshold)"
         )
 
@@ -189,15 +189,21 @@ class TestCriticalPathRegression:
             processor = mock_processor()
             test_documents = [
                 {
-                    "text": "Sample document content for testing processing performance",
+                    "text": (
+                        "Sample document content for testing processing performance"
+                    ),
                     "metadata": {"source": "test.pdf", "page": 1},
                 },
                 {
-                    "text": "Another document chunk to test batch processing efficiency",
+                    "text": (
+                        "Another document chunk to test batch processing efficiency"
+                    ),
                     "metadata": {"source": "test.pdf", "page": 2},
                 },
                 {
-                    "text": "Third document chunk for comprehensive processing validation",
+                    "text": (
+                        "Third document chunk for comprehensive processing validation"
+                    ),
                     "metadata": {"source": "test.pdf", "page": 3},
                 },
             ]
@@ -389,8 +395,8 @@ class TestCriticalPathRegression:
         # All configuration complexities should load quickly
         max_allowed = BASELINE_TARGETS["settings_initialization_ms"] * 2  # 2x baseline
         assert timing_stats["mean_ms"] < max_allowed, (
-            f"{complexity_name} config loading too slow: {timing_stats['mean_ms']:.2f}ms > "
-            f"{max_allowed}ms"
+            f"{complexity_name} config loading too slow: "
+            f"{timing_stats['mean_ms']:.2f}ms > {max_allowed}ms"
         )
 
         print(f"\n=== {complexity_name.title()} Configuration Loading ===")

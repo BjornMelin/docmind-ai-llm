@@ -388,7 +388,7 @@ class TestComponentLatencyBenchmarks:
 
                 start_time = latency_tracker.start_timing()
 
-                reranked_nodes = reranker._postprocess_nodes(test_nodes, query_bundle)
+                reranked_nodes = reranker.postprocess_nodes(test_nodes, query_bundle)
 
                 latency = latency_tracker.end_timing(start_time)
                 latency_tracker.record_component_latency(
@@ -909,7 +909,7 @@ class TestGPUAcceleratedLatencyBenchmarks:
             for _ in range(3):
                 start_time = latency_tracker.start_timing()
 
-                reranker_fp16._postprocess_nodes(test_nodes, query_bundle)
+                reranker_fp16.postprocess_nodes(test_nodes, query_bundle)
 
                 latency = latency_tracker.end_timing(start_time)
                 latency_tracker.record_component_latency("fp16_reranking", latency)
@@ -921,7 +921,7 @@ class TestGPUAcceleratedLatencyBenchmarks:
             for _ in range(3):
                 start_time = latency_tracker.start_timing()
 
-                reranker_fp32._postprocess_nodes(test_nodes, query_bundle)
+                reranker_fp32.postprocess_nodes(test_nodes, query_bundle)
 
                 latency = latency_tracker.end_timing(start_time)
                 latency_tracker.record_component_latency("fp32_reranking", latency)

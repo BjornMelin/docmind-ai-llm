@@ -1,6 +1,7 @@
 """Comprehensive performance validation tests for agent coordination flows.
 
-This test suite validates performance characteristics of the multi-agent coordination system:
+This test suite validates performance characteristics of the multi-agent coordination
+system:
 - Coordination overhead measurement and ADR-011 compliance (<200ms target)
 - Token reduction validation through parallel execution optimization
 - Memory usage monitoring for FP8 KV cache optimization
@@ -79,7 +80,8 @@ class TestAgentCoordinationPerformance:
 
         # ADR-011 compliance: <200ms coordination overhead
         assert avg_coordination_time < 200, (
-            f"Average coordination overhead {avg_coordination_time:.2f}ms exceeds 200ms target"
+            f"Average coordination overhead {avg_coordination_time:.2f}ms exceeds "
+            "200ms target"
         )
         assert max_coordination_time < 300, (
             f"Peak coordination overhead {max_coordination_time:.2f}ms too high"
@@ -102,7 +104,9 @@ class TestAgentCoordinationPerformance:
         # Simulate messages that would benefit from parallel optimization
         sequential_messages = [
             {
-                "content": f"Sequential query {i} with detailed context requiring processing",
+                "content": (
+                    f"Sequential query {i} with detailed context requiring processing"
+                ),
                 "role": "user",
             }
             for i in range(5)
@@ -143,7 +147,8 @@ class TestAgentCoordinationPerformance:
         print(f"Sequential tokens: {sequential_tokens}")
         print(f"Parallel tokens: {parallel_tokens}")
         print(
-            f"Optimization metadata present: {'YES' if 'metadata' in optimized_state else 'NO'}"
+            f"Optimization metadata present: "
+            f"{'YES' if 'metadata' in optimized_state else 'NO'}"
         )
 
     def test_memory_usage_fp8_optimization_validation(self):
@@ -165,7 +170,9 @@ class TestAgentCoordinationPerformance:
         for scenario in test_scenarios:
             messages = [
                 {
-                    "content": f"Context message {i} with substantial content for memory testing",
+                    "content": (
+                        f"Context msg {i} with substantial content for memory test"
+                    ),
                     "role": "user",
                 }
                 for i in range(scenario["message_count"])
@@ -200,7 +207,8 @@ class TestAgentCoordinationPerformance:
         print("\nMemory Usage Metrics (FP8 Optimization):")
         for scenario, metrics in memory_metrics.items():
             print(
-                f"{scenario}: {metrics['kv_cache_usage_gb']:.3f}GB ({metrics['token_count']} tokens)"
+                f"{scenario}: {metrics['kv_cache_usage_gb']:.3f}GB "
+                f"({metrics['token_count']} tokens)"
             )
 
     def test_throughput_concurrent_agent_operations(self):
@@ -253,7 +261,8 @@ class TestAgentCoordinationPerformance:
         print("\nThroughput Metrics:")
         for count, metrics in throughput_metrics.items():
             print(
-                f"{count} operations: {metrics['throughput_ops_per_sec']:.2f} ops/sec ({metrics['execution_time']:.3f}s)"
+                f"{count} operations: {metrics['throughput_ops_per_sec']:.2f} ops/sec "
+                f"({metrics['execution_time']:.3f}s)"
             )
 
     def test_latency_individual_agent_response_times(self):
@@ -305,7 +314,8 @@ class TestAgentCoordinationPerformance:
 
         total_latency = sum(agent_latencies.values())
         assert total_latency < 200, (
-            f"Total agent latency {total_latency:.2f}ms exceeds 200ms coordination target"
+            f"Total agent latency {total_latency:.2f}ms exceeds 200ms coordination "
+            "target"
         )
 
         print("\nAgent Latency Benchmarks:")
@@ -392,7 +402,8 @@ class TestAgentCoordinationPerformance:
         time_ratio = complex_time / simple_time
 
         assert time_ratio <= complexity_ratio * 2, (
-            f"Performance degradation {time_ratio:.2f}x too high for complexity increase {complexity_ratio:.2f}x"
+            f"Performance degradation {time_ratio:.2f}x too high for complexity "
+            f"increase {complexity_ratio:.2f}x"
         )
 
         # High complexity should still be manageable
@@ -442,7 +453,8 @@ class TestAsyncCoordinationPerformance:
         sequential_time = 0.01 + 0.02 + 0.03 + 0.02 + 0.01  # Sum of delays
 
         assert execution_time < sequential_time, (
-            f"Async execution {execution_time:.3f}s should be faster than sequential {sequential_time:.3f}s"
+            f"Async execution {execution_time:.3f}s should be faster than sequential "
+            f"{sequential_time:.3f}s"
         )
         assert len(results) == 5, "All async operations should complete"
 
@@ -496,7 +508,8 @@ class TestAsyncCoordinationPerformance:
         print("\nAsync Resource Utilization:")
         for result in results:
             print(
-                f"{result['resource_id']}: {result['efficiency']:.3f} efficiency ({result['duration']:.3f}s)"
+                f"{result['resource_id']}: {result['efficiency']:.3f} efficiency "
+                f"({result['duration']:.3f}s)"
             )
         print(f"Average efficiency: {avg_efficiency:.3f}")
 
