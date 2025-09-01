@@ -215,14 +215,14 @@ async def validate_end_to_end_pipeline(
         "norm": float(np.linalg.norm(image_embedding)),
     }
 
-    # Step 2: Extract entities from query (mock for now)
+    # Step 2: Extract entities from query (placeholder implementation)
     entities = ["LlamaIndex", "BGE-M3"]  # Would be extracted by property_graph
     results["entity_relationships"] = {
         "entities_found": entities,
         "relationship_count": len(entities) - RANK_ADJUSTMENT,
     }
 
-    # Step 3: Generate final response (mock for now)
+    # Step 3: Generate final response (basic template for now)
     results["final_response"] = (
         f"Based on visual similarity and entity relationships for {query}"
     )

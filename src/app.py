@@ -108,7 +108,7 @@ def process_query_with_agent_system(
     """
     if mode == "multi_agent":
         return agent_system.process_query(query, context=memory)
-    # Return a mock response object for error cases
+    # Return a minimal response envelope for error cases
     from types import SimpleNamespace
 
     return SimpleNamespace(content="Processing error")

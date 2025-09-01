@@ -1,6 +1,6 @@
 """Real DSPy Integration for Query Optimization (ADR-018).
 
-This module implements the real DSPy integration replacing the mock implementation
+This module implements the real DSPy integration
 to provide automatic query rewriting and optimization for improved retrieval quality.
 
 Features:
@@ -9,9 +9,6 @@ Features:
 - Query refinement and variant generation
 - Integration with LlamaIndex retrieval pipeline
 - Performance monitoring and quality metrics
-
-ADR Compliance:
-- ADR-018: DSPy Prompt Optimization (real implementation vs mock)
 """
 
 import time

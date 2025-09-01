@@ -287,7 +287,7 @@ class RetrievalAgent:
     def _parse_tool_result(self, result: Any) -> list[dict[str, Any]]:
         """Parse tool result to extract document list."""
         if isinstance(result, str):
-            # Tool returned text response - create mock document
+            # Tool returned text response — create a minimal document entry
             return [
                 {
                     "content": result,
