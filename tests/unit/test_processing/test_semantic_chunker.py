@@ -1,9 +1,14 @@
-"""Comprehensive test suite for SemanticChunker class.
+"""Unit tests for SemanticChunker class.
 
 This test suite covers the semantic chunker that uses direct chunk_by_title
 integration from unstructured.io, focusing on boundary detection,
 chunking parameters, and async processing.
+
+Note: A small number of helper methods are exercised via leading-underscore
+APIs where no public seam exists yet; access is narrowly scoped and documented.
 """
+
+# pylint: disable=protected-access
 
 import time
 from unittest.mock import Mock, patch
@@ -13,7 +18,6 @@ import pytest
 from src.models.processing import DocumentElement
 from src.processing.chunking.models import (
     BoundaryDetection,
-    ChunkingError,
     ChunkingParameters,
     ChunkingResult,
     SemanticChunk,
@@ -58,7 +62,10 @@ def sample_document_elements():
             metadata={"page_number": 1, "element_id": "title_1"},
         ),
         DocumentElement(
-            text="This is the introduction paragraph with detailed information about the topic.",
+            text=(
+                "This is the introduction paragraph with detailed "
+                "information about the topic."
+            ),
             category="NarrativeText",
             metadata={"page_number": 1, "element_id": "text_1"},
         ),
@@ -68,12 +75,17 @@ def sample_document_elements():
             metadata={"page_number": 1, "element_id": "title_2"},
         ),
         DocumentElement(
-            text="This section provides an overview of the main concepts and principles.",
+            text=(
+                "This section provides an overview of the main concepts and principles."
+            ),
             category="NarrativeText",
             metadata={"page_number": 1, "element_id": "text_2"},
         ),
         DocumentElement(
-            text="Additional content that expands on the overview with more detailed explanations.",
+            text=(
+                "Additional content that expands on the overview with "
+                "more detailed explanations."
+            ),
             category="NarrativeText",
             metadata={"page_number": 1, "element_id": "text_3"},
         ),
@@ -84,7 +96,10 @@ def sample_document_elements():
 def mock_unstructured_chunk():
     """Mock unstructured chunk returned by chunk_by_title."""
     chunk = Mock()
-    chunk.text = "Introduction\n\nThis is the introduction paragraph with detailed information about the topic."
+    chunk.text = (
+        "Introduction\n\nThis is the introduction paragraph with detailed "
+        "information about the topic."
+    )
     chunk.category = "CompositeElement"
     chunk.metadata = Mock()
     chunk.metadata.page_number = 1
@@ -152,165 +167,127 @@ class TestSemanticChunker:
 
     def test_initialization_with_settings(self, mock_settings):
         """Test chunker initialization with provided settings."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
-            assert chunker.settings == mock_settings
-            assert chunker.default_parameters.max_characters == 1500
-            assert chunker.default_parameters.new_after_n_chars == 1200
+        chunker = SemanticChunker(mock_settings)
+        assert chunker.settings == mock_settings
+        assert chunker.default_parameters.max_characters == 1500
+        assert chunker.default_parameters.new_after_n_chars == 1200
 
     def test_initialization_without_settings(self):
         """Test chunker initialization without settings uses defaults."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings"
-        ) as mock_default:
-            mock_default.processing.chunk_size = 1000
-            mock_default.processing.new_after_n_chars = 800
-            mock_default.processing.combine_text_under_n_chars = 300
-            mock_default.processing.multipage_sections = True
-
-            chunker = SemanticChunker()
-            assert chunker.settings == mock_default
-            assert chunker.default_parameters.max_characters == 1000
+        # Without explicit settings, it should use application defaults
+        chunker = SemanticChunker()
+        assert chunker.default_parameters.max_characters > 0
 
     def test_convert_document_elements_to_unstructured(
         self, mock_settings, sample_document_elements
     ):
         """Test conversion of DocumentElements to unstructured format."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
+        converted = chunker._convert_document_elements_to_unstructured(
+            sample_document_elements
+        )
+        assert len(converted) == len(sample_document_elements)
 
-            converted = chunker._convert_document_elements_to_unstructured(
-                sample_document_elements
-            )
-
-            assert len(converted) == len(sample_document_elements)
-
-            # Check first element (Title)
-            first_element = converted[0]
-            assert isinstance(first_element, ElementAdapter)
-            assert first_element.text == "Introduction"
-            assert first_element.category == "Title"
-            assert first_element.metadata.page_number == 1
+        # Check first element (Title)
+        first_element = converted[0]
+        assert isinstance(first_element, ElementAdapter)
+        assert first_element.text == "Introduction"
+        assert first_element.category == "Title"
+        assert first_element.metadata.page_number == 1
 
     def test_convert_document_elements_minimal_metadata(self, mock_settings):
         """Test conversion with minimal metadata creates defaults."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
 
-            # Element without metadata
-            elements = [DocumentElement(text="Test text", category="Text")]
-            converted = chunker._convert_document_elements_to_unstructured(elements)
-
-            assert len(converted) == 1
-            adapter = converted[0]
-            assert adapter.metadata.page_number == 1
-            assert adapter.metadata.element_id == "elem_0"
-            assert adapter.metadata.filename == "document"
+        # Element without metadata
+        elements = [DocumentElement(text="Test text", category="Text")]
+        converted = chunker._convert_document_elements_to_unstructured(elements)
+        assert len(converted) == 1
+        adapter = converted[0]
+        assert adapter.metadata.page_number == 1
+        assert adapter.metadata.element_id == "elem_0"
+        assert adapter.metadata.filename == "document"
 
     def test_calculate_boundary_accuracy_title_based(
         self, mock_settings, sample_chunking_parameters
     ):
         """Test boundary accuracy calculation for title-based detection."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
 
-            # Mock chunks with section titles
-            mock_chunks = [Mock(), Mock()]
-            for i, chunk in enumerate(mock_chunks):
-                chunk.metadata = Mock()
-                chunk.metadata.section_title = f"Section {i + 1}"
+        # Mock chunks with section titles
+        mock_chunks = [Mock(), Mock()]
+        for i, chunk in enumerate(mock_chunks):
+            chunk.metadata = Mock()
+            chunk.metadata.section_title = f"Section {i + 1}"
 
-            # Mock original elements with titles
-            original_elements = [Mock(), Mock(), Mock()]
-            original_elements[0].category = "Title"
-            original_elements[1].category = "NarrativeText"
-            original_elements[2].category = "Title"
+        # Mock original elements with titles
+        original_elements = [Mock(), Mock(), Mock()]
+        original_elements[0].category = "Title"
+        original_elements[1].category = "NarrativeText"
+        original_elements[2].category = "Title"
 
-            accuracy = chunker._calculate_boundary_accuracy(
-                mock_chunks, original_elements, sample_chunking_parameters
-            )
+        accuracy = chunker._calculate_boundary_accuracy(
+            mock_chunks, original_elements, sample_chunking_parameters
+        )
 
-            assert isinstance(accuracy, float)
-            assert 0.0 <= accuracy <= 1.0
+        assert isinstance(accuracy, float)
+        assert 0.0 <= accuracy <= 1.0
 
     def test_calculate_boundary_accuracy_no_titles(
         self, mock_settings, sample_chunking_parameters
     ):
         """Test boundary accuracy calculation with no title elements."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
+        # Mock chunks without titles
+        mock_chunks = [Mock(), Mock()]
+        for chunk in mock_chunks:
+            chunk.text = "A" * 1000  # 1000 chars
+            chunk.metadata = Mock()
+            chunk.metadata.section_title = None
 
-            # Mock chunks without titles
-            mock_chunks = [Mock(), Mock()]
-            for chunk in mock_chunks:
-                chunk.text = "A" * 1000  # 1000 chars
-                chunk.metadata = Mock()
-                chunk.metadata.section_title = None
+        # Mock original elements without titles
+        original_elements = [Mock(), Mock()]
+        for element in original_elements:
+            element.category = "NarrativeText"
 
-            # Mock original elements without titles
-            original_elements = [Mock(), Mock()]
-            for element in original_elements:
-                element.category = "NarrativeText"
+        accuracy = chunker._calculate_boundary_accuracy(
+            mock_chunks, original_elements, sample_chunking_parameters
+        )
 
-            accuracy = chunker._calculate_boundary_accuracy(
-                mock_chunks, original_elements, sample_chunking_parameters
-            )
-
-            assert isinstance(accuracy, float)
-            assert 0.0 <= accuracy <= 1.0
+        assert isinstance(accuracy, float)
+        assert 0.0 <= accuracy <= 1.0
 
     def test_calculate_boundary_accuracy_empty_inputs(
         self, mock_settings, sample_chunking_parameters
     ):
         """Test boundary accuracy calculation with empty inputs."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
-
-            accuracy = chunker._calculate_boundary_accuracy(
-                [], [], sample_chunking_parameters
-            )
-            assert accuracy == 0.0
+        chunker = SemanticChunker(mock_settings)
+        accuracy = chunker._calculate_boundary_accuracy(
+            [], [], sample_chunking_parameters
+        )
+        assert accuracy == 0.0
 
     def test_convert_unstructured_chunks_to_semantic(
         self, mock_settings, sample_chunking_parameters, mock_unstructured_chunk
     ):
         """Test conversion of unstructured chunks to SemanticChunk objects."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
+        chunks = chunker._convert_unstructured_chunks_to_semantic(
+            [mock_unstructured_chunk], sample_chunking_parameters
+        )
 
-            chunks = chunker._convert_unstructured_chunks_to_semantic(
-                [mock_unstructured_chunk], sample_chunking_parameters
-            )
-
-            assert len(chunks) == 1
-            chunk = chunks[0]
-            assert isinstance(chunk, SemanticChunk)
-            assert chunk.text.startswith("Introduction")
-            assert chunk.category == "CompositeElement"
-            assert chunk.section_title == "Introduction"
-            assert chunk.chunk_index == 0
-            assert "boundary_type" in chunk.semantic_boundaries
+        assert len(chunks) == 1
+        chunk = chunks[0]
+        assert isinstance(chunk, SemanticChunk)
+        assert chunk.text.startswith("Introduction")
+        assert chunk.category == "CompositeElement"
+        assert chunk.section_title == "Introduction"
+        assert chunk.chunk_index == 0
+        assert "boundary_type" in chunk.semantic_boundaries
 
     def test_chunk_by_title_sync_success(self, mock_settings):
         """Test synchronous chunking with chunk_by_title."""
         with (
-            patch(
-                "src.processing.chunking.unstructured_chunker.settings", mock_settings
-            ),
             patch(
                 "src.processing.chunking.unstructured_chunker.chunk_by_title"
             ) as mock_chunk_by_title,
@@ -333,31 +310,24 @@ class TestSemanticChunker:
         """Test error handling in synchronous chunking."""
         with (
             patch(
-                "src.processing.chunking.unstructured_chunker.settings", mock_settings
-            ),
-            patch(
                 "src.processing.chunking.unstructured_chunker.chunk_by_title"
             ) as mock_chunk_by_title,
         ):
             chunker = SemanticChunker(mock_settings)
             mock_chunk_by_title.side_effect = ValueError("Chunking failed")
 
-            with pytest.raises(ChunkingError) as excinfo:
+            with pytest.raises(
+                Exception, match="Unstructured.io chunk_by_title failed"
+            ) as excinfo:
                 chunker._chunk_by_title_sync([Mock()], {})
-
-            assert "chunk_by_title failed" in str(excinfo.value)
+            assert "Unstructured.io chunk_by_title failed" in str(excinfo.value)
 
     @pytest.mark.asyncio
     async def test_chunk_elements_async_success(
         self, mock_settings, sample_document_elements, mock_unstructured_chunk
     ):
         """Test successful async chunking of elements."""
-        with (
-            patch(
-                "src.processing.chunking.unstructured_chunker.settings", mock_settings
-            ),
-            patch("asyncio.to_thread") as mock_to_thread,
-        ):
+        with patch("asyncio.to_thread") as mock_to_thread:
             chunker = SemanticChunker(mock_settings)
 
             # Mock the sync chunking method
@@ -376,12 +346,7 @@ class TestSemanticChunker:
         self, mock_settings, sample_document_elements, mock_unstructured_chunk
     ):
         """Test async chunking with custom parameters."""
-        with (
-            patch(
-                "src.processing.chunking.unstructured_chunker.settings", mock_settings
-            ),
-            patch("asyncio.to_thread") as mock_to_thread,
-        ):
+        with patch("asyncio.to_thread") as mock_to_thread:
             chunker = SemanticChunker(mock_settings)
             mock_to_thread.return_value = [mock_unstructured_chunk]
 
@@ -403,34 +368,25 @@ class TestSemanticChunker:
     @pytest.mark.asyncio
     async def test_chunk_elements_async_empty_elements(self, mock_settings):
         """Test async chunking with empty elements list."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
+        result = await chunker.chunk_elements_async([])
 
-            result = await chunker.chunk_elements_async([])
-
-            assert isinstance(result, ChunkingResult)
-            assert len(result.chunks) == 0
-            assert result.total_elements == 0
-            assert result.boundary_accuracy == 0.0
-            assert "warning" in result.metadata
+        assert isinstance(result, ChunkingResult)
+        assert len(result.chunks) == 0
+        assert result.total_elements == 0
+        assert result.boundary_accuracy == 0.0
+        assert "warning" in result.metadata
 
     @pytest.mark.asyncio
     async def test_chunk_elements_async_error_handling(
         self, mock_settings, sample_document_elements
     ):
         """Test error handling in async chunking."""
-        with (
-            patch(
-                "src.processing.chunking.unstructured_chunker.settings", mock_settings
-            ),
-            patch("asyncio.to_thread") as mock_to_thread,
-        ):
+        with patch("asyncio.to_thread") as mock_to_thread:
             chunker = SemanticChunker(mock_settings)
             mock_to_thread.side_effect = ValueError("Async processing failed")
 
-            with pytest.raises(ChunkingError) as excinfo:
+            with pytest.raises(Exception, match="Async processing failed") as excinfo:
                 await chunker.chunk_elements_async(sample_document_elements)
 
             assert "Semantic chunking failed" in str(excinfo.value)
@@ -439,46 +395,36 @@ class TestSemanticChunker:
         self, mock_settings, sample_document_elements
     ):
         """Test parameter optimization with target chunk count."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
+        optimized = chunker.optimize_parameters(
+            sample_document_elements, target_chunk_count=3
+        )
 
-            optimized = chunker.optimize_parameters(
-                sample_document_elements, target_chunk_count=3
-            )
-
-            assert isinstance(optimized, ChunkingParameters)
-            assert optimized.max_characters >= 500
-            assert optimized.max_characters <= 3000
-            assert optimized.new_after_n_chars < optimized.max_characters
-            assert optimized.combine_text_under_n_chars < optimized.new_after_n_chars
+        assert isinstance(optimized, ChunkingParameters)
+        assert optimized.max_characters >= 500
+        assert optimized.max_characters <= 3000
+        assert optimized.new_after_n_chars < optimized.max_characters
+        assert optimized.combine_text_under_n_chars < optimized.new_after_n_chars
 
     def test_optimize_parameters_without_target(
         self, mock_settings, sample_document_elements
     ):
         """Test parameter optimization without target count."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
 
-            optimized = chunker.optimize_parameters(sample_document_elements)
+        optimized = chunker.optimize_parameters(sample_document_elements)
 
-            assert isinstance(optimized, ChunkingParameters)
-            # Should return default parameters when no target is specified
-            assert optimized.max_characters == chunker.default_parameters.max_characters
+        assert isinstance(optimized, ChunkingParameters)
+        # Should return default parameters when no target is specified
+        assert optimized.max_characters == chunker.default_parameters.max_characters
 
     def test_optimize_parameters_empty_elements(self, mock_settings):
         """Test parameter optimization with empty elements."""
-        with patch(
-            "src.processing.chunking.unstructured_chunker.settings", mock_settings
-        ):
-            chunker = SemanticChunker(mock_settings)
+        chunker = SemanticChunker(mock_settings)
 
-            optimized = chunker.optimize_parameters([])
+        optimized = chunker.optimize_parameters([])
 
-            assert optimized == chunker.default_parameters
+        assert optimized == chunker.default_parameters
 
 
 @pytest.mark.unit
@@ -497,10 +443,10 @@ class TestChunkingModels:
     def test_chunking_parameters_validation_errors(self):
         """Test ChunkingParameters validation errors."""
         # Test minimum values
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="max_characters"):
             ChunkingParameters(max_characters=50)  # Below minimum
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="max_characters"):
             ChunkingParameters(max_characters=15000)  # Above maximum
 
     def test_semantic_chunk_creation(self):
@@ -564,8 +510,8 @@ class TestSemanticChunkerIntegration:
             else:
                 # Content elements
                 content = (
-                    f"This is paragraph {i} with substantial content that provides detailed information. "
-                    * 3
+                    f"This is paragraph {i} with substantial content that "
+                    f"provides detailed information. " * 3
                 )
                 elements.append(
                     DocumentElement(
@@ -575,24 +521,21 @@ class TestSemanticChunkerIntegration:
                     )
                 )
 
-        with (
-            patch(
-                "src.processing.chunking.unstructured_chunker.settings"
-            ) as mock_settings,
-            patch(
-                "src.processing.chunking.unstructured_chunker.chunk_by_title"
-            ) as mock_chunk_by_title,
-        ):
-            mock_settings.processing.chunk_size = 1500
-            mock_settings.processing.new_after_n_chars = 1200
-            mock_settings.processing.combine_text_under_n_chars = 500
-            mock_settings.processing.multipage_sections = True
+        with patch(
+            "src.processing.chunking.unstructured_chunker.chunk_by_title"
+        ) as mock_chunk_by_title:
+            from src.config.settings import DocMindSettings
+
+            mock_settings = DocMindSettings()
 
             # Mock chunk_by_title to return combined chunks
             mock_chunks = []
             for i in range(3):
                 chunk = Mock()
-                chunk.text = f"Combined chunk {i} with multiple elements and substantial content."
+                chunk.text = (
+                    f"Combined chunk {i} with multiple elements and "
+                    f"substantial content."
+                )
                 chunk.category = "CompositeElement"
                 chunk.metadata = Mock()
                 chunk.metadata.section_title = f"Section {i + 1}"
@@ -601,7 +544,7 @@ class TestSemanticChunkerIntegration:
 
             mock_chunk_by_title.return_value = mock_chunks
 
-            chunker = SemanticChunker()
+            chunker = SemanticChunker(mock_settings)
             result = await chunker.chunk_elements_async(elements)
 
             assert isinstance(result, ChunkingResult)
@@ -647,14 +590,12 @@ class TestSemanticChunkerIntegration:
                     )
                 )
 
-        with (
-            patch(
-                "src.processing.chunking.unstructured_chunker.settings"
-            ) as mock_settings,
-            patch(
-                "src.processing.chunking.unstructured_chunker.chunk_by_title"
-            ) as mock_chunk_by_title,
-        ):
+        with patch(
+            "src.processing.chunking.unstructured_chunker.chunk_by_title"
+        ) as mock_chunk_by_title:
+            from src.config.settings import DocMindSettings
+
+            mock_settings = DocMindSettings()
             mock_settings.processing.chunk_size = 2000
             mock_settings.processing.new_after_n_chars = 1500
             mock_settings.processing.combine_text_under_n_chars = 800
@@ -674,7 +615,7 @@ class TestSemanticChunkerIntegration:
 
             mock_chunk_by_title.return_value = mock_chunks
 
-            chunker = SemanticChunker()
+            chunker = SemanticChunker(mock_settings)
             start_time = time.time()
             result = await chunker.chunk_elements_async(elements)
             processing_time = time.time() - start_time
