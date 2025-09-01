@@ -20,20 +20,10 @@ Usage:
 from .integrations import initialize_integrations, setup_llamaindex
 from .settings import settings
 
-# Initialize LlamaIndex automatically on import
-try:
-    setup_llamaindex()
-    import logging
-
-    logging.getLogger(__name__).info(
-        "LlamaIndex configuration initialized successfully"
-    )
-except Exception as e:  # pylint: disable=broad-exception-caught
-    import logging
-
-    logging.getLogger(__name__).error(
-        "Failed to initialize LlamaIndex configuration: %s", e
-    )
+# IMPORTANT:
+# Do NOT auto-initialize LlamaIndex on import. Tests and CLI may import
+# src.config for settings without bringing in heavy integration side effects.
+# Call initialize_integrations()/setup_llamaindex() explicitly where needed.
 
 __all__ = [
     "settings",

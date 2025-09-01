@@ -9,7 +9,10 @@ from src.retrieval.query_engine import AdaptiveRouterQueryEngine
 
 @pytest.mark.unit
 def test_detect_multimodal_query_branches(mock_vector_index, mock_llm_for_routing):
-    engine = AdaptiveRouterQueryEngine(vector_index=mock_vector_index, llm=mock_llm_for_routing)
+    """Test multimodal query detection with various query patterns."""
+    engine = AdaptiveRouterQueryEngine(
+        vector_index=mock_vector_index, llm=mock_llm_for_routing
+    )
 
     true_cases = [
         "Show me diagrams of the pipeline",
@@ -36,6 +39,7 @@ def test_detect_multimodal_query_branches(mock_vector_index, mock_llm_for_routin
 
 @pytest.mark.unit
 def test_create_router_engine_raises_when_no_tools(mock_llm_for_routing):
+    """Test that router engine creation fails when no query tools are available."""
     # Build engine, then delete tools and ensure the guard trips
     vec = MagicMock()
     vec.as_query_engine.return_value = MagicMock()
@@ -47,8 +51,13 @@ def test_create_router_engine_raises_when_no_tools(mock_llm_for_routing):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_aquery_fallback_on_router_failure(mock_vector_index, mock_llm_for_routing):
-    engine = AdaptiveRouterQueryEngine(vector_index=mock_vector_index, llm=mock_llm_for_routing)
+async def test_aquery_fallback_on_router_failure(
+    mock_vector_index, mock_llm_for_routing
+):
+    """Test async query fallback mechanism when router engine fails."""
+    engine = AdaptiveRouterQueryEngine(
+        vector_index=mock_vector_index, llm=mock_llm_for_routing
+    )
     engine.router_engine.aquery = AsyncMock(side_effect=RuntimeError("boom"))
 
     fallback = MagicMock()
@@ -61,9 +70,11 @@ async def test_aquery_fallback_on_router_failure(mock_vector_index, mock_llm_for
 
 @pytest.mark.unit
 def test_get_available_strategies_names(mock_vector_index, mock_llm_for_routing):
-    engine = AdaptiveRouterQueryEngine(vector_index=mock_vector_index, llm=mock_llm_for_routing)
+    """Test retrieval of available query strategy names."""
+    engine = AdaptiveRouterQueryEngine(
+        vector_index=mock_vector_index, llm=mock_llm_for_routing
+    )
     names = engine.get_available_strategies()
     # At minimum semantic and multi_query are present
     assert "semantic_search" in names
     assert "multi_query_search" in names
-

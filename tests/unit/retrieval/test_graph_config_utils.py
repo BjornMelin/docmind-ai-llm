@@ -11,30 +11,42 @@ import pytest
 
 @pytest.mark.unit
 def test_create_tech_schema_contains_expected_entities_relations():
+    """Test that tech schema contains expected entities and relations."""
     from src.retrieval.graph_config import create_tech_schema
 
     schema = create_tech_schema()
     assert set(schema.keys()) == {"entities", "relations"}
-    assert "FRAMEWORK" in schema["entities"] and "ORG" in schema["entities"]
-    assert "USES" in schema["relations"] and "SUPPORTS" in schema["relations"]
+    assert "FRAMEWORK" in schema["entities"]
+    assert "ORG" in schema["entities"]
+    assert "USES" in schema["relations"]
+    assert "SUPPORTS" in schema["relations"]
 
 
 @pytest.mark.unit
 def test_calculate_entity_confidence_branches():
+    """Test entity confidence calculation with different scenarios."""
     from src.retrieval.graph_config import (
         CONTEXT_LENGTH_THRESHOLD,
-        calculate_entity_confidence,
         MAX_CONFIDENCE_SCORE,
+        calculate_entity_confidence,
     )
 
     schema = {"entities": ["MODEL", "HARDWARE"]}
 
-    base_entity = {"type": "MODEL", "extractor": "SchemaLLMPathExtractor", "context": "x" * (CONTEXT_LENGTH_THRESHOLD + 5)}
+    base_entity = {
+        "type": "MODEL",
+        "extractor": "SchemaLLMPathExtractor",
+        "context": "x" * (CONTEXT_LENGTH_THRESHOLD + 5),
+    }
     score = calculate_entity_confidence(base_entity, schema)
     assert 0.0 < score <= MAX_CONFIDENCE_SCORE
 
     # Different extractor path
-    simple_entity = {"type": "HARDWARE", "extractor": "SimpleLLMPathExtractor", "context": "short"}
+    simple_entity = {
+        "type": "HARDWARE",
+        "extractor": "SimpleLLMPathExtractor",
+        "context": "short",
+    }
     score2 = calculate_entity_confidence(simple_entity, schema)
     assert score2 < score  # less context bonus
 
@@ -46,6 +58,7 @@ def test_calculate_entity_confidence_branches():
 
 @pytest.mark.unit
 def test_extend_property_graph_index_attaches_helpers():
+    """Test that property graph index extension attaches helper methods."""
     from src.retrieval.graph_config import extend_property_graph_index
 
     dummy_index = SimpleNamespace()
@@ -56,4 +69,3 @@ def test_extend_property_graph_index_attaches_helpers():
     assert callable(extended.extract_relationships)
     assert callable(extended.traverse_graph)
     assert callable(extended.query)
-

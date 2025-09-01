@@ -10,14 +10,17 @@ Covers:
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 
 @pytest.mark.unit
 class TestDetectHardware:
+    """Test cases for hardware detection functionality."""
+
     def test_detect_hardware_cuda_available(self):
+        """Test hardware detection when CUDA is available."""
         from src.utils import core
 
         with (
@@ -28,7 +31,11 @@ class TestDetectHardware:
                 "get_device_properties",
                 return_value=SimpleNamespace(total_memory=16 * 1024**3),  # 16GB
             ),
-            patch.object(core.settings, "monitoring", SimpleNamespace(bytes_to_gb_divisor=1024**3)),
+            patch.object(
+                core.settings,
+                "monitoring",
+                SimpleNamespace(bytes_to_gb_divisor=1024**3),
+            ),
         ):
             info = core.detect_hardware()
         assert info["cuda_available"] is True
@@ -37,6 +44,7 @@ class TestDetectHardware:
         assert info["vram_total_gb"] == 16.0
 
     def test_detect_hardware_no_cuda(self):
+        """Test hardware detection when CUDA is not available."""
         from src.utils import core
 
         with patch.object(core.torch.cuda, "is_available", return_value=False):
@@ -48,14 +56,20 @@ class TestDetectHardware:
 
 @pytest.mark.unit
 class TestValidateStartupConfiguration:
+    """Test cases for startup configuration validation."""
+
     def _settings(self, *, strategy="hybrid", alpha=70):
+        """Create mock settings object for testing."""
         return SimpleNamespace(
             database=SimpleNamespace(qdrant_url="http://localhost:6333"),
             enable_gpu_acceleration=False,
-            retrieval=SimpleNamespace(strategy=strategy, rrf_alpha=alpha, rrf_k_constant=60),
+            retrieval=SimpleNamespace(
+                strategy=strategy, rrf_alpha=alpha, rrf_k_constant=60
+            ),
         )
 
     def test_validate_startup_configuration_success(self):
+        """Test successful startup configuration validation."""
         from src.utils import core
 
         mock_client = MagicMock()
@@ -66,26 +80,37 @@ class TestValidateStartupConfiguration:
             result = core.validate_startup_configuration(self._settings())
 
         assert result["valid"] is True
-        assert any("Qdrant connection successful" in s for s in result["info"])  # connectivity checked
+        assert any(
+            "Qdrant connection successful" in s for s in result["info"]
+        )  # connectivity checked
 
         # client closed
         mock_client.get_collections.assert_called_once()
         mock_client.close.assert_called_once()
 
     def test_validate_startup_configuration_qdrant_failure_raises(self):
+        """Test startup configuration validation when Qdrant connection fails."""
         from src.utils import core
 
-        with patch("qdrant_client.QdrantClient", side_effect=ConnectionError("down")):
-            with pytest.raises(RuntimeError, match="Critical configuration errors"):
-                core.validate_startup_configuration(self._settings())
+        with (
+            patch("qdrant_client.QdrantClient", side_effect=ConnectionError("down")),
+            pytest.raises(RuntimeError, match="Critical configuration errors"),
+        ):
+            core.validate_startup_configuration(self._settings())
 
 
 @pytest.mark.unit
 class TestVerifyRRFConfiguration:
+    """Test cases for RRF (Reciprocal Rank Fusion) configuration validation."""
+
     def _settings(self, alpha):
-        return SimpleNamespace(retrieval=SimpleNamespace(rrf_alpha=alpha, rrf_k_constant=60))
+        """Create mock settings object for RRF testing."""
+        return SimpleNamespace(
+            retrieval=SimpleNamespace(rrf_alpha=alpha, rrf_k_constant=60)
+        )
 
     def test_rrf_in_range(self):
+        """Test RRF configuration validation with valid alpha value."""
         from src.utils.core import verify_rrf_configuration
 
         result = verify_rrf_configuration(self._settings(70))
@@ -95,16 +120,20 @@ class TestVerifyRRFConfiguration:
         assert result["computed_hybrid_alpha"] == pytest.approx(0.7, rel=1e-6)
 
     def test_rrf_out_of_range(self):
+        """Test RRF configuration validation with invalid alpha value."""
         from src.utils.core import verify_rrf_configuration
 
         result = verify_rrf_configuration(self._settings(5))
         assert result["alpha_in_range"] is False
-        assert any("RRF alpha" in issue for issue in result["issues"])  # recommendation emitted
+        assert any(
+            "RRF alpha" in issue for issue in result["issues"]
+        )  # recommendation emitted
 
 
 @pytest.mark.asyncio
 @pytest.mark.unit
 async def test_managed_gpu_operation_calls_cuda_cleanup():
+    """Test that managed GPU operation performs proper CUDA cleanup."""
     from src.utils import core
 
     with (
@@ -123,6 +152,7 @@ async def test_managed_gpu_operation_calls_cuda_cleanup():
 @pytest.mark.asyncio
 @pytest.mark.unit
 async def test_managed_async_qdrant_client_lifecycle():
+    """Test that managed async Qdrant client handles lifecycle correctly."""
     from src.utils import core
 
     fake_client = SimpleNamespace(close=AsyncMock())
@@ -136,6 +166,7 @@ async def test_managed_async_qdrant_client_lifecycle():
 @pytest.mark.asyncio
 @pytest.mark.unit
 async def test_async_timer_decorator_times_and_logs():
+    """Test that async timer decorator measures execution time and logs it."""
     from src.utils import core
 
     @core.async_timer
