@@ -177,6 +177,24 @@ known-first-party = ["docmind_ai"]
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+# Pylint configuration to keep tests clean without noisy warnings
+[tool.pylint.main]
+py-version = "3.12"
+jobs = 0
+limit-inference-results = 100
+extension-pkg-allow-list = ["llama_index", "torch"]
+
+# Keep pylint messages strict; use targeted per-file disables in tests when needed.
+
+[tool.pylint.basic]
+good-names = [
+  "i","j","k","ex","e","x","y","z","_",
+  "t1","t2","t3","db","df","ax","ok","id","llm","ctx",
+]
+
+[tool.pylint.format]
+max-line-length = 88
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -250,6 +268,7 @@ dev = [
     "responses>=0.25.8",
     "pytest-httpx>=0.35.0",
     "testcontainers>=4.12.0",
+    "coverage-badge>=1.1.2",
 ]
 test = [
     "pytest==8.3.1",
