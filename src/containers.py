@@ -66,7 +66,6 @@ class ApplicationContainer(containers.DeclarativeContainer):
     )
 
 
-
 def create_container() -> ApplicationContainer:
     """Create and configure the appropriate container.
 
