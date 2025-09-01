@@ -907,9 +907,15 @@ Contributions are welcome! Please follow these steps:
 4. **Run tests and linting:**
 
    ```bash
-   ruff check . --fix
-   ruff format .
-   pytest tests/
+   # Lint & format
+   ruff format . && ruff check .
+   uv run pylint -j 0 -sn --rcfile=pyproject.toml src tests/unit
+
+   # Unit tests with coverage
+   uv run pytest tests/unit -m unit --cov=src -q
+
+   # Integration tests (offline; no coverage gating)
+   uv run pytest tests/integration -m integration --no-cov -q
    ```
 
 5. **Submit a pull request** with clear description of changes
@@ -925,6 +931,29 @@ Contributions are welcome! Please follow these steps:
 - Write tests for new functionality
 
 - Update documentation as needed
+
+#### 🧪 Tests and CI
+
+We use a tiered test strategy and keep everything offline by default:
+
+- Unit (fast, offline): mocks only; no network/GPU.
+- Integration (offline): component interactions; router uses a session‑autouse MockLLM fixture in `tests/integration/conftest.py`, preventing any Ollama/remote calls.
+- System/E2E (optional): heavier flows beyond the PR quality gates.
+
+Quick local commands:
+
+```bash
+# Unit only (with coverage)
+uv run pytest tests/unit -m unit --cov=src -q
+
+# Integration only (offline; no coverage gating)
+uv run pytest tests/integration -m integration --no-cov -q
+
+# Combined (unit + integration) with coverage on src only
+uv run pytest -m "unit or integration" --cov=src -q
+```
+
+CI pipeline runs unit tests with coverage and a separate integration job without coverage gating. This keeps coverage gates stable while preserving integration signal.
 
 See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed guidelines.
 
