@@ -91,9 +91,13 @@ class TestAdaptiveRouterQueryEngineIntegration:
 class TestAdaptiveRouterQueryEngineFactories:
     """Factory and configuration helper tests."""
 
-    def test_create_adaptive_router_engine_minimal(self, mock_vector_index, mock_llm_for_routing):
+    def test_create_adaptive_router_engine_minimal(
+        self, mock_vector_index, mock_llm_for_routing
+    ):
         """Creates a minimal engine with only a vector index."""
-        router_engine = create_adaptive_router_engine(mock_vector_index, llm=mock_llm_for_routing)
+        router_engine = create_adaptive_router_engine(
+            mock_vector_index, llm=mock_llm_for_routing
+        )
         assert isinstance(router_engine, AdaptiveRouterQueryEngine)
         assert router_engine.vector_index == mock_vector_index
 

@@ -21,4 +21,3 @@ def integration_llm_guard() -> None:
         yield
     finally:
         Settings.llm = original_llm
-
