@@ -355,6 +355,6 @@ See these working patterns in the codebase:
 
 - `tests/conftest.py::centralized_settings_with_temp_dirs`
 - `tests/conftest.py::temp_settings_dirs`
-- `tests/unit/test_settings.py::test_cache_directory_creation`
+- `tests/unit/config/test_settings.py::test_cache_directory_creation`
 
 **Remember**: Always use pytest's `tmp_path` fixture for temporary directories in tests!

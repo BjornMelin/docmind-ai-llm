@@ -309,8 +309,8 @@ class TestRunner:
             "uv",
             "run",
             "pytest",
-            "tests/unit/test_models.py",
-            "tests/unit/test_config_validation.py",
+            "tests/unit/models/test_models.py",
+            "tests/unit/config/test_validation.py",
             "-v",
             "--tb=line",
             "--maxfail=3",  # Stop after 3 failures for smoke tests
