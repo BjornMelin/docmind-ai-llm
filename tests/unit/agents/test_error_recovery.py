@@ -335,7 +335,7 @@ class TestAgentErrorRecovery:
 
         # When: Validation fails initially then succeeds
         with patch(
-            "tests.unit.test_agents_error_recovery.validate_response"
+            "tests.unit.agents.test_error_recovery.validate_response"
         ) as mock_tool:
             mock_tool.invoke.side_effect = lambda inp: validation_failure_simulation(
                 inp["query"], inp["response"], inp.get("_state")

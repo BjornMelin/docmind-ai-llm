@@ -338,9 +338,8 @@ class TestBGECrossEncoderRerankPostprocessing:
         assert call_kwargs["show_progress_bar"] is False
 
     @patch("src.retrieval.reranking.CrossEncoder")
-    def test_avoids_double_normalization_when_scores_in_unit_interval(
-        self, mock_cross
-    ):
+    def test_avoids_double_normalization_when_scores_in_unit_interval(self, mock_cross):
+        """When model returns probabilities in [0,1], skip extra sigmoid."""
         from src.retrieval.reranking import BGECrossEncoderRerank
 
         mock_model = Mock()
@@ -362,11 +361,11 @@ class TestBGECrossEncoderRerankPostprocessing:
 
     @patch("src.retrieval.reranking.CrossEncoder")
     def test_applies_sigmoid_when_logits_returned(self, mock_cross):
-        import torch as _torch
+        """When model returns logits, apply sigmoid normalization."""
         from src.retrieval.reranking import BGECrossEncoderRerank
 
         logits = np.array([2.0, 0.0, -1.0])
-        expected = _torch.sigmoid(_torch.tensor(logits)).numpy().tolist()
+        expected = torch.sigmoid(torch.tensor(logits)).numpy().tolist()
 
         mock_model = Mock()
         mock_model.predict.return_value = logits

@@ -5,8 +5,6 @@ and error logging. Uses lightweight boundary fixtures to keep tests
 deterministic and offline.
 """
 
- 
-
 import pytest
 
 from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
