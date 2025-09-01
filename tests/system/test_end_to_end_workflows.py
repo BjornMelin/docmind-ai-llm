@@ -202,9 +202,12 @@ class TestCompleteDocumentWorkflows:
         for i in range(50):  # 50 documents to test scalability
             large_document_batch.append(
                 Document(
-                    text=f"Document {i} content with various technical topics including "
-                    f"machine learning, natural language processing, and system architecture. "
-                    f"This document covers topic {i % 10} in detail with examples.",
+                    text=(
+                        f"Document {i} content with various technical topics including "
+                        "machine learning, natural language processing, and system "
+                        f"architecture. This document covers topic {i % 10} in "
+                        "detail with examples."
+                    ),
                     metadata={
                         "source": f"doc_{i}.pdf",
                         "page": i % 5 + 1,
@@ -263,7 +266,10 @@ class TestMultiAgentCoordinationWorkflows:
         mock_index = MagicMock(spec=VectorStoreIndex)
         mock_query_engine = MagicMock()
         mock_query_engine.aquery.return_value = MagicMock(
-            response="Retrieved documents about DocMind AI architecture and multi-agent coordination.",
+            response=(
+                "Retrieved documents about DocMind AI architecture and multi-agent "
+                "coordination."
+            ),
             source_nodes=[
                 NodeWithScore(
                     node=TextNode(text="DocMind AI uses LangGraph supervisor pattern"),
@@ -285,7 +291,7 @@ class TestMultiAgentCoordinationWorkflows:
 
         # Simulate multi-agent workflow stages
         async def mock_agent_workflow(query):
-            """Mock multi-agent workflow with routing, planning, retrieval, synthesis."""
+            """Mock multi-agent workflow: routing, planning, retrieval, synthesis."""
             # Stage 1: Routing Agent - Determine query type
             routing_result = {
                 "query_type": "complex_technical",

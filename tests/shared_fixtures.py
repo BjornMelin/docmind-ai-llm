@@ -492,6 +492,104 @@ def supervisor_stream_shim() -> Mock:
 
 
 # ============================================================================
+# RETRIEVAL FIXTURES PORTED FROM tests/test_retrieval/conftest.py
+# ============================================================================
+
+
+@pytest.fixture
+def mock_vector_index() -> Mock:
+    """Mock VectorStoreIndex exposing a query engine.
+
+    Provides a minimal interface used by router engine tests without
+    depending on LlamaIndex internals.
+    """
+    mock_index = Mock()
+    mock_query_engine = Mock()
+    mock_query_engine.query.return_value = Mock(response="Mock response")
+    mock_index.as_query_engine.return_value = mock_query_engine
+    return mock_index
+
+
+@pytest.fixture
+def mock_hybrid_retriever() -> Mock:
+    """Mock hybrid retriever for dense + sparse search."""
+    return MockRetrieverFactory.create_mock_retriever()
+
+
+@pytest.fixture
+def mock_property_graph() -> Mock:
+    """Mock PropertyGraphIndex for knowledge graph tests."""
+    mock_graph = Mock()
+    mock_node = TextNode(text="Graph traversal result", id_="graph_node_1")
+    mock_graph.traverse_graph = AsyncMock(
+        return_value=[NodeWithScore(node=mock_node, score=0.9)]
+    )
+    mock_graph.extract_entities = AsyncMock(
+        return_value=[
+            {"text": "LlamaIndex", "type": "FRAMEWORK", "confidence": 0.95},
+            {"text": "BGE-M3", "type": "MODEL", "confidence": 0.92},
+        ]
+    )
+    mock_graph.as_retriever.return_value = MockRetrieverFactory.create_mock_retriever()
+    mock_graph.as_query_engine.return_value = Mock()
+    return mock_graph
+
+
+@pytest.fixture
+def mock_llm_for_routing():
+    """LlamaIndex-compatible LLM for routing selector tests."""
+    return MockLLMFactory.create_llamaindex_mock_llm("hybrid_search")
+
+
+@pytest.fixture
+def mock_cross_encoder() -> Mock:
+    """Generic mock reranker/CrossEncoder object."""
+    return Mock()
+
+
+@pytest.fixture
+def performance_test_nodes() -> list[NodeWithScore]:
+    """Generate nodes for reranking performance tests (20 docs)."""
+    return MockRetrieverFactory.create_search_results(20, base_score=0.8)
+
+
+@pytest.fixture
+def sample_query_scenarios() -> list[dict[str, Any]]:
+    """Provide sample query scenarios for integration tests."""
+    return TestDataFactory.create_query_scenarios()
+
+
+@pytest.fixture
+def rtx_4090_performance_targets() -> dict[str, float]:
+    """Performance targets used by integration tests."""
+    return {
+        "bgem3_embedding_latency_ms": 50.0,
+        "reranking_latency_ms": 100.0,
+        "query_p95_latency_s": 2.0,
+        "vram_usage_gb": 14.0,
+        "min_retrieval_accuracy": 0.8,
+        "strategy_selection_latency_ms": 50.0,
+    }
+
+
+@pytest.fixture
+def mock_multimodal_utilities() -> dict[str, Any]:
+    """Mock multimodal utilities (shape compatibility only)."""
+    return {
+        "cross_modal_search": AsyncMock(
+            return_value=[
+                {"score": 0.95, "image_path": "/path/to/image1.jpg"},
+                {"score": 0.87, "image_path": "/path/to/image2.jpg"},
+            ]
+        ),
+        "generate_image_embeddings": AsyncMock(
+            return_value=np.random.rand(512).astype(np.float32)
+        ),
+        "validate_vram_usage": Mock(return_value=1.2),
+    }
+
+
+# ============================================================================
 # SESSION-SCOPED FIXTURES FOR PERFORMANCE
 # ============================================================================
 
