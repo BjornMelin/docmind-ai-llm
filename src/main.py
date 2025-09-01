@@ -118,7 +118,7 @@ class DocMindApplication:
 
     async def _process_basic_rag(
         self,
-        query: str,
+        _query: str,
         _context: dict[str, Any] | None = None,
     ) -> AgentResponse:
         """Process query through basic RAG pipeline.

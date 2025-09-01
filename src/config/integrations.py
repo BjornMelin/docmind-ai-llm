@@ -1,9 +1,9 @@
 """LlamaIndex and vLLM integration setup.
 
-Simplified integration module that configures LlamaIndex Settings
-with the unified configuration architecture. Replaces the complex
-vllm_config.py and kv_cache.py modules with simple environment
-variable setup.
+This module configures LlamaIndex global ``Settings`` and vLLM environment
+variables using the unified configuration. It intentionally replaces complex
+bespoke setup code with clear, KISS functions to ensure reliability and ease of
+testing.
 """
 
 import logging
@@ -11,7 +11,6 @@ import os
 
 import torch
 from llama_index.core import Settings
-from llama_index.llms.ollama import Ollama
 
 from src.retrieval.embeddings import BGEM3Embedding
 
@@ -21,49 +20,65 @@ logger = logging.getLogger(__name__)
 
 
 def setup_llamaindex() -> None:
-    """Configure LlamaIndex Settings with unified configuration.
+    """Configure LlamaIndex ``Settings`` with unified configuration.
 
-    Sets up LLM and embedding models using the simplified configuration
-    approach. All complex vLLM configuration is now handled through
-    environment variables.
+    Sets up the global LLM and embedding model. Heavy dependencies are lazily
+    imported and failures result in ``Settings.llm``/``Settings.embed_model``
+    being set to ``None``.
+
+    Raises:
+        None: All errors are logged and converted to ``None`` assignments so the
+        rest of the app can gracefully degrade.
     """
-    # Configure LLM with unified settings
+    # Configure LLM with unified settings (do not overwrite test/fixture values)
     try:
-        model_config = settings.get_model_config()
+        if Settings.llm is not None:
+            logger.info("LLM already configured; skipping override")
+        else:
+            # Lazy import to avoid heavy dependency at module import time
+            from llama_index.llms.ollama import Ollama  # type: ignore
 
-        Settings.llm = Ollama(
-            model=model_config["model_name"],
-            base_url=model_config["base_url"],
-            temperature=model_config["temperature"],
-            request_timeout=120.0,
-        )
-        logger.info("LLM configured: %s", Settings.llm.model)
-    except Exception as e:
-        logger.warning("Could not configure LLM: %s", e)
+            model_config = settings.get_model_config()
+
+            Settings.llm = Ollama(
+                model=model_config["model_name"],
+                base_url=model_config["base_url"],
+                temperature=model_config["temperature"],
+                request_timeout=120.0,
+            )
+            logger.info("LLM configured: %s", getattr(Settings.llm, "model", "unknown"))
+    except (ImportError, RuntimeError, ValueError, OSError) as e:
+        logger.warning("Could not configure LLM: %s", e, exc_info=True)
         Settings.llm = None
 
     # Configure BGE-M3 embeddings with unified settings
+    # (do not overwrite test/fixture values)
     try:
-        embedding_config = settings.get_embedding_config()
+        if Settings.embed_model is not None:
+            logger.info("Embed model already configured; skipping override")
+        else:
+            embedding_config = settings.get_embedding_config()
 
-        # Prefer FP16 when on CUDA; BGEM3 internally handles dtype
-        use_fp16 = embedding_config["device"] == "cuda" and torch.cuda.is_available()
+            # Prefer FP16 when on CUDA; BGEM3 internally handles dtype
+            use_fp16 = (
+                embedding_config["device"] == "cuda" and torch.cuda.is_available()
+            )
 
-        Settings.embed_model = BGEM3Embedding(
-            model_name=embedding_config["model_name"],
-            device=embedding_config["device"],
-            max_length=embedding_config["max_length"],
-            batch_size=embedding_config["batch_size"],
-            use_fp16=use_fp16,
-        )
-        logger.info(
-            "Embedding model configured: %s (device=%s, fp16=%s)",
-            embedding_config["model_name"],
-            embedding_config["device"],
-            use_fp16,
-        )
-    except Exception as e:
-        logger.warning("Could not configure embeddings: %s", e)
+            Settings.embed_model = BGEM3Embedding(
+                model_name=embedding_config["model_name"],
+                device=embedding_config["device"],
+                max_length=embedding_config["max_length"],
+                batch_size=embedding_config["batch_size"],
+                use_fp16=use_fp16,
+            )
+            logger.info(
+                "Embedding model configured: %s (device=%s, fp16=%s)",
+                embedding_config.get("model_name"),
+                embedding_config.get("device"),
+                use_fp16,
+            )
+    except (ImportError, RuntimeError, ValueError, OSError) as e:
+        logger.warning("Could not configure embeddings: %s", e, exc_info=True)
         Settings.embed_model = None
 
     # Set context window and performance settings
@@ -73,19 +88,18 @@ def setup_llamaindex() -> None:
 
         logger.info(
             "Context configured: %d window, %d max tokens",
-            Settings.context_window,
-            Settings.num_output,
+            int(Settings.context_window),
+            int(Settings.num_output),
         )
-    except Exception as e:
-        logger.warning("Could not set context configuration: %s", e)
+    except (AttributeError, ValueError) as e:
+        logger.warning("Could not set context configuration: %s", e, exc_info=True)
 
 
 def setup_vllm_env() -> None:
-    """Set up vLLM environment variables.
+    """Set vLLM environment variables from unified settings.
 
-    Replaces the complex VLLMConfig and KVCacheManager classes
-    with simple environment variable setup. All vLLM optimization
-    is now handled through environment variables.
+    Uses environment variables to control vLLM optimization. Does not override
+    existing variables already present in the process.
     """
     # Get vLLM environment variables from unified settings
     vllm_env = settings.get_vllm_env_vars()
@@ -100,28 +114,26 @@ def setup_vllm_env() -> None:
 
 
 def get_vllm_server_command() -> list[str]:
-    """Generate vLLM server command with FP8 optimization.
-
-    Returns simple command for starting vLLM server with all
-    optimization settings from environment variables.
+    """Generate a vLLM server command with optimization flags.
 
     Returns:
-        List of command arguments for vLLM server
+        list[str]: Command line arguments for ``vllm serve`` using unified
+        settings (context window, kv cache dtype, batching, etc.).
     """
     cmd = [
         "vllm",
         "serve",
         settings.vllm.model,
         "--max-model-len",
-        str(settings.vllm.context_window),
+        str(int(settings.vllm.context_window)),
         "--kv-cache-dtype",
         settings.vllm.kv_cache_dtype,
         "--gpu-memory-utilization",
-        str(settings.vllm.gpu_memory_utilization),
+        str(float(settings.vllm.gpu_memory_utilization)),
         "--max-num-seqs",
-        str(settings.vllm.max_num_seqs),
+        str(int(settings.vllm.max_num_seqs)),
         "--max-num-batched-tokens",
-        str(settings.vllm.max_num_batched_tokens),
+        str(int(settings.vllm.max_num_batched_tokens)),
         "--trust-remote-code",
     ]
 
@@ -132,10 +144,9 @@ def get_vllm_server_command() -> list[str]:
 
 
 def initialize_integrations() -> None:
-    """Initialize all integrations.
+    """Initialize both vLLM environment and LlamaIndex ``Settings``.
 
-    Single function to set up both LlamaIndex and vLLM
-    integrations with the unified configuration.
+    Calls :func:`setup_vllm_env` and :func:`setup_llamaindex` in order.
     """
     setup_vllm_env()
     setup_llamaindex()

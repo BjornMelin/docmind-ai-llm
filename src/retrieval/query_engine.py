@@ -93,6 +93,7 @@ class AdaptiveRouterQueryEngine:
         if self.hybrid_retriever:
             hybrid_engine = RetrieverQueryEngine.from_args(
                 retriever=self.hybrid_retriever,
+                llm=self.llm,
                 node_postprocessors=[self.reranker] if self.reranker else [],
                 response_mode="compact",
                 streaming=True,
@@ -226,7 +227,7 @@ class AdaptiveRouterQueryEngine:
                 )
             )
 
-        logger.info("Created %d query engine tools for adaptive routing", len(tools))
+        logger.info("Created {} query engine tools for adaptive routing", len(tools))
         return tools
 
     def _detect_multimodal_query(self, query_str: str) -> bool:
@@ -333,7 +334,8 @@ class AdaptiveRouterQueryEngine:
         """
         try:
             logger.info(
-                "Executing adaptive query: %s...", query_str[:QUERY_TRUNCATE_LENGTH]
+                "Executing adaptive query: {}...",
+                query_str[:QUERY_TRUNCATE_LENGTH],
             )
 
             # Execute through RouterQueryEngine
@@ -342,7 +344,7 @@ class AdaptiveRouterQueryEngine:
             # Log selected strategy if available
             selected_tool = getattr(response, "metadata", {}).get("selector_result")
             if selected_tool:
-                logger.info("Router selected strategy: %s", selected_tool)
+                logger.info("Router selected strategy: {}", selected_tool)
             else:
                 logger.info(
                     "Router executed query (strategy selection metadata unavailable)"
@@ -351,7 +353,7 @@ class AdaptiveRouterQueryEngine:
             return response
 
         except (RuntimeError, ValueError, TimeoutError) as e:
-            logger.error("RouterQueryEngine failed: %s", e)
+            logger.error("RouterQueryEngine failed: {}", e)
             # Fallback to direct semantic search
             logger.info("Falling back to direct semantic search")
             return self.vector_index.as_query_engine().query(query_str, **kwargs)
@@ -368,7 +370,7 @@ class AdaptiveRouterQueryEngine:
         """
         try:
             logger.info(
-                "Executing async adaptive query: %s...",
+                "Executing async adaptive query: {}...",
                 query_str[:QUERY_TRUNCATE_LENGTH],
             )
 
@@ -377,12 +379,12 @@ class AdaptiveRouterQueryEngine:
             # Log selected strategy if available
             selected_tool = getattr(response, "metadata", {}).get("selector_result")
             if selected_tool:
-                logger.info("Router selected strategy: %s", selected_tool)
+                logger.info("Router selected strategy: {}", selected_tool)
 
             return response
 
         except (RuntimeError, ValueError, TimeoutError) as e:
-            logger.error("Async RouterQueryEngine failed: %s", e)
+            logger.error("Async RouterQueryEngine failed: {}", e)
             # Fallback to direct semantic search
             logger.info("Falling back to async semantic search")
             return await self.vector_index.as_query_engine().aquery(query_str, **kwargs)
@@ -444,5 +446,5 @@ def configure_router_settings(_router_engine: AdaptiveRouterQueryEngine) -> None
         # This would be handled at the application level
         logger.info("RouterQueryEngine configured for adaptive retrieval")
     except (AttributeError, ValueError, RuntimeError) as e:
-        logger.error("Failed to configure router settings: %s", e)
+        logger.error("Failed to configure router settings: {}", e)
         raise

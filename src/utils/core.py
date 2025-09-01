@@ -5,8 +5,6 @@ This module provides the most essential utilities needed by the application:
 - Startup configuration validation
 - Basic context managers for resource management
 - Performance timing utilities
-
-Follows KISS principle with minimal dependencies and no complex patterns.
 """
 
 import gc
@@ -16,14 +14,9 @@ from contextlib import asynccontextmanager
 from functools import wraps
 from typing import Any
 
+import qdrant_client
 import torch
 from loguru import logger
-
-# Re-export QdrantClient for test compatibility
-from qdrant_client import (
-    AsyncQdrantClient,
-    QdrantClient,  # noqa: F401
-)
 
 from src.config import settings
 from src.config.settings import DocMindSettings
@@ -32,6 +25,9 @@ from src.config.settings import DocMindSettings
 WEIGHT_TOLERANCE = 0.05
 RRF_ALPHA_MIN = 10
 RRF_ALPHA_MAX = 100
+
+# Compatibility alias so tests can patch src.utils.core.AsyncQdrantClient
+AsyncQdrantClient = qdrant_client.AsyncQdrantClient
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -83,9 +79,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
 
     # Check Qdrant connectivity
     try:
-        from qdrant_client import QdrantClient
-
-        client = QdrantClient(url=app_settings.database.qdrant_url)
+        client = qdrant_client.QdrantClient(url=app_settings.database.qdrant_url)
         client.get_collections()
         results["info"].append(
             f"Qdrant connection successful: {app_settings.database.qdrant_url}"
@@ -199,7 +193,7 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
 @asynccontextmanager
 async def managed_async_qdrant_client(
     url: str,
-) -> AsyncGenerator[AsyncQdrantClient, None]:
+) -> AsyncGenerator[object, None]:
     """Context manager for AsyncQdrantClient with proper cleanup.
 
     Args:
@@ -210,7 +204,7 @@ async def managed_async_qdrant_client(
     """
     client = None
     try:
-        client = AsyncQdrantClient(url=url)
+        client = qdrant_client.AsyncQdrantClient(url=url)
         yield client
     finally:
         if client is not None:

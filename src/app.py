@@ -145,7 +145,9 @@ if "index" not in st.session_state:
 st.title("🧠 DocMind AI: Local LLM Document Analysis")
 
 # Dynamic theming with Streamlit 1.47.0
-theme: str = st.selectbox("Theme", ["Light", "Dark", "Auto"], index=2)
+theme: str = st.selectbox(
+    "Theme", ["Light", "Dark", "Auto"], index=2, key="theme_select"
+)
 if theme != "Auto":
     bg_color = "#222" if theme == "Dark" else "#fff"
     text_color = "#fff" if theme == "Dark" else "#000"
@@ -216,15 +218,20 @@ with st.sidebar.expander("Advanced Settings"):
     else:
         st.sidebar.warning("LlamaCPP backend unavailable (BLAS library issue)")
 
-    backend: str = st.selectbox("Backend", backend_options, index=0)
+    backend: str = st.selectbox(
+        "Backend", backend_options, index=0, key="backend_select"
+    )
     context_size: int = st.selectbox(
-        "Context Size", settings.ui.context_size_options, index=1
+        "Context Size",
+        settings.ui.context_size_options,
+        index=1,
+        key="context_size_select",
     )
 
 model_options: list[str] = []
 if backend == "ollama":
     ollama_url: str = st.sidebar.text_input(
-        "Ollama URL", value=settings.ollama_base_url
+        "Ollama URL", value=settings.ollama_base_url, key="ollama_url"
     )
     try:
         # Use sync model listing to avoid asyncio event loop conflicts
@@ -233,7 +240,10 @@ if backend == "ollama":
     except (ConnectionError, TimeoutError, ValueError) as e:
         st.sidebar.error(f"Error fetching models: {str(e)}")
 model_name: str = (
-    st.sidebar.selectbox("Model", model_options or [suggested_model]) + quant_suffix
+    st.sidebar.selectbox(
+        "Model", model_options or [suggested_model], key="model_select"
+    )
+    + quant_suffix
 )
 
 # Auto-download if not present (quick win for UX)
@@ -289,6 +299,7 @@ async def upload_section() -> None:
             "Upload files",
             accept_multiple_files=True,
             type=["pdf", "docx", "mp4", "mp3", "wav"],
+            key="file_uploader",
         )
     )
     if uploaded_files:
@@ -429,7 +440,7 @@ for message in st.session_state.memory.chat_store.get_messages("default"):
     with st.chat_message(message.role):
         st.markdown(message.content)
 
-user_input: str | None = st.chat_input("Ask a question")
+user_input: str | None = st.chat_input("Ask a question", key="chat_input")
 if user_input:
     with st.chat_message("user"):
         st.markdown(user_input)
@@ -500,7 +511,7 @@ if user_input:
     st.session_state.memory.put(ChatMessage(role="user", content=user_input))
 
 # Persistence with Memory API and Error Handling
-if st.button("Save Session"):
+if st.button("Save Session", key="save_session_btn"):
     try:
         st.session_state.memory.chat_store.persist("session.json")
         st.success("Saved!")
@@ -508,7 +519,7 @@ if st.button("Save Session"):
         st.error(f"Save failed: {str(e)}")
         logger.error("Save error: %s", str(e))
 
-if st.button("Load Session"):
+if st.button("Load Session", key="load_session_btn"):
     try:
         st.session_state.memory = ChatMemoryBuffer.from_file("session.json")
         st.success("Loaded!")

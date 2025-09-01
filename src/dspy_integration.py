@@ -297,18 +297,14 @@ class DSPyLlamaIndexRetriever:
             return retriever
 
 
-# Global instance for easy access
-DSPY_RETRIEVER_INSTANCE = None
-
-
 def get_dspy_retriever(llm: Any = None) -> DSPyLlamaIndexRetriever:
-    """Get global DSPy retriever instance."""
-    global DSPY_RETRIEVER_INSTANCE
-
-    if DSPY_RETRIEVER_INSTANCE is None:
-        DSPY_RETRIEVER_INSTANCE = DSPyLlamaIndexRetriever(llm=llm)
-
-    return DSPY_RETRIEVER_INSTANCE
+    """Get cached DSPy retriever instance without using module-level globals."""
+    if (
+        not hasattr(get_dspy_retriever, "_instance")
+        or get_dspy_retriever._instance is None
+    ):
+        get_dspy_retriever._instance = DSPyLlamaIndexRetriever(llm=llm)  # type: ignore[attr-defined]
+    return get_dspy_retriever._instance  # type: ignore[attr-defined]
 
 
 def is_dspy_available() -> bool:

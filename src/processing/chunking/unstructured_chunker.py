@@ -126,8 +126,7 @@ class SemanticChunker:
         )
 
         logger.info(
-            "SemanticChunker initialized with parameters: max_chars={}, "
-            "new_after={}, combine_under={}",
+            "SemanticChunker init: max_chars={}, new_after={}, combine_under={}",
             self.default_parameters.max_characters,
             self.default_parameters.new_after_n_chars,
             self.default_parameters.combine_text_under_n_chars,
@@ -338,8 +337,9 @@ class SemanticChunker:
         chunk_parameters = parameters or self.default_parameters
 
         logger.info(
-            f"Chunking {len(elements)} elements with strategy: "
-            f"{chunk_parameters.boundary_detection}"
+            "Chunking {} elements with strategy: {}",
+            len(elements),
+            chunk_parameters.boundary_detection,
         )
 
         if not elements:
@@ -358,6 +358,16 @@ class SemanticChunker:
             unstructured_elements = self._convert_document_elements_to_unstructured(
                 elements
             )
+
+            # Validate parameter relationships
+            if not (
+                chunk_parameters.combine_text_under_n_chars
+                < chunk_parameters.new_after_n_chars
+                < chunk_parameters.max_characters
+            ):
+                raise ValueError(
+                    "Invalid chunking params: combine_under < new_after < max_chars"
+                )
 
             # Build chunk_by_title configuration
             chunk_config = {
@@ -404,9 +414,11 @@ class SemanticChunker:
             )
 
             logger.info(
-                f"Successfully chunked {len(elements)} elements into "
-                f"{len(semantic_chunks)} chunks "
-                f"in {processing_time:.2f}s (accuracy: {boundary_accuracy:.2f})"
+                "Chunked {} elements into {} chunks in {:.2f}s (accuracy: {:.2f})",
+                len(elements),
+                len(semantic_chunks),
+                processing_time,
+                boundary_accuracy,
             )
 
             return result
@@ -414,8 +426,10 @@ class SemanticChunker:
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(
-                f"Failed to chunk {len(elements)} elements after "
-                f"{processing_time:.2f}s: {str(e)}"
+                "Failed to chunk {} elements after {:.2f}s: {}",
+                len(elements),
+                processing_time,
+                e,
             )
             raise ChunkingError(f"Semantic chunking failed: {e}") from e
 
@@ -435,16 +449,16 @@ class SemanticChunker:
             ChunkingError: If chunking fails
         """
         try:
-            logger.debug(f"Calling chunk_by_title() with config: {config}")
+            logger.debug("Calling chunk_by_title() with config: {}", config)
 
             # Direct unstructured.chunking.title.chunk_by_title() call
             chunks = chunk_by_title(elements=elements, **config)
 
-            logger.debug(f"chunk_by_title returned {len(chunks)} chunks")
+            logger.debug("chunk_by_title returned {} chunks", len(chunks))
             return chunks
 
         except Exception as e:
-            logger.error(f"chunk_by_title failed: {str(e)}")
+            logger.error("chunk_by_title failed: {}", e)
             raise ChunkingError(f"Unstructured.io chunk_by_title failed: {e}") from e
 
     def optimize_parameters(
@@ -494,8 +508,10 @@ class SemanticChunker:
         )
 
         logger.info(
-            f"Optimized chunking parameters: max_chars={max_chars}, "
-            f"new_after={new_after_chars}, combine_under={combine_under_chars}"
+            "Optimized chunking params: max_chars={}, new_after={}, combine_under={}",
+            max_chars,
+            new_after_chars,
+            combine_under_chars,
         )
 
         return optimized_parameters

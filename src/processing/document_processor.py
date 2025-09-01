@@ -1,20 +1,14 @@
-"""Hybrid Document Processor combining unstructured and LlamaIndex IngestionPipeline.
+"""Hybrid document processing with Unstructured + LlamaIndex.
 
-This module implements a unified document processor that combines
-Unstructured.io + LlamaIndex IngestionPipeline:
-- Direct unstructured.partition.auto.partition() for document extraction
-- LlamaIndex IngestionPipeline for orchestration, caching, and transformations
-- Strategy-based processing with comprehensive error handling
-- Full API compatibility with ResilientDocumentProcessor
+This module provides a unified, library‑first document processing pipeline that
+combines Unstructured document partitioning and LlamaIndex IngestionPipeline.
 
-Key Features:
-- Unstructured.io parsing with hi_res strategy and multimodal extraction
-- LlamaIndex IngestionPipeline for built-in caching and async processing
-- Custom UnstructuredTransformation for seamless integration
-- Strategy mapping (hi_res, fast, ocr_only) based on file type
-- Complete metadata preservation and transformation pipeline
-- Async processing with retry logic and error handling
-- Performance target: >1 page/second with hi_res strategy
+Overview:
+- Uses ``unstructured.partition.auto.partition`` to extract structural elements.
+- Uses Unstructured's built‑in chunking via ``chunk_by_title`` (default) with a
+  basic fallback when heading density is low. Table elements remain isolated.
+- Orchestrates transformations and caching with LlamaIndex ``IngestionPipeline``.
+- Provides robust error handling and async execution with retries.
 """
 
 import asyncio
@@ -25,7 +19,6 @@ from typing import Any
 
 from llama_index.core import Document
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
-from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from loguru import logger
@@ -35,21 +28,33 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from unstructured.chunking.basic import chunk_elements as chunk_by_basic
+from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.auto import partition
 
 from src.cache.simple_cache import SimpleCache
+from src.config.settings import settings as app_settings
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 
 
 class ProcessingError(Exception):
-    """Custom exception for document processing errors."""
+    """Raised when a document processing operation fails."""
 
 
 class UnstructuredTransformation(TransformComponent):
-    """Custom LlamaIndex transformation that uses unstructured.io for document parsing.
+    """Unstructured parsing + chunking transformation for LlamaIndex.
 
-    This transformation integrates unstructured.io directly into the LlamaIndex
-    IngestionPipeline, providing strategy-based parsing with full metadata preservation.
+    This transformation integrates Unstructured directly into the LlamaIndex
+    ``IngestionPipeline``. It performs partitioning and then applies the
+    Unstructured chunking strategy (``chunk_by_title`` by default, with a
+    basic fallback for heading‑sparse documents). Metadata is preserved.
+
+    Args:
+        strategy: Processing strategy to use for Unstructured partitioning.
+        settings: Application settings object providing processing parameters.
+
+    Raises:
+        ProcessingError: If Unstructured partitioning or chunking fails.
     """
 
     # Declare Pydantic fields for the strategy and settings
@@ -67,23 +72,23 @@ class UnstructuredTransformation(TransformComponent):
         """
         super().__init__()
         self.strategy = strategy
-        self.settings = settings or settings
+        self.settings = settings or app_settings
         logger.debug(
-            f"UnstructuredTransformation initialized with strategy: {strategy}"
+            "UnstructuredTransformation initialized with strategy: {}", strategy
         )
 
     def __call__(self, nodes: list[BaseNode], **kwargs) -> list[BaseNode]:
-        """Transform Document nodes using unstructured.io parsing.
+        """Transform LlamaIndex ``Document`` nodes using Unstructured.
 
         Args:
-            nodes: List of Document nodes to transform
-            **kwargs: Additional transformation arguments
+            nodes: List of ``Document`` nodes to transform.
+            **kwargs: Additional transformation arguments (unused).
 
         Returns:
-            List of transformed BaseNode objects with unstructured elements
+            list[BaseNode]: Transformed nodes with chunked elements.
 
         Raises:
-            ProcessingError: If document processing fails
+            ProcessingError: If partitioning or chunking fails.
         """
         transformed_nodes = []
 
@@ -103,44 +108,95 @@ class UnstructuredTransformation(TransformComponent):
                     transformed_nodes.append(node)
                     continue
 
-                # Build partition configuration for this strategy
+                # Build partition configuration for this strategy (no chunking here)
                 partition_config = self._build_partition_config(self.strategy)
 
-                # Process document with unstructured.io
+                # First: partition the document into structural elements
                 elements = partition(filename=str(file_path), **partition_config)
 
-                # Convert unstructured elements to Document nodes
+                # Decide chunking strategy based on detected title density
+                title_count = sum(
+                    1
+                    for e in elements
+                    if hasattr(e, "category") and "title" in str(e.category).lower()
+                )
+                elem_count = len(elements) or 1
+                title_density = title_count / elem_count
+
+                # Parameters from settings (coerce to safe types)
+                def _safe_int(val: Any, default: int) -> int:
+                    try:
+                        return int(val)  # type: ignore[arg-type]
+                    except Exception:  # noqa: BLE001
+                        return default
+
+                def _safe_bool(val: Any, default: bool) -> bool:
+                    return bool(val) if isinstance(val, bool) else default
+
+                max_chars = _safe_int(
+                    getattr(self.settings.processing, "chunk_size", 1500), 1500
+                )
+                new_after = _safe_int(
+                    getattr(self.settings.processing, "new_after_n_chars", 1200), 1200
+                )
+                combine_under = _safe_int(
+                    getattr(
+                        self.settings.processing, "combine_text_under_n_chars", 500
+                    ),
+                    500,
+                )
+                multipage = _safe_bool(
+                    getattr(self.settings.processing, "multipage_sections", True), True
+                )
+
+                # Heuristic: use by_title if there are enough titles
+                use_by_title = title_count >= 3 or title_density >= 0.05
+
+                if use_by_title:
+                    chunked = chunk_by_title(
+                        elements=elements,
+                        max_characters=max_chars,
+                        new_after_n_chars=new_after,
+                        combine_text_under_n_chars=combine_under,
+                        multipage_sections=multipage,
+                    )
+                else:
+                    # Fallback to basic chunking for heading-sparse docs
+                    chunked = chunk_by_basic(
+                        elements=elements,
+                        max_characters=max_chars,
+                        new_after_n_chars=new_after,
+                        overlap=0,
+                        overlap_all=False,
+                    )
+
+                # Convert chunked elements to Document nodes
                 element_nodes = self._convert_elements_to_nodes(
-                    elements, node, file_path
+                    chunked, node, file_path
                 )
                 transformed_nodes.extend(element_nodes)
 
                 logger.debug(
-                    f"Processed {file_path}: {len(elements)} elements -> "
-                    f"{len(element_nodes)} nodes"
+                    "Processed {}: {} elements -> {} nodes",
+                    file_path,
+                    len(elements),
+                    len(element_nodes),
                 )
 
-            except (OSError, ProcessingError, ValueError) as e:
-                logger.error(f"UnstructuredTransformation failed for node: {str(e)}")
-                # Include original node on error to maintain pipeline flow
-                transformed_nodes.append(node)
-            except Exception as e:
-                logger.error(
-                    f"Unexpected error in UnstructuredTransformation: {str(e)}"
-                )
-                # Include original node on error to maintain pipeline flow
+            except (OSError, RuntimeError, ValueError, ProcessingError) as e:
+                logger.error("UnstructuredTransformation failed for node: {}", e)
                 transformed_nodes.append(node)
 
         return transformed_nodes
 
     def _extract_file_path(self, node: Document) -> Path | None:
-        """Extract file path from Document node metadata.
+        """Extract a local file path from a ``Document`` node.
 
         Args:
-            node: Document node to extract path from
+            node: Document node to extract path from.
 
         Returns:
-            Path object if found, None otherwise
+            Path | None: File path if found and exists, otherwise ``None``.
         """
         # Check various metadata fields for file path
         metadata = node.metadata or {}
@@ -157,15 +213,15 @@ class UnstructuredTransformation(TransformComponent):
         return None
 
     def _build_partition_config(self, strategy: ProcessingStrategy) -> dict[str, Any]:
-        """Build partition configuration for unstructured.io.
+        """Build configuration for Unstructured ``partition``.
 
         Args:
-            strategy: Processing strategy to use
+            strategy: Processing strategy to use.
 
         Returns:
-            Configuration dictionary for partition() call
+            dict[str, Any]: Keyword arguments to pass to ``partition``.
         """
-        # Base configuration for all strategies
+        # Base configuration for all strategies (chunking is applied after partition)
         config = {
             "strategy": strategy.value,
             "include_metadata": True,
@@ -180,22 +236,12 @@ class UnstructuredTransformation(TransformComponent):
                     "extract_images_in_pdf": True,
                     "extract_image_blocks": True,
                     "infer_table_structure": True,
-                    "chunking_strategy": "by_title",
-                    "multipage_sections": True,
-                    "combine_text_under_n_chars": 500,
-                    "new_after_n_chars": 1200,
-                    "max_characters": 1500,
                 }
             )
         elif strategy == ProcessingStrategy.FAST:
             # Fast strategy for quick text extraction
             config.update(
-                {
-                    "extract_images_in_pdf": False,
-                    "infer_table_structure": False,
-                    "chunking_strategy": "basic",
-                    "max_characters": 1000,
-                }
+                {"extract_images_in_pdf": False, "infer_table_structure": False}
             )
         elif strategy == ProcessingStrategy.OCR_ONLY:
             # OCR strategy for image-based documents
@@ -213,15 +259,15 @@ class UnstructuredTransformation(TransformComponent):
     def _convert_elements_to_nodes(
         self, elements: list[Any], original_node: Document, file_path: Path
     ) -> list[Document]:
-        """Convert unstructured elements to Document nodes.
+        """Convert Unstructured elements to LlamaIndex ``Document`` nodes.
 
         Args:
-            elements: Raw elements from unstructured.partition
-            original_node: Original Document node for metadata inheritance
-            file_path: Path to the source document
+            elements: Raw elements from Unstructured partition/chunking.
+            original_node: Original Document for metadata inheritance.
+            file_path: Source document path used for processing.
 
         Returns:
-            List of Document nodes with unstructured element data
+            list[Document]: Nodes representing the chunked elements.
         """
         nodes = []
 
@@ -273,13 +319,12 @@ class UnstructuredTransformation(TransformComponent):
 
 
 class DocumentProcessor:
-    """Hybrid document processor combining unstructured + LlamaIndex IngestionPipeline.
+    """Hybrid processor combining Unstructured with LlamaIndex pipeline.
 
-    This processor provides the best of both worlds:
-    - Direct unstructured.io integration for comprehensive document parsing
-    - LlamaIndex IngestionPipeline for built-in caching, async, and transformations
-    - Strategy-based processing with bulletproof error handling
-    - Full API compatibility with ResilientDocumentProcessor
+    - Direct Unstructured integration for parsing and chunking.
+    - LlamaIndex IngestionPipeline for caching and orchestration.
+    - Strategy mapping (hi_res/fast/ocr_only) by file extension.
+    - Async, resilient execution with retries.
     """
 
     def __init__(self, settings: Any | None = None) -> None:
@@ -288,7 +333,7 @@ class DocumentProcessor:
         Args:
             settings: DocMind configuration settings. Uses settings if None.
         """
-        self.settings = settings or settings
+        self.settings = settings or app_settings
         self._config_override = {}
 
         # Strategy mapping based on file extensions
@@ -325,8 +370,8 @@ class DocumentProcessor:
         )
 
         logger.info(
-            "DocumentProcessor initialized with strategy mapping for "
-            f"{len(self.strategy_map)} file types"
+            "DocumentProcessor initialized with strategy mapping for {} file types",
+            len(self.strategy_map),
         )
 
     def _get_strategy_for_file(self, file_path: str | Path) -> ProcessingStrategy:
@@ -352,20 +397,20 @@ class DocumentProcessor:
             )
 
         strategy = self.strategy_map[extension]
-        logger.debug(f"Selected strategy '{strategy}' for file: {file_path}")
+        logger.debug("Selected strategy '{}' for file: {}", strategy, file_path)
         return strategy
 
     def get_strategy_for_file(self, file_path: str | Path) -> ProcessingStrategy:
-        """Public method to determine processing strategy based on file extension.
+        """Get processing strategy based on file extension.
 
         Args:
-            file_path: Path to the document file
+            file_path: Path to the document file.
 
         Returns:
-            ProcessingStrategy enum value
+            ProcessingStrategy: Chosen strategy.
 
         Raises:
-            ValueError: If file extension is not supported
+            ValueError: If file extension is not supported.
         """
         return self._get_strategy_for_file(file_path)
 
@@ -404,17 +449,9 @@ class DocumentProcessor:
         Returns:
             Configured IngestionPipeline instance
         """
-        # Create transformations pipeline
+        # Create transformations pipeline: Unstructured parsing + our chunking inside
         transformations = [
-            # First transformation: parse document with unstructured
             UnstructuredTransformation(strategy, self.settings),
-            # Second transformation: split into semantic chunks
-            SentenceSplitter(
-                chunk_size=self.settings.processing.chunk_size,
-                chunk_overlap=self.settings.processing.chunk_overlap,
-                include_metadata=True,
-                include_prev_next_rel=True,
-            ),
         ]
 
         # Create pipeline with all LlamaIndex benefits
@@ -435,25 +472,28 @@ class DocumentProcessor:
     async def process_document_async(
         self,
         file_path: str | Path,
-        config_override: dict[str, Any] | None = None,
+        config_override: dict[str, Any] | None = None,  # pylint: disable=unused-argument
     ) -> ProcessingResult:
-        """Process document asynchronously with hybrid approach.
+        """Process a local document asynchronously.
 
         Args:
-            file_path: Path to the document file
-            config_override: Optional configuration overrides
+            file_path: Local path to the document file.
+            config_override: Optional configuration overrides (unused).
 
         Returns:
-            ProcessingResult with extracted elements and metadata
+            ProcessingResult: Extracted elements, metadata, and stats.
 
         Raises:
-            ProcessingError: If document processing fails
-            ValueError: If file format is unsupported
+            ProcessingError: If processing fails.
+            ValueError: If file format is unsupported.
         """
         start_time = time.time()
         file_path = Path(file_path)
 
-        logger.info(f"Processing document with hybrid processor: {file_path}")
+        logger.info(
+            "Processing document with hybrid processor: {}",
+            file_path,
+        )
 
         # Validate file exists and size
         if not file_path.exists():
@@ -473,7 +513,7 @@ class DocumentProcessor:
             # Check cache first using SimpleCache for compatibility
             cached_result = await self.simple_cache.get_document(str(file_path))
             if cached_result:
-                logger.info(f"Retrieved cached result for: {file_path}")
+                logger.info("Retrieved cached result for: {}", file_path)
                 return cached_result
 
             # Create pipeline for this strategy
@@ -528,17 +568,23 @@ class DocumentProcessor:
             await self.simple_cache.store_document(str(file_path), result)
 
             logger.info(
-                f"Successfully processed {file_path}: {len(processed_elements)} "
-                f"elements from {len(nodes)} nodes in {processing_time:.2f}s "
-                f"(strategy: {strategy})"
+                "Processed {}: {} elements from {} nodes in {:.2f}s (strategy: {})",
+                file_path,
+                len(processed_elements),
+                len(nodes),
+                processing_time,
+                strategy,
             )
 
             return result
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             processing_time = time.time() - start_time
             logger.error(
-                f"Failed to process {file_path} after {processing_time:.2f}s: {str(e)}"
+                "Failed to process {} after {:.2f}s: {}",
+                file_path,
+                processing_time,
+                e,
             )
 
             if "corrupted" in str(e).lower() or "invalid" in str(e).lower():
@@ -549,13 +595,13 @@ class DocumentProcessor:
     def _convert_nodes_to_elements(
         self, nodes: list[BaseNode]
     ) -> list[DocumentElement]:
-        """Convert LlamaIndex nodes to DocumentElement objects.
+        """Convert LlamaIndex nodes to ``DocumentElement`` objects.
 
         Args:
-            nodes: List of processed LlamaIndex nodes
+            nodes: List of processed LlamaIndex nodes.
 
         Returns:
-            List of DocumentElement objects for API compatibility
+            list[DocumentElement]: Compatible element structures.
         """
         elements = []
 
@@ -583,17 +629,17 @@ class DocumentProcessor:
         """Override configuration for processing operations.
 
         Args:
-            config: Configuration dictionary to apply
+            config: Configuration dictionary to apply.
         """
         # Store configuration for use in pipeline creation
         self._config_override.update(config)
-        logger.info(f"Configuration override applied: {config}")
+        logger.info("Configuration override applied: {}", config)
 
     async def clear_cache(self) -> bool:
         """Clear processing cache.
 
         Returns:
-            True if cache was cleared successfully
+            bool: True if cache was cleared successfully.
         """
         try:
             # Clear LlamaIndex cache (if possible)
@@ -610,17 +656,17 @@ class DocumentProcessor:
             logger.info("Processing cache cleared successfully")
             return True
         except (OSError, RuntimeError) as e:
-            logger.error(f"Failed to clear cache: {e}")
+            logger.error("Failed to clear cache: {}", e)
             return False
-        except Exception as e:
-            logger.error(f"Unexpected error clearing cache: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.error("Unexpected error clearing cache: {}", e)
             return False
 
     async def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:
-            Dictionary with cache statistics
+            dict[str, Any]: Basic stats for both caches.
         """
         try:
             simple_stats = await self.simple_cache.get_cache_stats()
@@ -636,12 +682,8 @@ class DocumentProcessor:
                 "strategy_mappings": len(self.strategy_map),
             }
         except (OSError, RuntimeError) as e:
-            logger.error(f"Failed to get cache stats: {e}")
+            logger.error("Failed to get cache stats: {}", e)
             return {"error": str(e), "processor_type": "hybrid"}
-        except Exception as e:
-            logger.error(f"Unexpected error getting cache stats: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.error("Unexpected error getting cache stats: {}", e)
             return {"error": str(e), "processor_type": "hybrid"}
-
-
-# Alias for test compatibility - tests expect UnstructuredLoader
-UnstructuredLoader = DocumentProcessor

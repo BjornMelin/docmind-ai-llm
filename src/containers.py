@@ -72,12 +72,12 @@ def create_container() -> ApplicationContainer:
     Returns:
         ApplicationContainer or MockContainer based on environment
     """
-    container = ApplicationContainer()
+    di_container = ApplicationContainer()
     logger.info("Created ApplicationContainer")
 
     # Load configuration from environment
-    container.config.from_env("DOCMIND")
-    container.config.from_dict(
+    di_container.config.from_env("DOCMIND")
+    di_container.config.from_dict(
         {
             "cache_dir": os.getenv("DOCMIND_CACHE_DIR", "./cache"),
             "embedding_model": os.getenv(
@@ -96,7 +96,7 @@ def create_container() -> ApplicationContainer:
         }
     )
 
-    return container
+    return di_container
 
 
 # Global container instance
