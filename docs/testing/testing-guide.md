@@ -1,30 +1,28 @@
 # DocMind AI Testing Guide
 
-## Executive Summary
+## Overview
 
-This guide documents the comprehensive testing framework for DocMind AI following a successful test refactoring that achieved **77.8% mock reduction** and implemented modern boundary testing patterns. The framework emphasizes **library-first** approaches, **boundary testing**, and **three-tier testing architecture** for reliable, maintainable tests.
+This guide describes DocMind AI’s testing approach and how to run and write tests. It follows a boundary-first strategy and a three-tier structure (unit, integration, system).
 
-## Testing Philosophy
+## Philosophy
 
 ### Boundary Testing Strategy
 
-Our testing philosophy centers on **testing at boundaries** rather than implementation details:
+Test at boundaries rather than implementation details:
 
 - **External Boundaries**: Mock external services (APIs, databases, file systems)
 - **Business Logic Testing**: Test algorithms and business rules directly
 - **Library-First**: Use specialized testing libraries instead of manual mocks
 - **Realistic Data**: Use meaningful test data that mirrors production
 
-### Mock Reduction Principles
+### Mocking Principles
 
-Based on successful reduction from 21 to 6 @patch decorators (71% reduction):
+- Consolidate: prefer boundary fixtures over many `@patch` decorators
+- Delegate: use libraries like `responses`, `pytest-httpx` for HTTP mocking
+- Focus: assert business outcomes, not mock interactions
+- Realistic: use structured, representative test data
 
-1. **Consolidate**: Replace multiple `@patch` decorators with single boundary fixtures
-2. **Delegate**: Use libraries like `responses`, `pytest-httpx` for HTTP mocking
-3. **Focus**: Test business outcomes, not mock interactions
-4. **Realistic**: Use structured, realistic test data
-
-## Test Architecture
+## Strategy
 
 ### Three-Tier Testing Strategy
 
@@ -48,7 +46,7 @@ graph TB
 
 ### Directory Structure
 
-```
+```text
 tests/
 ├── unit/                    # Tier 1: Fast unit tests with mocks
 │   ├── conftest.py         # Unit test fixtures
@@ -66,6 +64,21 @@ tests/
 ├── fixtures/                # Shared test fixtures
 ├── _mocks/                  # Mock implementations
 └── conftest.py             # Global test configuration
+```
+
+### Test Execution
+
+```bash
+# Reliable unit file
+uv run python -m pytest tests/unit/config/test_settings.py -v
+
+# Coverage report for a fast subset
+uv run python -m pytest --cov=src --cov-report=term-missing tests/unit/config/test_settings.py -q
+
+# Broader runs (may require local setup)
+uv run python -m pytest tests/unit/ -v
+uv run python -m pytest tests/integration/ -v
+uv run python -m pytest tests/system/ -v  # GPU required
 ```
 
 ### Test Markers and Categories
@@ -92,7 +105,7 @@ tests/
 @pytest.mark.slow         # Long-running tests
 ```
 
-## Modern Testing Patterns
+## Patterns
 
 ### 1. Boundary Testing Fixtures
 
@@ -218,7 +231,10 @@ def test_documents():
     ]
 ```
 
-#### Processing Pipeline Testing
+## Known Limitations
+
+- Some integration/system tests require GPU and local services and may fail without that environment.
+- Prefer unit and targeted integration tests for fast feedback during development.
 
 ```python
 @pytest.mark.unit
@@ -795,6 +811,7 @@ This testing framework provides a solid foundation for reliable, maintainable te
 The successful 77.8% mock reduction demonstrates that systematic improvement is possible while maintaining functionality and improving test quality.
 
 **Next Steps**:
+
 1. Apply migration patterns to remaining high-mock test files
 2. Expand coverage targeting critical business logic modules
 3. Implement property-based testing for edge case discovery

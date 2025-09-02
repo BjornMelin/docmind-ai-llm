@@ -1,8 +1,6 @@
 # Testing Patterns and Best Practices
 
-## Executive Summary
-
-This document defines the specific testing patterns implemented in DocMind AI following the successful test refactoring that achieved **77.8% mock reduction** (21 → 6 @patch decorators). These patterns emphasize **boundary testing**, **library-first approaches**, and **realistic test data** for maintainable, reliable tests.
+This document outlines practical testing patterns for DocMind AI. It emphasizes boundary testing, library-first approaches, and realistic test data for maintainable, reliable tests.
 
 ## Core Testing Patterns
 
@@ -79,6 +77,7 @@ def test_system_monitoring_logic(system_resource_boundary):
 ```
 
 **Benefits**:
+
 - ✅ Reduces 5+ @patch decorators to 1 fixture
 - ✅ Provides realistic, structured data
 - ✅ Reusable across multiple tests
@@ -1026,7 +1025,7 @@ def test_memory_usage_bounds(temp_settings):
 
 ### 1. Hierarchical Test Structure
 
-```
+```text
 tests/
 ├── unit/                           # Tier 1: Fast, isolated tests
 │   ├── test_core/                  # Core business logic

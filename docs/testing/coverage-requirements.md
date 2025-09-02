@@ -1,179 +1,9 @@
-# Test Coverage Requirements and Strategy
+# Test Coverage: How-To and Expectations
 
-## Executive Summary
+## Coverage Commands
 
-This document defines test coverage requirements for DocMind AI based on the current measured coverage of **3.51%** and establishes a roadmap to achieve production-ready coverage targets. Requirements are based on module criticality, business risk, and technical complexity.
+### Development coverage check
 
-## Current Coverage Baseline
-
-### Measured Coverage (January 2025)
-
-**Overall Coverage**: 3.51% (measured via pytest-cov)
-
-**Coverage by Module** (actual measurements):
-
-```
-Module                              Coverage    Lines    Missed   Status
-================================================================================
-src/config/settings.py              98.67%        2         2     ✅ Excellent
-src/config/__init__.py               70.00%        3         3     ✅ Good  
-src/config/integrations.py          53.70%       19        19     ⚠️  Moderate
-src/__init__.py                     100.00%        4         0     ✅ Complete
-src/agents/coordinator.py            0.00%      242       242     ❌ Critical Gap
-src/processing/document_processor.py  0.00%     183       183     ❌ Critical Gap
-src/core/infrastructure/            0.00%      156       156     ❌ Critical Gap
-src/utils/                          0.00%      298       298     ❌ Critical Gap
-```
-
-### Test Suite Statistics
-
-- **Total Tests**: 1,779 test functions across 116 test files
-- **Mock Instances**: 2,103 instances (77.8% reduction achieved in modernized tests)
-- **Test Categories**: Unit (fast), Integration (moderate), System (GPU-dependent)
-
-## Coverage Requirements by Module Type
-
-### 1. Critical Modules (Minimum 40% Coverage)
-
-**Business-critical components that directly impact system functionality:**
-
-#### Agent System (`src/agents/`)
-- **Current**: 0.00% ❌
-- **Target**: 40% minimum, 60% goal
-- **Priority**: **CRITICAL** - Core system functionality
-
-**Required Coverage**:
-```python
-# Agent coordination and communication (40%+ required)
-src/agents/coordinator.py          40%    # Multi-agent orchestration
-src/agents/retrieval.py            40%    # Information retrieval agent  
-src/agents/tool_factory.py         35%    # Tool creation and management
-src/agents/tools.py                35%    # Agent tool implementations
-```
-
-**Test Focus Areas**:
-- Agent communication protocols
-- Task routing and coordination
-- Error handling and recovery
-- Performance under load
-
-#### Document Processing (`src/processing/`, `src/core/`)
-- **Current**: 0.00% ❌  
-- **Target**: 40% minimum, 50% goal
-- **Priority**: **CRITICAL** - Data pipeline integrity
-
-**Required Coverage**:
-```python
-# Document processing pipeline (40%+ required)
-src/processing/document_processor.py     40%    # Core processing logic
-src/core/document_processor.py           40%    # Alternative implementation
-src/processing/chunking/unstructured_chunker.py  35%  # Document chunking
-src/processing/embeddings/bgem3_embedder.py      35%  # Embedding generation
-```
-
-**Test Focus Areas**:
-- Document parsing accuracy
-- Chunk boundary detection
-- Embedding consistency
-- Large document handling
-
-### 2. Core Modules (Minimum 35% Coverage)
-
-**Essential system components with moderate business risk:**
-
-#### Storage and Retrieval (`src/storage/`, `src/retrieval/`)
-- **Current**: 0.00% ❌
-- **Target**: 35% minimum, 45% goal
-- **Priority**: **HIGH** - Data persistence and retrieval
-
-**Required Coverage**:
-```python
-# Storage and retrieval systems (35%+ required)
-src/storage/hybrid_persistence.py    35%    # Data persistence logic
-src/retrieval/vector_store.py        35%    # Vector storage operations  
-src/retrieval/query_engine.py        35%    # Query processing engine
-src/retrieval/reranking.py          30%    # Result reranking logic
-```
-
-#### Utility Functions (`src/utils/`)
-- **Current**: 0.00% ❌
-- **Target**: 35% minimum, 50% goal  
-- **Priority**: **HIGH** - Supporting functionality
-
-**Required Coverage**:
-```python
-# Utility modules (35%+ required)
-src/utils/core.py                35%    # Core utility functions
-src/utils/document.py            35%    # Document utility functions
-src/utils/monitoring.py          35%    # System monitoring utilities
-src/utils/storage.py             30%    # Storage utility functions
-```
-
-### 3. Data Models (Minimum 80% Coverage)
-
-**Data structures and schemas - typically easy to test with high value:**
-
-#### Model Definitions (`src/models/`)
-- **Current**: Variable ❌
-- **Target**: 80% minimum, 90% goal
-- **Priority**: **MEDIUM** - High value, low complexity
-
-**Required Coverage**:
-```python
-# Data models and schemas (80%+ required)
-src/models/core.py               80%    # Core data models
-src/models/schemas.py            80%    # API schemas
-src/models/embeddings.py         80%    # Embedding models
-src/models/storage.py            75%    # Storage models
-src/models/processing.py         75%    # Processing models
-```
-
-**Test Focus Areas**:
-- Model validation logic
-- Serialization/deserialization
-- Field constraints and defaults
-- Schema compatibility
-
-### 4. Configuration (Minimum 60% Coverage)
-
-**System configuration and settings - critical for deployment:**
-
-#### Configuration Modules (`src/config/`)
-- **Current**: 53.70% - 98.67% ✅
-- **Target**: 60% minimum, 80% goal
-- **Priority**: **MEDIUM** - Already partially achieved
-
-**Required Coverage**:
-```python
-# Configuration modules (60%+ required)  
-src/config/settings.py           90%    # ✅ Currently 98.67%
-src/config/integrations.py       60%    # ⚠️ Currently 53.70% 
-src/config/app_settings.py       60%    # Application configuration
-src/config/vllm_config.py        60%    # Model configuration
-```
-
-### 5. Infrastructure (Minimum 25% Coverage)
-
-**System infrastructure and monitoring - lower priority but essential:**
-
-#### Infrastructure Components (`src/core/infrastructure/`)
-- **Current**: 0.00% ❌
-- **Target**: 25% minimum, 40% goal
-- **Priority**: **LOW** - Supporting infrastructure
-
-**Required Coverage**:
-```python
-# Infrastructure modules (25%+ required)
-src/core/infrastructure/gpu_monitor.py       25%    # GPU monitoring
-src/core/infrastructure/hardware_utils.py    25%    # Hardware utilities
-src/core/infrastructure/spacy_manager.py     25%    # Model management
-```
-
-## Coverage Measurement and Reporting
-
-### Coverage Commands
-
-#### Development Coverage Check
 ```bash
 # Quick coverage check for development
 uv run python -m pytest tests/unit/config/test_settings.py --cov=src --cov-report=term-missing
@@ -185,7 +15,8 @@ uv run python -m pytest tests/unit/test_agents/ --cov=src/agents --cov-report=te
 uv run python -m pytest tests/unit/ --cov=src --cov-report=html
 ```
 
-#### CI/CD Coverage Enforcement
+### CI coverage example
+
 ```bash
 # Coverage with minimum threshold enforcement
 uv run python -m pytest tests/unit/ tests/integration/ \
@@ -200,9 +31,8 @@ uv run python -m pytest tests/unit/test_agents/ \
     --cov-fail-under=40
 ```
 
-### Coverage Configuration
+### .coveragerc example
 
-#### `.coveragerc` Configuration
 ```ini
 [run]
 source = src/
@@ -296,9 +126,11 @@ python scripts/analyze_coverage_trends.py coverage_history.txt
 ## Coverage Roadmap and Milestones
 
 ### Phase 1: Foundation (Months 1-2)
+
 **Target**: 15% overall coverage
 
 **Priority Modules**:
+
 1. **Models and Schemas** (80% target)
    - High value, low complexity
    - Foundation for other tests
@@ -310,14 +142,17 @@ python scripts/analyze_coverage_trends.py coverage_history.txt
    - Relatively straightforward testing
 
 **Deliverables**:
+
 - Complete model validation testing
 - Configuration edge case coverage
 - Basic CI/CD coverage enforcement
 
 ### Phase 2: Core Functionality (Months 3-4)  
+
 **Target**: 25% overall coverage
 
 **Priority Modules**:
+
 1. **Agent System** (40% target)
    - Critical business functionality
    - Multi-agent coordination testing
@@ -329,14 +164,17 @@ python scripts/analyze_coverage_trends.py coverage_history.txt
    - Embedding generation consistency
 
 **Deliverables**:
+
 - Agent coordination test suite
 - Document processing pipeline tests
 - Integration test framework
 
 ### Phase 3: System Integration (Months 5-6)
+
 **Target**: 35% overall coverage
 
 **Priority Modules**:
+
 1. **Storage and Retrieval** (35% target)
    - Data persistence integrity
    - Vector store operations
@@ -348,14 +186,17 @@ python scripts/analyze_coverage_trends.py coverage_history.txt
    - Performance utilities
 
 **Deliverables**:
+
 - Complete storage test coverage
 - Utility function test suite
 - Performance regression tests
 
 ### Phase 4: Production Readiness (Months 7+)
+
 **Target**: 50%+ overall coverage
 
 **Focus Areas**:
+
 - Infrastructure monitoring (25% target)
 - Advanced error scenarios
 - Performance benchmarking
@@ -448,6 +289,7 @@ def test_gpu_monitor_critical_paths(system_resource_boundary):
 ### Coverage Quality Assessment
 
 #### Line Coverage vs Branch Coverage
+
 ```bash
 # Measure both line and branch coverage
 uv run python -m pytest --cov=src --cov-branch --cov-report=term-missing
@@ -457,6 +299,7 @@ uv run python -m pytest --cov=src --cov-branch --cov-report=term-missing
 ```
 
 #### Function Coverage Analysis
+
 ```python
 # Custom coverage analysis for function coverage
 def analyze_function_coverage(coverage_data):
@@ -479,12 +322,14 @@ def analyze_function_coverage(coverage_data):
 ### Coverage Quality Indicators
 
 #### High-Quality Coverage Characteristics
+
 - **Business Logic Focus**: Tests cover actual business rules, not just getters/setters
 - **Error Path Coverage**: Exception handling and edge cases tested
 - **Integration Points**: Module boundaries and interfaces tested
 - **Realistic Scenarios**: Tests use production-like data and workflows
 
 #### Coverage Anti-Patterns to Avoid
+
 - **Vanity Coverage**: High percentage but only testing trivial code paths
 - **Mock-Heavy Tests**: Tests that primarily verify mock interactions
 - **Brittle Tests**: Tests that break with minor refactoring
@@ -493,6 +338,7 @@ def analyze_function_coverage(coverage_data):
 ### Coverage Reporting and Monitoring
 
 #### Automated Coverage Reports
+
 ```python
 # Custom coverage report generator
 def generate_coverage_report():
@@ -537,6 +383,7 @@ def generate_coverage_report():
 ```
 
 #### Coverage Dashboard Integration
+
 ```yaml
 # Coverage dashboard configuration
 coverage_dashboard:
@@ -592,7 +439,9 @@ coverage_dashboard:
 ### Coverage Improvement Process
 
 #### Monthly Coverage Reviews
+
 1. **Measure Current Coverage**
+
    ```bash
    uv run python -m pytest --cov=src --cov-report=html
    ```
@@ -626,12 +475,14 @@ coverage_dashboard:
 The coverage requirements defined in this document provide a practical roadmap for improving test coverage from the current **3.51%** to production-ready levels of **35%+ overall** with module-specific targets based on criticality and business risk.
 
 **Success Metrics**:
+
 - **Phase 1**: 15% overall coverage (Models and Configuration)
 - **Phase 2**: 25% overall coverage (+ Agent System and Document Processing)  
 - **Phase 3**: 35% overall coverage (+ Storage, Retrieval, and Utilities)
 - **Phase 4**: 50%+ overall coverage (+ Infrastructure and Advanced Testing)
 
 **Key Principles**:
+
 - **Risk-Based Coverage**: Higher requirements for critical business logic
 - **Practical Targets**: Achievable milestones based on module complexity
 - **Quality Focus**: Emphasis on valuable tests, not just percentage coverage
