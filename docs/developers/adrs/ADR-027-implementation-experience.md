@@ -3,7 +3,7 @@
 ## Metadata
 
 **Status:** Accepted  
-**Version/Date:** v1.0 / 2025-08-27
+**Version/Date:** v1.1 / 2025-09-02
 
 ## Title
 
@@ -96,21 +96,20 @@ We will document the **Comprehensive Implementation Experience** including techn
 
 # 👤 Student with Laptop (CPU-only, 8GB RAM)
 DOCMIND_ENABLE_GPU_ACCELERATION=false
-DOCMIND_DEVICE=cpu
-DOCMIND_MAX_MEMORY_GB=8.0
+DOCMIND_MONITORING__MAX_MEMORY_GB=8.0
 DOCMIND_LLM_BACKEND=ollama
+DOCMIND_VLLM__CONTEXT_WINDOW=4096
 
-# 👤 Developer with RTX 3060 (12GB VRAM)  
+# 👤 Developer with RTX 3060 (12GB RAM)
 DOCMIND_ENABLE_GPU_ACCELERATION=true
-DOCMIND_DEVICE=cuda
-DOCMIND_MAX_VRAM_GB=12.0
+DOCMIND_MONITORING__MAX_MEMORY_GB=12.0
 DOCMIND_LLM_BACKEND=vllm
+DOCMIND_VLLM__CONTEXT_WINDOW=32768
 
 # 👤 Privacy User (CPU, local models)
 DOCMIND_ENABLE_GPU_ACCELERATION=false
 DOCMIND_LLM_BACKEND=llama_cpp
-DOCMIND_LOCAL_MODEL_PATH=/path/to/models
-DOCMIND_ENABLE_PERFORMANCE_LOGGING=false
+DOCMIND_MONITORING__ENABLE_PERFORMANCE_LOGGING=false
 ```
 
 **Lesson**: Any configuration change that removes user choice in a local application is fundamentally flawed and must be rejected.
@@ -306,21 +305,21 @@ def verify_adr_compliance() -> Dict[str, bool]:
         model_config = SettingsConfigDict(
             env_file=".env",
             env_prefix="DOCMIND_", 
+            env_nested_delimiter="__",
             case_sensitive=False,
-            extra="forbid",
+            extra="ignore",
         )
     ```
 
-2. **Dynamic Configuration Methods**:
+2. **Reading Nested Configuration**:
 
     ```python
-    def _get_embedding_device(self) -> str:
-        if self.device == "cpu" or not self.enable_gpu_acceleration:
-            return "cpu"
-        elif self.device == "cuda" or (self.device == "auto" and self.enable_gpu_acceleration):
-            return "cuda"
-        else:
-            return "cpu"  # Safe fallback
+    # Example: choose embedding batch size based on GPU acceleration
+    batch_size = (
+        settings.embedding.batch_size_gpu
+        if settings.enable_gpu_acceleration
+        else settings.embedding.batch_size_cpu
+    )
     ```
 
 3. **Test Fixture Isolation**:
@@ -332,7 +331,6 @@ def verify_adr_compliance() -> Dict[str, bool]:
             yield DocMindSettings(
                 data_dir=Path(temp_dir) / "data",
                 enable_gpu_acceleration=False,  # Test-safe defaults
-                device="cpu",
             )
     ```
 
@@ -411,10 +409,10 @@ graph TD
 
 **Configuration Flexibility Documented**:
 
-- Hardware choice: `enable_gpu_acceleration`, `device`, `max_memory_gb`, `max_vram_gb`
+- Hardware choice: `enable_gpu_acceleration`, `monitoring.max_memory_gb`  
 - Backend choice: `llm_backend` (ollama/vllm/llama_cpp/openai)
-- Model flexibility: `embedding_model`, `local_model_path`
-- Memory adaptation: Dynamic batch sizes, context windows
+- Model flexibility: `embedding.model_name`  
+- Memory adaptation: Dynamic batch sizes (`embedding.batch_size_*`), context windows (`vllm.context_window`)
 
 #### Implementation Alignment Verified
 
@@ -514,4 +512,5 @@ graph TD
 
 ## Changelog
 
+- **v1.1 (2025-09-02)**: Updated examples to nested settings and DOCMIND_ env mapping; removed legacy fields/methods to align with ADR-024.
 - **v1.0 (2025-08-27)**: Initial documentation of implementation experience including critical user flexibility insights, test contamination lessons, and local vs server application context. Documents successful restoration of user choice across 5 validated scenarios and provides guidance for future development avoiding similar pitfalls.

@@ -213,7 +213,7 @@ DocMind AI supports multiple local LLM providers with **USER-CONFIGURABLE** back
 - **👤 Student (CPU-only, 8GB RAM)**: `llm_backend=ollama` or `llm_backend=llama_cpp`
 - **👤 Developer (RTX 3060, 12GB VRAM)**: `llm_backend=vllm` or `llm_backend=ollama`  
 - **👤 Researcher (RTX 4090, 24GB VRAM)**: `llm_backend=vllm` (performance) or `llm_backend=ollama` (simplicity)
-- **👤 Privacy User (CPU, local models)**: `llm_backend=llama_cpp` with `local_model_path`
+- **👤 Privacy User (CPU, local models)**: `llm_backend=llama_cpp` with backend-specific local model path (see ADR-024 for settings mapping)
 - **👤 Custom User (alternative APIs)**: `llm_backend=openai` with `openai_base_url`
 
 #### Performance Benchmarks (RTX 4090 Laptop - 16GB VRAM)
@@ -605,8 +605,10 @@ MEMORY_USAGE_128K = {
 DocMind AI must support diverse hardware configurations as a LOCAL USER APPLICATION. The following scenarios have been validated and are supported by the multi-provider architecture:
 
 ### 1. CPU-Only Users (Limited Resources)
+
 **Hardware**: 8GB RAM, no dedicated GPU
 **Configuration**:
+
 ```bash
 DOCMIND_ENABLE_GPU_ACCELERATION=false
 DOCMIND_LLM_BACKEND=ollama
@@ -615,11 +617,14 @@ DOCMIND_MAX_MEMORY_GB=8.0
 DOCMIND_CONTEXT_WINDOW_SIZE=4096
 DOCMIND_BGE_M3_BATCH_SIZE_CPU=4
 ```
+
 **Use Cases**: Students, budget-conscious users, low-power systems
 
 ### 2. Mid-Range GPU Users (Mainstream)
+
 **Hardware**: RTX 3060 (12GB VRAM), 16GB RAM
 **Configuration**:
+
 ```bash
 DOCMIND_ENABLE_GPU_ACCELERATION=true
 DOCMIND_LLM_BACKEND=vllm
@@ -628,11 +633,14 @@ DOCMIND_MAX_VRAM_GB=12.0
 DOCMIND_CONTEXT_WINDOW_SIZE=32768
 DOCMIND_BGE_M3_BATCH_SIZE_GPU=12
 ```
+
 **Use Cases**: Developers, prosumer users, mid-range workstations
 
 ### 3. High-End GPU Users (Performance)
+
 **Hardware**: RTX 4090 (24GB VRAM), 32GB+ RAM  
 **Configuration**:
+
 ```bash
 DOCMIND_ENABLE_GPU_ACCELERATION=true
 DOCMIND_LLM_BACKEND=vllm
@@ -641,11 +649,14 @@ DOCMIND_MAX_VRAM_GB=24.0
 DOCMIND_CONTEXT_WINDOW_SIZE=131072
 DOCMIND_BGE_M3_BATCH_SIZE_GPU=12
 ```
+
 **Use Cases**: Researchers, AI enthusiasts, high-performance workstations
 
 ### 4. Privacy-Focused Users (Offline)
+
 **Hardware**: Variable (CPU preferred for privacy)
 **Configuration**:
+
 ```bash
 DOCMIND_ENABLE_GPU_ACCELERATION=false
 DOCMIND_LLM_BACKEND=llama_cpp
@@ -653,16 +664,20 @@ DOCMIND_LOCAL_MODEL_PATH=/path/to/local/models
 DOCMIND_ENABLE_PERFORMANCE_LOGGING=false
 DOCMIND_DEVICE=cpu
 ```
+
 **Use Cases**: Security-conscious users, air-gapped systems, compliance requirements
 
 ### 5. Custom Endpoint Users (Alternative APIs)
+
 **Hardware**: Variable
 **Configuration**:
+
 ```bash
 DOCMIND_LLM_BACKEND=openai
 DOCMIND_OPENAI_BASE_URL=http://localhost:8080
 DOCMIND_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ```
+
 **Use Cases**: Custom model deployments, alternative inference servers, specialized setups
 
 **Architecture Principle**: User choice first - no automatic hardware detection that overrides user preferences. All provider/hardware combinations must be user-configurable through environment variables.

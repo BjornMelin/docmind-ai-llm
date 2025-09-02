@@ -27,27 +27,27 @@ Successfully resolved massive over-engineering in DocMind AI's configuration man
 
 1. **👤 Student with Laptop (CPU-only, 8GB RAM)**
    - `enable_gpu_acceleration=False` → CPU-only operation
-   - `max_memory_gb=8.0` → Memory-constrained operation
-   - `bge_m3_batch_size_cpu=4` → CPU-optimized batching
-   - `context_window_size=4096` → Modest context window
+   - `monitoring.max_memory_gb=8.0` (DOCMIND_MONITORING__MAX_MEMORY_GB) → Memory-constrained operation
+   - `embedding.batch_size_cpu=4` (DOCMIND_EMBEDDING__BATCH_SIZE_CPU) → CPU-optimized batching
+   - `vllm.context_window=4096` (DOCMIND_VLLM__CONTEXT_WINDOW) → Modest context window
 
 2. **👤 Developer with RTX 3060 (12GB VRAM)**
    - `enable_gpu_acceleration=True` → GPU acceleration enabled
-   - `max_vram_gb=12.0` → Mid-range VRAM limit
+   - `monitoring.max_memory_gb=12.0` (DOCMIND_MONITORING__MAX_MEMORY_GB) → Mid-range memory limit
    - `llm_backend=vllm` → Performance backend choice
-   - `context_window_size=32768` → Extended context
+   - `vllm.context_window=32768` (DOCMIND_VLLM__CONTEXT_WINDOW) → Extended context
 
 3. **👤 Researcher with RTX 4090 (24GB VRAM)**
    - `enable_gpu_acceleration=True` → Full GPU utilization
-   - `max_vram_gb=24.0` → High-end VRAM support
-   - `context_window_size=131072` → Maximum 128K context
-   - `bge_m3_batch_size_gpu=12` → GPU-optimized batching
+   - `monitoring.max_memory_gb=24.0` (DOCMIND_MONITORING__MAX_MEMORY_GB) → High-end memory support
+   - `vllm.context_window=131072` (DOCMIND_VLLM__CONTEXT_WINDOW) → Maximum 128K context
+   - `embedding.batch_size_gpu=12` (DOCMIND_EMBEDDING__BATCH_SIZE_GPU) → GPU-optimized batching
 
 4. **👤 Privacy User (CPU, local models)**
    - `enable_gpu_acceleration=False` → CPU-only for privacy
    - `llm_backend=llama_cpp` → Local model support
-   - `local_model_path=/home/user/models` → Offline operation
-   - `enable_performance_logging=False` → Privacy-focused
+   - Backend-specific local model path (e.g., LlamaCPP) — see ADR-004 for backend model path configuration
+   - `monitoring.enable_performance_logging=False` (DOCMIND_MONITORING__ENABLE_PERFORMANCE_LOGGING) → Privacy-focused
 
 5. **👤 Custom Embedding User**
    - `embedding_model=sentence-transformers/all-MiniLM-L6-v2` → Alternative model choice
