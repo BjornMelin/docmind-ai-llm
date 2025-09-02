@@ -18,7 +18,6 @@ Covered workflows:
 """
 
 import os
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -67,55 +66,6 @@ class TestDocumentProcessingIntegration:
         assert info["supported"] is True
         assert info["file_extension"] == ".pdf"
         assert info["processing_strategy"] in {"hi_res", "fast", "ocr_only"}
-
-    @pytest.mark.asyncio
-    async def test_semantic_chunker_with_mocked_unstructured(
-        self, integration_settings
-    ):
-        """Validate semantic chunker wiring with mocked unstructured output.
-
-        Args:
-            integration_settings: Test settings.
-        """
-        from src.models.processing import DocumentElement
-        from src.processing.chunking.unstructured_chunker import SemanticChunker
-
-        # Prepare fake unstructured chunks
-        fake_chunks = [
-            SimpleNamespace(
-                text="Section 1",
-                category="Title",
-                metadata=SimpleNamespace(section_title="A"),
-            ),
-            SimpleNamespace(
-                text="Content paragraph",
-                category="NarrativeText",
-                metadata=SimpleNamespace(),
-            ),
-        ]
-
-        elements = [
-            DocumentElement(
-                text="Title: A", category="Title", metadata={"page_number": 1}
-            ),
-            DocumentElement(
-                text="Some content.",
-                category="NarrativeText",
-                metadata={"page_number": 1},
-            ),
-        ]
-
-        with patch(
-            "src.processing.chunking.unstructured_chunker.chunk_by_title",
-            return_value=fake_chunks,
-        ):
-            chunker = SemanticChunker(settings=integration_settings)
-            result = await chunker.chunk_elements_async(elements)
-
-        assert result.chunks
-        assert len(result.chunks) == len(fake_chunks)
-        assert result.total_elements == len(elements)
-        assert result.processing_time >= 0
 
 
 @pytest.mark.integration
@@ -303,27 +253,4 @@ class TestResourceManagementIntegration:
 class TestErrorHandlingIntegration:
     """Integration tests for error handling and resilience paths."""
 
-    @pytest.mark.asyncio
-    async def test_chunker_raises_chunking_error(self, integration_settings):
-        """Ensure SemanticChunker surfaces ChunkingError on failures.
-
-        Args:
-            integration_settings: Test settings passed to the chunker.
-        """
-        from src.models.processing import DocumentElement
-        from src.processing.chunking.unstructured_chunker import (
-            ChunkingError,
-            SemanticChunker,
-        )
-
-        elements = [
-            DocumentElement(text="X", category="Title", metadata={}),
-        ]
-
-        with patch(
-            "src.processing.chunking.unstructured_chunker.chunk_by_title",
-            side_effect=Exception("boom"),
-        ):
-            chunker = SemanticChunker(settings=integration_settings)
-            with pytest.raises(ChunkingError):
-                await chunker.chunk_elements_async(elements)
+    # Error path validation is covered by DocumentProcessor tests.

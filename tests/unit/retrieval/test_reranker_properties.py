@@ -37,4 +37,3 @@ def test_reranker_factory_reads_settings_normalize_and_topn(mocker):
         assert len(out) == 3
         # Verify ordering from returned scores
         assert [n.score for n in out] == sorted([n.score for n in out], reverse=True)
-

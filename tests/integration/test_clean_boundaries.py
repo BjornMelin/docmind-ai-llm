@@ -236,15 +236,6 @@ class TestDocumentProcessingBoundaryIntegration:
 
         mock_load_docs.assert_called_once_with(file_paths)
 
-    @patch("src.processing.chunking.unstructured_chunker.SemanticChunker")
-    def test_chunking_boundary_integration(self, mock_chunker):
-        """Test document chunking with settings boundary integration."""
-        # Patch constructor and ensure it's called with settings
-        instance = MagicMock()
-        mock_chunker.return_value = instance
-        _ = mock_chunker(DocMindSettings())
-        assert mock_chunker.called
-
 
 @pytest.mark.integration
 class TestDatabaseVectorStoreBoundaryIntegration:

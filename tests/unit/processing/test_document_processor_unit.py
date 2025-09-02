@@ -10,7 +10,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from hypothesis import assume, given
+from hypothesis import HealthCheck, assume, given
 from hypothesis import settings as hy_settings
 from hypothesis import strategies as st
 
@@ -125,7 +125,12 @@ async def test_metadata_propagation_minimal(tmp_path):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@hy_settings(deadline=None, max_examples=50, derandomize=True)
+@hy_settings(
+    deadline=None,
+    max_examples=50,
+    derandomize=True,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
 @given(
     max_chars=st.integers(min_value=600, max_value=3000),
     new_after=st.integers(min_value=400, max_value=2500),

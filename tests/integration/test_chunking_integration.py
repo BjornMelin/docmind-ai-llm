@@ -364,9 +364,7 @@ async def test_multipage_sections_propagation(tmp_path, multipage):
             "src.processing.document_processor.is_unstructured_like",
             return_value=True,
         ),
-        patch(
-            "src.processing.document_processor.chunk_by_title"
-        ) as mock_title,
+        patch("src.processing.document_processor.chunk_by_title") as mock_title,
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
