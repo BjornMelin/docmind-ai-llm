@@ -79,6 +79,10 @@ async def test_by_title_section_boundaries(tmp_path):
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
         patch(
+            "src.processing.document_processor.is_unstructured_like",
+            return_value=True,
+        ),
+        patch(
             "src.processing.document_processor.chunk_by_title", return_value=chunks
         ) as mock_chunk,
         patch("src.processing.document_processor.chunk_by_basic") as mock_basic,
@@ -134,6 +138,10 @@ async def test_basic_fallback_heading_sparse(tmp_path):
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
+        patch(
+            "src.processing.document_processor.is_unstructured_like",
+            return_value=True,
+        ),
         patch("src.processing.document_processor.chunk_by_title") as mock_title,
         patch(
             "src.processing.document_processor.chunk_by_basic",
@@ -190,6 +198,10 @@ async def test_table_isolation(tmp_path):
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
         patch(
+            "src.processing.document_processor.is_unstructured_like",
+            return_value=True,
+        ),
+        patch(
             "src.processing.document_processor.chunk_by_title",
             return_value=[table_chunk, text_chunk],
         ),
@@ -241,6 +253,10 @@ async def test_clustered_titles_form_separate_sections(tmp_path):
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
+        patch(
+            "src.processing.document_processor.is_unstructured_like",
+            return_value=True,
+        ),
         patch("src.processing.document_processor.chunk_by_title", return_value=chunks),
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
@@ -262,7 +278,10 @@ async def test_frequent_small_headings_fallbacks_to_basic(tmp_path):
     test_file.write_text("x")
 
     parts = sum(
-        ([[_mk_elem(f"H{i}", "Title")], [_mk_elem("x", "NarrativeText")]] for i in range(2)),
+        (
+            [[_mk_elem(f"H{i}", "Title")], [_mk_elem("x", "NarrativeText")]]
+            for i in range(2)
+        ),
         [],
     )
 
@@ -284,6 +303,10 @@ async def test_frequent_small_headings_fallbacks_to_basic(tmp_path):
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
+        patch(
+            "src.processing.document_processor.is_unstructured_like",
+            return_value=True,
+        ),
         patch("src.processing.document_processor.chunk_by_title"),
         patch(
             "src.processing.document_processor.chunk_by_basic",
@@ -337,7 +360,13 @@ async def test_multipage_sections_propagation(tmp_path, multipage):
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
-        patch("src.processing.document_processor.chunk_by_title") as mock_title,
+        patch(
+            "src.processing.document_processor.is_unstructured_like",
+            return_value=True,
+        ),
+        patch(
+            "src.processing.document_processor.chunk_by_title"
+        ) as mock_title,
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
@@ -387,6 +416,10 @@ async def test_combine_text_under_n_chars_forwarded(tmp_path, combine_under):
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
+        patch(
+            "src.processing.document_processor.is_unstructured_like",
+            return_value=True,
+        ),
         patch("src.processing.document_processor.chunk_by_title") as mock_title,
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),

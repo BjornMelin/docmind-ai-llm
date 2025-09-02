@@ -1,11 +1,11 @@
 """Hybrid document processing with Unstructured + LlamaIndex.
 
-This module provides a unified, library‑first document processing pipeline that
+This module provides a unified, document processing pipeline that
 combines Unstructured document partitioning and LlamaIndex IngestionPipeline.
 
 Overview:
 - Uses ``unstructured.partition.auto.partition`` to extract structural elements.
-- Uses Unstructured's built‑in chunking via ``chunk_by_title`` (default) with a
+- Uses Unstructured's built-in chunking via ``chunk_by_title`` (default) with a
   basic fallback when heading density is low. Table elements remain isolated.
 - Orchestrates transformations and caching with LlamaIndex ``IngestionPipeline``.
 - Provides robust error handling and async execution with retries.
@@ -33,9 +33,9 @@ from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.auto import partition
 
 from src.cache.simple_cache import SimpleCache
-from src.processing.utils import is_unstructured_like
 from src.config.settings import settings as app_settings
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
+from src.processing.utils import is_unstructured_like
 
 
 class ProcessingError(Exception):
@@ -113,12 +113,7 @@ class UnstructuredTransformation(TransformComponent):
                 partition_config = self._build_partition_config(self.strategy)
 
                 # First: partition the document into structural elements
-                # Use positional for filename; fall back to no kwargs when patched mocks
-                try:
-                    elements = partition(str(file_path), **partition_config)
-                except TypeError:
-                    # Patched mocks in tests may not accept kwargs; pass a Path instance
-                    elements = partition(Path(file_path))
+                elements = partition(str(file_path), **partition_config)
 
                 # Decide chunking strategy based on detected title density
                 title_count = sum(
@@ -162,15 +157,7 @@ class UnstructuredTransformation(TransformComponent):
                     """Helper delegating to processing utils for detection."""
                     return is_unstructured_like(el)
 
-                # If chunker is patched (MagicMock), allow mocks through;
-                # otherwise bypass
-                patched_chunker = (
-                    getattr(chunk_by_title, "__module__", "") == "unittest.mock"
-                )
-
-                if (
-                    not all(_looks_like_unstructured(e) for e in elements)
-                ) and not patched_chunker:
+                if not all(_looks_like_unstructured(e) for e in elements):
                     chunked = elements
                 else:
                     # Heuristic: use by_title if there are enough titles
@@ -194,7 +181,7 @@ class UnstructuredTransformation(TransformComponent):
                         # Fallback to basic chunking for heading-sparse docs
                         if getattr(self.settings.processing, "debug_chunk_flow", False):
                             logger.debug(
-                                "Chunk flow: basic fallback (titles={}, density={:.3f})",
+                                "Chunk flow: basic fallback (titles=%s, density=%.3f)",
                                 title_count,
                                 title_density,
                             )

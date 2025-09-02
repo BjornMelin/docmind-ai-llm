@@ -228,6 +228,12 @@ class IntegrationTestSettings(MockDocMindSettings):
     )
     cache: IntegrationCacheConfig = Field(default_factory=IntegrationCacheConfig)
 
+    # Convenience alias for tests expecting a flat attribute
+    @property
+    def embedding_dimension(self) -> int:  # pragma: no cover - simple proxy
+        """Expose embedding dimension at top-level for fixture compatibility."""
+        return int(self.embedding.dimension)
+
 
 class SystemTestSettings(DocMindSettings):
     """System test settings - uses production defaults.

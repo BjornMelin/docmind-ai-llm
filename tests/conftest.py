@@ -99,3 +99,35 @@ def system_settings():
         return create_system_settings()
     except Exception:  # noqa: BLE001
         return None
+
+
+@pytest.fixture
+def integration_settings():
+    """Provide integration-tier settings fixture for integration tests."""
+    try:
+        from tests.fixtures.test_settings import create_integration_settings
+
+        s = create_integration_settings(
+            embedding={"model_name": "sentence-transformers/all-MiniLM-L6-v2"}
+        )
+        # Provide convenience alias expected by validation tests
+        from contextlib import suppress
+
+        with suppress(Exception):
+            s.embedding_dimension = s.embedding.dimension
+        return s
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@pytest.fixture
+def lightweight_embedding_model():
+    """Provide a lightweight embedding model stub for integration tests.
+
+    Returns a CPU-only dummy model with an `encode` method.
+    """
+    class _LightweightModel:
+        def encode(self, texts):  # type: ignore[override]
+            return [[0.0] * 8 for _ in texts]
+
+    return _LightweightModel()
