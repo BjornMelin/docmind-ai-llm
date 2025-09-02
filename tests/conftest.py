@@ -85,3 +85,17 @@ def make_index_from_texts():
         return VectorStoreIndex.from_documents(docs)
 
     return _build
+
+
+@pytest.fixture
+def system_settings():
+    """Provide system-tier settings fixture for system tests.
+
+    Uses production-like defaults via tests fixtures. Keeps tests offline.
+    """
+    try:
+        from tests.fixtures.test_settings import create_system_settings
+
+        return create_system_settings()
+    except Exception:  # noqa: BLE001
+        return None
