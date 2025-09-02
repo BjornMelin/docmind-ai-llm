@@ -2,7 +2,7 @@
 
 ## Overview
 
-This complete onboarding guide will get you productive with DocMind AI's unified architecture in under 30 minutes. The system features 95% complexity reduction while maintaining full functionality and ADR compliance, making it easy to understand and contribute to.
+This guide helps you set up a working development environment and run DocMind AI locally using the unified configuration and local-first architecture.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ This complete onboarding guide will get you productive with DocMind AI's unified
 
 ### Prerequisites - Quick Start
 
-- Python 3.10+ (tested with 3.11, 3.12)
+- Python 3.10+ (tested with 3.11)
 - CUDA-compatible GPU (RTX 4060+ recommended)
 - Docker for Qdrant vector database
 - Git
@@ -65,7 +65,7 @@ python scripts/performance_validation.py
 
 ### Required Software
 
-- **Python**: 3.11+ (tested with 3.11, 3.12)
+- **Python**: 3.11+ (tested with 3.11)
 - **uv**: For package management (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - **Git**: Version control
 - **Docker**: Optional, for Qdrant database

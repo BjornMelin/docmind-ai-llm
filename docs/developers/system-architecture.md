@@ -334,7 +334,7 @@ graph LR
     H[Metadata Extraction] --> G
     B --> H
     
-    I[Simple Cache] --> G
+    I[IngestionCache] --> G
     E --> I
     
     style B fill:#ff9999
@@ -349,7 +349,7 @@ graph LR
 - **NLP Pipeline**: spaCy for entity recognition and linguistic analysis
 - **Intelligent Chunking**: Context-aware chunking with overlap optimization
 - **Unified Embeddings**: BGE-M3 dense + sparse embeddings (1024D + sparse)
-- **Caching Layer**: SimpleCache for processed documents
+- **Caching Layer**: IngestionCache (DuckDBKVStore) for processed documents
 
 ### Vector Storage & Retrieval
 
@@ -468,7 +468,7 @@ sequenceDiagram
     participant NLP as spaCy Pipeline
     participant EMB as BGE-M3 Embedder
     participant VS as Qdrant Vector Store
-    participant CACHE as SimpleCache
+    participant CACHE as IngestionCache
     
     U->>UI: Upload Document
     UI->>DP: Process Document
@@ -625,7 +625,7 @@ When adding new features:
 1. **Maintain Performance Targets**: All changes must maintain <200ms agent coordination
 2. **Memory Efficiency**: Monitor VRAM usage (target <14GB total)
 3. **Parallel Execution**: Leverage existing concurrency patterns
-4. **Caching Strategy**: Use SimpleCache for expensive operations
+4. **Caching Strategy**: Use IngestionCache (DuckDBKVStore) for expensive operations
 
 ### Integration Patterns
 

@@ -21,8 +21,8 @@ This directory contains comprehensive, consolidated documentation for DocMind AI
 | Guide | Purpose | Audience |
 |-------|---------|----------|
 | **[Architecture Overview](architecture-overview.md)** | Executive technical summary with performance specs | Technical leads, architects |
-| **[Implementation Guide](implementation-guide.md)** | Detailed code patterns and library usage examples | Developers needing specific implementation details |
-| **[Testing Guide](testing-guide.md)** | Comprehensive testing strategies and execution | QA engineers, developers writing tests |
+| **[Cache Implementation Guide](cache.md)** | Wiring, configuration, operations, troubleshooting | Developers integrating cache |
+| **[Testing Guide](../testing/testing-guide.md)** | Canonical testing strategy and commands | QA engineers, developers writing tests |
 | **[CI/CD Pipeline](ci-cd-pipeline.md)** | Continuous integration and deployment workflows | DevOps engineers, release managers |
 
 ### Documentation Framework
@@ -49,7 +49,7 @@ Following the **Divio Documentation System** for optimal developer experience:
 1. **Implementation Guidance**: [Developer Handbook](developer-handbook.md) - Patterns and practices
 2. **Architecture Reference**: [System Architecture](system-architecture.md) - System design
 3. **Configuration Tuning**: [Configuration Reference](configuration-reference.md) - Performance optimization
-4. **Specific Examples**: [Implementation Guide](implementation-guide.md) - Code patterns
+4. **Cache Wiring**: [Cache Implementation](cache.md) - Wiring and operations
 
 ### DevOps/Production Teams
 
@@ -81,10 +81,10 @@ Following the **Divio Documentation System** for optimal developer experience:
 # Setup (detailed in Getting Started guide)
 uv sync && streamlit run src/app.py
 
-# Testing (detailed in Developer Handbook)
-pytest tests/unit/ -v                    # Fast unit tests
-pytest tests/integration/ -v             # Cross-component tests
-python scripts/run_tests.py              # Full test suite
+# Testing (see Testing Guide)
+uv run python scripts/run_tests.py                # Full test suite
+uv run python scripts/run_tests.py --unit         # Unit tests only
+uv run python scripts/run_tests.py --integration  # Integration tests
 
 # Code Quality (detailed in Developer Handbook)
 ruff format . && ruff check . --fix      # Format and lint
@@ -109,11 +109,11 @@ chunk_size = settings.processing.chunk_size
 |------------|---------------|-------------------|
 | **Setup Problems** | [Getting Started](getting-started.md) | [Configuration Reference](configuration-reference.md) |
 | **Architecture Questions** | [System Architecture](system-architecture.md) | [Architecture Overview](architecture-overview.md), [ADRs](adrs/) |
-| **Implementation Help** | [Developer Handbook](developer-handbook.md) | [Implementation Guide](implementation-guide.md) |
+| **Implementation Help** | [Developer Handbook](developer-handbook.md) | [Cache Implementation](cache.md) |
 | **Configuration Issues** | [Configuration Reference](configuration-reference.md) | [Operations Guide](operations-guide.md) |
 | **Performance Problems** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
 | **Production Deployment** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
-| **Testing Issues** | [Developer Handbook](developer-handbook.md) | [Testing Guide](testing-guide.md) |
+| **Testing Issues** | [Developer Handbook](developer-handbook.md) | [Testing Guide](../testing/testing-guide.md) |
 
 ## Contributing
 
@@ -148,10 +148,10 @@ If you're looking for content from the previous documentation structure:
 
 - **Setup/Installation** → [Getting Started](getting-started.md)
 - **Architecture/Multi-Agent** → [System Architecture](system-architecture.md) + [Architecture Overview](architecture-overview.md)
-- **Development/Testing** → [Developer Handbook](developer-handbook.md) + [Testing Guide](testing-guide.md)
+- **Development/Testing** → [Developer Handbook](developer-handbook.md) + [Testing Guide](../testing/testing-guide.md)
 - **Environment/Model Config** → [Configuration Reference](configuration-reference.md)
 - **Deployment/Performance** → [Operations Guide](operations-guide.md)
-- **Implementation Examples** → [Implementation Guide](implementation-guide.md)
+- **Cache/Components** → [Cache Implementation](cache.md)
 - **Historical Content** → [archived/](archived/) directory
 
 ### Archived Documentation

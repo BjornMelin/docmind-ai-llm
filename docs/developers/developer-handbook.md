@@ -289,7 +289,7 @@ def retrieve_documents(
 
 ## Configuration Architecture Implementation
 
-### Overview
+### Overview -  Configuration
 
 This section provides comprehensive guidance for implementing clean configuration architecture in DocMind AI, based on lessons learned from successfully eliminating 127 lines of test contamination and achieving 95% complexity reduction. The patterns documented here follow library-first principles using pytest + pydantic-settings.
 
@@ -1569,48 +1569,7 @@ async def execute_with_memory_management(self, query: str) -> str:
 
 ### Caching Strategies
 
-```python
-# Intelligent caching for expensive operations
-from functools import lru_cache
-from src.cache.simple_cache import SimpleCache
-
-class IntelligentCaching:
-    """Multi-level caching for performance optimization."""
-    
-    def __init__(self):
-        self.memory_cache = {}  # In-memory for frequent access
-        self.disk_cache = SimpleCache()  # Persistent disk cache
-        self.embedding_cache = {}  # Specialized embedding cache
-    
-    @lru_cache(maxsize=1000)
-    def get_cached_embedding(self, text_hash: str) -> Optional[List[float]]:
-        """Memory-cached embeddings for repeated text."""
-        return self.embedding_cache.get(text_hash)
-    
-    async def get_or_generate_embedding(self, text: str) -> List[float]:
-        """Get embedding from cache or generate new one."""
-        text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
-        
-        # Check memory cache first
-        if cached := self.get_cached_embedding(text_hash):
-            return cached
-        
-        # Check disk cache
-        cache_key = f"embedding:{text_hash}"
-        if cached := await self.disk_cache.get(cache_key):
-            # Promote to memory cache
-            self.embedding_cache[text_hash] = cached
-            return cached
-        
-        # Generate new embedding
-        embedding = await self.embedder.generate_embedding(text)
-        
-        # Store in both caches
-        self.embedding_cache[text_hash] = embedding
-        await self.disk_cache.set(cache_key, embedding, ttl=86400)  # 24h TTL
-        
-        return embedding
-```
+For document-processing cache, use LlamaIndex IngestionCache with DuckDBKVStore directly. Avoid custom cache wrappers in production. See the cache implementation guide for wiring, configuration, operations, and troubleshooting: [cache.md](cache.md).
 
 ## Troubleshooting & Debugging
 

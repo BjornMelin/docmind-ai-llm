@@ -244,6 +244,6 @@ if __name__ == "__main__":
     print("4. Run your own analysis with actual documents")
     print("")
     print("For more information:")
-    print("- Documentation: docs/api/internal-api.md")
+    print("- Documentation: docs/api/api.md")
     print("- Examples: docs/api/examples/")
     print("- Developer Guide: docs/developers/")

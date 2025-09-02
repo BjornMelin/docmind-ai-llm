@@ -2,7 +2,7 @@
 
 ## Overview
 
-This comprehensive operations guide covers production deployment, performance optimization, monitoring procedures, and operational best practices for DocMind AI. The system has achieved production-ready status with 95% ADR compliance, excellent performance metrics, and comprehensive validation across all operational dimensions.
+This guide covers production deployment, configuration, performance tuning, monitoring, and troubleshooting for DocMind AI.
 
 ## Table of Contents
 
@@ -11,28 +11,13 @@ This comprehensive operations guide covers production deployment, performance op
 3. [Monitoring & Observability](#monitoring--observability)
 4. [Troubleshooting & Maintenance](#troubleshooting--maintenance)
 5. [Validation Procedures](#validation-procedures)
-6. [Lessons Learned & Best Practices](#lessons-learned--best-practices)
-7. [Operational Runbooks](#operational-runbooks)
+6. [Operational Runbooks](#operational-runbooks)
 
 ## Production Deployment
 
-### Production Readiness Status
+### Scope
 
-✅ **OVERALL STATUS: PRODUCTION READY**
-
-**Current Achievements:**
-
-- **Phase 1**: ✅ vLLM Backend Integration (FP8 + FlashInfer)
-- **Phase 2**: ✅ LangGraph Supervisor System (5-agent coordination)
-- **Phase 3**: ✅ Performance Validation (all targets met)
-- **Phase 4**: ✅ Production Integration (end-to-end validation)
-
-**Key Metrics:**
-
-- **Architecture**: 76% complexity reduction achieved
-- **Performance**: 120-180 tok/s decode, 900-1400 tok/s prefill
-- **Quality**: 9.88/10 code quality score, zero linting errors
-- **Compliance**: 95% ADR compliance across all components
+This section provides concrete steps and configuration for deploying and operating the application. Metrics and targets are maintained in the testing docs where relevant.
 
 ### Local Development Deployment
 
@@ -841,6 +826,20 @@ async def traced_agent_coordination(query: str) -> str:
 ```
 
 ## Troubleshooting & Maintenance
+
+### Cache Operations
+
+- Inspect cache location: `settings.cache_dir/docmind.duckdb`
+- Backup/restore: copy/move the file while the app is stopped
+- Relocate: set `DOCMIND_CACHE_DIR` and restart; the file is created on demand
+- Clear cache: delete `docmind.duckdb`; it will be recreated on the next run
+
+Common errors and fixes:
+
+- ImportError for DuckDBKVStore: ensure the LlamaIndex DuckDB KV integration is installed and matches the pinned version
+- PermissionError: choose a writable `DOCMIND_CACHE_DIR`
+- DB busy/lock: stop concurrent writers; DuckDB is single-writer
+- Corruption: stop the app, delete the file, restart
 
 ### Production Troubleshooting Runbooks
 

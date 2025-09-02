@@ -117,9 +117,9 @@ unstructured = "^0.16.0"         # Document processing
 
 ### Orchestration Pattern
 
-- **Framework**: LangGraph Supervisor (94% code reduction vs custom)
+- **Framework**: LangGraph Supervisor
 - **Coordination**: Built-in error handling and fallbacks
-- **Memory**: LangGraph InMemoryStore + Redis backend option
+- **Memory**: LangGraph InMemoryStore (local-first)
 - **Streaming**: Real-time response streaming via Streamlit
 
 ## Retrieval Architecture
