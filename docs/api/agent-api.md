@@ -1144,6 +1144,7 @@ print(f"Agent execution path: {[step.agent for step in result.agent_trace]}")
 The DocMind AI Agent Communication API provides comprehensive interfaces for:
 
 **Individual Agent Control:**
+
 - Query Router: Strategy selection and query analysis
 - Planning Agent: Task decomposition and execution planning
 - Retrieval Expert: Advanced document search and hybrid retrieval
@@ -1151,12 +1152,14 @@ The DocMind AI Agent Communication API provides comprehensive interfaces for:
 - Validation Agent: Quality assurance and fact checking
 
 **Multi-Agent Coordination:**
+
 - Orchestrated workflows with parallel and sequential execution
 - Performance monitoring and resource management
 - Error handling and graceful degradation
 - Adaptive coordination strategies
 
 **Key Features:**
+
 - Fine-grained agent control and customization
 - Comprehensive performance metrics and monitoring
 - Robust error handling with fallback strategies
