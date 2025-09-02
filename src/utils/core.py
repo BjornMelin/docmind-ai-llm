@@ -204,7 +204,7 @@ async def managed_async_qdrant_client(
     """
     client = None
     try:
-        client = qdrant_client.AsyncQdrantClient(url=url)
+        client = AsyncQdrantClient(url=url)
         yield client
     finally:
         if client is not None:

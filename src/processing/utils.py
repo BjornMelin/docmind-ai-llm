@@ -32,4 +32,3 @@ def is_unstructured_like(element: Any) -> bool:
     # Avoid passing unittest.mock-based metadata into real chunkers
     mod = getattr(getattr(meta, "__class__", object), "__module__", "")
     return not mod.startswith("unittest")
-

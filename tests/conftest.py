@@ -126,6 +126,7 @@ def lightweight_embedding_model():
 
     Returns a CPU-only dummy model with an `encode` method.
     """
+
     class _LightweightModel:
         def encode(self, texts):  # type: ignore[override]
             return [[0.0] * 8 for _ in texts]

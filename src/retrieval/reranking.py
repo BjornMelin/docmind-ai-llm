@@ -30,6 +30,7 @@ except ImportError:
 from llama_index.core.bridge.pydantic import Field
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
+
 from src.config.settings import settings
 
 # Cross-Encoder Reranking Constants
@@ -243,9 +244,19 @@ def create_bge_cross_encoder_reranker(
     # Resolve parameters with precedence: explicit args > settings > defaults
     try:
         cfg = settings.retrieval
-        resolved_top_n = top_n if top_n is not None else int(getattr(cfg, "reranking_top_k", DEFAULT_TOP_N))
+        resolved_top_n = (
+            top_n
+            if top_n is not None
+            else int(getattr(cfg, "reranking_top_k", DEFAULT_TOP_N))
+        )
         normalize = bool(getattr(cfg, "reranker_normalize_scores", True))
-        resolved_device = device if device is not None else ("cuda" if getattr(settings, "enable_gpu_acceleration", True) else "cpu")
+        resolved_device = (
+            device
+            if device is not None
+            else (
+                "cuda" if getattr(settings, "enable_gpu_acceleration", True) else "cpu"
+            )
+        )
     except Exception:  # noqa: BLE001
         resolved_top_n = top_n if top_n is not None else DEFAULT_TOP_N
         normalize = True
