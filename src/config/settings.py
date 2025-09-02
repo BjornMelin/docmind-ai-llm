@@ -63,6 +63,7 @@ class ProcessingConfig(BaseModel):
     multipage_sections: bool = Field(default=True)
     chunk_overlap: int = Field(default=50, ge=0, le=200)
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
+    debug_chunk_flow: bool = Field(default=False)
 
 
 class AgentConfig(BaseModel):
@@ -101,6 +102,7 @@ class RetrievalConfig(BaseModel):
     use_reranking: bool = Field(default=True)
     reranking_top_k: int = Field(default=5, ge=1, le=20)
     reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
+    reranker_normalize_scores: bool = Field(default=True)
 
     # RRF Fusion Settings
     rrf_alpha: int = Field(default=60, ge=10, le=100)
@@ -367,3 +369,12 @@ __all__ = [
     "MonitoringConfig",
     "settings",
 ]
+
+
+def get_vllm_env_vars() -> dict[str, str]:
+    """Module-level proxy for tests to patch vLLM env vars provider.
+
+    Returns:
+        dict[str, str]: Environment variables for vLLM processes.
+    """
+    return settings.get_vllm_env_vars()
