@@ -14,21 +14,24 @@ By the end of this guide, you'll have:
 ## Hardware Requirements
 
 ### Minimum Setup (CPU-Only)
+
 - **CPU**: Any modern processor
 - **RAM**: 8GB system memory
 - **Storage**: 20GB free space for models
 - **OS**: Linux, macOS, or Windows 10/11
 
 ### Recommended Setup  
+
 - **CPU**: Modern multi-core processor
 - **RAM**: 16GB system memory
 - **GPU**: RTX 4060 (12GB VRAM) or better
 - **Storage**: 50GB SSD space
 
 ### Optimal Performance
+
 - **CPU**: High-end desktop processor
 - **RAM**: 32GB+ system memory
-- **GPU**: RTX 4090 (16GB+ VRAM) 
+- **GPU**: RTX 4090 (16GB+ VRAM)
 - **Storage**: 100GB+ NVMe SSD
 
 > **Hardware Check**: Run `nvidia-smi` and `python --version` to verify GPU and Python availability.
@@ -52,6 +55,7 @@ uv run python -m spacy download en_core_web_sm
 ### Install Ollama (Local AI Backend)
 
 **Linux/macOS:**
+
 ```bash
 curl -fsSL https://ollama.ai/install.sh | sh
 ```
@@ -59,6 +63,7 @@ curl -fsSL https://ollama.ai/install.sh | sh
 **Windows:** Download from [ollama.com](https://ollama.com/download)
 
 **Start Ollama and download the recommended model:**
+
 ```bash
 # Start the Ollama service
 ollama serve
@@ -85,6 +90,7 @@ uv sync --extra gpu
 ```
 
 **Verify GPU setup:**
+
 ```bash
 python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
 ```
@@ -129,7 +135,8 @@ uv run streamlit run src/app.py
 ```
 
 **You should see:**
-```
+
+```text
 You can now view your Streamlit app in your browser.
 Local URL: http://localhost:8501
 ```
@@ -141,7 +148,7 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 Check the sidebar for system indicators:
 
 - ✅ **GPU Status**: Shows your GPU model (or "CPU Only")
-- ✅ **Model Status**: Shows "Model: Ready" 
+- ✅ **Model Status**: Shows "Model: Ready"
 - ✅ **Multi-Agent**: Shows "5 Agents Active"
 - ✅ **Ollama**: Shows "Connected" with model name
 
@@ -159,11 +166,13 @@ If you see any red error indicators, check the [Common Issues](#common-issues) s
 ### Ask Your First Question
 
 Try this example query:
-```
+
+```text
 What are the main topics and key insights in this document?
 ```
 
 **Watch the multi-agent system work:**
+
 - 🎯 **Query Router** analyzes your question  
 - 📋 **Query Planner** breaks down the task
 - 🔍 **Retrieval Expert** searches your documents
@@ -173,6 +182,7 @@ What are the main topics and key insights in this document?
 ### Interpret Your Results
 
 Your response will include:
+
 - **Main Answer**: Direct response to your question
 - **Sources**: Referenced document sections  
 - **Confidence Score**: Quality indicator (aim for >0.8)
@@ -209,19 +219,22 @@ DocMind AI uses specialized AI agents that coordinate automatically:
 ### Try Different Query Types
 
 **Simple Information Lookup:**
-```
+
+```text
 What is the budget mentioned in the financial report?
 Who are the key stakeholders identified?
 ```
 
 **Comparative Analysis:**
-```
+
+```text
 Compare the Q1 and Q2 performance metrics.
 How do the proposed solutions differ in approach?
 ```
 
 **Multi-Step Reasoning:**
-```
+
+```text
 What risks are identified, how severe are they, and what mitigation strategies are proposed?
 ```
 
@@ -239,8 +252,9 @@ What risks are identified, how severe are they, and what mitigation strategies a
 **Problem**: Application crashes or won't launch
 
 **Quick Fix:**
+
 ```bash
-# Check Python version (should be 3.10-3.12)
+# Check Python version (should be 3.10-3.11)
 python --version
 
 # Reinstall dependencies
@@ -255,6 +269,7 @@ lsof -i :8501  # Kill any process using port 8501
 **Problem**: Shows "CPU Only" despite having GPU
 
 **Quick Fix:**
+
 ```bash
 # Verify GPU detection
 nvidia-smi
@@ -270,6 +285,7 @@ echo 'DOCMIND_ENABLE_GPU_ACCELERATION=true' >> .env
 **Problem**: CUDA out of memory or system crashes
 
 **Quick Fix:**
+
 ```bash
 # Reduce GPU memory usage
 echo 'DOCMIND_GPU_MEMORY_UTILIZATION=0.75' >> .env
@@ -284,6 +300,7 @@ python -c "import torch; torch.cuda.empty_cache()"
 **Problem**: Queries take >10 seconds
 
 **Quick Fix:**
+
 ```bash
 # Enable performance optimizations
 echo 'VLLM_ATTENTION_BACKEND=FLASHINFER' >> .env
@@ -299,6 +316,7 @@ htop        # Monitor CPU and RAM usage
 **Problem**: Can't connect to Ollama service
 
 **Quick Fix:**
+
 ```bash
 # Check if Ollama is running
 curl http://localhost:11434/api/version
@@ -316,6 +334,7 @@ ollama pull qwen3-4b-instruct-2507  # If missing
 **Problem**: Documents won't upload or process
 
 **Quick Fix:**
+
 ```bash
 # Check file format support
 echo "Supported: PDF, DOCX, TXT, XLSX, CSV, JSON, XML, MD, RTF, MSG, PPTX, ODT, EPUB"
@@ -332,6 +351,7 @@ echo "Test document content" > test.txt
 ### Performance Profiles
 
 **Speed Optimized (Fast responses):**
+
 ```bash
 DOCMIND_CONTEXT_WINDOW_SIZE=32768
 AGENT_TIMEOUT_SECONDS=15
@@ -340,6 +360,7 @@ RETRIEVAL_TOP_K=10
 ```
 
 **Balanced (Default):**
+
 ```bash
 DOCMIND_CONTEXT_WINDOW_SIZE=65536
 AGENT_TIMEOUT_SECONDS=30
@@ -348,6 +369,7 @@ RETRIEVAL_TOP_K=20
 ```
 
 **Quality Optimized (Best accuracy):**
+
 ```bash
 DOCMIND_CONTEXT_WINDOW_SIZE=131072
 AGENT_TIMEOUT_SECONDS=60
@@ -359,6 +381,7 @@ ENABLE_DSPY_OPTIMIZATION=true
 ### Hardware-Specific Settings
 
 **RTX 4060 (12GB VRAM):**
+
 ```bash
 DOCMIND_GPU_MEMORY_UTILIZATION=0.85
 DOCMIND_CONTEXT_WINDOW_SIZE=65536
@@ -366,6 +389,7 @@ DOCMIND_MAX_DOCUMENT_SIZE_MB=50
 ```
 
 **RTX 4080 (16GB VRAM):**
+
 ```bash
 DOCMIND_GPU_MEMORY_UTILIZATION=0.85
 DOCMIND_CONTEXT_WINDOW_SIZE=131072
@@ -374,6 +398,7 @@ VLLM_ATTENTION_BACKEND=FLASHINFER
 ```
 
 **RTX 4090 (24GB VRAM):**
+
 ```bash
 DOCMIND_GPU_MEMORY_UTILIZATION=0.90
 DOCMIND_CONTEXT_WINDOW_SIZE=131072
@@ -400,8 +425,7 @@ tail -f logs/app.log | grep "ERROR\|WARNING"
 ### Documentation Resources
 
 - **Configuration Options**: [configuration.md](configuration.md)
-- **Common Problems**: [troubleshooting.md](troubleshooting.md) 
-- **Quick Answers**: [faq.md](faq.md)
+- **Common Problems & FAQ**: [troubleshooting-faq.md](troubleshooting-faq.md)
 
 ### Support Channels
 
@@ -412,6 +436,7 @@ tail -f logs/app.log | grep "ERROR\|WARNING"
 ### When Reporting Issues
 
 Include in your report:
+
 - System specifications (GPU, RAM, OS)
 - Complete error messages and logs
 - Steps to reproduce the problem
@@ -421,4 +446,4 @@ Include in your report:
 
 **Success!** You now have DocMind AI running locally with complete privacy and powerful AI-driven document analysis capabilities. Your sensitive documents never leave your machine, and you have access to advanced multi-agent coordination for complex queries.
 
-Ready to explore more? Check out [configuration.md](configuration.md) for advanced settings and [troubleshooting.md](troubleshooting.md) for detailed problem resolution.
+Ready to explore more? Check out [configuration.md](configuration.md) for advanced settings and [troubleshooting-faq.md](troubleshooting-faq.md) for detailed problem resolution.
