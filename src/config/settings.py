@@ -211,6 +211,31 @@ class DocMindSettings(BaseSettings):
     cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
 
+    # Analytics (ADR-032)
+    analytics_enabled: bool = Field(
+        default=False, description="Enable optional local DuckDB analytics database"
+    )
+    analytics_retention_days: int = Field(
+        default=60, ge=1, le=365, description="Days to retain analytics records"
+    )
+    analytics_db_path: Path | None = Field(
+        default=None,
+        description=(
+            "Optional override path; default is data_dir/analytics/analytics.duckdb"
+        ),
+    )
+
+    # Backup (ADR-033)
+    backup_enabled: bool = Field(
+        default=False, description="Enable manual local backups with simple rotation"
+    )
+    backup_keep_last: int = Field(
+        default=7,
+        ge=1,
+        le=100,
+        description="How many backups to retain during rotation",
+    )
+
     # Backend Configuration
     llm_backend: str = Field(default="ollama")
     ollama_base_url: str = Field(default="http://localhost:11434")

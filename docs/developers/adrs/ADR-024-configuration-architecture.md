@@ -3,7 +3,7 @@
 ## Metadata
 
 **Status:** Implemented  
-**Version/Date:** v2.1 / 2025-08-25
+**Version/Date:** v2.3 / 2025-09-02
 
 ## Title
 
@@ -208,6 +208,15 @@ class DocMindSettings(BaseSettings):
     data_dir: Path = Field(default=Path("./data"))
     cache_dir: Path = Field(default=Path("./cache"))
     sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
+
+    # Analytics (ADR-032)
+    analytics_enabled: bool = Field(default=False, description="Enable optional local DuckDB analytics database")
+    analytics_retention_days: int = Field(default=60, ge=1, le=365, description="Days to retain analytics records")
+    analytics_db_path: Path | None = Field(default=None, description="Optional override; default is data_dir/analytics/analytics.duckdb")
+
+    # Backup (ADR-033)
+    backup_enabled: bool = Field(default=False, description="Enable manual local backups with simple rotation")
+    backup_keep_last: int = Field(default=7, ge=1, le=100, description="How many backups to retain during rotation")
     
     # Performance & GPU Settings
     enable_gpu_acceleration: bool = Field(default=True)
@@ -222,6 +231,45 @@ class DocMindSettings(BaseSettings):
 
 # Global settings instance
 settings = DocMindSettings()
+```
+
+**Environment Variables** (prefix `DOCMIND_`):
+
+- `DOCMIND_ANALYTICS_ENABLED` (bool), `DOCMIND_ANALYTICS_RETENTION_DAYS` (int), `DOCMIND_ANALYTICS_DB_PATH` (path)
+- `DOCMIND_BACKUP_ENABLED` (bool), `DOCMIND_BACKUP_KEEP_LAST` (int)
+
+See ADR-032/ADR-033 for behavior and defaults.
+
+### Configuration Examples (ADR-032/ADR-033)
+
+Enable local analytics with 30-day retention and manual backups keeping the last 7 snapshots:
+
+```bash
+# .env
+DOCMIND_ANALYTICS_ENABLED=true
+DOCMIND_ANALYTICS_RETENTION_DAYS=30
+DOCMIND_ANALYTICS_DB_PATH=./data/analytics/analytics.duckdb
+
+DOCMIND_BACKUP_ENABLED=true
+DOCMIND_BACKUP_KEEP_LAST=7
+```
+
+Access the toggles in code via Pydantic settings:
+
+```python
+from src.config import settings
+
+if settings.analytics_enabled:
+    db_path = (
+        settings.analytics_db_path
+        or (settings.data_dir / "analytics" / "analytics.duckdb")
+    )
+    retention_days = settings.analytics_retention_days
+    # initialize analytics with db_path and retention_days
+
+if settings.backup_enabled:
+    keep_last = settings.backup_keep_last
+    # call backup routine with keep_last
 ```
 
 **In `src/config/integrations.py`:**
@@ -536,6 +584,7 @@ def test_configuration_simplicity():
 
 ## Changelog
 
+- **v2.3 (2025-09-02)**: Added ADR-032/ADR-033 settings toggles (analytics_*and backup_*) and configuration examples; documented DOCMIND_ env mappings.
 - **v2.2 (2025-08-27)**: ✅ **CRITICAL USER FLEXIBILITY PRESERVATION**. Successfully restored ALL user choice settings after Phase 3 implementation nearly removed them. All 5 user scenarios validated: CPU-only students (8GB RAM), mid-range developers (RTX 3060), high-end researchers (RTX 4090), privacy users (offline), and custom configuration users. Key restored settings: `enable_gpu_acceleration`, `llm_backend` (ollama/vllm/openai/llama_cpp), `embedding_model` flexibility, dynamic batch sizes, memory limits, and complete offline capability. Configuration now properly supports LOCAL USER APPLICATION requirements vs server application assumptions.
 
 - **v2.1 (2025-08-25)**: ✅ **Successfully implemented unified architecture**. Achieved 95% complexity reduction from 737 lines to ~80 lines. Resolved VLLMConfig duplication, restored full ADR compliance (BGE-M3, 200ms timeout, FP8 optimization), implemented hybrid model organization, achieved zero linting errors. All configuration tests passing. Production-ready implementation complete.
