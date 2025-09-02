@@ -3,7 +3,7 @@
 ## Metadata
 
 **Status:** Accepted  
-**Version/Date:** v1.0 / 2025-08-27
+**Version/Date:** v1.2 / 2025-09-02
 
 ## Title
 
@@ -130,40 +130,54 @@ graph TD
 **Production Configuration (`src/config/settings.py`)**:
 
 ```python
-class DocMindSettings(BaseSettings):
-    """DocMind AI unified configuration with full user flexibility.
-    
-    CLEAN PRODUCTION CODE: Zero test compatibility code.
-    All test configuration handled via pytest fixtures.
-    """
-    
-    # === USER HARDWARE FLEXIBILITY SETTINGS ===
-    enable_gpu_acceleration: bool = Field(default=True)
-    device: str = Field(default="auto")
-    max_memory_gb: float = Field(default=4.0, ge=1.0, le=32.0)
-    max_vram_gb: float = Field(default=14.0, ge=1.0, le=80.0)
-    
-    # === LLM BACKEND CHOICE ===
-    llm_backend: str = Field(default="ollama")
-    ollama_base_url: str = Field(default="http://localhost:11434")
+from pathlib import Path
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Abbreviated nested models
+class VLLMConfig(BaseModel):
+    model: str = Field(default="Qwen/Qwen3-4B-Instruct-2507-FP8")
+    context_window: int = Field(default=131072)
     vllm_base_url: str = Field(default="http://localhost:8000")
-    openai_base_url: str = Field(default="http://localhost:8080")
-    
-    # === MODEL PROVIDER FLEXIBILITY ===
-    embedding_model: str = Field(default="BAAI/bge-m3")
-    local_model_path: str | None = Field(default=None)
-    
-    # Configuration loading
+
+class EmbeddingConfig(BaseModel):
+    model_name: str = Field(default="BAAI/bge-m3")
+    batch_size_gpu: int = Field(default=12)
+    batch_size_cpu: int = Field(default=4)
+
+class DatabaseConfig(BaseModel):
+    sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
+    qdrant_url: str = Field(default="http://localhost:6333")
+
+class MonitoringConfig(BaseModel):
+    enable_performance_logging: bool = Field(default=True)
+    max_memory_gb: float = Field(default=4.0)
+
+class DocMindSettings(BaseSettings):
+    """DocMind AI unified configuration (no test code in production).
+
+    Test configuration is handled exclusively in pytest fixtures.
+    """
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="DOCMIND_",
+        env_nested_delimiter="__",
         case_sensitive=False,
-        extra="forbid",
+        extra="ignore",
     )
-    
-    # NO TEST CODE IN PRODUCTION CLASS
 
-# Global production instance
+    data_dir: Path = Field(default=Path("./data"))
+    cache_dir: Path = Field(default=Path("./cache"))
+    log_file: Path = Field(default=Path("./logs/docmind.log"))
+    llm_backend: str = Field(default="ollama")
+    ollama_base_url: str = Field(default="http://localhost:11434")
+    enable_gpu_acceleration: bool = Field(default=True)
+
+    vllm: VLLMConfig = Field(default_factory=VLLMConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+
 settings = DocMindSettings()
 ```
 
@@ -181,26 +195,17 @@ def test_settings():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         
-        # Create isolated settings with test-specific defaults
+        # Create isolated settings with test-specific defaults (nested overrides)
         test_config = DocMindSettings(
-            # Test-optimized settings
             data_dir=temp_path / "data",
-            cache_dir=temp_path / "cache", 
-            sqlite_db_path=temp_path / "test.db",
+            cache_dir=temp_path / "cache",
             log_file=temp_path / "test.log",
-            
-            # Mock external services for tests
-            qdrant_url="http://localhost:6333",
+            database=DatabaseConfig(
+                sqlite_db_path=temp_path / "test.db",
+                qdrant_url="http://localhost:6333",
+            ),
             ollama_base_url="http://localhost:11434",
-            
-            # Disable resource-intensive features in tests
             enable_gpu_acceleration=False,
-            device="cpu",
-            max_memory_gb=2.0,
-            
-            # Test-specific values
-            debug=True,
-            log_level="DEBUG",
         )
         
         # Ensure directories exist
@@ -214,10 +219,10 @@ def gpu_test_settings():
     """Settings for GPU-specific tests."""
     return DocMindSettings(
         enable_gpu_acceleration=True,
-        device="cuda",
-        max_vram_gb=12.0,
         llm_backend="vllm",
-        bge_m3_batch_size_gpu=12,
+        vllm=VLLMConfig(vllm_base_url="http://localhost:8000"),
+        embedding=EmbeddingConfig(batch_size_gpu=12),
+        monitoring=MonitoringConfig(max_memory_gb=12.0),
     )
 
 @pytest.fixture
@@ -225,10 +230,9 @@ def cpu_test_settings():
     """Settings for CPU-only tests.""" 
     return DocMindSettings(
         enable_gpu_acceleration=False,
-        device="cpu",
-        max_memory_gb=8.0,
         llm_backend="ollama",
-        bge_m3_batch_size_cpu=4,
+        embedding=EmbeddingConfig(batch_size_cpu=4),
+        monitoring=MonitoringConfig(max_memory_gb=8.0),
     )
 
 @pytest.fixture
@@ -240,10 +244,9 @@ def privacy_test_settings():
         
         yield DocMindSettings(
             enable_gpu_acceleration=False,
-            device="cpu", 
             llm_backend="llama_cpp",
-            local_model_path=str(local_path),
-            enable_performance_logging=False,
+            vllm=VLLMConfig(model=str(local_path / "qwen3.gguf")),
+            monitoring=MonitoringConfig(enable_performance_logging=False),
         )
 ```
 
@@ -257,32 +260,25 @@ def test_user_scenario_student(test_settings):
     """Test student scenario: CPU-only, 8GB RAM."""
     student_config = DocMindSettings(
         enable_gpu_acceleration=False,
-        device="cpu",
-        max_memory_gb=8.0,
         llm_backend="ollama",
-        context_window_size=4096,
-        bge_m3_batch_size_cpu=4,
+        vllm=VLLMConfig(context_window=4096),
+        embedding=EmbeddingConfig(batch_size_cpu=4),
+        monitoring=MonitoringConfig(max_memory_gb=8.0),
     )
-    
     assert student_config.enable_gpu_acceleration is False
-    assert student_config._get_embedding_device() == "cpu"
-    assert student_config._get_embedding_batch_size() == 4
+    assert student_config.embedding.batch_size_cpu == 4
 
 def test_user_scenario_developer(gpu_test_settings):
     """Test developer scenario: RTX 3060, 12GB VRAM."""
     dev_config = DocMindSettings(
         enable_gpu_acceleration=True,
-        device="cuda",
-        max_vram_gb=12.0,
         llm_backend="vllm",
-        context_window_size=32768,
-        bge_m3_batch_size_gpu=12,
+        vllm=VLLMConfig(context_window=32768, vllm_base_url="http://localhost:8000"),
+        embedding=EmbeddingConfig(batch_size_gpu=12),
+        monitoring=MonitoringConfig(max_memory_gb=12.0),
     )
-    
     assert dev_config.enable_gpu_acceleration is True
-    assert dev_config._get_embedding_device() == "cuda"
-    assert dev_config.max_vram_gb == 12.0
-    assert dev_config._get_backend_url().endswith(":8000")
+    assert dev_config.vllm.vllm_base_url.endswith(":8000")
 
 def test_user_scenario_privacy(privacy_test_settings):
     """Test privacy scenario: CPU, local models."""
@@ -291,15 +287,18 @@ def test_user_scenario_privacy(privacy_test_settings):
     assert privacy_test_settings.local_model_path is not None
     assert privacy_test_settings.enable_performance_logging is False
 
-@pytest.mark.parametrize("backend,expected_url", [
+@pytest.mark.parametrize("backend,expected", [
     ("ollama", "http://localhost:11434"),
-    ("vllm", "http://localhost:8000"), 
-    ("openai", "http://localhost:8080"),
+    ("vllm", "http://localhost:8000"),
 ])
-def test_backend_url_selection(test_settings, backend, expected_url):
-    """Test LLM backend URL selection."""
-    config = DocMindSettings(llm_backend=backend)
-    assert config._get_backend_url() == expected_url
+def test_backend_url_selection(test_settings, backend, expected):
+    """Test LLM backend URL selection (ollama/vllm)."""
+    if backend == "ollama":
+        cfg = DocMindSettings(llm_backend=backend, ollama_base_url=expected)
+        assert cfg.ollama_base_url == expected
+    elif backend == "vllm":
+        cfg = DocMindSettings(llm_backend=backend, vllm=VLLMConfig(vllm_base_url=expected))
+        assert cfg.vllm.vllm_base_url == expected
 
 def test_no_test_contamination():
     """Verify production settings have zero test code."""
@@ -327,21 +326,21 @@ def test_settings_isolation(test_settings):
     
     # Modify test settings
     test_settings.debug = True
-    test_settings.max_memory_gb = 1.0
+    test_settings.monitoring.max_memory_gb = 1.0
     
     # Production settings unchanged
     assert prod_settings.debug != test_settings.debug
-    assert prod_settings.max_memory_gb != test_settings.max_memory_gb
+    assert prod_settings.monitoring.max_memory_gb != test_settings.monitoring.max_memory_gb
 
 def test_all_user_scenarios_supported():
     """Verify all 5 user scenarios work in test isolation."""
     scenarios = [
         # Student: CPU-only, 8GB RAM
-        {"enable_gpu_acceleration": False, "max_memory_gb": 8.0, "device": "cpu"},
+        {"enable_gpu_acceleration": False, "monitoring": {"max_memory_gb": 8.0}},
         # Developer: RTX 3060, 12GB VRAM  
         {"enable_gpu_acceleration": True, "max_vram_gb": 12.0, "device": "cuda"},
         # Researcher: RTX 4090, 24GB VRAM
-        {"enable_gpu_acceleration": True, "max_vram_gb": 24.0, "device": "cuda"},
+        {"enable_gpu_acceleration": True, "monitoring": {"max_memory_gb": 24.0}},
         # Privacy: CPU, local models
         {"enable_gpu_acceleration": False, "device": "cpu", "llm_backend": "llama_cpp"},
         # Custom: OpenAI endpoint
@@ -394,4 +393,6 @@ def test_all_user_scenarios_supported():
 
 ## Changelog
 
+- **v1.2 (2025-09-02)**: Updated code examples to reflect nested settings (env_nested_delimiter), removed legacy fields/methods, corrected test fixtures to use nested overrides; reaffirmed no test code in production.
+- **v1.1 (2025-09-02)**: Removed custom SimpleCache from production; cache responsibilities handled by LlamaIndex IngestionCache(DuckDBKVStore). Reaffirmed zero test code in src/ and clean seams.
 - **v1.0 (2025-08-27)**: Initial implementation of test-production separation using pytest fixtures with isolated Pydantic BaseSettings instances. Successfully eliminated 127 lines of test contamination from production code while preserving all user flexibility settings across 5 validated scenarios. Clean architecture achieved with zero production code complexity for test compatibility.
