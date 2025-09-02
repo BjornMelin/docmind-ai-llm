@@ -6,7 +6,7 @@ Parallel Document Analysis with Conditional Routing and Result Aggregation
 
 ## Version/Date
 
-1.0 / 2025-08-18
+1.1 / 2025-09-02
 
 ## Status
 
@@ -970,4 +970,5 @@ def display_separate_results(result: AggregatedResult):
 
 ## Changelog
 
+- **1.1 (2025-09-02)**: No change required; cache unification speeds both modes without architectural impact.
 - **1.0 (2025-08-18)**: Initial document analysis mode strategy with parallel individual processing, unified combined analysis, and intelligent result aggregation

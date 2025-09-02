@@ -6,7 +6,7 @@ Modernized Document Ingestion with Multimodal Support and Intelligent Chunking
 
 ## Version/Date
 
-2.0 / 2025-08-26
+2.2 / 2025-09-02
 
 ## Implemented In
 
@@ -86,8 +86,10 @@ We will use **Hybrid DocumentProcessor** combining Unstructured.io with LlamaInd
 
 - **ADR-002** (Unified Embedding Strategy): Uses BGE-M3 embeddings for processed document chunks
 - **ADR-003** (Adaptive Retrieval Pipeline): Consumes intelligently chunked documents for retrieval
-- **ADR-007** (Hybrid Persistence Strategy): Stores processed documents and metadata efficiently
+- **ADR-031** (Local-First Persistence Architecture): Defines Qdrant vectors and DuckDBKV-backed cache
+- **ADR-030** (Cache Unification): Single cache via IngestionCache + DuckDBKVStore
 - **ADR-019** (Optional GraphRAG): Uses processed documents for PropertyGraphIndex construction
+- **ADR-034** (Idempotent Indexing & Embedding Reuse): Hashing/upsert policy to skip re-embedding unchanged nodes
 
 ### Why Unstructured.io?
 
@@ -115,7 +117,7 @@ After evaluating multiple approaches, we implemented a **hybrid DocumentProcesso
 1. **DocumentProcessor** (`src/processing/document_processor.py`): Main hybrid processor
 2. **UnstructuredTransformation**: Custom LlamaIndex TransformComponent
 3. **Strategy Mapping**: Automatic strategy selection for 11 file types
-4. **Dual Caching**: Both LlamaIndex IngestionCache and SimpleCache for compatibility
+4. **Single Cache**: LlamaIndex IngestionCache backed by DuckDBKVStore
 5. **Error Handling**: Comprehensive retry logic with Tenacity integration
 
 ## Actual Implementation (645 Lines)
@@ -125,6 +127,7 @@ from pathlib import Path
 from typing import Any
 from llama_index.core import Document
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
+from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import BaseNode, TransformComponent
 from unstructured.partition.auto import partition
@@ -158,12 +161,13 @@ class DocumentProcessor:
             '.bmp': ProcessingStrategy.OCR_ONLY,
         }
         
-        # Initialize dual caching system
+        # Initialize single cache: IngestionCache backed by DuckDBKVStore
+        cache_db = Path(getattr(self.settings, "cache_dir", "./cache")) / "docmind.duckdb"
+        cache_db.parent.mkdir(parents=True, exist_ok=True)
         self.cache = IngestionCache(
+            cache=DuckDBKVStore(db_path=str(cache_db)),
             collection="docmind_processing",
-            cache_dir=str(getattr(self.settings, "cache_dir", "./cache"))
         )
-        self.simple_cache = SimpleCache(cache_dir=str(getattr(self.settings, "cache_dir", "./cache")))
     
     def _create_pipeline(self, strategy: ProcessingStrategy) -> IngestionPipeline:
         """Create LlamaIndex IngestionPipeline with UnstructuredTransformation."""
@@ -398,7 +402,7 @@ def process_document(file_path: str):
 
 - **Code Reduction**: 878 lines of duplicate processing code removed
 - **File Type Support**: 11 formats with automatic strategy selection
-- **Cache Hit Rate**: 80-95% re-processing reduction via dual caching
+- **Cache Hit Rate**: 80-95% re-processing reduction via IngestionCache
 - **Processing Speed**: Exceeds 1 page/second target with hi_res strategy
 - **Memory Efficiency**: <2GB peak memory usage (well under 4GB limit)
 
@@ -406,14 +410,13 @@ def process_document(file_path: str):
 
 ### Positive Outcomes
 
-- **Hybrid Architecture**: Best of both worlds - Unstructured.io parsing + LlamaIndex orchestration
+- **Hybrid Architecture**: Unstructured.io parsing + LlamaIndex orchestration
 - **Strategy-Based Processing**: Automatic optimization based on file type
-- **Dual Caching System**: Both IngestionCache and SimpleCache for maximum compatibility
+- **Single Cache**: IngestionCache + DuckDBKVStore (no custom cache)
 - **Library-First Implementation**: Direct unstructured.partition() integration
 - **Complete Pipeline Integration**: Seamless LlamaIndex TransformComponent
-- **Backward Compatibility**: Drop-in replacement for ResilientDocumentProcessor
 - **Production Ready**: Comprehensive error handling and retry logic
-- **Performance Achievement**: All NFR targets met or exceeded
+- Performance Achievement: All NFR targets met or exceeded
 
 ### Negative Consequences / Trade-offs
 
@@ -430,10 +433,10 @@ def process_document(file_path: str):
 
 ## Dependencies
 
-- **Primary**: `unstructured[all-docs]>=0.10.0` - Handles all document formats and processing
-- **Python**: Python 3.8+ (automatically satisfied by Unstructured.io)
+- **Primary**: `unstructured[all-docs]>=0.10.0` — document parsing and multimodal extraction
+- **LlamaIndex**: `llama-index==0.13.x`, `llama-index-storage-kvstore-duckdb`
+- **Python**: 3.11 (project standard)
 - **System**: Dependencies automatically managed by Unstructured.io installation
-- **Memory**: <2GB for typical document processing (much lower than custom implementations)
 
 ## Monitoring Metrics
 
@@ -452,7 +455,9 @@ def process_document(file_path: str):
 
 ## Changelog
 
-- **2.0 (2025-08-26)**: **IMPLEMENTATION COMPLETE** - Hybrid DocumentProcessor deployed with all functional and non-functional requirements achieved. Code reduction: 878 lines removed. Performance: >1 page/second confirmed.
-- **1.2 (2025-08-26)**: Cleaned up documentation to align with library-first principles - removed contradictory custom parser implementations that violated KISS
-- **1.1 (2025-08-18)**: Added GraphRAG input processing support for PropertyGraphIndex construction and entity/relationship extraction from processed documents  
+- **2.2 (2025-09-02)**: Body overhauled to remove SimpleCache and dual caching; IngestionCache now backed by DuckDBKVStore with single-file DB. Related Decisions updated to ADR-031/ADR-030.
+- **2.1 (2025-09-02)**: Removed custom SimpleCache from pipeline; DocumentProcessor wires LlamaIndex IngestionCache with DuckDBKVStore as the single cache (no back-compat). Updated implementation notes accordingly.
+- **2.0 (2025-08-26)**: IMPLEMENTATION COMPLETE — Hybrid DocumentProcessor deployed with all functional and non-functional requirements achieved. Code reduction: 878 lines removed. Performance: >1 page/second confirmed.
+- **1.2 (2025-08-26)**: Cleaned up documentation to align with library-first principles — removed contradictory custom parser implementations that violated KISS
+- **1.1 (2025-08-18)**: Added GraphRAG input processing support for PropertyGraphIndex construction and entity/relationship extraction from processed documents
 - **1.0 (2025-01-16)**: Initial modernized document processing pipeline with multimodal support and intelligent chunking using Unstructured.io

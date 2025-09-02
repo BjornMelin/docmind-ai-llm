@@ -6,7 +6,7 @@ Persistent Chat Memory with Context-Aware Follow-Up Processing
 
 ## Version/Date
 
-2.0 / 2025-08-19
+3.2 / 2025-09-02
 
 ## Status
 
@@ -84,7 +84,7 @@ We will implement **LlamaIndex-based Conversational Memory** with:
 
 ## Related Decisions
 
-- **ADR-007** (Hybrid Persistence Strategy): Provides SQLite foundation for chat storage
+- **ADR-031** (Local-First Persistence Architecture): Confirms SQLite for operational data (separate from cache)
 - **ADR-016** (UI State Management): Manages chat interface state and user interactions
 - **ADR-001** (Modern Agentic RAG): Uses conversation context for agent decision-making
 - **ADR-003** (Adaptive Retrieval): Leverages chat history for contextual document retrieval
@@ -877,6 +877,7 @@ class ContextManager:
 
 ## Changelog
 
+- **3.2 (2025-09-02)**: No change required for chat memory; confirmed cache unification does not impact ChatMemoryBuffer/SimpleChatStore separation.
 - **3.1 (2025-08-20)**: **SUPERVISOR INTEGRATION HOOKS** - Added pre/post model hooks for LangGraph supervisor integration. Created trim_context_hook for automatic context trimming at 120K threshold (8K buffer) and format_response_hook for processing metadata. Added get_supervisor_hooks() method to expose RunnableLambda hooks for supervisor configuration. Enhanced with session tracking and processing metadata for structured output mode.
 - **3.0 (2025-08-19)**: **CONTEXT WINDOW CORRECTION** - Updated for Qwen/Qwen3-4B-Instruct-2507-FP8 with 128K context window through FP8 KV cache optimization. Reduced token limit from 260K to 120K (with safety buffer), requiring aggressive trimming strategies. Updated condensation trigger from 95% to 90% utilization. Added pre-model hook for context management and enhanced memory optimization for 128K window.
 - **2.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context window through INT8 KV cache optimization. Increased token limit from 65K to 260K (95% of full context), reducing the need for conversation condensation. Users can maintain extended conversation history spanning hundreds of exchanges without context loss. Condensation trigger moved from 80% to 95% utilization.

@@ -6,17 +6,15 @@ Multi-Backend Persistence with SQLite, DuckDB, and Vector Storage Optimization
 
 ## Version/Date
 
-2.2 / 2025-08-18
+2.3 / 2025-09-02
 
 ## Status
 
-Accepted (with simplification note)
+Superseded by ADR-031
 
 ## Description
 
-**SIMPLIFICATION NOTE**: For MVP, consider using SQLite + Qdrant only. Add DuckDB for analytics later if needed. The multi-backend approach described here may be over-engineering for initial release.
-
-Original description: Implements a hybrid persistence strategy that moves beyond SQLite-only storage to include DuckDB for analytics, optimized vector storage, and intelligent data partitioning. The system maintains local-first operation while providing better performance for different data types and access patterns, supporting both operational queries and analytical workloads.
+This ADR has been superseded by ADR-031: “Local-First Persistence Architecture (Vectors, Cache, Operational Data)”. Refer to ADR-031 for the final, non-legacy persistence decisions.
 
 ## Context
 
@@ -75,7 +73,7 @@ A hybrid approach allows each data type to use the most appropriate storage back
 
 ## Decision
 
-We will use **SQLite + Qdrant only** for MVP simplicity:
+See ADR-031 for current decisions. This ADR retained a prior iteration and is kept for historical context only.
 
 ### Library-First Persistence with Selective Resilience
 
@@ -108,12 +106,15 @@ with engine.begin() as conn:
 
 SQLModel.metadata.create_all(engine)
 
-# Native IngestionCache for 80-95% re-processing reduction
+# IngestionCache backed by DuckDBKVStore (single-file, local-first)
+from pathlib import Path
+from llama_index.core.ingestion import IngestionCache
+from llama_index.storage.kvstore.duckdb import DuckDBKVStore
+
+cache_path = Path("./data/docmind.duckdb")
 ingestion_cache = IngestionCache(
-    cache=SimpleKVStore.from_sqlite_path(
-        "./data/ingestion_cache.db",
-        wal=True  # WAL mode for cache too
-    )
+    cache=DuckDBKVStore(db_path=str(cache_path)),
+    collection="docmind_processing",
 )
 
 # Resilient Qdrant connection with Tenacity
@@ -148,7 +149,7 @@ vector_store = QdrantVectorStore(
 - ❌ Custom vector storage format
 - ❌ Custom compression layers  
 - ❌ Redis cache (use st.cache_data and IngestionCache)
-- ❌ DuckDB analytics (add later if needed)
+- ❌ DuckDB analytics coupled to cache (keep cache DB focused). If analytics are needed, add a separate DuckDB database later.
 - ❌ Complex data partitioning
 - ❌ Custom caching logic (use native IngestionCache)
 - ❌ Separate graph database (PropertyGraphIndex reuses Qdrant for embeddings)
@@ -168,7 +169,7 @@ vector_store = QdrantVectorStore(
 - **ADR-003** (Adaptive Retrieval Pipeline): Benefits from optimized vector storage
 - **ADR-008** (Production Observability): Uses DuckDB for analytics storage
 - **ADR-010** (Performance Optimization Strategy): Provides FP8 KV cache optimization for LLM performance
-- **ADR-025** (Simple Caching Strategy): Implements document processing and query result caching
+- **ADR-025** (Simple Caching Strategy): Implements document processing caching via IngestionCache(DuckDBKVStore)
 - **ADR-019** (Optional GraphRAG): Reuses existing Qdrant infrastructure for PropertyGraphIndex storage
 
 ## Design
@@ -828,6 +829,7 @@ class BackupManager:
 
 ## Changelog
 
+- **2.4 (2025-09-02)**: Marked as Superseded by ADR-031; removed legacy implementation detail. Kept only historical summary.
 - **2.2 (2025-08-21)**: **IMPLEMENTATION COMPLETE** - Qdrant unified vector store with resilience patterns fully deployed
 - **2.1 (2025-08-18)**: Added GraphRAG vector storage support using existing Qdrant infrastructure for PropertyGraphIndex integration
 - **2.0 (2025-08-17)**: Major simplification to SQLite + Qdrant for MVP, enhanced with resilience patterns

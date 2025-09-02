@@ -6,11 +6,11 @@ Library-First Development Opportunities and Implementation Impact
 
 ## Version/Date
 
-1.0 / 2025-08-29
+1.1 / 2025-09-02
 
 ## Status
 
-In Review
+Accepted
 
 ## Implementation Date
 
@@ -27,9 +27,9 @@ DocMind AI has successfully implemented a library-first approach achieving subst
 - **90% code reduction** from langgraph-supervisor vs custom orchestration
 - **94% code reduction** vs custom multi-agent implementation  
 - **91% code reduction** achieved overall through library adoption
-- **98% setup simplification** through SimpleCache vs complex cache systems
+- **Setup simplification** through LlamaIndex IngestionCache(DuckDBKVStore) vs custom cache systems
 
-Additional opportunities exist to further simplify the codebase while maintaining or improving functionality.
+Additional opportunities exist to further simplify the codebase while maintaining or improving functionality. We have adopted a single-cache architecture using LlamaIndex IngestionCache + DuckDBKVStore, eliminating custom cache wrappers and JSON-based persistence.
 
 ## Library Opportunities Analysis
 
@@ -314,7 +314,7 @@ For each library opportunity, evaluate:
 ## Related ADRs
 
 - **ADR-011**: Agent Orchestration Framework (achieved 90% code reduction)
-- **ADR-025**: Simplified Caching Strategy (achieved 90% code reduction)
+- **ADR-030**: Cache Unification (IngestionCache + DuckDBKVStore adoption)
 - **ADR-002**: BGE-M3 Unified Embeddings (potential FastEmbed target)
 - **ADR-024**: Configuration Architecture (Pydantic V2 optimizations)
 
@@ -355,6 +355,7 @@ This approach ensures continued code simplification while maintaining the produc
 
 ## Changelog
 
+- **1.1 (2025-09-02)**: Adopted IngestionCache(DuckDBKVStore) for document processing cache; removed custom SimpleCache. Updated status to Accepted.
 - **1.0 (2025-08-29)**: Initial analysis of library opportunities and code reduction potential across embedding pipeline, testing infrastructure, and UI components.
 
 ## References

@@ -25,7 +25,7 @@ The DocMind AI system requires a sophisticated interface that provides seamless 
 3. **Adaptive Retrieval**: Hierarchical search with BGE-M3 + CLIP embeddings (ADR-002, ADR-003)
 4. **Local-First LLM**: Qwen3-14B with 128K context for agent decisions (ADR-004)
 5. **Production Observability**: Real-time monitoring and quality metrics (ADR-008, ADR-012)
-6. **Session Persistence**: SQLite + Redis hybrid storage (ADR-007)
+6. **Session Persistence**: SQLite operational data (ADR-031); no Redis by default
 
 The interface must provide a premium user experience that showcases the system's sophisticated capabilities while maintaining simplicity and performance. Modern UI patterns, component libraries, and state management are essential for handling complex workflows and large datasets efficiently.
 
@@ -96,8 +96,9 @@ We will use **Native Streamlit Components** without unnecessary libraries:
 ## Related Decisions
 
 - **ADR-001** (Modern Agentic RAG): UI visualizes agent routing, correction, validation
-- **ADR-007** (Hybrid Persistence): Integrates SQLite + Redis session management  
-- **ADR-008** (Production Observability): Real-time metrics and monitoring dashboard
+- **ADR-031** (Local-First Persistence): Integrates SQLite ops data for session management  
+- **ADR-021** (Chat Memory): Confirms separation and persistence approach for chat history
+- **ADR-032** (Local Analytics & Metrics): Analytics page may display local metrics
 - **ADR-009** (Document Processing): Multimodal document upload and processing UI
 - **ADR-016** (UI State Management): Session state schema and caching strategy
 - **ADR-017** (Component Library): Streamlit component selection and theming

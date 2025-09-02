@@ -98,8 +98,8 @@ We will implement **LlamaIndex PropertyGraphIndex as an optional module** with:
 - **ADR-003** (Adaptive Retrieval): Routes to GraphRAG for complex queries
 - **ADR-009** (Document Processing): Provides input for graph construction
 - **ADR-011** (Agent Orchestration): Planning agent can invoke GraphRAG
-- **ADR-007** (Persistence): Reuses existing Qdrant vector storage for PropertyGraphIndex embeddings
-- **ADR-025** (Simple Caching Strategy): Caches PropertyGraphIndex construction for expensive graph operations
+- **ADR-031** (Local-First Persistence): Reuses existing Qdrant vector storage for PropertyGraphIndex embeddings
+- **ADR-030** (Cache Unification): App-level cache is IngestionCache(DuckDBKVStore); for GraphRAG, prefer LlamaIndex's native graph store persistence rather than a separate cache
 
 ## Design
 

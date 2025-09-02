@@ -6,7 +6,7 @@ Hierarchical Adaptive Retrieval with Simplified RAPTOR and Multi-Strategy Routin
 
 ## Version/Date
 
-3.0 / 2025-08-19
+3.2 / 2025-09-02
 
 ## Status
 
@@ -32,7 +32,7 @@ Current retrieval is limited to flat vector similarity search with basic reranki
 
 Full RAPTOR implementation is too resource-intensive for local deployment. Our RAPTOR-Lite approach maintains hierarchical benefits while optimizing for local-first constraints.
 
-**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-007), applies adaptive routing strategies optimized for 128K context windows, and uses BGE-reranker-v2-m3 (ADR-006) to refine results before returning them to the agentic RAG system with FP8 optimization.
+**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-031), applies adaptive routing strategies optimized for 128K context windows, and uses BGE-reranker-v2-m3 (ADR-006) to refine results before returning them to the agentic RAG system with FP8 optimization.
 
 ## Related Requirements
 
@@ -88,7 +88,7 @@ We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in fe
 
 - **ADR-002** (Unified Embedding Strategy): Provides BGE-M3 embeddings for hierarchical indexing
 - **ADR-006** (Modern Reranking Architecture): Reranks hierarchical retrieval results using BGE-reranker-v2-m3
-- **ADR-007** (Hybrid Persistence Strategy): Accesses Qdrant vector storage for similarity search operations
+- **ADR-031** (Local-First Persistence Architecture): Accesses Qdrant vector storage for similarity search operations
 - **ADR-001** (Modern Agentic RAG): Uses adaptive retrieval for intelligent routing
 - **ADR-011** (Agent Orchestration Framework): Orchestrates adaptive retrieval decisions
 - **ADR-018** (DSPy Prompt Optimization): Provides automatic query optimization for improved retrieval
@@ -157,7 +157,7 @@ def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graph
     """
     
     # NOTE: Document chunking handled by ResilientDocumentProcessor (ADR-009)
-    # Document processing results cached via SimpleCache (src/cache/simple_cache.py)
+    # Document processing results cached via IngestionCache (ADR-030) backed by DuckDBKVStore
     # semantic_splitter = SemanticSplitterNodeParser(  # Available for special cases only
     #     embed_model=Settings.embed_model,
     #     breakpoint_percentile_threshold=95,
@@ -410,7 +410,7 @@ def _create_section_summaries(documents: List[Document], llm) -> Dict[str, str]:
         summary_prompt = f"""
         Summarize the following section concisely, focusing on key concepts and themes:
         
-        {section_content[:100000]}  # Use large 262K context window
+        {section_content[:100000]}  # Sized for 128K context window (see ADR-010)
         
         Summary:"""
         
@@ -535,9 +535,11 @@ class QualityMetrics:
 ## Dependencies
 
 - **Python**: `scikit-learn>=1.3.0` for clustering, `numpy>=1.24.0`
-- **LlamaIndex**: Core retrieval and embedding interfaces, SimpleKVStore for document caching
-- **Models**: BGE-M3 embeddings, Qwen3-4B-Instruct-2507 with 262K context for document summarization
-- **Caching**: SimpleCache implementation (`src/cache/simple_cache.py`) using SQLite for document processing cache
+- **LlamaIndex**: Core retrieval and embedding interfaces
+- **Models**: BGE-M3 embeddings; Qwen3-4B-Instruct-2507 with 128K context (see ADR-004 and ADR-010)
+- **Caching**: IngestionCache + DuckDBKVStore (ADR-030) for document processing cache
+
+Note: Model/context specifics are governed by ADR-004 (Local-First LLM Strategy) and ADR-010 (Performance Optimization). This ADR focuses on retrieval architecture.
 
 ## Monitoring Metrics
 
@@ -554,8 +556,7 @@ class QualityMetrics:
 ### Completed Components
 
 - **RouterQueryEngine**: `src/retrieval/query_engine.py` - Adaptive strategy selection with LLMSingleSelector
-- **Document Processing Cache**: `src/cache/simple_cache.py` - SQLite-based document processing cache using LlamaIndex SimpleKVStore
-- **Cache Testing**: `tests/unit/cache/test_simple_cache.py` - Comprehensive test suite for SimpleCache functionality
+- **Document Processing Cache**: IngestionCache backed by DuckDBKVStore (ADR-030)
 - **Strategy Implementation**:
   - Dense semantic search (BGE-M3 dense vectors)
   - Hybrid search (BGE-M3 dense + sparse with RRF fusion)
@@ -575,8 +576,9 @@ class QualityMetrics:
 
 ## Changelog
 
-- **3.1 (2025-08-21)**: **IMPLEMENTATION COMPLETE** - RouterQueryEngine fully deployed with all adaptive strategies operational
-- **3.0 (2025-08-19)**: **CONTEXT WINDOW INCREASE** - Updated for Qwen3-4B-Instruct-2507 with 262K context enabling document processing without chunking limitations. Retrieval strategies now leverage large context windows for processing entire documents in single passes. Section summaries can utilize up to 100K tokens (vs previous 4K limit). Updated document understanding through extended context retention.
+- **3.2 (2025-09-02)**: Standardized to 128K context (see ADR-004/ADR-010); removed 262K mentions; updated cache references to ADR-030; added governance note for model/context
+- **3.1 (2025-08-21)**: IMPLEMENTATION COMPLETE — RouterQueryEngine fully deployed with all adaptive strategies operational
+- **3.0 (2025-08-19)**: CONTEXT WINDOW INCREASE — Updated for Qwen3-4B-Instruct-2507 with 262K context enabling document processing without chunking limitations. Retrieval strategies now leverage large context windows for processing entire documents in single passes. Section summaries can utilize up to 100K tokens (vs previous 4K limit). Updated document understanding through extended context retention.
 - **2.1 (2025-08-18)**: Added DSPy query optimization and PropertyGraphIndex as retrieval strategy for enhanced query processing and relationship-based retrieval
 - **2.0 (2025-08-17)**: Major enhancement with multi-strategy routing and DSPy integration
 - **1.0 (2025-01-16)**: Initial design for adaptive retrieval pipeline with RAPTOR-Lite hierarchical indexing

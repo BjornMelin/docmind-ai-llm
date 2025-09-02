@@ -14,7 +14,7 @@ Accepted
 
 ## Description
 
-Implements FP8 KV cache quantization and parallel tool execution for Qwen3-4B-Instruct-2507-FP8's 128K context window on RTX 4090 Laptop (16GB VRAM), achieving <1.5 second response times with optimized memory usage and 50-87% token reduction through parallel execution. Application-level caching is handled separately by ADR-025.
+Implements FP8 KV cache quantization and parallel tool execution for Qwen3-4B-Instruct-2507-FP8's 128K context window on RTX 4090 Laptop (16GB VRAM), achieving <1.5 second response times with optimized memory usage and 50-87% token reduction through parallel execution. Application-level caching is handled separately by ADR-030.
 
 ## Context
 
@@ -30,7 +30,7 @@ The multi-agent RAG architecture requires LLM performance optimization for viabl
 
 **CONFIRMED COMPATIBILITY**: **Update 2025-01-22** - RTX 4090 (Ada Lovelace architecture) DOES support FP8 quantization through vLLM and FlashInfer backends. This includes both FP8 KV cache (`fp8_e5m2`) and model weights quantization with proven stability and performance benefits.
 
-**Note**: Application-level caching (document processing, query results) is handled by a separate decision in ADR-025 (Simple Caching Strategy).
+**Note**: Application-level caching (document processing) is handled by a separate decision in ADR-030 (Cache Unification).
 
 ## Related Requirements
 
@@ -99,7 +99,8 @@ We will adopt **FP8 KV cache quantization with parallel tool execution** for opt
 - **ADR-004** (Local-First LLM Strategy): Specifies Qwen3-4B-Instruct-2507-FP8 with FP8 quantization enabling 128K context
 - **ADR-011** (Agent Orchestration Framework): Defines the 5-agent architecture requiring parallel tool coordination
 - **ADR-015** (Deployment Strategy): LLM performance optimization affects Docker deployment requirements
-- **ADR-025** (Simple Caching Strategy): Handles application-level caching separately from LLM performance optimization
+- **ADR-030** (Cache Unification): Handles application-level caching separately from LLM performance optimization
+- **ADR-032** (Local Analytics & Metrics): Optional local metrics store for performance insights
 
 ## Design
 
@@ -131,7 +132,7 @@ graph TD
 
 ### FP8 KV Cache Optimization
 
-**Core Focus**: This ADR specifically addresses LLM-level performance optimization through FP8 quantization and parallel execution. Application-level caching (document processing, query results) is handled separately by ADR-025.
+**Core Focus**: This ADR specifically addresses LLM-level performance optimization through FP8 quantization and parallel execution. Application-level caching (document processing) is handled separately by ADR-030.
 
 **FP8 KV Cache Benefits**:
 
@@ -250,7 +251,7 @@ class VLLMOptimizer:
 
 ```env
 # LLM Performance Optimization Configuration
-# Note: Application-level caching handled by ADR-025
+# Note: Application-level caching handled by ADR-030
 
 # FP8 KV Cache Optimization for Qwen3-4B-Instruct-2507-FP8
 VLLM_ATTENTION_BACKEND=FLASHINFER  # FlashInfer backend for FP8 acceleration
@@ -576,7 +577,7 @@ def test_configuration_validation():
 
 ### Dependencies
 
-- **Python**: `gptcache>=0.1.34`, `llama-index-core>=0.10.0`, `qdrant-client>=1.6.0`
+- **Python**: `llama-index-core>=0.10.0`, `qdrant-client>=1.6.0`
 - **Optional**: `torchao>=0.1.0` for additional quantization, `flash-attn>=2.0.0` for attention optimization
 - **System**: SQLite3 with WAL support
 - **Hardware**: NVIDIA GPU with ≥6GB VRAM, CUDA 11.8+
@@ -605,7 +606,7 @@ def test_configuration_validation():
 
 ## Changelog
 
-- **9.0 (2025-08-26)**: **MAJOR ARCHITECTURE SEPARATION** - Separated LLM performance optimization from application-level caching. Removed all dual-layer caching architecture (moved to ADR-025). Now focuses exclusively on FP8 KV cache optimization and parallel tool execution for Qwen3-4B-Instruct-2507-FP8. Updated design, implementation, testing, and configuration to reflect this separation. Application-level document processing and query caching now handled by ADR-025 simple SQLite strategy.
+- **9.0 (2025-08-26)**: **MAJOR ARCHITECTURE SEPARATION** - Separated LLM performance optimization from application-level caching. Removed all dual-layer caching architecture (moved to ADR-030). Now focuses exclusively on FP8 KV cache optimization and parallel tool execution for Qwen3-4B-Instruct-2507-FP8. Updated design, implementation, testing, and configuration to reflect this separation. Application-level document processing cache now handled by ADR-030 (IngestionCache + DuckDBKVStore).
 - **8.1 (2025-08-20)**: **VERIFIED PARALLEL EXECUTION PARAMETERS** - Enhanced parallel execution documentation with verified LangGraph supervisor parameters: parallel_tool_calls=True (concurrent execution), add_handoff_back_messages=True (coordination tracking), create_forward_message_tool=True (direct passthrough), output_mode="structured" (enhanced formatting). All parameters verified against official LangGraph supervisor documentation for accurate technical specifications.
 - **8.0 (2025-08-19)**: **FP8 OPTIMIZATION WITH PARALLEL EXECUTION** - Updated for Qwen3-4B-Instruct-2507-FP8 with FP8 quantization enabling 128K context on RTX 4090 Laptop (16GB VRAM). FP8 KV cache optimization with total memory at 128K: ~12-14GB. Performance improves by +30% with FP8 quantization. Added parallel tool execution achieving 50-87% token reduction. Updated configurations for vLLM with FlashInfer backend.
 - **7.0 (2025-08-19)**: **INT8 KV CACHE IMPLEMENTATION** - Updated for Qwen3-4B-Instruct-2507 with AWQ quantization enabling FULL 262K context on RTX 4090 Laptop (16GB VRAM). INT8 KV cache reduces memory by 50% with performance improvements.

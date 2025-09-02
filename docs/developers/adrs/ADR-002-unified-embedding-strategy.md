@@ -6,7 +6,7 @@ BGE-M3 Unified Dense/Sparse Embedding with CLIP Multimodal Support
 
 ## Version/Date
 
-4.0 / 2025-08-18
+4.1 / 2025-09-02
 
 ## Status
 
@@ -34,7 +34,7 @@ The current architecture uses three separate embedding models:
 
 BGE-M3 represents a significant advancement by unifying dense and sparse retrieval in a single model with multi-functionality, multi-linguality, and multi-granularity support. Research shows BGE-M3 achieves superior performance compared to separate dense/sparse models while reducing resource requirements.
 
-**Integration Flow**: Processed document chunks from **ADR-009** (Hybrid DocumentProcessor with Unstructured.io + LlamaIndex pipeline) are fed into BGE-M3 to generate 1024-dimensional unified embeddings, which are then stored in Qdrant collections (ADR-007) for retrieval by the adaptive pipeline (ADR-003) within the 128K context constraints of the FP8 model.
+**Integration Flow**: Processed document chunks from **ADR-009** (Hybrid DocumentProcessor with Unstructured.io + LlamaIndex pipeline) are fed into BGE-M3 to generate 1024-dimensional unified embeddings, which are then stored in Qdrant collections (ADR-031) for retrieval by the adaptive pipeline (ADR-003) within the 128K context constraints of the FP8 model.
 
 ## Related Requirements
 
@@ -119,8 +119,9 @@ We will adopt **BGE-M3 + CLIP strategy** for 100% local operation:
 
 - **ADR-003** (Adaptive Retrieval Pipeline): Uses unified embeddings for hybrid search
 - **ADR-006** (Modern Reranking Architecture): Works with BGE-M3 outputs
-- **ADR-007** (Hybrid Persistence Strategy): Stores unified embedding vectors in Qdrant
-- **ADR-009** (Document Processing Pipeline): **IMPLEMENTED** - Provides processed document chunks via hybrid DocumentProcessor for BGE-M3 embedding generation
+- **ADR-031** (Local-First Persistence Architecture): Stores unified embedding vectors in Qdrant
+- **ADR-009** (Document Processing Pipeline): IMPLEMENTED — Provides processed document chunks via hybrid DocumentProcessor for BGE-M3 embedding generation
+- **ADR-034** (Idempotent Indexing & Embedding Reuse): Establishes reuse policy to avoid re-embedding unchanged content
 - **ADR-001** (Modern Agentic RAG): Benefits from improved embedding quality
 
 ## Design
@@ -386,6 +387,7 @@ class OptimizedBGE_M3:
 
 ## Changelog
 
+- **4.1 (2025-09-02)**: Replaced ADR-007 with ADR-031; added ADR-034 reference; updated formatting
 - **4.1 (2025-08-26)**: **IMPLEMENTATION COMPLETE** - BGE-M3 fully deployed with all performance targets achieved and full integration with ADR-009 DocumentProcessor
 - **4.0 (2025-08-18)**: **HARDWARE UPGRADE** - Updated performance targets for RTX 4090 Laptop: <50ms embedding generation. BGE-M3 benefits from faster GPU with larger batch processing capabilities.
 - **3.1 (2025-08-18)**: Enhanced integration with DSPy query optimization for automatic embedding quality improvement and added BGE-M3 compatibility with PropertyGraphIndex for multi-modal retrieval scenarios
