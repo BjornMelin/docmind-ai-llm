@@ -30,6 +30,7 @@ except ImportError:
 from llama_index.core.bridge.pydantic import Field
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
+from src.config.settings import settings
 
 # Cross-Encoder Reranking Constants
 DEFAULT_TOP_N = 5
@@ -217,11 +218,11 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
 
 
 def create_bge_cross_encoder_reranker(
-    model_name: str = "BAAI/bge-reranker-v2-m3",
-    top_n: int = DEFAULT_TOP_N,
-    use_fp16: bool = True,
-    device: str = "cuda",
-    batch_size: int = DEFAULT_BATCH_SIZE,
+    model_name: str | None = None,
+    top_n: int | None = None,
+    use_fp16: bool | None = None,
+    device: str | None = None,
+    batch_size: int | None = None,
 ) -> BGECrossEncoderRerank:
     """Create BGE CrossEncoder reranker with optimal settings for RTX 4090.
 
@@ -238,20 +239,36 @@ def create_bge_cross_encoder_reranker(
     Returns:
         Configured BGECrossEncoderRerank instance optimized for RTX 4090 Laptop
     """
-    # RTX 4090 optimized batch size
-    batch_size = (
-        max(batch_size, CUDA_BATCH_SIZE_MIN)
-        if device == "cuda"
-        else min(batch_size, CPU_BATCH_SIZE_MAX)
+    # Resolve from settings when available
+    # Resolve parameters with precedence: explicit args > settings > defaults
+    try:
+        cfg = settings.retrieval
+        resolved_top_n = top_n if top_n is not None else int(getattr(cfg, "reranking_top_k", DEFAULT_TOP_N))
+        normalize = bool(getattr(cfg, "reranker_normalize_scores", True))
+        resolved_device = device if device is not None else ("cuda" if getattr(settings, "enable_gpu_acceleration", True) else "cpu")
+    except Exception:  # noqa: BLE001
+        resolved_top_n = top_n if top_n is not None else DEFAULT_TOP_N
+        normalize = True
+        resolved_device = device if device is not None else "cuda"
+
+    resolved_model = model_name or "BAAI/bge-reranker-v2-m3"
+    resolved_use_fp16 = use_fp16 if use_fp16 is not None else True
+    resolved_batch = batch_size if batch_size is not None else DEFAULT_BATCH_SIZE
+
+    # RTX 4090 optimized batch size / CPU conservative
+    batch = (
+        max(resolved_batch, CUDA_BATCH_SIZE_MIN)
+        if resolved_device == "cuda"
+        else min(resolved_batch, CPU_BATCH_SIZE_MAX)
     )
 
     return BGECrossEncoderRerank(
-        model_name=model_name,
-        top_n=top_n,
-        device=device,
-        use_fp16=use_fp16,
-        normalize_scores=True,
-        batch_size=batch_size,
+        model_name=resolved_model,
+        top_n=resolved_top_n,
+        device=resolved_device,
+        use_fp16=resolved_use_fp16,
+        normalize_scores=normalize,
+        batch_size=batch,
         max_length=DEFAULT_MAX_LENGTH,  # Optimal for BGE-reranker-v2-m3
     )
 
