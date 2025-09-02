@@ -208,8 +208,7 @@ addopts = [
     "-ra",
     "-v",
     "--import-mode=importlib",
-    "--cov=src/processing",
-    "--cov=src/config",
+    "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
     "--cov-report=xml:coverage.xml", 
@@ -234,6 +233,7 @@ markers = [
     "unit: Fast unit tests with mocked dependencies (95%+ success rate, <0.1s avg)",
     "integration: Component interaction tests with lightweight models (<30s each)",
     "system: Full system tests with real models and GPU (<5min each)",
+    "e2e: End-to-end tests using Streamlit AppTest and UI flows",
     
     # CI/CD Pipeline Modes
     "pre_commit: Fastest, most reliable tests for pre-commit hooks (>99% success rate)",

@@ -29,7 +29,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from llama_index.core.memory import ChatMemoryBuffer
 
-from src.agents.coordinator import ContextManager
+from src.agents.coordinator import ContextManager, MultiAgentCoordinator
 from src.agents.tools import (
     plan_query,
     retrieve_documents,
@@ -130,25 +130,29 @@ class TestAgentCoordinationPerformance:
             "parallel_execution_active": True,
             "parallel_tool_calls": True,
             "token_reduction_enabled": True,
+            "output_mode": "structured",
         }
 
-        optimized_state = context_manager.post_model_hook(parallel_optimized_state)
+        # Use production post-model hook via coordinator (ADR-011 wiring)
+        coordinator = MultiAgentCoordinator()
+        post_hook = coordinator._create_post_model_hook()  # private seam for tests only
+        optimized_state = post_hook(parallel_optimized_state)
 
         # Then: Parallel execution achieves token reduction
         # Token reduction should be achieved through optimized message structuring
         assert sequential_tokens > 0
         assert parallel_tokens > 0
 
-        # Verify optimization metadata is present
-        assert "parallel_execution_active" in optimized_state
+        # Verify optimization metadata is present (production hook contract)
+        assert "optimization_metrics" in optimized_state
         assert optimized_state["parallel_execution_active"] is True
 
         print("\nToken Optimization Metrics:")
         print(f"Sequential tokens: {sequential_tokens}")
         print(f"Parallel tokens: {parallel_tokens}")
         print(
-            f"Optimization metadata present: "
-            f"{'YES' if 'metadata' in optimized_state else 'NO'}"
+            f"Optimization metrics present: "
+            f"{'YES' if 'optimization_metrics' in optimized_state else 'NO'}"
         )
 
     def test_memory_usage_fp8_optimization_validation(self):

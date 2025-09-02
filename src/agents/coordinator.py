@@ -109,6 +109,7 @@ class ContextManager:
         }
 
 
+
 # Constants
 
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
@@ -356,7 +357,7 @@ class MultiAgentCoordinator:
             "Respond with agent name or 'FINISH' when complete."
         )
 
-    def _create_pre_model_hook(self) -> Callable:
+    def _create_pre_model_hook(self) -> Callable[[dict], dict]:
         """Create pre-model hook for context trimming (ADR-004, ADR-011)."""
 
         def pre_model_hook(state: dict) -> dict:
@@ -397,7 +398,7 @@ class MultiAgentCoordinator:
 
         return pre_model_hook
 
-    def _create_post_model_hook(self) -> Callable:
+    def _create_post_model_hook(self) -> Callable[[dict], dict]:
         """Create post-model hook for response formatting (ADR-011)."""
 
         def post_model_hook(state: dict) -> dict:

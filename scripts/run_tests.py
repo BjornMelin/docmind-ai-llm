@@ -292,7 +292,7 @@ class TestRunner:
             "tests/",
             "-v",
             "--tb=short",
-            "--cov=.",
+            "--cov=src",
             "--cov-report=html:htmlcov",
             "--cov-report=xml:coverage.xml",
             "--cov-report=json:coverage.json",
@@ -626,6 +626,9 @@ Examples:
             runner.run_performance_tests()
         elif args.gpu:
             runner.run_gpu_tests()
+        elif args.coverage:
+            # Full test suite with coverage over src/
+            runner.run_all_tests()
         else:
             # Default: Run tiered test strategy (unit → integration → system)
             print("\n🎯 Running Default Tiered Test Strategy")
