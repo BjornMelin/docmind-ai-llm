@@ -33,6 +33,7 @@ from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.auto import partition
 
 from src.cache.simple_cache import SimpleCache
+from src.processing.utils import is_unstructured_like
 from src.config.settings import settings as app_settings
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 
@@ -158,21 +159,8 @@ class UnstructuredTransformation(TransformComponent):
                 # skip chunking and treat them as pre-chunked identity to keep
                 # tests robust.
                 def _looks_like_unstructured(el: Any) -> bool:
-                    """Heuristic for unstructured-like elements.
-
-                    Real unstructured elements have rich metadata objects. When
-                    metadata comes from unittest.mock, avoid sending them into
-                    real chunkers (they expect iterable metadata fields).
-                    """
-                    if not (
-                        hasattr(el, "text")
-                        and hasattr(el, "category")
-                        and hasattr(el, "metadata")
-                    ):
-                        return False
-                    meta = getattr(el, "metadata", None)
-                    mod = getattr(getattr(meta, "__class__", object), "__module__", "")
-                    return not mod.startswith("unittest")
+                    """Helper delegating to processing utils for detection."""
+                    return is_unstructured_like(el)
 
                 # If chunker is patched (MagicMock), allow mocks through;
                 # otherwise bypass
@@ -189,6 +177,12 @@ class UnstructuredTransformation(TransformComponent):
                     use_by_title = title_count >= 3 or title_density >= 0.05
 
                     if use_by_title:
+                        if getattr(self.settings.processing, "debug_chunk_flow", False):
+                            logger.debug(
+                                "Chunk flow: by_title (titles={}, density={:.3f})",
+                                title_count,
+                                title_density,
+                            )
                         chunked = chunk_by_title(
                             elements=elements,
                             max_characters=max_chars,
@@ -198,6 +192,12 @@ class UnstructuredTransformation(TransformComponent):
                         )
                     else:
                         # Fallback to basic chunking for heading-sparse docs
+                        if getattr(self.settings.processing, "debug_chunk_flow", False):
+                            logger.debug(
+                                "Chunk flow: basic fallback (titles={}, density={:.3f})",
+                                title_count,
+                                title_density,
+                            )
                         chunked = chunk_by_basic(
                             elements=elements,
                             max_characters=max_chars,
