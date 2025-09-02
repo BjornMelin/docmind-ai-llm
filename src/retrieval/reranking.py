@@ -181,9 +181,8 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
             # Update node scores and create reranked list
             reranked_nodes = []
             for node, score in zip(nodes, scores, strict=False):
-                # Update node with CrossEncoder relevance score
-                node.score = float(score)
-                reranked_nodes.append(node)
+                # Create a fresh NodeWithScore to avoid mutating inputs across calls
+                reranked_nodes.append(NodeWithScore(node=node.node, score=float(score)))
 
             # Sort by relevance score (descending order)
             reranked_nodes.sort(key=lambda x: x.score or 0.0, reverse=True)

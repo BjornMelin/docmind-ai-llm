@@ -39,6 +39,9 @@ except ImportError:
     logger.warning("DSPy not available - falling back to basic query processing")
     DSPY_AVAILABLE = False
 
+# Global instance for testability and reuse in unit tests
+DSPY_RETRIEVER_INSTANCE: "DSPyLlamaIndexRetriever | None" = None
+
 
 class QueryOptimizationResult(BaseModel):
     """Result from DSPy query optimization."""
@@ -298,13 +301,14 @@ class DSPyLlamaIndexRetriever:
 
 
 def get_dspy_retriever(llm: Any = None) -> DSPyLlamaIndexRetriever:
-    """Get cached DSPy retriever instance without using module-level globals."""
-    if (
-        not hasattr(get_dspy_retriever, "_instance")
-        or get_dspy_retriever._instance is None
-    ):
-        get_dspy_retriever._instance = DSPyLlamaIndexRetriever(llm=llm)  # type: ignore[attr-defined]
-    return get_dspy_retriever._instance  # type: ignore[attr-defined]
+    """Get or create a module-level DSPy retriever instance.
+
+    Uses a module-level singleton for easier test patching.
+    """
+    global DSPY_RETRIEVER_INSTANCE
+    if DSPY_RETRIEVER_INSTANCE is None:
+        DSPY_RETRIEVER_INSTANCE = DSPyLlamaIndexRetriever(llm=llm)
+    return DSPY_RETRIEVER_INSTANCE
 
 
 def is_dspy_available() -> bool:

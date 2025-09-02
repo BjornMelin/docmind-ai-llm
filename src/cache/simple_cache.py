@@ -134,8 +134,11 @@ class SimpleCache(CacheInterface):
             total_requests = self._hits + self._misses
             hit_rate = (self._hits / total_requests) if total_requests > 0 else 0.0
 
-            # Get document count from our tracking
-            total_documents = self._stored_documents
+            # Prefer authoritative count from underlying KV store when available
+            try:
+                total_documents = len(self.cache.to_dict().get("data", {}))
+            except Exception:  # noqa: BLE001
+                total_documents = self._stored_documents
 
             return {
                 "cache_type": "simple_sqlite",

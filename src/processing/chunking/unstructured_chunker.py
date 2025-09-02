@@ -116,12 +116,35 @@ class SemanticChunker:
 
         self.settings = settings or default_settings
 
-        # Default chunking parameters from settings
+        # Coerce defaults to a valid relation: combine_under < new_after < max
+        raw_max = int(getattr(self.settings.processing, "chunk_size", 1500))
+        raw_new_after = int(
+            getattr(
+                self.settings.processing, "new_after_n_chars", max(100, raw_max - 300)
+            )
+        )
+        raw_combine_under = int(
+            getattr(
+                self.settings.processing,
+                "combine_text_under_n_chars",
+                max(50, raw_new_after - 300),
+            )
+        )
+
+        max_characters = max(100, raw_max)
+        new_after_n_chars = max(100, min(raw_new_after, max_characters - 1))
+        combine_text_under_n_chars = max(
+            0, min(raw_combine_under, new_after_n_chars - 1)
+        )
+
+        # Default chunking parameters from (coerced) settings
         self.default_parameters = ChunkingParameters(
-            max_characters=self.settings.processing.chunk_size,
-            new_after_n_chars=self.settings.processing.new_after_n_chars,
-            combine_text_under_n_chars=self.settings.processing.combine_text_under_n_chars,
-            multipage_sections=self.settings.processing.multipage_sections,
+            max_characters=max_characters,
+            new_after_n_chars=new_after_n_chars,
+            combine_text_under_n_chars=combine_text_under_n_chars,
+            multipage_sections=bool(
+                getattr(self.settings.processing, "multipage_sections", True)
+            ),
             boundary_detection=BoundaryDetection.TITLE_BASED,
         )
 
@@ -423,6 +446,15 @@ class SemanticChunker:
 
             return result
 
+        except ValueError as e:
+            # Propagate parameter validation errors directly (tests expect ValueError)
+            processing_time = time.time() - start_time
+            logger.error(
+                "Parameter validation failed after {:.2f}s: {}",
+                processing_time,
+                e,
+            )
+            raise
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(
