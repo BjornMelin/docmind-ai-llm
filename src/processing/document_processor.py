@@ -78,7 +78,7 @@ class UnstructuredTransformation(TransformComponent):
             "UnstructuredTransformation initialized with strategy: {}", strategy
         )
 
-    def __call__(self, nodes: list[BaseNode], **kwargs) -> list[BaseNode]:
+    def __call__(self, nodes: list[BaseNode], **kwargs: Any) -> list[BaseNode]:
         """Transform LlamaIndex ``Document`` nodes using Unstructured.
 
         Args:

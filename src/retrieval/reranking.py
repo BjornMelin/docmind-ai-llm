@@ -84,7 +84,7 @@ class BGECrossEncoderRerank(BaseNodePostprocessor):
         normalize_scores: bool = True,
         batch_size: int = DEFAULT_BATCH_SIZE,
         max_length: int = DEFAULT_MAX_LENGTH,
-        **kwargs,
+        **kwargs: Any,
     ):
         """Initialize BGE CrossEncoder reranker.
 

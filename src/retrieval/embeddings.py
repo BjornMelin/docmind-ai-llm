@@ -96,7 +96,7 @@ class BGEM3Embedding(BaseEmbedding):
         use_fp16: bool = True,
         batch_size: int = embedding_settings.batch_size_gpu,
         device: str = "cuda",
-        **kwargs,
+        **kwargs: Any,
     ):
         """Initialize BGE-M3 unified embedding model.
 

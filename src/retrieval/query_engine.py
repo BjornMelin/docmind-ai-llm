@@ -319,7 +319,7 @@ class AdaptiveRouterQueryEngine:
         )
         return router_engine
 
-    def query(self, query_str: str, **kwargs) -> Any:
+    def query(self, query_str: str, **kwargs: Any) -> Any:
         """Execute query through adaptive routing.
 
         The RouterQueryEngine analyzes the query and automatically selects
@@ -358,7 +358,7 @@ class AdaptiveRouterQueryEngine:
             logger.info("Falling back to direct semantic search")
             return self.vector_index.as_query_engine().query(query_str, **kwargs)
 
-    async def aquery(self, query_str: str, **kwargs) -> Any:
+    async def aquery(self, query_str: str, **kwargs: Any) -> Any:
         """Async query execution through adaptive routing.
 
         Args:

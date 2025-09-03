@@ -288,7 +288,7 @@ class DSPyOptimizer:
         from dspy.teleprompt import MIPROv2
 
         # Define simple quality metric
-        def quality_metric(example, prediction, trace=None):
+        def quality_metric(example: Any, prediction: Any, trace: Any | None = None) -> float:
             """Simple quality metric for optimization."""
             if not prediction or not hasattr(prediction, "answer"):
                 return 0.0
@@ -348,7 +348,7 @@ class DSPyOptimizer:
         from dspy.teleprompt import BootstrapFewShot
 
         # Define evaluation metric
-        def answer_quality_metric(example, prediction, trace=None):
+        def answer_quality_metric(example: Any, prediction: Any, trace: Any | None = None) -> float:
             """Evaluate answer quality."""
             if not prediction or not hasattr(prediction, "answer"):
                 return 0.0
@@ -427,7 +427,7 @@ class DSPyOptimizer:
         from dspy.teleprompt import BootstrapFewShotWithRandomSearch
 
         # Production metric with more sophisticated evaluation
-        def production_metric(example, prediction, trace=None):
+        def production_metric(example: Any, prediction: Any, trace: Any | None = None) -> float:
             """Production-level quality metric."""
             if not prediction or not hasattr(prediction, "answer"):
                 return 0.0

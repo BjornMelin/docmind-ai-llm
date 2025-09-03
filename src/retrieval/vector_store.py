@@ -127,7 +127,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         collection_name: str = "docmind_feat002_unified",
         embedding_dim: int = embedding_settings.dimension,
         rrf_alpha: float = retrieval_settings.rrf_alpha,
-        **kwargs,
+        **kwargs: Any,
     ):
         """Initialize QdrantUnifiedVectorStore.
 
@@ -206,7 +206,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         nodes: list[BaseNode],
         dense_embeddings: list[list[float]] | None = None,
         sparse_embeddings: list[dict[int, float]] | None = None,
-        **_kwargs,
+        **_kwargs: Any,
     ) -> list[str]:
         """Add nodes with unified dense + sparse embeddings.
 
@@ -287,7 +287,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         query: VectorStoreQuery,
         dense_embedding: list[float] | None = None,
         sparse_embedding: dict[int, float] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> VectorStoreQueryResult:
         """Execute unified query with dense + sparse search.
 
@@ -332,7 +332,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         query: VectorStoreQuery,
         dense_embedding: list[float],
         sparse_embedding: dict[int, float],
-        **_kwargs,
+        **_kwargs: Any,
     ) -> VectorStoreQueryResult:
         """Execute hybrid search with RRF score fusion.
 
@@ -442,7 +442,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         return fused_results
 
     def _dense_search(
-        self, query: VectorStoreQuery, embedding: list[float], **_kwargs
+        self, query: VectorStoreQuery, embedding: list[float], **_kwargs: Any
     ) -> VectorStoreQueryResult:
         """Execute dense-only search using BGE-M3 dense embeddings."""
         results = self.qdrant_client.search(
@@ -456,7 +456,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         return self._convert_results(results)
 
     def _sparse_search(
-        self, query: VectorStoreQuery, sparse_embedding: dict[int, float], **_kwargs
+        self, query: VectorStoreQuery, sparse_embedding: dict[int, float], **_kwargs: Any
     ) -> VectorStoreQueryResult:
         """Execute sparse-only search using BGE-M3 sparse embeddings."""
         indices = list(sparse_embedding.keys())

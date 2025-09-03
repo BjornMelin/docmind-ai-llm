@@ -37,7 +37,7 @@ try:
     from dataclasses import dataclass
 except ImportError:
     # Fallback for older Python versions
-    def dataclass(cls):
+    def dataclass(cls: Any) -> Any:
         """Fallback dataclass decorator for compatibility."""
         return cls
 
