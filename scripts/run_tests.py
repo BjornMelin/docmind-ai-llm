@@ -284,12 +284,13 @@ class TestRunner:
         return self.run_command(command, "GPU Tests (Hardware validation)")
 
     def run_all_tests(self) -> TestResult:
-        """Run all tests with comprehensive coverage."""
+        """Run unit+integration tests with coverage (exclude performance/e2e)."""
         command = [
             "uv",
             "run",
             "pytest",
-            "tests/",
+            "tests/unit",
+            "tests/integration",
             "-v",
             "--tb=short",
             "--cov=src",
@@ -299,9 +300,11 @@ class TestRunner:
             "--cov-report=term-missing",
             "--cov-branch",
             "--durations=20",
-            "--maxfail=5",  # Stop after 5 failures
+            "-m",
+            "unit or integration",
+            "--maxfail=5",
         ]
-        return self.run_command(command, "All Tests with Coverage")
+        return self.run_command(command, "All Tests with Coverage (unit+integration)")
 
     def run_smoke_tests(self) -> TestResult:
         """Run basic smoke tests to verify system health."""
