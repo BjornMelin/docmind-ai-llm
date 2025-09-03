@@ -1,5 +1,4 @@
-"""
-Recalculate and update progress counts in a planning Markdown file.
+"""Recalculate and update progress counts in a planning Markdown file.
 
 Usage:
   uv run python scripts/update_progress_counts.py \
@@ -7,15 +6,14 @@ Usage:
 
 The script updates the "## Progress Summary" block in-place.
 """
+
 from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
-from typing import Dict, Tuple
 
-
-SECTION_HEADERS: Dict[str, str] = {
+SECTION_HEADERS: dict[str, str] = {
     "Libraries & Imports": "## Libraries & Imports (Ensure Available)",
     "ADR Updates": "## ADR Updates (Precise)",
     "Code Changes (A–F)": "## Code Changes — Step‑by‑Step (No changes applied yet)",
@@ -24,7 +22,7 @@ SECTION_HEADERS: Dict[str, str] = {
 }
 
 
-def _count_checkboxes(md: str, section_header: str) -> Tuple[int, int]:
+def _count_checkboxes(md: str, section_header: str) -> tuple[int, int]:
     start = md.find(section_header)
     if start == -1:
         return 0, 0
@@ -39,7 +37,7 @@ def _count_checkboxes(md: str, section_header: str) -> Tuple[int, int]:
     return done, total
 
 
-def _update_summary_block(md: str, counts: Dict[str, Tuple[int, int]]) -> str:
+def _update_summary_block(md: str, counts: dict[str, tuple[int, int]]) -> str:
     # Compute overall
     overall_done = sum(d for d, _ in counts.values())
     overall_total = sum(t for _, t in counts.values())
@@ -54,25 +52,35 @@ def _update_summary_block(md: str, counts: Dict[str, Tuple[int, int]]) -> str:
         insert_after = md.find("Author:")
         if insert_after != -1:
             insert_pos = md.find("\n", insert_after)
+            libs_done, libs_total = counts["Libraries & Imports"]
+            adr_done, adr_total = counts["ADR Updates"]
+            code_done, code_total = counts["Code Changes (A–F)"]
+            tests_done, tests_total = counts["Tests"]
+            checklist_done, checklist_total = counts["Final Checklist"]
             summary = (
                 "\n\n## Progress Summary\n\n"
                 f"- Overall: {overall_done}/{overall_total}\n"
-                f"- Libraries & Imports: {counts['Libraries & Imports'][0]}/{counts['Libraries & Imports'][1]}\n"
-                f"- ADR Updates: {counts['ADR Updates'][0]}/{counts['ADR Updates'][1]}\n"
-                f"- Code Changes (A–F): {counts['Code Changes (A–F)'][0]}/{counts['Code Changes (A–F)'][1]}\n"
-                f"- Tests: {counts['Tests'][0]}/{counts['Tests'][1]}\n"
-                f"- Final Checklist: {counts['Final Checklist'][0]}/{counts['Final Checklist'][1]}\n"
+                f"- Libraries & Imports: {libs_done}/{libs_total}\n"
+                f"- ADR Updates: {adr_done}/{adr_total}\n"
+                f"- Code Changes (A–F): {code_done}/{code_total}\n"
+                f"- Tests: {tests_done}/{tests_total}\n"
+                f"- Final Checklist: {checklist_done}/{checklist_total}\n"
             )
             return md[: insert_pos + 1] + summary + md[insert_pos + 1 :]
         # Else, prepend to file
+        libs_done, libs_total = counts["Libraries & Imports"]
+        adr_done, adr_total = counts["ADR Updates"]
+        code_done, code_total = counts["Code Changes (A–F)"]
+        tests_done, tests_total = counts["Tests"]
+        checklist_done, checklist_total = counts["Final Checklist"]
         preface = (
             "## Progress Summary\n\n"
             f"- Overall: {overall_done}/{overall_total}\n"
-            f"- Libraries & Imports: {counts['Libraries & Imports'][0]}/{counts['Libraries & Imports'][1]}\n"
-            f"- ADR Updates: {counts['ADR Updates'][0]}/{counts['ADR Updates'][1]}\n"
-            f"- Code Changes (A–F): {counts['Code Changes (A–F)'][0]}/{counts['Code Changes (A–F)'][1]}\n"
-            f"- Tests: {counts['Tests'][0]}/{counts['Tests'][1]}\n"
-            f"- Final Checklist: {counts['Final Checklist'][0]}/{counts['Final Checklist'][1]}\n\n"
+            f"- Libraries & Imports: {libs_done}/{libs_total}\n"
+            f"- ADR Updates: {adr_done}/{adr_total}\n"
+            f"- Code Changes (A–F): {code_done}/{code_total}\n"
+            f"- Tests: {tests_done}/{tests_total}\n"
+            f"- Final Checklist: {checklist_done}/{checklist_total}\n\n"
         )
         return preface + md
 
@@ -91,12 +99,17 @@ def _update_summary_block(md: str, counts: Dict[str, Tuple[int, int]]) -> str:
 
 
 def main() -> int:
-    path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
-        "agent-logs/2025-09-02/settings/002-settings-final-research-and-plan.md"
+    """Parse command line arguments and update progress counts in markdown file."""
+    path = (
+        Path(sys.argv[1])
+        if len(sys.argv) > 1
+        else Path(
+            "agent-logs/2025-09-02/settings/002-settings-final-research-and-plan.md"
+        )
     )
     text = path.read_text(encoding="utf-8")
 
-    counts: Dict[str, Tuple[int, int]] = {
+    counts: dict[str, tuple[int, int]] = {
         label: _count_checkboxes(text, header)
         for label, header in SECTION_HEADERS.items()
     }
@@ -109,4 +122,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
