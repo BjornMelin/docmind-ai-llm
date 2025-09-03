@@ -543,17 +543,25 @@ class DocumentProcessor:
             # Determine processing strategy
             strategy = self._get_strategy_for_file(file_path)
 
+            # Calculate a stable file hash up front so the ingestion cache and
+            # docstore can re-use results across repeated runs.
+            document_hash = self._calculate_document_hash(file_path)
+
             # Create pipeline for this strategy
             pipeline = self._create_pipeline(strategy)
 
-            # Create Document object for LlamaIndex processing
+            # Create Document object for LlamaIndex processing with a stable ID.
+            # Include the file hash in metadata so BaseNode.hash changes when the
+            # underlying file content changes.
             document = Document(
+                doc_id=document_hash,
                 text="",  # Will be populated by UnstructuredTransformation
                 metadata={
                     "file_path": str(file_path),
                     "file_name": file_path.name,
                     "source": str(file_path),
                     "strategy": strategy.value,
+                    "file_sha256": document_hash,
                 },
             )
 
@@ -566,7 +574,6 @@ class DocumentProcessor:
             processed_elements = self._convert_nodes_to_elements(nodes)
 
             processing_time = time.time() - start_time
-            document_hash = self._calculate_document_hash(file_path)
 
             result = ProcessingResult(
                 elements=processed_elements,
