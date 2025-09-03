@@ -342,7 +342,7 @@ def app_test(tmp_path, monkeypatch):
         patch("src.utils.core.validate_startup_configuration", return_value=True),
         # Mock hardware detection for consistent tests
         patch(
-            "src.core.infrastructure.hardware_utils.detect_hardware",
+            "src.utils.core.detect_hardware",
             return_value={
                 "gpu_name": "RTX 4090",
                 "vram_total_gb": 24,

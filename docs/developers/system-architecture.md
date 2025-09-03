@@ -529,8 +529,6 @@ src/
 │   └── simple_cache.py      # SQLite-based document cache (ADR-025)
 ├── core/                     # Core processing modules
 │   └── infrastructure/      # System infrastructure
-├── interfaces/               # Abstract interfaces for dependency injection
-│   └── cache.py             # Cache interface definitions
 ├── processing/               # Document processing pipeline
 │   ├── document_processor.py # Document loading and chunking
 │   ├── chunking/            # Document chunking strategies

@@ -6,9 +6,8 @@ This repository organizes unit tests by domain to mirror the src/ folder. This k
 - `agents/`: Coordinator, tools, error recovery, ToolFactory
 - `cache/`: Simple cache and cache interfaces
 - `config/`: Settings and validation
-- `core/`: Containers, exceptions, invariants; `core/infrastructure/`: hardware utils, GPU monitor, resources
+- `core/`: Containers, exceptions, invariants; `core/infrastructure/`: spaCy manager, resources
 - `embeddings/`: Cross-boundary embedding contracts (dims/shape)
-- `interfaces/`: Interface adapters and caches
 - `models/`: Pydantic models (schemas, processing, storage, embeddings)
 - `processing/`: Document processing; processing/chunking and processing/embeddings
 - `prompts/`: Prompt templates
