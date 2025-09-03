@@ -31,11 +31,15 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Unified configuration and integrations
-from llama_index.core import Settings
+from llama_index.core import Settings  # pylint: disable=wrong-import-position
 
-from agents.coordinator import MultiAgentCoordinator
-from config.integrations import initialize_integrations
-from config.settings import settings
+from agents.coordinator import (
+    MultiAgentCoordinator,  # pylint: disable=wrong-import-position
+)
+from config.integrations import (
+    initialize_integrations,  # pylint: disable=wrong-import-position
+)
+from config.settings import settings  # pylint: disable=wrong-import-position
 
 
 class PerformanceMetrics(BaseModel):
@@ -632,7 +636,7 @@ async def main():
 
         # Save to file
         report_file = Path("performance_validation_report.txt")
-        report_file.write_text(report)
+        report_file.write_text(report, encoding="utf-8")
 
         print(f"\n📄 Report saved to: {report_file}")
         print("\n" + "=" * 60)
