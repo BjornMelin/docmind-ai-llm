@@ -1,17 +1,25 @@
-# ADR-024: Unified Settings Architecture
-
-## Metadata
-
-**Status:** Implemented  
-**Version/Date:** v2.4 / 2025-09-03
-
-## Title
-
-Unified Pydantic BaseSettings Configuration with LlamaIndex Native Integration
+---
+ADR: 024
+Title: Unified Settings Architecture (Reranker Mode + 128K Cap)
+Status: Implemented
+Version: 2.5
+Date: 2025-09-03
+Supersedes:
+Superseded-by:
+Related: 003, 004, 036, 037
+Tags: configuration, settings, llamaindex
+References:
+- [LlamaIndex Settings](https://docs.llamaindex.ai/en/stable/module_guides/supporting_modules/settings/)
+---
 
 ## Description
 
 Successfully implemented unified configuration approach using simple Pydantic BaseSettings for app-specific settings and LlamaIndex's native Settings for LLM/embedding configuration, achieving 95% complexity reduction while maintaining full functionality and industry standard compliance.
+
+New fields added to surface final decisions:
+
+- `retrieval.reranker_mode`: `auto|text|multimodal` (default: `auto`)
+- `llm.context_window_max`: `131072` (enforced cap, referenced by vLLM and alternate backends)
 
 **CRITICAL USER FLEXIBILITY PRESERVED**: DocMind AI is a LOCAL USER APPLICATION supporting diverse hardware configurations. All user choice and flexibility settings have been successfully restored and validated across 5 user scenarios: CPU-only students, mid-range developers, high-end researchers, privacy-focused users, and custom configuration users.
 
