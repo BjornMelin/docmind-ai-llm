@@ -80,6 +80,25 @@ graph TD
     style AGENTS fill:#ccffcc
 ```
 
+## Backend Selection & Endpoints (Updated)
+
+Select a backend using `DOCMIND_LLM_BACKEND` in `{ollama|vllm|lmstudio|llamacpp}`. Endpoints and paths:
+
+- `ollama`: `DOCMIND_OLLAMA_BASE_URL` (default `http://localhost:11434`).
+- `vllm`: `DOCMIND_VLLM__VLLM_BASE_URL` (default `http://localhost:8000` with no `/v1`). If running the OpenAI-compatible vLLM server, use `/v1`.
+- `lmstudio`: `DOCMIND_LMSTUDIO_BASE_URL` (default `http://localhost:1234/v1`).
+- `llamacpp`: local GGUF path via `DOCMIND_VLLM__LLAMACPP_MODEL_PATH`.
+
+OpenAI-like flags for OpenAI-compatible servers:
+
+```env
+DOCMIND_OPENAI_LIKE__API_KEY=not-needed
+DOCMIND_OPENAI_LIKE__IS_CHAT_MODEL=true
+DOCMIND_OPENAI_LIKE__IS_FUNCTION_CALLING_MODEL=false
+# Optional JSON headers
+# DOCMIND_OPENAI_LIKE__EXTRA_HEADERS={"x-custom":"1"}
+```
+
 ## Environment Variables Reference
 
 ### Core Application Settings

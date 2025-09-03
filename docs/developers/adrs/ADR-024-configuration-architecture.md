@@ -460,6 +460,36 @@ def initialize_app():
     return settings
 ```
 
+## Backend Selection & Endpoints
+
+DocMind AI supports multiple local-first backends via LlamaIndex adapters and a single LLM factory (`src/config/llm_factory.py`):
+
+| Backend    | Adapter                                  | Default Base URL                    | "/v1" Usage                                |
+|------------|------------------------------------------|-------------------------------------|--------------------------------------------|
+| `ollama`   | `llama_index.llms.ollama.Ollama`         | `http://localhost:11434`            | N/A                                        |
+| `vllm`     | `llama_index.llms.openai_like.OpenAILike`| `http://localhost:8000`             | Only when running OpenAI-compatible server |
+| `lmstudio` | `llama_index.llms.openai_like.OpenAILike`| `http://localhost:1234/v1`          | Always                                     |
+| `llamacpp` | `llama_index.llms.llama_cpp.LlamaCPP`    | Local path `./models/qwen3.gguf`    | N/A                                        |
+
+Notes:
+
+- Use `OpenAILike` for any OpenAI-compatible server. It avoids OpenAI SDK model-name heuristics and exposes chat/function-calling flags.
+- For llama.cpp bindings, set GPU offload via `model_kwargs={"n_gpu_layers": ...}` and provide `context_window`.
+- Global `Settings.context_window` and `Settings.num_output` derive from `settings.vllm` defaults.
+
+### OpenAI-Compatible Servers
+
+- LM Studio: always uses `/v1` on the local API. Configure `DOCMIND_LMSTUDIO_BASE_URL=http://localhost:1234/v1`.
+- vLLM: default base URL is `http://localhost:8000` (no `/v1`). When running the OpenAI-compatible server (`vllm.entrypoints.openai.api_server`), use `/v1`.
+- llama-cpp server (optional):
+
+```bash
+pip install "llama-cpp-python[server]"
+python -m llama_cpp.server --model /path/to/model.gguf --n_ctx 8192 --n_gpu_layers -1
+```
+
+Connect via `OpenAILike(api_base="http://localhost:8000/v1")`.
+
 ## Testing
 
 **In `tests/unit/config/test_settings.py`:**
