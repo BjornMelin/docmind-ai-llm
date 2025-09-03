@@ -1,20 +1,26 @@
-# ADR-006: Modern Reranking Architecture
+---
+ADR: 006
+Title: Modern Reranking Architecture (Text-Only)
+Status: Superseded
+Version: 3.3
+Date: 2025-09-03
+Supersedes:
+Superseded-by: 037
+Related: 003, 037
+Tags: retrieval, reranking, text
+References:
+- [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3)
+---
 
-## Title
-
-Simplified Reranking with BGE-reranker-v2-m3 Direct Usage
-
-## Version/Date
-
-3.2 / 2025-09-03
+This ADR is retained for historical context. It has been superseded by **ADR‑037** which introduces a multimodal reranking architecture using ColPali (visual) and BGE v2‑m3 (text) with automatic gating.
 
 ## Status
 
-Accepted
+Superseded by ADR‑037 on 2025‑09‑03.
 
-## Description
+## Description (Historical Record)
 
-**SIMPLIFICATION NOTE**: While this ADR describes advanced multi-stage reranking, for most use cases we recommend using BGE-reranker-v2-m3 directly via sentence-transformers CrossEncoder without custom wrappers. Only implement the full multi-stage approach if you have specific performance requirements that simple reranking doesn't meet.
+This ADR documented text‑only CrossEncoder reranking via `bge-reranker-v2-m3` and recommended a simple, library‑first approach using SentenceTransformers’ CrossEncoder. It is superseded by ADR‑037 to support image/PDF page nodes.
 
 Original description: Enhances the current BGE-reranker-v2-m3 strategy with multi-stage filtering (Stage 2 of the 50→20→10 pipeline), adaptive batch processing, and integration with the unified embedding pipeline. The architecture provides critical context optimization for 128K context windows with FP8 optimization, filtering 50 initial candidates to 20 highly relevant results before final relevance filtering.
 
@@ -66,9 +72,9 @@ Research shows reranking effectiveness increases significantly with query-adapti
 - **Benefits**: Balanced performance/quality, maintainable, resource efficient
 - **Score**: 8/10 (quality: 7, performance: 8, simplicity: 9)
 
-## Decision
+## Decision (Historical)
 
-We will use **sentence-transformers CrossEncoder directly** for simple, effective reranking:
+Use **sentence-transformers CrossEncoder** for text reranking:
 
 ### Simple Library-First Approach (Recommended)
 
@@ -90,7 +96,7 @@ scores = model.predict(pairs)  # pairs = [(query, doc1), (query, doc2), ...]
 4. **Simple**: 2 lines of code vs 200+ lines of custom implementation
 5. **Maintainable**: Library updates give you improvements for free
 
-## Related Decisions
+## Related Decisions (Historical)
 
 - **ADR-002** (Unified Embedding Strategy): Uses BGE-M3 embeddings for enhanced relevance
 - **ADR-003** (Adaptive Retrieval Pipeline): Reranks hierarchical retrieval results
@@ -98,7 +104,7 @@ scores = model.predict(pairs)  # pairs = [(query, doc1), (query, doc2), ...]
 - **ADR-010** (Performance Optimization Strategy): Implements caching and quantization
 - **ADR-036** (Reranker UI Controls): Exposes `normalize_scores` and `top_n` in the UI; this ADR’s implementation reads those settings at construction time
 
-## Design
+## Design (Historical)
 
 ### Using More sentence-transformers Features
 
