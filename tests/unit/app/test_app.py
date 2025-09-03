@@ -53,8 +53,6 @@ def mock_app_startup():
     with (
         # Patch the underlying core function before app import to avoid Qdrant calls
         patch("src.utils.core.validate_startup_configuration") as mock_validate,
-        # Patch container wiring at source to avoid DI side-effects
-        patch("src.containers.wire_container"),
         # Patch Streamlit globals used at import time
         patch("streamlit.set_page_config"),
         patch("streamlit.session_state", _SessionState()),
@@ -186,9 +184,9 @@ class TestAgentSystemSetup:
         # Mock the dependency injection
         import src.app as app_module
 
-        with patch.object(app_module, "ApplicationContainer") as mock_container:
-            mock_container.multi_agent_coordinator = mock_coordinator
-
+        with patch.object(
+            app_module, "get_multi_agent_coordinator", return_value=mock_coordinator
+        ):
             from src.app import get_agent_system
 
             # Test with mocked injection
@@ -196,7 +194,6 @@ class TestAgentSystemSetup:
                 mock_tools,
                 mock_llm,
                 mock_memory,
-                multi_agent_coordinator=mock_coordinator,
             )
 
             assert result_agent == mock_coordinator
@@ -763,20 +760,17 @@ class TestAppIntegration:
             assert docs[0].text == "Test document content"
 
     @pytest.mark.integration
-    def test_agent_system_integration_with_di(self):
-        """Test agent system integration with dependency injection."""
-        # Test that dependency injection container works
+    def test_agent_system_integration_with_factory(self):
+        """Test agent system integration with factory override injection."""
+        # No DI; ensure factory override path works
         mock_coordinator = MagicMock()
 
-        with patch("src.app.ApplicationContainer") as mock_container:
-            mock_container.multi_agent_coordinator = mock_coordinator
+        # Test agent system creation via factory injection override
+        from src.app import get_agent_system
 
-            # Test agent system creation
-            from src.app import get_agent_system
+        agent, mode = get_agent_system(
+            None, None, None, multi_agent_coordinator=mock_coordinator
+        )
 
-            agent, mode = get_agent_system(
-                None, None, None, multi_agent_coordinator=mock_coordinator
-            )
-
-            assert agent == mock_coordinator
-            assert mode == "multi_agent"
+        assert agent == mock_coordinator
+        assert mode == "multi_agent"

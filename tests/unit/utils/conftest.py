@@ -13,20 +13,20 @@ import pytest
 @pytest.fixture(autouse=True)
 def rng_seed():
     """Seed RNGs for deterministic unit tests."""
-    import random
+    import random  # pylint: disable=C0415  # late import to speed test collection
 
-    import numpy as np
+    import numpy as np  # pylint: disable=C0415
 
     random.seed(1337)
     np.random.seed(1337)
     try:
-        import torch
+        import torch  # pylint: disable=C0415
 
         if hasattr(torch, "manual_seed"):
             torch.manual_seed(1337)
     except ImportError:
-        # Torch not installed in this environment; ignore seeding
-        return
+        # Torch not installed in this environment; ignore torch seeding
+        pass
 
 
 @pytest.fixture
@@ -45,8 +45,8 @@ def network_guard():
         raise RuntimeError("Network access disabled in unit tests")
 
     try:
-        import httpx
-        import requests
+        import httpx  # pylint: disable=C0415
+        import requests  # pylint: disable=C0415
 
         with (
             patch.object(requests, "get", _raise),
@@ -63,8 +63,8 @@ def network_guard():
 @pytest.fixture(autouse=True)
 def no_sleep():
     """Patch time.sleep and asyncio.sleep to avoid real delays in unit tests."""
-    import asyncio as _asyncio
-    import time as _time
+    import asyncio as _asyncio  # pylint: disable=C0415
+    import time as _time  # pylint: disable=C0415
 
     def _sleep_noop(_secs: float = 0.0):
         return None
@@ -129,7 +129,7 @@ def performance_boundary():
 @pytest.fixture
 def system_resource_boundary():
     """Boundary for psutil and OS resource calls with predictable values."""
-    import os as _os
+    import os as _os  # pylint: disable=C0415
 
     class _Mem(SimpleNamespace):
         pass
@@ -160,14 +160,14 @@ def system_resource_boundary():
 @pytest.fixture
 def ai_stack_boundary():
     """Boundary for AI components using LlamaIndex built-in mocks."""
-    from llama_index.core import Settings
-    from llama_index.core.embeddings import MockEmbedding
-    from llama_index.core.llms import MockLLM
+    from llama_index.core import Settings  # pylint: disable=C0415
+    from llama_index.core.embeddings import MockEmbedding  # pylint: disable=C0415
+    from llama_index.core.llms import MockLLM  # pylint: disable=C0415
 
     original_llm = Settings.llm
     original_embed = Settings.embed_model
 
-    mock_llm = MockLLM(max_tokens=256, temperature=0.0)
+    mock_llm = MockLLM(max_tokens=256)
     mock_embed = MockEmbedding(embed_dim=1024)
 
     Settings.llm = mock_llm

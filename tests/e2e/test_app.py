@@ -244,14 +244,9 @@ def setup_external_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "unstructured.chunking.title", title_pkg)
     monkeypatch.setitem(sys.modules, "unstructured.chunking.basic", basic_pkg)
 
-    # Mock internal containers - avoid DI complexity in E2E tests
+    # Mock internal containers - factory-based in new architecture
     mock_containers = MagicMock()
-    mock_containers.ApplicationContainer = MagicMock()
-    mock_containers.wire_container = MagicMock()
-    mock_containers.get_cache = MagicMock()
-    mock_containers.get_settings = MagicMock()
-    mock_containers.get_query_engine = MagicMock()
-    mock_containers.get_agent_system = MagicMock()
+    mock_containers.get_multi_agent_coordinator = MagicMock()
     monkeypatch.setitem(sys.modules, "src.containers", mock_containers)
 
 

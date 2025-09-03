@@ -99,7 +99,7 @@ class RetrievalAgent:
 
         # Create LangGraph agent
         self.agent = create_react_agent(
-            llm=self.llm,
+            model=self.llm,
             tools=[retrieve_documents],
         )
 

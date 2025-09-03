@@ -35,6 +35,9 @@ from loguru import logger
 
 from src.agents.tool_factory import ToolFactory
 from src.config import settings
+from src.config.settings import MonitoringConfig as _MonConfig
+
+MON: _MonConfig = settings.monitoring
 
 # Constants
 
@@ -176,7 +179,7 @@ def route_query(
         complexity = "simple"
         strategy = "vector"
         needs_planning = False
-        confidence = settings.monitoring.default_confidence_threshold
+        confidence = SIMPLE_CONFIDENCE
 
         if (
             any(pattern in query_lower for pattern in complex_patterns)

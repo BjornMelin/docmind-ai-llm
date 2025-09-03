@@ -178,6 +178,10 @@ py-version = "3.12"
 jobs = 0
 limit-inference-results = 100
 extension-pkg-allow-list = ["llama_index", "torch", "dependency_injector"]
+disable = [
+  # Pydantic model attributes are resolved at runtime; avoid false positives
+  "no-member",
+]
 
 # Keep pylint messages strict; use targeted per-file disables in tests when needed.
 

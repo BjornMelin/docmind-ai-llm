@@ -109,7 +109,8 @@ class ToolFactory:
                 keep_retrieval_score=True,
             )
             logger.info(
-                "ColBERT reranker created: %s", settings.retrieval.reranker_model
+                "ColBERT reranker created: %s",
+                settings.retrieval.reranker_model,
             )
             return reranker
         except (RuntimeError, ValueError, AttributeError, ImportError) as e:

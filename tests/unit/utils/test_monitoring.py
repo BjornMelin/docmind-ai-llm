@@ -215,7 +215,7 @@ class TestModernizedMonitoringPatterns:
         log_error_with_context(err, "op")
         logging_boundary["logger"].error.assert_called_once()
 
-    def test_performance_timer_success(
+    def test_performance_timer_success(  # pylint: disable=unused-argument
         self, system_resource_boundary, performance_boundary, logging_boundary
     ):
         """Test successful performance timer execution."""
@@ -226,13 +226,15 @@ class TestModernizedMonitoringPatterns:
         logging_boundary["logger"].info.assert_called()
 
     @pytest.mark.asyncio
-    async def test_async_performance_timer_success(
+    async def test_async_performance_timer_success(  # pylint: disable=unused-argument
         self, system_resource_boundary, performance_boundary, logging_boundary
     ):
         """Test successful async performance timer execution."""
-        import asyncio
+        import asyncio  # pylint: disable=C0415
 
-        from src.utils.monitoring import async_performance_timer
+        from src.utils.monitoring import (
+            async_performance_timer,  # pylint: disable=C0415
+        )
 
         async with async_performance_timer("async_operation") as metrics:
             metrics["async_metric"] = "ok"
