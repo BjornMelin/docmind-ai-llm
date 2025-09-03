@@ -2,7 +2,8 @@
 
 This module provides a centralized factory for creating agent tools with
 optimal configuration, reranking, and hybrid search capabilities. Eliminates
-code duplication across different tool creation patterns.
+code duplication across different tool creation patterns. Embeddings are
+standardized on BGE-M3 (dense+sparse) per ADR-002.
 
 Features:
 - Consistent tool metadata and configuration
@@ -88,8 +89,6 @@ class ToolFactory:
         )
 
     @classmethod
-
-    @classmethod
     def create_vector_search_tool(cls, index: Any) -> QueryEngineTool:
         """Create vector search tool.
 
@@ -116,11 +115,11 @@ class ToolFactory:
             query_engine,
             "vector_search",
             (
-                "Semantic similarity search using dense embeddings (BGE-Large). "
+                "Semantic similarity search using BGE-M3 embeddings. "
                 "Best for: finding conceptually similar content, answering "
                 "questions about document meaning, summarization, and general "
-                "information retrieval. Uses GPU acceleration when available "
-                "for improved performance."
+                "information retrieval. Uses unified dense+sparse signals per "
+                "ADR-002 (BGE-M3)."
             ),
         )
 
@@ -166,11 +165,12 @@ class ToolFactory:
 
     @classmethod
     def create_hybrid_search_tool(cls, retriever: Any) -> QueryEngineTool:
-        """Create hybrid search tool with RRF fusion and reranking.
+        """Create hybrid search tool with RRF fusion.
 
-        Creates a hybrid search tool using QueryFusionRetriever
-        with RRF (Reciprocal Rank Fusion) and ColBERT reranking for optimal
-        search performance.
+        Creates a hybrid search tool using QueryFusionRetriever with
+        RRF (Reciprocal Rank Fusion). Aligns with ADR-002 (BGE-M3 hybrid)
+        where dense and sparse signals are combined; fusion weight typically
+        follows RRF alpha≈0.7 when configured upstream.
 
         Args:
             retriever: QueryFusionRetriever with RRF fusion capabilities.
@@ -191,13 +191,11 @@ class ToolFactory:
             "hybrid_fusion_search",
             (
                 "Advanced hybrid search with QueryFusionRetriever using RRF "
-                "(Reciprocal Rank Fusion) to combine dense (BGE-Large) and "
-                "sparse (SPLADE++) embeddings. "
-                "Best for: comprehensive document retrieval, finding relevant "
-                "content through semantic similarity and keyword matching, "
-                "complex queries requiring both context understanding and "
-                "precise term matching. Provides superior relevance through RRF "
-                "score fusion."
+                "(Reciprocal Rank Fusion) over BGE-M3 signals (dense+sparse). "
+                "Best for: comprehensive retrieval that benefits from both "
+                "semantic understanding and exact term matching. Uses the "
+                "BGE-M3 model per ADR-002; typical setup applies RRF fusion "
+                "(alpha≈0.7) as configured in retrieval settings."
             ),
         )
 
@@ -227,12 +225,11 @@ class ToolFactory:
             query_engine,
             "hybrid_vector_search",
             (
-                "Hybrid search combining dense (BGE-Large) and sparse "
-                "(SPLADE++) embeddings. "
-                "Best for: semantic search, document retrieval, finding "
-                "similar content, answering questions about document content, "
-                "summarization, and general information extraction. Uses "
-                "hybrid embeddings for both semantic and keyword matching."
+                "Hybrid search using BGE-M3 unified dense+sparse embeddings "
+                "(single-index hybrid, e.g., Qdrant). "
+                "Best for: semantic search and retrieval where both meaning "
+                "and exact term presence matter. Implements ADR-002 by "
+                "leveraging BGE-M3 for dual dense+sparse signals."
             ),
         )
 
