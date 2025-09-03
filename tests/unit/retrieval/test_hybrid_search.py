@@ -359,9 +359,7 @@ class TestHybridSearchIntegration:
         - Returns ranked results with hybrid scores
         - Validates ADR-002 FR-4 compliance
         """
-        with patch(
-            "src.retrieval.embeddings.BGEM3Embedding"
-        ) as mock_embedder_class:
+        with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder_class:
             mock_embedder = Mock()
             mock_embedder_class.return_value = mock_embedder
 
@@ -455,9 +453,7 @@ class TestHybridSearchPerformance:
         - Maintains result accuracy with batch processing
         - Scales well with increasing query volume
         """
-        with patch(
-            "src.retrieval.embeddings.BGEM3Embedding"
-        ) as mock_embedder_class:
+        with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder_class:
             mock_embedder = Mock()
             mock_embedder_class.return_value = mock_embedder
 
@@ -540,9 +536,7 @@ class TestHybridSearchPerformance:
         - Verifies BGE-M3 model integration
         - Ensures hybrid search meets ADR-002 requirements
         """
-        with patch(
-            "src.retrieval.embeddings.BGEM3Embedding"
-        ) as mock_embedder_class:
+        with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder_class:
             searcher = HybridSearcher(mock_settings)
 
             # Verify ADR-002 compliance parameters

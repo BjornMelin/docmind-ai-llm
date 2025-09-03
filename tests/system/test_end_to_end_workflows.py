@@ -218,9 +218,7 @@ class TestCompleteDocumentWorkflows:
             )
 
         # Test batch processing
-        with patch(
-            "src.retrieval.embeddings.BGEM3Embedding"
-        ) as mock_embedder:
+        with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder:
             mock_embedder_instance = MagicMock()
 
             # Mock batch processing with realistic batch sizes
@@ -634,9 +632,7 @@ class TestErrorHandlingSystemWorkflows:
         recovery_results = {}
 
         for error_name, error in error_scenarios:
-            with patch(
-                "src.retrieval.embeddings.BGEM3Embedding"
-            ) as mock_embedder:
+            with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder:
                 # First call fails, second succeeds
                 mock_embedder.side_effect = [error, MagicMock()]
 
