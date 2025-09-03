@@ -540,7 +540,7 @@ class TestDocMindSettings(DocMindSettings):
 def test_settings_default_values():
     settings = DocMindSettings()
     assert settings.embedding.model_name == "BAAI/bge-m3"  # Correct BGE-M3 model
-    assert settings.agents.decision_timeout == 300  # Wrong timeout
+    assert settings.agents.decision_timeout == 200  # Correct timeout
 
 # After (uses proper test settings)
 def test_settings_default_values(test_settings):
@@ -1712,7 +1712,27 @@ def diagnose_gpu_setup():
     try:
         import vllm
         print(f"vLLM Version: {vllm.__version__}")
-        print(f"FlashInfer Available: {'FLASHINFER' in os.environ.get('VLLM_ATTENTION_BACKEND', '')}")
+        # Report configured backend from env (if any)
+        backend = os.environ.get('VLLM_ATTENTION_BACKEND', '').upper() or 'DEFAULT'
+        print(f"vLLM Attention Backend (env): {backend}")
+
+        # Robust FlashInfer availability checks
+        # 1) Python package presence (flashinfer/flashinfer_torch)
+        try:
+            from importlib.util import find_spec
+            fi_installed = (find_spec('flashinfer') is not None) or (find_spec('flashinfer_torch') is not None)
+        except Exception:
+            fi_installed = False
+
+        # 2) vLLM compiled backend importability
+        try:
+            from vllm.attention.backends import flashinfer as _fi  # type: ignore
+            fi_backend_available = True
+        except Exception:
+            fi_backend_available = False
+
+        print(f"FlashInfer Installed: {fi_installed}")
+        print(f"FlashInfer Backend Available: {fi_backend_available}")
     except ImportError:
         print("vLLM not installed")
     
