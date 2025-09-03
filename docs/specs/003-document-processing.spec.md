@@ -81,7 +81,7 @@
 - `src/processing/chunking/unstructured_chunker.py` - chunk_by_title implementation
 - `src/processing/embeddings/bgem3_embedder.py` - BGE-M3 8K context integration
 - `src/cache/simple_cache.py` - SimpleCache (SQLite-based document caching)
-- `src/storage/hybrid_persistence.py` - SQLite + Qdrant integration
+- `src/utils/storage.py` - Qdrant integration and hybrid persistence helpers
 - `src/config/kv_cache.py` - FP8 optimization and context management
 - `tests/integration/test_document_processing.py` - Unstructured.io integration tests
 - `tests/unit/cache/test_simple_cache.py` - SimpleCache performance and functionality tests
@@ -435,7 +435,7 @@ def create_cache_system(cache_dir: str = "./cache") -> SimpleCacheManager:
 - `src/processing/chunking/unstructured_chunker.py` - chunk_by_title semantic chunking implementation
 - `src/processing/embeddings/bgem3_embedder.py` - BGE-M3 embedding generation (ADR-002)
 - `src/cache/simple_cache.py` - SimpleCache with SQLite-based document caching (ADR-010)
-- `src/storage/hybrid_persistence.py` - SQLite + Qdrant integration (ADR-007)
+- `src/utils/storage.py` - Qdrant integration and hybrid persistence helpers (ADR-007)
 - `src/config/kv_cache.py` - FP8 optimization and context management
 - `tests/integration/test_document_processing.py` - Unstructured.io integration tests
 - `tests/unit/cache/test_simple_cache.py` - SimpleCache performance and functionality tests
@@ -445,7 +445,7 @@ def create_cache_system(cache_dir: str = "./cache") -> SimpleCacheManager:
 - `src/main.py` - Integrate ResilientDocumentProcessor with SimpleCache system
 - `src/config/settings.py` - BGE-M3, Qdrant, and SimpleCache configuration
 - `src/ui/upload_handler.py` - Connect upload to resilient processor with progress tracking
-- `src/storage/vector_store.py` - Qdrant integration for embeddings storage
+- `src/utils/storage.py` - Qdrant integration for embeddings storage
 
 ### Integration Points (VERIFIED ADR COMPLIANCE)
 
