@@ -513,12 +513,10 @@ class TestSystemValidationReporting:
         # Processor → Embedder integration
         doc_result = await processor.process_document_async(
             sample_documents["tech_docs"]
-        )
-
         # Patch the actual async embedding method for the current embedder
-        with patch.object(embedder, "embed_texts_async") as mock_embed:
+        from unittest.mock import AsyncMock
+        with patch.object(embedder, "embed_texts_async", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = Mock(dense_embeddings=[[0.1] * 1024])
-            result = await embedder.embed_texts_async([doc_result.elements[0].text])
 
         # Build a small index to simulate storage/retrieval
         from llama_index.core import Document as LIDocument, VectorStoreIndex  # noqa: I001
