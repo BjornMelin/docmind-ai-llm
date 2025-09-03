@@ -1,9 +1,7 @@
-"""Shared pytest fixtures for document processing tests.
+"""Shared pytest fixtures for document processing tests."""
+# pylint: disable=redefined-outer-name
 
-This module provides common fixtures that can be reused across all document
-processing test suites, including mock objects, sample data, and test utilities.
-"""
-
+from dataclasses import dataclass
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -13,7 +11,19 @@ from src.models.processing import (
     ProcessingResult,
     ProcessingStrategy,
 )
+
 # Chunking models removed; using Unstructured + LlamaIndex standard splitters.
+
+
+@dataclass
+class ChunkingParameters:
+    """Parameters for chunking (test stub)."""
+
+    chunk_size: int = 1000
+    chunk_overlap: int = 100
+    new_after_n_chars: int = 1200
+    combine_text_under_n_chars: int = 200
+
 
 # Document Processing Fixtures
 
@@ -236,7 +246,6 @@ def sample_processing_result(sample_document_elements):
         },
         document_hash="abc123def456",
     )
-
 
 
 # File System Fixtures
@@ -585,6 +594,8 @@ def test_utils():
     """Provide utility functions for testing."""
 
     class TestUtils:
+        """Utility helpers for tests."""
+
         @staticmethod
         def create_mock_processing_result(
             element_count: int = 5,
