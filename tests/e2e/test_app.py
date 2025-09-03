@@ -130,10 +130,43 @@ def setup_external_dependencies(monkeypatch):
 
     li_core.Document = _DummyDocument
 
+    # Provide minimal StorageContext shim used by app/index creation
+    class _DummyStorageContext:
+        def __init__(self, *, vector_store=None, image_store=None):
+            self.vector_store = vector_store
+            self.image_store = image_store
+
+        @classmethod
+        def from_defaults(cls, *, vector_store=None, image_store=None):
+            return cls(vector_store=vector_store, image_store=image_store)
+
+    li_core.StorageContext = _DummyStorageContext
+
     class _DummyPGI:  # PropertyGraphIndex placeholder
         pass
 
     li_core.PropertyGraphIndex = _DummyPGI
+    # Provide llms.ChatMessage and indices.MultiModalVectorStoreIndex shims
+    li_llms = _types.ModuleType("llama_index.core.llms")
+
+    class _ChatMessage:
+        def __init__(self, role: str, content: str):
+            self.role = role
+            self.content = content
+
+    li_llms.ChatMessage = _ChatMessage
+
+    li_indices = _types.ModuleType("llama_index.core.indices")
+
+    class _DummyMMIndex:
+        @classmethod
+        def from_documents(cls, *_args, **_kwargs):
+            return cls()
+
+    li_indices.MultiModalVectorStoreIndex = _DummyMMIndex
+
+    monkeypatch.setitem(sys.modules, "llama_index.core.llms", li_llms)
+    monkeypatch.setitem(sys.modules, "llama_index.core.indices", li_indices)
 
     class _DummyVSI:
         pass
