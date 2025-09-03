@@ -342,8 +342,8 @@ def setup_llamaindex() -> None:
     Settings.node_parser = SentenceSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     
     # Configure context window and performance settings (ADR-004, ADR-010)
-    Settings.context_window = int(os.getenv("DOCMIND_CONTEXT_WINDOW_SIZE", "131072"))
-    Settings.num_output = int(os.getenv("DOCMIND_MAX_TOKENS", "2048"))
+    Settings.context_window = int(os.getenv("DOCMIND_VLLM__CONTEXT_WINDOW", "131072"))
+    Settings.num_output = int(os.getenv("DOCMIND_VLLM__MAX_TOKENS", "2048"))
 ```
 
 ### Configuration
@@ -363,54 +363,53 @@ DOCMIND_LLM_BACKEND=ollama
 # MULTI-AGENT COORDINATION SYSTEM (ADR-001 compliant)
 # ============================================================================
 DOCMIND_AGENTS__ENABLE_MULTI_AGENT=true
-DOCMIND_AGENT_DECISION_TIMEOUT=200  # Fixed: 200ms not 300ms per ADR
-DOCMIND_MAX_AGENT_RETRIES=2
-DOCMIND_ENABLE_FALLBACK_RAG=true
-DOCMIND_MAX_CONCURRENT_AGENTS=3
+DOCMIND_AGENTS__DECISION_TIMEOUT=200  # Fixed: 200ms not 300ms per ADR
+DOCMIND_AGENTS__MAX_RETRIES=2
+DOCMIND_AGENTS__ENABLE_FALLBACK_RAG=true
+DOCMIND_AGENTS__MAX_CONCURRENT_AGENTS=3
 
 # ============================================================================
 # LLM CONFIGURATION (Used by LlamaIndex Settings)
 # ============================================================================
-DOCMIND_MODEL_NAME=Qwen/Qwen3-4B-Instruct-2507-FP8  # ADR-004 compliant
-DOCMIND_LLM_BASE_URL=http://localhost:11434
-DOCMIND_TEMPERATURE=0.1
-DOCMIND_CONTEXT_WINDOW_SIZE=131072  # 128K context with FP8 optimization
-DOCMIND_MAX_TOKENS=2048
-DOCMIND_REQUEST_TIMEOUT=120
+DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8  # ADR-004 compliant
+DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
+DOCMIND_VLLM__TEMPERATURE=0.1
+DOCMIND_VLLM__CONTEXT_WINDOW=131072  # 128K context with FP8 optimization
+DOCMIND_VLLM__MAX_TOKENS=2048
+DOCMIND_UI__REQUEST_TIMEOUT_SECONDS=120
 
 # ============================================================================
 # EMBEDDING & RETRIEVAL CONFIGURATION (ADR-002 compliant)
 # ============================================================================
-DOCMIND_EMBEDDING_MODEL=BAAI/bge-m3  # Fixed: BGE-M3 not bge-large-en-v1.5
-DOCMIND_EMBEDDING_DIMENSION=1024
-DOCMIND_BGE_M3_MAX_LENGTH=8192
-DOCMIND_BGE_M3_BATCH_SIZE_GPU=12
-DOCMIND_BGE_M3_BATCH_SIZE_CPU=4
+DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3  # Fixed: BGE-M3 not bge-large-en-v1.5
+DOCMIND_EMBEDDING__DIMENSION=1024
+DOCMIND_EMBEDDING__MAX_LENGTH=8192
+DOCMIND_EMBEDDING__BATCH_SIZE_GPU=12
+DOCMIND_EMBEDDING__BATCH_SIZE_CPU=4
 
 # Document processing optimized for BGE-M3 8K context
 DOCMIND_PROCESSING__CHUNK_SIZE=1024
-DOCMIND_CHUNK_OVERLAP=100
+DOCMIND_PROCESSING__CHUNK_OVERLAP=100
 
 # Hybrid retrieval strategy
-DOCMIND_RETRIEVAL_STRATEGY=hybrid
-DOCMIND_TOP_K=10
-DOCMIND_USE_RERANKING=true
-DOCMIND_RERANKING_TOP_K=5
-DOCMIND_USE_SPARSE_EMBEDDINGS=true
+DOCMIND_RETRIEVAL__STRATEGY=hybrid
+DOCMIND_RETRIEVAL__TOP_K=10
+DOCMIND_RETRIEVAL__USE_RERANKING=true
+DOCMIND_RETRIEVAL__RERANKING_TOP_K=5
+DOCMIND_RETRIEVAL__USE_SPARSE_EMBEDDINGS=true
 
 # ============================================================================
 # PERFORMANCE & GPU OPTIMIZATION (ADR-010 compliant)
 # ============================================================================
 DOCMIND_ENABLE_GPU_ACCELERATION=true
-DOCMIND_QUANT_POLICY=fp8  # FP8 quantization policy
-DOCMIND_MAX_VRAM_GB=14.0  # RTX 4090 Laptop optimization
+DOCMIND_MONITORING__MAX_VRAM_GB=14.0  # RTX 4090 Laptop optimization
 
 # vLLM FP8 Performance Settings
-DOCMIND_VLLM_GPU_MEMORY_UTILIZATION=0.95  # 95% utilization for RTX 4090
-DOCMIND_VLLM_ATTENTION_BACKEND=FLASHINFER
-DOCMIND_VLLM_ENABLE_CHUNKED_PREFILL=true
-DOCMIND_VLLM_MAX_NUM_BATCHED_TOKENS=8192
-DOCMIND_VLLM_MAX_NUM_SEQS=16
+DOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.95  # 95% utilization for RTX 4090
+DOCMIND_VLLM__ATTENTION_BACKEND=FLASHINFER
+DOCMIND_VLLM__ENABLE_CHUNKED_PREFILL=true
+DOCMIND_VLLM__MAX_NUM_BATCHED_TOKENS=8192
+DOCMIND_VLLM__MAX_NUM_SEQS=16
 
 # Additional vLLM environment variables
 VLLM_ATTENTION_BACKEND=FLASHINFER
@@ -423,14 +422,14 @@ VLLM_USE_CUDNN_PREFILL=1
 # ============================================================================
 DOCMIND_DATA_DIR=./data
 DOCMIND_CACHE_DIR=./cache
-DOCMIND_SQLITE_DB_PATH=./data/docmind.db
-DOCMIND_ENABLE_WAL_MODE=true
+DOCMIND_DATABASE__SQLITE_DB_PATH=./data/docmind.db
+DOCMIND_DATABASE__ENABLE_WAL_MODE=true
 
 # ============================================================================
 # USER INTERFACE
 # ============================================================================
-DOCMIND_STREAMLIT_PORT=8501
-DOCMIND_ENABLE_UI_DARK_MODE=true
+DOCMIND_UI__STREAMLIT_PORT=8501
+DOCMIND_UI__ENABLE_DARK_MODE=true
 ```
 
 **Application Integration:**

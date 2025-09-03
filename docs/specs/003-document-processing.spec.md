@@ -120,7 +120,7 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 ✅ **ADR-002**: BGE-M3 unified dense/sparse embeddings with 8K context (lines 25, 47, 54, 79-84)
 ✅ **ADR-007**: SQLite WAL mode + Qdrant hybrid persistence (lines 27, 86-88, 243, 253-256)
 ✅ **ADR-009**: Direct Unstructured.io integration with chunk_by_title semantic chunking (lines 21-24, 66-67, 111-129, 181-208)
-✅ **ADR-010**: SimpleCache SQLite-based caching (lines 26, 48, 86-88, 235-291)
+✅ **ADR-030**: IngestionCache(DuckDBKVStore) single-cache architecture (replaces SimpleCache)
 ✅ **ADR-019**: GraphRAG PropertyGraphIndex preparation support (lines 29, 378, 589)
 
 ## 3. Inputs and Outputs
@@ -131,7 +131,7 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 - **Processing Strategy**: Adaptive strategy selection (hi_res for PDF/DOCX, fast for HTML/TXT, ocr_only for images)
 - **Chunking Config**: max_characters=1500, new_after_n_chars=1200, combine_text_under_n_chars=500
 - **Embedding Config**: BGE-M3 model with 8K context length (ADR-002)
-- **Cache Config**: SimpleCache SQLite-based caching with LlamaIndex SimpleKVStore (ADR-010)
+- **Cache Config**: IngestionCache backed by DuckDBKVStore (ADR-030)
 - **Metadata**: User-provided tags and categories (optional)
 
 ### Outputs
@@ -141,7 +141,7 @@ The Document Processing Pipeline transforms raw documents (PDF, DOCX, TXT, MD, H
 - **Extracted Tables**: Automatically parsed tables with inferred structure
 - **Extracted Images**: Processed images with OCR text when applicable
 - **Document Metadata**: Title, author, creation date, page count, structure hierarchy
-- **Cache Results**: SimpleCache SQLite entries for document processing result storage
+- **Cache Results**: IngestionCache(DuckDBKVStore) entries for document processing cache
 - **Processing Status**: Success/failure with Tenacity retry logs and quality scores
 
 ## 4. Interfaces
@@ -531,13 +531,13 @@ And section headings and hierarchy are preserved in metadata
 And multipage sections are handled correctly
 ```
 
-### Scenario 3: SimpleCache Performance (ADR-010)
+### Scenario 3: Cache Performance (ADR-030)
 
 ```gherkin
 Given a previously processed document with BGE-M3 embeddings
 When the same document is uploaded again
-Then SimpleCache returns cached processing results instantly
-And document processing pipeline is skipped entirely
+Then subsequent runs reuse cached pipeline stages via IngestionCache
+And processing avoids redundant work, improving latency
 And response time is under 100ms for cached content
 And cache provides consistent results across agent coordination
 And user sees cache hit notification with processing stats
@@ -686,7 +686,7 @@ And parallel agent execution benefits from shared cached documents
 - **REQ-0022**: DOCX parsing with automatic structure preservation and table extraction ✓
 - **REQ-0023**: Multimodal element extraction (text, tables, images) with OCR support ✓
 - **REQ-0024**: Semantic chunking using DIRECT chunk_by_title with intelligent boundary detection (ADR-009) ✓
-- **REQ-0025**: SimpleCache SQLite-based document caching for processing results (VERIFIED ADR-010) ✓
+- **REQ-0025**: IngestionCache(DuckDBKVStore) document caching for processing results (VERIFIED ADR-030) ✓
 - **REQ-0026**: >1 page/second throughput with 95%+ accuracy (revised for quality focus) ✓
 - **REQ-0027**: Asynchronous non-blocking processing with FP8 optimization support ✓
 - **REQ-0028**: Graceful error handling with Tenacity retry patterns and fallback strategies ✓
@@ -695,7 +695,7 @@ And parallel agent execution benefits from shared cached documents
 
 - **BGE-M3 Integration**: 8K context embeddings with 1024-dimensional unified vectors (VERIFIED ADR-002) ✓
 - **Qdrant Storage**: Vector embeddings storage backend integration (VERIFIED ADR-007) ✓
-- **Multi-Agent Cache**: Shared SimpleCache document storage across 5 specialized agents (VERIFIED ADR-010) ✓
+- **Multi-Agent Cache**: Single local cache via IngestionCache(DuckDBKVStore) (ADR-030) ✓
 - **GraphRAG Input**: PropertyGraphIndex document preparation support (VERIFIED ADR-019) ✓
 - **Resilient Processing**: Tenacity patterns for robust error recovery and retry logic ✓
 
@@ -705,7 +705,7 @@ And parallel agent execution benefits from shared cached documents
 
 - `unstructured>=0.15.13` - Core document processing library
 - `FlagEmbedding>=1.2.0` - BGE-M3 embeddings (ADR-002)
-- `llama-index-core>=0.10.0` - Document pipeline and SimpleKVStore caching
+- `llama-index-core>=0.10.0` - Document pipeline and ingestion cache
 - `llama-index-embeddings-huggingface>=0.2.0` - BGE-M3 integration
 - `qdrant-client>=1.6.0` - Vector storage backend (ADR-007)
 - `tenacity>=8.0.0` - Resilient retry patterns
@@ -716,10 +716,10 @@ And parallel agent execution benefits from shared cached documents
 ### Infrastructure Dependencies (ADR-007/ADR-010)
 
 - Local file system for document storage
-- SQLite for SimpleCache document processing result storage
+- DuckDB file for document processing cache (`./cache/docmind.duckdb`)
 - Qdrant vector database for embeddings storage
 - GPU for BGE-M3 embedding generation (RTX 4090 Laptop recommended)
-- Cache directory: ./cache/docmind.db (SimpleCache SQLite storage)
+- Cache file: ./cache/docmind.duckdb (DuckDB KV store)
 - Optional: FP8 quantization support for memory optimization
 
 ### Feature Dependencies (ADR Integration)
@@ -738,7 +738,7 @@ And parallel agent execution benefits from shared cached documents
 - **ADR-009**: Document Processing Pipeline (VERIFIED primary architecture - direct Unstructured.io)
 - **ADR-002**: Unified Embedding Strategy (VERIFIED BGE-M3 integration with 8K context)
 - **ADR-007**: Hybrid Persistence Strategy (VERIFIED SQLite + Qdrant storage)
-- **ADR-010**: Performance Optimization Strategy (VERIFIED SimpleCache SQLite-based caching)
+- **ADR-030**: Cache Unification (IngestionCache + DuckDBKVStore)
 - **ADR-019**: Optional GraphRAG (VERIFIED PropertyGraphIndex input preparation)
 - **ADR-018**: DSPy Prompt Optimization (query enhancement integration)
 - PRD Section 3: Core Document Ingestion Epic
