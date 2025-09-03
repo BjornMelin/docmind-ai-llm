@@ -712,10 +712,10 @@ DOCMIND_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 
 ## Dependencies
 
-- **Python**: `llama-cpp-python>=0.2.32,<0.3.0`, `transformers==4.55.0` (YaRN support), `vllm[flashinfer]>=0.10.1` (YaRN support)
+- **Python (runtime pins)**: `llama-cpp-python>=0.2.32,<0.3.0`, `transformers>=4.53.1,<4.54.0` (ColPali compat), `vllm>=0.9.1,<0.10.0` + `flashinfer-python>=0.2.11`
 - **Hardware**: RTX 4090 Laptop GPU (16GB VRAM), Intel Core i9-14900HX, 64GB RAM
 - **CUDA**: CUDA 12.8+ with cuDNN 8.9+
-- **Inference**: llama.cpp with YaRN support, vLLM 0.10.1+, transformers 4.55.0
+- **Inference**: Default runtime uses vLLM 0.9.x with explicit FlashInfer and transformers 4.53.x (ColPali compat). For YaRN-specific workflows, use an isolated environment with transformers 4.55.0 and vLLM ≥0.10.1.
 - **Storage**: ~10-11GB for Q5_K_M/Q6_K GGUF models, 2TB SSD recommended
 - **Optional**: Flash Attention 2 for transformers, tensor parallelism support
 

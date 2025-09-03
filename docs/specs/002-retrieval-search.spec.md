@@ -659,7 +659,7 @@ And retrieval accuracy maintains >80% relevance
 - `llama-index-core>=0.12.0` (RouterQueryEngine, HybridRetriever - **CRITICAL for adaptive routing**)
 - `llama-index-vector-stores-qdrant>=0.1.0`
 - `dspy-ai>=2.4.0` (optional, for query optimization)
-- `torch>=2.7.1` (FP8 support for RTX 4090 optimization)
+- `torch>=2.7.0` (FP8 support for RTX 4090 optimization)
 - `tenacity>=9.1.2` (resilience patterns - **CRITICAL for production reliability**)
 
 ### Model Dependencies
