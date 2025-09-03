@@ -338,6 +338,7 @@ async def test_multipage_sections_propagation(tmp_path, multipage):
     settings.processing.multipage_sections = multipage
     settings.max_document_size_mb = 100
     settings.cache_dir = tmp_path / "cache"
+    settings.cache_dir = tmp_path / "cache"
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
