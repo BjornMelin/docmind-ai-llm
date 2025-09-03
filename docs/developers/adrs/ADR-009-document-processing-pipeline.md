@@ -1,24 +1,25 @@
-# ADR-009: Document Processing Pipeline
-
-## Title
-
-Modernized Document Ingestion with Multimodal Support and Intelligent Chunking
-
-## Version/Date
-
-2.2 / 2025-09-02
+---
+ADR: 009
+Title: Document Processing Pipeline (Multimodal)
+Status: Implemented
+Version: 2.3
+Date: 2025-09-03
+Supersedes:
+Superseded-by:
+Related: 002, 003, 030, 031, 037
+Tags: ingestion, unstructured, chunking, multimodal
+References:
+- [Unstructured PDF partitioning](https://unstructured-io.github.io/unstructured/introduction.html)
+- [LlamaIndex Multi-Modal Retrieval](https://docs.llamaindex.ai/en/stable/examples/multi_modal/multi_modal_retrieval/)
+---
 
 ## Implemented In
 
 FEAT-009.1 Hybrid Document Processing Pipeline
 
-## Status
-
-Implemented
-
 ## Description
 
-Implements a modernized document processing pipeline that handles diverse file formats, extracts multimodal content (text, images, tables), and applies intelligent chunking strategies. The pipeline integrates with the unified embedding strategy and hierarchical indexing while maintaining high throughput and quality for local processing.
+Implements a modernized document processing pipeline that handles diverse file formats, extracts multimodal content (text, images, tables), and applies intelligent chunking strategies. The pipeline now explicitly emits **page‑image nodes** for PDFs tagged with `metadata.modality="pdf_page_image"` to enable multimodal reranking (ADR‑037). The pipeline integrates with the unified embedding strategy and hierarchical indexing while maintaining high throughput and quality for local processing.
 
 **Enhanced Integration:**
 
