@@ -36,15 +36,12 @@ from src.processing.document_processor import (
 )
 
 __all__ = [
-    # Primary implementation
-    "DocumentProcessor",
-    # Essential models
-    "ProcessingStrategy",
     "DocumentElement",
-    "ProcessingResult",
-    "ProcessingError",
-    # Embedding models
+    "DocumentProcessor",
+    "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",
-    "EmbeddingError",
+    "ProcessingError",
+    "ProcessingResult",
+    "ProcessingStrategy",
 ]

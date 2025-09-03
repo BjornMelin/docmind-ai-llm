@@ -5,15 +5,13 @@ and multi-agent coordination for intelligent document processing.
 
 Note: Module name intentionally kept as-is to match project name in pyproject.toml.
 Ruff's N999 rule is temporarily disabled for this module.
-"""  # noqa: N999
+"""
 
 __version__ = "0.1.0"
 __author__ = "Bjorn Melin"
 
 # Make key components available at package level
 from .config import settings
-
-# Note: ADR-009/ADR-030 compliant processing available via src.processing
 
 __all__ = [
     "settings",

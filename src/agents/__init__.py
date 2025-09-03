@@ -9,7 +9,7 @@ Modules:
     tool_factory: Factory for creating agent tools with optimal configuration
     tools: Shared @tool functions for agents
            (routing, planning, retrieval, synthesis, validation)
-"""  # noqa: N999
+"""
 
 # Multi-Agent Coordination System imports
 from .coordinator import (
@@ -39,22 +39,18 @@ from .tools import (
 )
 
 __all__ = [
-    # Multi-Agent Coordination System
     "AgentResponse",
-    "MultiAgentState",
     "MultiAgentCoordinator",
-    "create_multi_agent_coordinator",
-    # Retrieval Agent
+    "MultiAgentState",
     "RetrievalAgent",
     "RetrievalResult",
-    "optimize_query_for_strategy",
-    "select_optimal_strategy",
-    # Tool Factory
     "ToolFactory",
-    # Shared Tool Functions
+    "create_multi_agent_coordinator",
+    "optimize_query_for_strategy",
     "plan_query",
     "retrieve_documents",
     "route_query",
+    "select_optimal_strategy",
     "synthesize_results",
     "validate_response",
 ]

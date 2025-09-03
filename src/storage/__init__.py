@@ -25,10 +25,10 @@ from src.models.storage import (
 from src.storage.hybrid_persistence import HybridPersistenceManager
 
 __all__ = [
-    "HybridPersistenceManager",
     "DocumentMetadata",
-    "VectorRecord",
+    "HybridPersistenceManager",
+    "PersistenceError",
     "SearchResult",
     "StorageStats",
-    "PersistenceError",
+    "VectorRecord",
 ]

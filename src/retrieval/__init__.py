@@ -1,10 +1,8 @@
-"""FEAT-002 Retrieval & Search System.
+"""Retrieval & Search System.
 
 Complete architectural replacement implementing BGE-M3 unified embeddings,
 RouterQueryEngine adaptive retrieval, and CrossEncoder reranking per ADR-002,
 ADR-003, and ADR-006.
-
-Flattened directory structure with consolidated modules per Task 3.1.1.
 """
 
 # BGE-M3 and CLIP embeddings (consolidated)
@@ -61,43 +59,36 @@ from .reranking import (
 from .vector_store import QdrantUnifiedVectorStore, create_unified_qdrant_store
 
 __all__ = [
-    # BGE-M3 Unified Embeddings
-    "BGEM3Embedding",
-    "create_bgem3_embedding",
-    "configure_bgem3_settings",
-    # CLIP Multimodal Embeddings
-    "ClipConfig",
-    "create_clip_embedding",
-    "setup_clip_for_llamaindex",
-    # CrossEncoder Reranking
-    "BGECrossEncoderRerank",
-    "create_bge_cross_encoder_reranker",
-    "benchmark_reranking_latency",
-    # RouterQueryEngine Adaptive Retrieval
     "AdaptiveRouterQueryEngine",
-    "create_adaptive_router_engine",
-    "configure_router_settings",
-    # Qdrant Unified Vector Store
-    "QdrantUnifiedVectorStore",
-    "create_unified_qdrant_store",
-    # Property Graph Configuration
+    "BGECrossEncoderRerank",
+    "BGEM3Embedding",
+    "ClipConfig",
+    "DSPyABTest",
+    "DSPyConfig",
+    "DSPyOptimizer",
+    "DocMindRAG",
+    "OptimizationMode",
     "PropertyGraphConfig",
+    "QdrantUnifiedVectorStore",
+    "QueryStrategy",
+    "benchmark_reranking_latency",
+    "calculate_entity_confidence",
+    "classify_query_strategy",
+    "configure_bgem3_settings",
+    "configure_router_settings",
+    "create_adaptive_router_engine",
+    "create_bge_cross_encoder_reranker",
+    "create_bgem3_embedding",
+    "create_clip_embedding",
     "create_property_graph_index",
     "create_property_graph_index_async",
     "create_tech_schema",
+    "create_unified_qdrant_store",
+    "extend_property_graph_index",
     "extract_entities",
     "extract_relationships",
-    "traverse_graph",
-    "calculate_entity_confidence",
-    "extend_property_graph_index",
-    # DSPy Optimization
-    "DSPyConfig",
-    "DSPyOptimizer",
-    "DSPyABTest",
-    "DocMindRAG",
-    "OptimizationMode",
-    "QueryStrategy",
-    "classify_query_strategy",
     "measure_quality_improvement",
     "progressive_optimization_pipeline",
+    "setup_clip_for_llamaindex",
+    "traverse_graph",
 ]

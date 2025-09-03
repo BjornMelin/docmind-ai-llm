@@ -26,7 +26,7 @@ from .settings import settings
 # Call initialize_integrations()/setup_llamaindex() explicitly where needed.
 
 __all__ = [
-    "settings",
     "initialize_integrations",
+    "settings",
     "setup_llamaindex",
 ]

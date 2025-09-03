@@ -111,7 +111,7 @@ def get_multi_agent_coordinator(
 
 
 __all__ = [
-    "get_embedding_model",
     "get_document_processor",
+    "get_embedding_model",
     "get_multi_agent_coordinator",
 ]

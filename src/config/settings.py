@@ -371,16 +371,16 @@ settings = DocMindSettings()
 
 # Module exports
 __all__ = [
-    "DocMindSettings",
-    "VLLMConfig",
-    "ProcessingConfig",
     "AgentConfig",
-    "EmbeddingConfig",
-    "RetrievalConfig",
     "CacheConfig",
     "DatabaseConfig",
-    "UIConfig",
+    "DocMindSettings",
+    "EmbeddingConfig",
     "MonitoringConfig",
+    "ProcessingConfig",
+    "RetrievalConfig",
+    "UIConfig",
+    "VLLMConfig",
     "settings",
 ]
 

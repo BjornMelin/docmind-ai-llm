@@ -155,8 +155,8 @@ def initialize_integrations() -> None:
 
 # Convenience exports
 __all__ = [
-    "setup_llamaindex",
-    "setup_vllm_env",
     "get_vllm_server_command",
     "initialize_integrations",
+    "setup_llamaindex",
+    "setup_vllm_env",
 ]

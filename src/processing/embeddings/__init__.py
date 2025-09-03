@@ -28,7 +28,7 @@ from src.processing.embeddings.bgem3_embedder import (
 
 __all__ = [
     "BGEM3Embedder",
+    "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",
-    "EmbeddingError",
 ]

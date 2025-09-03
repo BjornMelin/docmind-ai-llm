@@ -26,10 +26,10 @@ from src.processing.chunking.models import (
 from src.processing.chunking.unstructured_chunker import SemanticChunker
 
 __all__ = [
-    "SemanticChunker",
     "BoundaryDetection",
-    "ChunkingParameters",
-    "SemanticChunk",
-    "ChunkingResult",
     "ChunkingError",
+    "ChunkingParameters",
+    "ChunkingResult",
+    "SemanticChunk",
+    "SemanticChunker",
 ]

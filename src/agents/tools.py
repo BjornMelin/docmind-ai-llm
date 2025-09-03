@@ -246,7 +246,7 @@ def route_query(
 def plan_query(
     query: str,
     complexity: str,
-    _state: Annotated[dict, InjectedState] = None,
+    _state: Annotated[dict, InjectedState] | None = None,
 ) -> str:
     """Decompose complex queries into structured sub-tasks.
 
@@ -406,7 +406,7 @@ def retrieve_documents(
     strategy: str = "hybrid",
     use_dspy: bool = True,
     use_graphrag: bool = False,
-    state: Annotated[dict, InjectedState] = None,
+    state: Annotated[dict, InjectedState] | None = None,
 ) -> str:
     """Execute document retrieval using specified strategy and optimizations.
 
@@ -516,9 +516,7 @@ def retrieve_documents(
         strategy_used = strategy
 
         # Execute retrieval with all query variants for improved coverage
-        queries_to_process = [primary_query] + variant_queries[
-            :VARIANT_QUERY_LIMIT
-        ]  # Limit variants for performance
+        queries_to_process = [primary_query, *variant_queries[:VARIANT_QUERY_LIMIT]]
 
         if strategy == "graphrag" and use_graphrag and kg_index:
             # Use knowledge graph retrieval with optimized queries
@@ -629,7 +627,7 @@ def retrieve_documents(
 def synthesize_results(
     sub_results: str,
     original_query: str,
-    _state: Annotated[dict, InjectedState] = None,
+    _state: Annotated[dict, InjectedState] | None = None,
 ) -> str:
     """Combine and synthesize results from multiple retrieval operations.
 
@@ -755,7 +753,7 @@ def validate_response(
     query: str,
     response: str,
     sources: str,
-    _state: Annotated[dict, InjectedState] = None,
+    _state: Annotated[dict, InjectedState] | None = None,
 ) -> str:
     """Validate response quality and accuracy against sources.
 
