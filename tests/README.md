@@ -9,7 +9,7 @@ This repository organizes unit tests by domain to mirror the src/ folder. This k
 - `core/`: Containers, exceptions, invariants; `core/infrastructure/`: spaCy manager, resources
 - `embeddings/`: Cross-boundary embedding contracts (dims/shape)
 - `models/`: Pydantic models (schemas, processing, storage, embeddings)
-- `processing/`: Document processing; processing/chunking and processing/embeddings
+- `processing/`: Document processing; Unstructured + LlamaIndex pipeline
 - `prompts/`: Prompt templates
 - `retrieval/`: Query engine, hybrid search; retrieval/reranking, retrieval/similarity, retrieval/vector_store, retrieval/adapters (e.g., DSPy)
 - `storage/`: Persistence and managers

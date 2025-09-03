@@ -34,8 +34,8 @@ class TestCompleteDocumentWorkflows:
 
     @pytest.mark.asyncio
     @patch("src.utils.document.load_documents_unstructured")
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
-    @patch("src.retrieval.vector_store.QdrantVectorStore")
+    @patch("src.retrieval.embeddings.BGEM3Embedding")
+    @patch("llama_index.vector_stores.qdrant.QdrantVectorStore")
     async def test_document_upload_to_query_workflow(
         self, mock_vector_store, mock_embedder, mock_load_docs, system_settings
     ):
@@ -219,7 +219,7 @@ class TestCompleteDocumentWorkflows:
 
         # Test batch processing
         with patch(
-            "src.processing.embeddings.bgem3_embedder.BGEM3Embedder"
+            "src.retrieval.embeddings.BGEM3Embedding"
         ) as mock_embedder:
             mock_embedder_instance = MagicMock()
 
@@ -635,7 +635,7 @@ class TestErrorHandlingSystemWorkflows:
 
         for error_name, error in error_scenarios:
             with patch(
-                "src.processing.embeddings.bgem3_embedder.BGEM3Embedder"
+                "src.retrieval.embeddings.BGEM3Embedding"
             ) as mock_embedder:
                 # First call fails, second succeeds
                 mock_embedder.side_effect = [error, MagicMock()]
@@ -769,7 +769,7 @@ class TestPerformanceSystemWorkflows:
         print(f"Workload time: {final_metrics['workload_time_ms']:.2f}ms")
 
     @pytest.mark.asyncio
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
+    @patch("src.retrieval.embeddings.BGEM3Embedding")
     async def test_concurrent_processing_workflow(self, mock_embedder):
         """Test system performance under concurrent processing load."""
         # Mock embedder for consistent performance testing

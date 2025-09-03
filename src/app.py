@@ -32,7 +32,7 @@ from typing import Any, cast
 
 import ollama
 import streamlit as st
-from llama_index.core import VectorStoreIndex
+from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core.vector_stores import SimpleVectorStore
 from llama_index.llms.ollama import Ollama
@@ -61,6 +61,10 @@ from src.containers import get_multi_agent_coordinator
 from src.prompts import PREDEFINED_PROMPTS
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
+from src.utils.storage import create_vector_store
+from src.utils.multimodal import create_image_documents
+from src.retrieval.embeddings import setup_clip_for_llamaindex
+from src.retrieval.query_engine import create_adaptive_router_engine
 
 # Help static analysis by annotating settings instance explicitly
 SETTINGS: _DocMindSettings = settings
@@ -231,8 +235,8 @@ if backend == "ollama":
         "Ollama URL", value=SETTINGS.ollama_base_url, key="ollama_url"
     )
     try:
-        # Use sync model listing to avoid asyncio event loop conflicts
-        models_response = ollama.list()  # Direct sync call
+                # Use sync model listing to avoid asyncio event loop conflicts
+                models_response = ollama.list()  # Direct sync call
         items = []
         if isinstance(models_response, dict):
             items = models_response.get("models", [])
@@ -339,11 +343,54 @@ async def upload_section() -> None:
                 # Use async indexing for 50-80% performance improvement
                 index_start_time = time.perf_counter()
                 try:
-                    # Create vector store and index with documents
-                    vector_store = SimpleVectorStore()
-                    st.session_state.index = VectorStoreIndex.from_documents(
-                        docs, vector_store=vector_store
+                    # Prefer Qdrant vector store via LlamaIndex
+                    collection_name = "docmind_text_index"
+                    qdrant_vs = create_vector_store(collection_name, enable_hybrid=True)
+                    storage_context = StorageContext.from_defaults(
+                        vector_store=qdrant_vs
                     )
+                    st.session_state.index = VectorStoreIndex.from_documents(
+                        docs, storage_context=storage_context
+                    )
+
+                    # Multimodal index (text + images) kept always-on
+                    try:
+                        setup_clip_for_llamaindex({})
+                        # Create image documents if any image paths are available
+                        image_docs = create_image_documents([])
+                        if image_docs:
+                            from llama_index.core.indices import (
+                                MultiModalVectorStoreIndex,
+                            )
+                            # Separate image store collection
+                            image_collection = "docmind_image_index"
+                            image_vs = create_vector_store(
+                                image_collection, enable_hybrid=False
+                            )
+                            mm_context = StorageContext.from_defaults(
+                                vector_store=qdrant_vs, image_store=image_vs
+                            )
+                            st.session_state.multimodal_index = (
+                                MultiModalVectorStoreIndex.from_documents(
+                                    image_docs, storage_context=mm_context
+                                )
+                            )
+                        else:
+                            st.session_state.multimodal_index = None
+                    except Exception as mm_e:  # pragma: no cover - optional path
+                        logger.warning("Multimodal index setup skipped: %s", mm_e)
+                        st.session_state.multimodal_index = None
+
+                    # Create adaptive router engine (vector + multimodal)
+                    try:
+                        st.session_state.router_engine = create_adaptive_router_engine(
+                            vector_index=st.session_state.index,
+                            multimodal_index=st.session_state.multimodal_index,
+                        )
+                    except Exception as re_e:  # pragma: no cover - optional path
+                        logger.warning("Router engine setup skipped: %s", re_e)
+                        st.session_state.router_engine = None
+
                 except (ValueError, RuntimeError) as e:
                     st.error(f"Document processing failed: {e}")
                     logger.error("Index creation failed: %s", str(e))

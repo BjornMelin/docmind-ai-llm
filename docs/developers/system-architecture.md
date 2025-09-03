@@ -530,16 +530,12 @@ src/
 ├── core/                     # Core processing modules
 │   └── infrastructure/      # System infrastructure
 ├── processing/               # Document processing pipeline
-│   ├── document_processor.py # Document loading and chunking
-│   ├── chunking/            # Document chunking strategies
-│   └── embeddings/          # BGE-M3 embedding implementation
+│   └── document_processor.py # Unstructured partition + LlamaIndex pipeline
 ├── retrieval/                # Retrieval system components
-│   ├── vector_store.py      # Qdrant vector storage
-│   ├── embeddings.py        # Embedding utilities
+│   ├── embeddings.py        # BGEM3 + CLIP embedding utilities
 │   ├── reranking.py         # BGE-reranker-v2-m3 implementation
-│   └── query_engine.py      # LlamaIndex query pipeline
-├── storage/                  # Persistence layer
-│   └── hybrid_persistence.py # SQLite + Qdrant hybrid storage
+│   └── query_engine.py      # RouterQueryEngine orchestration
+├── storage/                  # Persistence models (see src.utils.storage for helpers)
 ├── utils/                    # Utility modules
 │   ├── core.py              # Core utilities
 │   ├── document.py          # Document processing utilities

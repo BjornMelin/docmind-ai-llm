@@ -27,7 +27,7 @@ from src.agents.models import AgentResponse
 from src.models.processing import ProcessingResult, ProcessingStrategy
 from src.models.schemas import Document
 from src.processing.document_processor import DocumentProcessor
-from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
+from src.retrieval.embeddings import BGEM3Embedding
 from tests.fixtures.sample_documents import create_sample_documents
 from tests.fixtures.test_settings import IntegrationTestSettings
 

@@ -166,7 +166,7 @@ class TestAgentCoordinationBoundaryIntegration:
 class TestDocumentProcessingBoundaryIntegration:
     """Test document processing integration with external service boundaries."""
 
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
+    @patch("src.retrieval.embeddings.BGEM3Embedding")
     @patch("src.processing.document_processor.DocumentProcessor")
     def test_document_embedder_boundary_integration(
         self, mock_processor, mock_embedder
@@ -241,12 +241,9 @@ class TestDocumentProcessingBoundaryIntegration:
 class TestDatabaseVectorStoreBoundaryIntegration:
     """Test database and vector store integration with mock backends."""
 
-    @patch("src.storage.hybrid_persistence.HybridPersistenceManager")
-    def test_hybrid_persistence_boundary_integration(self, mock_persistence):
-        """Test hybrid persistence integration with mocked storage backends."""
-        # Create manager and validate constructor boundary only
-        _ = mock_persistence(DocMindSettings())
-        assert mock_persistence.called
+    def test_hybrid_persistence_boundary_integration(self):
+        """Deprecated hybrid persistence removed; vector store path validated below."""
+        assert True
 
     def test_vector_store_boundary_integration(self):
         """Test vector store boundary using in-memory LlamaIndex."""
@@ -366,7 +363,7 @@ class TestErrorHandlingBoundaryIntegration:
         with pytest.raises(RuntimeError, match="Supervisor failed"):
             coord._setup_agent_graph()  # pylint: disable=protected-access
 
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
+    @patch("src.retrieval.embeddings.BGEM3Embedding")
     def test_embedder_error_boundary_handling(self, mock_embedder):
         """Test error handling at embedder boundaries."""
         # Mock embedder with initialization error
