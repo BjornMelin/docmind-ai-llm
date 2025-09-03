@@ -5,7 +5,7 @@ local large language models. It handles user interface components, model
 selection and configuration, document upload and processing, analysis with
 customizable prompts, and interactive chat functionality with multimodal
 and hybrid search support, enhanced by Agentic RAG, optimizations,
-ColBERT for late-interaction, and auto-quantization.
+and auto-quantization.
 
 The application supports multiple backends (Ollama, LlamaCpp, LM Studio),
 various document formats including basic video/audio, and provides features like session
@@ -275,7 +275,35 @@ st.sidebar.info(
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
-# ColBERT reranking is now always enabled via native postprocessor (Phase 2.2)
+# Retrieval & Reranking controls (ADR-036/037)
+with st.sidebar:
+    st.markdown("### Retrieval & Reranking")
+    try:
+        mode = st.radio(
+            "Reranker Mode",
+            options=["auto", "text", "multimodal"],
+            index=["auto", "text", "multimodal"].index(
+                getattr(SETTINGS.retrieval, "reranker_mode", "auto")
+            ),
+            key="reranker_mode",
+        )
+        norm = st.checkbox(
+            "Normalize scores",
+            value=bool(getattr(SETTINGS.retrieval, "reranker_normalize_scores", True)),
+            key="reranker_normalize_scores",
+        )
+        top_n = st.number_input(
+            "Top N",
+            min_value=1,
+            max_value=20,
+            value=int(getattr(SETTINGS.retrieval, "reranking_top_k", 10)),
+            key="reranking_top_k",
+        )
+        SETTINGS.retrieval.reranker_mode = mode
+        SETTINGS.retrieval.reranker_normalize_scores = bool(norm)
+        SETTINGS.retrieval.reranking_top_k = int(top_n)
+    except Exception as _e:  # pragma: no cover - UI resilience
+        logger.warning("Reranking controls not initialized: {}", _e)
 _parse_media: bool = st.sidebar.checkbox("Parse Video/Audio", value=False)
 enable_multimodal: bool = st.sidebar.checkbox(
     "Enable Multimodal Processing",

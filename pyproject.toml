@@ -55,7 +55,7 @@ dependencies = [
     "llama-index-llms-openai-like",
     "llama-index-embeddings-huggingface",
     "llama-index-embeddings-clip",
-    "llama-index-postprocessor-colbert-rerank",
+    "llama-index-postprocessor-colpali-rerank",
     "llama-index-embeddings-fastembed",
     "llama-index-embeddings-openai",
     "llama-index-readers-file",

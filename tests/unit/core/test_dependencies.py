@@ -22,7 +22,7 @@ REQUIRED_MODULAR_IMPORTS = {
     "llama_index.embeddings.huggingface",
     "llama_index.embeddings.fastembed",
     "llama_index.vector_stores.qdrant",
-    "llama_index.postprocessor.colbert_rerank",
+    "llama_index.postprocessor.colpali_rerank",
 }
 
 # Get project root directory

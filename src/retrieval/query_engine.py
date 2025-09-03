@@ -20,6 +20,9 @@ from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
+from src.config import settings
+from src.retrieval.reranking import MultimodalReranker, build_text_reranker
+
 # Router Engine Configuration Constants
 DEFAULT_DENSE_SIMILARITY_TOP_K = 10
 DEFAULT_MULTI_QUERY_SIMILARITY_TOP_K = 15
@@ -422,6 +425,15 @@ def create_adaptive_router_engine(
     Returns:
         Configured AdaptiveRouterQueryEngine for FEAT-002.1
     """
+    # Build reranker if not provided
+    if reranker is None and getattr(settings.retrieval, "use_reranking", True):
+        mode = getattr(settings.retrieval, "reranker_mode", "auto")
+        reranker = (
+            MultimodalReranker()
+            if mode in {"auto", "multimodal"}
+            else build_text_reranker()
+        )
+
     return AdaptiveRouterQueryEngine(
         vector_index=vector_index,
         kg_index=kg_index,

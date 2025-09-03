@@ -91,8 +91,10 @@ class RetrievalConfig(BaseModel):
     top_k: int = Field(default=10, ge=1, le=50)
     use_reranking: bool = Field(default=True)
     reranking_top_k: int = Field(default=5, ge=1, le=20)
-    reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
     reranker_normalize_scores: bool = Field(default=True)
+    # ADR-024/036/037: explicit reranker mode selection
+    # auto: modality-aware (visual+text); text: text-only; multimodal: force both
+    reranker_mode: str = Field(default="auto")  # Literal["auto","text","multimodal"]
 
     # RRF Fusion Settings
     rrf_alpha: int = Field(default=60, ge=10, le=100)
@@ -276,6 +278,10 @@ class DocMindSettings(BaseSettings):
     ui: UIConfig = Field(default_factory=UIConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
 
+    # Top-level LLM context window cap (ADR-004/024)
+    # Ensure backends (e.g., vLLM) enforce this limit via server args.
+    llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
+
     def model_post_init(self, __context: Any) -> None:
         """Create necessary directories after initialization."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -293,13 +299,18 @@ class DocMindSettings(BaseSettings):
             "VLLM_ENABLE_CHUNKED_PREFILL": "1"
             if self.vllm.enable_chunked_prefill
             else "0",
+            # Provide max model len for launcher scripts that read env
+            "VLLM_MAX_MODEL_LEN": str(self.llm_context_window_max),
         }
 
     def get_model_config(self) -> dict[str, Any]:
         """Get model configuration for LlamaIndex setup."""
         return {
             "model_name": self.vllm.model,
-            "context_window": self.vllm.context_window,
+            # Enforce cap consistently
+            "context_window": min(
+                self.vllm.context_window, self.llm_context_window_max
+            ),
             "max_tokens": self.vllm.max_tokens,
             "temperature": self.vllm.temperature,
             "base_url": self.ollama_base_url,

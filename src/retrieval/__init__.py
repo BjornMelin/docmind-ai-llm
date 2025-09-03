@@ -48,34 +48,34 @@ from .query_engine import (
     create_adaptive_router_engine,
 )
 
-# CrossEncoder reranking
+# Modality-aware reranking
 from .reranking import (
-    BGECrossEncoderRerank,
-    benchmark_reranking_latency,
-    create_bge_cross_encoder_reranker,
+    MultimodalReranker,
+    build_text_reranker,
+    build_visual_reranker,
 )
 
 # Unified Qdrant vector store
 
 __all__ = [
     "AdaptiveRouterQueryEngine",
-    "BGECrossEncoderRerank",
     "BGEM3Embedding",
     "ClipConfig",
     "DSPyABTest",
     "DSPyConfig",
     "DSPyOptimizer",
     "DocMindRAG",
+    "MultimodalReranker",
     "OptimizationMode",
     "PropertyGraphConfig",
     "QueryStrategy",
-    "benchmark_reranking_latency",
+    "build_text_reranker",
+    "build_visual_reranker",
     "calculate_entity_confidence",
     "classify_query_strategy",
     "configure_bgem3_settings",
     "configure_router_settings",
     "create_adaptive_router_engine",
-    "create_bge_cross_encoder_reranker",
     "create_bgem3_embedding",
     "create_clip_embedding",
     "create_property_graph_index",
