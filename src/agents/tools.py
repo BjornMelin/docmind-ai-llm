@@ -40,7 +40,6 @@ from src.config.settings import MonitoringConfig as _MonConfig
 MON: _MonConfig = settings.monitoring
 
 # Constants
-
 COMPLEX_QUERY_WORD_THRESHOLD = 20
 MEDIUM_QUERY_WORD_THRESHOLD = 10
 RECENT_CHAT_HISTORY_LIMIT = 3
@@ -949,9 +948,6 @@ def validate_response(
                 "error": str(e),
             }
         )
-
-
-# Helper functions
 
 
 def _parse_tool_result(result: Any) -> list[dict[str, Any]]:

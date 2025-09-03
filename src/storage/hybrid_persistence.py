@@ -17,7 +17,7 @@ import asyncio
 import json
 import sqlite3
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -727,6 +727,16 @@ class HybridPersistenceManager:
     async def close(self) -> None:
         """Close storage connections."""
         try:
+            # Cancel background tasks started during initialization
+            if hasattr(self, "_background_tasks"):
+                for task in list(self._background_tasks):
+                    if not task.done():
+                        task.cancel()
+                for task in list(self._background_tasks):
+                    with suppress(Exception):  # pragma: no cover - cancellation
+                        await task
+                self._background_tasks.clear()
+
             if self.sqlite_connection is not None:
                 self.sqlite_connection.close()
                 self.sqlite_connection = None

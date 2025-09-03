@@ -118,10 +118,10 @@ class DSPyLlamaIndexRetriever:
             class DSPyLLMWrapper:
                 """Wrapper class to make LlamaIndex LLMs compatible with DSPy."""
 
-                def __init__(self, llm):
+                def __init__(self, llm: Any):
                     self.llm = llm
 
-                def __call__(self, prompt: str, **kwargs) -> str:
+                def __call__(self, prompt: str, **kwargs: Any) -> str:
                     try:
                         response = self.llm.complete(prompt)
                         return str(response)

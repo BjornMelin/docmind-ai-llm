@@ -112,7 +112,7 @@ class RetrievalAgent:
         use_dspy: bool = True,
         use_graphrag: bool = False,
         _context: ChatMemoryBuffer | None = None,
-        **_kwargs,
+        **_kwargs: Any,
     ) -> RetrievalResult:
         """Execute document retrieval using specified strategy.
 

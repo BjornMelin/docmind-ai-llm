@@ -159,8 +159,8 @@ ignore = [
     "S607",  # partial executable path (acceptable for well-known system commands)
     "S108",  # hardcoded temp file path (will be replaced with tempfile)
 ]
-# Ensure unused or mistyped noqa comments are flagged.
-extend-select = ["RUF100"]
+# Ensure unused or mistyped noqa comments are flagged and pilot ANN rules.
+extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
@@ -171,11 +171,18 @@ extend-select = ["RUF100"]
     "RUF005",  # list concatenation shortcuts allowed in tests
     "RUF017",  # performance anti-patterns acceptable in tests
     "N802",    # test AST visitors use conventional names
+    "ANN001", "ANN002", "ANN003",  # pilot annotations off in tests
+    "ANN201", "ANN202", "ANN204",
 ]
-"scripts/**/*.py" = [
-    "RUF001", "RUF002", "RUF003",  # authoring convenience in scripts
-    "RUF013",  # allow implicit Optional in scripts
-]
+"src/config/**/*.py" = ["ANN001", "ANN002", "ANN003"]
+"src/models/**/*.py" = ["ANN001", "ANN002", "ANN003"]
+"src/processing/**/*.py" = ["ANN001", "ANN002", "ANN003"]
+"src/retrieval/**/*.py" = ["ANN001", "ANN002", "ANN003"]
+"src/utils/**/*.py" = ["ANN001", "ANN002", "ANN003"]
+"src/storage/**/*.py" = ["ANN001", "ANN002", "ANN003"]
+"scripts/check_coverage.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/update_progress_counts.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/run_quality_gates.py" = ["RUF013"]
 "docs/**/*.py" = [
     "RUF001", "RUF002", "RUF003",  # unicode in examples/docstrings
 ]
