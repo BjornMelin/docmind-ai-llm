@@ -89,14 +89,14 @@ Select a backend using `DOCMIND_LLM_BACKEND` in `{ollama|vllm|lmstudio|llamacpp}
 - `lmstudio`: `DOCMIND_LMSTUDIO_BASE_URL` (default `http://localhost:1234/v1`).
 - `llamacpp`: local GGUF path via `DOCMIND_VLLM__LLAMACPP_MODEL_PATH`.
 
-OpenAI-like flags for OpenAI-compatible servers:
+OpenAI-like flags for OpenAI-compatible servers (flat mapping):
 
 ```env
-DOCMIND_OPENAI_LIKE__API_KEY=not-needed
-DOCMIND_OPENAI_LIKE__IS_CHAT_MODEL=true
-DOCMIND_OPENAI_LIKE__IS_FUNCTION_CALLING_MODEL=false
+DOCMIND_OPENAI_LIKE_API_KEY=not-needed
+DOCMIND_OPENAI_LIKE_IS_CHAT_MODEL=true
+DOCMIND_OPENAI_LIKE_IS_FUNCTION_CALLING_MODEL=false
 # Optional JSON headers
-# DOCMIND_OPENAI_LIKE__EXTRA_HEADERS={"x-custom":"1"}
+# DOCMIND_OPENAI_LIKE_EXTRA_HEADERS={"x-custom":"1"}
 ```
 
 ## Environment Variables Reference

@@ -40,23 +40,25 @@ dependencies = [
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
     "ollama==0.5.3",                     # Ollama client
-    "llama-cpp-python>=0.2.32,<0.3.0",   # llama.cpp bindings (CPU variant)
+    "llama-cpp-python>=0.3.0,<0.4.0",   # llama.cpp bindings (CPU variant)
     # Vector Databases & Clients
     "qdrant-client==1.15.1",             # Qdrant client
     # LlamaIndex (meta + selected integrations)
-    "llama-index==0.13.4",               # Meta package (core + curated integrations)
-    "llama-index-vector-stores-qdrant",   # Qdrant vector-store integration
+    "llama-index==0.13.4",
+    "llama-index-vector-stores-qdrant",
     "llama-index-vector-stores-duckdb>=0.4.6", # DuckDB vector-store
     "llama-index-storage-kvstore-duckdb>=0.2.0", # DuckDB KV store (cache)
-    "llama-index-llms-vllm",             # vLLM LLM integration
-    "llama-index-llms-openai",            # OpenAI LLM integration
-    "llama-index-llms-ollama",            # Ollama LLM integration
-    "llama-index-embeddings-huggingface", # HF embeddings integration
-    "llama-index-embeddings-clip",        # CLIP embeddings integration
-    "llama-index-postprocessor-colbert-rerank", # ColBERT reranker integration
-    "llama-index-embeddings-fastembed",   # FastEmbed embeddings integration
-    "llama-index-embeddings-openai",      # OpenAI embeddings integration
-    "llama-index-readers-file",           # File readers integration
+    "llama-index-llms-vllm",
+    "llama-index-llms-openai",
+    "llama-index-llms-ollama",
+    "llama-index-llms-llama-cpp",
+    "llama-index-llms-openai-like",
+    "llama-index-embeddings-huggingface",
+    "llama-index-embeddings-clip",
+    "llama-index-postprocessor-colbert-rerank",
+    "llama-index-embeddings-fastembed",
+    "llama-index-embeddings-openai",
+    "llama-index-readers-file",
     # Agentic Orchestration
     "langgraph>=0.6.6",                  # Graph-based orchestration
     "langgraph-supervisor>=0.0.29",      # Multi-agent supervisor
@@ -83,10 +85,10 @@ gpu = [
     "cmake>=3.26.4",                      # Required for CUDA builds
 ]
 test = [
-    "pytest==8.3.1",
+    "pytest>=8.1,<9",
     "pytest-asyncio>=1.1.0",
-    "pytest-cov>=6.2.1",
-    "pytest-mock>=3.14.1",
+    "pytest-cov>=6.2.0",
+    "pytest-mock>=3.14.0",
     "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
 ]
