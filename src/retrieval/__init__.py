@@ -1,8 +1,8 @@
 """Retrieval & Search System.
 
-Complete architectural replacement implementing BGE-M3 unified embeddings,
-RouterQueryEngine adaptive retrieval, and CrossEncoder reranking per ADR-002,
-ADR-003, and ADR-006.
+Implements BGE-M3 unified embeddings and RouterQueryEngine adaptive retrieval
+per ADR-002 and ADR-003, with modality-aware reranking (ADR-037) using
+ColPali (visual) and BGE v2-m3 CrossEncoder (text).
 """
 
 # BGE-M3 and CLIP embeddings (consolidated)
