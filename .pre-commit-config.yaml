@@ -1,0 +1,31 @@
+default_language_version:
+  python: python3.12
+fail_fast: true
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      - id: ruff-format
+      - id: ruff
+        args: ["--force-exclude"]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]
+
+# Optional local policy guard; uncomment to prevent direct commits to main
+#  - repo: https://github.com/pre-commit/pre-commit-hooks
+#    rev: v4.6.0
+#    hooks:
+#      - id: no-commit-to-branch
+#        args: ["--branch", "main"]

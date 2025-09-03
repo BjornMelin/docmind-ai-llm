@@ -1,376 +1,254 @@
-"""Document loading and processing utilities for DocMind AI.
+"""Document processing utilities for DocMind AI.
 
-This module provides core document processing using LlamaIndex UnstructuredReader
-with high-resolution parsing strategy for multimodal content extraction, plus
-essential spaCy model management for NLP processing.
+This module provides convenient wrapper functions for document processing
+operations using the ADR-009 compliant architecture.
 
-ADR-004 Compliance: Offline document loading with Unstructured hi_res strategy.
-
-Supported formats:
-- Documents: PDF, DOCX, PPTX, HTML, TXT, MD
-- Multimodal: Text, images, tables with OCR via YOLOX/Tesseract
-
-Key features:
-- UnstructuredReader with hi_res strategy (ADR-004)
-- Simple diskcache for document caching
-- Basic spaCy model management with auto-download
-- Comprehensive error handling with loguru
+Available Functions:
+- load_documents_unstructured: Redirects to ResilientDocumentProcessor
+- load_documents_from_directory: Batch document processing
+- get_document_info: Document metadata extraction
+- clear_document_cache: Cache clearing operations
+- get_cache_stats: Cache statistics
+- ensure_spacy_model: spaCy model management
 """
 
-import hashlib
-import subprocess
-import time
 from pathlib import Path
 from typing import Any
 
-import diskcache
-from llama_index.core import Document
-from llama_index.readers.file import UnstructuredReader
 from loguru import logger
 
-from src.config.app_settings import app_settings
-
-# Simple document cache using diskcache
-_document_cache = diskcache.Cache("./cache/documents")
+from src.core.infrastructure.spacy_manager import get_spacy_manager
+from src.processing.document_processor import DocumentProcessor, ProcessingError
 
 
-def _get_file_hash(file_path: str) -> str:
-    """Generate SHA-256 hash for file content."""
-    try:
-        with open(file_path, "rb") as f:
-            content = f.read()
-        return hashlib.sha256(content).hexdigest()
-    except (OSError, PermissionError) as e:
-        logger.warning("Could not hash file %s: %s", file_path, e)
-        return f"nohash_{Path(file_path).name}_{Path(file_path).stat().st_mtime}"
-
-
-def _is_cached(file_path: str) -> bool:
-    """Check if document is cached."""
-    file_hash = _get_file_hash(file_path)
-    return file_hash in _document_cache
-
-
-def _get_cached(file_path: str) -> list[Document] | None:
-    """Get cached documents."""
-    if not _is_cached(file_path):
-        return None
-    file_hash = _get_file_hash(file_path)
-    return _document_cache.get(file_hash)
-
-
-def _cache_documents(file_path: str, documents: list[Document]) -> None:
-    """Cache documents with 1 hour expiry."""
-    file_hash = _get_file_hash(file_path)
-    _document_cache.set(file_hash, documents, expire=app_settings.cache_expiry_seconds)
-
-
-def load_documents_unstructured(file_path: str | Path) -> list[Document]:
-    """Load documents using UnstructuredReader with hi_res strategy (ADR-004).
-
-    Uses Unstructured library for offline multimodal document processing including
-    text, images, and tables with OCR support via YOLOX/Tesseract.
+async def load_documents_unstructured(
+    file_paths: list[str | Path], settings: Any | None = None
+) -> list[Any]:
+    """Load documents using ADR-009 compliant ResilientDocumentProcessor.
 
     Args:
-        file_path: Path to document file to process
+        file_paths: List of file paths to process
+        settings: Optional DocMind settings
 
     Returns:
-        List of Document objects with multimodal content and metadata
-
-    Raises:
-        RuntimeError: If document loading fails after basic retries
-
-    Note:
-        Follows ADR-004 specification for offline document parsing using
-        UnstructuredReader.load_data(file_path, strategy='hi_res')
+        List of processed documents
     """
-    file_path = str(file_path)
+    logger.info(
+        f"Processing {len(file_paths)} documents via ResilientDocumentProcessor"
+    )
 
-    # Check cache first
-    cached_docs = _get_cached(file_path)
-    if cached_docs:
-        logger.info("Using cached document for %s", Path(file_path).name)
-        return cached_docs
+    processor = DocumentProcessor(settings)
+    results = []
 
-    logger.info("Loading document with UnstructuredReader: %s", Path(file_path).name)
+    for file_path in file_paths:
+        try:
+            result = await processor.process_document_async(file_path)
+            results.append(result)
+        except (ProcessingError, ValueError, OSError) as e:
+            logger.error(f"Failed to process {file_path}: {e!s}")
+            # Continue processing other files
+            continue
 
-    try:
-        # Validate file exists
-        if not Path(file_path).exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        # Initialize UnstructuredReader (ADR-004 compliant)
-        reader = UnstructuredReader()
-
-        # Load with hi_res strategy for multimodal extraction (ADR-004)
-        documents = reader.load_data(
-            file=file_path,
-            strategy=getattr(app_settings, "parse_strategy", "hi_res"),
-            split_documents=True,
-        )
-
-        # Enhance metadata
-        for doc in documents:
-            if not hasattr(doc, "metadata"):
-                doc.metadata = {}
-            doc.metadata.update(
-                {
-                    "filename": Path(file_path).name,
-                    "source": str(file_path),
-                    "loader": "unstructured_reader",
-                    "strategy": getattr(app_settings, "parse_strategy", "hi_res"),
-                }
-            )
-
-        # Cache results
-        _cache_documents(file_path, documents)
-
-        logger.success(
-            "Loaded %d elements from %s", len(documents), Path(file_path).name
-        )
-        return documents
-
-    except (
-        FileNotFoundError,
-        PermissionError,
-        ValueError,
-        ImportError,
-        RuntimeError,
-    ) as e:
-        error_msg = f"Failed to load document {Path(file_path).name}: {str(e)}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg) from e
+    logger.info(f"Successfully processed {len(results)}/{len(file_paths)} documents")
+    return results
 
 
-def load_documents_from_directory(directory_path: str | Path) -> list[Document]:
+async def load_documents_from_directory(
+    directory_path: str | Path,
+    settings: Any | None = None,
+    recursive: bool = True,
+    supported_extensions: set[str] | None = None,
+) -> list[Any]:
     """Load all supported documents from a directory.
 
     Args:
         directory_path: Path to directory containing documents
+        settings: Optional DocMind settings
+        recursive: Whether to search subdirectories
+        supported_extensions: Set of file extensions to process
 
     Returns:
-        List of all loaded Document objects
-
-    Raises:
-        RuntimeError: If directory access fails
+        List of processed documents
     """
     directory_path = Path(directory_path)
 
-    if not directory_path.exists() or not directory_path.is_dir():
-        raise RuntimeError(f"Directory not found: {directory_path}")
-
-    # Supported file extensions
-    supported_extensions = {".pdf", ".docx", ".pptx", ".html", ".htm", ".txt", ".md"}
+    if supported_extensions is None:
+        # Default extensions from ResilientDocumentProcessor
+        supported_extensions = {
+            ".pdf",
+            ".docx",
+            ".doc",
+            ".pptx",
+            ".ppt",
+            ".html",
+            ".htm",
+            ".txt",
+            ".md",
+            ".rtf",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".tiff",
+            ".bmp",
+        }
 
     # Find all supported files
-    files = []
-    for ext in supported_extensions:
-        files.extend(directory_path.glob(f"*{ext}"))
-        files.extend(directory_path.glob(f"**/*{ext}"))  # Recursive search
+    file_paths = []
+    if recursive:
+        for ext in supported_extensions:
+            file_paths.extend(directory_path.rglob(f"*{ext}"))
+    else:
+        for ext in supported_extensions:
+            file_paths.extend(directory_path.glob(f"*{ext}"))
 
-    if not files:
-        logger.warning("No supported documents found in %s", directory_path)
-        return []
+    logger.info(f"Found {len(file_paths)} supported files in {directory_path}")
 
-    logger.info("Found %d documents in %s", len(files), directory_path)
-
-    # Load all documents
-    all_documents = []
-    for file_path in files:
-        try:
-            documents = load_documents_unstructured(file_path)
-            all_documents.extend(documents)
-        except (
-            FileNotFoundError,
-            PermissionError,
-            ValueError,
-            ImportError,
-            RuntimeError,
-        ) as e:
-            logger.warning("Failed to load %s: %s", file_path.name, e)
-            continue
-
-    logger.success(
-        "Loaded %d total elements from %d files", len(all_documents), len(files)
-    )
-    return all_documents
+    # Process all files
+    return await load_documents_unstructured(file_paths, settings)
 
 
 def get_document_info(file_path: str | Path) -> dict[str, Any]:
-    """Get basic information about a document without loading it.
+    """Get document information and metadata.
 
     Args:
-        file_path: Path to document file
+        file_path: Path to the document file
 
     Returns:
-        Dictionary with document information (size, type, cached status)
+        Dictionary with document information
     """
     file_path = Path(file_path)
 
     if not file_path.exists():
-        return {"error": "File not found"}
+        raise FileNotFoundError(f"Document not found: {file_path}")
 
     stat = file_path.stat()
 
-    return {
-        "filename": file_path.name,
-        "size_bytes": stat.st_size,
-        "size_mb": round(stat.st_size / app_settings.bytes_to_mb_divisor, 2),
-        "extension": file_path.suffix.lower(),
-        "modified": stat.st_mtime,
-        "is_cached": _is_cached(str(file_path)),
+    # Basic file information
+    info = {
+        "file_path": str(file_path),
+        "file_name": file_path.name,
+        "file_extension": file_path.suffix.lower(),
+        "file_size_bytes": stat.st_size,
+        "file_size_mb": stat.st_size / (1024 * 1024),
+        "created_time": stat.st_ctime,
+        "modified_time": stat.st_mtime,
+        "is_readable": file_path.is_file() and stat.st_size > 0,
     }
 
+    # Determine processing strategy
+    processor = DocumentProcessor()
+    try:
+        strategy = processor.get_strategy_for_file(file_path)
+        info["processing_strategy"] = strategy.value
+        info["supported"] = True
+    except ValueError:
+        info["processing_strategy"] = None
+        info["supported"] = False
 
-def clear_document_cache() -> int:
-    """Clear all cached documents.
+    return info
+
+
+async def clear_document_cache() -> bool:
+    """Clear document processing cache.
 
     Returns:
-        Number of cached items cleared
+        True if cache was cleared successfully
     """
+    logger.info("Clearing document processing cache (duckdb file)")
     try:
-        count = len(_document_cache)
-        _document_cache.clear()
-        logger.info("Cleared %d cached documents", count)
-        return count
-    except (OSError, PermissionError) as e:
-        logger.error("Failed to clear cache: %s", e)
-        return 0
+        from src.config.settings import settings as app_settings
+
+        cache_dir = Path(getattr(app_settings, "cache_dir", "./cache"))
+        cache_db = cache_dir / "docmind.duckdb"
+        if cache_db.exists():
+            cache_db.unlink()
+        logger.info("Document cache cleared (duckdb file removed if present)")
+        return True
+    except (OSError, RuntimeError) as e:
+        logger.warning(f"Failed to clear document cache: {e}")
+        return False
 
 
-def get_cache_stats() -> dict[str, Any]:
-    """Get document cache statistics.
+async def get_cache_stats() -> dict[str, Any]:
+    """Get document processing cache statistics.
 
     Returns:
-        Dictionary with cache statistics
+        Cache statistics dictionary
     """
     try:
-        return {
-            "cache_size": len(_document_cache),
-            "cache_dir": str(_document_cache.directory),
-            "total_size_bytes": sum(
-                Path(_document_cache.directory).glob("**/*").st_size
-                for p in Path(_document_cache.directory).glob("**/*")
-                if p.is_file()
-            )
-            if Path(_document_cache.directory).exists()
-            else 0,
+        from src.config.settings import settings as app_settings
+
+        cache_dir = Path(getattr(app_settings, "cache_dir", "./cache"))
+        cache_db = cache_dir / "docmind.duckdb"
+        stats = {
+            "cache_type": "duckdb_kvstore",
+            "db_path": str(cache_db),
+            "total_documents": -1,
         }
-    except (OSError, PermissionError, AttributeError) as e:
-        logger.error("Failed to get cache stats: %s", e)
-        return {"error": str(e)}
-
-
-# spaCy Model Management Functions
+        logger.debug(f"Cache statistics: type={stats.get('cache_type', 'unknown')}")
+        logger.debug(f"Cache path: {stats.get('db_path')}")
+        return stats
+    except Exception as e:
+        logger.warning(f"Failed to read cache stats: {e}")
+        return {"cache_type": "duckdb_kvstore", "error": str(e)}
 
 
 def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:
-    """Ensure spaCy model is available, download if needed.
+    """Ensure spaCy model is available and loaded using SpacyManager architecture.
 
     Args:
-        model_name: Name of the spaCy model to load (default: en_core_web_sm)
+        model_name: Name of the spaCy model to load
 
     Returns:
-        Loaded spaCy Language model instance or None if fails
+        Loaded spaCy language model
     """
-    start_time = time.perf_counter()
-    logger.info("Loading spaCy model: %s", model_name)
+    logger.info(f"Ensuring spaCy model: {model_name}")
 
-    try:
-        import spacy
+    spacy_manager = get_spacy_manager()
+    nlp = spacy_manager.ensure_model(model_name)
 
-        # Try to load existing model first
-        try:
-            nlp = spacy.load(model_name)
-            logger.success("spaCy model '%s' loaded successfully", model_name)
-
-            duration = time.perf_counter() - start_time
-            logger.info("spaCy model loaded in %.2fs", duration)
-            return nlp
-
-        except OSError:
-            # Model not found locally, try to download
-            logger.info(
-                "spaCy model '%s' not found locally, downloading...", model_name
-            )
-
-            try:
-                # Download with simple subprocess call
-                import os
-
-                download_cmd = ["python", "-m", "spacy", "download", model_name]
-
-                # Try uv if available
-                if any(
-                    os.path.exists(os.path.join(path, "uv"))
-                    for path in os.environ.get("PATH", "").split(os.pathsep)
-                ):
-                    download_cmd = [
-                        "uv",
-                        "run",
-                        "python",
-                        "-m",
-                        "spacy",
-                        "download",
-                        model_name,
-                    ]
-
-                subprocess.run(
-                    download_cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=app_settings.spacy_download_timeout,
-                )
-
-                logger.info("spaCy model '%s' downloaded successfully", model_name)
-
-                # Try loading again after download
-                nlp = spacy.load(model_name)
-                logger.success("spaCy model '%s' loaded after download", model_name)
-
-                duration = time.perf_counter() - start_time
-                logger.info("spaCy model downloaded and loaded in %.2fs", duration)
-                return nlp
-
-            except (
-                subprocess.TimeoutExpired,
-                subprocess.CalledProcessError,
-                OSError,
-            ) as e:
-                logger.error("Failed to download spaCy model '%s': %s", model_name, e)
-                return None
-
-    except ImportError:
-        logger.error("spaCy is not installed. Install with: pip install spacy")
-        return None
-    except (RuntimeError, ValueError) as e:
-        logger.error("Unexpected error loading spaCy model '%s': %s", model_name, e)
-        return None
+    logger.info(f"spaCy model '{model_name}' loaded successfully")
+    return nlp
 
 
-def extract_entities_with_spacy(
-    text: str, model_name: str = "en_core_web_sm"
-) -> list[dict[str, Any]]:
-    """Extract named entities from text using spaCy.
+def clear_document_cache_sync() -> bool:
+    """Synchronous wrapper for cache clearing.
+
+    Returns:
+        True if cache was cleared successfully
+    """
+    import asyncio
+
+    return asyncio.run(clear_document_cache())
+
+
+def get_cache_stats_sync() -> dict[str, Any]:
+    """Synchronous wrapper for cache stats.
+
+    Returns:
+        Cache statistics dictionary
+    """
+    import asyncio
+
+    return asyncio.run(get_cache_stats())
+
+
+def extract_entities_with_spacy(text: str, nlp: Any = None) -> list[dict[str, Any]]:
+    """Extract entities using spaCy.
 
     Args:
-        text: Text to extract entities from
-        model_name: spaCy model to use for extraction
+        text: Text to process
+        nlp: Optional spaCy nlp model, defaults to ensure_spacy_model()
 
     Returns:
-        List of dictionaries with entity information
+        List of entities with text, label, start, end positions
     """
-    nlp = ensure_spacy_model(model_name)
-
     if nlp is None:
-        logger.warning("spaCy model not available, returning empty entities")
-        return []
+        nlp = ensure_spacy_model()
 
     try:
         doc = nlp(text)
         entities = []
-
         for ent in doc.ents:
             entities.append(
                 {
@@ -378,84 +256,104 @@ def extract_entities_with_spacy(
                     "label": ent.label_,
                     "start": ent.start_char,
                     "end": ent.end_char,
-                    "confidence": app_settings.default_entity_confidence,  # spaCy
+                    "confidence": getattr(ent, "confidence", 0.8),  # Default confidence
                 }
             )
-
-        logger.info("Extracted %d entities from text", len(entities))
         return entities
-
-    except (ValueError, RuntimeError, AttributeError) as e:
-        logger.error("Failed to extract entities: %s", e)
+    except (ValueError, OSError, AttributeError) as e:
+        logger.warning(f"Failed to extract entities with spaCy: {e}")
         return []
 
 
 def extract_relationships_with_spacy(
-    text: str, model_name: str = "en_core_web_sm"
+    text: str, nlp: Any = None
 ) -> list[dict[str, Any]]:
-    """Extract relationships from text using spaCy dependency parsing.
+    """Extract relationships using spaCy.
 
     Args:
-        text: Text to extract relationships from
-        model_name: spaCy model to use for parsing
+        text: Text to process
+        nlp: Optional spaCy nlp model, defaults to ensure_spacy_model()
 
     Returns:
-        List of dictionaries with relationship information
+        List of relationships with source, target, type information
     """
-    nlp = ensure_spacy_model(model_name)
-
     if nlp is None:
-        logger.warning("spaCy model not available, returning empty relationships")
-        return []
+        nlp = ensure_spacy_model()
 
     try:
         doc = nlp(text)
         relationships = []
 
+        # Simple relationship extraction based on dependency parsing
         for token in doc:
-            # Focus on meaningful relationships (subject-verb-object patterns)
             if token.dep_ in ["nsubj", "dobj", "pobj"] and token.head.pos_ == "VERB":
                 relationships.append(
                     {
-                        "subject": token.text,
-                        "relation": token.head.text,
-                        "object": token.head.text,
-                        "dependency": token.dep_,
-                        "start": token.idx,
-                        "end": token.idx + len(token.text),
+                        "source": token.text,
+                        "target": token.head.text,
+                        "type": token.dep_.upper(),
+                        "confidence": 0.7,
                     }
                 )
 
-        logger.info("Extracted %d relationships from text", len(relationships))
         return relationships
-
-    except (ValueError, RuntimeError, AttributeError) as e:
-        logger.error("Failed to extract relationships: %s", e)
+    except (ValueError, OSError, AttributeError) as e:
+        logger.warning(f"Failed to extract relationships with spaCy: {e}")
         return []
 
 
 def create_knowledge_graph_data(
-    text: str, model_name: str = "en_core_web_sm"
+    text_or_entities: str | list, nlp_or_relationships: Any = None
 ) -> dict[str, Any]:
-    """Create knowledge graph data from text using spaCy.
+    """Create knowledge graph structure.
 
     Args:
-        text: Text to process
-        model_name: spaCy model to use
+        text_or_entities: Either text to process or list of entities
+        nlp_or_relationships: Either spaCy nlp model or list of relationships
 
     Returns:
-        Dictionary with entities and relationships for knowledge graph
+        Dictionary with entities, relationships, and metadata
     """
-    entities = extract_entities_with_spacy(text, model_name)
-    relationships = extract_relationships_with_spacy(text, model_name)
+    try:
+        # Handle two different calling patterns from tests
+        if isinstance(text_or_entities, str):
+            # Called with text and nlp model
+            text = text_or_entities
+            nlp = nlp_or_relationships or ensure_spacy_model()
+            entities = extract_entities_with_spacy(text, nlp)
+            relationships = extract_relationships_with_spacy(text, nlp)
+        else:
+            # Called with entities and relationships lists
+            entities = text_or_entities or []
+            relationships = nlp_or_relationships or []
+            text = ""  # No text in this mode
 
-    return {
-        "entities": entities,
-        "relationships": relationships,
-        "text_length": len(text),
-        "processed_at": time.time(),
-    }
+        return {
+            "entities": entities,
+            "relationships": relationships,
+            "metadata": {
+                "entity_count": len(entities),
+                "relationship_count": len(relationships),
+                "text_length": len(text) if isinstance(text_or_entities, str) else 0,
+                "processing_method": "spacy_knowledge_graph",
+            },
+        }
+    except (ValueError, OSError, AttributeError) as e:
+        logger.warning(f"Failed to create knowledge graph data: {e}")
+        return {
+            "entities": [],
+            "relationships": [],
+            "metadata": {
+                "entity_count": 0,
+                "relationship_count": 0,
+                "text_length": 0,
+                "processing_method": "spacy_knowledge_graph",
+                "error": str(e),
+            },
+        }
 
 
-# Backwards compatibility aliases
-load_documents_llama = load_documents_unstructured  # Legacy alias
+# Convenient function aliases
+load_documents = load_documents_unstructured  # Common alias
+get_doc_info = get_document_info  # Short alias
+clear_cache = clear_document_cache  # Short alias

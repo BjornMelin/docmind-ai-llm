@@ -1,6 +1,6 @@
 """Real DSPy Integration for Query Optimization (ADR-018).
 
-This module implements the real DSPy integration replacing the mock implementation
+This module implements the real DSPy integration
 to provide automatic query rewriting and optimization for improved retrieval quality.
 
 Features:
@@ -9,9 +9,6 @@ Features:
 - Query refinement and variant generation
 - Integration with LlamaIndex retrieval pipeline
 - Performance monitoring and quality metrics
-
-ADR Compliance:
-- ADR-018: DSPy Prompt Optimization (real implementation vs mock)
 """
 
 import time
@@ -41,6 +38,9 @@ try:
 except ImportError:
     logger.warning("DSPy not available - falling back to basic query processing")
     DSPY_AVAILABLE = False
+
+# Module-local cache for testability and reuse in unit tests (no globals)
+_DSPY_CACHE: dict[str, Any] = {"inst": None}
 
 
 class QueryOptimizationResult(BaseModel):
@@ -118,10 +118,10 @@ class DSPyLlamaIndexRetriever:
             class DSPyLLMWrapper:
                 """Wrapper class to make LlamaIndex LLMs compatible with DSPy."""
 
-                def __init__(self, llm):
+                def __init__(self, llm: Any):
                     self.llm = llm
 
-                def __call__(self, prompt: str, **kwargs) -> str:
+                def __call__(self, prompt: str, **kwargs: Any) -> str:
                     try:
                         response = self.llm.complete(prompt)
                         return str(response)
@@ -300,18 +300,13 @@ class DSPyLlamaIndexRetriever:
             return retriever
 
 
-# Global instance for easy access
-DSPY_RETRIEVER_INSTANCE = None
-
-
 def get_dspy_retriever(llm: Any = None) -> DSPyLlamaIndexRetriever:
-    """Get global DSPy retriever instance."""
-    global DSPY_RETRIEVER_INSTANCE
-
-    if DSPY_RETRIEVER_INSTANCE is None:
-        DSPY_RETRIEVER_INSTANCE = DSPyLlamaIndexRetriever(llm=llm)
-
-    return DSPY_RETRIEVER_INSTANCE
+    """Get or create a cached DSPy retriever instance without global state."""
+    inst = _DSPY_CACHE.get("inst")
+    if inst is None:
+        inst = DSPyLlamaIndexRetriever(llm=llm)
+        _DSPY_CACHE["inst"] = inst
+    return inst  # type: ignore[return-value]
 
 
 def is_dspy_available() -> bool:

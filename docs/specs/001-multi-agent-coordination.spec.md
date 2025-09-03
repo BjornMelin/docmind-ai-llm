@@ -63,7 +63,7 @@ The Multi-Agent Coordination System orchestrates five specialized agents using L
 **ADR-011 Architecture with Modern Parameters**:
 
 - ✅ Replaced custom LangGraph with `langgraph-supervisor` library (coordinator.py:282)
-- ✅ Implemented `create_supervisor()` with modern optimization parameters (coordinator.py:282-296)
+- ✅ Implemented `AgentCoordinator with unified configuration` with modern optimization parameters (coordinator.py:282-296)
 - ✅ Enabled `parallel_tool_calls=True` for 50-87% token reduction (coordinator.py:287)
 - ✅ Configured `output_mode="structured"` for enhanced response formatting (coordinator.py:288)
 - ✅ Added `create_forward_message_tool=True` for direct message passthrough (coordinator.py:289)
@@ -482,7 +482,7 @@ class SupervisorConfig:
 ### Modified Files
 
 - `src/main.py` - Integrate supervisor-based multi-agent coordinator
-- `src/config/app_settings.py` - Add modern agent configuration
+- `src/config/settings.py` - Add modern agent configuration
 - `src/ui/streamlit_app.py` - Connect UI to supervisor system
 
 ### Configuration Changes
@@ -660,7 +660,7 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
 ### Modified Files
 
 - `src/main.py` - Integrate multi-agent coordinator
-- `src/config/app_settings.py` - Add agent configuration
+- `src/config/settings.py` - Add agent configuration
 - `src/ui/streamlit_app.py` - Connect UI to agent system
 
 ### Configuration Changes
@@ -757,7 +757,7 @@ And no critical information is lost during trimming
 Given the ADR-mandated supervisor system architecture (ADR-011)
 When implementing the complete architectural replacement
 Then the existing custom LangGraph implementation must be DELETED (❌ CURRENT: Custom supervisor_graph.py)
-And langgraph-supervisor library must be used with create_supervisor() (❌ CURRENT: Custom StateGraph)
+And langgraph-supervisor library must be used with AgentCoordinator with unified configuration (❌ CURRENT: Custom StateGraph)
 And parallel_tool_calls=True must enable concurrent agent execution (❌ NOT IMPLEMENTED)
 And token usage must be reduced by 50-87% through parallel tool execution (❌ NOT IMPLEMENTED)
 And add_handoff_back_messages=True must track coordination messages (❌ NOT IMPLEMENTED)

@@ -9,18 +9,20 @@ Provides specialized fixtures for unit-level testing with focus on:
 Follows 2025 pytest patterns with proper typing and async support.
 """
 
+import asyncio as _asyncio
 import base64
 import io
-import sys
+import time as _time
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from PIL import Image
 
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from src.config.settings import DocMindSettings
+
+# Import path handling moved to pytest.ini pythonpath configuration
 
 # Note: mock_settings removed - use fixtures from main conftest.py
 # Note: PDF creation moved to use temp_pdf_file from main conftest.py
@@ -157,3 +159,55 @@ def mock_uploaded_file() -> Mock:
     mock_file.type = "application/pdf"
     mock_file.getvalue.return_value = b"mock pdf content"
     return mock_file
+
+
+# --- Global stabilization fixtures for unit tier ---
+
+
+@pytest.fixture(autouse=True)
+def no_sleep(request):
+    """Avoid real delays: patch sleeps globally, except for timeout tests."""
+
+    def _sleep_noop(_secs: float = 0.0):
+        return None
+
+    async def _async_sleep_noop(_secs: float = 0.0):
+        return None
+
+    name = getattr(request.node, "name", "").lower()
+    if "timeout" in name:
+        # Allow asyncio.sleep for timeout tests; still patch time.sleep
+        with patch.object(_time, "sleep", _sleep_noop):
+            yield
+    else:
+        with (
+            patch.object(_time, "sleep", _sleep_noop),
+            patch.object(_asyncio, "sleep", _async_sleep_noop),
+        ):
+            yield
+
+
+@pytest.fixture
+def perf_counter_boundary():
+    """Provide a deterministic perf_counter sequence for timing assertions."""
+    seq = [0.0, 0.015, 0.030, 0.045, 0.060, 0.075]
+    with patch("time.perf_counter", side_effect=seq):
+        yield {"sequence": seq}
+
+
+@pytest.fixture
+def integration_settings():
+    """Lightweight DocMindSettings for unit-tier integration checks."""
+    return DocMindSettings(debug=False, log_level="INFO", enable_gpu_acceleration=False)
+
+
+@pytest.fixture
+def mock_llm() -> Mock:
+    """Generic Mock LLM with simple complete/predict methods for unit tests."""
+    llm = Mock()
+    response = Mock()
+    response.text = "Mock LLM response"
+    llm.complete.return_value = response
+    llm.invoke.return_value = "Mock LLM response"
+    llm.predict.return_value = "Mock LLM response"
+    return llm

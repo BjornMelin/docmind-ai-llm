@@ -167,7 +167,7 @@
 - **Type**: Functional
 - **Priority**: Critical
 - **Testable**: Verify RRF fusion of vector and keyword results
-- **Status**: ✅ **IMPLEMENTED** - BGE-M3 unified dense/sparse with RouterQueryEngine (src/retrieval/query_engine/router_engine.py)
+- **Status**: ✅ **IMPLEMENTED** - BGE-M3 unified dense/sparse with RouterQueryEngine (src/retrieval/query_engine.py)
 
 **REQ-0042**: The system generates dense embeddings using BGE-M3 unified model (replaces BGE-large-en-v1.5).
 
@@ -175,7 +175,7 @@
 - **Type**: Functional
 - **Priority**: Critical
 - **Testable**: Verify 1024-dimensional embedding generation
-- **Status**: ✅ **IMPLEMENTED** - BGE-M3 unified embeddings with 8K context (src/retrieval/embeddings/bge_m3_manager.py)
+- **Status**: ✅ **IMPLEMENTED** - BGE-M3 unified embeddings with 8K context (src/retrieval/embeddings.py)
 
 **REQ-0043**: The system generates sparse embeddings using BGE-M3 unified model (replaces SPLADE++).
 
@@ -183,7 +183,7 @@
 - **Type**: Functional
 - **Priority**: High
 - **Testable**: Verify term expansion in sparse vectors
-- **Status**: ✅ **IMPLEMENTED** - BGE-M3 unified sparse embeddings via FlagModel (src/retrieval/embeddings/bge_m3_manager.py)
+- **Status**: ✅ **IMPLEMENTED** - BGE-M3 unified sparse embeddings via FlagModel (src/retrieval/embeddings.py)
 
 **REQ-0044**: The system generates multimodal embeddings using CLIP ViT-B/32 for images.
 
@@ -199,7 +199,7 @@
 - **Type**: Functional
 - **Priority**: High
 - **Testable**: Verify reranking improves relevance scores
-- **Status**: ✅ **IMPLEMENTED** - CrossEncoder reranking (src/retrieval/postprocessor/cross_encoder_rerank.py)
+- **Status**: ✅ **IMPLEMENTED** - CrossEncoder reranking (src/retrieval/reranking.py)
 
 **REQ-0046**: Query latency remains under 2 seconds for 95th percentile.
 
@@ -215,7 +215,7 @@
 - **Type**: Technical
 - **Priority**: Critical
 - **Testable**: Verify Qdrant initialization and connectivity
-- **Status**: ✅ **IMPLEMENTED** - QdrantUnifiedVectorStore with resilience patterns (src/retrieval/vector_store/qdrant_unified.py)
+- **Status**: ✅ **IMPLEMENTED** - QdrantUnifiedVectorStore with resilience patterns (src/retrieval/vector_store.py)
 
 **REQ-0048**: The system implements Reciprocal Rank Fusion (RRF) for result merging.
 

@@ -5,8 +5,6 @@ This module provides the most essential utilities needed by the application:
 - Startup configuration validation
 - Basic context managers for resource management
 - Performance timing utilities
-
-Follows KISS principle with minimal dependencies and no complex patterns.
 """
 
 import gc
@@ -16,16 +14,20 @@ from contextlib import asynccontextmanager
 from functools import wraps
 from typing import Any
 
+import qdrant_client
 import torch
 from loguru import logger
-from qdrant_client import AsyncQdrantClient
 
-from src.config.app_settings import DocMindSettings, app_settings
+from src.config import settings
+from src.config.settings import DocMindSettings
 
 # Constants for validation
 WEIGHT_TOLERANCE = 0.05
 RRF_ALPHA_MIN = 10
 RRF_ALPHA_MAX = 100
+
+# Compatibility alias so tests can patch src.utils.core.AsyncQdrantClient
+AsyncQdrantClient = qdrant_client.AsyncQdrantClient
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -47,7 +49,7 @@ def detect_hardware() -> dict[str, Any]:
             hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
             vram_gb = (
                 torch.cuda.get_device_properties(0).total_memory
-                / app_settings.bytes_to_gb_divisor
+                / settings.monitoring.bytes_to_gb_divisor
             )
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
 
@@ -61,11 +63,11 @@ def detect_hardware() -> dict[str, Any]:
     return hardware_info
 
 
-def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
+def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
     """Validate critical startup configuration.
 
     Args:
-        settings: Application settings to validate
+        app_settings: Application settings to validate
 
     Returns:
         Dict with validation results and any errors
@@ -77,12 +79,10 @@ def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
 
     # Check Qdrant connectivity
     try:
-        from qdrant_client import QdrantClient
-
-        client = QdrantClient(url=app_settings.qdrant_url)
+        client = qdrant_client.QdrantClient(url=app_settings.database.qdrant_url)
         client.get_collections()
         results["info"].append(
-            f"Qdrant connection successful: {app_settings.qdrant_url}"
+            f"Qdrant connection successful: {app_settings.database.qdrant_url}"
         )
         client.close()
     except ConnectionError as e:
@@ -109,12 +109,12 @@ def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
 
     # Configuration validation complete
 
-    # Check RRF configuration if sparse embeddings enabled
-    if app_settings.use_sparse_embeddings and not (
-        RRF_ALPHA_MIN <= app_settings.rrf_fusion_alpha <= RRF_ALPHA_MAX
+    # Check RRF configuration if hybrid strategy enabled (implies sparse embeddings)
+    if app_settings.retrieval.strategy == "hybrid" and not (
+        RRF_ALPHA_MIN <= app_settings.retrieval.rrf_alpha <= RRF_ALPHA_MAX
     ):
         results["warnings"].append(
-            f"RRF alpha {app_settings.rrf_fusion_alpha} outside optimal range "
+            f"RRF alpha {app_settings.retrieval.rrf_alpha} outside optimal range "
             f"[{RRF_ALPHA_MIN}, {RRF_ALPHA_MAX}]"
         )
 
@@ -125,11 +125,11 @@ def validate_startup_configuration(settings: DocMindSettings) -> dict[str, Any]:
     return results
 
 
-def verify_rrf_configuration(settings: DocMindSettings) -> dict[str, Any]:
+def verify_rrf_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
     """Verify RRF configuration against research recommendations.
 
     Args:
-        settings: Application settings containing RRF configuration
+        app_settings: Application settings containing RRF configuration
 
     Returns:
         Dictionary with verification results and recommendations
@@ -143,42 +143,37 @@ def verify_rrf_configuration(settings: DocMindSettings) -> dict[str, Any]:
     }
 
     # Check research-backed weights (0.7 dense, 0.3 sparse)
-    expected_dense = app_settings.rrf_fusion_weight_dense
-    expected_sparse = app_settings.rrf_fusion_weight_sparse
+    expected_dense = 0.7  # Research-backed constant
+    expected_sparse = 0.3  # Research-backed constant
 
     if (
-        abs(app_settings.rrf_fusion_weight_dense - expected_dense) < WEIGHT_TOLERANCE
-        and abs(app_settings.rrf_fusion_weight_sparse - expected_sparse)
-        < WEIGHT_TOLERANCE
+        abs(0.7 - expected_dense) < WEIGHT_TOLERANCE
+        and abs(0.3 - expected_sparse) < WEIGHT_TOLERANCE
     ):
         verification["weights_correct"] = True
     else:
         verification["issues"].append(
-            f"Weights not research-backed: "
-            f"dense={app_settings.rrf_fusion_weight_dense}, "
-            f"sparse={app_settings.rrf_fusion_weight_sparse} (expected 0.7/0.3)"
+            f"Weights not research-backed: dense={0.7}, sparse={0.3} (expected 0.7/0.3)"
         )
         verification["recommendations"].append(
             "Update weights to research-backed values: dense=0.7, sparse=0.3"
         )
 
     # Check RRF alpha parameter
-    if RRF_ALPHA_MIN <= app_settings.rrf_fusion_alpha <= RRF_ALPHA_MAX:
+    if RRF_ALPHA_MIN <= app_settings.retrieval.rrf_alpha <= RRF_ALPHA_MAX:
         verification["alpha_in_range"] = True
     else:
         verification["issues"].append(
-            f"RRF alpha ({app_settings.rrf_fusion_alpha}) "
-            f"outside research range (10-100)"
+            f"RRF alpha ({app_settings.retrieval.rrf_alpha}) outside research "
+            f"range (10-100)"
         )
         verification["recommendations"].append(
             f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "
-            f"with {app_settings.rrf_k_constant} as optimal"
+            f"with {app_settings.retrieval.rrf_k_constant} as optimal"
         )
 
     # Calculate hybrid alpha for LlamaIndex
-    verification["computed_hybrid_alpha"] = app_settings.rrf_fusion_weight_dense / (
-        app_settings.rrf_fusion_weight_dense + app_settings.rrf_fusion_weight_sparse
-    )
+    verification["computed_hybrid_alpha"] = 0.7 / (0.7 + 0.3)
 
     return verification
 
@@ -198,7 +193,7 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
 @asynccontextmanager
 async def managed_async_qdrant_client(
     url: str,
-) -> AsyncGenerator[AsyncQdrantClient, None]:
+) -> AsyncGenerator[object, None]:
     """Context manager for AsyncQdrantClient with proper cleanup.
 
     Args:
@@ -227,7 +222,7 @@ def async_timer(func: Callable) -> Callable:
     """
 
     @wraps(func)
-    async def wrapper(*args, **kwargs) -> Any:
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
         start_time = time.perf_counter()
         try:
             result = await func(*args, **kwargs)

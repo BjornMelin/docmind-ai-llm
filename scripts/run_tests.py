@@ -283,22 +283,6 @@ class TestRunner:
         ]
         return self.run_command(command, "GPU Tests (Hardware validation)")
 
-    def run_slow_tests(self) -> TestResult:
-        """Run legacy slow tests (maintained for backward compatibility)."""
-        command = [
-            "uv",
-            "run",
-            "pytest",
-            "tests/",
-            "-v",
-            "--tb=short",
-            "--cov-report=term-missing",
-            "--durations=10",
-            "-m",
-            "slow or requires_gpu or requires_network",
-        ]
-        return self.run_command(command, "Legacy Slow Tests (GPU/Network/Models)")
-
     def run_all_tests(self) -> TestResult:
         """Run all tests with comprehensive coverage."""
         command = [
@@ -308,7 +292,7 @@ class TestRunner:
             "tests/",
             "-v",
             "--tb=short",
-            "--cov=.",
+            "--cov=src",
             "--cov-report=html:htmlcov",
             "--cov-report=xml:coverage.xml",
             "--cov-report=json:coverage.json",
@@ -325,8 +309,8 @@ class TestRunner:
             "uv",
             "run",
             "pytest",
-            "tests/unit/test_models.py",
-            "tests/unit/test_config_validation.py",
+            "tests/unit/models/test_models.py",
+            "tests/unit/config/test_validation.py",
             "-v",
             "--tb=line",
             "--maxfail=3",  # Stop after 3 failures for smoke tests
@@ -384,7 +368,7 @@ import importlib
 
 modules = [
     'src.models.core', 'src.utils.core', 'src.utils.document',
-    'src.utils.database', 'src.utils.monitoring',
+    'src.utils.monitoring',
     'src.agents.coordinator', 'src.agents.tool_factory', 'src.agents.tools'
 ]
 
@@ -601,11 +585,6 @@ Examples:
         help="Run basic smoke tests (quick system health check)",
     )
 
-    # Legacy support (backward compatibility)
-    parser.add_argument(
-        "--slow", action="store_true", help="Run legacy slow tests (GPU/Network/Models)"
-    )
-
     # Utility arguments
     parser.add_argument(
         "--coverage", action="store_true", help="Generate detailed coverage report"
@@ -647,9 +626,9 @@ Examples:
             runner.run_performance_tests()
         elif args.gpu:
             runner.run_gpu_tests()
-        elif args.slow:
-            # Legacy support for backward compatibility
-            runner.run_slow_tests()
+        elif args.coverage:
+            # Full test suite with coverage over src/
+            runner.run_all_tests()
         else:
             # Default: Run tiered test strategy (unit → integration → system)
             print("\n🎯 Running Default Tiered Test Strategy")
@@ -671,7 +650,6 @@ Examples:
                     args.integration,
                     args.performance,
                     args.gpu,
-                    args.slow,
                     args.smoke,
                     args.validate_imports,
                 ]

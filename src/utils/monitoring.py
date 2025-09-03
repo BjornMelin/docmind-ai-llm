@@ -14,15 +14,14 @@ Key features:
 
 import sys
 import time
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
 import psutil
 from loguru import logger
 
-from src.config.app_settings import app_settings
-
-# Constants
+from src.config import settings
 
 
 def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
@@ -60,7 +59,7 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
             compression="gz",
         )
 
-    logger.info("Logging configured: level=%s, file=%s", log_level, log_file)
+    logger.info("Logging configured: level={}, file={}", log_level, log_file)
 
 
 def log_error_with_context(
@@ -116,7 +115,9 @@ def log_performance(
 
 
 @contextmanager
-def performance_timer(operation: str, **context: Any):
+def performance_timer(
+    operation: str, **context: Any
+) -> Generator[dict[str, Any], None, None]:
     """Context manager for timing operations.
 
     Args:
@@ -128,7 +129,9 @@ def performance_timer(operation: str, **context: Any):
     """
     start_time = time.perf_counter()
     process = psutil.Process()
-    start_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
+    start_memory = (
+        process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+    )  # MB
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -142,7 +145,9 @@ def performance_timer(operation: str, **context: Any):
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
+        end_memory = (
+            process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+        )  # MB
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
@@ -159,7 +164,9 @@ def performance_timer(operation: str, **context: Any):
 
 
 @asynccontextmanager
-async def async_performance_timer(operation: str, **context: Any):
+async def async_performance_timer(
+    operation: str, **context: Any
+) -> AsyncGenerator[dict[str, Any], None]:
     """Async context manager for timing operations.
 
     Args:
@@ -171,7 +178,9 @@ async def async_performance_timer(operation: str, **context: Any):
     """
     start_time = time.perf_counter()
     process = psutil.Process()
-    start_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
+    start_memory = (
+        process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+    )  # MB
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -185,7 +194,9 @@ async def async_performance_timer(operation: str, **context: Any):
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = process.memory_info().rss / app_settings.bytes_to_mb_divisor  # MB
+        end_memory = (
+            process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+        )  # MB
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
@@ -212,12 +223,16 @@ def get_memory_usage() -> dict[str, float]:
         memory_info = process.memory_info()
 
         return {
-            "rss_mb": round(memory_info.rss / app_settings.bytes_to_mb_divisor, 2),
-            "vms_mb": round(memory_info.vms / app_settings.bytes_to_mb_divisor, 2),
+            "rss_mb": round(
+                memory_info.rss / settings.monitoring.bytes_to_mb_divisor, 2
+            ),
+            "vms_mb": round(
+                memory_info.vms / settings.monitoring.bytes_to_mb_divisor, 2
+            ),
             "percent": round(process.memory_percent(), 2),
         }
     except (OSError, psutil.Error) as e:
-        logger.warning("Failed to get memory usage: %s", e)
+        logger.warning("Failed to get memory usage: {}", e)
         return {"rss_mb": 0.0, "vms_mb": 0.0, "percent": 0.0}
 
 
@@ -230,7 +245,7 @@ def get_system_info() -> dict[str, Any]:
     try:
         return {
             "cpu_percent": psutil.cpu_percent(
-                interval=app_settings.cpu_monitoring_interval
+                interval=settings.monitoring.cpu_monitoring_interval
             ),
             "memory_percent": psutil.virtual_memory().percent,
             "disk_percent": psutil.disk_usage("/").percent,
@@ -239,14 +254,14 @@ def get_system_info() -> dict[str, Any]:
             else None,
         }
     except (OSError, psutil.Error) as e:
-        logger.warning("Failed to get system info: %s", e)
+        logger.warning("Failed to get system info: {}", e)
         return {}
 
 
 class SimplePerformanceMonitor:
     """Simple performance monitor for tracking operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the performance monitor with empty metrics list."""
         self.metrics: list[dict[str, Any]] = []
 
@@ -300,7 +315,7 @@ class SimplePerformanceMonitor:
             "successful_operations": len(successes),
             "success_rate": len(successes)
             / len(metrics)
-            * app_settings.percent_multiplier,
+            * settings.monitoring.percent_multiplier,
             "avg_duration_seconds": sum(durations) / len(durations),
             "min_duration_seconds": min(durations),
             "max_duration_seconds": max(durations),

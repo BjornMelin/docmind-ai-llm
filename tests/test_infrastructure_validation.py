@@ -159,7 +159,7 @@ def test_integration_tier_fixtures(integration_settings, lightweight_embedding_m
     """Test that integration-tier fixtures work properly."""
     # Test integration settings
     assert integration_settings.embedding_dimension == 384
-    assert "MiniLM" in integration_settings.embedding_model
+    assert "MiniLM" in integration_settings.embedding.model_name
 
     # Test lightweight model (may be None if not available)
     if lightweight_embedding_model is not None:
@@ -172,21 +172,20 @@ def test_system_tier_fixtures(system_settings):
     """Test that system-tier fixtures work properly."""
     # Test system settings use full models
     assert system_settings.embedding_dimension == 1024
-    assert "bge-large" in system_settings.embedding_model
-    assert system_settings.use_reranking is True
+    assert "bge-large" in system_settings.embedding.model_name
+    assert system_settings.retrieval.use_reranking is True
 
 
 def test_conftest_hierarchy():
     """Test that conftest files work together without conflicts."""
-    # Test that fixtures from different conftest files can coexist
-    from tests.test_multi_agent_coordination.conftest import mock_vllm_config
-    from tests.test_retrieval.conftest import mock_bgem3_model
+    # Test that fixtures from shared and unit-level conftest coexist
+    from tests.shared_fixtures import mock_llm_for_routing, mock_vector_index
     from tests.unit.conftest import sample_image_base64
 
     # All should be fixture functions
     assert hasattr(sample_image_base64, "_pytestfixturefunction")
-    assert hasattr(mock_vllm_config, "_pytestfixturefunction")
-    assert hasattr(mock_bgem3_model, "_pytestfixturefunction")
+    assert hasattr(mock_vector_index, "_pytestfixturefunction")
+    assert hasattr(mock_llm_for_routing, "_pytestfixturefunction")
 
 
 @pytest.mark.unit

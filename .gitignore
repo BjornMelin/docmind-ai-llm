@@ -51,6 +51,7 @@ coverage.json
 .hypothesis/
 .pytest_cache/
 cover/
+coverage_badge.svg
 
 # Translations
 *.mo
@@ -174,15 +175,18 @@ cython_debug/
 
 # Project specific
 CLAUDE.md
+AGENTS.md
 logs/
 docmind_ai.log
-repomix-output.md
+repomix-output.*
 tests-output.md
 core-files-output.md
 crawled/
 TODO.md.bak
 ai-research/
 .spec-updates/
+agent-logs/
+docs/specs/.workflow/
 
 # Model caches and embeddings
 embeddings_cache/
@@ -196,7 +200,7 @@ TODO-COMPLETED.md
 TODO.md
 
 # Document processing cache
-cache/
+# cache/
 *.db
 
 # Tool caches
@@ -241,3 +245,31 @@ docs/developers/archived/
 reports/
 docs/research/
 ADR_TEMPLATE.md
+docs/specs/analysis/
+CLEANUP_TRACKING.md
+
+# Prevent test files in root directory
+/test_*.py
+/tests_*.py
+/Test*.py
+
+# Mock and temporary directories that might be created during development
+*Mock*/
+*MagicMock*/
+*mock*/
+temp_*/
+tmp_*/
+temporary/
+relative/
+
+# Additional cache and runtime patterns
+.streamlit/
+*.sqlite
+*.sqlite3
+*.pickle
+*.pkl
+
+# Development artifacts that shouldn't be tracked
+debug_*.py
+scratch_*.py
+experiment_*.py

@@ -93,7 +93,7 @@ def integration_settings() -> AppSettings:
 def gpu_smoke_config() -> dict:
     """Configuration for manual GPU validation."""
     return {
-        "model_name": "BAAI/bge-large-en-v1.5",  # 1GB
+        "bge_m3_model_name": "BAAI/bge-m3",  # ADR-002 compliant
         "enable_reranking": True,  # Full feature testing
         "gpu_memory_limit": 14.0,  # RTX 4090 target
         ...
@@ -293,3 +293,68 @@ def test_with_proper_mocking(mock_settings):
 7. **Performance Awareness**: Use lightweight models for speed
 
 This framework ensures fast, reliable, maintainable tests that provide confidence in the DocMind AI system while minimizing development friction.
+
+## CRITICAL: Prevent Mock Directory Creation Bug
+
+### Problem
+
+Mock objects in test fixtures can be converted to strings and used as actual file paths, creating directories with names like `<Mock name='mock.cache_dir' id='123456789'>` in the project root.
+
+### Root Cause
+
+When code calls `Path(mock_object).mkdir()` or similar filesystem operations, Mock objects get stringified instead of returning proper path values.
+
+### Prevention Strategy
+
+#### ✅ GOOD: Proper Mock Settings Fixture Pattern
+
+```python
+@pytest.fixture
+def mock_settings(tmp_path):
+    """Mock settings with proper temporary paths."""
+    settings = Mock()
+    settings.model_name = "test-model"
+    settings.embedding_dimension = 1024
+    # CRITICAL: Provide real paths for filesystem operations
+    settings.cache_dir = str(tmp_path / "cache")
+    settings.data_dir = str(tmp_path / "data") 
+    settings.log_file = str(tmp_path / "logs" / "test.log")
+    return settings
+```
+
+#### ❌ BAD: Mock Without Proper Paths
+
+```python
+@pytest.fixture  
+def bad_mock_settings():
+    """BROKEN: Creates mock directories in project root!"""
+    settings = Mock()
+    settings.cache_dir = Mock()  # This becomes "<Mock ...>" string!
+    return settings
+```
+
+### Mandatory Checklist
+
+Before creating any new test fixtures:
+
+1. **✅ Use `tmp_path` parameter** for any fixture that might create directories
+2. **✅ Provide real path strings** for `cache_dir`, `data_dir`, `log_file`, etc.
+3. **✅ Never leave path fields as Mock objects** if they'll be used in filesystem operations
+4. **✅ Follow existing patterns** in `conftest.py` (e.g., `centralized_settings_with_temp_dirs`)
+
+### Detection
+
+If you see directories like these in project root, you have a mock path bug:
+
+- `<Mock name='mock.cache_dir' id='133725091402384'>`
+- `<MagicMock name='app_settings.cache_dir' id='133725128381264'>`
+
+### Implementation Examples
+
+See these working patterns in the codebase:
+
+- `tests/conftest.py::centralized_settings_with_temp_dirs`
+- `tests/conftest.py::temp_settings_dirs`
+- `tests/unit/config/test_settings.py::test_cache_directory_creation`
+
+**Remember**: Always use pytest's `tmp_path` fixture for temporary directories in tests!

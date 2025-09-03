@@ -25,7 +25,6 @@ Architecture Decision:
 
 from typing import Any
 
-from langgraph.graph import MessagesState
 from llama_index.core.memory import ChatMemoryBuffer
 from pydantic import BaseModel, Field
 
@@ -72,7 +71,7 @@ class AgentResponse(BaseModel):
     )
 
 
-class MultiAgentState(MessagesState):
+class MultiAgentState(BaseModel):
     """Extended state for ADR-compliant multi-agent coordination.
 
     This model extends LangGraph's MessagesState to provide comprehensive state
@@ -104,6 +103,7 @@ class MultiAgentState(MessagesState):
     """
 
     # Core state
+    messages: list[Any] = Field(default_factory=list)
     tools_data: dict[str, Any] = Field(default_factory=dict)
     context: ChatMemoryBuffer | None = None
 

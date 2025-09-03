@@ -26,38 +26,55 @@ Attributes:
 
 import asyncio
 import time
-from typing import Any
+from collections.abc import Generator
+from types import SimpleNamespace
+from typing import Any, cast
 
 import ollama
 import streamlit as st
+from llama_index.core import VectorStoreIndex
 from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.core.vector_stores import SimpleVectorStore
 from llama_index.llms.ollama import Ollama
-from llama_index.llms.openai import OpenAI
 from loguru import logger
 
-# Conditional import for LlamaCPP to handle BLAS library issues
 try:
-    from llama_index.llms.llama_cpp import LlamaCPP
+    from llama_index.llms.llama_cpp import LlamaCPP  # type: ignore
 
     LLAMACPP_AVAILABLE = True
-except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
+except Exception as _e:  # pragma: no cover - environment dependent
     logger.warning("LlamaCPP not available. Running without LlamaCPP support.")
-    logger.debug("LlamaCPP import failed: %s", e)
-    LlamaCPP = None
+    LlamaCPP = None  # type: ignore
     LLAMACPP_AVAILABLE = False
+try:
+    from llama_index.llms.openai_like import OpenAILike  # type: ignore
+except Exception:  # pragma: no cover - optional integration
+    OpenAILike = None  # type: ignore
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
-from src.config.app_settings import app_settings
+from src.config import settings
+from src.config.settings import DocMindSettings as _DocMindSettings
+from src.config.settings import UIConfig as _UIConfig
+from src.config.settings import VLLMConfig as _VLLMConfig
+from src.containers import get_multi_agent_coordinator
 from src.prompts import PREDEFINED_PROMPTS
-from src.retrieval.integration import create_index_async
 from src.utils.core import detect_hardware, validate_startup_configuration
-from src.utils.document import load_documents_llama
+from src.utils.document import load_documents_unstructured
 
-# Constants now imported from centralized settings
+# Help static analysis by annotating settings instance explicitly
+SETTINGS: _DocMindSettings = settings
+# Help pylint by casting nested Pydantic models to Any (runtime instances)
+UI: _UIConfig = cast(Any, SETTINGS.ui)
+VLLM: _VLLMConfig = cast(Any, SETTINGS.vllm)
 
 
 # Simple wrapper functions for Ollama API calls
+def is_llamacpp_available() -> bool:
+    """Return True if llama.cpp bindings are available in this environment."""
+    return bool(LLAMACPP_AVAILABLE)
+
+
 async def get_ollama_models() -> dict[str, Any]:
     """Get list of available Ollama models."""
     return ollama.list()
@@ -78,35 +95,34 @@ def create_tools_from_index(index: Any) -> list[Any]:
 
 
 def get_agent_system(
-    _tools: Any, _llm: Any, _memory: Any
+    _tools: Any,
+    _llm: Any,
+    _memory: Any,
+    *,
+    multi_agent_coordinator: MultiAgentCoordinator | None = None,
 ) -> tuple[MultiAgentCoordinator, str]:
-    """Get agent system using MultiAgentCoordinator.
-
-    Note: Parameters are currently not used but kept for future compatibility.
-    """
-    coordinator = MultiAgentCoordinator()
+    """Build agent system using unified settings (no DI)."""
+    coordinator = multi_agent_coordinator or get_multi_agent_coordinator()
     return coordinator, "multi_agent"
 
 
 def process_query_with_agent_system(
-    agent_system: Any, query: str, mode: str, memory: Any
+    agent_system_: Any, query: str, mode_: str, memory: Any
 ) -> Any:
     """Process query with agent system.
 
     Returns:
         AgentResponse: Response object with .content attribute.
     """
-    if mode == "multi_agent":
-        return agent_system.process_query(query, context=memory)
-    # Return a mock response object for error cases
-    from types import SimpleNamespace
-
+    if mode_ == "multi_agent":
+        return agent_system_.process_query(query, context=memory)
+    # Return a minimal response envelope for error cases
     return SimpleNamespace(content="Processing error")
 
 
 # Validate configuration at startup
 try:
-    validate_startup_configuration(app_settings)
+    validate_startup_configuration(SETTINGS)
 except RuntimeError as e:
     st.error(f"⚠️ Configuration Error: {e}")
     st.error(
@@ -115,11 +131,12 @@ except RuntimeError as e:
     )
     st.stop()
 
+
 st.set_page_config(page_title="DocMind AI", page_icon="🧠")
 
 if "memory" not in st.session_state:
     st.session_state.memory = ChatMemoryBuffer.from_defaults(
-        token_limit=app_settings.default_token_limit
+        token_limit=SETTINGS.vllm.context_window
     )
 if "agent_system" not in st.session_state:
     st.session_state.agent_system = None
@@ -131,14 +148,16 @@ if "index" not in st.session_state:
 st.title("🧠 DocMind AI: Local LLM Document Analysis")
 
 # Dynamic theming with Streamlit 1.47.0
-theme: str = st.selectbox("Theme", ["Light", "Dark", "Auto"], index=2)
+theme: str = st.selectbox(
+    "Theme", ["Light", "Dark", "Auto"], index=2, key="theme_select"
+)
 if theme != "Auto":
-    bg_color = "#222" if theme == "Dark" else "#fff"
-    text_color = "#fff" if theme == "Dark" else "#000"
+    BG_COLOR = "#222" if theme == "Dark" else "#fff"
+    TEXT_COLOR = "#fff" if theme == "Dark" else "#000"
     st.markdown(
         f"""
         <style>
-            .stApp {{ background-color: {bg_color}; color: {text_color}; }}
+            .stApp {{ background-color: {BG_COLOR}; color: {TEXT_COLOR}; }}
             /* Additional theming styles */
         </style>
         """,
@@ -152,30 +171,28 @@ gpu_name = hardware_status.get("gpu_name", "No GPU")
 st.sidebar.info(
     f"Detected: {gpu_name}, VRAM: {vram}GB" if vram else f"Detected: {gpu_name}"
 )
-quant_suffix: str = ""
-suggested_model: str = "google/gemma-3n-E4B-it"
-suggested_context: int = 8192
+QUANT_SUFFIX: str = ""
+SUGGESTED_MODEL: str = "google/gemma-3n-E4B-it"
+SUGGESTED_CONTEXT: int = 8192
 if vram:
-    if vram >= app_settings.minimum_vram_high_gb:
-        suggested_model = "nvidia/OpenReasoning-Nemotron-32B"
-        quant_suffix = "-Q4_K_M"  # Fits 16GB
-        suggested_context = app_settings.suggested_context_high
-    elif vram >= app_settings.minimum_vram_medium_gb:
-        suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
-        quant_suffix = "-Q8_0"  # Fits 8GB
-        suggested_context = app_settings.suggested_context_medium
+    if vram >= 16:  # 16GB for high-end models
+        SUGGESTED_MODEL = "nvidia/OpenReasoning-Nemotron-32B"
+        QUANT_SUFFIX = "-Q4_K_M"  # Fits 16GB
+        SUGGESTED_CONTEXT = 131072  # 128K context
+    elif vram >= 8:  # 8GB for medium models
+        SUGGESTED_MODEL = "nvidia/OpenReasoning-Nemotron-14B"
+        QUANT_SUFFIX = "-Q8_0"  # Fits 8GB
+        SUGGESTED_CONTEXT = 65536  # 64K context
     else:
-        suggested_model = "google/gemma-3n-E4B-it"
-        quant_suffix = "-Q4_K_S"  # Minimal
-        suggested_context = app_settings.suggested_context_low
+        SUGGESTED_MODEL = "google/gemma-3n-E4B-it"
+        QUANT_SUFFIX = "-Q4_K_S"  # Minimal
+        SUGGESTED_CONTEXT = 32768  # 32K context for low VRAM
 st.sidebar.info(
-    f"Suggested: {suggested_model}{quant_suffix} with {suggested_context} context"
+    f"Suggested: {SUGGESTED_MODEL}{QUANT_SUFFIX} with {SUGGESTED_CONTEXT} context"
 )
 
 
-def is_llamacpp_available() -> bool:
-    """Check if LlamaCPP backend is available."""
-    return LLAMACPP_AVAILABLE
+# LlamaCPP is assumed installed; no runtime availability checks
 
 
 use_gpu: bool = st.sidebar.checkbox(
@@ -196,30 +213,49 @@ enable_multimodal: bool = st.sidebar.checkbox(
 st.sidebar.header("Model and Backend")
 with st.sidebar.expander("Advanced Settings"):
     # Show backend availability status
-    backend_options = ["ollama", "lmstudio"]
-    if is_llamacpp_available():
-        backend_options.insert(1, "llamacpp")
-    else:
-        st.sidebar.warning("LlamaCPP backend unavailable (BLAS library issue)")
+    backend_options = ["ollama", "llamacpp", "lmstudio", "vllm"]
 
-    backend: str = st.selectbox("Backend", backend_options, index=0)
+    backend: str = st.selectbox(
+        "Backend", backend_options, index=0, key="backend_select"
+    )
     context_size: int = st.selectbox(
-        "Context Size", app_settings.context_size_options, index=1
+        "Context Size",
+        SETTINGS.ui.context_size_options,
+        index=1,
+        key="context_size_select",
     )
 
 model_options: list[str] = []
 if backend == "ollama":
     ollama_url: str = st.sidebar.text_input(
-        "Ollama URL", value=app_settings.ollama_base_url
+        "Ollama URL", value=SETTINGS.ollama_base_url, key="ollama_url"
     )
     try:
         # Use sync model listing to avoid asyncio event loop conflicts
         models_response = ollama.list()  # Direct sync call
-        model_options = [m["name"] for m in models_response["models"]]
-    except (ConnectionError, TimeoutError, ValueError) as e:
-        st.sidebar.error(f"Error fetching models: {str(e)}")
+        items = []
+        if isinstance(models_response, dict):
+            items = models_response.get("models", [])
+        elif isinstance(models_response, list):
+            items = models_response
+        # Be resilient to varied shapes: dicts with name/model, or plain strings
+        model_options = []
+        for it in items:
+            if isinstance(it, dict):
+                name = it.get("name") or it.get("model")
+                if name:
+                    model_options.append(name)
+                else:
+                    model_options.append(str(it))
+            else:
+                model_options.append(str(it))
+    except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError) as e:
+        st.sidebar.error(f"Error fetching models: {e!s}")
 model_name: str = (
-    st.sidebar.selectbox("Model", model_options or [suggested_model]) + quant_suffix
+    st.sidebar.selectbox(
+        "Model", model_options or [SUGGESTED_MODEL], key="model_select"
+    )
+    + QUANT_SUFFIX
 )
 
 # Auto-download if not present (quick win for UX)
@@ -230,7 +266,7 @@ if backend == "ollama" and model_name not in model_options:
             ollama.pull(model_name)  # Direct sync call
             st.sidebar.success("Model downloaded!")
     except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
-        st.sidebar.error(f"Download failed: {str(e)}")
+        st.sidebar.error(f"Download failed: {e!s}")
 
 llm: Any | None = None
 try:
@@ -238,30 +274,37 @@ try:
         llm = Ollama(
             base_url=ollama_url,
             model=model_name,
-            request_timeout=app_settings.request_timeout_seconds,
+            request_timeout=SETTINGS.ui.request_timeout_seconds,
         )
     elif backend == "llamacpp":
-        if not is_llamacpp_available():
-            st.error(
-                "LlamaCPP backend is not available. Please check the installation "
-                "or use a different backend (Ollama or LM Studio)."
-            )
-        else:
-            n_gpu_layers = -1 if use_gpu else 0
-            llm = LlamaCPP(
-                model_path=app_settings.llamacpp_model_path,
-                context_window=context_size,
-                n_gpu_layers=n_gpu_layers,
-            )
+        N_GPU_LAYERS = -1 if use_gpu else 0
+        llm = LlamaCPP(
+            model_path=SETTINGS.vllm.llamacpp_model_path,
+            context_window=context_size,
+            model_kwargs={"n_gpu_layers": N_GPU_LAYERS},
+        )
     elif backend == "lmstudio":
-        llm = OpenAI(
-            base_url=app_settings.lmstudio_base_url,
+        llm = OpenAILike(
+            api_base=SETTINGS.lmstudio_base_url,
             api_key="not-needed",
             model=model_name,
-            max_tokens=context_size,
+            is_chat_model=True,
+            is_function_calling_model=False,
+            context_window=context_size,
+            timeout=float(SETTINGS.ui.request_timeout_seconds),
+        )
+    elif backend == "vllm":
+        llm = OpenAILike(
+            api_base=SETTINGS.vllm.vllm_base_url,
+            api_key="not-needed",
+            model=model_name,
+            is_chat_model=True,
+            is_function_calling_model=False,
+            context_window=context_size,
+            timeout=float(SETTINGS.ui.request_timeout_seconds),
         )
 except (ValueError, TypeError, RuntimeError, ConnectionError) as e:
-    st.error(f"Model initialization error: {str(e)}")
+    st.error(f"Model initialization error: {e!s}")
     logger.error("Model init error: %s", str(e))
     st.stop()
 
@@ -275,6 +318,7 @@ async def upload_section() -> None:
             "Upload files",
             accept_multiple_files=True,
             type=["pdf", "docx", "mp4", "mp3", "wav"],
+            key="file_uploader",
         )
     )
     if uploaded_files:
@@ -283,14 +327,27 @@ async def upload_section() -> None:
                 # Start timing for performance monitoring
                 start_time = time.perf_counter()
 
-                docs: list[Any] = await asyncio.to_thread(
-                    load_documents_llama, uploaded_files, parse_media, enable_multimodal
-                )
+                # ADR-009 compliant document processing
+                docs = await load_documents_unstructured(uploaded_files, SETTINGS)
                 doc_load_time = time.perf_counter() - start_time
+
+                # Progress tracking for document processing
+                progress_bar = st.progress(0)
+                for i, _doc in enumerate(docs):
+                    progress_bar.progress((i + 1) / len(docs))
 
                 # Use async indexing for 50-80% performance improvement
                 index_start_time = time.perf_counter()
-                st.session_state.index = await create_index_async(docs, use_gpu)
+                try:
+                    # Create vector store and index with documents
+                    vector_store = SimpleVectorStore()
+                    st.session_state.index = VectorStoreIndex.from_documents(
+                        docs, vector_store=vector_store
+                    )
+                except (ValueError, RuntimeError) as e:
+                    st.error(f"Document processing failed: {e}")
+                    logger.error("Index creation failed: %s", str(e))
+                    return
                 index_time = time.perf_counter() - index_start_time
                 total_time = time.perf_counter() - start_time
 
@@ -314,7 +371,7 @@ async def upload_section() -> None:
                 )
 
             except (ValueError, TypeError, OSError, RuntimeError) as e:
-                st.error(f"Document processing failed: {str(e)}")
+                st.error(f"Document processing failed: {e!s}")
                 logger.error("Doc process error: %s", str(e))
 
 
@@ -330,34 +387,34 @@ async def run_analysis() -> None:
         with st.spinner("Running analysis..."):
             try:
                 # Create tools from index
-                agent_tools = create_tools_from_index(st.session_state.index)
+                tools_for_agent = create_tools_from_index(st.session_state.index)
 
                 # Get appropriate agent system
-                agent_system, mode = get_agent_system(
-                    _tools=agent_tools,
+                coordinator, agent_mode = get_agent_system(
+                    _tools=tools_for_agent,
                     _llm=llm,
                     _memory=st.session_state.memory,
                 )
 
                 # Process analysis with agent system
-                analysis_query = f"Perform {prompt_type} analysis on the documents"
-                results = await asyncio.to_thread(
+                analysis_query_text = f"Perform {prompt_type} analysis on the documents"
+                analysis_output = await asyncio.to_thread(
                     process_query_with_agent_system,
-                    agent_system,
-                    analysis_query,
-                    mode,
+                    coordinator,
+                    analysis_query_text,
+                    agent_mode,
                     st.session_state.memory,
                 )
 
-                st.session_state.analysis_results = results
-                st.session_state.agent_system = agent_system
-                st.session_state.agent_mode = mode
+                st.session_state.analysis_results = analysis_output
+                st.session_state.agent_system = coordinator
+                st.session_state.agent_mode = agent_mode
 
-                if mode == "multi":
+                if agent_mode == "multi":
                     st.info("✅ Analysis completed using multi-agent system")
 
             except (ValueError, TypeError, RuntimeError) as e:
-                st.error(f"Analysis failed: {str(e)}")
+                st.error(f"Analysis failed: {e!s}")
                 logger.error("Analysis error: %s", str(e))
 
 
@@ -366,33 +423,33 @@ if st.button("Analyze") and st.session_state.index:
     with st.spinner("Running analysis..."):
         try:
             # Create tools from index
-            agent_tools = create_tools_from_index(st.session_state.index)
+            tools_for_agent = create_tools_from_index(st.session_state.index)
 
             # Get appropriate agent system
-            agent_system, mode = get_agent_system(
-                _tools=agent_tools,
+            coordinator, agent_mode = get_agent_system(
+                _tools=tools_for_agent,
                 _llm=llm,
                 _memory=st.session_state.memory,
             )
 
             # Process analysis with agent system
-            analysis_query = f"Perform {prompt_type} analysis on the documents"
-            results = process_query_with_agent_system(
-                agent_system,
-                analysis_query,
-                mode,
+            analysis_query_text = f"Perform {prompt_type} analysis on the documents"
+            analysis_output = process_query_with_agent_system(
+                coordinator,
+                analysis_query_text,
+                agent_mode,
                 st.session_state.memory,
             )
 
-            st.session_state.analysis_results = results
-            st.session_state.agent_system = agent_system
-            st.session_state.agent_mode = mode
+            st.session_state.analysis_results = analysis_output
+            st.session_state.agent_system = coordinator
+            st.session_state.agent_mode = agent_mode
 
-            if mode == "multi_agent":
+            if agent_mode == "multi_agent":
                 st.info("✅ Analysis completed using multi-agent system")
 
         except (ValueError, TypeError, RuntimeError) as e:
-            st.error(f"Analysis failed: {str(e)}")
+            st.error(f"Analysis failed: {e!s}")
             logger.error("Analysis error: %s", str(e))
 
 # Chat with Agent using st.chat_message and write_stream
@@ -402,7 +459,7 @@ for message in st.session_state.memory.chat_store.get_messages("default"):
     with st.chat_message(message.role):
         st.markdown(message.content)
 
-user_input: str | None = st.chat_input("Ask a question")
+user_input: str | None = st.chat_input("Ask a question", key="chat_input")
 if user_input:
     with st.chat_message("user"):
         st.markdown(user_input)
@@ -423,7 +480,7 @@ if user_input:
                 # Using single ReActAgent for all queries
 
                 # Process query with appropriate agent system using streaming
-                def stream_response():
+                def stream_response() -> Generator[str, None, None]:
                     """Stream response from agent system."""
                     try:
                         response = process_query_with_agent_system(
@@ -447,9 +504,9 @@ if user_input:
                             else:
                                 yield " " + word
                             # Add slight delay for streaming effect
-                            time.sleep(app_settings.streaming_delay_seconds)
+                            time.sleep(SETTINGS.ui.streaming_delay_seconds)
                     except (ValueError, TypeError, RuntimeError) as e:
-                        yield f"Error processing query: {str(e)}"
+                        yield f"Error processing query: {e!s}"
 
                 # Use Streamlit's native streaming
                 full_response = st.write_stream(stream_response())
@@ -464,7 +521,7 @@ if user_input:
             else:
                 st.error("Please upload and process documents first before chatting.")
         except (ValueError, TypeError, RuntimeError) as e:
-            st.error(f"Chat response failed: {str(e)}")
+            st.error(f"Chat response failed: {e!s}")
             logger.error("Chat error: %s", str(e))
 
     # Store user message in memory using proper ChatMessage API
@@ -473,18 +530,18 @@ if user_input:
     st.session_state.memory.put(ChatMessage(role="user", content=user_input))
 
 # Persistence with Memory API and Error Handling
-if st.button("Save Session"):
+if st.button("Save Session", key="save_session_btn"):
     try:
         st.session_state.memory.chat_store.persist("session.json")
         st.success("Saved!")
     except (OSError, ValueError, TypeError) as e:
-        st.error(f"Save failed: {str(e)}")
+        st.error(f"Save failed: {e!s}")
         logger.error("Save error: %s", str(e))
 
-if st.button("Load Session"):
+if st.button("Load Session", key="load_session_btn"):
     try:
         st.session_state.memory = ChatMemoryBuffer.from_file("session.json")
         st.success("Loaded!")
     except (OSError, ValueError, TypeError) as e:
-        st.error(f"Load failed: {str(e)}")
+        st.error(f"Load failed: {e!s}")
         logger.error("Load error: %s", str(e))

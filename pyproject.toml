@@ -5,7 +5,7 @@ description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.12"
 keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -13,68 +13,67 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    # Core application framework
-    "streamlit>=1.48.0",
-    "python-dotenv==1.1.1",
-    "loguru>=0.7.3",
-    "tenacity>=9.1.2",
-    "diskcache==5.6.3",
-    # Document processing
-    "pymupdf==1.26.3",
-    "python-docx==1.2.0",
-    "pillow>=11.0.0,<12.0.0",
-    "unstructured[all-docs]>=0.18.11",
-    "pyarrow>=21.0.0,<22.0.0",
-    # AI/ML core
-    "transformers==4.55.4",
-    "torch==2.7.1",
-    "tiktoken==0.11.0",
-    "openai>=1.98.0,<2.0.0",
-    "openai-whisper==20250625",
-    "spacy==3.8.7",
-    # LLM backends
-    "ollama==0.5.3",
-    "llama-cpp-python>=0.2.32,<0.3.0", # CPU version only, GPU version in [gpu] extra
-    # Vector database
-    "qdrant-client==1.15.1",
-    # LlamaIndex ecosystem - core
-    "llama-index-core>=0.12.14,<0.13.0",
+    # Application & Configuration (core runtime utilities)
+    "python-dotenv==1.1.1",             # Environment variable loading
+    "loguru>=0.7.3",                     # Structured logging
+    "tenacity>=9.1.2",                   # Robust retries
+    "pydantic==2.11.7",                  # Data validation & settings
+    "pydantic-settings==2.10.1",         # Settings management
+    # UI / App Framework
+    "streamlit>=1.48.0",                 # Local app UI
+    # Document Processing & NLP
+    "unstructured[all-docs]>=0.18.11",   # Multiformat parsing (PDF, DOCX, HTML, etc.)
+    "unstructured-ingest>=0.2.1",        # Ingestion utilities
+    "pymupdf==1.26.4",                   # PDF rendering/text extraction
+    "python-docx==1.2.0",                # DOCX parsing
+    "pillow>=11.0.0,<12.0.0",            # Image handling
+    "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
+    "spacy==3.8.7",                      # NLP pipeline
+    # ML/LLM Fundamentals
+    "torch==2.7.1",                      # PyTorch runtime
+    "transformers==4.55.4",              # HF model interfaces
+    "tiktoken==0.11.0",                  # Tokenization utilities
+    "openai>=1.98.0,<2.0.0",             # OpenAI API client
+    "openai-whisper==20250625",          # Whisper speech-to-text (optional)
+    # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
+    "ollama==0.5.3",                     # Ollama client
+    "llama-cpp-python>=0.3.0,<0.4.0",   # llama.cpp bindings (CPU variant)
+    # Vector Databases & Clients
+    "qdrant-client==1.15.1",             # Qdrant client
+    # LlamaIndex (meta + selected integrations)
+    "llama-index==0.13.4",
     "llama-index-vector-stores-qdrant",
-    # LlamaIndex ecosystem - LLMs
+    "llama-index-vector-stores-duckdb>=0.4.6", # DuckDB vector-store
+    "llama-index-storage-kvstore-duckdb>=0.2.0", # DuckDB KV store (cache)
+    "llama-index-llms-vllm",
     "llama-index-llms-openai",
     "llama-index-llms-ollama",
     "llama-index-llms-llama-cpp",
-    "llama-index-llms-vllm>=0.5.1",
-    # LlamaIndex ecosystem - embeddings
-    "llama-index-embeddings-openai",
+    "llama-index-llms-openai-like",
     "llama-index-embeddings-huggingface",
-    "llama-index-embeddings-jinaai",
-    "llama-index-embeddings-fastembed",
-    "llama-index-embeddings-clip>=0.1.0",
-    # LlamaIndex ecosystem - tools
+    "llama-index-embeddings-clip",
     "llama-index-postprocessor-colbert-rerank",
-    "llama-index-agent-openai",
-    "llama-index-program-openai",
+    "llama-index-embeddings-fastembed",
+    "llama-index-embeddings-openai",
     "llama-index-readers-file",
-    "llama-index-multi-modal-llms-openai",
-    "llama-index-question-gen-openai",
-    # Agent framework - LangGraph for multi-agent orchestration
-    "langgraph>=0.6.6",
-    "langgraph-supervisor>=0.0.29",
-    "langchain-core>=0.3.74",
-    "langchain-openai>=0.3.31",
-    # BGE-M3 and retrieval dependencies for FEAT-002
-    "FlagEmbedding>=1.3.5", # BGE-M3 unified embeddings
-    "sentence-transformers>=5.1.0", # CrossEncoder reranking
-    # DSPy for prompt optimization
-    "dspy-ai>=2.5.0",
-    "pydantic==2.11.7",
-    "pydantic-settings==2.10.1",
-    "vllm[flashinfer]>=0.10.1.1",
+    # Agentic Orchestration
+    "langgraph>=0.6.6",                  # Graph-based orchestration
+    "langgraph-supervisor>=0.0.29",      # Multi-agent supervisor
+    "langchain-core>=0.3.75",            # Shared interfaces
+    "langchain-openai>=0.3.32",          # LangChain OpenAI bindings
+    # Retrieval & Reranking Extras
+    "FlagEmbedding>=1.3.5",              # BGE-M3 unified embeddings
+    "sentence-transformers>=5.1.0",      # CrossEncoder reranking
+    # Prompt Optimization
+    "dspy-ai>=2.5.0",                    # DSPy optimizer
+    # Storage (local analytical DB used for cache KV store)
+    "duckdb>=0.10.0",                    # DuckDB engine
+    # Testing Support (runtime-level perf/property tests if invoked)
+    "pytest-benchmark>=5.1.0",           # Benchmark harness
+    "hypothesis>=6.137.2",               # Property-based tests
 ]
 
 [project.optional-dependencies]
@@ -84,6 +83,14 @@ gpu = [
     # Build tools for GPU libraries
     "ninja>=1.11.1",                      # Build acceleration
     "cmake>=3.26.4",                      # Required for CUDA builds
+]
+test = [
+    "pytest>=8.1,<9",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.0",
+    "pytest-mock>=3.14.0",
+    "pytest-benchmark>=5.0.0",
+    "hypothesis>=6.137.1",
 ]
 
 # Note: spaCy models are not PyPI packages and must be installed separately:
@@ -141,10 +148,11 @@ Manual Installation Steps (if needed):
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
+select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D", "RUF"]
+# Be slightly stricter than before; keep a short, explicit ignore set.
 ignore = [
     "D203",  # 1 blank line required before class docstring (conflicts with D211)
     "D213",  # Multi-line docstring summary should start at the second line (conflicts with Google style)
@@ -153,18 +161,55 @@ ignore = [
     "S607",  # partial executable path (acceptable for well-known system commands)
     "S108",  # hardcoded temp file path (will be replaced with tempfile)
 ]
+# Ensure unused or mistyped noqa comments are flagged and pilot ANN rules.
+extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",  # assert usage (standard practice in pytest tests)
     "S311",  # pseudo-random generators (acceptable for test timing simulation)
+    "RUF001", "RUF002", "RUF003",  # allow unicode/emoji in test strings/docstrings
+    "RUF013",  # allow implicit Optional in test annotations for brevity
+    "RUF005",  # list concatenation shortcuts allowed in tests
+    "RUF017",  # performance anti-patterns acceptable in tests
+    "N802",    # test AST visitors use conventional names
+    "ANN001", "ANN002", "ANN003",  # pilot annotations off in tests
+    "ANN201", "ANN202", "ANN204",
+]
+"scripts/check_coverage.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/update_progress_counts.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/run_quality_gates.py" = ["RUF013"]
+"docs/**/*.py" = [
+    "RUF001", "RUF002", "RUF003",  # unicode in examples/docstrings
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docmind_ai"]
+known-first-party = ["src"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+# Pylint configuration to keep tests clean without noisy warnings
+[tool.pylint.main]
+py-version = "3.11"
+jobs = 0
+limit-inference-results = 100
+extension-pkg-allow-list = ["llama_index", "torch"]
+disable = [
+  # Pydantic model attributes are resolved at runtime; avoid false positives
+  "no-member",
+]
+
+# Keep pylint messages strict; use targeted per-file disables in tests when needed.
+
+[tool.pylint.basic]
+good-names = [
+  "i","j","k","ex","e","x","y","z","_",
+  "t1","t2","t3","db","df","ax","ok","id","llm","ctx",
+]
+
+[tool.pylint.format]
+max-line-length = 88
 
 
 [tool.pytest.ini_options]
@@ -174,15 +219,52 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
-    "--strict-config",
+    "--strict-config", 
     "--tb=short",
     "-ra",
+    "-v",
     "--import-mode=importlib",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml:coverage.xml", 
+    "--cov-report=json:coverage.json",
+    "--cov-branch",
+    "--durations=10",
+    "--durations-min=0.01",
+    "--maxfail=10",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning", 
+    "ignore::UserWarning:torch.*",
+    "ignore::UserWarning:transformers.*",
+    "ignore::FutureWarning:llama_index.*",
+    "ignore::FutureWarning:httpx.*",
+    "ignore:.*asyncio_default_fixture_loop_scope.*:pytest.PytestDeprecationWarning",
+]
+minversion = "8.0"
 markers = [
+    # CI/CD Pipeline Tiers (Phase 5A Optimized)
+    "unit: Fast unit tests with mocked dependencies (95%+ success rate, <0.1s avg)",
+    "integration: Component interaction tests with lightweight models (<30s each)",
+    "system: Full system tests with real models and GPU (<5min each)",
+    "e2e: End-to-end tests using Streamlit AppTest and UI flows",
+    
+    # CI/CD Pipeline Modes
+    "pre_commit: Fastest, most reliable tests for pre-commit hooks (>99% success rate)",
+    "ci_pipeline: CI pipeline tests optimized for fast feedback (95%+ success rate)",
+    "pr_validation: Comprehensive PR validation tests (quality gate enforcement)",
+    "deployment_gate: Production deployment gate tests (full validation)",
+    
+    # Performance and Quality
+    "performance: Performance benchmarks and regression tests (<0.2s unit test target)",
+    "quality_gate: Tests that enforce Phase 5A quality standards (95%+ success)",
+    "high_confidence: Tests with >95% historical success rate",
+    "regression_test: Tests for detecting performance/quality regressions",
+    
+    # Legacy compatibility
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "performance: marks tests as performance tests",
     "requires_gpu: marks tests that require GPU",
     "requires_network: marks tests that require network access",
 ]
@@ -197,6 +279,14 @@ dev = [
     "pytest-asyncio>=1.1.0",
     "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
+    "bandit>=1.8.6",
+    "mypy>=1.17.1",
+    "pytest-mock>=3.14.1",
+    "responses>=0.25.8",
+    "pytest-httpx>=0.35.0",
+    "testcontainers>=4.12.0",
+    "coverage-badge>=1.1.2",
+    "pylint>=3.2.5",
 ]
 test = [
     "pytest==8.3.1",
@@ -207,3 +297,100 @@ test = [
 performance = [
     "numba>=0.61.0",  # Optional JIT compilation for performance
 ]
+quality = [
+    "pre-commit>=4.0.1",
+    "coverage[toml]>=7.6.0",
+    "pytest-xdist>=3.6.0",  # Parallel test execution
+    "pytest-timeout>=2.3.1",  # Test timeout enforcement
+    "pytest-mock>=3.14.0",  # Enhanced mocking support
+]
+
+# Coverage Configuration - Production Ready
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/env/*",
+    "setup.py",
+    "conftest.py",
+    ".pytest_cache/*",
+    "htmlcov/*",
+    "dist/*",
+    "build/*",
+    "*.egg-info/*",
+    "qdrant_storage/*",
+    "embeddings_cache/*",
+    "test_logs/*",
+    "cache/*",
+    "logs/*",
+]
+branch = true
+data_file = "coverage/.coverage"
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+    "except ImportError:",
+    "if TYPE_CHECKING:",
+]
+fail_under = 29.71
+precision = 2
+show_missing = true
+skip_covered = false
+sort = "Cover"
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "DocMind AI Test Coverage Report"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.json]
+output = "coverage.json"
+pretty_print = true
+
+# CI/CD Quality Gates and Monitoring - Phase 5A Optimized
+[tool.pytest-quality]
+# Performance monitoring (Phase 5A: <0.1s unit test average)
+max_test_duration_seconds = 300
+max_collection_time_seconds = 30
+slow_test_threshold_seconds = 0.2
+unit_test_time_threshold_seconds = 0.1
+performance_regression_threshold = 1.5
+
+# Coverage enforcement (Phase 5A: 29.71% trending upward)  
+min_line_coverage_percent = 29.71
+min_branch_coverage_percent = 25.0
+coverage_fail_on_decrease = false
+coverage_regression_threshold = 0.95
+
+# Success rate enforcement (Phase 5A: 95.4% success rate)
+min_success_rate_percent = 95.0
+critical_success_rate_percent = 90.0
+success_rate_fail_under = true
+
+# Health monitoring (CI/CD optimized)
+max_flaky_tests = 3
+flaky_pass_rate_threshold = 0.9
+max_anti_patterns = 5
+enable_performance_regression_detection = true
+enable_health_monitoring = true
+enable_quality_gate_enforcement = true
+
+# CI/CD Pipeline Configuration
+enable_intelligent_test_selection = true
+enable_fast_feedback_mode = true
+enable_deployment_gate_validation = true

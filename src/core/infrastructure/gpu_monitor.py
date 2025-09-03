@@ -44,8 +44,7 @@ async def gpu_performance_monitor() -> AsyncGenerator[GPUMetrics | None, None]:
 
     Example:
         async with gpu_performance_monitor() as metrics:
-            if metrics:
-                print(f"GPU Utilization: {metrics.utilization_percent}%")
+            # use metrics.utilization_percent if metrics is not None
     """
     if not torch.cuda.is_available():
         yield None

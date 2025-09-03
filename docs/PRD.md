@@ -16,13 +16,13 @@
 
 ## 1. Executive Summary
 
-DocMind AI is an offline-first document analysis system architected for high performance, privacy, and maintainability. It leverages a pure **LlamaIndex** stack to combine hybrid vector search, knowledge graphs, and a **5-agent LangGraph supervisor system** for intelligent document processing with 128K context capability through FP8 KV cache optimization. By eliminating external APIs and prioritizing local computation, it provides a secure, high-throughput environment for users to analyze their documents.
+DocMind AI is an offline-first document analysis system using Qwen3-4B-Instruct-2507-FP8 with 128K context windows, achieving 100-160 tokens/second decode performance. It uses a **LlamaIndex** stack with hybrid vector search (BGE-M3 embeddings), knowledge graphs, and a **5-agent LangGraph supervisor system** for document processing with FP8 KV cache optimization. By eliminating external APIs and using local computation only, it provides zero data exfiltration for document analysis.
 
 ## 2. Problem Statement & Opportunity
 
 **Problem Statement:** In today's data-rich world, professionals, researchers, and students are inundated with digital documents. Extracting meaningful insights is a time-consuming, manual process. Furthermore, existing AI-powered solutions are almost exclusively cloud-based, forcing users to upload sensitive or proprietary documents to third-party servers, creating significant privacy risks and vendor lock-in. There is limited availability of solutions that offer modern AI capabilities with complete privacy through local, offline processing.
 
-**Opportunity:** There is growing market demand for professional tools that deliver advanced AI capabilities without compromising on data security. By building a high-performance, offline-first RAG application with 128K context capability, DocMind AI can serve this underserved segment. The solution provides fast, intelligent, and completely private document processing, making it an effective choice for security-conscious users.
+**Opportunity:** Professional users require AI document processing without cloud dependencies for data security. DocMind AI provides offline-first RAG with 128K context capability using local models only. The system processes documents with 100% local computation, zero external API calls, and requires 12-14GB VRAM on RTX 4090 hardware.
 
 ## 3. Features & Epics
 
@@ -32,7 +32,7 @@ This section groups the system's requirements into high-level, user-centric feat
   - **Description:** Enables users to add documents to the system and have them automatically processed for analysis.
   - **Requirements:** FR-1, FR-2, FR-11, NFR-4, AR-5
 
-- **Epic 2: Advanced Hybrid Search & Retrieval**
+- **Epic 2: Hybrid Search & Retrieval**
   - **Description:** Provides the core search functionality, allowing users to find the most relevant information using a combination of semantic and keyword search.
   - **Requirements:** FR-3, FR-4, FR-5, FR-6, FR-7, NFR-2
 
@@ -40,8 +40,8 @@ This section groups the system's requirements into high-level, user-centric feat
   - **Description:** The primary user interface for interacting with documents. A LangGraph supervisor coordinates 5 specialized agents to answer questions, perform analysis, and reason over the indexed content with enhanced quality and reliability.
   - **Requirements:** FR-8, FR-9, FR-10, NFR-1, AR-6
 
-- **Epic 4: High-Performance Infrastructure**
-  - **Description:** The underlying non-functional backbone of the application, ensuring it is fast, efficient, and reliable.
+- **Epic 4: Local Processing Infrastructure**
+  - **Description:** The underlying infrastructure providing 100-160 tok/s decode performance, 12-14GB VRAM usage, and 100% offline operation.
   - **Requirements:** NFR-1, NFR-3, NFR-5, NFR-6, NFR-7, NFR-8, NFR-9, AR-1, AR-2, AR-3, AR-4
 
 ## 4. System Requirements
@@ -53,8 +53,8 @@ The following requirements are derived directly from the architectural decisions
 - **FR-1: Multimodal Document Processing**: The system must parse a variety of document formats (PDF, DOCX, etc.) and extract all constituent elements, including text, tables, and images. **(ADR-004)**
 - **FR-2: Semantic Text Chunking**: Text extracted from documents must be split into semantic chunks (e.g., by sentence) with configurable size and overlap to preserve context for embedding. **(ADR-005)**
 - **FR-3: Hybrid Search Retrieval**: The system must perform hybrid search by combining results from dense (semantic) and sparse (keyword) vector searches to improve retrieval quality. **(ADR-013)**
-- **FR-4: Dense Embeddings**: The system must generate dense embeddings for text chunks using a high-performance model (e.g., BGE-large-en-v1.5) to capture semantic meaning. **(ADR-002)**
-- **FR-5: Sparse Embeddings**: The system must generate sparse embeddings (e.g., SPLADE++) to enable effective keyword-based retrieval and term expansion. **(ADR-002)**
+- **FR-4: Dense Embeddings**: The system must generate dense embeddings for text chunks using BGE-M3 (1024 dimensions) for semantic search. **(ADR-002)**
+- **FR-5: Sparse Embeddings**: The system must generate sparse embeddings (SPLADE++) for keyword-based retrieval and term expansion. **(ADR-002)**
 - **FR-6: Multimodal Embeddings**: The system must generate distinct embeddings for images (e.g., using CLIP ViT-B/32) to enable multimodal search capabilities. **(ADR-016)**
 - **FR-7: High-Relevance Reranking**: The system must include a post-retrieval reranking step to refine the order of retrieved documents and improve the final context quality. **(ADR-014)**
 - **FR-8: Multi-Agent Coordination**: All user queries and interactions must be handled by a LangGraph supervisor system coordinating 5 specialized agents (query router, query planner, retrieval expert, result synthesizer, response validator) for enhanced quality and reliability. **(ADR-011)**
@@ -66,14 +66,14 @@ The following requirements are derived directly from the architectural decisions
 ### Non-Functional Requirements (How the System Performs)
 
 - **NFR-1: Performance - High Throughput**: The system must be optimized to achieve 100-160 tokens/second decode and 800-1300 tokens/second prefill (with FP8 optimization) for LLM inference on RTX 4090 Laptop hardware with 128K context capability. **(ADR-004, ADR-010)**
-- **NFR-2: Performance - Fast Reranking**: The primary reranking model must be lightweight (`BGE-reranker-v2-m3`) to ensure minimal latency impact on the query pipeline. **(ADR-014)**
+- **NFR-2: Performance - Reranking Latency**: The reranking model (`BGE-reranker-v2-m3`) must add <50ms latency to the query pipeline. **(ADR-014)**
 - **NFR-3: Performance - Asynchronous Processing**: The system must leverage asynchronous and parallel processing patterns (`QueryPipeline.parallel_run`) for all I/O-bound and compute-intensive tasks to ensure a non-blocking UI and maximum throughput. **(ADR-012)**
 - **NFR-4: Privacy - Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
-- **NFR-5: Resilience - Robust Error Handling**: The system must be resilient to transient failures (e.g., network hiccups, file errors) by implementing intelligent retry strategies (e.g., exponential backoff) for all critical infrastructure operations. **(ADR-022)**
+- **NFR-5: Resilience - Error Handling**: The system must handle transient failures (network hiccups, file errors) using exponential backoff retry strategies (3 attempts, 2s base delay) for infrastructure operations. **(ADR-022)**
 - **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with vLLM FlashInfer backend. **(ADR-004, ADR-010)**
 - **NFR-7: Memory Efficiency - Multimodal VRAM**: The multimodal embedding model (CLIP ViT-B/32) must be selected for its low VRAM usage (~1.4GB) to ensure efficiency. **(ADR-016)**
 - **NFR-8: Scalability - Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
-- **NFR-9: Hardware Adaptability**: The system must automatically detect available hardware (especially GPUs) and adapt its configuration for optimal performance, including model selection and context length. **(ADR-017)**
+- **NFR-9: Hardware Adaptability**: The system must detect GPU availability (CUDA 12.8+) and select appropriate models: Qwen3-4B-FP8 for RTX 4090, CPU fallback for systems without GPUs. **(ADR-017)**
 
 ### Architectural & Implementation Requirements
 
@@ -195,7 +195,7 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 
 - [ ] Documents upload and parse without errors (PDF, DOCX, TXT, etc.)
 - [ ] Hybrid search returns relevant results with source attribution.
-- [ ] The 5-agent supervisor system intelligently coordinates specialized agents to answer complex queries with enhanced quality.
+- [ ] The 5-agent supervisor system coordinates specialized agents (router, planner, retrieval, synthesizer, validator) with <200ms coordination overhead.
 - [ ] GPU acceleration provides measurable, order-of-magnitude performance improvements.
 - [ ] System operates completely offline without API dependencies.
 - [ ] Session persistence maintains context across restarts.
@@ -205,7 +205,7 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 - [ ] Query latency <1.5 seconds for 95th percentile (RTX 4090 Laptop).
 - [ ] Document processing throughput >50 pages/second with GPU and caching.
 - [ ] System VRAM usage ~12-14GB with 128K context capability.
-- [ ] Multi-agent coordination overhead remains under 200ms due to efficient LangGraph supervisor patterns with parallel tool execution (50-87% token reduction).
+- [ ] Multi-agent coordination overhead remains under 200ms with LangGraph supervisor patterns achieving 50-87% token reduction through parallel execution.
 - [ ] Retrieval accuracy >80% relevance on domain-specific queries.
 - [ ] FP8 KV cache enables 128K context processing without OOM errors.
 
@@ -240,7 +240,7 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 - **Target Audience**: 100 knowledge workers across all three personas
 - **Distribution**: Open beta signup with screening questionnaire
 - **Goals**:
-  - Validate 5-agent supervisor system effectiveness and coordination quality
+  - Validate 5-agent supervisor system coordination overhead <200ms and 50-87% token reduction
   - Test GPU acceleration and performance optimizations
   - Refine UI/UX based on broader user feedback
 - **Success Criteria**:
@@ -342,7 +342,7 @@ This section details how the Success Metrics will be tracked. As a privacy-first
 - **Probability**: High | **Impact**: Medium
 - **Mitigation Strategies**:
   - Tiered model deployment (small/medium/large based on hardware)
-  - Intelligent resource detection and optimization
+  - GPU detection and model selection based on available VRAM
   - Progressive feature enablement based on available resources
   - Clear hardware requirement documentation
 - **Contingency Plan**: CPU-only mode with reduced feature set
@@ -441,7 +441,7 @@ This section details how the Success Metrics will be tracked. As a privacy-first
 
 ### Document Processing
 
-- **ADR-009-NEW**: Document processing pipeline with Unstructured integration and intelligent chunking.
+- **ADR-009-NEW**: Document processing pipeline with Unstructured integration and sentence-based chunking (512 tokens, 50% overlap).
 - **ADR-018-NEW**: DSPy prompt optimization for automatic query rewriting and quality improvement.
 - **ADR-019-NEW**: Optional GraphRAG integration for relationship-based queries and multi-hop reasoning.
 

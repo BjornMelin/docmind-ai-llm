@@ -17,7 +17,7 @@ from llama_index.core.schema import ImageDocument
 from loguru import logger
 from PIL import Image
 
-from src.config.app_settings import app_settings
+from src.config import settings
 
 # Constants
 MAX_TEST_IMAGES = 10
@@ -76,7 +76,9 @@ def validate_vram_usage(
         torch.cuda.empty_cache()
 
         # Measure baseline VRAM
-        baseline_vram = torch.cuda.memory_allocated() / app_settings.bytes_to_gb_divisor
+        baseline_vram = (
+            torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
+        )
 
         if images:
             # Process images to measure VRAM with load
@@ -102,7 +104,7 @@ def validate_vram_usage(
         # Measure current VRAM safely
         try:
             current_vram = (
-                torch.cuda.memory_allocated() / app_settings.bytes_to_gb_divisor
+                torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
             )
         except RuntimeError as e:
             logger.warning("Failed to measure current VRAM: %s", e)
@@ -188,8 +190,8 @@ async def validate_end_to_end_pipeline(
     query: str,
     query_image: Image.Image,
     clip_embedding: Any,
-    property_graph: Any,
-    llm: Any,
+    _property_graph: Any,
+    _llm: Any,
 ) -> dict[str, Any]:
     """Validate end-to-end multimodal + graph pipeline.
 
@@ -213,14 +215,14 @@ async def validate_end_to_end_pipeline(
         "norm": float(np.linalg.norm(image_embedding)),
     }
 
-    # Step 2: Extract entities from query (mock for now)
+    # Step 2: Extract entities from query (placeholder implementation)
     entities = ["LlamaIndex", "BGE-M3"]  # Would be extracted by property_graph
     results["entity_relationships"] = {
         "entities_found": entities,
         "relationship_count": len(entities) - RANK_ADJUSTMENT,
     }
 
-    # Step 3: Generate final response (mock for now)
+    # Step 3: Generate final response (basic template for now)
     results["final_response"] = (
         f"Based on visual similarity and entity relationships for {query}"
     )
@@ -265,7 +267,7 @@ def create_image_documents(
 def batch_process_images(
     clip_embedding: Any,
     images: list[Image.Image],
-    batch_size: int = app_settings.default_batch_size,
+    batch_size: int = settings.monitoring.default_batch_size,
 ) -> np.ndarray:
     """Process images in batches for efficiency.
 

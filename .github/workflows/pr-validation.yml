@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main, development ]
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Lint and Unit Tests (Linux)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.10"]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv (with cache)
+        id: setup-uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync --group test --group dev
+
+      - name: Ruff format (check only)
+        run: uv run ruff format --check .
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Pylint (src + unit tests)
+        run: uv run pylint -j 0 -sn --rcfile=pyproject.toml src tests/unit
+
+      - name: Run unit tests with coverage
+        run: |
+          uv run pytest tests/unit -m unit --cov=src --cov-report=xml:coverage.xml --cov-report=term -q
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          echo "## Coverage Summary (Unit)" >> $GITHUB_STEP_SUMMARY
+          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY || echo "(No coverage data)" >> $GITHUB_STEP_SUMMARY
+
+  integration:
+    name: Integration Tests (Linux)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.10"]
+    needs: unit
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv (with cache)
+        id: setup-uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync --group test --group dev
+
+      - name: Run integration tests (no coverage gating)
+        env:
+          PYTEST_ADDOPTS: "--no-cov"
+        run: |
+          uv run pytest tests/integration -m integration -q --no-cov
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Integration tests executed without coverage gating." >> $GITHUB_STEP_SUMMARY

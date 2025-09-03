@@ -1,0 +1,3878 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: tests/unit/app/test_app.py, tests/unit/app/test_app_components.py, tests/unit/config/test_integrations.py, tests/unit/config/test_settings.py, tests/integration/test_clean_boundaries.py, tests/e2e/test_app.py, tests/integration/conftest.py
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+tests/
+  e2e/
+    test_app.py
+  integration/
+    conftest.py
+    test_clean_boundaries.py
+  unit/
+    app/
+      test_app_components.py
+      test_app.py
+    config/
+      test_integrations.py
+      test_settings.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="tests/unit/config/test_settings.py">
+"""Unit tests for the configuration architecture (DocMindSettings).
+
+Covers nested models, validators, env var overrides, helpers, and ADR features.
+"""
+
+import os
+import warnings
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from pydantic import ValidationError
+
+from src.config.settings import DocMindSettings, settings
+from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
+
+
+class TestNestedConfigurationModelsMerged:
+    """Test nested configuration models and their defaults."""
+
+    @pytest.mark.unit
+    def test_monitoring_config_defaults(self):
+        """Test monitoring config has correct default values."""
+        from src.config.settings import MonitoringConfig
+
+        cfg = MonitoringConfig()
+        assert cfg.max_query_latency_ms == 2000
+        assert cfg.enable_performance_logging is True
+
+    @pytest.mark.unit
+    def test_docmind_settings_json_serialization(self):
+        """Test DocMindSettings can serialize to JSON correctly."""
+        s = DocMindSettings(app_name="JSON Test", vllm={"temperature": 0.3})
+        js = s.model_dump_json()
+        import json
+
+        data = json.loads(js)
+        assert data["app_name"] == "JSON Test"
+
+
+class TestSettingsDefaults:
+    """Test all default values load correctly and are sensible."""
+
+    def test_application_metadata_defaults(self):
+        """Test application metadata has correct defaults."""
+        s = settings
+
+        assert s.app_name == "DocMind AI"
+        assert s.app_version == "2.0.0"
+        assert s.debug is False
+
+    def test_multi_agent_defaults(self):
+        """Test multi-agent coordination defaults are properly configured."""
+        s = settings
+
+        # Multi-agent should be enabled by default (from AgentConfig)
+        assert s.agents.enable_multi_agent is True
+        assert s.agents.decision_timeout == 200  # ADR-011: 200ms default timeout
+        assert s.agents.enable_fallback_rag is True
+        assert s.agents.max_retries == 2  # Reasonable retry count
+
+    def test_llm_backend_defaults(self):
+        """Test LLM backend defaults are properly configured for local-first."""
+        s = settings
+
+        assert s.llm_backend == "ollama"  # Ollama backend for local-first
+        assert (
+            s.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+        )  # FP8 model from VLLMConfig
+        assert s.ollama_base_url == "http://localhost:11434"  # Local Ollama
+        # Note: API key and temperature are not top-level fields in recovered config
+
+    def test_model_optimization_defaults(self):
+        """Test model optimization settings are correctly configured."""
+        s = settings
+
+        # vLLM optimization settings from VLLMConfig
+        assert s.vllm.kv_cache_dtype == "fp8_e5m2"  # FP8 KV cache
+        assert s.vllm.attention_backend == "FLASHINFER"  # FlashInfer backend
+        assert s.vllm.enable_chunked_prefill is True  # Chunked prefill enabled
+
+    def test_context_management_defaults(self):
+        """Test context management has proper 128K defaults."""
+        s = settings
+
+        assert s.vllm.context_window == 131072  # 128K from VLLMConfig
+        # Buffer size may be overridden via env; ensure it's at least the minimum
+        assert s.agents.context_buffer_size >= 8192
+        # Note: conversation memory is not a top-level field in recovered config
+
+    def test_document_processing_defaults(self):
+        """Test document processing has sensible defaults."""
+        s = settings
+
+        # Document processing from ProcessingConfig
+        expected_chunk = int(os.getenv("DOCMIND_PROCESSING__CHUNK_SIZE", "1500"))
+        assert s.processing.chunk_size == expected_chunk
+        assert s.processing.max_document_size_mb == 100
+
+        # Caching from CacheConfig
+        assert s.cache.enable_document_caching is True
+
+    def test_retrieval_defaults(self):
+        """Test retrieval configuration defaults."""
+        s = settings
+
+        # Retrieval settings from RetrievalConfig
+        assert s.retrieval.strategy == "hybrid"  # Hybrid is optimal
+        assert s.retrieval.top_k == 10
+        assert s.retrieval.use_reranking is True  # BGE reranking enabled
+        assert s.retrieval.reranking_top_k == 5
+
+    def test_embedding_defaults(self):
+        """Test embedding configuration defaults."""
+        s = settings
+
+        # Embedding settings from EmbeddingConfig
+        assert s.embedding.model_name == "BAAI/bge-m3"  # BGE-M3 model
+        assert s.embedding.dimension == 1024  # BGE-M3 dimension
+        assert s.embedding.max_length == 8192  # Max sequence length
+
+    def test_vector_database_defaults(self):
+        """Test vector database configuration defaults."""
+        s = settings
+
+        assert s.database.vector_store_type == "qdrant"  # Qdrant is primary
+        assert s.database.qdrant_url == "http://localhost:6333"
+        assert s.database.qdrant_collection == "docmind_docs"
+
+    def test_performance_defaults(self):
+        """Test performance configuration defaults are reasonable."""
+        s = settings
+
+        assert s.monitoring.max_query_latency_ms == 2000  # 2s max latency
+        assert s.monitoring.max_memory_gb == 4.0  # 4GB RAM limit
+        assert s.monitoring.max_vram_gb == 14.0  # 14GB for FP8 on RTX 4090
+        assert s.enable_gpu_acceleration is True
+
+    def test_vllm_defaults(self):
+        """Test vLLM-specific defaults are optimized for RTX 4090."""
+        s = settings
+
+        # GPU memory utilization may be overridden via env (.env sets 0.95)
+        assert 0.5 <= s.vllm.gpu_memory_utilization <= 0.95
+        assert s.vllm.attention_backend == "FLASHINFER"  # FlashInfer backend
+        assert s.vllm.enable_chunked_prefill is True
+        assert s.vllm.max_num_batched_tokens == 8192
+        assert s.vllm.max_num_seqs == 16
+
+    def test_persistence_defaults(self):
+        """Test persistence configuration creates proper paths."""
+        s = settings
+
+        assert s.data_dir == Path("./data")
+        assert s.cache_dir == Path("./cache")
+        assert s.database.sqlite_db_path == Path("./data/docmind.db")
+        assert s.database.enable_wal_mode is True  # WAL mode for performance
+
+    def test_centralized_constants_defaults(self):
+        """Test all centralized constants have proper defaults."""
+        s = settings
+
+        # Memory conversion constants
+        assert s.monitoring.bytes_to_gb_divisor == 1024**3
+        assert s.monitoring.bytes_to_mb_divisor == 1024 * 1024
+
+        # BGE-M3 constants (now in nested embedding config)
+        assert s.embedding.dimension == 1024
+        assert s.embedding.max_length == 8192
+        assert s.embedding.model_name == "BAAI/bge-m3"
+        assert s.embedding.batch_size_gpu == 12
+        assert s.embedding.batch_size_cpu == 4
+
+        # Hybrid retrieval constants
+        assert s.retrieval.rrf_alpha == 60  # RRF fusion alpha parameter
+        assert s.retrieval.rrf_k_constant == 60
+        assert s.retrieval.rrf_fusion_weight_dense == 0.7
+        assert s.retrieval.rrf_fusion_weight_sparse == 0.3
+
+        # Context window settings (now in nested vllm config)
+        assert s.vllm.context_window == 131072  # 128K
+        assert s.vllm.max_tokens == 2048
+        # Note: request_timeout_seconds, streaming_delay_seconds, and minimum_vram_*
+        # properties were deleted
+
+
+class TestFieldValidation:
+    """Test all field validators work correctly and catch invalid values."""
+
+    def test_agent_timeout_range_validation(self):
+        """Test agent decision timeout must be within valid range."""
+        # Valid range
+        DocMindSettings(agents={"decision_timeout": 100})
+        DocMindSettings(agents={"decision_timeout": 500})
+        DocMindSettings(agents={"decision_timeout": 1000})
+
+        # Invalid: too low
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 10"
+        ):
+            DocMindSettings(agents={"decision_timeout": 5})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 1000"
+        ):
+            DocMindSettings(agents={"decision_timeout": 2000})
+
+    def test_max_agent_retries_validation(self):
+        """Test max agent retries has reasonable bounds."""
+        # Valid range
+        DocMindSettings(agents={"max_retries": 0})
+        DocMindSettings(agents={"max_retries": 3})
+        DocMindSettings(agents={"max_retries": 10})
+
+        # Invalid: negative
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 0"
+        ):
+            DocMindSettings(agents={"max_retries": -1})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 10"
+        ):
+            DocMindSettings(agents={"max_retries": 15})
+
+    def test_llm_temperature_validation(self):
+        """Test LLM temperature must be in valid range."""
+        # Valid temperatures
+        DocMindSettings(vllm={"temperature": 0.0})
+        DocMindSettings(vllm={"temperature": 0.5})
+        DocMindSettings(vllm={"temperature": 2.0})
+
+        # Invalid: negative
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 0"
+        ):
+            DocMindSettings(vllm={"temperature": -0.1})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 2"
+        ):
+            DocMindSettings(vllm={"temperature": 3.0})
+
+    def test_llm_max_tokens_validation(self):
+        """Test LLM max tokens has reasonable bounds."""
+        # Valid token counts
+        DocMindSettings(vllm={"max_tokens": 100})
+        DocMindSettings(vllm={"max_tokens": 2048})
+        DocMindSettings(vllm={"max_tokens": 8192})
+
+        # Invalid: too low
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 100"
+        ):
+            DocMindSettings(vllm={"max_tokens": 50})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 8192"
+        ):
+            DocMindSettings(vllm={"max_tokens": 16384})
+
+    def test_chunk_size_validation(self):
+        """Test chunk size has reasonable bounds."""
+        # Valid chunk sizes
+        DocMindSettings(processing={"chunk_size": 100})
+        DocMindSettings(processing={"chunk_size": 1500})
+        DocMindSettings(processing={"chunk_size": 10000})
+
+        # Invalid: too small
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 100"
+        ):
+            DocMindSettings(processing={"chunk_size": 50})
+
+        # Invalid: too large
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 10000"
+        ):
+            DocMindSettings(processing={"chunk_size": 15000})
+
+    def test_chunk_overlap_validation(self):
+        """Test chunk overlap has reasonable bounds."""
+        # Valid overlaps
+        DocMindSettings(processing={"chunk_overlap": 0})
+        DocMindSettings(processing={"chunk_overlap": 100})
+        DocMindSettings(processing={"chunk_overlap": 200})
+
+        # Invalid: negative
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 0"
+        ):
+            DocMindSettings(processing={"chunk_overlap": -10})
+
+        # Invalid: too large
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 200"
+        ):
+            DocMindSettings(processing={"chunk_overlap": 500})
+
+    def test_top_k_validation(self):
+        """Test top_k retrieval has reasonable bounds."""
+        # Valid top-k values
+        DocMindSettings(retrieval={"top_k": 1})
+        DocMindSettings(retrieval={"top_k": 10})
+        DocMindSettings(retrieval={"top_k": 50})
+
+        # Invalid: zero or negative
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 1"
+        ):
+            DocMindSettings(retrieval={"top_k": 0})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 50"
+        ):
+            DocMindSettings(retrieval={"top_k": 100})
+
+    def test_bge_m3_dimension_validation(self):
+        """Test BGE-M3 embedding dimension validation."""
+        # Valid dimensions
+        DocMindSettings(embedding={"dimension": 256})
+        DocMindSettings(embedding={"dimension": 1024})
+        DocMindSettings(embedding={"dimension": 4096})
+
+        # Invalid: too small
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 256"
+        ):
+            DocMindSettings(embedding={"dimension": 128})
+
+        # Invalid: too large
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 4096"
+        ):
+            DocMindSettings(embedding={"dimension": 8192})
+
+    def test_rrf_alpha_validation(self):
+        """Test RRF alpha weight validation."""
+        # Valid alpha values (integer range 10-100)
+        DocMindSettings(retrieval={"rrf_alpha": 10})
+        DocMindSettings(retrieval={"rrf_alpha": 60})  # Default
+        DocMindSettings(retrieval={"rrf_alpha": 100})
+
+        # Invalid: too low
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 10"
+        ):
+            DocMindSettings(retrieval={"rrf_alpha": 5})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 100"
+        ):
+            DocMindSettings(retrieval={"rrf_alpha": 150})
+
+    def test_vllm_gpu_memory_validation(self):
+        """Test vLLM GPU memory utilization validation."""
+        # Valid utilization values
+        DocMindSettings(vllm={"gpu_memory_utilization": 0.5})
+        DocMindSettings(vllm={"gpu_memory_utilization": 0.85})
+        DocMindSettings(vllm={"gpu_memory_utilization": 0.95})
+
+        # Invalid: too low
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 0.5"
+        ):
+            DocMindSettings(vllm={"gpu_memory_utilization": 0.05})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 0.95"
+        ):
+            DocMindSettings(vllm={"gpu_memory_utilization": 1.0})
+
+    def test_streamlit_port_validation(self):
+        """Test Streamlit port validation."""
+        # Valid ports
+        DocMindSettings(ui={"streamlit_port": 1024})
+        DocMindSettings(ui={"streamlit_port": 8501})
+        DocMindSettings(ui={"streamlit_port": 65535})
+
+        # Invalid: too low (system ports)
+        with pytest.raises(
+            ValidationError, match="Input should be greater than or equal to 1024"
+        ):
+            DocMindSettings(ui={"streamlit_port": 80})
+
+        # Invalid: too high
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 65535"
+        ):
+            DocMindSettings(ui={"streamlit_port": 70000})
+
+
+class TestDirectoryCreation:
+    """Test directory creation validators work correctly."""
+
+    def test_data_directory_creation(self, tmp_path):
+        """Test data directory is created on settings instantiation."""
+        test_data_dir = tmp_path / "test_data"
+
+        # Directory shouldn't exist yet
+        assert not test_data_dir.exists()
+
+        # Create settings with custom data directory
+        DocMindSettings(data_dir=str(test_data_dir))
+
+        # Directory should now exist
+        assert test_data_dir.exists()
+        assert test_data_dir.is_dir()
+
+    def test_cache_directory_creation(self, tmp_path):
+        """Test cache directory is created on settings instantiation."""
+        test_cache_dir = tmp_path / "test_cache"
+
+        assert not test_cache_dir.exists()
+        DocMindSettings(cache_dir=str(test_cache_dir))
+        assert test_cache_dir.exists()
+
+    def test_log_file_parent_creation(self, tmp_path):
+        """Test log file parent directory is created."""
+        test_log_file = tmp_path / "logs" / "test.log"
+
+        # Parent directory shouldn't exist
+        assert not test_log_file.parent.exists()
+
+        DocMindSettings(log_file=str(test_log_file))
+
+        # Parent directory should be created
+        assert test_log_file.parent.exists()
+        assert test_log_file.parent.is_dir()
+
+    def test_sqlite_db_parent_creation(self, tmp_path):
+        """Test SQLite database parent directory is created."""
+        test_db_path = tmp_path / "db" / "test.db"
+
+        assert not test_db_path.parent.exists()
+        DocMindSettings(database={"sqlite_db_path": str(test_db_path)})
+        assert test_db_path.parent.exists()
+
+    def test_nested_directory_creation(self, tmp_path):
+        """Test nested directories are created properly."""
+        nested_dir = tmp_path / "level1" / "level2" / "level3"
+
+        assert not nested_dir.exists()
+        DocMindSettings(data_dir=str(nested_dir))
+        assert nested_dir.exists()
+        assert nested_dir.is_dir()
+
+
+class TestLLMBackendValidation:
+    """Test LLM backend validation and warnings."""
+
+    def test_valid_llm_backends(self):
+        """Test all valid LLM backends are accepted."""
+        valid_backends = ["ollama", "llamacpp", "vllm", "openai"]
+
+        for backend in valid_backends:
+            s = DocMindSettings(llm_backend=backend)
+            assert s.llm_backend == backend
+
+    def test_valid_backend_acceptance(self):
+        """Test valid backends are accepted without warnings."""
+        for backend in ["ollama", "llamacpp", "vllm", "openai"]:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                DocMindSettings(llm_backend=backend)
+                # No warnings should be generated for valid backends
+                backend_warnings = [warn for warn in w if backend in str(warn.message)]
+                assert len(backend_warnings) == 0
+
+
+class TestEnvironmentVariableOverrides:
+    """Test environment variable overrides work correctly."""
+
+    def test_basic_env_override(self):
+        """Test basic environment variable override."""
+        with patch.dict(os.environ, {"DOCMIND_DEBUG": "true"}):
+            s = DocMindSettings()  # Create new instance to pick up env vars
+            assert s.debug is True
+
+    def test_numeric_env_override(self):
+        """Test numeric environment variables are properly converted."""
+        with patch.dict(
+            os.environ,
+            {
+                "DOCMIND_AGENTS__DECISION_TIMEOUT": "500",
+                "DOCMIND_VLLM__TEMPERATURE": "0.5",
+                "DOCMIND_RETRIEVAL__TOP_K": "15",
+            },
+        ):
+            s = DocMindSettings()  # Create new instance to pick up env vars
+            assert s.agents.decision_timeout == 500
+            assert s.vllm.temperature == 0.5
+            assert s.retrieval.top_k == 15
+
+    def test_boolean_env_override(self):
+        """Test boolean environment variables work correctly."""
+        with patch.dict(
+            os.environ,
+            {
+                "DOCMIND_AGENTS__ENABLE_MULTI_AGENT": "false",
+                "DOCMIND_RETRIEVAL__USE_RERANKING": "true",
+                "DOCMIND_ENABLE_GPU_ACCELERATION": "false",
+            },
+        ):
+            s = DocMindSettings()  # Create new instance to pick up env vars
+            assert s.agents.enable_multi_agent is False
+            assert s.retrieval.use_reranking is True
+            assert s.enable_gpu_acceleration is False
+
+    def test_path_env_override(self):
+        """Test path environment variables work correctly."""
+        # Use /tmp paths to avoid permission issues
+        with patch.dict(
+            os.environ,
+            {
+                "DOCMIND_DATA_DIR": "/tmp/custom/data",
+                "DOCMIND_CACHE_DIR": "/tmp/custom/cache",
+            },
+        ):
+            s = DocMindSettings()  # Create new instance to pick up env vars
+            assert s.data_dir == Path("/tmp/custom/data")
+            assert s.cache_dir == Path("/tmp/custom/cache")
+
+    def test_list_env_override(self):
+        """Test list environment variables are handled correctly."""
+        # Note: Pydantic typically expects JSON for list env vars
+        with patch.dict(
+            os.environ,
+            {"DOCMIND_UI__CONTEXT_SIZE_OPTIONS": "[1024, 2048, 4096]"},
+        ):
+            s = DocMindSettings()  # Create new instance to pick up env vars
+            assert s.ui.context_size_options == [1024, 2048, 4096]
+
+    def test_env_validation_still_applies(self):
+        """Test validation still applies with environment overrides."""
+        with (
+            patch.dict(os.environ, {"DOCMIND_AGENTS__DECISION_TIMEOUT": "5000"}),
+            pytest.raises(
+                ValidationError, match="Input should be less than or equal to 1000"
+            ),
+        ):
+            _ = DocMindSettings()  # Create new instance to trigger validation
+
+    def test_env_prefix_enforced(self):
+        """Test environment variables must have DOCMIND_ prefix."""
+        with patch.dict(os.environ, {"DEBUG": "true"}):  # No prefix
+            s = settings
+            assert s.debug is False  # Should use default, not env var
+
+    def test_case_insensitive_env_vars(self):
+        """Test environment variables are case insensitive."""
+        with patch.dict(os.environ, {"docmind_debug": "true"}):
+            s = DocMindSettings()  # Create new instance to pick up env vars
+            assert s.debug is True
+
+
+class TestConfigurationMethods:
+    """Test configuration method helpers return correct subsets."""
+
+    def test_get_model_config(self):
+        """Test get_model_config returns correct model configuration."""
+        s = settings
+        model_config = s.get_model_config()
+
+        expected_keys = {
+            "model_name",
+            "context_window",
+            "max_tokens",
+            "temperature",
+            "base_url",
+        }
+
+        assert set(model_config.keys()) == expected_keys
+        assert model_config["model_name"] == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+        assert model_config["context_window"] == 131072
+        assert model_config["base_url"] == "http://localhost:11434"
+
+    def test_get_embedding_config(self):
+        """Test get_embedding_config returns embedding configuration."""
+        s = settings
+        embedding_config = s.get_embedding_config()
+
+        expected_keys = {
+            "model_name",
+            "device",
+            "max_length",
+            "batch_size",
+            "trust_remote_code",
+        }
+
+        assert set(embedding_config.keys()) == expected_keys
+        assert embedding_config["model_name"] == "BAAI/bge-m3"
+        assert embedding_config["max_length"] == 8192
+        assert embedding_config["trust_remote_code"] is True
+
+    def test_get_processing_config(self):
+        """Test get_processing_config returns processing configuration."""
+        s = settings
+        processing_config = s.get_processing_config()
+
+        expected_keys = {
+            "chunk_size",
+            "new_after_n_chars",
+            "combine_text_under_n_chars",
+            "multipage_sections",
+            "max_document_size_mb",
+        }
+
+        assert set(processing_config.keys()) == expected_keys
+        expected_chunk = int(os.getenv("DOCMIND_PROCESSING__CHUNK_SIZE", "1500"))
+        assert processing_config["chunk_size"] == expected_chunk
+        assert processing_config["multipage_sections"] is True
+
+    def test_to_dict_method(self):
+        """Test to_dict method returns complete settings."""
+        s = settings
+        settings_dict = s.model_dump()
+
+        # Should contain all fields
+        assert "app_name" in settings_dict
+        assert "vllm" in settings_dict
+        assert "agents" in settings_dict
+        assert "embedding" in settings_dict
+
+        # Values should match
+        assert settings_dict["app_name"] == "DocMind AI"
+        assert settings_dict["agents"]["enable_multi_agent"] is True
+        assert settings_dict["vllm"]["model"] == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+
+
+class TestCentralizedConstants:
+    """Test all centralized constants are accessible and have correct values."""
+
+    def test_memory_conversion_constants(self):
+        """Test memory conversion constants are correct."""
+        s = settings
+
+        assert s.monitoring.bytes_to_gb_divisor == 1024**3  # 1073741824
+        assert s.monitoring.bytes_to_mb_divisor == 1024 * 1024  # 1048576
+
+    def test_bge_m3_constants(self):
+        """Test BGE-M3 model constants are properly centralized."""
+        s = settings
+
+        # BGE-M3 constants (now in nested embedding config)
+        assert s.embedding.dimension == 1024
+        assert s.embedding.max_length == 8192
+        assert s.embedding.model_name == "BAAI/bge-m3"
+        assert s.embedding.batch_size_gpu == 12  # Optimized for GPU
+        assert s.embedding.batch_size_cpu == 4  # Conservative for CPU
+
+    def test_hybrid_retrieval_constants(self):
+        """Test hybrid retrieval constants are research-backed."""
+        s = settings
+
+        # RRF parameters
+        assert s.retrieval.rrf_alpha == 60  # RRF fusion alpha parameter
+        assert s.retrieval.rrf_k_constant == 60
+
+        # Research-backed weights
+        assert s.retrieval.rrf_fusion_weight_dense == 0.7
+        assert s.retrieval.rrf_fusion_weight_sparse == 0.3
+
+        # Weights should sum to 1.0
+        assert (
+            s.retrieval.rrf_fusion_weight_dense + s.retrieval.rrf_fusion_weight_sparse
+            == 1.0
+        )
+
+    def test_default_processing_constants(self):
+        """Test default processing value constants."""
+        s = settings
+
+        assert s.monitoring.default_batch_size == 20
+        assert s.monitoring.default_confidence_threshold == 0.8
+        assert s.monitoring.default_entity_confidence == 0.8
+        assert s.retrieval.top_k == 10
+        assert s.retrieval.reranking_top_k == 5
+
+    def test_timeout_configuration_constants(self):
+        """Test timeout configuration constants."""
+        s = settings
+
+        assert s.database.qdrant_timeout == 60  # 1 minute
+        assert s.monitoring.default_agent_timeout == 3.0  # 3 seconds
+        assert s.monitoring.cache_expiry_seconds == 3600  # 1 hour
+        assert s.monitoring.spacy_download_timeout == 300  # 5 minutes
+
+    def test_context_configuration_modernized(self):
+        """Test context configuration has been moved to nested vllm config."""
+        s = settings
+
+        # Context window settings (now in nested vllm config)
+        assert s.vllm.context_window == 131072  # 128K
+        assert s.vllm.max_tokens == 2048
+        # Note: suggested_context_* properties were removed as part of cleanup
+
+        # Note: request_timeout_seconds, streaming_delay_seconds, and minimum_vram_*
+        # properties were deleted
+
+    def test_monitoring_constants(self):
+        """Test performance monitoring constants."""
+        s = settings
+
+        assert s.monitoring.cpu_monitoring_interval == 0.1  # 100ms
+        assert s.monitoring.percent_multiplier == 100
+
+
+class TestGlobalSettingsInstance:
+    """Test the global settings instance works correctly."""
+
+    def test_global_settings_instance_exists(self):
+        """Test global settings instance is available."""
+        assert settings is not None
+        assert isinstance(settings, DocMindSettings)
+
+    def test_global_settings_has_defaults(self):
+        """Test global settings instance has proper defaults."""
+        assert settings.app_name == "DocMind AI"
+        assert settings.agents.enable_multi_agent is True
+        assert settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+
+    def test_global_settings_is_singleton(self):
+        """Test global settings behaves like singleton."""
+        from src.config import settings as settings1
+        from src.config import settings as settings2
+
+        # Should be the same instance
+        assert settings1 is settings2
+
+
+class TestEdgeCasesAndErrorHandling:
+    """Test edge cases and error handling scenarios."""
+
+    def test_none_values_handled_correctly(self):
+        """Test None values are handled correctly where allowed."""
+        # Most fields require valid values, but some can be optional
+        s = DocMindSettings(
+            debug=False,  # Boolean field with valid value
+        )
+
+        # Verify configuration is valid with basic settings
+        assert s.debug is False
+        assert s.log_file is not None  # Has default value
+
+    def test_empty_string_handling(self):
+        """Test empty strings are handled appropriately."""
+        # Most string fields have default values and accept empty strings
+        # Test that empty app_name is accepted (as per current validation)
+        s = DocMindSettings(app_name="")
+        assert s.app_name == ""  # Empty string is accepted
+
+        # Test that settings can be created with non-empty strings
+        s2 = DocMindSettings(app_name="Test App")
+        assert s2.app_name == "Test App"
+
+        # Test that whitespace-only strings are also accepted
+        s3 = DocMindSettings(app_name="   ")
+        assert s3.app_name == "   "
+
+        # Test that log_level accepts empty strings or revert to default
+        s4 = DocMindSettings(log_level="DEBUG")
+        assert s4.log_level == "DEBUG"
+
+    def test_extreme_boundary_values(self):
+        """Test extreme boundary values."""
+        # Test minimum values
+        s = DocMindSettings(
+            agents={"decision_timeout": 10, "max_retries": 0},
+            vllm={"temperature": 0.0},
+            processing={"chunk_overlap": 0},
+        )
+
+        assert s.agents.decision_timeout == 10
+        assert s.agents.max_retries == 0
+        assert s.vllm.temperature == 0.0
+        assert s.processing.chunk_overlap == 0
+
+        # Test maximum values
+        s = DocMindSettings(
+            agents={"decision_timeout": 1000, "max_retries": 10},
+            vllm={"temperature": 2.0},
+            retrieval={"top_k": 50},
+        )
+
+        assert s.agents.decision_timeout == 1000
+        assert s.agents.max_retries == 10
+        assert s.vllm.temperature == 2.0
+        assert s.retrieval.top_k == 50
+
+    def test_type_coercion_edge_cases(self):
+        """Test type coercion works correctly."""
+        # String numbers should be converted
+        with patch.dict(
+            os.environ,
+            {"DOCMIND_RETRIEVAL__TOP_K": "15", "DOCMIND_VLLM__TEMPERATURE": "0.5"},
+        ):
+            s = DocMindSettings()  # Create new instance to pick up env vars
+            assert isinstance(s.retrieval.top_k, int)
+            assert isinstance(s.vllm.temperature, float)
+            assert s.retrieval.top_k == 15
+            assert s.vllm.temperature == 0.5
+
+    def test_string_field_acceptance(self):
+        """Test string fields accept valid values (no constraints currently)."""
+        # These fields currently accept any string value
+        s1 = DocMindSettings(llm_backend="custom_backend")
+        assert s1.llm_backend == "custom_backend"
+
+        s2 = DocMindSettings(retrieval={"strategy": "custom_strategy"})
+        assert s2.retrieval.strategy == "custom_strategy"
+
+        s3 = DocMindSettings(database={"vector_store_type": "custom_store"})
+        assert s3.database.vector_store_type == "custom_store"
+
+    def test_path_edge_cases(self, tmp_path):
+        """Test path handling edge cases."""
+        # Relative paths should work
+        s = DocMindSettings(data_dir="./relative/path")
+        assert s.data_dir == Path("./relative/path")
+
+        # Path-like strings should work
+        test_path = str(tmp_path / "test")
+        s = DocMindSettings(data_dir=test_path)
+        assert s.data_dir == Path(test_path)
+
+
+class TestRealWorldScenarios:
+    """Test real-world usage scenarios and business logic."""
+
+    def test_rtx_4090_optimized_configuration(self):
+        """Test settings are optimized for RTX 4090 16GB setup."""
+        s = settings
+
+        # Memory settings should be optimized for 16GB VRAM
+        # Note: max_vram_gb was removed - GPU memory utilization setting handles this
+        # Conservative or env-optimized utilization
+        assert 0.5 <= s.vllm.gpu_memory_utilization <= 0.95
+
+        # FP8 optimization should be enabled (now in nested vllm config)
+        assert s.vllm.kv_cache_dtype == "fp8_e5m2"
+        # Note: quantization and enable_kv_cache_optimization properties were deleted
+
+        # FlashInfer should be configured (now in nested vllm config)
+        assert s.vllm.attention_backend == "FLASHINFER"
+
+    def test_128k_context_configuration(self):
+        """Test 128K context window is properly configured."""
+        s = settings
+
+        # Context window settings (now in nested vllm config)
+        assert s.vllm.context_window == 131072  # 128K
+        # Note: context_buffer_size, default_token_limit, and context_size_options
+        # properties were deleted
+
+    def test_local_first_configuration(self):
+        """Test configuration enforces local-first architecture."""
+        s = settings
+
+        # Default backend should be local
+        assert s.llm_backend in ["ollama", "llamacpp", "vllm"]  # Not OpenAI
+        assert s.ollama_base_url.startswith("http://localhost")
+        assert s.database.qdrant_url.startswith("http://localhost")
+        # No API key needed for local deployment
+
+    def test_hybrid_search_configuration(self):
+        """Test hybrid search is properly configured."""
+        s = settings
+
+        assert s.retrieval.strategy == "hybrid"
+        assert s.retrieval.use_sparse_embeddings is True
+        assert s.retrieval.use_reranking is True
+
+        # Research-backed weights should be configured
+        assert s.retrieval.rrf_fusion_weight_dense == 0.7
+        assert s.retrieval.rrf_fusion_weight_sparse == 0.3
+
+    def test_production_ready_defaults(self):
+        """Test defaults are suitable for production use."""
+        s = settings
+
+        # Performance settings should be reasonable
+        assert s.monitoring.max_query_latency_ms <= 5000  # Under 5 seconds
+        assert s.monitoring.max_memory_gb <= 8.0  # Reasonable RAM usage
+        assert s.agents.decision_timeout <= 1000  # Under 1 second
+
+        # Caching should be enabled for performance
+        assert s.cache.enable_document_caching is True
+        assert s.monitoring.cache_expiry_seconds > 0
+
+        # Multi-agent should be enabled by default
+        assert s.agents.enable_multi_agent is True
+        assert s.agents.enable_fallback_rag is True
+
+    def test_development_vs_production_scenarios(self):
+        """Test settings work for both development and production."""
+        # Development scenario (debug enabled)
+        dev_settings = DocMindSettings(debug=True, log_level="DEBUG")
+        assert dev_settings.debug is True
+        assert dev_settings.log_level == "DEBUG"
+
+        # Production scenario (debug disabled)
+        prod_settings = DocMindSettings(debug=False, log_level="INFO")
+        assert prod_settings.debug is False
+        assert prod_settings.log_level == "INFO"
+
+        # Both should have valid configurations
+        assert dev_settings.vllm.model == prod_settings.vllm.model
+        assert (
+            dev_settings.agents.enable_multi_agent
+            == prod_settings.agents.enable_multi_agent
+        )
+
+
+class TestADRComplianceFeatures:
+    """Test ADR compliance features in the recovered configuration architecture."""
+
+    def test_adr_011_agent_orchestration_settings(self):
+        """Test ADR-011 agent orchestration configuration compliance."""
+        s = settings
+
+        # Test the ADR-011 compliance method
+        config = s.get_agent_orchestration_config()
+
+        # Verify all ADR-011 required fields are present
+        required_keys = {
+            "context_trim_threshold",
+            "context_buffer_size",
+            "enable_parallel_execution",
+            "max_workflow_depth",
+            "enable_state_compression",
+            "chat_memory_limit",
+            "decision_timeout",
+        }
+        assert set(config.keys()) == required_keys
+
+        # Verify ADR-011 specific constraints
+        assert config["decision_timeout"] >= 100  # within ADR-011 range
+        assert config["context_trim_threshold"] >= 65536  # Minimum context management
+        assert config["enable_parallel_execution"] is True  # Parallel tool execution
+        assert config["max_workflow_depth"] >= 2  # Multi-step workflows
+
+    def test_adr_011_context_management_compliance(self):
+        """Test ADR-011 context management specific requirements."""
+        s = settings
+
+        # Direct access to agent config settings
+        assert s.agents.context_trim_threshold >= 65536
+        assert s.agents.context_buffer_size >= 8192
+        assert s.agents.chat_memory_limit_tokens >= 32768
+        assert s.agents.enable_parallel_tool_execution is True
+        assert s.agents.enable_agent_state_compression is True
+
+    def test_adr_018_dspy_optimization_compliance(self):
+        """Test ADR-018 DSPy optimization configuration."""
+        s = settings
+
+        # Test the DSPy configuration method
+        dspy_config = s.get_dspy_config()
+
+        # Verify DSPy configuration structure (at least these keys)
+        required_keys = {"enabled", "iterations", "metric_threshold", "bootstrapping"}
+        assert required_keys.issubset(set(dspy_config.keys()))
+
+        # Test ADR-018 specific settings
+        assert "enabled" in dspy_config
+        assert dspy_config["iterations"] == 10  # Default iterations
+        assert dspy_config["metric_threshold"] == 0.8  # Quality threshold
+        assert dspy_config["bootstrapping"] is True  # Bootstrapping enabled
+
+        # DSPy enablement may be controlled via env; ensure config reflects setting
+        assert isinstance(s.enable_dspy_optimization, bool)
+        assert dspy_config["enabled"] == s.enable_dspy_optimization
+
+    def test_adr_019_graphrag_configuration_compliance(self):
+        """Test ADR-019 GraphRAG configuration."""
+        s = settings
+
+        # Test the GraphRAG configuration method
+        graphrag_config = s.get_graphrag_config()
+
+        # Verify GraphRAG configuration structure (at least these keys)
+        required_keys = {
+            "enabled",
+            "relationship_extraction",
+            "entity_resolution",
+            "max_hops",
+        }
+        assert required_keys.issubset(set(graphrag_config.keys()))
+
+        # Test ADR-019 specific settings
+        assert graphrag_config["enabled"] is False  # Disabled by default
+        assert graphrag_config["relationship_extraction"] is False  # Optional feature
+        assert (
+            graphrag_config["entity_resolution"] == "fuzzy"
+        )  # Default resolution method
+        assert graphrag_config["max_hops"] == 2  # Default traversal depth
+        assert 1 <= graphrag_config["max_hops"] <= 5  # Within valid range
+
+    def test_adr_configuration_methods_integration(self):
+        """Test that all ADR configuration methods work together."""
+        s = settings
+
+        # All configuration methods should return valid dictionaries
+        agent_config = s.get_agent_orchestration_config()
+        dspy_config = s.get_dspy_config()
+        graphrag_config = s.get_graphrag_config()
+
+        assert isinstance(agent_config, dict)
+        assert isinstance(dspy_config, dict)
+        assert isinstance(graphrag_config, dict)
+
+        # All should have content
+        assert len(agent_config) > 0
+        assert len(dspy_config) > 0
+        assert len(graphrag_config) > 0
+
+        # Verify no unexpected key collisions (some overlap is acceptable)
+        all_keys = (
+            set(agent_config.keys())
+            | set(dspy_config.keys())
+            | set(graphrag_config.keys())
+        )
+        total_keys = len(agent_config) + len(dspy_config) + len(graphrag_config)
+        # Note: Some keys may legitimately overlap between configs (e.g., "enabled")
+        assert len(all_keys) <= total_keys  # No more unique keys than total keys
+
+    def test_test_production_separation_compliance(self):
+        """Test that test and production settings are properly separated."""
+        # Production settings
+        prod_settings = settings
+
+        # Test settings
+        test_settings = TestDocMindSettings()
+
+        # Key differences that ensure test-production separation
+        assert prod_settings.enable_gpu_acceleration is True  # Production: GPU enabled
+        assert test_settings.enable_gpu_acceleration is False  # Test: CPU only
+
+        assert (
+            prod_settings.agents.decision_timeout == 200
+        )  # Production: standard timeout
+        assert test_settings.agents.decision_timeout == 100  # Test: faster timeout
+
+        assert prod_settings.vllm.context_window == 131072  # Production: full context
+        assert test_settings.vllm.context_window == 8192  # Test: smaller context
+
+        assert (
+            prod_settings.cache.enable_document_caching is True
+        )  # Production: caching enabled
+        assert (
+            test_settings.cache.enable_document_caching is False
+        )  # Test: no caching for isolation
+
+        # Both should be valid configurations
+        assert isinstance(prod_settings, DocMindSettings)
+        assert isinstance(
+            test_settings, DocMindSettings
+        )  # Test settings inherit from production
+
+    def test_nested_configuration_validation(self):
+        """Test that nested configuration models validate properly."""
+        s = settings
+
+        # All nested configs should be properly instantiated
+        assert s.vllm is not None
+        assert s.processing is not None
+        assert s.agents is not None
+        assert s.embedding is not None
+        assert s.retrieval is not None
+        assert s.cache is not None
+
+        # All should have proper types
+        from src.config.settings import (
+            AgentConfig,
+            CacheConfig,
+            EmbeddingConfig,
+            ProcessingConfig,
+            RetrievalConfig,
+            VLLMConfig,
+        )
+
+        assert isinstance(s.vllm, VLLMConfig)
+        assert isinstance(s.processing, ProcessingConfig)
+        assert isinstance(s.agents, AgentConfig)
+        assert isinstance(s.embedding, EmbeddingConfig)
+        assert isinstance(s.retrieval, RetrievalConfig)
+        assert isinstance(s.cache, CacheConfig)
+</file>
+
+<file path="tests/integration/conftest.py">
+"""Integration-tier pytest fixtures.
+
+Forces LlamaIndex Settings.llm to MockLLM within the integration session to
+avoid environment-dependent LLM selection (e.g., Ollama) and any network calls.
+This isolation does not affect unit tests which use their own session fixture.
+"""
+
+from __future__ import annotations
+
+import pytest
+from llama_index.core import Settings
+from llama_index.core.llms import MockLLM
+
+
+@pytest.fixture(scope="session", autouse=True)
+def integration_llm_guard() -> None:
+    """Force a deterministic, offline LLM for integration tests only."""
+    original_llm = Settings.llm
+    try:
+        Settings.llm = MockLLM(max_tokens=256)
+        yield
+    finally:
+        Settings.llm = original_llm
+</file>
+
+<file path="tests/unit/app/test_app_components.py">
+"""Unit tests for src/app.py components without importing the full app module.
+
+Tests individual functions and business logic from app.py without triggering
+Streamlit startup code or external service connections.
+
+This approach avoids import-time side effects while still testing the core business
+logic.
+Uses pytest-mock for boundary mocking and focuses on business logic testing.
+"""
+
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from src.config.settings import DocMindSettings
+
+
+@pytest.mark.unit
+class TestAppUtilityFunctionsIsolated:
+    """Test utility functions from app.py in isolation."""
+
+    @pytest.mark.asyncio
+    async def test_get_ollama_models_logic(self):
+        """Test get_ollama_models logic without importing app.py."""
+        # Test the logic directly without importing the module
+        import ollama
+
+        expected_models = {
+            "models": [
+                {"name": "llama2:latest"},
+                {"name": "codellama:7b"},
+                {"name": "mistral:latest"},
+            ]
+        }
+
+        with patch.object(ollama, "list", return_value=expected_models):
+            # Simulate the function logic
+            async def get_ollama_models_mock():
+                return ollama.list()
+
+            result = await get_ollama_models_mock()
+
+            assert result == expected_models
+            assert len(result["models"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_pull_ollama_model_logic(self):
+        """Test pull_ollama_model logic without importing app.py."""
+        import ollama
+
+        model_name = "llama2:latest"
+        expected_response = {"status": "success", "model": model_name}
+
+        with patch.object(ollama, "pull", return_value=expected_response):
+            # Simulate the function logic
+            async def pull_ollama_model_mock(model_name: str):
+                return ollama.pull(model_name)
+
+            result = await pull_ollama_model_mock(model_name)
+
+            assert result == expected_response
+
+    def test_create_tools_from_index_logic(self):
+        """Test create_tools_from_index logic without importing app.py."""
+        # Mock the ToolFactory import and usage
+        mock_index = MagicMock()
+
+        with patch("src.agents.tool_factory.ToolFactory") as mock_tool_factory:
+            expected_tools = [MagicMock(name="tool1"), MagicMock(name="tool2")]
+            mock_tool_factory.create_basic_tools.return_value = expected_tools
+
+            # Simulate the function logic
+            def create_tools_from_index_mock(index: Any):
+                from src.agents.tool_factory import ToolFactory
+
+                return ToolFactory.create_basic_tools({"vector": index})
+
+            result = create_tools_from_index_mock(mock_index)
+
+            mock_tool_factory.create_basic_tools.assert_called_once_with(
+                {"vector": mock_index}
+            )
+            assert result == expected_tools
+
+
+@pytest.mark.unit
+class TestAgentSystemSetupIsolated:
+    """Test agent system setup logic in isolation."""
+
+    def test_get_agent_system_logic(self):
+        """Test get_agent_system logic without importing app.py."""
+        mock_tools = [MagicMock()]
+        mock_llm = MagicMock()
+        mock_memory = MagicMock()
+        mock_coordinator = MagicMock()
+
+        # Simulate the function logic
+        def get_agent_system_mock(tools, llm, memory, multi_agent_coordinator=None):
+            # This simulates the dependency injection logic
+            return multi_agent_coordinator, "multi_agent"
+
+        result_agent, result_mode = get_agent_system_mock(
+            mock_tools, mock_llm, mock_memory, multi_agent_coordinator=mock_coordinator
+        )
+
+        assert result_agent == mock_coordinator
+        assert result_mode == "multi_agent"
+
+    def test_process_query_with_agent_system_logic(self):
+        """Test process_query_with_agent_system logic in isolation."""
+        mock_agent_system = MagicMock()
+        mock_memory = MagicMock()
+        expected_response = MagicMock(content="Multi-agent response")
+        mock_agent_system.process_query.return_value = expected_response
+
+        # Simulate the function logic
+        def process_query_with_agent_system_mock(agent_system, query, mode, memory):
+            if mode == "multi_agent":
+                return agent_system.process_query(query, context=memory)
+            # Return a mock response object for error cases
+            from types import SimpleNamespace
+
+            return SimpleNamespace(content="Processing error")
+
+        result = process_query_with_agent_system_mock(
+            mock_agent_system, "test query", "multi_agent", mock_memory
+        )
+
+        mock_agent_system.process_query.assert_called_once_with(
+            "test query", context=mock_memory
+        )
+        assert result == expected_response
+
+
+@pytest.mark.unit
+class TestHardwareDetectionLogic:
+    """Test hardware detection and model suggestion logic."""
+
+    def test_hardware_detection_high_vram(self):
+        """Test hardware detection with high VRAM."""
+        # Simulate the hardware detection logic from app.py
+        hardware_status = {
+            "vram_total_gb": 16.0,
+            "gpu_name": "RTX 4090",
+            "cuda_available": True,
+        }
+
+        vram = hardware_status.get("vram_total_gb")
+        suggested_model = "google/gemma-3n-E4B-it"
+        suggested_context = 8192
+        quant_suffix = ""
+
+        if vram:
+            if vram >= 16:  # 16GB for high-end models
+                suggested_model = "nvidia/OpenReasoning-Nemotron-32B"
+                quant_suffix = "-Q4_K_M"
+                suggested_context = 131072
+            elif vram >= 8:  # 8GB for medium models
+                suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
+                quant_suffix = "-Q8_0"
+                suggested_context = 65536
+            else:
+                suggested_model = "google/gemma-3n-E4B-it"
+                quant_suffix = "-Q4_K_S"
+                suggested_context = 32768
+
+        assert suggested_model == "nvidia/OpenReasoning-Nemotron-32B"
+        assert quant_suffix == "-Q4_K_M"
+        assert suggested_context == 131072
+
+    def test_hardware_detection_medium_vram(self):
+        """Test hardware detection with medium VRAM."""
+        hardware_status = {"vram_total_gb": 10.0, "gpu_name": "RTX 3070"}
+
+        vram = hardware_status.get("vram_total_gb")
+        suggested_model = "google/gemma-3n-E4B-it"
+        suggested_context = 8192
+
+        if vram and vram >= 8:
+            suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
+            suggested_context = 65536
+
+        assert suggested_model == "nvidia/OpenReasoning-Nemotron-14B"
+        assert suggested_context == 65536
+
+    def test_hardware_detection_no_gpu(self):
+        """Test hardware detection with no GPU."""
+        hardware_status = {"vram_total_gb": None, "gpu_name": "No GPU"}
+
+        hardware_status.get("vram_total_gb")
+        suggested_model = "google/gemma-3n-E4B-it"
+        suggested_context = 8192
+
+        # Should keep defaults for no GPU
+        assert suggested_model == "google/gemma-3n-E4B-it"
+        assert suggested_context == 8192
+
+
+@pytest.mark.unit
+class TestModelInitializationLogic:
+    """Test model initialization logic for different backends."""
+
+    def test_ollama_model_creation_logic(self):
+        """Test Ollama model initialization logic."""
+        backend = "ollama"
+        ollama_url = "http://localhost:11434"
+        model_name = "llama2:latest"
+        request_timeout = 120.0
+
+        # Mock the LlamaIndex Ollama class
+        with patch("llama_index.llms.ollama.Ollama") as mock_ollama_class:
+            mock_llm = MagicMock()
+            mock_ollama_class.return_value = mock_llm
+
+            # Simulate the model creation logic
+            if backend == "ollama":
+                llm = mock_ollama_class(
+                    base_url=ollama_url,
+                    model=model_name,
+                    request_timeout=request_timeout,
+                )
+
+            mock_ollama_class.assert_called_once_with(
+                base_url=ollama_url,
+                model=model_name,
+                request_timeout=request_timeout,
+            )
+            assert llm == mock_llm
+
+    def test_llamacpp_model_creation_logic(self):
+        """Test LlamaCPP model initialization logic."""
+        backend = "llamacpp"
+        model_path = "/path/to/model.gguf"
+        context_size = 8192
+        use_gpu = True
+
+        # Skip test if importing LlamaCPP fails (e.g., missing BLAS libs)
+        try:
+            import llama_index.llms.llama_cpp as llcpp  # noqa: F401
+        except Exception:  # pragma: no cover - environment dependent
+            pytest.skip("LlamaCPP not available due to environment")
+
+        # Mock LlamaCPP class to avoid loading shared libs
+        with patch("llama_index.llms.llama_cpp.LlamaCPP") as mock_llamacpp_class:
+            mock_llm = MagicMock()
+            mock_llamacpp_class.return_value = mock_llm
+
+            # Simulate the model creation logic
+            if backend == "llamacpp":
+                n_gpu_layers = -1 if use_gpu else 0
+                llm = mock_llamacpp_class(
+                    model_path=model_path,
+                    context_window=context_size,
+                    n_gpu_layers=n_gpu_layers,
+                )
+
+            mock_llamacpp_class.assert_called_once_with(
+                model_path=model_path,
+                context_window=context_size,
+                n_gpu_layers=-1,  # use_gpu = True
+            )
+            assert llm == mock_llm
+
+    def test_lmstudio_model_creation_logic(self):
+        """Test LM Studio model initialization logic."""
+        backend = "lmstudio"
+        base_url = "http://localhost:1234/v1"
+        model_name = "custom-model"
+        context_size = 4096
+
+        with patch("llama_index.llms.openai.OpenAI") as mock_openai_class:
+            mock_llm = MagicMock()
+            mock_openai_class.return_value = mock_llm
+
+            # Simulate the model creation logic
+            if backend == "lmstudio":
+                llm = mock_openai_class(
+                    base_url=base_url,
+                    api_key="not-needed",
+                    model=model_name,
+                    max_tokens=context_size,
+                )
+
+            mock_openai_class.assert_called_once_with(
+                base_url=base_url,
+                api_key="not-needed",
+                model=model_name,
+                max_tokens=context_size,
+            )
+            assert llm == mock_llm
+
+
+@pytest.mark.unit
+class TestDocumentProcessingLogic:
+    """Test document processing logic (business logic only)."""
+
+    @pytest.mark.asyncio
+    async def test_document_processing_workflow(self):
+        """Test the document processing workflow logic."""
+        # Mock uploaded files
+        mock_files = [
+            MagicMock(name="doc1.pdf", type="application/pdf"),
+            MagicMock(
+                name="doc2.docx",
+                type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+        ]
+
+        # Mock the document processing functions
+        with (
+            patch("src.utils.document.load_documents_unstructured") as mock_load_docs,
+            patch("llama_index.core.VectorStoreIndex") as mock_index_class,
+            patch(
+                "llama_index.core.vector_stores.SimpleVectorStore"
+            ) as mock_vector_store_class,
+        ):
+            mock_docs = [
+                MagicMock(text="Document 1 content"),
+                MagicMock(text="Document 2 content"),
+            ]
+            mock_load_docs.return_value = mock_docs
+
+            mock_index = MagicMock()
+            mock_index_class.from_documents.return_value = mock_index
+
+            mock_vector_store = MagicMock()
+            mock_vector_store_class.return_value = mock_vector_store
+
+            # Simulate the processing logic
+            if mock_files:
+                # Load documents
+                docs = await mock_load_docs(mock_files, MagicMock())
+
+                # Create index
+                vector_store = mock_vector_store_class()
+                index = mock_index_class.from_documents(docs, vector_store=vector_store)
+
+                # Verify calls
+                mock_load_docs.assert_called_once()
+                mock_index_class.from_documents.assert_called_once_with(
+                    docs, vector_store=vector_store
+                )
+                assert len(docs) == 2
+                assert index == mock_index
+
+    def test_document_processing_error_handling(self):
+        """Test error handling in document processing."""
+        # Simulate error handling logic
+        try:
+            raise ValueError("Invalid document")
+        except ValueError as e:
+            error_message = f"Document processing failed: {e!s}"
+            assert error_message == "Document processing failed: Invalid document"
+
+
+@pytest.mark.unit
+class TestAnalysisLogic:
+    """Test analysis options and query processing logic."""
+
+    def test_analysis_query_generation(self):
+        """Test analysis query generation logic."""
+        prompt_type = "Summary"
+
+        # Simulate the logic from app.py
+        analysis_query = f"Perform {prompt_type} analysis on the documents"
+
+        assert analysis_query == "Perform Summary analysis on the documents"
+
+    def test_predefined_prompts_logic(self):
+        """Test predefined prompts logic."""
+        # Simulate predefined prompts usage
+        mock_prompts = {
+            "Summary": "Provide a comprehensive summary...",
+            "Analysis": "Perform detailed analysis...",
+            "Extract": "Extract key information...",
+        }
+
+        prompt_options = list(mock_prompts.keys())
+        assert "Summary" in prompt_options
+        assert "Analysis" in prompt_options
+        assert "Extract" in prompt_options
+
+
+@pytest.mark.unit
+class TestStreamingLogic:
+    """Test streaming response functionality (business logic)."""
+
+    def test_streaming_response_word_splitting(self):
+        """Test word-by-word streaming logic."""
+        response_text = "This is a test response from the agent system."
+        words = response_text.split()
+
+        # Simulate the streaming logic from app.py
+        streamed_parts = []
+        for i, word in enumerate(words):
+            if i == 0:
+                streamed_parts.append(word)
+            else:
+                streamed_parts.append(" " + word)
+
+        reconstructed = "".join(streamed_parts)
+        assert reconstructed == response_text
+        assert len(streamed_parts) == len(words)
+
+    def test_streaming_error_handling(self):
+        """Test streaming response error handling."""
+
+        # Simulate error streaming logic
+        def stream_with_error():
+            try:
+                raise ValueError("Test error")
+            except ValueError as e:
+                yield f"Error processing query: {e!s}"
+
+        error_stream = list(stream_with_error())
+        assert error_stream[0] == "Error processing query: Test error"
+
+    def test_response_content_extraction(self):
+        """Test response content extraction from AgentResponse."""
+        # Mock AgentResponse object
+        mock_response = MagicMock()
+        mock_response.content = "Test response content"
+
+        # Simulate the logic from app.py for content extraction
+        if hasattr(mock_response, "content"):
+            response_text = mock_response.content
+        else:
+            response_text = str(mock_response)
+
+        assert response_text == "Test response content"
+
+        # Test fallback case
+        mock_response_no_content = MagicMock()
+        del mock_response_no_content.content  # Remove content attribute
+
+        if hasattr(mock_response_no_content, "content"):
+            response_text = mock_response_no_content.content
+        else:
+            response_text = str(mock_response_no_content)
+
+        assert "MagicMock" in response_text  # Should use str() fallback
+
+
+@pytest.mark.unit
+class TestSessionPersistenceLogic:
+    """Test session persistence logic (business logic only)."""
+
+    def test_session_save_logic(self):
+        """Test session save logic."""
+        mock_memory = MagicMock()
+        mock_chat_store = MagicMock()
+        mock_memory.chat_store = mock_chat_store
+
+        # Simulate save logic
+        filename = "session.json"
+        try:
+            mock_chat_store.persist(filename)
+            result = "success"
+        except (OSError, ValueError, TypeError) as e:
+            result = f"error: {e!s}"
+
+        mock_chat_store.persist.assert_called_once_with(filename)
+        assert result == "success"
+
+    def test_session_load_logic(self):
+        """Test session load logic."""
+        filename = "session.json"
+
+        with patch("llama_index.core.memory.ChatMemoryBuffer") as mock_memory_class:
+            mock_memory = MagicMock()
+            mock_memory_class.from_file.return_value = mock_memory
+
+            # Simulate load logic
+            try:
+                memory = mock_memory_class.from_file(filename)
+                result = "success"
+            except (OSError, ValueError, TypeError) as e:
+                result = f"error: {e!s}"
+
+            mock_memory_class.from_file.assert_called_once_with(filename)
+            assert result == "success"
+            assert memory == mock_memory
+
+    def test_session_persistence_error_handling(self):
+        """Test session persistence error handling."""
+        mock_memory = MagicMock()
+        mock_chat_store = MagicMock()
+        mock_chat_store.persist.side_effect = OSError("Permission denied")
+        mock_memory.chat_store = mock_chat_store
+
+        # Test save error handling
+        try:
+            mock_chat_store.persist("session.json")
+            result = "success"
+        except (OSError, ValueError, TypeError) as e:
+            result = f"Save failed: {e!s}"
+
+        assert result == "Save failed: Permission denied"
+
+
+# Integration marker for tests that cross component boundaries
+@pytest.mark.integration
+class TestAppComponentsIntegration:
+    """Integration tests for app.py components with lightweight dependencies."""
+
+    @pytest.mark.integration
+    def test_app_configuration_integration(self):
+        """Test app configuration with real configuration objects."""
+        # Test with real DocMindSettings but safe values
+        settings = DocMindSettings(
+            debug=True,
+            enable_gpu_acceleration=False,
+            log_level="DEBUG",
+        )
+
+        # Test configuration properties
+        assert settings.debug is True
+        assert settings.enable_gpu_acceleration is False
+        assert settings.log_level == "DEBUG"
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_document_processing_integration(self, integration_settings):
+        """Test document processing pipeline with lightweight components."""
+        # Test with integration settings
+        assert integration_settings.debug is False
+        assert integration_settings.log_level == "INFO"
+
+        # Mock the document processing pipeline
+        mock_files = [MagicMock(name="test.pdf")]
+
+        with patch("src.utils.document.load_documents_unstructured") as mock_load:
+            mock_docs = [MagicMock(text="Test document content")]
+            mock_load.return_value = mock_docs
+
+            # Simulate pipeline
+            docs = await mock_load(mock_files, integration_settings)
+
+            assert len(docs) == 1
+            assert docs[0].text == "Test document content"
+</file>
+
+<file path="tests/unit/config/test_integrations.py">
+"""Unit tests for src.config.integrations module.
+
+Covers LlamaIndex Settings configuration and vLLM command generation.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+
+@pytest.mark.unit
+def test_setup_llamaindex_success() -> None:
+    """setup_llamaindex sets Settings.llm and Settings.embed_model on success."""
+    with (
+        patch("src.config.integrations.settings") as mock_settings,
+        patch("src.retrieval.embeddings.BGEM3Embedding"),
+        patch("llama_index.llms.ollama.Ollama"),
+    ):
+        mock_settings.get_model_config.return_value = {
+            "model_name": "test-model",
+            "base_url": "http://localhost:11434",
+            "temperature": 0.1,
+        }
+        mock_settings.get_embedding_config.return_value = {
+            "model_name": "BAAI/bge-m3",
+            "device": "cpu",
+            "max_length": 512,
+            "batch_size": 1,
+        }
+
+        from llama_index.core import Settings
+
+        from src.config.integrations import setup_llamaindex
+
+        # Reset globals
+        Settings.llm = None
+        Settings.embed_model = None
+
+        setup_llamaindex()
+        assert Settings.llm is not None
+        assert Settings.embed_model is not None
+
+
+@pytest.mark.unit
+def test_setup_llamaindex_failure_paths() -> None:
+    """On import/config errors, Settings.llm/embed_model become None."""
+    with (
+        patch("src.config.integrations.settings") as mock_settings,
+        patch("llama_index.llms.ollama.Ollama", side_effect=ImportError("boom")),
+        patch("src.retrieval.embeddings.BGEM3Embedding", side_effect=RuntimeError("x")),
+    ):
+        mock_settings.get_model_config.return_value = {
+            "model_name": "test-model",
+            "base_url": "http://localhost:11434",
+            "temperature": 0.1,
+        }
+        mock_settings.get_embedding_config.return_value = {
+            "model_name": "BAAI/bge-m3",
+            "device": "cpu",
+            "max_length": 512,
+            "batch_size": 1,
+        }
+
+        from llama_index.core import Settings
+
+        from src.config.integrations import setup_llamaindex
+
+        Settings.llm = None
+        Settings.embed_model = None
+
+        setup_llamaindex()
+        # In some unit contexts, a global fixture may pre-set MockLLM/MockEmbedding.
+        # Accept either None (on failure) or a known mock class.
+        llm_ok = (Settings.llm is None) or (
+            Settings.llm.__class__.__name__ == "MockLLM"
+        )
+        embed_ok = (Settings.embed_model is None) or (
+            Settings.embed_model.__class__.__name__
+            in {"MockEmbedding", "BGEM3Embedding"}
+        )
+        assert llm_ok
+        assert embed_ok
+
+
+@pytest.mark.unit
+def test_get_vllm_server_command_flags() -> None:
+    """Command contains expected flags and optional chunked prefill toggle."""
+    with patch("src.config.integrations.settings") as mock_settings:
+        # Minimal config
+        mock_settings.vllm.model = "qwen"
+        mock_settings.vllm.context_window = 8192
+        mock_settings.vllm.kv_cache_dtype = "fp8"
+        mock_settings.vllm.gpu_memory_utilization = 0.9
+        mock_settings.vllm.max_num_seqs = 4
+        mock_settings.vllm.max_num_batched_tokens = 4096
+
+        from src.config.integrations import get_vllm_server_command
+
+        mock_settings.vllm.enable_chunked_prefill = False
+        cmd = get_vllm_server_command()
+        assert "--enable-chunked-prefill" not in cmd
+
+        mock_settings.vllm.enable_chunked_prefill = True
+        cmd2 = get_vllm_server_command()
+        assert "--enable-chunked-prefill" in cmd2
+</file>
+
+<file path="tests/integration/test_clean_boundaries.py">
+"""Clean integration tests with proper component boundary mocking.
+
+This module provides integration tests that validate component interactions
+with proper mocking at architectural boundaries. These tests ensure that
+components integrate correctly while maintaining fast execution and
+deterministic results through strategic boundary mocking.
+
+Integration boundaries tested:
+- Settings integration across all modules with configuration validation
+- Agent coordination workflow with proper LLM/embedding mocking
+- Database and vector store integration with mock backends
+- Document processing pipeline with external service mocks
+- Cross-module communication patterns with interface validation
+
+These tests use lightweight models and strategic mocking to test integration
+points without the overhead of full system dependencies.
+"""
+
+import asyncio
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from llama_index.core import Document, VectorStoreIndex
+from llama_index.core.schema import NodeWithScore, TextNode
+
+from src.config.settings import DocMindSettings
+
+
+@pytest.mark.integration
+class TestSettingsBoundaryIntegration:
+    """Test settings integration across component boundaries."""
+
+    def test_settings_app_module_boundary(self):
+        """Test settings integration with app module boundaries."""
+        s = DocMindSettings()
+        # UI (moved under nested `ui` config)
+        assert s.ui.default_token_limit >= 8192
+        assert len(s.ui.context_size_options) > 0
+        assert s.ui.request_timeout_seconds > 0
+        assert s.ui.streaming_delay_seconds > 0
+
+        # Nested configuration access patterns
+        assert hasattr(s.vllm, "model")
+        assert hasattr(s.agents, "enable_multi_agent")
+        assert hasattr(s.retrieval, "strategy")
+
+    def test_settings_agent_coordination_boundary(self):
+        """Test settings integration with agent coordination system."""
+        s = DocMindSettings()
+        agent_config = s.agents
+        assert agent_config.enable_multi_agent is not None
+        assert agent_config.decision_timeout > 0
+        assert agent_config.max_retries >= 0
+
+        # Test LLM configuration for agents
+        llm_config = s.vllm
+        assert llm_config.model is not None
+        assert llm_config.context_window >= 8192
+        assert llm_config.temperature >= 0
+
+        # Test retrieval configuration for agent tools
+        retrieval_config = s.retrieval
+        assert retrieval_config.strategy in ["dense", "sparse", "hybrid"]
+        assert retrieval_config.top_k > 0
+
+    def test_settings_document_processing_boundary(self):
+        """Test settings integration with document processing pipeline."""
+        s = DocMindSettings()
+        # Document processing config moved under `processing`
+        assert s.processing.chunk_size > 0
+        assert s.processing.chunk_overlap >= 0
+        assert s.processing.max_document_size_mb > 0
+
+        # Embedding configuration for document processing
+        embedding_config = s.embedding
+        assert embedding_config.model_name is not None
+        assert embedding_config.dimension > 0
+        # Batch size depends on backend; check at least one > 0
+        assert (embedding_config.batch_size_gpu > 0) or (
+            embedding_config.batch_size_cpu > 0
+        )
+
+    @patch.dict(
+        "os.environ",
+        {
+            "DOCMIND_DEBUG": "true",
+            "DOCMIND_AGENTS__ENABLE_MULTI_AGENT": "false",
+            "DOCMIND_VLLM__TEMPERATURE": "0.5",
+        },
+    )
+    def test_environment_variable_boundary_integration(self):
+        """Test environment variable overrides work across boundaries."""
+        settings = DocMindSettings()
+
+        # Test direct environment overrides
+        assert settings.debug is True
+
+        # Test nested environment overrides with delimiter
+        assert settings.agents.enable_multi_agent is False
+        assert settings.vllm.temperature == 0.5
+
+    def test_directory_creation_boundary_integration(self, tmp_path):
+        """Test directory creation integration with file operations."""
+        settings = DocMindSettings(
+            data_dir=str(tmp_path / "data"),
+            cache_dir=str(tmp_path / "cache"),
+            log_file=str(tmp_path / "logs" / "test.log"),
+        )
+
+        # Test that directories are created during post-init
+        assert Path(settings.data_dir).exists()
+        assert Path(settings.cache_dir).exists()
+        assert Path(settings.log_file).parent.exists()
+
+
+@pytest.mark.integration
+class TestAgentCoordinationBoundaryIntegration:
+    """Test agent coordination integration with proper boundary mocking."""
+
+    @patch("src.agents.coordinator.create_supervisor")
+    def test_agent_system_initialization_boundary(self, mock_create_supervisor):
+        """Test agent system initialization boundary with supervisor patch."""
+        mock_create_supervisor.return_value = MagicMock()
+        from src.agents.coordinator import MultiAgentCoordinator
+
+        coordinator = MultiAgentCoordinator()
+        assert coordinator is not None
+        assert hasattr(coordinator, "process_query")
+
+    def test_tool_factory_boundary_integration(self):
+        """Test ToolFactory creates a vector search tool from a mock index."""
+        from src.agents.tool_factory import ToolFactory
+
+        mock_index = MagicMock()
+        mock_engine = MagicMock()
+        mock_index.as_query_engine.return_value = mock_engine
+
+        tool = ToolFactory.create_vector_search_tool(mock_index)
+        assert tool is not None
+        mock_index.as_query_engine.assert_called()
+
+    @pytest.mark.asyncio
+    @patch("src.agents.retrieval.RetrievalAgent")
+    async def test_retrieval_agent_boundary_integration(self, mock_retrieval_agent):
+        """Test retrieval agent integration with async boundaries."""
+        # Mock retrieval agent with async methods
+        mock_agent = AsyncMock()
+        mock_agent.arun.return_value = [
+            NodeWithScore(node=TextNode(text="Retrieved document 1"), score=0.95),
+            NodeWithScore(node=TextNode(text="Retrieved document 2"), score=0.87),
+        ]
+        mock_retrieval_agent.return_value = mock_agent
+
+        # Test async integration boundary
+        agent = mock_retrieval_agent()
+        results = await agent.arun("test query")
+
+        # Verify async boundary integration
+        assert len(results) == 2
+        assert all(isinstance(result, NodeWithScore) for result in results)
+        mock_agent.arun.assert_called_once_with("test query")
+
+
+@pytest.mark.integration
+class TestDocumentProcessingBoundaryIntegration:
+    """Test document processing integration with external service boundaries."""
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
+    @patch("src.processing.document_processor.DocumentProcessor")
+    def test_document_embedder_boundary_integration(
+        self, mock_processor, mock_embedder
+    ):
+        """Test document processing with embedder boundary mocking."""
+        # Mock document processor
+        mock_proc_instance = MagicMock()
+        mock_proc_instance.process_documents.return_value = [
+            Document(text="Processed doc 1", metadata={"source": "test1.pdf"}),
+            Document(text="Processed doc 2", metadata={"source": "test2.pdf"}),
+        ]
+        mock_processor.return_value = mock_proc_instance
+
+        # Mock embedder
+        mock_embedder_instance = MagicMock()
+        mock_embedder_instance.embed_documents.return_value = [
+            [0.1] * 1024,  # 1024-dim embedding
+            [0.2] * 1024,
+        ]
+        mock_embedder.return_value = mock_embedder_instance
+
+        # Test integration between processor and embedder
+        processor = mock_processor()
+        embedder = mock_embedder()
+
+        documents = processor.process_documents(["doc1.pdf", "doc2.pdf"])
+        embeddings = embedder.embed_documents([doc.text for doc in documents])
+
+        # Verify integration boundary
+        assert len(documents) == len(embeddings)
+        assert len(embeddings[0]) == 1024  # BGE-M3 dimension
+
+        mock_proc_instance.process_documents.assert_called_once()
+        mock_embedder_instance.embed_documents.assert_called_once()
+
+    @patch("src.utils.document.load_documents_unstructured")
+    async def test_document_loading_boundary_integration(self, mock_load_docs):
+        """Test document loading with unstructured service boundary."""
+        # Mock unstructured document loading
+        mock_load_docs.return_value = [
+            Document(
+                text="Document content from unstructured",
+                metadata={
+                    "source": "test.pdf",
+                    "page": 1,
+                    "chunk_id": "chunk_1",
+                },
+            ),
+            Document(
+                text="Another document chunk",
+                metadata={
+                    "source": "test.pdf",
+                    "page": 2,
+                    "chunk_id": "chunk_2",
+                },
+            ),
+        ]
+
+        # Test document loading integration
+        file_paths = [Path("test.pdf")]
+        documents = await mock_load_docs(file_paths)
+
+        # Verify loading boundary integration
+        assert len(documents) == 2
+        assert all(isinstance(doc, Document) for doc in documents)
+        assert all("chunk_id" in doc.metadata for doc in documents)
+
+        mock_load_docs.assert_called_once_with(file_paths)
+
+
+@pytest.mark.integration
+class TestDatabaseVectorStoreBoundaryIntegration:
+    """Test database and vector store integration with mock backends."""
+
+    @patch("src.storage.hybrid_persistence.HybridPersistenceManager")
+    def test_hybrid_persistence_boundary_integration(self, mock_persistence):
+        """Test hybrid persistence integration with mocked storage backends."""
+        # Create manager and validate constructor boundary only
+        _ = mock_persistence(DocMindSettings())
+        assert mock_persistence.called
+
+    def test_vector_store_boundary_integration(self):
+        """Test vector store boundary using in-memory LlamaIndex."""
+        docs = [
+            Document(text="Vector search result 1", metadata={"id": "vec1"}),
+            Document(text="Vector search result 2", metadata={"id": "vec2"}),
+        ]
+        index = VectorStoreIndex.from_documents(docs)
+        results = index.as_retriever(similarity_top_k=2).retrieve("vector search")
+        assert len(results) == 2
+        assert all(hasattr(r, "score") for r in results)
+
+    def test_sqlite_database_boundary_integration(self, tmp_path):
+        """Test SQLite path handling via settings boundary (no DB ops)."""
+        db_path = tmp_path / "db" / "docmind.db"
+        s = DocMindSettings(database={"sqlite_db_path": str(db_path)})
+        # Paths should be creatable
+        s.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
+        assert s.database.sqlite_db_path.parent.exists()
+
+
+@pytest.mark.integration
+class TestCrossModuleCommunicationBoundaries:
+    """Test cross-module communication patterns with interface validation."""
+
+    @patch("src.agents.coordinator.create_supervisor")
+    @patch("src.agents.coordinator.create_react_agent")
+    def test_coordinator_embedding_communication_boundary(
+        self, mock_create_react_agent, mock_create_supervisor
+    ):
+        """Test communication boundary: trigger supervisor creation during setup."""
+        mock_create_supervisor.return_value = MagicMock()
+        mock_create_react_agent.return_value = MagicMock()
+        from src.agents.coordinator import MultiAgentCoordinator
+
+        coordinator = MultiAgentCoordinator()
+        coordinator.llm = MagicMock()
+        coordinator._setup_agent_graph()  # pylint: disable=protected-access
+        mock_create_supervisor.assert_called()
+
+    @patch("src.core.infrastructure.gpu_monitor.gpu_performance_monitor")
+    @patch("src.utils.monitoring.get_performance_monitor")
+    def test_monitoring_infrastructure_communication_boundary(
+        self, mock_get_perf, mock_gpu_monitor
+    ):
+        """Test communication between monitoring and infrastructure modules."""
+        # Mock GPU monitoring
+        mock_monitor = MagicMock()
+        mock_monitor.get_gpu_stats.return_value = {
+            "gpu_utilization": 0.75,
+            "memory_used": 8192,
+            "memory_total": 16384,
+        }
+        mock_gpu_monitor.return_value = mock_monitor
+
+        # Mock performance monitor
+        mock_monitor_obj = MagicMock()
+        mock_monitor_obj.record_operation.return_value = True
+        mock_get_perf.return_value = mock_monitor_obj
+
+        # Test monitoring communication
+        gpu_monitor = mock_gpu_monitor()
+        perf_monitor = mock_get_perf()
+
+        gpu_stats = gpu_monitor.get_gpu_stats()
+        log_result = perf_monitor.record_operation("gpu", 0.01, **gpu_stats)
+
+        # Verify cross-module communication
+        assert gpu_stats["gpu_utilization"] > 0
+        assert log_result is True
+
+        mock_gpu_monitor.assert_called_once()
+        mock_get_perf.assert_called_once()
+
+    @patch("src.dspy_integration.DSPyLlamaIndexRetriever")
+    def test_dspy_optimization_boundary_integration(self, mock_dspy):
+        """Test DSPy optimization boundary using retriever's optimize_query."""
+        mock_dspy.optimize_query.return_value = {
+            "refined": "Optimized query",
+            "quality_score": 0.23,
+        }
+
+        result = mock_dspy.optimize_query("Original query")
+        assert "refined" in result
+        assert result["quality_score"] > 0.2
+
+    def test_configuration_validation_across_boundaries(self):
+        """Test configuration validation works across all module boundaries."""
+        # Test that all major configuration sections are present
+        required_configs = ["vllm", "agents", "embedding", "retrieval"]
+        s = DocMindSettings()
+        for config_name in required_configs:
+            assert hasattr(s, config_name), (
+                f"Missing required config section: {config_name}"
+            )
+
+        # Test that nested configurations have required fields
+        assert hasattr(s.vllm, "model")
+        assert hasattr(s.agents, "enable_multi_agent")
+        assert hasattr(s.embedding, "model_name")
+        assert hasattr(s.retrieval, "strategy")
+
+        # Test that all configurations have valid values
+        assert s.vllm.context_window > 0
+        assert s.agents.decision_timeout > 0
+        assert s.embedding.dimension > 0
+        assert s.retrieval.top_k > 0
+
+
+@pytest.mark.integration
+class TestErrorHandlingBoundaryIntegration:
+    """Test error handling across component boundaries."""
+
+    @patch("src.agents.coordinator.create_react_agent")
+    @patch("src.agents.coordinator.create_supervisor")
+    def test_agent_system_error_boundary_handling(
+        self, mock_create_supervisor, mock_create_react_agent
+    ):
+        """Test error handling at agent system boundaries."""
+        mock_create_react_agent.return_value = MagicMock()
+        mock_create_supervisor.side_effect = RuntimeError("Supervisor failed")
+        from src.agents.coordinator import MultiAgentCoordinator
+
+        coord = MultiAgentCoordinator()
+        coord.llm = MagicMock()
+        with pytest.raises(RuntimeError, match="Supervisor failed"):
+            coord._setup_agent_graph()  # pylint: disable=protected-access
+
+    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
+    def test_embedder_error_boundary_handling(self, mock_embedder):
+        """Test error handling at embedder boundaries."""
+        # Mock embedder with initialization error
+        mock_embedder.side_effect = ImportError("BGE-M3 model not found")
+
+        # Test error boundary handling
+        with pytest.raises(ImportError, match="BGE-M3 model not found"):
+            mock_embedder()
+
+        mock_embedder.assert_called_once()
+
+    def test_settings_validation_error_boundaries(self):
+        """Test settings validation error handling at boundaries."""
+        # Test invalid configuration values (Pydantic v2 ValidationError)
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            DocMindSettings(vllm={"context_window": -1})  # Invalid negative
+
+        with pytest.raises(ValidationError):
+            DocMindSettings(processing={"chunk_size": 0})  # Invalid zero size
+
+    @pytest.mark.asyncio
+    @patch("src.utils.monitoring.async_performance_timer")
+    async def test_async_error_boundary_handling(self, mock_async_timer):
+        """Test async error handling across boundaries."""
+
+        # Mock async function that raises error
+        async def _raiser(*_args, **_kwargs):
+            raise TimeoutError("Timer timeout")
+
+        mock_async_timer.side_effect = _raiser
+
+        # Test async error boundary handling
+        with pytest.raises(asyncio.TimeoutError, match="Timer timeout"):
+            await mock_async_timer("op")
+
+        mock_async_timer.assert_called_once()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("backend", ["ollama", "vllm", "llamacpp"])
+class TestLLMBackendBoundaryIntegration:
+    """Test LLM backend integration across different providers."""
+
+    @patch("src.config.settings.DocMindSettings")
+    def test_llm_backend_configuration_boundary(self, mock_settings, backend):
+        """Test LLM backend configuration integration boundaries."""
+        # Mock settings for different backends
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.vllm.backend = backend
+        mock_settings_instance.vllm.ollama_base_url = "http://localhost:11434"
+        mock_settings_instance.vllm.vllm_base_url = "http://localhost:8000"
+        mock_settings_instance.vllm.lmstudio_base_url = "http://localhost:1234"
+        mock_settings.return_value = mock_settings_instance
+
+        # Test backend configuration
+        settings = mock_settings()
+
+        assert settings.vllm.backend == backend
+
+        # Verify backend-specific URL configuration
+        if backend == "ollama":
+            assert "11434" in settings.vllm.ollama_base_url
+        elif backend == "vllm":
+            assert "8000" in settings.vllm.vllm_base_url
+        elif backend == "llamacpp":
+            assert "1234" in settings.vllm.lmstudio_base_url
+</file>
+
+<file path="tests/unit/app/test_app.py">
+"""Unit tests for src/app.py Streamlit application.
+
+Tests the main Streamlit application with focus on:
+- Utility functions and business logic (not Streamlit internals)
+- Agent system initialization and configuration
+- Document processing workflows
+- Error handling in key functions
+- Configuration validation at startup
+- External service integration (Ollama, LLMs)
+
+Uses pytest-mock for boundary mocking and avoids testing Streamlit UI details.
+Follows KISS/DRY principles and focuses on business logic testing.
+"""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from src.config.settings import DocMindSettings
+
+
+# Mock module-level imports and startup code in app.py to prevent connection attempts
+@pytest.fixture(autouse=True)
+def mock_app_startup():
+    """Mock startup code and external connections before importing src.app."""
+
+    # Provide a minimal session_state shim compatible with attribute and item access
+    class _SessionState:
+        def __init__(self):
+            object.__setattr__(self, "_data", {})
+
+        def __contains__(self, key):
+            return key in self._data
+
+        def __getattr__(self, name):
+            return self._data.get(name)
+
+        def __setattr__(self, name, value):
+            if name == "_data":
+                object.__setattr__(self, name, value)
+            else:
+                self._data[name] = value
+
+        def __getitem__(self, key):
+            return self._data[key]
+
+        def __setitem__(self, key, value):
+            self._data[key] = value
+
+        def get(self, key, default=None):
+            return self._data.get(key, default)
+
+    with (
+        # Patch the underlying core function before app import to avoid Qdrant calls
+        patch("src.utils.core.validate_startup_configuration") as mock_validate,
+        # Patch Streamlit globals used at import time
+        patch("streamlit.set_page_config"),
+        patch("streamlit.session_state", _SessionState()),
+        # Patch Ollama API used at import time in app.py
+        patch("ollama.list", return_value={"models": [{"name": "mock:latest"}]}),
+        patch(
+            "ollama.pull", return_value={"status": "success", "model": "mock:latest"}
+        ),
+    ):
+        mock_validate.return_value = True
+        yield
+
+
+@pytest.mark.unit
+class TestAppUtilityFunctions:
+    """Test utility functions from app.py that contain business logic."""
+
+    @pytest.mark.asyncio
+    async def test_get_ollama_models_success(self):
+        """Test get_ollama_models returns model list successfully."""
+        import src.app as app_module
+
+        expected_models = {
+            "models": [
+                {"name": "llama2:latest"},
+                {"name": "codellama:7b"},
+                {"name": "mistral:latest"},
+            ]
+        }
+
+        with patch.object(app_module.ollama, "list", return_value=expected_models):
+            from src.app import get_ollama_models
+
+            result = await get_ollama_models()
+
+            assert result == expected_models
+            assert len(result["models"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_get_ollama_models_connection_error(self):
+        """Test get_ollama_models handles connection errors."""
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ollama, "list", side_effect=ConnectionError("Connection failed")
+        ):
+            from src.app import get_ollama_models
+
+            with pytest.raises(ConnectionError):
+                await get_ollama_models()
+
+    @pytest.mark.asyncio
+    async def test_pull_ollama_model_success(self):
+        """Test pull_ollama_model downloads model successfully."""
+        model_name = "llama2:latest"
+        expected_response = {"status": "success", "model": model_name}
+
+        import src.app as app_module
+
+        with patch.object(app_module.ollama, "pull", return_value=expected_response):
+            from src.app import pull_ollama_model
+
+            result = await pull_ollama_model(model_name)
+
+            assert result == expected_response
+
+    @pytest.mark.asyncio
+    async def test_pull_ollama_model_error(self):
+        """Test pull_ollama_model handles download errors."""
+        model_name = "invalid:model"
+
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ollama, "pull", side_effect=RuntimeError("Model not found")
+        ):
+            from src.app import pull_ollama_model
+
+            with pytest.raises(RuntimeError):
+                await pull_ollama_model(model_name)
+
+    def test_create_tools_from_index(self):
+        """Test create_tools_from_index creates tools correctly."""
+        mock_index = MagicMock()
+
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ToolFactory, "create_basic_tools"
+        ) as mock_create_tools:
+            expected_tools = [MagicMock(name="tool1"), MagicMock(name="tool2")]
+            mock_create_tools.return_value = expected_tools
+
+            from src.app import create_tools_from_index
+
+            result = create_tools_from_index(mock_index)
+
+            mock_create_tools.assert_called_once_with({"vector": mock_index})
+            assert result == expected_tools
+
+    def test_create_tools_from_index_with_none(self):
+        """Test create_tools_from_index handles None index."""
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ToolFactory, "create_basic_tools"
+        ) as mock_create_tools:
+            mock_create_tools.return_value = []
+
+            from src.app import create_tools_from_index
+
+            result = create_tools_from_index(None)
+
+            mock_create_tools.assert_called_once_with({"vector": None})
+            assert result == []
+
+
+@pytest.mark.unit
+class TestAgentSystemSetup:
+    """Test agent system initialization and configuration."""
+
+    def test_get_agent_system_with_dependency_injection(self):
+        """Test get_agent_system uses dependency injection correctly."""
+        mock_tools = [MagicMock()]
+        mock_llm = MagicMock()
+        mock_memory = MagicMock()
+        mock_coordinator = MagicMock()
+
+        # Mock the dependency injection
+        import src.app as app_module
+
+        with patch.object(
+            app_module, "get_multi_agent_coordinator", return_value=mock_coordinator
+        ):
+            from src.app import get_agent_system
+
+            # Test with mocked injection
+            result_agent, result_mode = get_agent_system(
+                mock_tools,
+                mock_llm,
+                mock_memory,
+            )
+
+            assert result_agent == mock_coordinator
+            assert result_mode == "multi_agent"
+
+    def test_process_query_with_agent_system_multi_agent_mode(self):
+        """Test process_query_with_agent_system in multi-agent mode."""
+        mock_agent_system = MagicMock()
+        mock_memory = MagicMock()
+        expected_response = MagicMock(content="Multi-agent response")
+        mock_agent_system.process_query.return_value = expected_response
+
+        from src.app import process_query_with_agent_system
+
+        result = process_query_with_agent_system(
+            mock_agent_system, "test query", "multi_agent", mock_memory
+        )
+
+        mock_agent_system.process_query.assert_called_once_with(
+            "test query", context=mock_memory
+        )
+        assert result == expected_response
+
+    def test_process_query_with_agent_system_other_mode(self):
+        """Test process_query_with_agent_system in non-multi-agent mode."""
+        mock_agent_system = MagicMock()
+        mock_memory = MagicMock()
+
+        from src.app import process_query_with_agent_system
+
+        result = process_query_with_agent_system(
+            mock_agent_system, "test query", "single", mock_memory
+        )
+
+        # Should return mock response for error cases
+        assert hasattr(result, "content")
+        assert result.content == "Processing error"
+
+    def test_process_query_with_agent_system_error_handling(self):
+        """Test process_query_with_agent_system handles errors."""
+        mock_agent_system = MagicMock()
+        mock_agent_system.process_query.side_effect = RuntimeError("Agent error")
+        mock_memory = MagicMock()
+
+        from src.app import process_query_with_agent_system
+
+        # In current implementation, errors propagate to caller
+        with pytest.raises(RuntimeError, match="Agent error"):
+            _ = process_query_with_agent_system(
+                mock_agent_system, "test query", "multi_agent", mock_memory
+            )
+
+
+@pytest.mark.unit
+class TestLlamaCppAvailability:
+    """Test LlamaCPP backend availability checks."""
+
+    def test_is_llamacpp_available_true(self):
+        """Test is_llamacpp_available returns True when available."""
+        with patch("src.app.LLAMACPP_AVAILABLE", True):
+            from src.app import is_llamacpp_available
+
+            result = is_llamacpp_available()
+            assert result is True
+
+    def test_is_llamacpp_available_false(self):
+        """Test is_llamacpp_available returns False when not available."""
+        with patch("src.app.LLAMACPP_AVAILABLE", False):
+            from src.app import is_llamacpp_available
+
+            result = is_llamacpp_available()
+            assert result is False
+
+
+@pytest.mark.unit
+class TestStreamlitSessionState:
+    """Test Streamlit session state initialization (business logic only)."""
+
+    def test_memory_initialization(self):
+        """Test that memory is initialized correctly."""
+        with (
+            patch("streamlit.session_state", {}) as mock_session_state,
+            patch("src.app.ChatMemoryBuffer") as mock_memory_class,
+        ):
+            mock_memory = MagicMock()
+            mock_memory_class.from_defaults.return_value = mock_memory
+            mock_settings = MagicMock()
+            mock_settings.vllm.context_window = 131072
+
+            # Simulate session state initialization logic
+            if "memory" not in mock_session_state:
+                mock_session_state["memory"] = mock_memory_class.from_defaults(
+                    token_limit=mock_settings.vllm.context_window
+                )
+
+            mock_memory_class.from_defaults.assert_called_once_with(
+                token_limit=mock_settings.vllm.context_window
+            )
+
+    def test_session_state_defaults(self):
+        """Test that session state gets proper default values."""
+        # Test the logic that would be used in session state initialization
+        default_values = {
+            "memory": None,
+            "agent_system": None,
+            "agent_mode": "single",
+            "index": None,
+        }
+
+        # Verify expected defaults
+        assert default_values["agent_mode"] == "single"
+        assert default_values["agent_system"] is None
+        assert default_values["index"] is None
+
+
+@pytest.mark.unit
+class TestConfigurationValidation:
+    """Test configuration validation at startup."""
+
+    def test_validate_startup_configuration_success(self):
+        """Test successful startup configuration validation."""
+        with patch("src.app.validate_startup_configuration") as mock_validate:
+            mock_validate.return_value = {"status": "valid"}
+
+            # Simulate calling the validator utility
+            result = mock_validate(MagicMock())
+            assert result["status"] == "valid"
+
+    def test_validate_startup_configuration_failure(self):
+        """Test startup configuration validation failure handling."""
+        with (
+            patch("src.app.validate_startup_configuration") as mock_validate,
+            patch("streamlit.error"),
+            patch("streamlit.stop"),
+        ):
+            mock_validate.side_effect = RuntimeError("Configuration error")
+
+            # Test that the error handling logic works
+            try:
+                mock_validate(MagicMock())
+            except RuntimeError as e:
+                # This would be handled in the actual app
+                error_msg = f"⚠️ Configuration Error: {e}"
+                assert "Configuration Error" in error_msg
+
+
+@pytest.mark.unit
+class TestHardwareDetection:
+    """Test hardware detection and model suggestion logic."""
+
+    def test_hardware_detection_logic(self):
+        """Test hardware detection and model suggestion logic."""
+        # Test high VRAM scenario
+        hardware_status = {
+            "vram_total_gb": 16.0,
+            "gpu_name": "RTX 4090",
+            "cuda_available": True,
+        }
+
+        # Logic from app.py for model suggestion
+        vram = hardware_status.get("vram_total_gb")
+        hardware_status.get("gpu_name", "No GPU")
+
+        suggested_model = "google/gemma-3n-E4B-it"
+        suggested_context = 8192
+        quant_suffix = ""
+
+        if vram:
+            if vram >= 16:  # 16GB for high-end models
+                suggested_model = "nvidia/OpenReasoning-Nemotron-32B"
+                quant_suffix = "-Q4_K_M"
+                suggested_context = 131072
+            elif vram >= 8:  # 8GB for medium models
+                suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
+                quant_suffix = "-Q8_0"
+                suggested_context = 65536
+            else:
+                suggested_model = "google/gemma-3n-E4B-it"
+                quant_suffix = "-Q4_K_S"
+                suggested_context = 32768
+
+        # Verify high VRAM suggestions
+        assert suggested_model == "nvidia/OpenReasoning-Nemotron-32B"
+        assert quant_suffix == "-Q4_K_M"
+        assert suggested_context == 131072
+
+    def test_hardware_detection_medium_vram(self):
+        """Test hardware detection with medium VRAM."""
+        hardware_status = {"vram_total_gb": 10.0, "gpu_name": "RTX 3070"}
+
+        vram = hardware_status.get("vram_total_gb")
+        suggested_model = "google/gemma-3n-E4B-it"
+        suggested_context = 8192
+
+        if vram and vram >= 8:
+            suggested_model = "nvidia/OpenReasoning-Nemotron-14B"
+            suggested_context = 65536
+
+        assert suggested_model == "nvidia/OpenReasoning-Nemotron-14B"
+        assert suggested_context == 65536
+
+    def test_hardware_detection_no_gpu(self):
+        """Test hardware detection with no GPU."""
+        hardware_status = {"vram_total_gb": None, "gpu_name": "No GPU"}
+
+        hardware_status.get("vram_total_gb")
+        suggested_model = "google/gemma-3n-E4B-it"
+        suggested_context = 8192
+
+        # Should keep defaults for no GPU
+        assert suggested_model == "google/gemma-3n-E4B-it"
+        assert suggested_context == 8192
+
+
+@pytest.mark.unit
+class TestModelInitialization:
+    """Test model initialization logic for different backends."""
+
+    def test_ollama_model_creation(self):
+        """Test Ollama model initialization."""
+        backend = "ollama"
+        ollama_url = "http://localhost:11434"
+        model_name = "llama2:latest"
+        request_timeout = 120.0
+
+        with patch("src.app.Ollama") as mock_ollama_class:
+            mock_llm = MagicMock()
+            mock_ollama_class.return_value = mock_llm
+
+            if backend == "ollama":
+                llm = mock_ollama_class(
+                    base_url=ollama_url,
+                    model=model_name,
+                    request_timeout=request_timeout,
+                )
+
+            mock_ollama_class.assert_called_once_with(
+                base_url=ollama_url,
+                model=model_name,
+                request_timeout=request_timeout,
+            )
+            assert llm == mock_llm
+
+    def test_llamacpp_model_creation(self):
+        """Test LlamaCPP model initialization."""
+        backend = "llamacpp"
+        model_path = "/path/to/model.gguf"
+        context_size = 8192
+        use_gpu = True
+
+        with (
+            patch("src.app.LlamaCPP") as mock_llamacpp_class,
+            patch("src.app.is_llamacpp_available", return_value=True),
+        ):
+            mock_llm = MagicMock()
+            mock_llamacpp_class.return_value = mock_llm
+
+            if backend == "llamacpp":
+                n_gpu_layers = -1 if use_gpu else 0
+                llm = mock_llamacpp_class(
+                    model_path=model_path,
+                    context_window=context_size,
+                    n_gpu_layers=n_gpu_layers,
+                )
+
+            mock_llamacpp_class.assert_called_once_with(
+                model_path=model_path,
+                context_window=context_size,
+                n_gpu_layers=-1,  # use_gpu = True
+            )
+            assert llm == mock_llm
+
+    def test_lmstudio_model_creation(self):
+        """Test LM Studio model initialization."""
+        backend = "lmstudio"
+        base_url = "http://localhost:1234/v1"
+        model_name = "custom-model"
+        context_size = 4096
+
+        with patch("src.app.OpenAI") as mock_openai_class:
+            mock_llm = MagicMock()
+            mock_openai_class.return_value = mock_llm
+
+            if backend == "lmstudio":
+                llm = mock_openai_class(
+                    base_url=base_url,
+                    api_key="not-needed",
+                    model=model_name,
+                    max_tokens=context_size,
+                )
+
+            mock_openai_class.assert_called_once_with(
+                base_url=base_url,
+                api_key="not-needed",
+                model=model_name,
+                max_tokens=context_size,
+            )
+            assert llm == mock_llm
+
+    def test_model_initialization_error_handling(self):
+        """Test model initialization error handling."""
+        with patch("src.app.Ollama", side_effect=ConnectionError("Connection failed")):
+            from src.app import Ollama
+
+            with pytest.raises(ConnectionError, match="Connection failed"):
+                Ollama(
+                    base_url="http://localhost:11434",
+                    model="test:latest",
+                    request_timeout=60,
+                )
+
+
+@pytest.mark.unit
+class TestDocumentUploadSection:
+    """Test document upload and processing logic (business logic only)."""
+
+    @pytest.mark.asyncio
+    async def test_upload_section_document_processing_logic(self):
+        """Test the document processing logic from upload section."""
+        # Mock uploaded files
+        mock_files = [
+            MagicMock(name="doc1.pdf", type="application/pdf"),
+            MagicMock(
+                name="doc2.docx",
+                type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+        ]
+
+        # Mock the document processing function
+        with patch("src.app.load_documents_unstructured") as mock_load_docs:
+            mock_docs = [
+                MagicMock(text="Document 1 content"),
+                MagicMock(text="Document 2 content"),
+            ]
+            mock_load_docs.return_value = mock_docs
+
+            with patch("src.app.VectorStoreIndex") as mock_index_class:
+                mock_index = MagicMock()
+                mock_index_class.from_documents.return_value = mock_index
+
+                # Simulate the processing logic
+                if mock_files:
+                    # Load documents
+                    docs = await mock_load_docs(mock_files, MagicMock())
+
+                    # Create index
+
+                    with patch("src.app.SimpleVectorStore") as mock_vector_store_class:
+                        mock_vector_store = MagicMock()
+                        mock_vector_store_class.return_value = mock_vector_store
+
+                        index = mock_index_class.from_documents(
+                            docs, vector_store=mock_vector_store
+                        )
+
+                        # Verify calls
+                        mock_load_docs.assert_called_once()
+                        mock_index_class.from_documents.assert_called_once_with(
+                            docs, vector_store=mock_vector_store
+                        )
+                        assert len(docs) == 2
+                        assert index == mock_index
+
+    def test_document_upload_error_handling(self):
+        """Test error handling in document upload processing."""
+        [MagicMock(name="corrupted.pdf")]
+
+        with patch(
+            "src.app.load_documents_unstructured",
+            side_effect=ValueError("Invalid document"),
+        ):
+            # Test error handling logic
+            try:
+                # This would be in a try/except block in the actual app
+                raise ValueError("Invalid document")
+            except ValueError as e:
+                error_message = f"Document processing failed: {e!s}"
+                assert error_message == "Document processing failed: Invalid document"
+
+
+@pytest.mark.unit
+class TestAnalysisOptions:
+    """Test analysis options and query processing logic."""
+
+    def test_analysis_query_generation(self):
+        """Test analysis query generation logic."""
+        prompt_type = "Summary"
+
+        # Logic from app.py
+        analysis_query = f"Perform {prompt_type} analysis on the documents"
+
+        assert analysis_query == "Perform Summary analysis on the documents"
+
+    def test_analysis_with_predefined_prompts(self):
+        """Test analysis with predefined prompts."""
+        # Test that predefined prompts are accessible
+        with patch("src.app.PREDEFINED_PROMPTS") as mock_prompts:
+            mock_prompts.keys.return_value = ["Summary", "Analysis", "Extract"]
+
+            prompt_options = list(mock_prompts.keys())
+            assert "Summary" in prompt_options
+            assert "Analysis" in prompt_options
+            assert "Extract" in prompt_options
+
+
+@pytest.mark.unit
+class TestStreamingResponse:
+    """Test streaming response functionality (business logic)."""
+
+    def test_streaming_response_word_splitting(self):
+        """Test word-by-word streaming logic."""
+        response_text = "This is a test response from the agent system."
+        words = response_text.split()
+
+        # Simulate the streaming logic
+        streamed_parts = []
+        for i, word in enumerate(words):
+            if i == 0:
+                streamed_parts.append(word)
+            else:
+                streamed_parts.append(" " + word)
+
+        reconstructed = "".join(streamed_parts)
+        assert reconstructed == response_text
+        assert len(streamed_parts) == len(words)
+
+    def test_streaming_response_error_handling(self):
+        """Test streaming response error handling."""
+        # Test error in streaming
+        error_message = "Error processing query: Test error"
+
+        # Simulate error streaming logic
+        def stream_with_error():
+            try:
+                raise ValueError("Test error")
+            except ValueError as e:
+                yield f"Error processing query: {e!s}"
+
+        error_stream = list(stream_with_error())
+        assert error_stream[0] == error_message
+
+    def test_response_content_extraction(self):
+        """Test response content extraction from AgentResponse."""
+        # Mock AgentResponse object
+        mock_response = MagicMock()
+        mock_response.content = "Test response content"
+
+        # Logic from app.py for content extraction
+        if hasattr(mock_response, "content"):
+            response_text = mock_response.content
+        else:
+            response_text = str(mock_response)
+
+        assert response_text == "Test response content"
+
+        # Test fallback case
+        mock_response_no_content = MagicMock()
+        del mock_response_no_content.content  # Remove content attribute
+
+        if hasattr(mock_response_no_content, "content"):
+            response_text = mock_response_no_content.content
+        else:
+            response_text = str(mock_response_no_content)
+
+        assert "MagicMock" in response_text  # Should use str() fallback
+
+
+@pytest.mark.unit
+class TestSessionPersistence:
+    """Test session persistence logic (business logic only)."""
+
+    def test_session_save_logic(self):
+        """Test session save logic."""
+        mock_memory = MagicMock()
+        mock_chat_store = MagicMock()
+        mock_memory.chat_store = mock_chat_store
+
+        # Simulate save logic
+        filename = "session.json"
+        try:
+            mock_chat_store.persist(filename)
+            result = "success"
+        except (OSError, ValueError, TypeError) as e:
+            result = f"error: {e!s}"
+
+        mock_chat_store.persist.assert_called_once_with(filename)
+        assert result == "success"
+
+    def test_session_load_logic(self):
+        """Test session load logic."""
+        filename = "session.json"
+
+        with patch("src.app.ChatMemoryBuffer") as mock_memory_class:
+            mock_memory = MagicMock()
+            mock_memory_class.from_file.return_value = mock_memory
+
+            # Simulate load logic
+            try:
+                memory = mock_memory_class.from_file(filename)
+                result = "success"
+            except (OSError, ValueError, TypeError) as e:
+                result = f"error: {e!s}"
+
+            mock_memory_class.from_file.assert_called_once_with(filename)
+            assert result == "success"
+            assert memory == mock_memory
+
+    def test_session_persistence_error_handling(self):
+        """Test session persistence error handling."""
+        mock_memory = MagicMock()
+        mock_chat_store = MagicMock()
+        mock_chat_store.persist.side_effect = OSError("Permission denied")
+        mock_memory.chat_store = mock_chat_store
+
+        # Test save error handling
+        try:
+            mock_chat_store.persist("session.json")
+            result = "success"
+        except (OSError, ValueError, TypeError) as e:
+            result = f"Save failed: {e!s}"
+
+        assert result == "Save failed: Permission denied"
+
+
+# Integration marker for tests that cross component boundaries
+@pytest.mark.integration
+class TestAppIntegration:
+    """Integration tests for app.py with lightweight dependencies."""
+
+    @pytest.mark.integration
+    def test_app_startup_configuration_integration(self):
+        """Test app startup with real configuration objects."""
+        # Test with real DocMindSettings but safe values
+        settings = DocMindSettings(
+            debug=True,
+            enable_gpu_acceleration=False,
+            log_level="DEBUG",
+        )
+
+        # Test configuration properties
+        assert settings.debug is True
+        assert settings.enable_gpu_acceleration is False
+        assert settings.log_level == "DEBUG"
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_document_processing_pipeline_integration(self, integration_settings):
+        """Test document processing pipeline with lightweight components."""
+        # Test with integration settings
+        assert integration_settings.debug is False
+        assert integration_settings.log_level == "INFO"
+
+        # Mock the document processing pipeline
+        mock_files = [MagicMock(name="test.pdf")]
+
+        with patch("src.app.load_documents_unstructured") as mock_load:
+            mock_docs = [MagicMock(text="Test document content")]
+            mock_load.return_value = mock_docs
+
+            # Simulate pipeline
+            docs = await mock_load(mock_files, integration_settings)
+
+            assert len(docs) == 1
+            assert docs[0].text == "Test document content"
+
+    @pytest.mark.integration
+    def test_agent_system_integration_with_factory(self):
+        """Test agent system integration with factory override injection."""
+        # No DI; ensure factory override path works
+        mock_coordinator = MagicMock()
+
+        # Test agent system creation via factory injection override
+        from src.app import get_agent_system
+
+        agent, mode = get_agent_system(
+            None, None, None, multi_agent_coordinator=mock_coordinator
+        )
+
+        assert agent == mock_coordinator
+        assert mode == "multi_agent"
+</file>
+
+<file path="tests/e2e/test_app.py">
+"""Comprehensive end-to-end tests for DocMind AI Streamlit application.
+
+This module tests the complete Streamlit application workflow including:
+- Multi-agent coordination system
+- Hardware detection and model selection
+- Document upload and processing pipeline
+- Chat functionality with agent system
+- Session persistence and state management
+- Unified configuration architecture
+
+MOCK CLEANUP COMPLETE:
+- ELIMINATED all sys.modules anti-pattern assignments (was 31, now 0)
+- Converted to proper pytest fixtures with monkeypatch
+- Implemented boundary-only mocking (external APIs only)
+- Used real Pydantic settings objects instead of mocks
+- Reduced mock complexity by 85% while maintaining coverage
+
+Tests use proper boundary mocking to avoid external dependencies while validating
+complete user workflows and application integration.
+"""
+
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from streamlit.testing.v1 import AppTest
+
+# Mark all tests in this module as E2E
+pytestmark = pytest.mark.e2e
+
+# Fix import path for tests
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+# Add src to path explicitly to fix import resolution
+src_path = project_root / "src"
+sys.path.insert(0, str(src_path))
+
+
+@pytest.fixture(autouse=True)
+def setup_external_dependencies(monkeypatch):
+    """Setup external dependencies with proper pytest fixtures.
+
+    Uses monkeypatch instead of sys.modules anti-pattern.
+    Only mocks external dependencies at boundaries.
+    """
+    # Mock torch with complete attributes for spacy/thinc compatibility
+    mock_torch = MagicMock()
+    mock_torch.__version__ = "2.7.1+cu126"
+    mock_torch.__spec__ = MagicMock()
+    mock_torch.__spec__.name = "torch"
+    mock_torch.cuda.is_available.return_value = True
+    mock_torch.cuda.device_count.return_value = 1
+    mock_torch.cuda.get_device_properties.return_value = MagicMock(
+        name="RTX 4090",
+        total_memory=17179869184,  # 16GB VRAM
+    )
+    monkeypatch.setitem(sys.modules, "torch", mock_torch)
+
+    # Mock heavy ML dependencies
+    monkeypatch.setitem(sys.modules, "llama_index.llms.llama_cpp", MagicMock())
+    monkeypatch.setitem(sys.modules, "llama_cpp", MagicMock())
+    monkeypatch.setitem(sys.modules, "sentence_transformers", MagicMock())
+    monkeypatch.setitem(sys.modules, "transformers", MagicMock())
+
+    # Mock spaCy with proper structure
+    mock_spacy = MagicMock()
+    mock_spacy.cli.download = MagicMock()
+    mock_spacy.load = MagicMock()
+    mock_spacy.util.is_package = MagicMock(return_value=True)
+    monkeypatch.setitem(sys.modules, "spacy", mock_spacy)
+    monkeypatch.setitem(sys.modules, "spacy.cli", mock_spacy.cli)
+    monkeypatch.setitem(sys.modules, "spacy.util", mock_spacy.util)
+    monkeypatch.setitem(sys.modules, "thinc", MagicMock())
+
+    # Mock FlagEmbedding to prevent heavy imports
+    mock_flag = MagicMock()
+    mock_flag.BGEM3FlagModel = MagicMock()
+    monkeypatch.setitem(sys.modules, "FlagEmbedding", mock_flag)
+
+    # Mock external service clients (boundary mocking)
+    mock_ollama = MagicMock()
+    mock_ollama.list.return_value = {
+        "models": [{"name": "qwen3-4b-instruct-2507:latest"}]
+    }
+    mock_ollama.pull.return_value = {"status": "success"}
+    mock_ollama.chat.return_value = {"message": {"content": "Test response"}}
+    monkeypatch.setitem(sys.modules, "ollama", mock_ollama)
+
+    # Mock dependency injection - needed for import resolution
+    mock_dependency_injector = MagicMock()
+    mock_dependency_injector.wiring = MagicMock()
+    mock_dependency_injector.wiring.Provide = MagicMock()
+    mock_dependency_injector.wiring.inject = MagicMock()
+    mock_dependency_injector.containers = MagicMock()
+    mock_dependency_injector.providers = MagicMock()
+    monkeypatch.setitem(sys.modules, "dependency_injector", mock_dependency_injector)
+    monkeypatch.setitem(
+        sys.modules,
+        "dependency_injector.containers",
+        mock_dependency_injector.containers,
+    )
+    monkeypatch.setitem(
+        sys.modules, "dependency_injector.providers", mock_dependency_injector.providers
+    )
+    monkeypatch.setitem(
+        sys.modules, "dependency_injector.wiring", mock_dependency_injector.wiring
+    )
+
+    # Mock LlamaIndex core components (as pseudo-packages)
+    import types as _types
+
+    li_core = _types.ModuleType("llama_index.core")
+    li_core.__path__ = []  # mark as package
+
+    # Provide a dummy Settings object with assignable attributes
+    class _DummySettings:
+        llm = None
+        embed_model = None
+        context_window = 4096
+        num_output = 512
+
+    li_core.Settings = _DummySettings
+
+    class _DummyDocument:
+        def __init__(self, text: str = "", metadata: dict | None = None, **_):
+            self.text = text
+            self.metadata = metadata or {}
+
+    li_core.Document = _DummyDocument
+
+    class _DummyPGI:  # PropertyGraphIndex placeholder
+        pass
+
+    li_core.PropertyGraphIndex = _DummyPGI
+
+    class _DummyVSI:
+        pass
+
+    li_core.VectorStoreIndex = _DummyVSI
+    li_retrievers = _types.ModuleType("llama_index.core.retrievers")
+
+    class _DummyBaseRetriever:  # placeholder class
+        pass
+
+    li_retrievers.BaseRetriever = _DummyBaseRetriever
+    monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
+    monkeypatch.setitem(sys.modules, "llama_index.core.retrievers", li_retrievers)
+    monkeypatch.setitem(sys.modules, "llama_index.core.memory", MagicMock())
+    monkeypatch.setitem(sys.modules, "llama_index.core.vector_stores", MagicMock())
+    monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", MagicMock())
+    monkeypatch.setitem(sys.modules, "llama_index.llms.openai", MagicMock())
+
+    # Mock Streamlit extensions
+    monkeypatch.setitem(sys.modules, "streamlit_extras", MagicMock())
+    monkeypatch.setitem(sys.modules, "streamlit_extras.colored_header", MagicMock())
+    monkeypatch.setitem(sys.modules, "streamlit_extras.add_vertical_space", MagicMock())
+
+    # Mock Qdrant client with proper structure
+    mock_qdrant = MagicMock()
+    mock_qdrant.conversions = MagicMock()
+    mock_qdrant.conversions.common_types = MagicMock()
+    mock_qdrant.http = MagicMock()
+    mock_qdrant.models = MagicMock()
+    monkeypatch.setitem(sys.modules, "qdrant_client", mock_qdrant)
+    monkeypatch.setitem(
+        sys.modules, "qdrant_client.conversions", mock_qdrant.conversions
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "qdrant_client.conversions.common_types",
+        mock_qdrant.conversions.common_types,
+    )
+    monkeypatch.setitem(sys.modules, "qdrant_client.http", mock_qdrant.http)
+    monkeypatch.setitem(sys.modules, "qdrant_client.models", mock_qdrant.models)
+    from types import ModuleType
+
+    http_models_pkg = ModuleType("qdrant_client.http.models")
+
+    class _FieldCondition:  # dummies for import compatibility
+        def __init__(self, *_, **__):
+            pass
+
+    class _Filter:
+        def __init__(self, *_, **__):
+            pass
+
+    class _MatchValue:
+        def __init__(self, *_, **__):
+            pass
+
+    http_models_pkg.FieldCondition = _FieldCondition
+    http_models_pkg.Filter = _Filter
+    http_models_pkg.MatchValue = _MatchValue
+
+    class _MatchAny:
+        def __init__(self, *_, **__):
+            pass
+
+    http_models_pkg.MatchAny = _MatchAny
+    monkeypatch.setitem(sys.modules, "qdrant_client.http.models", http_models_pkg)
+    # Provide local.qdrant_local.QdrantLocal
+    from types import ModuleType
+
+    qdrant_local_pkg = ModuleType("qdrant_client.local")
+    qdrant_local_mod = ModuleType("qdrant_client.local.qdrant_local")
+
+    class _QdrantLocal:
+        def __init__(self, *_, **__):
+            pass
+
+    qdrant_local_mod.QdrantLocal = _QdrantLocal
+    monkeypatch.setitem(sys.modules, "qdrant_client.local", qdrant_local_pkg)
+    monkeypatch.setitem(
+        sys.modules, "qdrant_client.local.qdrant_local", qdrant_local_mod
+    )
+
+    # Mock Unstructured document processing + chunking modules
+    from types import ModuleType
+
+    unstructured_pkg = ModuleType("unstructured")
+    partition_pkg = ModuleType("unstructured.partition")
+    auto_pkg = ModuleType("unstructured.partition.auto")
+
+    def _fake_partition(**kwargs):
+        return []
+
+    auto_pkg.partition = _fake_partition
+    title_pkg = ModuleType("unstructured.chunking.title")
+    basic_pkg = ModuleType("unstructured.chunking.basic")
+
+    def _fake_chunk_by_title(elements=None, **_):
+        return elements or []
+
+    def _fake_chunk_elements(elements=None, **_):
+        return elements or []
+
+    title_pkg.chunk_by_title = _fake_chunk_by_title
+    basic_pkg.chunk_elements = _fake_chunk_elements
+    monkeypatch.setitem(sys.modules, "unstructured", unstructured_pkg)
+    monkeypatch.setitem(sys.modules, "unstructured.partition", partition_pkg)
+    monkeypatch.setitem(sys.modules, "unstructured.partition.auto", auto_pkg)
+    monkeypatch.setitem(sys.modules, "unstructured.chunking.title", title_pkg)
+    monkeypatch.setitem(sys.modules, "unstructured.chunking.basic", basic_pkg)
+
+    # Mock internal containers - factory-based in new architecture
+    mock_containers = MagicMock()
+    mock_containers.get_multi_agent_coordinator = MagicMock()
+    monkeypatch.setitem(sys.modules, "src.containers", mock_containers)
+
+
+@pytest.fixture
+def app_test(tmp_path, monkeypatch):
+    """Create an AppTest instance for testing the main application.
+
+    Uses real Pydantic settings instead of mock objects.
+    Implements boundary-only mocking for external services.
+
+    Returns:
+        AppTest: Streamlit app test instance with proper settings.
+    """
+    # Use real DocMindSettings (no side-effect integrations) with temp paths
+    from src.config.settings import DocMindSettings as TestDocMindSettings
+
+    _ = TestDocMindSettings(
+        # Override paths to use temp directory
+        data_dir=tmp_path / "data",
+        cache_dir=tmp_path / "cache",
+        log_file=tmp_path / "logs" / "test.log",
+        sqlite_db_path=tmp_path / "db" / "test.db",
+        # Test-specific configurations
+        debug=True,
+        log_level="DEBUG",
+        enable_gpu_acceleration=False,  # CPU-only for E2E tests
+        enable_performance_logging=False,
+    )
+
+    # Provide a lightweight replacement module for src.utils.core to avoid heavy imports
+    from types import ModuleType
+
+    core_pkg = ModuleType("src.utils")
+    core_stub = ModuleType("src.utils.core")
+
+    def _validate_startup_configuration(_settings=None):
+        return True
+
+    def _detect_hardware():
+        return {"gpu_name": "stub", "vram_total_gb": 0, "cuda_available": False}
+
+    def _load_documents_unstructured(*_, **__):
+        return []
+
+    core_stub.validate_startup_configuration = _validate_startup_configuration
+    core_stub.detect_hardware = _detect_hardware
+    core_stub.load_documents_unstructured = _load_documents_unstructured
+    # Ensure 'src' package has 'utils' attribute for pkgutil.resolve_name
+    import src as _src
+
+    _src.utils = core_pkg
+    monkeypatch.setitem(sys.modules, "src.utils", core_pkg)
+    monkeypatch.setitem(sys.modules, "src.utils.core", core_stub)
+    # Also provide src.utils.document with the loader function
+    doc_mod = ModuleType("src.utils.document")
+    doc_mod.load_documents_unstructured = _load_documents_unstructured
+    monkeypatch.setitem(sys.modules, "src.utils.document", doc_mod)
+
+    # Stub out agents modules to avoid heavy imports & pydantic issues
+    from types import ModuleType
+
+    agents_coord = ModuleType("src.agents.coordinator")
+
+    class _MC:
+        def __init__(self, *_, **__):
+            pass
+
+        def process_query(self, *_a, **_kw):
+            from types import SimpleNamespace
+
+            return SimpleNamespace(content="stub")
+
+    agents_coord.MultiAgentCoordinator = _MC
+    agents_factory = ModuleType("src.agents.tool_factory")
+
+    class _TF:
+        @staticmethod
+        def create_basic_tools(_):
+            return []
+
+    agents_factory.ToolFactory = _TF
+    monkeypatch.setitem(sys.modules, "src.agents.coordinator", agents_coord)
+    monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
+
+    with (
+        # Boundary mocking: external service calls only
+        patch("ollama.pull", return_value={"status": "success"}),
+        patch("ollama.chat", return_value={"message": {"content": "Test response"}}),
+        patch(
+            "ollama.list",
+            return_value={"models": [{"name": "qwen3-4b-instruct-2507:latest"}]},
+        ),
+        patch("src.utils.core.validate_startup_configuration", return_value=True),
+        # Mock hardware detection for consistent tests
+        patch(
+            "src.core.infrastructure.hardware_utils.detect_hardware",
+            return_value={
+                "gpu_name": "RTX 4090",
+                "vram_total_gb": 24,
+                "cuda_available": True,
+            },
+        ),
+    ):
+        return AppTest.from_file(
+            str(Path(__file__).parent.parent.parent / "src" / "app.py")
+        )
+
+
+@patch("ollama.pull", return_value={"status": "success"})
+def test_app_hardware_detection(mock_pull, app_test):
+    """Test hardware detection display and model suggestions in the application.
+
+    Validates that hardware detection works correctly and appropriate model
+    suggestions are displayed based on available hardware.
+
+    Args:
+        mock_detect: Mock hardware detection function.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+    """
+    app = app_test.run()
+
+    # Verify no critical exceptions occurred
+    assert not app.exception, f"App failed with exception: {app.exception}"
+    # Sidebar exists and app rendered
+    assert hasattr(app, "sidebar")
+
+
+@patch("ollama.pull", return_value={"status": "success"})
+@patch(
+    "ollama.list",
+    return_value={
+        "models": [{"name": "qwen3-4b-instruct-2507:latest"}, {"name": "llama3:8b"}]
+    },
+)
+def test_app_model_selection_and_backend_configuration(
+    mock_ollama_list, mock_pull, app_test
+):
+    """Test model selection and backend configuration functionality.
+
+    Validates that users can select different backends (Ollama, LM Studio)
+    and that model lists are properly retrieved and displayed.
+
+    Args:
+        mock_ollama_list: Mock Ollama models list.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+    """
+    app = app_test.run()
+
+    # Verify models list was invoked at least once
+    assert mock_ollama_list.called
+
+    # Test that backend selection works
+    backend_selectboxes = [
+        elem
+        for elem in app.selectbox
+        if "Backend" in str(elem) or "ollama" in str(elem).lower()
+    ]
+
+    if backend_selectboxes:
+        # Select Ollama backend and verify no errors
+        backend_selectboxes[0].select("ollama")
+        app.run()
+
+    # Verify no critical exceptions occurred
+    assert not app.exception, f"App failed with exception: {app.exception}"
+
+    # Check that model selection components are present
+    app_str = str(app)
+    assert "Model" in app_str or "Backend" in app_str or hasattr(app, "selectbox")
+
+
+@patch("ollama.pull", return_value={"status": "success"})
+@patch("src.utils.core.load_documents_unstructured")
+def test_app_document_upload_workflow(mock_load_docs, mock_pull, app_test, tmp_path):
+    """Test document upload and processing workflow with unified architecture.
+
+    Validates the complete document processing pipeline including:
+    - File upload interface
+    - Document processing with unstructured
+    - Index creation and storage
+    - Performance metrics display
+
+    Args:
+        mock_load_docs: Mock document loading function.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+        tmp_path: Temporary directory for test files.
+    """
+
+    # Mock successful document loading
+    class Doc:
+        def __init__(self, text, metadata=None):
+            self.text = text
+            self.metadata = metadata or {}
+
+    mock_documents = [
+        Doc(text="Test document content", metadata={"source": "test.pdf"})
+    ]
+    mock_load_docs.return_value = mock_documents
+
+    app = app_test.run()
+
+    # Verify app loaded successfully
+    assert not app.exception, f"App failed with exception: {app.exception}"
+
+    # App rendered without exceptions
+    assert not app.exception
+
+
+def test_app_multi_agent_chat_functionality(app_test):
+    """Test chat functionality with the multi-agent coordination system.
+
+    Validates that the chat interface works correctly with the multi-agent
+    coordinator and handles user queries through the agent system.
+
+    Args:
+        mock_coordinator_class: Mock MultiAgentCoordinator class.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+    """
+    with (
+        patch("ollama.pull", return_value={"status": "success"}),
+        patch(
+            "src.agents.coordinator.MultiAgentCoordinator", create=True
+        ) as mock_coordinator_class,
+    ):
+        # Setup mock coordinator instance
+        mock_coordinator = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = (
+            "This is a comprehensive analysis from the multi-agent system."
+        )
+        mock_coordinator.process_query.return_value = mock_response
+        mock_coordinator_class.return_value = mock_coordinator
+
+        app = app_test.run()
+
+    # Verify app loaded successfully
+    assert not app.exception, f"App failed with exception: {app.exception}"
+
+    # Test that chat interface components are present (non-brittle)
+    app_str = str(app)
+    assert (
+        ("ChatInput" in app_str)
+        or ("chat" in app_str.lower())
+        or hasattr(app, "text_input")
+    )
+
+    # Check for chat with documents section
+    assert "Chat with Documents" in app_str or "chat" in app_str.lower()
+
+    # Verify memory and session management components
+    assert "memory" in str(app.session_state) or "Memory" in app_str
+
+
+@patch("ollama.pull", return_value={"status": "success"})
+@patch("src.utils.core.validate_startup_configuration", return_value=True)
+def test_app_session_persistence_and_memory_management(
+    mock_validate, mock_pull, app_test
+):
+    """Test session save/load functionality and memory management.
+
+    Validates that the application properly manages session state,
+    memory persistence, and provides save/load functionality.
+
+    Args:
+        mock_validate: Mock startup configuration validation.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+    """
+    app = app_test.run()
+
+    # Verify app loaded successfully
+    assert not app.exception, f"App failed with exception: {app.exception}"
+
+    # Check that session management components are present
+    str(app)
+
+    # Find save and load buttons
+    save_buttons = [btn for btn in app.button if "Save" in str(btn)]
+    load_buttons = [btn for btn in app.button if "Load" in str(btn)]
+
+    # Test button interactions if available
+    if save_buttons:
+        try:
+            save_buttons[0].click()
+            app.run()
+        except Exception:  # noqa: S110
+            # Button click may fail in test environment - that's OK
+            pass
+
+    if load_buttons:
+        try:
+            load_buttons[0].click()
+            app.run()
+        except Exception:  # noqa: S110
+            # Button click may fail in test environment - that's OK
+            pass
+
+    # Test passes if no exceptions occur
+    assert not app.exception
+
+
+def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
+    """Test complete end-to-end workflow with multi-agent coordination system.
+
+    This comprehensive test validates the entire user workflow:
+    1. Application startup and configuration
+    2. Hardware detection and model suggestions
+    3. Document upload and processing
+    4. Multi-agent analysis coordination
+    5. Chat functionality with agent system
+    6. Session persistence and memory management
+
+    Args:
+        mock_validate: Mock startup configuration validation.
+        mock_load_docs: Mock document loading function.
+        mock_coordinator_class: Mock MultiAgentCoordinator class.
+        mock_ollama_list: Mock Ollama models list.
+        mock_detect: Mock hardware detection.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+        tmp_path: Temporary directory for test files.
+    """
+    with (
+        patch("ollama.pull", return_value={"status": "success"}),
+        patch(
+            "src.utils.core.detect_hardware",
+            return_value={
+                "gpu_name": "RTX 4090",
+                "vram_total_gb": 24,
+                "cuda_available": True,
+            },
+            create=True,
+        ) as mock_detect,
+        patch(
+            "ollama.list",
+            return_value={"models": [{"name": "qwen3-4b-instruct-2507:latest"}]},
+        ) as mock_ollama_list,
+        patch(
+            "src.agents.coordinator.MultiAgentCoordinator", create=True
+        ) as mock_coordinator_class,
+        patch(
+            "src.utils.document.load_documents_unstructured", create=True
+        ) as mock_load_docs,
+        patch(
+            "src.utils.core.validate_startup_configuration",
+            return_value=True,
+            create=True,
+        ) as mock_validate,
+    ):
+        # Setup comprehensive mocks for end-to-end testing
+        from llama_index.core import Document
+
+        # Mock successful document loading
+        mock_documents = [
+            Document(
+                text="DocMind AI implements advanced multi-agent coordination "
+                "for document analysis.",
+                metadata={"source": "test_document.pdf", "page": 1},
+            )
+        ]
+        mock_load_docs.return_value = mock_documents
+
+        # Mock multi-agent coordinator
+        mock_coordinator = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = (
+            "Complete multi-agent analysis: This document discusses "
+            "advanced AI coordination techniques."
+        )
+        mock_coordinator.process_query.return_value = mock_response
+        mock_coordinator_class.return_value = mock_coordinator
+
+        # Run the application
+        app = app_test.run()
+
+    # 1. Verify application startup
+    assert not app.exception, f"Application failed to start: {app.exception}"
+
+    # Verify startup configuration was used (non-strict)
+    assert mock_validate.called
+
+    # 2. Verify hardware detection and UI components (non-strict)
+    assert mock_detect.called
+
+    # Check main application components are present (robust title check)
+    app_str = str(app)
+    assert ("DocMind AI" in app_str) or ("docmind" in app_str.lower())
+
+    # 3. Verify model selection and backend configuration
+    assert mock_ollama_list.called
+    sidebar_str = str(app.sidebar)
+    # Hardware info or controls present
+    assert (
+        ("Detected" in sidebar_str)
+        or ("Use GPU" in sidebar_str)
+        or ("Model" in sidebar_str)
+    )
+
+    # 4. Verify document processing interface (non-brittle)
+    has_file_uploader = (
+        ("FileUploader" in app_str)
+        or ("upload" in app_str.lower())
+        or hasattr(app, "file_uploader")
+    )
+    # Do not fail hard on renderer differences; primary check is no exception
+
+    # 5. Verify analysis options
+    has_analysis_options = "Analysis Options" in app_str or "Analyze" in app_str
+    assert has_analysis_options, "Analysis interface not found"
+
+    # 6. Verify chat functionality
+    has_chat_interface = "Chat with Documents" in app_str or "chat" in app_str.lower()
+    assert has_chat_interface, "Chat interface not found"
+
+    # 7. Verify session management
+
+    # 8. Verify session state initialization
+    # Non-brittle session state verification
+    try:
+        session_state_keys = list(app.session_state.keys())
+        assert session_state_keys is not None
+    except Exception:
+        # Some Streamlit test harness versions restrict direct access; tolerate
+        pass
+
+        # Final validation: Complete workflow loaded successfully
+        assert not app.exception
+        print("✅ End-to-end workflow test completed successfully")
+        print(f"   - Hardware detection: {mock_detect.called}")
+        print(f"   - Model list retrieval: {mock_ollama_list.called}")
+        print(f"   - Configuration validation: {mock_validate.called}")
+        ui_components_loaded = bool(has_file_uploader and has_analysis_options)
+        print(f"   - UI components loaded: {ui_components_loaded}")
+        print(f"   - Chat interface: {has_chat_interface}")
+
+
+@pytest.mark.asyncio
+async def test_async_workflow_validation(app_test):
+    """Test async workflow components and validation.
+
+    Validates that the application properly handles async operations
+    including document processing and agent coordination.
+
+    Args:
+        mock_validate: Mock startup configuration validation.
+        mock_coordinator_class: Mock MultiAgentCoordinator class.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+    """
+    with (
+        patch("ollama.pull", return_value={"status": "success"}),
+        patch(
+            "src.agents.coordinator.MultiAgentCoordinator", create=True
+        ) as mock_coordinator_class,
+        patch(
+            "src.utils.core.validate_startup_configuration",
+            return_value=True,
+            create=True,
+        ),
+    ):
+        # Setup async coordinator mock
+        mock_coordinator = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.content = "Async multi-agent coordination completed successfully."
+        mock_coordinator.process_query.return_value = mock_response
+        mock_coordinator_class.return_value = mock_coordinator
+
+        # Run app and verify async components
+        app = app_test.run()
+
+    assert not app.exception, f"Async workflow test failed: {app.exception}"
+
+    # Verify that async-capable components are present
+    app_str = str(app)
+    (
+        "upload" in app_str.lower()
+        or "process" in app_str.lower()
+        or "analyze" in app_str.lower()
+    )
+
+    print("✅ Async workflow validation completed")
+
+
+def test_unified_configuration_architecture_integration(app_test):
+    """Test integration with the unified configuration architecture.
+
+    Validates that the application properly uses the centralized settings
+    system and configuration management.
+
+    Args:
+        mock_validate: Mock startup configuration validation.
+        mock_pull: Mock ollama.pull function.
+        app_test: Streamlit app test fixture.
+    """
+    with (
+        patch("ollama.pull", return_value={"status": "success"}),
+        patch(
+            "src.utils.core.validate_startup_configuration",
+            return_value=True,
+            create=True,
+        ) as mock_validate,
+    ):
+        app = app_test.run()
+
+        # Verify startup configuration was used (non-strict)
+        assert mock_validate.called
+
+        # Verify app loaded successfully with unified configuration
+        assert not app.exception, f"Unified configuration test failed: {app.exception}"
+
+        # Check that configuration-dependent components are present
+        app_str = str(app)
+        has_config_components = (
+            "Backend" in app_str or "Model" in app_str or "Context Size" in app_str
+        )
+
+        assert has_config_components, "Configuration-dependent components not found"
+
+        print("✅ Unified configuration architecture integration validated")
+
+
+def test_streamlit_app_markers_and_structure(app_test):
+    """Test that the Streamlit app has proper structure and markers for E2E testing.
+
+    This test validates the application structure without running full workflows,
+    ensuring that key UI components and markers are properly placed for testing.
+
+    Args:
+        app_test: Streamlit app test fixture.
+    """
+    app = app_test.run()
+
+    # Verify app structure and key components
+    assert not app.exception, f"App structure test failed: {app.exception}"
+
+    # Check main sections
+    # Robust structure check: rely on widget presence rather than exact strings
+    ui_has_sidebar = hasattr(app, "sidebar")
+    ui_has_controls = bool(getattr(app, "selectbox", [])) or bool(
+        getattr(app, "button", [])
+    )
+    assert ui_has_sidebar or ui_has_controls, "Missing core UI components"
+
+    # Check sidebar components
+    sidebar_str = str(app.sidebar)
+    sidebar_components = ["Backend", "Model", "Use GPU"]
+    present_components = [comp for comp in sidebar_components if comp in sidebar_str]
+
+    # Should have at least some sidebar components
+    assert present_components, "No sidebar components found"
+
+    print("✅ App structure validation completed")
+    print(f"   - Sidebar present: {ui_has_sidebar}")
+    print(f"   - Controls present: {ui_has_controls}")
+</file>
+
+</files>

@@ -13,6 +13,7 @@ Key Components:
 
 import asyncio
 import time
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
@@ -21,16 +22,40 @@ import pytest
 import pytest_asyncio
 from llama_index.core import Document
 from llama_index.core.base.llms.types import CompletionResponse, LLMMetadata
+from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.llms.llm import LLM
+from llama_index.core.llms.mock import MockLLM
 from llama_index.core.schema import NodeWithScore, TextNode
 
 # ============================================================================
-# MOCK FACTORIES
+# LLAMAINDEX MOCK FACTORIES (LIBRARY-FIRST APPROACH)
 # ============================================================================
 
 
 class MockEmbeddingFactory:
-    """Factory for creating consistent embedding mocks."""
+    """Factory for creating mock embedding models and embeddings.
+
+    Provides consistent mock embedding implementations across test suite.
+    Uses library-first approach with LlamaIndex MockEmbedding when possible.
+    """
+
+    @staticmethod
+    def create_mock_embedding_model():
+        """Create a mock embedding model for testing."""
+        mock = Mock()
+        mock.get_text_embedding.return_value = np.random.rand(1024).tolist()
+        mock.get_query_embedding.return_value = np.random.rand(1024).tolist()
+        mock.embed_dim = 1024
+        return mock
+
+    @staticmethod
+    def create_async_embedding_model():
+        """Create an async mock embedding model."""
+        mock = AsyncMock()
+        mock.aget_text_embedding.return_value = np.random.rand(1024).tolist()
+        mock.aget_query_embedding.return_value = np.random.rand(1024).tolist()
+        mock.embed_dim = 1024
+        return mock
 
     @staticmethod
     def create_dense_embeddings(
@@ -54,45 +79,31 @@ class MockEmbeddingFactory:
             )
         return embeddings
 
-    @staticmethod
-    def create_mock_embedding_model() -> Mock:
-        """Create a comprehensive mock embedding model."""
-        mock = Mock()
-        mock.get_text_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
-        mock.get_query_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
-        mock.embed_dim = 1024
-        mock.embed_documents.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings()
-        )
-        mock.embed_query.return_value = MockEmbeddingFactory.create_dense_embeddings(
-            num_docs=1
-        )[0]
-        return mock
+
+class LlamaIndexMockFactory:
+    """Factory for creating LlamaIndex-native mock objects.
+
+    ELIMINATES custom mock implementations in favor of library patterns.
+    Uses MockEmbedding and MockLLM from LlamaIndex core for consistency.
+    """
 
     @staticmethod
-    def create_async_embedding_model() -> AsyncMock:
-        """Create an async mock embedding model with comprehensive async methods."""
-        mock = AsyncMock()
-        mock.aembed_documents.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings()
-        )
-        mock.aembed_query.return_value = MockEmbeddingFactory.create_dense_embeddings(
-            num_docs=1
-        )[0]
+    def create_mock_embedding(embed_dim: int = 1024) -> MockEmbedding:
+        """Create LlamaIndex-native MockEmbedding.
 
-        # Add additional async methods commonly used in LlamaIndex
-        mock._aget_query_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
-        mock._aget_text_embedding.return_value = (
-            MockEmbeddingFactory.create_dense_embeddings(num_docs=1)[0]
-        )
+        Uses built-in MockEmbedding instead of manual Mock objects.
+        Provides consistent dimensions and deterministic behavior.
+        """
+        return MockEmbedding(embed_dim=embed_dim)
 
-        return mock
+    @staticmethod
+    def create_mock_llm(max_tokens: int = 512) -> MockLLM:
+        """Create LlamaIndex-native MockLLM.
+
+        Uses built-in MockLLM instead of manual Mock objects.
+        Provides realistic completion behavior for testing.
+        """
+        return MockLLM(max_tokens=max_tokens)
 
 
 class MockLLMFactory:
@@ -118,10 +129,11 @@ class MockLLMFactory:
 class MockLlamaIndexLLM(LLM):
     """Proper LlamaIndex LLM mock that inherits from LLM base class."""
 
+    response_text: str = "Mock LLM response"
+
     def __init__(self, response_text: str = "Mock LLM response", **kwargs):
         """Initialize MockLLM with configurable response text."""
-        super().__init__(**kwargs)
-        self.response_text = response_text
+        super().__init__(response_text=response_text, **kwargs)
 
     @property
     def metadata(self) -> LLMMetadata:
@@ -450,6 +462,154 @@ async def async_test_utils() -> AsyncTestUtils:
     return AsyncTestUtils()
 
 
+@pytest.fixture
+def supervisor_stream_shim() -> Mock:
+    """Provide a deterministic supervisor shim with compile().stream().
+
+    Returns an object mimicking the minimal interface used by
+    MultiAgentCoordinator:
+    - graph.compile(checkpointer=...) -> compiled_graph
+    - compiled_graph.stream(initial_state, config=..., stream_mode="values")
+      yields a final state dict with a response-like message.
+    """
+
+    class _Compiled:
+        def stream(self, initial_state, config=None, stream_mode: str | None = None):
+            del config, stream_mode
+            # Copy initial state and append a deterministic assistant message
+            messages = list(initial_state.get("messages", []))
+            messages.append(SimpleNamespace(content="Shim: processed successfully"))
+            final = dict(initial_state)
+            final["messages"] = messages
+            final["agent_timings"] = {"router_agent": 0.01}
+            yield final
+
+    class _Graph:
+        def compile(self, checkpointer=None):
+            return _Compiled()
+
+    return _Graph()
+
+
+# ============================================================================
+# RETRIEVAL FIXTURES PORTED FROM tests/test_retrieval/conftest.py
+# ============================================================================
+
+
+@pytest.fixture
+def mock_vector_index() -> Mock:
+    """Mock VectorStoreIndex exposing a query engine.
+
+    Provides a minimal interface used by router engine tests without
+    depending on LlamaIndex internals.
+    """
+    mock_index = Mock()
+    mock_query_engine = Mock()
+    mock_query_engine.query.return_value = Mock(response="Mock response")
+    mock_index.as_query_engine.return_value = mock_query_engine
+    return mock_index
+
+
+@pytest.fixture
+def mock_hybrid_retriever() -> Mock:
+    """Mock hybrid retriever for dense + sparse search."""
+    return MockRetrieverFactory.create_mock_retriever()
+
+
+@pytest.fixture
+def mock_property_graph() -> Mock:
+    """Mock PropertyGraphIndex for knowledge graph tests."""
+    mock_graph = Mock()
+    mock_node = TextNode(text="Graph traversal result", id_="graph_node_1")
+    mock_graph.traverse_graph = AsyncMock(
+        return_value=[NodeWithScore(node=mock_node, score=0.9)]
+    )
+    mock_graph.extract_entities = AsyncMock(
+        return_value=[
+            {"text": "LlamaIndex", "type": "FRAMEWORK", "confidence": 0.95},
+            {"text": "BGE-M3", "type": "MODEL", "confidence": 0.92},
+        ]
+    )
+    mock_graph.as_retriever.return_value = MockRetrieverFactory.create_mock_retriever()
+    mock_graph.as_query_engine.return_value = Mock()
+    return mock_graph
+
+
+@pytest.fixture
+def mock_llm_for_routing():
+    """LlamaIndex-compatible LLM for routing selector tests."""
+    return MockLLMFactory.create_llamaindex_mock_llm("hybrid_search")
+
+
+@pytest.fixture
+def mock_cross_encoder() -> Mock:
+    """Generic mock reranker/CrossEncoder object."""
+    return Mock()
+
+
+@pytest.fixture
+def performance_test_nodes() -> list[NodeWithScore]:
+    """Generate nodes for reranking performance tests (20 docs)."""
+    return MockRetrieverFactory.create_search_results(20, base_score=0.8)
+
+
+@pytest.fixture
+def sample_query_scenarios() -> list[dict[str, Any]]:
+    """Provide sample query scenarios for integration tests."""
+    return TestDataFactory.create_query_scenarios()
+
+
+@pytest.fixture
+def rtx_4090_performance_targets() -> dict[str, float]:
+    """Performance targets used by integration tests."""
+    return {
+        "bgem3_embedding_latency_ms": 50.0,
+        "reranking_latency_ms": 100.0,
+        "query_p95_latency_s": 2.0,
+        "vram_usage_gb": 14.0,
+        "min_retrieval_accuracy": 0.8,
+        "strategy_selection_latency_ms": 50.0,
+    }
+
+
+@pytest.fixture
+def mock_multimodal_utilities() -> dict[str, Any]:
+    """Mock multimodal utilities (shape compatibility only)."""
+    return {
+        "cross_modal_search": AsyncMock(
+            return_value=[
+                {"score": 0.95, "image_path": "/path/to/image1.jpg"},
+                {"score": 0.87, "image_path": "/path/to/image2.jpg"},
+            ]
+        ),
+        "generate_image_embeddings": AsyncMock(
+            return_value=np.random.rand(512).astype(np.float32)
+        ),
+        "validate_vram_usage": Mock(return_value=1.2),
+    }
+
+
+@pytest.fixture
+def mock_memory_monitor() -> Any:
+    """Lightweight memory monitor stub for integration tests.
+
+    Provides the minimal surface used by memory efficiency tests without
+    introducing external dependencies.
+    """
+
+    class _Monitor:
+        def __init__(self) -> None:
+            self._peak = 1.3
+
+        def get_memory_usage(self) -> dict[str, float]:
+            return {"used_gb": 1.2}
+
+        def track_peak_usage(self) -> float:
+            return self._peak
+
+    return _Monitor()
+
+
 # ============================================================================
 # SESSION-SCOPED FIXTURES FOR PERFORMANCE
 # ============================================================================
@@ -482,3 +642,34 @@ def shared_mock_qdrant_client() -> Mock:
     across multiple test functions without recreation overhead.
     """
     return MockVectorStoreFactory.create_qdrant_client()
+
+
+# ============================================================================
+# TEST-ONLY HELPER: ensure directories for a DocMindSettings instance
+# ============================================================================
+
+
+def ensure_settings_dirs(s) -> None:  # pragma: no cover
+    """Create filesystem directories for a DocMindSettings instance (test-only).
+
+    Rationale:
+    - Keep src/config/settings.py pure (no side effects).
+    - Tests that assert on real file operations can call this explicitly.
+    """
+    try:
+        # Paths are Path objects on DocMindSettings; tolerate strings if present.
+        from pathlib import Path
+
+        data_dir = Path(s.data_dir)
+        cache_dir = Path(s.cache_dir)
+        log_parent = Path(s.log_file).parent
+        db_parent = Path(s.sqlite_db_path).parent
+
+        data_dir.mkdir(parents=True, exist_ok=True)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        log_parent.mkdir(parents=True, exist_ok=True)
+        db_parent.mkdir(parents=True, exist_ok=True)
+    except Exception:  # noqa: S110
+        # Tests should fail on their own assertions; avoid raising
+        # here to keep helper minimal.
+        pass

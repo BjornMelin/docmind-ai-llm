@@ -11,9 +11,9 @@
 [![GitHub](https://img.shields.io/badge/GitHub-BjornMelin-181717?logo=github)](https://github.com/BjornMelin)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Bjorn%20Melin-0077B5?logo=linkedin)](https://www.linkedin.com/in/bjorn-melin/)
 
-**DocMind AI** transforms how you analyze documents locally with zero cloud dependency. This system combines hybrid search (dense + sparse embeddings), knowledge graph extraction, and a sophisticated 5-agent coordination system to extract and analyze information from your PDFs, Office docs, and multimedia content. Built on LlamaIndex pipelines with LangGraph supervisor orchestration and Qwen3-4B-Instruct-2507's FULL 262K context capability through INT8 KV cache optimization, it delivers production-ready document intelligence that runs entirely on your hardware—with GPU acceleration for enhanced performance and specialized agent coordination for improved query quality.
+**DocMind AI** provides local document analysis with zero cloud dependency. This system combines hybrid search (dense + sparse embeddings), knowledge graph extraction, and a 5-agent coordination system to extract and analyze information from your PDFs, Office docs, and multimedia content. Built on LlamaIndex pipelines with LangGraph supervisor orchestration and Qwen3-4B-Instruct-2507's FULL 262K context capability through INT8 KV cache optimization, it provides document intelligence that runs entirely on your hardware—with GPU acceleration and agent coordination.
 
-**Why DocMind AI?** Traditional document analysis tools either send your data to the cloud (privacy risk) or provide basic keyword search (limited intelligence). DocMind AI gives you the best of both worlds: AI reasoning with complete data privacy. Process complex queries that require multiple reasoning strategies, extract entities and relationships, and get contextual answers—all while your sensitive documents never leave your machine.
+**Architecture**: Traditional document analysis tools either send your data to the cloud (privacy risk) or provide basic keyword search (limited intelligence). DocMind AI provides AI reasoning with complete data privacy. Process complex queries that require multiple reasoning strategies, extract entities and relationships, and get contextual answers—all while your sensitive documents never leave your machine.
 
 ## ✨ Features of DocMind AI
 
@@ -39,13 +39,13 @@
 
 - **LlamaIndex RAG Pipeline:** QueryPipeline with async/parallel processing, ingestion pipelines, and caching.
 
-- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-Large dense and SPLADE++ sparse embeddings for 15-20% better recall.
+- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-M3 unified dense/sparse embeddings for improved recall.
 
 - **Knowledge Graph Integration:** spaCy entity extraction with relationship mapping for complex queries.
 
 - **Multimodal Processing:** Unstructured hi-res parsing for PDFs with text, tables, and images using Jina v4 embeddings.
 
-- **ColBERT Reranking:** Late-interaction reranking improves context quality by 20-30%.
+- **ColBERT Reranking:** Late-interaction reranking for improved context quality.
 
 - **Offline-First Design:** 100% local processing with no external API dependencies.
 
@@ -112,6 +112,10 @@
       - [3. Model Download Issues](#3-model-download-issues)
       - [4. Memory Issues](#4-memory-issues)
       - [5. Document Processing Errors](#5-document-processing-errors)
+      - [6. vLLM FlashInfer Installation Issues](#6-vllm-flashinfer-installation-issues)
+      - [7. PyTorch 2.7.1 Compatibility Issues](#7-pytorch-271-compatibility-issues)
+      - [8. GPU Memory Issues (16GB RTX 4090)](#8-gpu-memory-issues-16gb-rtx-4090)
+      - [9. Performance Validation](#9-performance-validation)
     - [Performance Optimization](#performance-optimization)
     - [Getting Help](#getting-help)
   - [📖 How to Cite](#-how-to-cite)
@@ -227,14 +231,14 @@
    uv sync --extra gpu
    ```
 
-   See [GPU Setup Guide](docs/developers/gpu-setup.md) for detailed configuration and troubleshooting.
+   See [GPU Setup Guide](docs/developers/archived/gpu-setup.md) for detailed configuration and troubleshooting.
 
 ### ▶️ Running the App
 
 **Locally:**
 
 ```bash
-streamlit run app.py
+streamlit run src/app.py
 ```
 
 **With Docker:**
@@ -368,7 +372,7 @@ Results include summaries, insights, action items, and open questions, exportabl
 
 ### 💬 Interacting with the LLM
 
-Use the chat interface to ask follow-up questions. The LLM leverages hybrid search (Jina v4 dense + FastEmbed SPLADE++ sparse) with submodular-optimized reranking for context-aware, high-quality responses.
+Use the chat interface to ask follow-up questions. The LLM leverages hybrid search (BGE-M3 unified dense + sparse embeddings) with BGE-reranker-v2-m3 ColBERT reranking for context-aware, high-quality responses.
 
 ## 🔧 API Usage Examples
 
@@ -377,14 +381,13 @@ Use the chat interface to ask follow-up questions. The LLM leverages hybrid sear
 ```python
 import asyncio
 from pathlib import Path
-from models import AppSettings
+from src.config import settings
 from src.utils.document import load_documents_unstructured
 from src.utils.embedding import create_index_async
-from agent_factory import get_agent_system
+from src.agents.coordinator import get_agent_system
 
 async def analyze_document(file_path: str, query: str):
     """Example: Analyze a document programmatically."""
-    settings = AppSettings()
     
     # Load and process document
     documents = await load_documents_unstructured([Path(file_path)], settings)
@@ -411,17 +414,17 @@ asyncio.run(main())
 ### Custom Configuration
 
 ```python
-from models import AppSettings
+from src.config import settings
 import os
 
 # Override default settings
-os.environ["DEFAULT_MODEL"] = "llama3.2"
-os.environ["GPU_ACCELERATION"] = "true"
-os.environ["ENABLE_COLBERT_RERANKING"] = "true"
+os.environ["DOCMIND_VLLM__MODEL"] = "qwen3-4b-instruct-2507-FP8"
+os.environ["DOCMIND_ENABLE_GPU_ACCELERATION"] = "true"
+os.environ["DOCMIND_RETRIEVAL__USE_RERANKING"] = "true"
 
-settings = AppSettings()
-print(f"Using model: {settings.default_model}")
-print(f"GPU enabled: {settings.gpu_acceleration}")
+print(f"Using model: {settings.vllm.model}")
+print(f"GPU enabled: {settings.enable_gpu_acceleration}")
+print(f"Reranking enabled: {settings.retrieval.use_reranking}")
 ```
 
 ### Batch Document Processing
@@ -429,13 +432,12 @@ print(f"GPU enabled: {settings.gpu_acceleration}")
 ```python
 import asyncio
 from pathlib import Path
-from models import AppSettings
+from src.config import settings
 from src.utils.document import load_documents_unstructured
 from src.utils.embedding import create_index_async
 
 async def process_document_folder(folder_path: str):
     """Process all supported documents in a folder."""
-    settings = AppSettings()
     
     # Find all supported documents
     folder = Path(folder_path)
@@ -476,7 +478,7 @@ graph TD
     E --> G[Multi-Modal Embeddings]
     F --> H[Knowledge Graph Builder<br/>Entity Relations]
     
-    G --> I[Dense: BGE-Large 1024D<br/>Sparse: SPLADE++ FastEmbed<br/>Multimodal: Jina v4 512D]
+    G --> I[BGE-M3 Unified: Dense + Sparse 1024D<br/>Multimodal: CLIP ViT-B/32 512D]
     I --> J[Qdrant Vector Store<br/>RRF Fusion α=0.7]
     
     H --> K[Knowledge Graph Index<br/>NetworkX Relations]
@@ -527,11 +529,9 @@ graph TD
 
 ### Hybrid Retrieval Architecture
 
-- **Dense Embeddings:** BGE-Large 1024D (BAAI/bge-large-en-v1.5) for semantic similarity
+- **Unified Text Embeddings:** BGE-M3 (BAAI/bge-m3) provides both dense (1024D) and sparse embeddings in a single model for semantic similarity and neural lexical matching
 
-- **Sparse Embeddings:** SPLADE++ with FastEmbed for neural lexical matching and term expansion
-
-- **Multimodal:** Jina v4 512D embeddings for images and mixed content with int8 quantization
+- **Multimodal:** CLIP ViT-B/32 (512D) embeddings for images and mixed content with FP16 acceleration
 
 - **Fusion:** RRF (Reciprocal Rank Fusion) with α=0.7 weighting for optimal dense/sparse balance
 
@@ -548,7 +548,7 @@ graph TD
   - **Result Synthesizer:** Combines and reconciles results from multiple retrieval passes with deduplication
   - **Response Validator:** Validates response quality, accuracy, and completeness before final output
 
-- **Enhanced Capabilities:** DSPy automatic query optimization (20-30% quality improvement) and optional GraphRAG for multi-hop reasoning
+- **Enhanced Capabilities:** DSPy automatic query optimization and optional GraphRAG for multi-hop reasoning
 
 - **Workflow Coordination:** Supervisor automatically routes between agents based on query complexity with <300ms coordination overhead
 
@@ -560,7 +560,7 @@ graph TD
 
 - **GPU Acceleration:** CUDA support with FP8 quantization via vLLM FlashInfer backend and torch.compile optimization
 
-- **Async Processing:** QueryPipeline with parallel execution and intelligent caching
+- **Async Processing:** QueryPipeline with parallel execution and caching
 
 - **Reranking:** ColBERT late-interaction model improves top-5 results from top-20 prefetch
 
@@ -594,22 +594,22 @@ Key configuration options in `.env`:
 DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507
 DOCMIND_DEVICE=cuda
 DOCMIND_CONTEXT_LENGTH=262144
-LMDEPLOY_HOST=http://localhost:23333
+DOCMIND_LLM_BASE_URL=http://localhost:11434
 
 # Embedding Models (BGE-M3 unified)
-EMBEDDING_MODEL=BAAI/bge-m3
-RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+DOCMIND_EMBEDDING_MODEL=BAAI/bge-m3
+DOCMIND_RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 
 # Feature Flags
-ENABLE_DSPY_OPTIMIZATION=true
-ENABLE_GRAPHRAG=false
-ENABLE_GPU_ACCELERATION=true
-LMDEPLOY_QUANT_POLICY=fp8  # FP8 KV cache
+DOCMIND_ENABLE_DSPY_OPTIMIZATION=true
+DOCMIND_ENABLE_GRAPHRAG=false
+DOCMIND_ENABLE_GPU_ACCELERATION=true
+DOCMIND_QUANT_POLICY=fp8  # FP8 KV cache
 
 # Performance Tuning
-RETRIEVAL_TOP_K=10
-RERANK_TOP_K=5
-CACHE_SIZE_LIMIT=1073741824  # 1GB
+DOCMIND_RETRIEVAL_TOP_K=10
+DOCMIND_RERANK_TOP_K=5
+DOCMIND_CACHE_SIZE_LIMIT=1073741824  # 1GB
 ```
 
 See the complete [.env.example](.env.example) file for all available configuration options.
@@ -635,6 +635,8 @@ maxUploadSize = 200
 
 ## 📊 Performance Benchmarks
 
+> **Note**: The following performance metrics are estimates based on hardware specifications and typical usage patterns. Actual performance may vary depending on hardware configuration, model size, document complexity, and system load. For measured test suite performance, see [Testing Guide](docs/testing/current-testing-guide.md).
+
 ### Performance Metrics
 
 | Operation | Performance | Notes |
@@ -645,7 +647,7 @@ maxUploadSize = 200
 | **5-Agent System Response** | 3-8 seconds | LangGraph supervisor coordination with <200ms overhead |
 | **128K Context Processing** | 1.5-3 seconds | 128K context with FP8 KV cache |
 | **Vector Search** | <500ms | Qdrant in-memory with GPU embeddings |
-| **Test Suite (99 tests)** | ~40 seconds | Comprehensive coverage |
+| **Test Suite (2,263 tests)** | Varies by tier | Unit/integration/system testing - 3.51% measured coverage |
 | **Memory Usage (Idle)** | 400-500MB | Base application |
 | **Memory Usage (Processing)** | 1.2-2.1GB | During document analysis |
 | **GPU Memory Usage** | ~12-14GB | Model + 128K context + embedding cache |
@@ -654,7 +656,7 @@ maxUploadSize = 200
 
 **Document Processing Cache:**
 
-- **Cache hit ratio**: 85-90% for repeated documents
+- **Cache hit ratio**: High rate for repeated documents
 
 - **Storage efficiency**: ~1GB handles 1000+ documents
 
@@ -666,9 +668,9 @@ maxUploadSize = 200
 
 **Retrieval Quality Metrics:**
 
-- **Dense + Sparse RRF**: 15-20% better recall vs single-vector
+- **Dense + Sparse RRF**: Improved recall vs single-vector
 
-- **ColBERT Reranking**: 20-30% context quality improvement
+- **ColBERT Reranking**: Enhanced context quality
 
 - **Top-K Retrieval**: <2 seconds for 10K document corpus
 
@@ -868,7 +870,7 @@ python scripts/performance_validation.py
 
 - Check logs in `logs/` directory for detailed errors
 
-- Review [troubleshooting guide](docs/user/troubleshooting.md)
+- Review [troubleshooting guide](docs/user/troubleshooting-reference.md)
 
 - Search existing [GitHub Issues](https://github.com/BjornMelin/docmind-ai-llm/issues)
 
@@ -905,9 +907,15 @@ Contributions are welcome! Please follow these steps:
 4. **Run tests and linting:**
 
    ```bash
-   ruff check . --fix
-   ruff format .
-   pytest tests/
+   # Lint & format
+   ruff format . && ruff check .
+   uv run pylint -j 0 -sn --rcfile=pyproject.toml src tests/unit
+
+   # Unit tests with coverage
+   uv run pytest tests/unit -m unit --cov=src -q
+
+   # Integration tests (offline; no coverage gating)
+   uv run pytest tests/integration -m integration --no-cov -q
    ```
 
 5. **Submit a pull request** with clear description of changes
@@ -924,7 +932,30 @@ Contributions are welcome! Please follow these steps:
 
 - Update documentation as needed
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+#### 🧪 Tests and CI
+
+We use a tiered test strategy and keep everything offline by default:
+
+- Unit (fast, offline): mocks only; no network/GPU.
+- Integration (offline): component interactions; router uses a session‑autouse MockLLM fixture in `tests/integration/conftest.py`, preventing any Ollama/remote calls.
+- System/E2E (optional): heavier flows beyond the PR quality gates.
+
+Quick local commands:
+
+```bash
+# Unit only (with coverage)
+uv run pytest tests/unit -m unit --cov=src -q
+
+# Integration only (offline; no coverage gating)
+uv run pytest tests/integration -m integration --no-cov -q
+
+# Combined (unit + integration) with coverage on src only
+uv run pytest -m "unit or integration" --cov=src -q
+```
+
+CI pipeline runs unit tests with coverage and a separate integration job without coverage gating. This keeps coverage gates stable while preserving integration signal.
+
+See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed guidelines. For an overview of the unit test layout and fixture strategy, see tests/README.md.
 
 ## 📃 License
 

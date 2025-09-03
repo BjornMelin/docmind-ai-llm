@@ -13,8 +13,8 @@ from loguru import logger
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import AgentResponse
-from src.config.app_settings import DocMindSettings, app_settings
-from src.core.document_processor import DocumentProcessor
+from src.config.settings import DocMindSettings, settings
+from src.processing.document_processor import DocumentProcessor
 
 # Load environment variables
 load_dotenv()
@@ -22,8 +22,6 @@ load_dotenv()
 # Constants
 AGENT_TIMEOUT_DIVISOR = 1000.0
 BASIC_VALIDATION_SCORE = 0.8
-DOCUMENT_TEXT_SLICE_SHORT = 500
-DOCUMENT_TEXT_SLICE_LONG = 1000
 
 
 class DocMindApplication:
@@ -31,16 +29,16 @@ class DocMindApplication:
 
     def __init__(
         self,
-        settings: DocMindSettings | None = None,
+        app_settings: DocMindSettings | None = None,
         enable_multi_agent: bool = True,
     ) -> None:
         """Initialize the DocMind application.
 
         Args:
-            settings: Application settings. Defaults to loading from environment.
+            app_settings: Application settings. Defaults to unified settings.
             enable_multi_agent: Enable multi-agent coordination system.
         """
-        self.settings = settings or app_settings
+        self.settings = app_settings or settings
         self.enable_multi_agent = enable_multi_agent
 
         # Initialize components
@@ -59,11 +57,11 @@ class DocMindApplication:
         # Multi-agent coordinator if enabled
         if self.enable_multi_agent:
             self.agent_coordinator = MultiAgentCoordinator(
-                model_path=self.settings.model_name,
-                max_context_length=self.settings.context_window_size,
+                model_path=self.settings.vllm.model,
+                max_context_length=self.settings.vllm.context_window,
                 backend="vllm",
-                enable_fallback=self.settings.enable_fallback_rag,
-                max_agent_timeout=self.settings.agent_decision_timeout
+                enable_fallback=self.settings.agents.enable_fallback_rag,
+                max_agent_timeout=self.settings.agents.decision_timeout
                 / AGENT_TIMEOUT_DIVISOR,
             )
         else:
@@ -111,7 +109,7 @@ class DocMindApplication:
             logger.error("Error processing query: %s", e)
             # Return error response
             return AgentResponse(
-                content=f"I encountered an error processing your query: {str(e)}",
+                content=f"I encountered an error processing your query: {e!s}",
                 sources=[],
                 metadata={"error": str(e), "fallback": True},
                 validation_score=0.0,
@@ -120,7 +118,7 @@ class DocMindApplication:
 
     async def _process_basic_rag(
         self,
-        query: str,
+        _query: str,
         _context: dict[str, Any] | None = None,
     ) -> AgentResponse:
         """Process query through basic RAG pipeline.
@@ -132,27 +130,16 @@ class DocMindApplication:
         Returns:
             Basic RAG response.
         """
-        # Implementation of basic RAG pipeline using retrieval components
-        # Note: This is a simplified implementation placeholder
-        try:
-            # Import would be done here, but keeping it safe for now
-            # TODO: Properly integrate with retrieval system once API is stable
-            logger.info("Basic RAG pipeline requested for query: %s", query)
-
-            # Generate a basic informative response
-            content = (
-                f"Basic RAG pipeline received query: '{query}'. "
-                "This functionality requires document indexing and retrieval setup. "
-                "For full functionality, please use multi-agent mode which includes "
-                "comprehensive document analysis and retrieval capabilities."
-            )
-
-        except (ImportError, ValueError, RuntimeError) as e:
-            logger.warning("Basic RAG pipeline setup encountered issues: %s", e)
-            content = (
-                f"Basic RAG pipeline encountered an error for query: '{query}'. "
-                "Please use multi-agent mode or check your configuration."
-            )
+        # Basic RAG is deprecated - multi-agent mode should be used instead
+        logger.warning(
+            "Basic RAG pipeline is deprecated. Use multi-agent mode "
+            "for full functionality."
+        )
+        content = (
+            "Basic RAG pipeline is no longer supported. "
+            "Please enable multi-agent mode for document analysis "
+            "and retrieval capabilities."
+        )
 
         return AgentResponse(
             content=content,
@@ -161,39 +148,6 @@ class DocMindApplication:
             validation_score=BASIC_VALIDATION_SCORE,  # Basic confidence
             processing_time=0.0,  # Would be measured
         )
-
-    def _generate_basic_response(
-        self,
-        _query: str,
-        results: list[Any],
-    ) -> str:
-        """Generate basic response from retrieval results.
-
-        Args:
-            _query: Original query (unused in basic implementation).
-            results: Retrieved documents.
-
-        Returns:
-            Generated response text.
-        """
-        if not results:
-            return "I couldn't find relevant information to answer your query."
-
-        # Format context from results
-        context_text = "\n\n".join(
-            [
-                f"Source {i + 1}: {doc.text[:DOCUMENT_TEXT_SLICE_SHORT]}"
-                for i, doc in enumerate(results[:3])
-            ]
-        )
-
-        # Note: In production, this would use the actual LLM
-        response = (
-            f"Based on the retrieved information:\n\n"
-            f"{context_text[:DOCUMENT_TEXT_SLICE_LONG]}..."
-        )
-
-        return response
 
     async def ingest_document(
         self,
@@ -213,9 +167,11 @@ class DocMindApplication:
             logger.info("Ingesting document: %s", file_path)
 
             if process_async:
-                result = await self.document_processor.aprocess_document(file_path)
+                result = await self.document_processor.process_document_async(file_path)
             else:
-                result = self.document_processor.process_document(file_path)
+                result = asyncio.run(
+                    self.document_processor.process_document_async(file_path)
+                )
 
             logger.info("Document ingested successfully: %s", file_path)
             return result
@@ -228,13 +184,10 @@ class DocMindApplication:
         """Shutdown application and cleanup resources."""
         logger.info("Shutting down DocMind AI application")
 
-        # Cleanup components
+        # Cleanup agent coordinator if present
         if self.agent_coordinator:
-            # Any cleanup needed for agents
+            # Agent coordinator handles its own cleanup
             pass
-
-        # Close connections handled by agent coordinator
-        # No explicit cleanup needed for current implementation
 
         logger.info("Shutdown complete")
 
@@ -248,9 +201,9 @@ async def main() -> None:
     query = "What are the key features of the new product?"
     response = await app.process_query(query)
 
-    print(f"Response: {response.content}")
-    print(f"Processing time: {response.processing_time:.2f}s")
-    print(f"Validation score: {response.validation_score:.2f}")
+    logger.info("Response: %s", response.content)
+    logger.info("Processing time: %.2fs", response.processing_time)
+    logger.info("Validation score: %.2f", response.validation_score)
 
     # Shutdown
     app.shutdown()

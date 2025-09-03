@@ -1,0 +1,34 @@
+{
+  "query": "Analyze the quarterly financial performance and identify key trends across all business units",
+  "session_id": "sess_financial_analysis_2024",
+  "options": {
+    "max_response_tokens": 2048,
+    "enable_citations": true,
+    "performance_mode": "balanced",
+    "context_optimization": true,
+    "include_confidence_scores": true,
+    "include_agent_trace": true
+  },
+  "filters": {
+    "document_ids": [
+      "doc_q3_financial_report",
+      "doc_q4_financial_report",
+      "doc_technology_metrics",
+      "doc_healthcare_analysis"
+    ],
+    "date_range": {
+      "start": "2024-07-01T00:00:00Z",
+      "end": "2024-12-31T23:59:59Z"
+    },
+    "business_units": ["Technology", "Healthcare", "Finance"],
+    "document_types": ["pdf", "xlsx"],
+    "min_relevance_score": 0.8
+  },
+  "content_preferences": {
+    "tone": "professional",
+    "technical_level": "business_analyst",
+    "include_recommendations": true,
+    "highlight_key_metrics": true,
+    "comparative_analysis": true
+  }
+}

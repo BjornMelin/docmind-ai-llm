@@ -1,0 +1,74 @@
+{
+  "upload_id": "upload_456def789",
+  "status": "processing",
+  "session_id": "sess_financial_analysis_2024",
+  "documents": [
+    {
+      "document_id": "doc_q4_financial_report",
+      "filename": "Q4_2024_Financial_Report.pdf",
+      "status": "processing",
+      "size_bytes": 2048576,
+      "pages": 24,
+      "estimated_processing_time": "45s",
+      "processing_stages": [
+        {"stage": "upload_complete", "status": "completed", "timestamp": "2025-08-20T15:28:30Z"},
+        {"stage": "text_extraction", "status": "in_progress", "timestamp": "2025-08-20T15:28:32Z"},
+        {"stage": "table_extraction", "status": "pending", "timestamp": null},
+        {"stage": "chunk_creation", "status": "pending", "timestamp": null},
+        {"stage": "embedding_generation", "status": "pending", "timestamp": null},
+        {"stage": "indexing", "status": "pending", "timestamp": null}
+      ]
+    },
+    {
+      "document_id": "doc_healthcare_analysis",
+      "filename": "Healthcare_Division_Analysis.xlsx",
+      "status": "queued",
+      "size_bytes": 1536000,
+      "sheets": 8,
+      "estimated_processing_time": "30s",
+      "processing_stages": [
+        {"stage": "upload_complete", "status": "completed", "timestamp": "2025-08-20T15:28:30Z"},
+        {"stage": "sheet_extraction", "status": "pending", "timestamp": null},
+        {"stage": "data_parsing", "status": "pending", "timestamp": null},
+        {"stage": "chunk_creation", "status": "pending", "timestamp": null},
+        {"stage": "embedding_generation", "status": "pending", "timestamp": null},
+        {"stage": "indexing", "status": "pending", "timestamp": null}
+      ]
+    },
+    {
+      "document_id": "doc_technology_metrics",
+      "filename": "Technology_Metrics_Q4.docx",
+      "status": "queued",
+      "size_bytes": 892416,
+      "pages": 12,
+      "estimated_processing_time": "25s",
+      "processing_stages": [
+        {"stage": "upload_complete", "status": "completed", "timestamp": "2025-08-20T15:28:30Z"},
+        {"stage": "text_extraction", "status": "pending", "timestamp": null},
+        {"stage": "formatting_preservation", "status": "pending", "timestamp": null},
+        {"stage": "chunk_creation", "status": "pending", "timestamp": null},
+        {"stage": "embedding_generation", "status": "pending", "timestamp": null},
+        {"stage": "indexing", "status": "pending", "timestamp": null}
+      ]
+    }
+  ],
+  "processing_summary": {
+    "total_documents": 3,
+    "total_size_mb": 4.4,
+    "estimated_total_time": "100s",
+    "processing_mode": "sequential",
+    "queue_position": 1
+  },
+  "session_info": {
+    "session_name": "Financial Analysis Session",
+    "total_documents_in_session": 3,
+    "session_created_at": "2025-08-20T15:25:45Z"
+  },
+  "webhook_info": {
+    "completion_webhook": null,
+    "progress_webhook": null,
+    "error_webhook": null
+  },
+  "created_at": "2025-08-20T15:28:30Z",
+  "estimated_completion": "2025-08-20T15:30:10Z"
+}

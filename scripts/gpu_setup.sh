@@ -108,7 +108,7 @@ export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 
 # vLLM Optimization
 export VLLM_TORCH_BACKEND=cu128  
-export VLLM_ATTENTION_BACKEND=FLASH_ATTN
+export VLLM_ATTENTION_BACKEND=FLASHINFER
 
 # Memory Management
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
@@ -417,7 +417,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=0
       - VLLM_TORCH_BACKEND=cu128
-      - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
       - FASTEMBED_CACHE_PATH=/tmp/fastembed_cache
       - ONNXRUNTIME_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider
@@ -430,13 +430,6 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     runtime: nvidia
     ipc: host
     shm_size: '2gb'
@@ -510,7 +503,7 @@ DEFAULT_SPARSE_MODEL=prithvida/Splade_PP_en_v1
 CUDA_VISIBLE_DEVICES=0
 NVIDIA_VISIBLE_DEVICES=all
 VLLM_TORCH_BACKEND=cu128
-VLLM_ATTENTION_BACKEND=FLASH_ATTN
+VLLM_ATTENTION_BACKEND=FLASHINFER
 PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 TOKENIZERS_PARALLELISM=false
 

@@ -38,15 +38,15 @@ from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.postprocessor.colbert_rerank import ColbertRerank
 from loguru import logger
 
-from src.config.app_settings import app_settings
+from src.config import settings
 
 # Constants
 
 KG_SIMILARITY_TOP_K = 10
 
-# Re-export settings constants for backward compatibility
-DEFAULT_RERANKING_TOP_K = app_settings.reranking_top_k
-DEFAULT_VECTOR_SIMILARITY_TOP_K = app_settings.top_k
+# Tool configuration constants
+DEFAULT_RERANKING_TOP_K = settings.retrieval.reranking_top_k
+DEFAULT_VECTOR_SIMILARITY_TOP_K = settings.retrieval.top_k
 
 
 class ToolFactory:
@@ -99,16 +99,19 @@ class ToolFactory:
         Returns:
             ColbertRerank or None: Configured reranker or None if disabled.
         """
-        if not app_settings.reranker_model:
+        if not settings.retrieval.reranker_model:
             return None
 
         try:
             reranker = ColbertRerank(
-                top_n=app_settings.reranking_top_k,
-                model=app_settings.reranker_model,
+                top_n=settings.retrieval.reranking_top_k,
+                model=settings.retrieval.reranker_model,
                 keep_retrieval_score=True,
             )
-            logger.info("ColBERT reranker created: %s", app_settings.reranker_model)
+            logger.info(
+                "ColBERT reranker created: %s",
+                settings.retrieval.reranker_model,
+            )
             return reranker
         except (RuntimeError, ValueError, AttributeError, ImportError) as e:
             logger.warning("Failed to create ColBERT reranker: %s", e)
@@ -137,7 +140,7 @@ class ToolFactory:
 
         # Configure query engine with optimal settings
         query_engine = index.as_query_engine(
-            similarity_top_k=app_settings.top_k,
+            similarity_top_k=settings.retrieval.top_k,
             node_postprocessors=postprocessors,
             verbose=False,
         )
@@ -263,7 +266,7 @@ class ToolFactory:
         postprocessors = [reranker] if reranker else []
 
         query_engine = index.as_query_engine(
-            similarity_top_k=app_settings.top_k,
+            similarity_top_k=settings.retrieval.top_k,
             node_postprocessors=postprocessors,
             verbose=False,
         )
@@ -315,7 +318,7 @@ class ToolFactory:
             ...     kg_index=kg_idx,
             ...     retriever=fusion_retriever
             ... )
-            >>> print(f"Created {len(tools)} tools")
+            >>> len(tools)  # number of tools created
         """
         tools = []
 
@@ -350,10 +353,10 @@ class ToolFactory:
 
     @classmethod
     def create_basic_tools(cls, index_data: dict[str, Any]) -> list[QueryEngineTool]:
-        """Create basic tools from index data dictionary (legacy compatibility).
+        """Create basic tools from index data dictionary.
 
-        Provides backward compatibility with existing code that passes
-        index_data as a dictionary. Extracts components and creates tools.
+        Provides a convenient dictionary-based interface for tool creation.
+        Extracts components and creates tools from the provided dictionary.
 
         Args:
             index_data: Dictionary containing indexed components:
