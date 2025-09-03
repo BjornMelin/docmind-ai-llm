@@ -6,7 +6,7 @@ Simplified Reranking with BGE-reranker-v2-m3 Direct Usage
 
 ## Version/Date
 
-3.1 / 2025-08-18
+3.2 / 2025-09-03
 
 ## Status
 
@@ -96,6 +96,7 @@ scores = model.predict(pairs)  # pairs = [(query, doc1), (query, doc2), ...]
 - **ADR-003** (Adaptive Retrieval Pipeline): Reranks hierarchical retrieval results
 - **ADR-001** (Modern Agentic RAG): Provides reranking quality for agent decisions
 - **ADR-010** (Performance Optimization Strategy): Implements caching and quantization
+- **ADR-036** (Reranker UI Controls): Exposes `normalize_scores` and `top_n` in the UI; this ADR’s implementation reads those settings at construction time
 
 ## Design
 
@@ -636,6 +637,7 @@ class EnhancedBGEReranker(RerankerInterface):
 
 ## Changelog
 
+- **3.2 (2025-09-03)**: DOCS - Added cross-reference to ADR-036 (UI controls for `normalize_scores` and `top_n`)
 - **3.1 (2025-08-21)**: **IMPLEMENTATION COMPLETE** - CrossEncoder reranking fully deployed with BGE-reranker-v2-m3
 - **3.0 (2025-08-18)**: **HARDWARE UPGRADE** - Updated performance targets for RTX 4090 Laptop: <100ms reranking latency for 20 documents (50% improvement).
 - **2.0 (2025-08-17)**: SIMPLIFIED - Recommend using BGE-reranker directly via sentence-transformers without complex wrappers. Multi-stage filtering is over-engineering for most use cases.

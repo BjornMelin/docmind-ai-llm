@@ -3,7 +3,7 @@
 ## Metadata
 
 **Status:** Implemented  
-**Version/Date:** v2.3 / 2025-09-02
+**Version/Date:** v2.4 / 2025-09-03
 
 ## Title
 
@@ -159,6 +159,8 @@ graph TD
 - **ADR-001** (Modern Agentic RAG Architecture): Multi-agent system requiring streamlined configuration
 - **ADR-010** (Performance Optimization Strategy): Performance benefits from simplified configuration
 - **ADR-011** (Agent Orchestration Framework): Supervisor pattern with simplified settings management
+- **ADR-036** (Reranker UI Controls): Uses existing `RetrievalConfig.reranker_normalize_scores` and `RetrievalConfig.reranking_top_k`
+- **ADR-035** (Semantic Cache v1.1): Introduces `SemanticCacheConfig` under `settings.semantic_cache` (provider “gptcache” initially)
 
 ## Design
 
@@ -583,6 +585,7 @@ def test_configuration_simplicity():
 
 ## Changelog
 
+- **v2.4 (2025-09-03)**: DOCS - Added related-decision references to ADR-035 (SemanticCacheConfig provider block) and ADR-036 (reranker controls consume RetrievalConfig fields)
 - **v2.3 (2025-09-02)**: Added ADR-032/ADR-033 settings toggles (analytics_*and backup_*) and configuration examples; documented DOCMIND_ env mappings.
 - **v2.2 (2025-08-27)**: ✅ **CRITICAL USER FLEXIBILITY PRESERVATION**. Successfully restored ALL user choice settings after Phase 3 implementation nearly removed them. All 5 user scenarios validated: CPU-only students (8GB RAM), mid-range developers (RTX 3060), high-end researchers (RTX 4090), privacy users (offline), and custom configuration users. Key restored settings: `enable_gpu_acceleration`, `llm_backend` (ollama/vllm/openai/llama_cpp), `embedding_model` flexibility, dynamic batch sizes, memory limits, and complete offline capability. Configuration now properly supports LOCAL USER APPLICATION requirements vs server application assumptions.
 

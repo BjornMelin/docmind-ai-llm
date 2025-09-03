@@ -372,6 +372,8 @@ if prompt := st.chat_input("Ask a question"):
 - **ADR-010** (Performance Optimization Strategy): Cache integration affects UI responsiveness
 - **ADR-011** (Agent Orchestration Framework): Manages state for 5-agent coordination in the UI
 - **ADR-004** (Local-First LLM Strategy): Configures Qwen3-14B settings in the UI
+- **ADR-013** (UI Architecture): Placement and composition of controls
+- **ADR-036** (Reranker UI Controls): Adds two settings-driven sidebar controls (`normalize_scores`, `top_n`) that rely on `st.session_state` initialization and persistence patterns from this ADR
 
 ## Performance Tips
 
@@ -399,6 +401,7 @@ Streamlit provides built-in monitoring:
 
 ## Changelog
 
+- **4.2.1 (2025-09-03)**: DOCS - Added related-decision reference to ADR-036 (Reranker UI controls rely on session_state patterns)
 - **4.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
 - **4.1 (2025-08-18)**: Enhanced state management for 5-agent workflow coordination, supporting DSPy optimization state and optional GraphRAG session persistence while maintaining Streamlit native simplicity
 - **4.0 (2025-08-17)**: [Missing previous changelog entry - needs documentation]

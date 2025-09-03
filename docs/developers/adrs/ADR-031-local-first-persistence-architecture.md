@@ -3,7 +3,7 @@
 ## Metadata
 
 **Status:** Accepted  
-**Version/Date:** v1.0 / 2025-09-02
+**Version/Date:** v1.1 / 2025-09-03
 
 ## Title
 
@@ -88,6 +88,7 @@ graph TD
 - **ADR-030**: Cache Unification (IngestionCache/DuckDBKVStore)
 - **ADR-026**: Test-production separation
 - **ADR-033**: Local Backup & Retention (optional manual backups/rotation)
+- **ADR-035**: Application-level semantic cache (GPTCache) — complements this ADR by covering prompt/response cache separate from processing cache
 
 ## Design
 
@@ -142,4 +143,5 @@ graph TD
 
 ## Changelog
 
+- **1.1 (2025-09-03)**: DOCS - Added Related Decisions note referencing ADR-035 (application-level semantic cache)
 - **1.0 (2025-09-02)**: Initial accepted version.

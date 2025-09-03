@@ -3,7 +3,7 @@
 ## Metadata
 
 **Status:** Accepted  
-**Version/Date:** v1.0 / 2025-09-02
+**Version/Date:** v1.1 / 2025-09-03
 
 ## Title
 
@@ -78,6 +78,7 @@ graph TD
 - **ADR-031**: Local-first persistence; vectors in Qdrant, cache via DuckDBKVStore
 - **ADR-025**: Simplified caching; now unified on IngestionCache(DuckDBKVStore)
 - **ADR-026**: Test/production separation; removes SimpleCache from src
+- **ADR-035**: Application-level semantic cache (GPTCache) — separate from document-processing cache described here
 
 ## Design
 
@@ -138,4 +139,5 @@ graph TD
 
 ## Changelog
 
+- **1.1 (2025-09-03)**: DOCS - Clarified separation from application-level semantic cache (ADR-035) in Related Decisions
 - **1.0 (2025-09-02)**: Initial accepted version.

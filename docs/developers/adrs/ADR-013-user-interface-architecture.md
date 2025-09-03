@@ -6,7 +6,7 @@ Premium Streamlit-Based Multipage UI with Modern Navigation and Component Integr
 
 ## Version/Date
 
-3.0 / 2025-08-17
+3.1 / 2025-09-03
 
 ## Status
 
@@ -102,6 +102,7 @@ We will use **Native Streamlit Components** without unnecessary libraries:
 - **ADR-009** (Document Processing): Multimodal document upload and processing UI
 - **ADR-016** (UI State Management): Session state schema and caching strategy
 - **ADR-017** (Component Library): Streamlit component selection and theming
+- **ADR-036** (Reranker UI Controls): Accepts two minimal controls—`normalize_scores` and `top_n`—in the sidebar under Retrieval & Reranking
 
 ## Design
 
@@ -688,5 +689,7 @@ class AsyncTaskManager:
 
 ## Changelog
 
+- **3.1 (2025-09-03)**: DOCS - Added related-decision reference to ADR-036 (Reranker UI controls)
+- **3.0 (2025-08-17)**: Accepted version reflecting premium Streamlit multipage UI and modern patterns
 - **2.0 (2025-08-17)**: **MAJOR UPDATE** - Complete redesign with modern multipage architecture, component integration, advanced state management, and production-ready performance optimization
 - **1.0 (2025-01-16)**: Initial user interface architecture with basic Streamlit implementation

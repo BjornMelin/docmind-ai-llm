@@ -6,7 +6,7 @@ DeepEval-Based RAG Testing with Pytest Integration and Local Quality Assurance
 
 ## Version/Date
 
-1.0 / 2025-01-16
+1.1 / 2025-09-03
 
 ## Status
 
@@ -113,6 +113,8 @@ def test_rag_quality(evaluator):
 - **ADR-008** (Production Observability): Provides metrics for testing validation
 - **ADR-012** (Evaluation and Quality Assurance): Complements production monitoring
 - **ADR-026** (Test-Production Separation): Provides clean test architecture framework
+- **ADR-036** (Reranker UI Controls): Adds deterministic Streamlit AppTest coverage for two sidebar controls
+- **ADR-035** (Semantic Cache v1.1): Requires offline deterministic unit/integration tests using temp SQLite and MockEmbedding
 
 ## Design
 
@@ -678,4 +680,5 @@ jobs:
 
 ## Changelog
 
+- **1.1 (2025-09-03)**: DOCS - Added Related Decisions pointers to ADR-035 (semantic cache offline tests) and ADR-036 (Streamlit AppTest for UI controls)
 - **1.0 (2025-01-16)**: Initial testing and quality validation framework with DeepEval integration, pytest orchestration, and CI/CD support
