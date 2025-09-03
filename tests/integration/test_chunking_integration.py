@@ -81,7 +81,6 @@ async def test_by_title_section_boundaries(tmp_path):
         patch(
             "src.processing.document_processor.is_unstructured_like",
             return_value=True,
-            
         ),
         patch(
             "src.processing.document_processor.chunk_by_title", return_value=chunks

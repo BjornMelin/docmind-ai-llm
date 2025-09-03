@@ -11,6 +11,7 @@ def _ns(**kw):
 
 
 def test_create_vector_store_returns_store(monkeypatch):
+    """Test vector store creation returns proper store instance."""
     # Avoid real network: stub QdrantClient constructor
     monkeypatch.setattr(storage_mod, "QdrantClient", MagicMock())
 
@@ -19,11 +20,14 @@ def test_create_vector_store_returns_store(monkeypatch):
 
 
 def test_get_collection_info_exists(monkeypatch):
+    """Test collection info retrieval when collection exists."""
     mock_client = MagicMock()
     mock_client.collection_exists.return_value = True
     mock_info = _ns(
         points_count=10,
-        config=_ns(params=_ns(vectors={"text-dense": {}}, sparse_vectors={"text-sparse": {}})),
+        config=_ns(
+            params=_ns(vectors={"text-dense": {}}, sparse_vectors={"text-sparse": {}})
+        ),
         status="green",
     )
     mock_client.get_collection.return_value = mock_info
@@ -44,6 +48,7 @@ def test_get_collection_info_exists(monkeypatch):
 
 
 def test_get_collection_info_not_exists(monkeypatch):
+    """Test collection info retrieval when collection does not exist."""
     mock_client = MagicMock()
     mock_client.collection_exists.return_value = False
 
@@ -60,8 +65,11 @@ def test_get_collection_info_not_exists(monkeypatch):
 
 
 def test_test_connection_success(monkeypatch):
+    """Test connection test succeeds with valid Qdrant client."""
     mock_client = MagicMock()
-    mock_client.get_collections.return_value = _ns(collections=[_ns(name="a"), _ns(name="b")])
+    mock_client.get_collections.return_value = _ns(
+        collections=[_ns(name="a"), _ns(name="b")]
+    )
 
     class _CM:
         def __enter__(self):
@@ -77,6 +85,8 @@ def test_test_connection_success(monkeypatch):
 
 
 def test_test_connection_error(monkeypatch):
+    """Test connection test fails with connection error."""
+
     class _CM:
         def __enter__(self):
             raise ConnectionError("boom")
@@ -90,6 +100,7 @@ def test_test_connection_error(monkeypatch):
 
 
 def test_clear_collection_exists(monkeypatch):
+    """Test collection clearing succeeds when collection exists."""
     mock_client = MagicMock()
     mock_client.collection_exists.return_value = True
     mock_client.get_collection.return_value = _ns(
@@ -108,6 +119,7 @@ def test_clear_collection_exists(monkeypatch):
 
 
 def test_clear_collection_missing(monkeypatch):
+    """Test collection clearing fails when collection does not exist."""
     mock_client = MagicMock()
     mock_client.collection_exists.return_value = False
 

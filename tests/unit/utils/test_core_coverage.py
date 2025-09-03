@@ -6,7 +6,7 @@ are boundary-mocked.
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,6 +14,7 @@ from src.utils import core as core_mod
 
 
 def test_detect_hardware_cpu_only(monkeypatch):
+    """Test hardware detection returns CPU-only configuration."""
     mock_torch = MagicMock()
     mock_torch.cuda.is_available.return_value = False
     monkeypatch.setattr(core_mod, "torch", mock_torch, raising=False)
@@ -24,6 +25,7 @@ def test_detect_hardware_cpu_only(monkeypatch):
 
 
 def test_detect_hardware_gpu(monkeypatch):
+    """Test hardware detection returns GPU configuration when available."""
     mock_torch = MagicMock()
     mock_torch.cuda.is_available.return_value = True
     mock_torch.cuda.get_device_name.return_value = "RTX-TEST"
@@ -39,6 +41,7 @@ def test_detect_hardware_gpu(monkeypatch):
 
 
 def test_validate_startup_configuration_success(monkeypatch):
+    """Test startup configuration validation succeeds with valid Qdrant connection."""
     mock_client = MagicMock()
     mock_client.get_collections.return_value = SimpleNamespace(collections=[])
     monkeypatch.setattr(
@@ -55,8 +58,10 @@ def test_validate_startup_configuration_success(monkeypatch):
 
 
 def test_validate_startup_configuration_connection_error(monkeypatch):
+    """Test startup config validation raises RuntimeError on connection failure."""
+
     # Raise ConnectionError on init to hit error path
-    def _raise(*_a, **_kw):  # noqa: D401 - simple raiser
+    def _raise(*_a, **_kw):
         raise ConnectionError("boom")
 
     monkeypatch.setattr(core_mod.qdrant_client, "QdrantClient", _raise)
@@ -70,6 +75,7 @@ def test_validate_startup_configuration_connection_error(monkeypatch):
 
 
 def test_verify_rrf_configuration_in_range():
+    """Test RRF configuration verification with valid parameters."""
     cfg = SimpleNamespace(
         retrieval=SimpleNamespace(rrf_alpha=50, rrf_k_constant=60, strategy="hybrid")
     )
@@ -79,6 +85,7 @@ def test_verify_rrf_configuration_in_range():
 
 
 def test_managed_gpu_operation(monkeypatch):
+    """Test managed GPU operation context manager clears cache on exit."""
     mock_torch = MagicMock()
     mock_torch.cuda.is_available.return_value = True
     monkeypatch.setattr(core_mod, "torch", mock_torch, raising=False)
@@ -94,10 +101,11 @@ def test_managed_gpu_operation(monkeypatch):
 
 
 def test_async_timer_decorator(monkeypatch):
+    """Test async timer decorator executes function correctly."""
     calls = {"count": 0}
 
     @core_mod.async_timer
-    async def _fn():  # noqa: D401 - test stub
+    async def _fn():
         calls["count"] += 1
         return 42
 

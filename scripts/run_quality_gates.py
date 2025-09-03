@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 QUALITY_SCRIPTS = {
     "coverage": {
         "script": "scripts/check_coverage.py",
-        "args": ['--collect', '--threshold', '80', '--fail-under'],
+        "args": ["--collect", "--threshold", "80", "--fail-under"],
         "description": "Coverage threshold validation",
         "timeout": 900,
     },
