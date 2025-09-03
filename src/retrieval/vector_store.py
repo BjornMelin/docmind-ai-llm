@@ -456,7 +456,10 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         return self._convert_results(results)
 
     def _sparse_search(
-        self, query: VectorStoreQuery, sparse_embedding: dict[int, float], **_kwargs: Any
+        self,
+        query: VectorStoreQuery,
+        sparse_embedding: dict[int, float],
+        **_kwargs: Any,
     ) -> VectorStoreQueryResult:
         """Execute sparse-only search using BGE-M3 sparse embeddings."""
         indices = list(sparse_embedding.keys())
