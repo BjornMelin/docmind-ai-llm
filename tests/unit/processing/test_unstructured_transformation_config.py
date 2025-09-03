@@ -15,7 +15,7 @@ from src.processing.document_processor import UnstructuredTransformation
 def test_partition_config_hi_res() -> None:
     """HI_RES should enable image extraction and table inference."""
     tfm = UnstructuredTransformation(strategy=ProcessingStrategy.HI_RES)
-    cfg = tfm._build_partition_config(ProcessingStrategy.HI_RES)  # noqa: SLF001
+    cfg = tfm._build_partition_config(ProcessingStrategy.HI_RES)
     assert cfg["strategy"] == ProcessingStrategy.HI_RES.value
     assert cfg["include_metadata"] is True
     assert cfg["include_page_breaks"] is True
@@ -28,7 +28,7 @@ def test_partition_config_hi_res() -> None:
 def test_partition_config_fast() -> None:
     """FAST should disable image/table heavy features."""
     tfm = UnstructuredTransformation(strategy=ProcessingStrategy.FAST)
-    cfg = tfm._build_partition_config(ProcessingStrategy.FAST)  # noqa: SLF001
+    cfg = tfm._build_partition_config(ProcessingStrategy.FAST)
     assert cfg["strategy"] == ProcessingStrategy.FAST.value
     assert cfg["include_metadata"] is True
     assert cfg["include_page_breaks"] is True
@@ -40,7 +40,7 @@ def test_partition_config_fast() -> None:
 def test_partition_config_ocr_only() -> None:
     """OCR_ONLY should enable OCR-related flags and languages."""
     tfm = UnstructuredTransformation(strategy=ProcessingStrategy.OCR_ONLY)
-    cfg = tfm._build_partition_config(ProcessingStrategy.OCR_ONLY)  # noqa: SLF001
+    cfg = tfm._build_partition_config(ProcessingStrategy.OCR_ONLY)
     assert cfg["strategy"] == ProcessingStrategy.OCR_ONLY.value
     assert cfg["include_metadata"] is True
     assert cfg["include_page_breaks"] is True

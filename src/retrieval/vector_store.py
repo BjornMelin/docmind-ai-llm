@@ -7,7 +7,7 @@ with hybrid search and RRF score fusion capabilities per ADR-007.
 Key features:
 - Single collection supporting dense + sparse vectors
 - Native sparse vector support with payload-based storage
-- Hybrid search with configurable RRF fusion (α=0.7)
+- Hybrid search with configurable RRF fusion (alpha=0.7)
 - Resilience patterns with tenacity retry logic
 - Optimized for RTX 4090 performance
 """
@@ -96,7 +96,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
     Features:
     - Dense vector search (BGE-M3 1024D embeddings)
     - Sparse vector search (BGE-M3 sparse embeddings)
-    - Hybrid search with configurable RRF fusion (α=0.7)
+    - Hybrid search with configurable RRF fusion (alpha=0.7)
     - Metadata filtering and payload storage
     - Resilience patterns with exponential backoff
     - Optimized for RTX 4090 performance
@@ -418,7 +418,7 @@ class QdrantUnifiedVectorStore(BasePydanticVectorStore):
         for doc_id in all_ids:
             dense_score = dense_scores.get(doc_id, 0.0)
             sparse_score = sparse_scores.get(doc_id, 0.0)
-            # Apply alpha weighting: α * dense + (1-α) * sparse
+            # Apply alpha weighting: alpha * dense + (1-alpha) * sparse
             fused_scores[doc_id] = (
                 self.rrf_alpha * dense_score + (1 - self.rrf_alpha) * sparse_score
             )

@@ -41,7 +41,7 @@ def perf_counter_boundary():
 def network_guard():
     """Guard against accidental network calls in unit tests."""
 
-    def _raise(*_a, **_k):  # noqa: D401
+    def _raise(*_a, **_k):
         raise RuntimeError("Network access disabled in unit tests")
 
     try:
@@ -69,7 +69,7 @@ def no_sleep():
     def _sleep_noop(_secs: float = 0.0):
         return None
 
-    async def _async_sleep_noop(_secs: float = 0.0):  # noqa: D401
+    async def _async_sleep_noop(_secs: float = 0.0):
         return None
 
     with (

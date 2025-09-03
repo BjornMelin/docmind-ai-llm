@@ -485,7 +485,7 @@ def supervisor_stream_shim() -> Mock:
             yield final
 
     class _Graph:
-        def compile(self, checkpointer=None):  # noqa: D401, ARG002
+        def compile(self, checkpointer=None):
             return _Compiled()
 
     return _Graph()
@@ -598,13 +598,13 @@ def mock_memory_monitor() -> Any:
     """
 
     class _Monitor:
-        def __init__(self) -> None:  # noqa: D401
+        def __init__(self) -> None:
             self._peak = 1.3
 
-        def get_memory_usage(self) -> dict[str, float]:  # noqa: D401
+        def get_memory_usage(self) -> dict[str, float]:
             return {"used_gb": 1.2}
 
-        def track_peak_usage(self) -> float:  # noqa: D401
+        def track_peak_usage(self) -> float:
             return self._peak
 
     return _Monitor()

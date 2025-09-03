@@ -90,7 +90,7 @@ class TestEmbeddingsIntegration:
                 self.use_fp16 = use_fp16
                 self.device = device
 
-            def encode(self, texts, **kwargs):  # noqa: D401
+            def encode(self, texts, **kwargs):
                 return_dense = kwargs.get("return_dense", True)
                 return_sparse = kwargs.get("return_sparse", True)
                 return_colbert_vecs = kwargs.get("return_colbert_vecs", True)

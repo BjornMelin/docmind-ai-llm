@@ -570,7 +570,7 @@ class TestDocumentUploadSection:
                 # This would be in a try/except block in the actual app
                 raise ValueError("Invalid document")
             except ValueError as e:
-                error_message = f"Document processing failed: {str(e)}"
+                error_message = f"Document processing failed: {e!s}"
                 assert error_message == "Document processing failed: Invalid document"
 
 
@@ -630,7 +630,7 @@ class TestStreamingResponse:
             try:
                 raise ValueError("Test error")
             except ValueError as e:
-                yield f"Error processing query: {str(e)}"
+                yield f"Error processing query: {e!s}"
 
         error_stream = list(stream_with_error())
         assert error_stream[0] == error_message
@@ -677,7 +677,7 @@ class TestSessionPersistence:
             mock_chat_store.persist(filename)
             result = "success"
         except (OSError, ValueError, TypeError) as e:
-            result = f"error: {str(e)}"
+            result = f"error: {e!s}"
 
         mock_chat_store.persist.assert_called_once_with(filename)
         assert result == "success"
@@ -695,7 +695,7 @@ class TestSessionPersistence:
                 memory = mock_memory_class.from_file(filename)
                 result = "success"
             except (OSError, ValueError, TypeError) as e:
-                result = f"error: {str(e)}"
+                result = f"error: {e!s}"
 
             mock_memory_class.from_file.assert_called_once_with(filename)
             assert result == "success"
@@ -713,7 +713,7 @@ class TestSessionPersistence:
             mock_chat_store.persist("session.json")
             result = "success"
         except (OSError, ValueError, TypeError) as e:
-            result = f"Save failed: {str(e)}"
+            result = f"Save failed: {e!s}"
 
         assert result == "Save failed: Permission denied"
 

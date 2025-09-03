@@ -5,7 +5,7 @@ description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.11,<3.12"
 keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -22,7 +22,6 @@ dependencies = [
     "tenacity>=9.1.2",                   # Robust retries
     "pydantic==2.11.7",                  # Data validation & settings
     "pydantic-settings==2.10.1",         # Settings management
-    "dependency-injector>=4.48.1",       # DI container for modular wiring
     # UI / App Framework
     "streamlit>=1.48.0",                 # Local app UI
     # Document Processing & NLP
@@ -147,10 +146,11 @@ Manual Installation Steps (if needed):
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
+select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D", "RUF"]
+# Be slightly stricter than before; keep a short, explicit ignore set.
 ignore = [
     "D203",  # 1 blank line required before class docstring (conflicts with D211)
     "D213",  # Multi-line docstring summary should start at the second line (conflicts with Google style)
@@ -159,25 +159,39 @@ ignore = [
     "S607",  # partial executable path (acceptable for well-known system commands)
     "S108",  # hardcoded temp file path (will be replaced with tempfile)
 ]
+# Ensure unused or mistyped noqa comments are flagged.
+extend-select = ["RUF100"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",  # assert usage (standard practice in pytest tests)
     "S311",  # pseudo-random generators (acceptable for test timing simulation)
+    "RUF001", "RUF002", "RUF003",  # allow unicode/emoji in test strings/docstrings
+    "RUF013",  # allow implicit Optional in test annotations for brevity
+    "RUF005",  # list concatenation shortcuts allowed in tests
+    "RUF017",  # performance anti-patterns acceptable in tests
+    "N802",    # test AST visitors use conventional names
+]
+"scripts/**/*.py" = [
+    "RUF001", "RUF002", "RUF003",  # authoring convenience in scripts
+    "RUF013",  # allow implicit Optional in scripts
+]
+"docs/**/*.py" = [
+    "RUF001", "RUF002", "RUF003",  # unicode in examples/docstrings
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["docmind_ai"]
+known-first-party = ["src"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 # Pylint configuration to keep tests clean without noisy warnings
 [tool.pylint.main]
-py-version = "3.12"
+py-version = "3.11"
 jobs = 0
 limit-inference-results = 100
-extension-pkg-allow-list = ["llama_index", "torch", "dependency_injector"]
+extension-pkg-allow-list = ["llama_index", "torch"]
 disable = [
   # Pydantic model attributes are resolved at runtime; avoid false positives
   "no-member",

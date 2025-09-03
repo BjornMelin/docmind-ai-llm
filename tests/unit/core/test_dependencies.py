@@ -37,13 +37,13 @@ class ImportVisitor(ast.NodeVisitor):
         self.imports = set()
         self.from_imports = set()
 
-    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
+    def visit_Import(self, node: ast.Import) -> None:
         """Visit import statements (import x)."""
         for alias in node.names:
             self.imports.add(alias.name)
         self.generic_visit(node)
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Visit from-import statements (from x import y)."""
         if node.module:
             self.from_imports.add(node.module)

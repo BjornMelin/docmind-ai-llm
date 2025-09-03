@@ -109,7 +109,7 @@ class DocMindApplication:
             logger.error("Error processing query: %s", e)
             # Return error response
             return AgentResponse(
-                content=f"I encountered an error processing your query: {str(e)}",
+                content=f"I encountered an error processing your query: {e!s}",
                 sources=[],
                 metadata={"error": str(e), "fallback": True},
                 validation_score=0.0,

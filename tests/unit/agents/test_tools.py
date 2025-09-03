@@ -308,7 +308,7 @@ class TestRetrieveDocuments:
 
         real_import = _builtins.__import__
 
-        def _fake_import(name, *args, **kwargs):  # noqa: D401
+        def _fake_import(name, *args, **kwargs):
             if name.startswith("src.dspy_integration"):
                 raise ImportError("Module not found")
             return real_import(name, *args, **kwargs)

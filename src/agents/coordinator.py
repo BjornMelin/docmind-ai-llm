@@ -635,7 +635,7 @@ class MultiAgentCoordinator:
             logger.error("Failed to extract response: %s", e)
             processing_time = time.perf_counter() - start_time
             return AgentResponse(
-                content=f"Error extracting response: {str(e)}",
+                content=f"Error extracting response: {e!s}",
                 sources=[],
                 metadata={"extraction_error": str(e)},
                 validation_score=0.0,
@@ -693,7 +693,7 @@ class MultiAgentCoordinator:
             logger.error("Fallback RAG also failed: %s", e)
             processing_time = time.perf_counter() - start_time
             return AgentResponse(
-                content=f"System temporarily unavailable. Error: {str(e)}",
+                content=f"System temporarily unavailable. Error: {e!s}",
                 sources=[],
                 metadata={
                     "fallback_used": True,

@@ -92,7 +92,7 @@ def mock_all_external_services():
                     yield final
 
             class _Graph:
-                def compile(self, checkpointer=None):  # noqa: ARG002
+                def compile(self, checkpointer=None):
                     """Return compiled shim object."""
                     return _Compiled()
 

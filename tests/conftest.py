@@ -97,7 +97,7 @@ def system_settings():
         from tests.fixtures.test_settings import create_system_settings
 
         return create_system_settings()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -116,7 +116,7 @@ def integration_settings():
         with suppress(Exception):
             s.embedding_dimension = s.embedding.dimension
         return s
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 

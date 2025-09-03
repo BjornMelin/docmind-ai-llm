@@ -101,6 +101,9 @@ class HybridPersistenceManager:
         self._operation_count = 0
         self._total_operation_time = 0.0
 
+        # Track background tasks to avoid premature GC (e.g., create_task)
+        self._background_tasks: list[asyncio.Task] = []
+
         # Initialize storage systems
         self._initialize_storage()
 
@@ -120,7 +123,7 @@ class HybridPersistenceManager:
             self._initialize_qdrant()
 
         except Exception as e:
-            logger.error(f"Failed to initialize hybrid storage: {str(e)}")
+            logger.error(f"Failed to initialize hybrid storage: {e!s}")
             raise PersistenceError(f"Storage initialization failed: {e}") from e
 
     def _initialize_sqlite(self) -> None:
@@ -149,7 +152,7 @@ class HybridPersistenceManager:
             logger.info(f"SQLite initialized with WAL mode: {self.sqlite_path}")
 
         except Exception as e:
-            logger.error(f"Failed to initialize SQLite: {str(e)}")
+            logger.error(f"Failed to initialize SQLite: {e!s}")
             raise PersistenceError(f"SQLite initialization failed: {e}") from e
 
     def _create_documents_table(self) -> None:
@@ -203,12 +206,14 @@ class HybridPersistenceManager:
             )
 
             # Create vectors collection if not exists
-            asyncio.create_task(self._ensure_vector_collection())
+            self._background_tasks.append(
+                asyncio.create_task(self._ensure_vector_collection())
+            )
 
             logger.info(f"Qdrant initialized: {self.settings.database.qdrant_url}")
 
         except (ConnectionError, OSError, ValueError, TimeoutError) as e:
-            logger.error(f"Failed to initialize Qdrant: {str(e)}")
+            logger.error(f"Failed to initialize Qdrant: {e!s}")
             # Continue without Qdrant - storage will work in SQLite-only mode
             self.qdrant_client = None
 
@@ -243,7 +248,7 @@ class HybridPersistenceManager:
                     logger.info(f"Created Qdrant collection: {self.vectors_collection}")
 
         except (ConnectionError, OSError, ValueError, TimeoutError) as e:
-            logger.error(f"Failed to ensure vector collection: {str(e)}")
+            logger.error(f"Failed to ensure vector collection: {e!s}")
 
     @asynccontextmanager
     async def _sqlite_transaction(self):
@@ -327,7 +332,7 @@ class HybridPersistenceManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to store document {document_metadata.id}: {str(e)}")
+            logger.error(f"Failed to store document {document_metadata.id}: {e!s}")
             raise PersistenceError(f"Document storage failed: {e}") from e
 
     async def _store_vectors(self, vectors: list[VectorRecord]) -> None:
@@ -367,7 +372,7 @@ class HybridPersistenceManager:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to store vectors: {str(e)}")
+            logger.error(f"Failed to store vectors: {e!s}")
             raise PersistenceError(f"Vector storage failed: {e}") from e
 
     @retry(
@@ -425,7 +430,7 @@ class HybridPersistenceManager:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to get document by hash {file_hash}: {str(e)}")
+            logger.error(f"Failed to get document by hash {file_hash}: {e!s}")
             raise PersistenceError(f"Document retrieval failed: {e}") from e
 
     async def search_similar_vectors(
@@ -505,7 +510,7 @@ class HybridPersistenceManager:
             return unified_results
 
         except Exception as e:
-            logger.error(f"Vector search failed: {str(e)}")
+            logger.error(f"Vector search failed: {e!s}")
             raise PersistenceError(f"Vector search failed: {e}") from e
 
     async def _get_document_by_id(self, document_id: str) -> DocumentMetadata | None:
@@ -553,7 +558,7 @@ class HybridPersistenceManager:
                 )
 
         except (sqlite3.Error, json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Failed to get document by ID {document_id}: {str(e)}")
+            logger.error(f"Failed to get document by ID {document_id}: {e!s}")
             return None
 
     async def get_storage_stats(self) -> StorageStats:
@@ -613,12 +618,12 @@ class HybridPersistenceManager:
                         stats.qdrant_size_mb = (stats.total_vectors * 5) / 1024
 
                 except (ConnectionError, OSError, ValueError, TimeoutError) as e:
-                    logger.debug(f"Could not get Qdrant stats: {str(e)}")
+                    logger.debug(f"Could not get Qdrant stats: {e!s}")
 
             return stats
 
         except (sqlite3.Error, OSError) as e:
-            logger.error(f"Failed to get storage stats: {str(e)}")
+            logger.error(f"Failed to get storage stats: {e!s}")
             return StorageStats()
 
     async def delete_document(self, document_id: str) -> bool:
@@ -659,7 +664,7 @@ class HybridPersistenceManager:
             return True
 
         except (sqlite3.Error, ConnectionError, OSError, ValueError, TimeoutError) as e:
-            logger.error(f"Failed to delete document {document_id}: {str(e)}")
+            logger.error(f"Failed to delete document {document_id}: {e!s}")
             return False
 
     async def cleanup_storage(self, max_age_days: int = 30) -> int:
@@ -696,7 +701,7 @@ class HybridPersistenceManager:
             return deleted_count
 
         except (sqlite3.Error, OSError) as e:
-            logger.error(f"Storage cleanup failed: {str(e)}")
+            logger.error(f"Storage cleanup failed: {e!s}")
             return 0
 
     def get_performance_stats(self) -> dict[str, Any]:
@@ -733,7 +738,7 @@ class HybridPersistenceManager:
                 logger.info("Qdrant client closed")
 
         except (sqlite3.Error, ConnectionError, OSError) as e:
-            logger.error(f"Error closing storage connections: {str(e)}")
+            logger.error(f"Error closing storage connections: {e!s}")
 
 
 # Factory function for easy instantiation

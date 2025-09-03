@@ -48,7 +48,7 @@ class UnstructuredTransformation(TransformComponent):
     This transformation integrates Unstructured directly into the LlamaIndex
     ``IngestionPipeline``. It performs partitioning and then applies the
     Unstructured chunking strategy (``chunk_by_title`` by default, with a
-    basic fallback for heading‑sparse documents). Metadata is preserved.
+    basic fallback for heading-sparse documents). Metadata is preserved.
 
     Args:
         strategy: Processing strategy to use for Unstructured partitioning.
@@ -128,7 +128,7 @@ class UnstructuredTransformation(TransformComponent):
                 def _safe_int(val: Any, default: int) -> int:
                     try:
                         return int(val)  # type: ignore[arg-type]
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         return default
 
                 def _safe_bool(val: Any, default: bool) -> bool:
@@ -228,7 +228,7 @@ class UnstructuredTransformation(TransformComponent):
         path_fields = ["file_path", "filename", "source", "file_name", "path"]
 
         for field in path_fields:
-            if field in metadata and metadata[field]:
+            if metadata.get(field):
                 path = Path(metadata[field])
                 if path.exists():
                     return path
@@ -677,7 +677,7 @@ class DocumentProcessor:
         except (OSError, RuntimeError) as e:
             logger.error("Failed to clear cache: {}", e)
             return False
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("Unexpected error clearing cache: {}", e)
             return False
 
@@ -705,6 +705,6 @@ class DocumentProcessor:
         except (OSError, RuntimeError) as e:
             logger.error("Failed to get cache stats: {}", e)
             return {"error": str(e), "processor_type": "hybrid"}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("Unexpected error getting cache stats: {}", e)
             return {"error": str(e), "processor_type": "hybrid"}

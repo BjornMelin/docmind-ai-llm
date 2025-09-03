@@ -252,7 +252,7 @@ if backend == "ollama":
             else:
                 model_options.append(str(it))
     except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError) as e:
-        st.sidebar.error(f"Error fetching models: {str(e)}")
+        st.sidebar.error(f"Error fetching models: {e!s}")
 model_name: str = (
     st.sidebar.selectbox(
         "Model", model_options or [SUGGESTED_MODEL], key="model_select"
@@ -268,7 +268,7 @@ if backend == "ollama" and model_name not in model_options:
             ollama.pull(model_name)  # Direct sync call
             st.sidebar.success("Model downloaded!")
     except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
-        st.sidebar.error(f"Download failed: {str(e)}")
+        st.sidebar.error(f"Download failed: {e!s}")
 
 llm: Any | None = None
 try:
@@ -299,7 +299,7 @@ try:
             max_tokens=context_size,
         )
 except (ValueError, TypeError, RuntimeError, ConnectionError) as e:
-    st.error(f"Model initialization error: {str(e)}")
+    st.error(f"Model initialization error: {e!s}")
     logger.error("Model init error: %s", str(e))
     st.stop()
 
@@ -366,7 +366,7 @@ async def upload_section() -> None:
                 )
 
             except (ValueError, TypeError, OSError, RuntimeError) as e:
-                st.error(f"Document processing failed: {str(e)}")
+                st.error(f"Document processing failed: {e!s}")
                 logger.error("Doc process error: %s", str(e))
 
 
@@ -409,7 +409,7 @@ async def run_analysis() -> None:
                     st.info("✅ Analysis completed using multi-agent system")
 
             except (ValueError, TypeError, RuntimeError) as e:
-                st.error(f"Analysis failed: {str(e)}")
+                st.error(f"Analysis failed: {e!s}")
                 logger.error("Analysis error: %s", str(e))
 
 
@@ -444,7 +444,7 @@ if st.button("Analyze") and st.session_state.index:
                 st.info("✅ Analysis completed using multi-agent system")
 
         except (ValueError, TypeError, RuntimeError) as e:
-            st.error(f"Analysis failed: {str(e)}")
+            st.error(f"Analysis failed: {e!s}")
             logger.error("Analysis error: %s", str(e))
 
 # Chat with Agent using st.chat_message and write_stream
@@ -501,7 +501,7 @@ if user_input:
                             # Add slight delay for streaming effect
                             time.sleep(SETTINGS.ui.streaming_delay_seconds)
                     except (ValueError, TypeError, RuntimeError) as e:
-                        yield f"Error processing query: {str(e)}"
+                        yield f"Error processing query: {e!s}"
 
                 # Use Streamlit's native streaming
                 full_response = st.write_stream(stream_response())
@@ -516,7 +516,7 @@ if user_input:
             else:
                 st.error("Please upload and process documents first before chatting.")
         except (ValueError, TypeError, RuntimeError) as e:
-            st.error(f"Chat response failed: {str(e)}")
+            st.error(f"Chat response failed: {e!s}")
             logger.error("Chat error: %s", str(e))
 
     # Store user message in memory using proper ChatMessage API
@@ -530,7 +530,7 @@ if st.button("Save Session", key="save_session_btn"):
         st.session_state.memory.chat_store.persist("session.json")
         st.success("Saved!")
     except (OSError, ValueError, TypeError) as e:
-        st.error(f"Save failed: {str(e)}")
+        st.error(f"Save failed: {e!s}")
         logger.error("Save error: %s", str(e))
 
 if st.button("Load Session", key="load_session_btn"):
@@ -538,5 +538,5 @@ if st.button("Load Session", key="load_session_btn"):
         st.session_state.memory = ChatMemoryBuffer.from_file("session.json")
         st.success("Loaded!")
     except (OSError, ValueError, TypeError) as e:
-        st.error(f"Load failed: {str(e)}")
+        st.error(f"Load failed: {e!s}")
         logger.error("Load error: %s", str(e))

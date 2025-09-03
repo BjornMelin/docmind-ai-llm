@@ -45,7 +45,7 @@ def _fake_supervisor_graph(final_text: str):
             # legacy attribute used in some assertions
             self.ainvoke = Mock()
 
-        def compile(self, checkpointer=None):  # noqa: ARG002
+        def compile(self, checkpointer=None):
             """Return compiled shim that supports .stream()."""
             return _Compiled(self._text, self)
 
@@ -159,7 +159,7 @@ class TestCompleteQueryWorkflow:
                 def __init__(self) -> None:
                     self.ainvoke = Mock()
 
-                def compile(self, checkpointer=None):  # noqa: ARG002
+                def compile(self, checkpointer=None):
                     return _FlakyCompiled()
 
             mock_supervisor.return_value = _FlakySupervisor()

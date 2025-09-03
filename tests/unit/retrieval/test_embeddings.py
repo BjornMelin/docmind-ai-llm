@@ -457,7 +457,7 @@ class TestClipConfigValidation:
             optimized = config.optimize_for_hardware()
 
             # Adjust batch size based on VRAM; float precision may yield 9 or 10
-            expected = int(round(1.4 / 0.14))
+            expected = round(1.4 / 0.14)
             assert optimized.embed_batch_size in (expected, expected - 1)
             assert mock_logger.info.call_count >= 0
 

@@ -257,7 +257,7 @@ def create_bge_cross_encoder_reranker(
                 "cuda" if getattr(settings, "enable_gpu_acceleration", True) else "cpu"
             )
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         resolved_top_n = top_n if top_n is not None else DEFAULT_TOP_N
         normalize = True
         resolved_device = device if device is not None else "cuda"
