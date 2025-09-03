@@ -1,21 +1,26 @@
-# ADR-036: Reranker UI Controls (normalize_scores and top_n)
-
-## Metadata
-
-**Status:** Accepted  
-**Version/Date:** v1.0.0 / 2025-09-03
-
-## Title
-
-Expose CrossEncoder reranker controls in Streamlit UI: normalize_scores and top_n
+---
+ADR: 036
+Title: Reranker UI Controls (normalize_scores, top_n, mode)
+Status: Accepted
+Version: 1.1.0
+Date: 2025-09-03
+Supersedes:
+Superseded-by:
+Related: 003, 024, 037
+Tags: ui, streamlit, reranking
+References:
+- [Streamlit docs](https://docs.streamlit.io/)
+---
 
 ## Description
 
-Add two simple Streamlit UI controls to tune reranking behavior: a checkbox to enable sigmoid score normalization and a number input to set `top_n` (1–20). Values persist through the existing settings model and are consumed by the reranker factory.
+Expose CrossEncoder/multimodal reranker controls in Streamlit UI: normalize_scores, top_n, and Reranker Mode
+
+Expose three controls in the sidebar to tune reranking behavior: 1) a checkbox to enable sigmoid score normalization, 2) a number input to set `top_n` (1–20), and 3) a radio for `Reranker Mode` (`auto|text|multimodal`). Values persist through the settings model and are consumed by the reranker factory.
 
 ## Context
 
-Our reranking (ADR-006) uses a sentence-transformers CrossEncoder (`BAAI/bge-reranker-v2-m3`). The model outputs logits; optional sigmoid maps to [0,1]. Operators need lightweight control to adjust reranked list size and normalization without editing environment variables.
+Our reranking uses a sentence-transformers CrossEncoder (`BAAI/bge-reranker-v2-m3`) for text and ColPali for visual nodes (ADR‑037). Operators need lightweight control to adjust reranked list size, normalization, and mode selection without editing environment variables.
 
 ## Decision Drivers
 
@@ -49,8 +54,9 @@ Our reranking (ADR-006) uses a sentence-transformers CrossEncoder (`BAAI/bge-rer
 - Add in `src/app.py` (sidebar):
   - Checkbox `"Reranker: Normalize scores"` (default True)
   - Number input `"Reranker: Top N"` (min=1, max=20; default from settings)
-- Wiring: update `settings.retrieval.reranker_normalize_scores` and `settings.retrieval.reranking_top_k` before creating the reranker via `create_bge_cross_encoder_reranker(top_n=...)`.
-- Bounds and validation: rely on Streamlit `number_input` built-in constraints.
+  - Radio `"Reranker Mode"` with options `["auto","text","multimodal"]` (default `auto`)
+- Wiring: update `settings.retrieval.reranker_normalize_scores`, `settings.retrieval.reranking_top_k`, and `settings.retrieval.reranker_mode` before constructing reranker(s).
+- Bounds and validation: rely on Streamlit `number_input` and `radio` built-in constraints.
 
 ## High-Level Architecture
 
@@ -59,7 +65,7 @@ graph TD
   UI[Streamlit Sidebar Controls]
   UI --> S[Settings.retrieval]
   S --> F[Reranker Factory]
-  F --> CE[CrossEncoder (BGE-reranker-v2-m3)]
+  F --> CE[CrossEncoder (BGE-v2-m3) + ColPali]
 ```
 
 ## Related Requirements
@@ -81,7 +87,7 @@ graph TD
 ### Integration Requirements
 
 - **IR-1**: Read/write via existing settings singleton (ADR-024)
-- **IR-2**: Works with current reranker (ADR-006) and UI architecture (ADR-013/ADR-016)
+- **IR-2**: Works with modality-aware reranking (ADR‑037) and UI architecture (ADR-013/ADR-016)
 
 ## Related Decisions
 
