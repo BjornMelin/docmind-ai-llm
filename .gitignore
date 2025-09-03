@@ -186,6 +186,7 @@ TODO.md.bak
 ai-research/
 .spec-updates/
 agent-logs/
+docs/specs/.workflow/
 
 # Model caches and embeddings
 embeddings_cache/
