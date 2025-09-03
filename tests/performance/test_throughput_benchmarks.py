@@ -261,7 +261,7 @@ class TestEmbeddingThroughputBenchmarks:
     def test_single_document_embedding_throughput(self, throughput_tracker):
         """Test single document embedding throughput."""
         with patch(
-            "src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel"
+            "src.retrieval.embeddings.BGEM3FlagModel"
         ) as mock_model:
             mock_bgem3 = MagicMock()
 
@@ -308,7 +308,7 @@ class TestEmbeddingThroughputBenchmarks:
     def test_batch_embedding_throughput_scaling(self, throughput_tracker):
         """Test how batch embedding throughput scales with batch size."""
         with patch(
-            "src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel"
+            "src.retrieval.embeddings.BGEM3FlagModel"
         ) as mock_model:
             mock_bgem3 = MagicMock()
             mock_model.return_value = mock_bgem3
@@ -391,7 +391,7 @@ class TestEmbeddingThroughputBenchmarks:
     def test_concurrent_embedding_throughput(self, throughput_tracker):
         """Test concurrent embedding processing throughput."""
         with patch(
-            "src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel"
+            "src.retrieval.embeddings.BGEM3FlagModel"
         ) as mock_model:
             mock_bgem3 = MagicMock()
 
@@ -505,7 +505,7 @@ class TestEndToEndThroughputBenchmarks:
         # Mock all pipeline components for fast processing
         with (
             patch(
-                "src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel"
+                "src.retrieval.embeddings.BGEM3FlagModel"
             ) as mock_embed,
             patch(
                 "src.retrieval.postprocessor.cross_encoder_rerank.CrossEncoder"
@@ -864,7 +864,7 @@ class TestGPUAcceleratedThroughputBenchmarks:
             pytest.skip("GPU not available for accelerated throughput test")
 
         with patch(
-            "src.retrieval.embeddings.bge_m3_manager.BGEM3FlagModel"
+            "src.retrieval.embeddings.BGEM3FlagModel"
         ) as mock_model:
             mock_bgem3 = MagicMock()
 
