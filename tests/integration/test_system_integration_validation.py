@@ -513,6 +513,7 @@ class TestSystemValidationReporting:
         # Processor → Embedder integration
         doc_result = await processor.process_document_async(
             sample_documents["tech_docs"]
+        )
         # Patch the actual async embedding method for the current embedder
         from unittest.mock import AsyncMock
         with patch.object(embedder, "embed_texts_async", new_callable=AsyncMock) as mock_embed:
