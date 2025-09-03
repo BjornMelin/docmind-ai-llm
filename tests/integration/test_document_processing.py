@@ -7,7 +7,7 @@ the definitive location for document processing integration tests.
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -71,17 +71,8 @@ def test_documents(tmp_path: Path):
 
 @pytest.fixture
 def mock_cache():
-    """Patch SimpleCache to avoid disk IO and ensure determinism."""
-    with patch("src.processing.document_processor.SimpleCache") as mock_simple_cache:
-        cache_instance = Mock()
-        cache_instance.get_document = AsyncMock(return_value=None)
-        cache_instance.store_document = AsyncMock(return_value=True)
-        cache_instance.clear_cache = AsyncMock(return_value=True)
-        cache_instance.get_cache_stats = AsyncMock(
-            return_value={"hits": 0, "misses": 1}
-        )
-        mock_simple_cache.return_value = cache_instance
-        yield cache_instance
+    """Deprecated: SimpleCache removed per ADR-030. No cache patching required."""
+    return None
 
 
 @pytest.fixture
@@ -123,7 +114,7 @@ class TestDocumentProcessorCore:
 
     @pytest.mark.asyncio
     async def test_process_txt_document(
-        self, test_settings, test_documents, mock_unstructured_partition, mock_cache
+        self, test_settings, test_documents, mock_unstructured_partition
     ):
         """Test processing of TXT documents with mocking."""
         proc = DocumentProcessor(test_settings)

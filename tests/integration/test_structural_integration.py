@@ -224,29 +224,16 @@ class TestConfigurationPropagation:
 
 @pytest.mark.integration
 class TestResourceManagementIntegration:
-    """Integration tests for memory context and caching paths."""
+    """Integration tests for memory context."""
 
     @pytest.mark.asyncio
-    async def test_gpu_memory_context_and_cache(self, integration_settings):
-        """Validate gpu_memory_context works alongside SimpleCache.
-
-        Args:
-            integration_settings: Test settings for cache init.
-        """
-        from src.cache.simple_cache import SimpleCache
+    async def test_gpu_memory_context(self, integration_settings):
+        """Validate gpu_memory_context context manager works without cache coupling."""
         from src.utils.storage import gpu_memory_context
 
-        with (
-            patch.object(SimpleCache, "get_document", return_value=None) as mock_get,
-            patch.object(SimpleCache, "store_document", return_value=True) as mock_set,
-        ):
-            cache = SimpleCache(str(integration_settings.cache_dir))
-            with gpu_memory_context():
-                key = "embeddings:test"
-                assert await cache.get_document(key) is None
-                assert await cache.store_document(key, {"dense": [[0.1] * 8]}) is True
-        mock_get.assert_called_once()
-        mock_set.assert_called_once()
+        # Just ensure the context manager enters/exits cleanly
+        with gpu_memory_context():
+            assert True
 
 
 @pytest.mark.integration

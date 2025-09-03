@@ -9,7 +9,7 @@ These tests validate that:
 All heavy library calls are patched; we assert behavior via calls/metadata.
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -89,11 +89,7 @@ async def test_by_title_section_boundaries(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
 
@@ -150,11 +146,7 @@ async def test_basic_fallback_heading_sparse(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
 
@@ -208,11 +200,7 @@ async def test_table_isolation(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
 
@@ -261,11 +249,7 @@ async def test_clustered_titles_form_separate_sections(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
         assert len(result.elements) == 3
@@ -315,11 +299,7 @@ async def test_frequent_small_headings_fallbacks_to_basic(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
         assert mock_basic.called
@@ -368,11 +348,7 @@ async def test_multipage_sections_propagation(tmp_path, multipage):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor(settings=settings)
         await processor.process_document_async(test_file)
 
@@ -422,11 +398,7 @@ async def test_combine_text_under_n_chars_forwarded(tmp_path, combine_under):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor(settings=settings)
         await processor.process_document_async(test_file)
 

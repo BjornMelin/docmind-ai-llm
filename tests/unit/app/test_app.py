@@ -75,6 +75,8 @@ class TestAppUtilityFunctions:
     @pytest.mark.asyncio
     async def test_get_ollama_models_success(self):
         """Test get_ollama_models returns model list successfully."""
+        import src.app as app_module
+
         expected_models = {
             "models": [
                 {"name": "llama2:latest"},
@@ -83,7 +85,7 @@ class TestAppUtilityFunctions:
             ]
         }
 
-        with patch("src.app.ollama.list", return_value=expected_models):
+        with patch.object(app_module.ollama, "list", return_value=expected_models):
             from src.app import get_ollama_models
 
             result = await get_ollama_models()
@@ -94,8 +96,10 @@ class TestAppUtilityFunctions:
     @pytest.mark.asyncio
     async def test_get_ollama_models_connection_error(self):
         """Test get_ollama_models handles connection errors."""
-        with patch(
-            "src.app.ollama.list", side_effect=ConnectionError("Connection failed")
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ollama, "list", side_effect=ConnectionError("Connection failed")
         ):
             from src.app import get_ollama_models
 
@@ -108,7 +112,9 @@ class TestAppUtilityFunctions:
         model_name = "llama2:latest"
         expected_response = {"status": "success", "model": model_name}
 
-        with patch("src.app.ollama.pull", return_value=expected_response):
+        import src.app as app_module
+
+        with patch.object(app_module.ollama, "pull", return_value=expected_response):
             from src.app import pull_ollama_model
 
             result = await pull_ollama_model(model_name)
@@ -120,7 +126,11 @@ class TestAppUtilityFunctions:
         """Test pull_ollama_model handles download errors."""
         model_name = "invalid:model"
 
-        with patch("src.app.ollama.pull", side_effect=RuntimeError("Model not found")):
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ollama, "pull", side_effect=RuntimeError("Model not found")
+        ):
             from src.app import pull_ollama_model
 
             with pytest.raises(RuntimeError):
@@ -130,7 +140,11 @@ class TestAppUtilityFunctions:
         """Test create_tools_from_index creates tools correctly."""
         mock_index = MagicMock()
 
-        with patch("src.app.ToolFactory.create_basic_tools") as mock_create_tools:
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ToolFactory, "create_basic_tools"
+        ) as mock_create_tools:
             expected_tools = [MagicMock(name="tool1"), MagicMock(name="tool2")]
             mock_create_tools.return_value = expected_tools
 
@@ -143,7 +157,11 @@ class TestAppUtilityFunctions:
 
     def test_create_tools_from_index_with_none(self):
         """Test create_tools_from_index handles None index."""
-        with patch("src.app.ToolFactory.create_basic_tools") as mock_create_tools:
+        import src.app as app_module
+
+        with patch.object(
+            app_module.ToolFactory, "create_basic_tools"
+        ) as mock_create_tools:
             mock_create_tools.return_value = []
 
             from src.app import create_tools_from_index
@@ -166,7 +184,9 @@ class TestAgentSystemSetup:
         mock_coordinator = MagicMock()
 
         # Mock the dependency injection
-        with patch("src.app.ApplicationContainer") as mock_container:
+        import src.app as app_module
+
+        with patch.object(app_module, "ApplicationContainer") as mock_container:
             mock_container.multi_agent_coordinator = mock_coordinator
 
             from src.app import get_agent_system

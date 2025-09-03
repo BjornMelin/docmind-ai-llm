@@ -17,7 +17,6 @@ from typing import Any
 
 from loguru import logger
 
-from src.cache.simple_cache import SimpleCache
 from src.core.infrastructure.spacy_manager import get_spacy_manager
 from src.processing.document_processor import DocumentProcessor, ProcessingError
 
@@ -155,19 +154,19 @@ async def clear_document_cache() -> bool:
     Returns:
         True if cache was cleared successfully
     """
-    logger.info("Clearing document processing cache")
+    logger.info("Clearing document processing cache (duckdb file)")
+    try:
+        from src.config.settings import settings as app_settings
 
-    cache_manager = SimpleCache()
-
-    # Simple cache has only one layer
-    success = await cache_manager.clear_cache()
-
-    if success:
-        logger.info("Document cache cleared successfully")
-    else:
-        logger.warning("Failed to clear document cache")
-
-    return success
+        cache_dir = Path(getattr(app_settings, "cache_dir", "./cache"))
+        cache_db = cache_dir / "docmind.duckdb"
+        if cache_db.exists():
+            cache_db.unlink()
+        logger.info("Document cache cleared (duckdb file removed if present)")
+        return True
+    except (OSError, RuntimeError) as e:
+        logger.warning(f"Failed to clear document cache: {e}")
+        return False
 
 
 async def get_cache_stats() -> dict[str, Any]:
@@ -176,12 +175,22 @@ async def get_cache_stats() -> dict[str, Any]:
     Returns:
         Cache statistics dictionary
     """
-    cache_manager = SimpleCache()
-    stats = await cache_manager.get_cache_stats()
+    try:
+        from src.config.settings import settings as app_settings
 
-    logger.debug(f"Cache statistics: type={stats.get('cache_type', 'unknown')}")
-
-    return stats
+        cache_dir = Path(getattr(app_settings, "cache_dir", "./cache"))
+        cache_db = cache_dir / "docmind.duckdb"
+        stats = {
+            "cache_type": "duckdb_kvstore",
+            "db_path": str(cache_db),
+            "total_documents": -1,
+        }
+        logger.debug(f"Cache statistics: type={stats.get('cache_type', 'unknown')}")
+        logger.debug(f"Cache path: {stats.get('db_path')}")
+        return stats
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Failed to read cache stats: {e}")
+        return {"cache_type": "duckdb_kvstore", "error": str(e)}
 
 
 def ensure_spacy_model(model_name: str = "en_core_web_sm") -> Any:

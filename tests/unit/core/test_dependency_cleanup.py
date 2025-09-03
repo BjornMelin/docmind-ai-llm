@@ -101,7 +101,6 @@ class TestOptionalDependencyHandling:
         adr009_modules = [
             "src.processing.document_processor",
             "src.processing.chunking.unstructured_chunker",
-            "src.cache.simple_cache",
             "src.processing.embeddings.bgem3_embedder",
         ]
 

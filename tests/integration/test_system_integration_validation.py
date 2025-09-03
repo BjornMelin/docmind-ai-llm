@@ -24,7 +24,6 @@ import pytest
 # Ensure proper imports
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import AgentResponse
-from src.cache.simple_cache import SimpleCache
 from src.models.processing import ProcessingResult, ProcessingStrategy
 from src.models.schemas import Document
 from src.processing.document_processor import DocumentProcessor
@@ -296,7 +295,6 @@ class TestSystemIntegrationValidation:
         integration_settings.cache.enable_document_caching = True
 
         processor = DocumentProcessor(integration_settings)
-        _cache = SimpleCache(integration_settings.cache_dir / "test_cache.db")
 
         # Test document processing cache
         doc_path = sample_documents["tech_docs"]

@@ -21,6 +21,7 @@ from llama_index.core import Document
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.core.storage.docstore import SimpleDocumentStore
+from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 from loguru import logger
 from tenacity import (
     retry,
@@ -32,7 +33,6 @@ from unstructured.chunking.basic import chunk_elements as chunk_by_basic
 from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.auto import partition
 
-from src.cache.simple_cache import SimpleCache
 from src.config.settings import settings as app_settings
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 from src.processing.utils import is_unstructured_like
@@ -294,11 +294,22 @@ class UnstructuredTransformation(TransformComponent):
         """
         nodes = []
 
+        def _safe_json_value(val: Any) -> Any:
+            """Coerce values to JSON-serializable forms."""
+            if isinstance(val, (str | int | float | bool)) or val is None:
+                return val
+            if isinstance(val, (list | tuple)):
+                return [_safe_json_value(v) for v in val]
+            if isinstance(val, dict):
+                return {k: _safe_json_value(v) for k, v in val.items()}
+            # Fallback to string representation
+            return str(val)
+
         for i, element in enumerate(elements):
             # Extract metadata dictionary from unstructured element
             element_metadata = {}
             if hasattr(element, "metadata") and element.metadata:
-                element_metadata = {
+                raw_md = {
                     "page_number": getattr(element.metadata, "page_number", None),
                     "element_id": getattr(element.metadata, "element_id", None),
                     "parent_id": getattr(element.metadata, "parent_id", None),
@@ -307,6 +318,7 @@ class UnstructuredTransformation(TransformComponent):
                     "text_as_html": getattr(element.metadata, "text_as_html", None),
                     "image_path": getattr(element.metadata, "image_path", None),
                 }
+                element_metadata = {k: _safe_json_value(v) for k, v in raw_md.items()}
                 # Remove None values
                 element_metadata = {
                     k: v for k, v in element_metadata.items() if v is not None
@@ -380,19 +392,15 @@ class DocumentProcessor:
             ".bmp": ProcessingStrategy.OCR_ONLY,
         }
 
-        # Initialize cache for LlamaIndex IngestionPipeline
-        self.cache = IngestionCache(
-            collection="docmind_processing",
-            cache_dir=str(getattr(self.settings, "cache_dir", "./cache")),
-        )
+        # Initialize DuckDB-backed cache for LlamaIndex IngestionPipeline (ADR-030)
+        cache_dir = Path(getattr(self.settings, "cache_dir", "./cache"))
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_db = cache_dir / "docmind.duckdb"
+        kv = DuckDBKVStore(db_path=str(cache_db))
+        self.cache = IngestionCache(cache=kv, collection="docmind_processing")
 
         # Document store for document management and deduplication
         self.docstore = SimpleDocumentStore()
-
-        # Initialize SimpleCache for compatibility
-        self.simple_cache = SimpleCache(
-            cache_dir=str(getattr(self.settings, "cache_dir", "./cache"))
-        )
 
         logger.info(
             "DocumentProcessor initialized with strategy mapping for {} file types",
@@ -535,12 +543,6 @@ class DocumentProcessor:
             # Determine processing strategy
             strategy = self._get_strategy_for_file(file_path)
 
-            # Check cache first using SimpleCache for compatibility
-            cached_result = await self.simple_cache.get_document(str(file_path))
-            if cached_result:
-                logger.info("Retrieved cached result for: {}", file_path)
-                return cached_result
-
             # Create pipeline for this strategy
             pipeline = self._create_pipeline(strategy)
 
@@ -588,12 +590,6 @@ class DocumentProcessor:
                 },
                 document_hash=document_hash,
             )
-
-            # Store in cache for future use (best-effort; ignore serialization errors)
-            try:
-                await self.simple_cache.store_document(str(file_path), result)
-            except Exception as cache_err:  # noqa: BLE001
-                logger.warning("SimpleCache store failed: {}", cache_err)
 
             logger.info(
                 "Processed {}: {} elements from {} nodes in {:.2f}s (strategy: {})",
@@ -670,18 +666,13 @@ class DocumentProcessor:
             bool: True if cache was cleared successfully.
         """
         try:
-            # Clear LlamaIndex cache (if possible)
-            if hasattr(self.cache, "clear"):
-                self.cache.clear()
-            elif hasattr(self.cache, "delete_all"):
-                self.cache.delete_all()
-            else:
-                logger.warning("LlamaIndex cache does not support clearing")
-
-            # Clear SimpleCache
-            await self.simple_cache.clear_cache()
-
-            logger.info("Processing cache cleared successfully")
+            # Best-effort clear: delete DuckDB cache file; it will
+            # be recreated automatically on next use
+            cache_dir = Path(getattr(self.settings, "cache_dir", "./cache"))
+            cache_db = cache_dir / "docmind.duckdb"
+            if cache_db.exists():
+                cache_db.unlink()
+            logger.info("Processing cache cleared (duckdb file removed if present)")
             return True
         except (OSError, RuntimeError) as e:
             logger.error("Failed to clear cache: {}", e)
@@ -697,15 +688,17 @@ class DocumentProcessor:
             dict[str, Any]: Basic stats for both caches.
         """
         try:
-            simple_stats = await self.simple_cache.get_cache_stats()
-
+            cache_dir = Path(getattr(self.settings, "cache_dir", "./cache"))
+            cache_db = cache_dir / "docmind.duckdb"
             return {
                 "processor_type": "hybrid",
-                "simple_cache": simple_stats,
                 "llamaindex_cache": {
-                    "cache_enabled": True,
-                    "docstore_enabled": True,
-                    "collection": self.cache.collection,
+                    "cache_type": "duckdb_kvstore",
+                    "db_path": str(cache_db),
+                    "collection": getattr(
+                        self.cache, "collection", "docmind_processing"
+                    ),
+                    "total_documents": -1,
                 },
                 "strategy_mappings": len(self.strategy_map),
             }

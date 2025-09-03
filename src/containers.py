@@ -12,6 +12,7 @@ Key features:
 - Environment-aware configuration loading
 """
 
+import logging
 import os
 from typing import Any
 
@@ -32,12 +33,6 @@ class ApplicationContainer(containers.DeclarativeContainer):
 
     # Configuration provider - loads from environment
     config = providers.Configuration()
-
-    # Cache dependencies
-    cache = providers.Singleton(
-        "src.cache.simple_cache.SimpleCache",
-        cache_dir=config.cache_dir.as_(str, default="./cache"),
-    )
 
     # Embedding dependencies
     embedding_model = providers.Factory(
@@ -74,6 +69,7 @@ def create_container() -> ApplicationContainer:
     """
     di_container = ApplicationContainer()
     logger.info("Created ApplicationContainer")
+    logging.warning("Created ApplicationContainer")
 
     # Load configuration from environment
     di_container.config.from_env("DOCMIND")
@@ -128,12 +124,6 @@ def unwire_container() -> None:
 
 # Example dependency injection functions
 @inject
-def get_cache(cache=Provide[ApplicationContainer.cache]) -> Any:
-    """Get cache instance with dependency injection."""
-    return cache
-
-
-@inject
 def get_embedding_model(
     embedding_model=Provide[ApplicationContainer.embedding_model],
 ) -> Any:
@@ -158,11 +148,6 @@ def get_multi_agent_coordinator(
 
 
 # Factory functions for manual instantiation (when not using injection)
-def create_cache(**kwargs) -> Any:
-    """Create cache instance manually."""
-    return container.cache(**kwargs)
-
-
 def create_embedding_model(**kwargs) -> Any:
     """Create embedding model manually."""
     return container.embedding_model(**kwargs)

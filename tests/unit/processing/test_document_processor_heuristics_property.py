@@ -5,7 +5,7 @@ Verifies by_title vs basic fallback based on synthetic title densities.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from hypothesis import HealthCheck, given
@@ -74,13 +74,9 @@ async def test_by_title_heuristic_titles_trigger_chunk_by_title(
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
         patch("src.processing.document_processor.chunk_by_title") as mock_title,
         patch("src.processing.document_processor.chunk_by_basic") as mock_basic,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
-
         processor = DocumentProcessor()
         await processor.process_document_async(test_file)
 

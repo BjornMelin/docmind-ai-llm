@@ -34,18 +34,8 @@ class VLLMConfig(BaseModel):
     max_num_seqs: int = Field(default=16, ge=1, le=64)
     max_num_batched_tokens: int = Field(default=8192, ge=1024, le=16384)
 
-    # Backend Configuration
-    backend: str = Field(
-        default="ollama", description="LLM backend: vllm, ollama, llamacpp"
-    )
     vllm_base_url: str = Field(
         default="http://localhost:8000", description="vLLM server endpoint"
-    )
-    ollama_base_url: str = Field(
-        default="http://localhost:11434", description="Ollama API endpoint"
-    )
-    lmstudio_base_url: str = Field(
-        default="http://localhost:1234/v1", description="LM Studio API endpoint"
     )
     llamacpp_model_path: Path = Field(
         default=Path("./models/qwen3.gguf"),
@@ -95,7 +85,7 @@ class EmbeddingConfig(BaseModel):
 
 
 class RetrievalConfig(BaseModel):
-    """Retrieval and reranking configuration (ADR-006, ADR-007)."""
+    """Retrieval and reranking configuration (ADR-006)."""
 
     strategy: str = Field(default="hybrid")
     top_k: int = Field(default=10, ge=1, le=50)
@@ -113,13 +103,11 @@ class RetrievalConfig(BaseModel):
 
 
 class CacheConfig(BaseModel):
-    """Simple cache configuration."""
+    """Document processing cache toggles (ADR-030)."""
 
     enable_document_caching: bool = Field(default=True)
     ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     max_size_mb: int = Field(default=1000, ge=100, le=10000)
-    enable_semantic_cache: bool = Field(default=True)
-    semantic_threshold: float = Field(default=0.85, ge=0.5, le=0.95)
 
 
 class DatabaseConfig(BaseModel):
@@ -239,6 +227,7 @@ class DocMindSettings(BaseSettings):
     # Backend Configuration
     llm_backend: str = Field(default="ollama")
     ollama_base_url: str = Field(default="http://localhost:11434")
+    lmstudio_base_url: str = Field(default="http://localhost:1234/v1")
     enable_gpu_acceleration: bool = Field(default=True)
 
     # Advanced Features

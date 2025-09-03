@@ -7,7 +7,7 @@ Unstructured chunkers with deterministic settings.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 from hypothesis import HealthCheck, assume, given
@@ -73,7 +73,6 @@ async def test_oversized_input_error(tmp_path):
     with (
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache"),
         pytest.raises(ProcessingError),
     ):
         await proc.process_document_async(p)
@@ -112,12 +111,9 @@ async def test_metadata_propagation_minimal(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
         patch("src.processing.document_processor.partition", return_value=[elem]),
         patch("src.processing.document_processor.chunk_by_basic", return_value=[elem]),
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
         result = await proc.process_document_async(p)
         assert result.elements
         assert result.elements[0].metadata.get("page_number") == 1
@@ -174,12 +170,9 @@ async def test_property_chunking_param_forwarding(
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
-        patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
         patch("src.processing.document_processor.partition", return_value=parts),
         patch("src.processing.document_processor.chunk_by_basic") as mock_basic,
     ):
-        mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-        mock_simple_cache.return_value.store_document = AsyncMock()
         await proc.process_document_async(test_file)
         # Heading-sparse -> basic fallback path
         assert mock_basic.called

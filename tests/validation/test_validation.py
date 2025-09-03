@@ -68,7 +68,6 @@ class TestImportValidation:
         adr009_modules = [
             "src.processing.document_processor",
             "src.processing.chunking.unstructured_chunker",
-            "src.cache.simple_cache",
             "src.processing.embeddings.bgem3_embedder",
         ]
 
@@ -84,8 +83,7 @@ class TestImportValidation:
                     assert hasattr(
                         module, "SemanticChunker"
                     )  # Actual class name in the module
-                elif module_name == "src.cache.simple_cache":
-                    assert hasattr(module, "SimpleCache")
+                # SimpleCache removed per ADR-030
                 elif module_name == "src.processing.embeddings.bgem3_embedder":
                     assert hasattr(module, "BGEM3Embedder")
 
@@ -161,7 +159,6 @@ class TestImportValidation:
         adr009_files = [
             "src/processing/document_processor.py",
             "src/processing/chunking/unstructured_chunker.py",
-            "src/cache/simple_cache.py",
             "src/processing/embeddings/bgem3_embedder.py",
         ]
 

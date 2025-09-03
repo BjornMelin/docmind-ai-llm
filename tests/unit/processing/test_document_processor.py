@@ -78,7 +78,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
             assert processor.settings == mock_settings
@@ -90,7 +89,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             # When no settings passed, should create with whatever is available
             processor = DocumentProcessor(None)
@@ -102,7 +100,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
 
@@ -127,7 +124,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
             strategy = processor.get_strategy_for_file("document.pdf")
@@ -138,7 +134,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
             strategy = processor.get_strategy_for_file("document.txt")
@@ -149,7 +144,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
             strategy = processor.get_strategy_for_file("image.jpg")
@@ -160,7 +154,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
 
@@ -175,7 +168,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
             doc_hash = processor._calculate_document_hash(sample_text_file)
@@ -192,7 +184,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
 
@@ -216,8 +207,6 @@ class TestDocumentProcessor:
     @pytest.mark.asyncio
     async def test_process_document_async_file_not_found(self, mock_settings):
         """Test error handling for non-existent files."""
-        from unittest.mock import AsyncMock
-
         from src.processing.document_processor import (
             ProcessingError as DPProcessingError,
         )
@@ -225,7 +214,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             # Mock the getattr calls for settings access
@@ -246,8 +234,6 @@ class TestDocumentProcessor:
         large_file = tmp_path / "large_file.pdf"
         large_file.write_text("A" * 2000)  # 2KB file with very small limit
 
-        from unittest.mock import AsyncMock
-
         from src.processing.document_processor import (
             ProcessingError as DPProcessingError,
         )
@@ -255,7 +241,6 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
             # Set a very small size limit to trigger the error
@@ -268,36 +253,7 @@ class TestDocumentProcessor:
 
             assert "exceeds limit" in str(excinfo.value)
 
-    @pytest.mark.asyncio
-    async def test_process_document_async_with_cache_hit(
-        self, mock_settings, sample_text_file
-    ):
-        """Test processing with cached result."""
-        mock_cache_result = ProcessingResult(
-            elements=[
-                DocumentElement(text="Cached content", category="Text", metadata={})
-            ],
-            processing_time=0.1,
-            strategy_used=ProcessingStrategy.FAST,
-            metadata={},
-            document_hash="test_hash",
-        )
-
-        with (
-            patch("src.processing.document_processor.IngestionCache"),
-            patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
-        ):
-            # Mock cache to return cached result
-            mock_simple_cache.return_value.get_document = AsyncMock(
-                return_value=mock_cache_result
-            )
-
-            processor = DocumentProcessor(mock_settings)
-            result = await processor.process_document_async(sample_text_file)
-
-            assert result == mock_cache_result
-            assert result.elements[0].text == "Cached content"
+    # Direct cache-hit path removed per ADR-030; pipeline caching covered elsewhere.
 
     @pytest.mark.asyncio
     async def test_process_document_async_success(
@@ -313,13 +269,8 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
             patch("asyncio.to_thread") as mock_to_thread,
         ):
-            # Mock cache miss
-            mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-            mock_simple_cache.return_value.store_document = AsyncMock()
-
             # Mock pipeline processing
             mock_nodes = [Mock()]
             mock_nodes[0].get_content.return_value = "Processed content"
@@ -347,25 +298,12 @@ class TestDocumentProcessor:
     async def test_clear_cache_success(self, mock_settings):
         """Test cache clearing success."""
         with (
-            patch(
-                "src.processing.document_processor.IngestionCache"
-            ) as mock_ingestion_cache,
+            patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
         ):
-            # Mock cache clearing
-            mock_cache = Mock()
-            mock_cache.clear = Mock()
-            mock_ingestion_cache.return_value = mock_cache
-
-            mock_simple_cache.return_value.clear_cache = AsyncMock(return_value=True)
-
             processor = DocumentProcessor(mock_settings)
-            processor.cache = mock_cache
-
             result = await processor.clear_cache()
             assert result is True
-            mock_cache.clear.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_cache_stats_success(self, mock_settings):
@@ -373,27 +311,20 @@ class TestDocumentProcessor:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
         ):
-            mock_stats = {"hits": 10, "misses": 5, "size": 15}
-            mock_simple_cache.return_value.get_cache_stats = AsyncMock(
-                return_value=mock_stats
-            )
-
             processor = DocumentProcessor(mock_settings)
             stats = await processor.get_cache_stats()
 
             assert isinstance(stats, dict)
-            assert "processor_type" in stats
-            assert stats["processor_type"] == "hybrid"
-            assert "simple_cache" in stats
+            assert stats.get("processor_type") == "hybrid"
+            assert "llamaindex_cache" in stats
+            assert stats["llamaindex_cache"].get("cache_type") == "duckdb_kvstore"
 
     def test_override_config(self, mock_settings):
         """Test configuration override functionality."""
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor(mock_settings)
             config_override = {"test_param": "test_value"}
@@ -542,13 +473,8 @@ class TestDocumentProcessorIntegration:
 
         # Mock heavy dependencies but test real file processing
         with (
-            patch("src.processing.document_processor.SimpleCache") as mock_simple_cache,
             patch("src.processing.document_processor.partition") as mock_partition,
         ):
-            # Mock cache operations
-            mock_simple_cache.return_value.get_document = AsyncMock(return_value=None)
-            mock_simple_cache.return_value.store_document = AsyncMock()
-
             # Mock unstructured partition
             mock_element = Mock()
             mock_element.text = test_content
@@ -584,7 +510,6 @@ class TestDocumentProcessorIntegration:
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
-            patch("src.processing.document_processor.SimpleCache"),
         ):
             processor = DocumentProcessor()
 

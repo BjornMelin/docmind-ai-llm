@@ -51,7 +51,10 @@ dependencies = [
     "llama-index-storage-kvstore-duckdb>=0.2.0", # DuckDB KV store (cache)
     "llama-index-llms-vllm",             # vLLM LLM integration
     "llama-index-llms-openai",            # OpenAI LLM integration
+    "llama-index-llms-ollama",            # Ollama LLM integration
     "llama-index-embeddings-huggingface", # HF embeddings integration
+    "llama-index-embeddings-clip",        # CLIP embeddings integration
+    "llama-index-postprocessor-colbert-rerank", # ColBERT reranker integration
     "llama-index-embeddings-fastembed",   # FastEmbed embeddings integration
     "llama-index-embeddings-openai",      # OpenAI embeddings integration
     "llama-index-readers-file",           # File readers integration
@@ -174,7 +177,7 @@ convention = "google"
 py-version = "3.12"
 jobs = 0
 limit-inference-results = 100
-extension-pkg-allow-list = ["llama_index", "torch"]
+extension-pkg-allow-list = ["llama_index", "torch", "dependency_injector"]
 
 # Keep pylint messages strict; use targeted per-file disables in tests when needed.
 

@@ -13,7 +13,7 @@ __author__ = "Bjorn Melin"
 # Make key components available at package level
 from .config import settings
 
-# Note: ADR-009 compliant processing available via src.processing and src.cache modules
+# Note: ADR-009/ADR-030 compliant processing available via src.processing
 
 __all__ = [
     "settings",

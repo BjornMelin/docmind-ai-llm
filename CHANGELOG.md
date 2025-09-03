@@ -76,3 +76,19 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ---
 
 [1.0.0]: https://example.com/releases/tag/v1.0.0
+- LlamaIndex integration packages added as first‑class dependencies:
+  - `llama-index-embeddings-clip` for CLIP multimodal embeddings
+  - `llama-index-postprocessor-colbert-rerank` for ColBERT reranking
+  - `llama-index-llms-ollama` for local Ollama backend
+- New cache unit test: DuckDBKV lifecycle (create/stats/clear) under `tests/unit/cache/test_ingestion_cache.py`.
+- Shared backlog tracker: `agent-logs/2025-09-02/next-tasks/001-next-tasks-and-research-backlog.md`.
+- Caching architecture: replaced custom `SimpleCache` with LlamaIndex `IngestionCache` backed by `DuckDBKVStore` (single local file at `cache/docmind.duckdb`). No back‑compat.
+- DocumentProcessor: wired DuckDBKV‐backed `IngestionCache`; added safe JSON coercion for Unstructured element metadata to support KV persistence.
+- Utils: cache clear/stats now operate on the DuckDB cache file (delete/inspect path).
+- Tests: modernized app and perf test patches to target `src.app` functions; ensured deterministic performance tests and removed brittle timing checks.
+- DI: container creation logs a standard message for test capture (`Created ApplicationContainer`).
+- Resolved import errors by adding LlamaIndex split packages and using correct namespaced imports (CLIP, ColBERT, Ollama).
+- Prevented JSON serialization errors when persisting pipeline outputs by coercing metadata to JSON‑safe types.
+- Stabilized performance tests by patching the correct targets and relaxing environment‑sensitive assertions.
+- `src/cache/simple_cache.py` and all references.
+- `tests/unit/cache/test_simple_cache.py` and docs/spec references to SimpleCache; specs now reflect ADR‑030.
