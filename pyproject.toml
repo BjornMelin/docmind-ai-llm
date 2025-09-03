@@ -33,8 +33,8 @@ dependencies = [
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
     "spacy==3.8.7",                      # NLP pipeline
     # ML/LLM Fundamentals
-    "torch==2.7.1",                      # PyTorch runtime
-    "transformers==4.55.4",              # HF model interfaces
+    "torch==2.7.0",                      # PyTorch runtime (vLLM<0.10 compat)
+    "transformers>=4.53.1,<4.54.0",      # HF model interfaces (ColPali compat)
     "tiktoken==0.11.0",                  # Tokenization utilities
     "openai>=1.98.0,<2.0.0",             # OpenAI API client
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
@@ -55,7 +55,7 @@ dependencies = [
     "llama-index-llms-openai-like",
     "llama-index-embeddings-huggingface",
     "llama-index-embeddings-clip",
-    "llama-index-postprocessor-colpali-rerank",
+    "llama-index-postprocessor-colpali-rerank==0.3.0",
     "llama-index-embeddings-fastembed",
     "llama-index-embeddings-openai",
     "llama-index-readers-file",
@@ -79,7 +79,11 @@ dependencies = [
 [project.optional-dependencies]
 gpu = [
     "fastembed-gpu>=0.7.0",               # GPU-accelerated embeddings
-    "vllm[flashinfer]>=0.10.1.1",         # vLLM with FlashInfer support
+    # vLLM pinned below 0.10 to avoid hard transformers>=4.55 requirement
+    # Ensures compatibility with ColPali (transformers <4.54)
+    "vllm>=0.6.3,<0.10.0",
+    # FlashInfer runtime pinned explicitly (older vLLM may not expose [flashinfer] extra)
+    "flashinfer-python>=0.2.11",
     # Build tools for GPU libraries
     "ninja>=1.11.1",                      # Build acceleration
     "cmake>=3.26.4",                      # Required for CUDA builds
@@ -114,7 +118,7 @@ performance-test = "scripts.performance_validation:main"
 # CUDA Stack Requirements
 cuda_version = "12.8+"
 pytorch_version = "2.7.1"
-vllm_version = ">=0.10.1.1"
+vllm_version = ">=0.9.1,<0.10.0"
 driver_version = "550.54.14+"
 
 # Hardware Requirements for Qwen3-4B-Instruct-2507-FP8
@@ -136,8 +140,9 @@ Manual Installation Steps (if needed):
 1. Install PyTorch with CUDA 12.8:
    uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
 
-2. Install vLLM with FlashInfer:
-   uv pip install "vllm[flashinfer]>=0.10.1.1" --extra-index-url https://download.pytorch.org/whl/cu128
+2. Install vLLM (GPU) + FlashInfer:
+   uv pip install "vllm>=0.9.1,<0.10.0" --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install flashinfer-python>=0.2.11
 
 3. Install llama-cpp-python with CUDA:
    uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu128

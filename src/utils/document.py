@@ -17,7 +17,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.core.infrastructure.spacy_manager import get_spacy_manager
+from src.core.spacy_manager import get_spacy_manager
 from src.processing.document_processor import DocumentProcessor, ProcessingError
 
 

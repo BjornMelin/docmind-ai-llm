@@ -32,18 +32,16 @@ class TestSpacyManager:
 
     def test_ensure_model_downloads_and_caches(self):
         """ensure_model downloads when missing and caches result."""
-        from src.core.infrastructure.spacy_manager import SpacyManager
+        from src.core.spacy_manager import SpacyManager
 
         manager = SpacyManager()
 
         mock_nlp = MagicMock()
         with (
+            patch("src.core.spacy_manager.is_package", return_value=False),
+            patch("src.core.spacy_manager.download") as mock_dl,
             patch(
-                "src.core.infrastructure.spacy_manager.is_package", return_value=False
-            ),
-            patch("src.core.infrastructure.spacy_manager.download") as mock_dl,
-            patch(
-                "src.core.infrastructure.spacy_manager.spacy.load",
+                "src.core.spacy_manager.spacy.load",
                 return_value=mock_nlp,
             ),
         ):
@@ -56,7 +54,7 @@ class TestSpacyManager:
 
     def test_memory_optimized_processing_uses_memory_zone(self):
         """memory_optimized_processing yields nlp and calls memory_zone."""
-        from src.core.infrastructure.spacy_manager import SpacyManager
+        from src.core.spacy_manager import SpacyManager
 
         manager = SpacyManager()
         mock_nlp = Mock()
@@ -66,11 +64,9 @@ class TestSpacyManager:
         mock_nlp.memory_zone.return_value = mock_zone
 
         with (
+            patch("src.core.spacy_manager.is_package", return_value=True),
             patch(
-                "src.core.infrastructure.spacy_manager.is_package", return_value=True
-            ),
-            patch(
-                "src.core.infrastructure.spacy_manager.spacy.load",
+                "src.core.spacy_manager.spacy.load",
                 return_value=mock_nlp,
             ),
             manager.memory_optimized_processing("en_core_web_sm") as nlp,
@@ -80,7 +76,7 @@ class TestSpacyManager:
 
     def test_get_spacy_manager_singleton(self):
         """get_spacy_manager returns a singleton instance."""
-        from src.core.infrastructure.spacy_manager import (
+        from src.core.spacy_manager import (
             SpacyManager,
             get_spacy_manager,
         )

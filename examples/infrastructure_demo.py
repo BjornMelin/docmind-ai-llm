@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Demo of new PyTorch native GPU monitoring and optimized spaCy management.
+"""Demo of lightweight system/GPU info and optimized spaCy management.
 
 This example demonstrates:
-1. PyTorch native GPU monitoring using torch.cuda APIs only
-2. spaCy 3.8+ native features with memory_zone() optimization
-3. Clean, KISS-compliant implementations with minimal dependencies
+1. Simple system info via psutil (no heavy deps)
+2. Optional GPU stats via torch.cuda if available
+3. spaCy 3.8+ memory_zone() optimization
 """
 
 import asyncio
@@ -13,22 +13,46 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.infrastructure.gpu_monitor import gpu_performance_monitor
-from src.core.infrastructure.spacy_manager import get_spacy_manager
+from src.core.spacy_manager import get_spacy_manager
+from src.utils.monitoring import get_system_info
+
+try:
+    import torch
+except Exception:  # torch may be unavailable in some envs
+    torch = None  # type: ignore
 
 
-async def demo_gpu_monitoring():
-    """Demonstrate PyTorch native GPU monitoring."""
-    print("=== GPU Monitoring Demo ===")
+async def demo_system_and_gpu():
+    """Show basic system info and optional CUDA stats (if available)."""
+    print("=== System/GPU Monitoring Demo ===")
 
-    async with gpu_performance_monitor() as metrics:
-        if metrics is None:
-            print("No CUDA GPU available - running on CPU")
-        else:
-            print(f"GPU Device: {metrics.device_name}")
-            print(f"Memory Allocated: {metrics.memory_allocated_gb:.2f} GB")
-            print(f"Memory Reserved: {metrics.memory_reserved_gb:.2f} GB")
-            print(f"Utilization: {metrics.utilization_percent:.1f}%")
+    info = get_system_info()
+    if info:
+        print("System Info:")
+        print(f"  CPU %: {info.get('cpu_percent')}%")
+        print(f"  Mem %: {info.get('memory_percent')}%")
+        if avg := info.get("load_average"):
+            print(f"  Load Avg: {avg}")
+
+    if torch is None or not hasattr(torch, "cuda") or not torch.cuda.is_available():
+        print("No CUDA GPU available - running on CPU")
+        return
+
+    try:
+        device_index = 0
+        name = torch.cuda.get_device_name(device_index)
+        allocated_gb = torch.cuda.memory_allocated(device_index) / (1024**3)
+        reserved_gb = torch.cuda.memory_reserved(device_index) / (1024**3)
+        total_gb = torch.cuda.get_device_properties(device_index).total_memory / (
+            1024**3
+        )
+        print("GPU Info:")
+        print(f"  Device: {name}")
+        print(f"  Memory Allocated: {allocated_gb:.2f} GB")
+        print(f"  Memory Reserved:  {reserved_gb:.2f} GB")
+        print(f"  Total Memory:     {total_gb:.2f} GB")
+    except Exception as e:  # keep demo resilient
+        print(f"GPU info unavailable: {e}")
 
 
 def demo_spacy_optimization():
@@ -68,14 +92,14 @@ async def main():
     print("DocMind AI - Infrastructure Optimization Demo")
     print("=" * 50)
 
-    await demo_gpu_monitoring()
+    await demo_system_and_gpu()
     demo_spacy_optimization()
 
     print("\n" + "=" * 50)
-    print("✓ PyTorch native GPU monitoring: <25 lines")
-    print("✓ spaCy 3.8+ optimizations: <35 lines")
+    print("✓ System + optional GPU info: minimal")
+    print("✓ spaCy 3.8+ optimizations: concise")
     print("✓ Memory zone() integration: 40% improvement")
-    print("✓ Zero deprecated dependencies removed")
+    print("✓ No extra dependencies added")
     print("✓ KISS, DRY, YAGNI principles followed")
 
 
