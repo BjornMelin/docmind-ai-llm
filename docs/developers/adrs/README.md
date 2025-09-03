@@ -21,8 +21,10 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Unified dense/sparse embeddings centered on BGE-M3
 - **[ADR-003 — Adaptive Retrieval Pipeline](ADR-003-adaptive-retrieval-pipeline.md)**  
   Scope: Router/strategy selection and hierarchical retrieval
-- **[ADR-006 — Modern Reranking Architecture](ADR-006-reranking-architecture.md)**  
-  Scope: CrossEncoder reranking (BGE-reranker-v2-m3), library-first usage
+- **[ADR-006 — Modern Reranking Architecture (Superseded)](ADR-006-reranking-architecture.md)**  
+  Scope: Historical text-only CrossEncoder reranking; superseded by ADR‑037
+- **[ADR-037 — Multimodal Reranking with ColPali (visual) and BGE v2‑m3 (text)](ADR-037-multimodal-reranking-architecture.md)**  
+  Scope: Modality-aware reranking; ColPali for visuals, BGE v2‑m3 for text
 - **[ADR-019 — Optional GraphRAG Module](ADR-019-optional-graphrag.md)**  
   Scope: Property graph/graph retrieval integrations
 - **[ADR-034 — Idempotent Indexing & Embedding Reuse](ADR-034-idempotent-indexing-and-embedding-reuse.md)**  

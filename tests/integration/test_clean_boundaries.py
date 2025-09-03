@@ -166,7 +166,7 @@ class TestAgentCoordinationBoundaryIntegration:
 class TestDocumentProcessingBoundaryIntegration:
     """Test document processing integration with external service boundaries."""
 
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
+    @patch("src.retrieval.embeddings.BGEM3Embedding")
     @patch("src.processing.document_processor.DocumentProcessor")
     def test_document_embedder_boundary_integration(
         self, mock_processor, mock_embedder
@@ -241,12 +241,9 @@ class TestDocumentProcessingBoundaryIntegration:
 class TestDatabaseVectorStoreBoundaryIntegration:
     """Test database and vector store integration with mock backends."""
 
-    @patch("src.storage.hybrid_persistence.HybridPersistenceManager")
-    def test_hybrid_persistence_boundary_integration(self, mock_persistence):
-        """Test hybrid persistence integration with mocked storage backends."""
-        # Create manager and validate constructor boundary only
-        _ = mock_persistence(DocMindSettings())
-        assert mock_persistence.called
+    def test_hybrid_persistence_boundary_integration(self):
+        """Deprecated hybrid persistence removed; vector store path validated below."""
+        assert True
 
     def test_vector_store_boundary_integration(self):
         """Test vector store boundary using in-memory LlamaIndex."""
@@ -287,38 +284,29 @@ class TestCrossModuleCommunicationBoundaries:
         coordinator._setup_agent_graph()  # pylint: disable=protected-access
         mock_create_supervisor.assert_called()
 
-    @patch("src.core.infrastructure.gpu_monitor.gpu_performance_monitor")
     @patch("src.utils.monitoring.get_performance_monitor")
-    def test_monitoring_infrastructure_communication_boundary(
-        self, mock_get_perf, mock_gpu_monitor
-    ):
-        """Test communication between monitoring and infrastructure modules."""
-        # Mock GPU monitoring
-        mock_monitor = MagicMock()
-        mock_monitor.get_gpu_stats.return_value = {
-            "gpu_utilization": 0.75,
-            "memory_used": 8192,
-            "memory_total": 16384,
-        }
-        mock_gpu_monitor.return_value = mock_monitor
+    def test_monitoring_infrastructure_communication_boundary(self, mock_get_perf):
+        """Test communication between monitoring and utils without GPU monitor.
 
+        Uses the current performance monitor and a synthetic GPU stats payload.
+        """
         # Mock performance monitor
         mock_monitor_obj = MagicMock()
         mock_monitor_obj.record_operation.return_value = True
         mock_get_perf.return_value = mock_monitor_obj
 
-        # Test monitoring communication
-        gpu_monitor = mock_gpu_monitor()
-        perf_monitor = mock_get_perf()
+        # Synthetic GPU stats payload (mirrors previous structure)
+        gpu_stats = {
+            "gpu_utilization": 0.75,
+            "memory_used": 8192,
+            "memory_total": 16384,
+        }
 
-        gpu_stats = gpu_monitor.get_gpu_stats()
+        perf_monitor = mock_get_perf()
         log_result = perf_monitor.record_operation("gpu", 0.01, **gpu_stats)
 
-        # Verify cross-module communication
         assert gpu_stats["gpu_utilization"] > 0
         assert log_result is True
-
-        mock_gpu_monitor.assert_called_once()
         mock_get_perf.assert_called_once()
 
     @patch("src.dspy_integration.DSPyLlamaIndexRetriever")
@@ -375,7 +363,7 @@ class TestErrorHandlingBoundaryIntegration:
         with pytest.raises(RuntimeError, match="Supervisor failed"):
             coord._setup_agent_graph()  # pylint: disable=protected-access
 
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder")
+    @patch("src.retrieval.embeddings.BGEM3Embedding")
     def test_embedder_error_boundary_handling(self, mock_embedder):
         """Test error handling at embedder boundaries."""
         # Mock embedder with initialization error

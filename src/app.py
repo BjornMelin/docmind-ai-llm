@@ -32,24 +32,11 @@ from typing import Any, cast
 
 import ollama
 import streamlit as st
-from llama_index.core import VectorStoreIndex
+from llama_index.core import StorageContext, VectorStoreIndex
+from llama_index.core.llms import ChatMessage
 from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.core.vector_stores import SimpleVectorStore
 from llama_index.llms.ollama import Ollama
 from loguru import logger
-
-try:
-    from llama_index.llms.llama_cpp import LlamaCPP  # type: ignore
-
-    LLAMACPP_AVAILABLE = True
-except Exception as _e:  # pragma: no cover - environment dependent
-    logger.warning("LlamaCPP not available. Running without LlamaCPP support.")
-    LlamaCPP = None  # type: ignore
-    LLAMACPP_AVAILABLE = False
-try:
-    from llama_index.llms.openai_like import OpenAILike  # type: ignore
-except Exception:  # pragma: no cover - optional integration
-    OpenAILike = None  # type: ignore
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
@@ -59,8 +46,49 @@ from src.config.settings import UIConfig as _UIConfig
 from src.config.settings import VLLMConfig as _VLLMConfig
 from src.containers import get_multi_agent_coordinator
 from src.prompts import PREDEFINED_PROMPTS
+from src.retrieval.embeddings import setup_clip_for_llamaindex
+from src.retrieval.query_engine import create_adaptive_router_engine
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
+from src.utils.multimodal import create_image_documents
+from src.utils.storage import create_vector_store
+
+LLAMACPP_AVAILABLE = False
+try:  # Detect availability without importing at module import time
+    import importlib
+
+    importlib.import_module("llama_index.llms.llama_cpp")
+    LLAMACPP_AVAILABLE = True
+except ImportError:  # pragma: no cover - environment dependent
+    logger.warning("LlamaCPP not available. Running without LlamaCPP support.")
+
+
+def _log_processing_metrics(
+    doc_load_time: float, index_time: float, total_time: float, docs_count: int
+) -> None:
+    """Display and log document processing performance metrics.
+
+    Args:
+        doc_load_time (float): Elapsed time in seconds to load documents.
+        index_time (float): Elapsed time in seconds to build the index(es).
+        total_time (float): Total elapsed time in seconds for the operation.
+        docs_count (int): Number of processed documents.
+    """
+    st.info(
+        f"""
+        **Performance Metrics (Async Mode):**
+        - Document loading: {doc_load_time:.2f}s
+        - Index creation: {index_time:.2f}s
+        - Total processing: {total_time:.2f}s
+        - Documents processed: {docs_count}
+        """
+    )
+    logger.info(
+        "Async processing completed in {:.2f}s for {} documents",
+        total_time,
+        docs_count,
+    )
+
 
 # Help static analysis by annotating settings instance explicitly
 SETTINGS: _DocMindSettings = settings
@@ -71,25 +99,53 @@ VLLM: _VLLMConfig = cast(Any, SETTINGS.vllm)
 
 # Simple wrapper functions for Ollama API calls
 def is_llamacpp_available() -> bool:
-    """Return True if llama.cpp bindings are available in this environment."""
+    """Check llama.cpp binding availability.
+
+    Returns:
+        bool: True if the optional llama.cpp bindings are importable in the
+        current runtime environment; False otherwise.
+    """
     return bool(LLAMACPP_AVAILABLE)
 
 
 async def get_ollama_models() -> dict[str, Any]:
-    """Get list of available Ollama models."""
+    """List available models from a local Ollama server.
+
+    The function uses Ollama's model listing endpoint. It is defined as async
+    for symmetry with other I/O helpers, but internally calls the synchronous
+    client to avoid event-loop conflicts inside Streamlit.
+
+    Returns:
+        dict[str, Any]: A dictionary payload returned by Ollama containing the
+        available models under the ``models`` key.
+    """
     return ollama.list()
 
 
 async def pull_ollama_model(ollama_model_name: str) -> dict[str, Any]:
-    """Pull an Ollama model."""
+    """Ensure an Ollama model is available locally.
+
+    Args:
+        ollama_model_name (str): The model identifier to pull (e.g.,
+            ``"qwen2:7b-instruct"``).
+
+    Returns:
+        dict[str, Any]: Ollama's streaming or summary response for the pull
+        operation.
+    """
     return ollama.pull(ollama_model_name)
 
 
 def create_tools_from_index(index: Any) -> list[Any]:
-    """Create tools from index using ToolFactory.
+    """Create retrieval tools backed by a vector index.
+
+    Args:
+        index (Any): LlamaIndex-compatible vector index instance used for
+            retrieval operations.
 
     Returns:
-        list[Any]: List of tools created from the index.
+        list[Any]: A list of tool objects that expose search/retrieval
+        capabilities to the agent system.
     """
     return ToolFactory.create_basic_tools({"vector": index})
 
@@ -101,18 +157,39 @@ def get_agent_system(
     *,
     multi_agent_coordinator: MultiAgentCoordinator | None = None,
 ) -> tuple[MultiAgentCoordinator, str]:
-    """Build agent system using unified settings (no DI)."""
-    coordinator = multi_agent_coordinator or get_multi_agent_coordinator()
-    return coordinator, "multi_agent"
+    """Construct and return the active agent system.
+
+    Args:
+        _tools (Any): Tools available to the agent(s), typically created from
+            the current vector index.
+        _llm (Any): The LLM client to use for reasoning and generation.
+        _memory (Any): Conversation memory or context object.
+        multi_agent_coordinator (MultiAgentCoordinator | None): Optional
+            pre-configured multi-agent coordinator.
+
+    Returns:
+        tuple[MultiAgentCoordinator, str]: The coordinator to handle queries
+        and the operating mode label (``"multi_agent"``).
+    """
+    agent_coordinator = multi_agent_coordinator or get_multi_agent_coordinator()
+    return agent_coordinator, "multi_agent"
 
 
 def process_query_with_agent_system(
     agent_system_: Any, query: str, mode_: str, memory: Any
 ) -> Any:
-    """Process query with agent system.
+    """Dispatch a user query to the configured agent system.
+
+    Args:
+        agent_system_ (Any): The agent/coordinator handling the request.
+        query (str): The user query or analysis instruction.
+        mode_ (str): Operating mode identifier. When set to ``"multi_agent"``,
+            the multi-agent coordinator is used.
+        memory (Any): Conversation memory/context passed to the agent.
 
     Returns:
-        AgentResponse: Response object with .content attribute.
+        Any: An agent response object with a ``content`` attribute when
+        successful. A minimal fallback namespace is returned on invalid mode.
     """
     if mode_ == "multi_agent":
         return agent_system_.process_query(query, context=memory)
@@ -199,7 +276,7 @@ use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
 # ColBERT reranking is now always enabled via native postprocessor (Phase 2.2)
-parse_media: bool = st.sidebar.checkbox("Parse Video/Audio", value=False)
+_parse_media: bool = st.sidebar.checkbox("Parse Video/Audio", value=False)
 enable_multimodal: bool = st.sidebar.checkbox(
     "Enable Multimodal Processing",
     value=True,
@@ -233,7 +310,7 @@ if backend == "ollama":
     try:
         # Use sync model listing to avoid asyncio event loop conflicts
         models_response = ollama.list()  # Direct sync call
-        items = []
+        items: list[Any] = []
         if isinstance(models_response, dict):
             items = models_response.get("models", [])
         elif isinstance(models_response, list):
@@ -277,13 +354,21 @@ try:
             request_timeout=SETTINGS.ui.request_timeout_seconds,
         )
     elif backend == "llamacpp":
-        N_GPU_LAYERS = -1 if use_gpu else 0
+        from llama_index.llms.llama_cpp import (  # pylint: disable=ungrouped-imports
+            LlamaCPP,
+        )  # local import to avoid hard dependency
+
+        n_gpu_layers = -1 if use_gpu else 0
         llm = LlamaCPP(
             model_path=SETTINGS.vllm.llamacpp_model_path,
             context_window=context_size,
-            model_kwargs={"n_gpu_layers": N_GPU_LAYERS},
+            model_kwargs={"n_gpu_layers": n_gpu_layers},
         )
     elif backend == "lmstudio":
+        from llama_index.llms.openai_like import (  # pylint: disable=ungrouped-imports
+            OpenAILike,
+        )
+
         llm = OpenAILike(
             api_base=SETTINGS.lmstudio_base_url,
             api_key="not-needed",
@@ -294,6 +379,10 @@ try:
             timeout=float(SETTINGS.ui.request_timeout_seconds),
         )
     elif backend == "vllm":
+        from llama_index.llms.openai_like import (  # pylint: disable=ungrouped-imports
+            OpenAILike,
+        )
+
         llm = OpenAILike(
             api_base=SETTINGS.vllm.vllm_base_url,
             api_key="not-needed",
@@ -305,14 +394,19 @@ try:
         )
 except (ValueError, TypeError, RuntimeError, ConnectionError) as e:
     st.error(f"Model initialization error: {e!s}")
-    logger.error("Model init error: %s", str(e))
+    logger.error("Model init error: {}", e)
     st.stop()
 
 
 # Async Document Upload Section with Media Parsing and Error Handling
 @st.fragment
 async def upload_section() -> None:
-    """Async function to handle document upload and processing."""
+    """Handle document upload, ingestion, and indexing.
+
+    The function reads uploaded files, constructs a text vector index, and,
+    when enabled, builds a multimodal (image + text) index. Progress and
+    performance metrics are displayed inline.
+    """
     uploaded_files: list[st.runtime.uploaded_file_manager.UploadedFile] | None = (
         st.file_uploader(
             "Upload files",
@@ -339,11 +433,64 @@ async def upload_section() -> None:
                 # Use async indexing for 50-80% performance improvement
                 index_start_time = time.perf_counter()
                 try:
-                    # Create vector store and index with documents
-                    vector_store = SimpleVectorStore()
-                    st.session_state.index = VectorStoreIndex.from_documents(
-                        docs, vector_store=vector_store
+                    # Prefer Qdrant vector store via LlamaIndex
+                    collection_name = "docmind_text_index"
+                    qdrant_vs = create_vector_store(collection_name, enable_hybrid=True)
+                    storage_context = StorageContext.from_defaults(
+                        vector_store=qdrant_vs
                     )
+                    st.session_state.index = VectorStoreIndex.from_documents(
+                        docs, storage_context=storage_context
+                    )
+
+                    # Multimodal index (text + images) controlled by toggle
+                    if enable_multimodal:
+                        try:
+                            setup_clip_for_llamaindex({})
+                            # Create image documents if any image paths are available
+                            image_docs = create_image_documents([])
+                            if image_docs:
+                                from llama_index.core.indices import (  # pylint: disable=ungrouped-imports
+                                    MultiModalVectorStoreIndex,
+                                )
+
+                                # Separate image store collection
+                                image_collection = "docmind_image_index"
+                                image_vs = create_vector_store(
+                                    image_collection, enable_hybrid=False
+                                )
+                                mm_context = StorageContext.from_defaults(
+                                    vector_store=qdrant_vs, image_store=image_vs
+                                )
+                                st.session_state.multimodal_index = (
+                                    MultiModalVectorStoreIndex.from_documents(
+                                        image_docs, storage_context=mm_context
+                                    )
+                                )
+                            else:
+                                st.session_state.multimodal_index = None
+                        except (
+                            ValueError,
+                            RuntimeError,
+                        ) as mm_e:  # pragma: no cover - optional path
+                            logger.warning("Multimodal index setup skipped: {}", mm_e)
+                            st.session_state.multimodal_index = None
+                    else:
+                        st.session_state.multimodal_index = None
+
+                    # Create adaptive router engine (vector + multimodal)
+                    try:
+                        st.session_state.router_engine = create_adaptive_router_engine(
+                            vector_index=st.session_state.index,
+                            multimodal_index=st.session_state.multimodal_index,
+                        )
+                    except (
+                        ValueError,
+                        RuntimeError,
+                    ) as re_e:  # pragma: no cover - optional path
+                        logger.warning("Router engine setup skipped: {}", re_e)
+                        st.session_state.router_engine = None
+
                 except (ValueError, RuntimeError) as e:
                     st.error(f"Document processing failed: {e}")
                     logger.error("Index creation failed: %s", str(e))
@@ -357,22 +504,13 @@ async def upload_section() -> None:
 
                 # Show performance metrics
                 st.success("Documents indexed successfully! ⚡")
-                st.info(f"""
-                **Performance Metrics (Async Mode):**
-                - Document loading: {doc_load_time:.2f}s
-                - Index creation: {index_time:.2f}s
-                - Total processing: {total_time:.2f}s
-                - Documents processed: {len(docs)}
-                """)
-                logger.info(
-                    "Async processing completed in %.2fs for %s documents",
-                    total_time,
-                    len(docs),
+                _log_processing_metrics(
+                    doc_load_time, index_time, total_time, len(docs)
                 )
 
             except (ValueError, TypeError, OSError, RuntimeError) as e:
                 st.error(f"Document processing failed: {e!s}")
-                logger.error("Doc process error: %s", str(e))
+                logger.error("Doc process error: {}", e)
 
 
 # Analysis Options and Agentic Analysis with Error Handling
@@ -382,75 +520,90 @@ prompt_type: str = st.selectbox("Prompt", list(PREDEFINED_PROMPTS.keys()))
 
 
 async def run_analysis() -> None:
-    """Async function to run document analysis with multi-agent support."""
+    """Execute predefined analysis against the current index.
+
+    Builds agent tools from the active index, invokes the multi-agent
+    coordinator, and stores the result in session state.
+    """
     if st.session_state.index:
         with st.spinner("Running analysis..."):
             try:
-                # Create tools from index
-                tools_for_agent = create_tools_from_index(st.session_state.index)
-
-                # Get appropriate agent system
-                coordinator, agent_mode = get_agent_system(
-                    _tools=tools_for_agent,
-                    _llm=llm,
-                    _memory=st.session_state.memory,
-                )
-
-                # Process analysis with agent system
                 analysis_query_text = f"Perform {prompt_type} analysis on the documents"
-                analysis_output = await asyncio.to_thread(
-                    process_query_with_agent_system,
-                    coordinator,
-                    analysis_query_text,
-                    agent_mode,
-                    st.session_state.memory,
-                )
 
-                st.session_state.analysis_results = analysis_output
-                st.session_state.agent_system = coordinator
-                st.session_state.agent_mode = agent_mode
-
-                if agent_mode == "multi":
-                    st.info("✅ Analysis completed using multi-agent system")
+                # Prefer RouterQueryEngine when available
+                if st.session_state.get("router_engine") is not None:
+                    analysis_resp = await asyncio.to_thread(
+                        st.session_state.router_engine.query, analysis_query_text
+                    )
+                    st.session_state.analysis_results = analysis_resp
+                    st.info("✅ Analysis completed using RouterQueryEngine")
+                else:
+                    # Fallback to multi-agent coordinator path
+                    tools_for_agent = create_tools_from_index(st.session_state.index)
+                    coordinator, agent_mode = get_agent_system(
+                        _tools=tools_for_agent,
+                        _llm=llm,
+                        _memory=st.session_state.memory,
+                    )
+                    analysis_output = await asyncio.to_thread(
+                        process_query_with_agent_system,
+                        coordinator,
+                        analysis_query_text,
+                        agent_mode,
+                        st.session_state.memory,
+                    )
+                    st.session_state.analysis_results = analysis_output
+                    st.session_state.agent_system = coordinator
+                    st.session_state.agent_mode = agent_mode
+                    if agent_mode == "multi_agent":
+                        st.info("✅ Analysis completed using multi-agent system")
 
             except (ValueError, TypeError, RuntimeError) as e:
                 st.error(f"Analysis failed: {e!s}")
-                logger.error("Analysis error: %s", str(e))
+                logger.error("Analysis error: {}", e)
 
 
-if st.button("Analyze") and st.session_state.index:
-    # Use sync analysis to avoid asyncio event loop conflicts
-    with st.spinner("Running analysis..."):
-        try:
-            # Create tools from index
-            tools_for_agent = create_tools_from_index(st.session_state.index)
+def _render_analyze_button() -> None:
+    """Render and handle the Analyze button synchronously.
 
-            # Get appropriate agent system
-            coordinator, agent_mode = get_agent_system(
-                _tools=tools_for_agent,
-                _llm=llm,
-                _memory=st.session_state.memory,
-            )
+    This avoids the asyncio event loop conflict that can arise when nesting
+    asynchronous calls within Streamlit event handlers.
+    """
+    if st.button("Analyze") and st.session_state.index:
+        # Use sync analysis to avoid asyncio event loop conflicts
+        with st.spinner("Running analysis..."):
+            try:
+                sync_query = f"Perform {prompt_type} analysis on the documents"
 
-            # Process analysis with agent system
-            analysis_query_text = f"Perform {prompt_type} analysis on the documents"
-            analysis_output = process_query_with_agent_system(
-                coordinator,
-                analysis_query_text,
-                agent_mode,
-                st.session_state.memory,
-            )
+                # Prefer RouterQueryEngine when available (synchronous call)
+                if st.session_state.get("router_engine") is not None:
+                    sync_resp = st.session_state.router_engine.query(sync_query)
+                    st.session_state.analysis_results = sync_resp
+                    st.info("✅ Analysis completed using RouterQueryEngine")
+                else:
+                    # Fallback to multi-agent coordinator
+                    sync_tools = create_tools_from_index(st.session_state.index)
+                    sync_coordinator, sync_agent_mode = get_agent_system(
+                        _tools=sync_tools,
+                        _llm=llm,
+                        _memory=st.session_state.memory,
+                    )
+                    sync_analysis_output = process_query_with_agent_system(
+                        sync_coordinator,
+                        sync_query,
+                        sync_agent_mode,
+                        st.session_state.memory,
+                    )
+                    st.session_state.analysis_results = sync_analysis_output
+                    st.session_state.agent_system = sync_coordinator
+                    st.session_state.agent_mode = sync_agent_mode
+                    if sync_agent_mode == "multi_agent":
+                        st.info("✅ Analysis completed using multi-agent system")
 
-            st.session_state.analysis_results = analysis_output
-            st.session_state.agent_system = coordinator
-            st.session_state.agent_mode = agent_mode
+            except (ValueError, TypeError, RuntimeError) as e:
+                st.error(f"Analysis failed: {e!s}")
+                logger.error("Analysis error: {}", e)
 
-            if agent_mode == "multi_agent":
-                st.info("✅ Analysis completed using multi-agent system")
-
-        except (ValueError, TypeError, RuntimeError) as e:
-            st.error(f"Analysis failed: {e!s}")
-            logger.error("Analysis error: %s", str(e))
 
 # Chat with Agent using st.chat_message and write_stream
 # (Async Streaming with Error Handling)
@@ -476,10 +629,32 @@ if user_input:
                     )
                 )
 
-            if st.session_state.agent_system:
-                # Using single ReActAgent for all queries
+            # Prefer RouterQueryEngine for chat when available
+            if st.session_state.get("router_engine") is not None:
 
-                # Process query with appropriate agent system using streaming
+                def stream_response() -> Generator[str, None, None]:
+                    """Stream response from RouterQueryEngine (tokenized locally)."""
+                    try:
+                        resp = st.session_state.router_engine.query(user_input)
+                        # Extract text content or stringify
+                        resp_text = (
+                            getattr(resp, "response", None)
+                            or getattr(resp, "text", None)
+                            or str(resp)
+                        )
+                        for i, word in enumerate(resp_text.split()):
+                            yield word if i == 0 else " " + word
+                            time.sleep(SETTINGS.ui.streaming_delay_seconds)
+                    except (ValueError, TypeError, RuntimeError) as e:
+                        yield f"Error processing query: {e!s}"
+
+                full_response = st.write_stream(stream_response())
+                if full_response:
+                    st.session_state.memory.put(
+                        ChatMessage(role="assistant", content=full_response)
+                    )
+            elif st.session_state.agent_system:
+                # Fallback to multi-agent system
                 def stream_response() -> Generator[str, None, None]:
                     """Stream response from agent system."""
                     try:
@@ -489,32 +664,19 @@ if user_input:
                             st.session_state.agent_mode,
                             st.session_state.memory,
                         )
-
-                        # Stream response word by word for better UX
-                        # Fix: Extract content from AgentResponse object
-                        if hasattr(response, "content"):
-                            response_text = response.content
-                        else:
-                            response_text = str(response)
-
-                        words = response_text.split()
-                        for i, word in enumerate(words):
-                            if i == 0:
-                                yield word
-                            else:
-                                yield " " + word
-                            # Add slight delay for streaming effect
+                        response_text = (
+                            response.content
+                            if hasattr(response, "content")
+                            else str(response)
+                        )
+                        for i, word in enumerate(response_text.split()):
+                            yield word if i == 0 else " " + word
                             time.sleep(SETTINGS.ui.streaming_delay_seconds)
                     except (ValueError, TypeError, RuntimeError) as e:
                         yield f"Error processing query: {e!s}"
 
-                # Use Streamlit's native streaming
                 full_response = st.write_stream(stream_response())
-
-                # Store the response in memory using proper ChatMessage API
                 if full_response:
-                    from llama_index.core.llms import ChatMessage
-
                     st.session_state.memory.put(
                         ChatMessage(role="assistant", content=full_response)
                     )
@@ -522,12 +684,13 @@ if user_input:
                 st.error("Please upload and process documents first before chatting.")
         except (ValueError, TypeError, RuntimeError) as e:
             st.error(f"Chat response failed: {e!s}")
-            logger.error("Chat error: %s", str(e))
+            logger.error("Chat error: {}", e)
 
     # Store user message in memory using proper ChatMessage API
-    from llama_index.core.llms import ChatMessage
-
     st.session_state.memory.put(ChatMessage(role="user", content=user_input))
+
+# Render action controls
+_render_analyze_button()
 
 # Persistence with Memory API and Error Handling
 if st.button("Save Session", key="save_session_btn"):
@@ -536,7 +699,7 @@ if st.button("Save Session", key="save_session_btn"):
         st.success("Saved!")
     except (OSError, ValueError, TypeError) as e:
         st.error(f"Save failed: {e!s}")
-        logger.error("Save error: %s", str(e))
+        logger.error("Save error: {}", e)
 
 if st.button("Load Session", key="load_session_btn"):
     try:
@@ -544,4 +707,4 @@ if st.button("Load Session", key="load_session_btn"):
         st.success("Loaded!")
     except (OSError, ValueError, TypeError) as e:
         st.error(f"Load failed: {e!s}")
-        logger.error("Load error: %s", str(e))
+        logger.error("Load error: {}", e)

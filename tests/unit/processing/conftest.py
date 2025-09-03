@@ -1,9 +1,7 @@
-"""Shared pytest fixtures for document processing tests.
+"""Shared pytest fixtures for document processing tests."""
+# pylint: disable=redefined-outer-name
 
-This module provides common fixtures that can be reused across all document
-processing test suites, including mock objects, sample data, and test utilities.
-"""
-
+from dataclasses import dataclass
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -13,11 +11,19 @@ from src.models.processing import (
     ProcessingResult,
     ProcessingStrategy,
 )
-from src.processing.chunking.models import (
-    BoundaryDetection,
-    ChunkingParameters,
-    SemanticChunk,
-)
+
+# Chunking models removed; using Unstructured + LlamaIndex standard splitters.
+
+
+@dataclass
+class ChunkingParameters:
+    """Parameters for chunking (test stub)."""
+
+    chunk_size: int = 1000
+    chunk_overlap: int = 100
+    new_after_n_chars: int = 1200
+    combine_text_under_n_chars: int = 200
+
 
 # Document Processing Fixtures
 
@@ -240,99 +246,6 @@ def sample_processing_result(sample_document_elements):
         },
         document_hash="abc123def456",
     )
-
-
-# Chunking Fixtures
-
-
-@pytest.fixture
-def sample_chunking_parameters():
-    """Create sample ChunkingParameters with various configurations."""
-    return ChunkingParameters(
-        max_characters=1500,
-        new_after_n_chars=1200,
-        combine_text_under_n_chars=500,
-        multipage_sections=True,
-        boundary_detection=BoundaryDetection.TITLE_BASED,
-        preserve_section_hierarchy=True,
-        include_orig_elements=True,
-    )
-
-
-@pytest.fixture
-def sample_semantic_chunks():
-    """Create sample SemanticChunk objects for testing."""
-    return [
-        SemanticChunk(
-            text=(
-                "Research Paper: Advanced Document Processing\n\nThis paper presents a "
-                "comprehensive analysis of document processing techniques using "
-                "advanced natural language processing methods."
-            ),
-            category="CompositeElement",
-            metadata={
-                "page_number": 1,
-                "section": "Title and Abstract",
-                "original_elements": ["title_1", "abstract_1"],
-                "chunk_method": "title_based",
-            },
-            section_title="Research Paper: Advanced Document Processing",
-            chunk_index=0,
-            semantic_boundaries={
-                "boundary_type": "title",
-                "chunk_size": 145,
-                "meets_size_target": False,
-                "section_based": True,
-            },
-            original_elements_count=2,
-        ),
-        SemanticChunk(
-            text=(
-                "Introduction\n\nDocument processing has become increasingly important "
-                "in modern applications. The ability to extract meaningful information "
-                "from documents is crucial for business and research applications."
-            ),
-            category="CompositeElement",
-            metadata={
-                "page_number": 2,
-                "section": "Introduction",
-                "original_elements": ["title_2", "intro_1", "intro_2"],
-                "chunk_method": "title_based",
-            },
-            section_title="Introduction",
-            chunk_index=1,
-            semantic_boundaries={
-                "boundary_type": "title",
-                "chunk_size": 187,
-                "meets_size_target": False,
-                "section_based": True,
-            },
-            original_elements_count=3,
-        ),
-        SemanticChunk(
-            text=(
-                "| Method | Accuracy | Speed |\n| --- | --- | --- |\n| Traditional | "
-                "75% | Fast |\n| ML-based | 92% | Medium |\n\nFigure 1: Processing "
-                "Pipeline Architecture"
-            ),
-            category="CompositeElement",
-            metadata={
-                "page_number": 3,
-                "section": "Results and Figures",
-                "original_elements": ["table_1", "figure_1"],
-                "chunk_method": "content_based",
-            },
-            section_title=None,
-            chunk_index=2,
-            semantic_boundaries={
-                "boundary_type": "content",
-                "chunk_size": 134,
-                "meets_size_target": False,
-                "section_based": False,
-            },
-            original_elements_count=2,
-        ),
-    ]
 
 
 # File System Fixtures
@@ -681,6 +594,8 @@ def test_utils():
     """Provide utility functions for testing."""
 
     class TestUtils:
+        """Utility helpers for tests."""
+
         @staticmethod
         def create_mock_processing_result(
             element_count: int = 5,

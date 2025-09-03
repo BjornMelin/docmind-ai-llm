@@ -100,8 +100,7 @@ class TestOptionalDependencyHandling:
         """Verify that ADR-009 compliant modules are available."""
         adr009_modules = [
             "src.processing.document_processor",
-            "src.processing.chunking.unstructured_chunker",
-            "src.processing.embeddings.bgem3_embedder",
+            "src.retrieval.embeddings",
         ]
 
         for module in adr009_modules:

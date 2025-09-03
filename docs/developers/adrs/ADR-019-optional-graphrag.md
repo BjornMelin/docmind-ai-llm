@@ -84,7 +84,7 @@ LlamaIndex PropertyGraphIndex addresses these limitations through:
 
 We will implement **LlamaIndex PropertyGraphIndex as an optional module** with:
 
-1. **Feature Flag**: Disabled by default, enabled via config
+1. **Feature Flag**: Enabled by default (can be disabled via config)
 2. **Zero Infrastructure**: Uses in-memory SimplePropertyGraphStore
 3. **Qdrant Reuse**: Leverages existing vector store for embeddings
 4. **Native Integration**: Works with LlamaIndex pipeline (production-ready component)
@@ -337,7 +337,7 @@ class HybridRAGRouter:
 ```yaml
 # config/graphrag.yaml
 graphrag:
-  enabled: false  # Disabled by default
+  enabled: true  # Enabled by default
   
   # Graph Extraction
   extraction:
@@ -579,3 +579,26 @@ class GraphRAGMonitor:
 - **3.1 (2025-08-22)**: **IMPLEMENTATION COMPLETE** - Full PropertyGraphIndex implementation with domain-specific extractors and multimodal support
 - **3.0 (2025-08-19)**: **FP8 MODEL OPTIMIZATION** - Updated for Qwen3-4B-Instruct-2507-FP8 with 128K context capability for enhanced entity extraction and relationship mapping within FP8-optimized context windows
 - **1.0 (2025-08-17)**: Initial optional GraphRAG module design with Microsoft GraphRAG integration
+
+## Addendum (2025-09-03)
+
+Per product direction, GraphRAG (PropertyGraphIndex) is now enabled by default. This supersedes the earlier default-off recommendation. To mitigate risk:
+
+- Maintain a one-line rollback via .
+- Route to graph retrieval only when graph indicators are detected or when the selector chooses it.
+- Track graph query latency/throughput and set SLOs; if targets are not met, disable by config and investigate.
+- Keep vector-only routing available as a safe fallback.
+
+This change does not alter the library-first implementation: it continues to rely on LlamaIndex’s PropertyGraphIndex, SimplePropertyGraphStore, and existing Qdrant reuse for embeddings.
+
+## Addendum (2025-09-03)
+
+Per product direction, GraphRAG (PropertyGraphIndex) is now enabled by default. This supersedes the earlier default-off recommendation. To mitigate risk:
+
+- Maintain a one-line rollback via `graphrag.enabled: false`.
+- Route to graph retrieval only when graph indicators are detected or when the selector chooses it.
+- Track graph query latency/throughput and set SLOs; if targets are not met, disable by config and investigate.
+- Keep vector-only routing available as a safe fallback.
+
+This change does not alter the library-first implementation: it continues to rely on LlamaIndex’s PropertyGraphIndex, SimplePropertyGraphStore, and existing Qdrant reuse for embeddings.
+

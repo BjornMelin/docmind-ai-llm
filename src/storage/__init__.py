@@ -1,18 +1,8 @@
 """DocMind AI Storage Module.
 
-This module provides hybrid persistence architecture combining Qdrant vector
-storage with SQLite relational storage for comprehensive data management
-and retrieval capabilities following ADR-009 requirements.
-
-Components:
-    hybrid_persistence: HybridPersistenceManager with Qdrant + SQLite integration
-    models: Storage-specific Pydantic models
-
-Key Features:
-- Qdrant vector storage for embeddings and similarity search
-- SQLite relational storage for metadata and session persistence
-- Hybrid persistence layer for unified data access
-- WAL mode for concurrent access optimization
+Library-first storage utilities. Vector storage is provided via
+LlamaIndex QdrantVectorStore and StorageContext (see src.utils.storage).
+Operational metadata may use SQLite via application components when needed.
 """
 
 from src.models.storage import (
@@ -22,11 +12,9 @@ from src.models.storage import (
     StorageStats,
     VectorRecord,
 )
-from src.storage.hybrid_persistence import HybridPersistenceManager
 
 __all__ = [
     "DocumentMetadata",
-    "HybridPersistenceManager",
     "PersistenceError",
     "SearchResult",
     "StorageStats",

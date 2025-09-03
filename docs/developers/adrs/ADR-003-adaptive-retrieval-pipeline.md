@@ -1,16 +1,17 @@
-# ADR-003: Adaptive Retrieval Pipeline with RAPTOR-Lite
-
-## Title
-
-Hierarchical Adaptive Retrieval with Simplified RAPTOR and Multi-Strategy Routing
-
-## Version/Date
-
-3.2 / 2025-09-02
-
-## Status
-
-Accepted
+---
+ADR: 003
+Title: Adaptive Retrieval Pipeline with RAPTOR‑Lite
+Status: Accepted
+Version: 3.3
+Date: 2025-09-03
+Supersedes:
+Superseded-by:
+Related: 002, 004, 024, 037
+Tags: retrieval, routing, raptor, hybrid, reranking
+References:
+- [LlamaIndex Node Postprocessors](https://docs.llamaindex.ai/en/stable/module_guides/querying/node_postprocessors/)
+- [LlamaIndex BM25 / hybrid examples](https://docs.llamaindex.ai/en/stable/examples/retrievers/BM25Retriever/)
+---
 
 ## Description
 
@@ -32,7 +33,9 @@ Current retrieval is limited to flat vector similarity search with basic reranki
 
 Full RAPTOR implementation is too resource-intensive for local deployment. Our RAPTOR-Lite approach maintains hierarchical benefits while optimizing for local-first constraints.
 
-**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-031), applies adaptive routing strategies optimized for 128K context windows, and uses BGE-reranker-v2-m3 (ADR-006) to refine results before returning them to the agentic RAG system with FP8 optimization.
+**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-031), applies adaptive routing strategies optimized for the enforced 128K context window (ADR‑004/010), and performs modality‑aware reranking per ADR‑037 (ColPali for visuals; BGE v2‑m3 for text) before synthesis.
+
+> Update (2025‑09‑03): Integrated ADR‑037 multimodal reranking and affirmed 128K cap alignment with ADR‑004/010.
 
 ## Related Requirements
 
@@ -87,7 +90,7 @@ We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in fe
 ## Related Decisions
 
 - **ADR-002** (Unified Embedding Strategy): Provides BGE-M3 embeddings for hierarchical indexing
-- **ADR-006** (Modern Reranking Architecture): Reranks hierarchical retrieval results using BGE-reranker-v2-m3
+- **ADR-037** (Multimodal Reranking): Modality‑aware reranking with ColPali (visual) and BGE v2‑m3 (text)
 - **ADR-031** (Local-First Persistence Architecture): Accesses Qdrant vector storage for similarity search operations
 - **ADR-001** (Modern Agentic RAG): Uses adaptive retrieval for intelligent routing
 - **ADR-011** (Agent Orchestration Framework): Orchestrates adaptive retrieval decisions

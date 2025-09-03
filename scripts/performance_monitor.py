@@ -116,6 +116,7 @@ class PerformanceMonitor:
                 cmd,
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=self.config["test_suite_timeout"],
             )
 
@@ -133,7 +134,7 @@ class PerformanceMonitor:
                 }
             )
 
-            logger.info(f"Test suite completed in {duration:.2f}s")
+            logger.info("Test suite completed in %.2fs", duration)
             return performance_data
 
         except subprocess.TimeoutExpired:
@@ -167,6 +168,7 @@ class PerformanceMonitor:
                 ["uv", "run", "python", "-m", "pytest", "--collect-only", "-q"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=self.config["test_collection_timeout"],
             )
 
@@ -192,7 +194,7 @@ class PerformanceMonitor:
                 "timestamp": datetime.now().isoformat(),
             }
 
-            logger.info(f"Collected {test_count} tests in {collection_time:.2f}s")
+            logger.info("Collected %d tests in %.2fs", test_count, collection_time)
             return collection_data
 
         except subprocess.TimeoutExpired:
@@ -240,7 +242,7 @@ class PerformanceMonitor:
             if "slowest durations" in line.lower():
                 in_slowest_section = True
                 continue
-            elif in_slowest_section and line.strip() and not line.startswith("="):
+            if in_slowest_section and line.strip() and not line.startswith("="):
                 try:
                     # Parse format: "0.12s call     tests/test_file.py::test_function"
                     parts = line.strip().split()
@@ -255,7 +257,7 @@ class PerformanceMonitor:
                         )
                 except (ValueError, IndexError):
                     continue
-            elif "=" in line and in_slowest_section:
+            if "=" in line and in_slowest_section:
                 break
 
         # Parse test results summary
@@ -328,7 +330,7 @@ class PerformanceMonitor:
 
             logger.info("Performance baseline recorded successfully")
 
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             self.warnings.append(f"Failed to record baseline: {e}")
 
     def check_performance_regressions(
@@ -533,12 +535,12 @@ class PerformanceMonitor:
         filepath = self.config["reports_storage"] / filename
 
         try:
-            with open(filepath, "w") as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
-            logger.info(f"Performance data saved to {filepath}")
+            logger.info("Performance data saved to %s", filepath)
 
-        except Exception as e:
+        except (OSError, TypeError) as e:
             self.warnings.append(f"Failed to save performance data: {e}")
 
 

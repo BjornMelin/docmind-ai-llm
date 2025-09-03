@@ -337,6 +337,7 @@ async def test_multipage_sections_propagation(tmp_path, multipage):
     settings.processing.combine_text_under_n_chars = 500
     settings.processing.multipage_sections = multipage
     settings.max_document_size_mb = 100
+    settings.cache_dir = tmp_path / "cache"
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),
@@ -387,6 +388,7 @@ async def test_combine_text_under_n_chars_forwarded(tmp_path, combine_under):
     settings.processing.combine_text_under_n_chars = combine_under
     settings.processing.multipage_sections = True
     settings.max_document_size_mb = 100
+    settings.cache_dir = tmp_path / "cache"
 
     with (
         patch("src.processing.document_processor.partition", return_value=parts),

@@ -70,11 +70,11 @@ class CoverageAnalyzer:
             return False
 
         try:
-            with open(COVERAGE_JSON) as f:
+            with open(COVERAGE_JSON, encoding="utf-8") as f:
                 self.coverage_data = json.load(f)
             logger.info("Coverage data loaded successfully")
             return True
-        except Exception as e:
+        except (OSError, json.JSONDecodeError) as e:
             self.failures.append(f"Failed to load coverage data: {e}")
             return False
 
@@ -385,7 +385,7 @@ class CoverageAnalyzer:
             logger.info("Coverage collection completed")
             return True
 
-        except Exception as e:
+        except subprocess.SubprocessError as e:
             self.failures.append(f"Failed to run coverage collection: {e}")
             return False
 
@@ -471,7 +471,7 @@ class CoverageAnalyzer:
         except subprocess.CalledProcessError as e:
             self.failures.append(f"Failed to get modified files: {e}")
             return {"status": "error", "message": str(e)}
-        except Exception as e:
+        except (OSError, ValueError, json.JSONDecodeError) as e:
             self.failures.append(f"Error checking new code coverage: {e}")
             return {"status": "error", "message": str(e)}
 

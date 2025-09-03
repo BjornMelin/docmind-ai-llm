@@ -67,8 +67,7 @@ class TestImportValidation:
         """Test that ADR-009 compliant document processing modules can be imported."""
         adr009_modules = [
             "src.processing.document_processor",
-            "src.processing.chunking.unstructured_chunker",
-            "src.processing.embeddings.bgem3_embedder",
+            "src.retrieval.embeddings",
         ]
 
         for module_name in adr009_modules:
@@ -79,13 +78,8 @@ class TestImportValidation:
                 # Test that key classes are available
                 if module_name == "src.processing.document_processor":
                     assert hasattr(module, "DocumentProcessor")
-                elif module_name == "src.processing.chunking.unstructured_chunker":
-                    assert hasattr(
-                        module, "SemanticChunker"
-                    )  # Actual class name in the module
-                # SimpleCache removed per ADR-030
-                elif module_name == "src.processing.embeddings.bgem3_embedder":
-                    assert hasattr(module, "BGEM3Embedder")
+                elif module_name == "src.retrieval.embeddings":
+                    assert hasattr(module, "BGEM3Embedding")
 
             except ImportError as e:
                 pytest.fail(f"Failed to import ADR-009 module {module_name}: {e}")
@@ -158,8 +152,7 @@ class TestImportValidation:
         # ADR-009 compliant file structure
         adr009_files = [
             "src/processing/document_processor.py",
-            "src/processing/chunking/unstructured_chunker.py",
-            "src/processing/embeddings/bgem3_embedder.py",
+            "src/retrieval/embeddings.py",
         ]
 
         for file_path in required_files:

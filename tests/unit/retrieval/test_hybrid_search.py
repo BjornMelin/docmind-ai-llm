@@ -212,7 +212,7 @@ class TestHybridSearchIntegration:
         - Handles batch similarity calculations efficiently
         - Returns similarity scores with document IDs
         """
-        with patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder"):
+        with patch("src.retrieval.embeddings.BGEM3Embedding"):
             searcher = HybridSearcher(mock_settings)
 
             # Mock dense similarity computation
@@ -251,7 +251,7 @@ class TestHybridSearchIntegration:
         - Handles token weight multiplication correctly
         - Returns keyword-based relevance scores
         """
-        with patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder"):
+        with patch("src.retrieval.embeddings.BGEM3Embedding"):
             searcher = HybridSearcher(mock_settings)
 
             # Mock sparse similarity computation
@@ -308,7 +308,7 @@ class TestHybridSearchIntegration:
         - Applies ADR-002 specified α=0.7 weighting
         - Returns fused rankings with combined scores
         """
-        with patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder"):
+        with patch("src.retrieval.embeddings.BGEM3Embedding"):
             searcher = HybridSearcher(mock_settings)
 
             # Mock dense and sparse results
@@ -359,9 +359,7 @@ class TestHybridSearchIntegration:
         - Returns ranked results with hybrid scores
         - Validates ADR-002 FR-4 compliance
         """
-        with patch(
-            "src.processing.embeddings.bgem3_embedder.BGEM3Embedder"
-        ) as mock_embedder_class:
+        with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder_class:
             mock_embedder = Mock()
             mock_embedder_class.return_value = mock_embedder
 
@@ -418,7 +416,7 @@ class TestHybridSearchIntegration:
         - Applies threshold to both dense and sparse results
         - Preserves high-relevance results only
         """
-        with patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder"):
+        with patch("src.retrieval.embeddings.BGEM3Embedding"):
             searcher = HybridSearcher(mock_settings)
 
             # Test results with mixed relevance scores
@@ -455,9 +453,7 @@ class TestHybridSearchPerformance:
         - Maintains result accuracy with batch processing
         - Scales well with increasing query volume
         """
-        with patch(
-            "src.processing.embeddings.bgem3_embedder.BGEM3Embedder"
-        ) as mock_embedder_class:
+        with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder_class:
             mock_embedder = Mock()
             mock_embedder_class.return_value = mock_embedder
 
@@ -506,7 +502,7 @@ class TestHybridSearchPerformance:
         - Handles top-k result selection efficiently
         - Maintains ranking stability across searches
         """
-        with patch("src.processing.embeddings.bgem3_embedder.BGEM3Embedder"):
+        with patch("src.retrieval.embeddings.BGEM3Embedding"):
             searcher = HybridSearcher(mock_settings)
 
             # Generate large result set for ranking test
@@ -540,9 +536,7 @@ class TestHybridSearchPerformance:
         - Verifies BGE-M3 model integration
         - Ensures hybrid search meets ADR-002 requirements
         """
-        with patch(
-            "src.processing.embeddings.bgem3_embedder.BGEM3Embedder"
-        ) as mock_embedder_class:
+        with patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embedder_class:
             searcher = HybridSearcher(mock_settings)
 
             # Verify ADR-002 compliance parameters

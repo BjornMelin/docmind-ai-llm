@@ -428,39 +428,7 @@ class TestSparseEmbeddingValidation:
 class TestInterfaceContractValidation:
     """Test interface contracts for embedding operations."""
 
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
-    def test_bgem3_embedder_dimension_contract(
-        self, mock_flag_model_class, test_settings_1024d, bgem3_parameters_1024d
-    ):
-        """Test BGE-M3 embedder maintains 1024D contract."""
-        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
-
-        # Setup mock to return 1024D embeddings
-        mock_model = Mock()
-
-        def mock_encode(*args, **kwargs):
-            batch_size = len(args[0]) if args else 1
-            return {"dense_vecs": np.random.randn(batch_size, 1024).astype(np.float32)}
-
-        mock_model.encode.side_effect = mock_encode
-        mock_flag_model_class.return_value = mock_model
-
-        embedder = BGEM3Embedder(
-            settings=test_settings_1024d, parameters=bgem3_parameters_1024d
-        )
-
-        # Test single embedding contract
-        single_result = embedder.get_dense_embeddings(["Test text"])
-        assert single_result is not None, "Dense embeddings should not be None"
-        assert len(single_result) == 1, "Should return one embedding"
-        assert len(single_result[0]) == 1024, "Single embedding should be 1024D"
-
-        # Test batch embedding contract
-        batch_result = embedder.get_dense_embeddings(["Text 1", "Text 2", "Text 3"])
-        assert batch_result is not None, "Batch dense embeddings should not be None"
-        assert len(batch_result) == 3, "Should return three embeddings"
-        for embedding in batch_result:
-            assert len(embedding) == 1024, "Each batch embedding should be 1024D"
+    # Removed BGEM3Embedder legacy test; retrieval BGEM3Embedding covers contract
 
     @patch("src.retrieval.embeddings.BGEM3FlagModel")
     def test_retrieval_embedding_dimension_contract(

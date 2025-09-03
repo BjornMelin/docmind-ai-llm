@@ -5,8 +5,8 @@ processing pipeline with unified dense/sparse embeddings, batch processing,
 and semantic caching integration following ADR-009 requirements.
 
 Components:
-    bgem3_embedder: BGEM3Embedder with 8K context window and GPU optimization
-    models: Embedding-specific Pydantic models
+    retrieval.embeddings: BGEM3Embedding with 8K context window and GPU optimization
+    models: Embedding-specific Pydantic models (interfaces only)
 
 Key Features:
 - BGE-M3 unified dense/sparse embeddings with 8K context window
@@ -22,12 +22,10 @@ from src.models.embeddings import (
     EmbeddingParameters,
     EmbeddingResult,
 )
-from src.processing.embeddings.bgem3_embedder import (
-    BGEM3Embedder,
-)
+from src.retrieval.embeddings import BGEM3Embedding
 
 __all__ = [
-    "BGEM3Embedder",
+    "BGEM3Embedding",
     "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",

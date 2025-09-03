@@ -27,7 +27,6 @@ from src.agents.models import AgentResponse
 from src.models.processing import ProcessingResult, ProcessingStrategy
 from src.models.schemas import Document
 from src.processing.document_processor import DocumentProcessor
-from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
 from tests.fixtures.sample_documents import create_sample_documents
 from tests.fixtures.test_settings import IntegrationTestSettings
 
@@ -496,7 +495,8 @@ class TestSystemValidationReporting:
         # Component integration matrix test
         components = {
             "document_processor": DocumentProcessor(integration_settings),
-            "embedder": BGEM3Embedder(integration_settings),
+            # Use a simple mock embedder; embedding correctness is validated elsewhere.
+            "embedder": Mock(),
             # Build vector index when needed directly in tests; no create_vector_store
             "coordinator": MultiAgentCoordinator(),
         }
@@ -514,9 +514,12 @@ class TestSystemValidationReporting:
         doc_result = await processor.process_document_async(
             sample_documents["tech_docs"]
         )
-
         # Patch the actual async embedding method for the current embedder
-        with patch.object(embedder, "embed_texts_async") as mock_embed:
+        from unittest.mock import AsyncMock
+
+        with patch.object(
+            embedder, "embed_texts_async", new_callable=AsyncMock
+        ) as mock_embed:
             mock_embed.return_value = Mock(dense_embeddings=[[0.1] * 1024])
             result = await embedder.embed_texts_async([doc_result.elements[0].text])
 

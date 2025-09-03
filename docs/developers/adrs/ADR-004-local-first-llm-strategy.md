@@ -1,22 +1,23 @@
-# ADR-004: Local-First LLM Strategy
-
-## Title
-
-Local LLM Selection and Optimization for Consumer Hardware
-
-## Version/Date
-
-10.0 / 2025-08-19
-
-## Status
-
-Accepted
+---
+ADR: 004
+Title: Local LLM Selection and 128K Context Enforcement
+Status: Accepted
+Version: 10.1
+Date: 2025-09-03
+Supersedes:
+Superseded-by:
+Related: 010, 011, 024, 037
+Tags: llm, performance, context, vllm, qwen
+References:
+- [vLLM Engine Args (`max_model_len`, `kv_cache_dtype`)](https://docs.vllm.ai/en/latest/models/engine_args.html)
+- [Qwen/Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507)
+---
 
 ## Description
 
-Establishes a local-first LLM strategy using **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache optimization. This configuration enables a 131,072-token (128K) context window on RTX 4090 Laptop (16GB VRAM) through optimized FP8 memory usage.
+Establishes a local-first LLM strategy using **Qwen/Qwen3-4B-Instruct-2507-FP8** with FP8 quantization and FP8 KV cache optimization and **explicitly enforces a 131,072-token (128K) context** via vLLM `--max-model-len 131072`.
 
-**Hardware-Constrained Design Decision**: The 128K context limit represents sound engineering - constraining from the model's native 262K capability due to RTX 4090 Laptop's 16GB VRAM limitation. This is an intentional design choice balancing context capability with available hardware resources.
+**Hardware-Constrained Design Decision**: The 128K context limit represents sound engineering — constraining from the model's native larger capability due to RTX 4090 Laptop's 16GB VRAM limitation. This is an intentional design choice balancing capability with resources. Enforcement is required across backends.
 
 Total memory usage at 128K: ~12-14GB (well within 16GB limit). Performance significantly improves with FP8 quantization (100-160 tok/s decode, 800-1300 tok/s prefill) while maintaining high accuracy.
 

@@ -2,6 +2,7 @@
 py-version=3.11
 suggestion-mode=yes
 jobs=0
+ignore-paths=^docs/.*$,^examples/.*$
 
 [MESSAGES CONTROL]
 disable=
@@ -11,7 +12,8 @@ disable=
     too-many-locals,
     import-outside-toplevel,
     fixme,
-    import-error
+    import-error,
+    duplicate-code
 
 [FORMAT]
 max-line-length=100

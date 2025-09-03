@@ -56,7 +56,6 @@ from .reranking import (
 )
 
 # Unified Qdrant vector store
-from .vector_store import QdrantUnifiedVectorStore, create_unified_qdrant_store
 
 __all__ = [
     "AdaptiveRouterQueryEngine",
@@ -69,7 +68,6 @@ __all__ = [
     "DocMindRAG",
     "OptimizationMode",
     "PropertyGraphConfig",
-    "QdrantUnifiedVectorStore",
     "QueryStrategy",
     "benchmark_reranking_latency",
     "calculate_entity_confidence",
@@ -83,7 +81,6 @@ __all__ = [
     "create_property_graph_index",
     "create_property_graph_index_async",
     "create_tech_schema",
-    "create_unified_qdrant_store",
     "extend_property_graph_index",
     "extract_entities",
     "extract_relationships",

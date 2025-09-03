@@ -19,7 +19,7 @@ Key testing areas:
 """
 
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -513,43 +513,7 @@ class TestBatchDimensionValidation:
 class TestBatchProcessingContracts:
     """Test interface contracts for batch processing operations."""
 
-    @patch("src.processing.embeddings.bgem3_embedder.BGEM3FlagModel")
-    def test_bgem3_batch_contract_compliance(
-        self, mock_flag_model_class, memory_efficient_settings
-    ):
-        """Test BGE-M3 embedder batch contract compliance."""
-        from src.processing.embeddings.bgem3_embedder import BGEM3Embedder
-
-        # Setup mock to return 1024D embeddings
-        mock_model = Mock()
-
-        def mock_encode(*args, **kwargs):
-            texts = args[0] if args else []
-            batch_size = len(texts) if isinstance(texts, list) else 1
-            return {"dense_vecs": np.random.randn(batch_size, 1024).astype(np.float32)}
-
-        mock_model.encode.side_effect = mock_encode
-        mock_flag_model_class.return_value = mock_model
-
-        embedder = BGEM3Embedder(settings=memory_efficient_settings)
-
-        # Test batch contract with various sizes
-        batch_sizes = [1, 5, 10, 25, 50]
-
-        for size in batch_sizes:
-            test_texts = [f"Batch contract test text {i}" for i in range(size)]
-
-            # Test dense embeddings batch contract
-            dense_result = embedder.get_dense_embeddings(test_texts)
-            assert dense_result is not None, (
-                f"Dense embeddings should not be None for batch size {size}"
-            )
-            assert len(dense_result) == size, f"Should return {size} dense embeddings"
-
-            for i, embedding in enumerate(dense_result):
-                assert len(embedding) == 1024, (
-                    f"Dense embedding {i} in batch size {size} should be 1024D"
-                )
+    # Removed legacy BGEM3Embedder batch test; covered by retrieval embedding tests
 
     def test_batch_processing_error_recovery(self, mock_llamaindex_embedding_1024d):
         """Test error recovery in batch processing."""

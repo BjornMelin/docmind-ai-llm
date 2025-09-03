@@ -1,13 +1,15 @@
-# ADR-[ADR #]: [Concise Decision Title]
-
-## Metadata
-
-**Status:** [Proposed | Accepted | Rejected | Deprecated | Superseded by ADR-XXXX]
-**Version/Date:** vX.Y / YYYY-MM-DD
-
-## Title
-
-[Full, Descriptive Title of the Decision]
+---
+ADR: <zero-padded number>
+Title: <concise decision>
+Status: <Proposed|Accepted|Deprecated|Superseded>
+Version: <X.Y>
+Date: <YYYY-MM-DD>
+Supersedes: <ADR-IDs>
+Superseded-by: <ADR-IDs>
+Related: <ADR-IDs>
+Tags: <e.g., architecture, streamlit, orchestration, auth, embeddings, agents, retrieval>
+References: <official docs and key sources as markdown links>
+---
 
 ## Description
 
@@ -84,14 +86,6 @@ This section outlines the specific requirements this ADR addresses. Be brief and
 
 - **IR-1:** [The solution must integrate natively with the LlamaIndex `Settings` singleton.]
 - **IR-2:** [The component must be callable via asynchronous patterns (`async/await`).]
-
-## Related Decisions
-
-<!-- 
-Link to other ADRs that are connected to this one. This helps in understanding the broader architectural context.
--->
-- **ADR-[XXX]** ([Title of related ADR]): [Briefly explain the relationship, e.g., "This decision builds upon the core architecture defined in ADR-XXX."]
-- **ADR-[YYY]** ([Title of related ADR]): [e.g., "The component chosen here will be configured via the `Settings` singleton established in ADR-YYY."]
 
 ## Design
 
@@ -200,15 +194,6 @@ Analyze the results and impact of the decision.
 - **System**: [e.g., `tesseract-ocr` if adding OCR capabilities.]
 - **Python**: [e.g., `llama-index-core>=0.12.0`, `tenacity>=8.2.0`.]
 - **Removed**: [e.g., `diskcache` (replaced by native solution).]
-
-## References
-
-- [e.g., Primary Library Documentation](https://fastapi.tiangolo.com/) - Comprehensive guide to async web framework features and performance characteristics
-- [e.g., FastAPI on PyPI](https://pypi.org/project/fastapi/) - Version history and dependency requirements
-- [e.g., Flask vs FastAPI Performance Benchmark](https://github.com/klen/py-frameworks-bench) - Independent performance comparison that informed the decision
-- [e.g., Async Python Performance Analysis](https://realpython.com/async-io-python/) - Deep dive into asyncio patterns used in implementation
-- [e.g., OWASP API Security Top 10](https://owasp.org/www-project-api-security/) - Security considerations that shaped authentication design
-- [e.g., ADR-001: Database Selection](docs/adrs/001-database-selection.md) - Dependency relationship with current decision
 
 ## Changelog
 

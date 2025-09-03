@@ -368,7 +368,7 @@ class OptimizedBGE_M3:
 
 ### Implementation Components
 
-- **BGEM3Embedding**: `src/processing/embeddings/bgem3_embedder.py` - Native LlamaIndex BaseEmbedding integration
+- **BGEM3Embedding**: `src/retrieval/embeddings.py` - Native LlamaIndex BaseEmbedding integration
 - **Direct FlagEmbedding**: Uses BGEM3FlagModel for unified dense/sparse embeddings
 - **Library-First Methods**: `get_unified_embeddings()`, `encode_queries()`, `encode_corpus()`
 - **Performance Achieved**:
