@@ -14,21 +14,13 @@ import pytest
 def test_setup_llamaindex_success() -> None:
     """setup_llamaindex sets Settings.llm and Settings.embed_model on success."""
     with (
-        patch("src.config.integrations.settings") as mock_settings,
-        patch("src.retrieval.embeddings.BGEM3Embedding"),
-        patch("llama_index.llms.ollama.Ollama"),
+        patch("src.config.integrations.settings") as _mock_settings,
+        patch("src.config.integrations.build_llm") as mock_build_llm,
+        patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embed,
     ):
-        mock_settings.get_model_config.return_value = {
-            "model_name": "test-model",
-            "base_url": "http://localhost:11434",
-            "temperature": 0.1,
-        }
-        mock_settings.get_embedding_config.return_value = {
-            "model_name": "BAAI/bge-m3",
-            "device": "cpu",
-            "max_length": 512,
-            "batch_size": 1,
-        }
+        mock_llm = object()
+        mock_build_llm.return_value = mock_llm
+        mock_embed.return_value = object()
 
         from llama_index.core import Settings
 
@@ -39,30 +31,22 @@ def test_setup_llamaindex_success() -> None:
         Settings.embed_model = None
 
         setup_llamaindex()
+        # A global fixture may pre-set a MockLLM; accept any non-None value
         assert Settings.llm is not None
         assert Settings.embed_model is not None
+        # Depending on how settings is patched, these may be ints or mocks.
+        assert Settings.context_window is not None
+        assert Settings.num_output is not None
 
 
 @pytest.mark.unit
 def test_setup_llamaindex_failure_paths() -> None:
     """On import/config errors, Settings.llm/embed_model become None."""
     with (
-        patch("src.config.integrations.settings") as mock_settings,
-        patch("llama_index.llms.ollama.Ollama", side_effect=ImportError("boom")),
+        patch("src.config.integrations.settings") as _mock_settings,
+        patch("src.config.integrations.build_llm", side_effect=ImportError("boom")),
         patch("src.retrieval.embeddings.BGEM3Embedding", side_effect=RuntimeError("x")),
     ):
-        mock_settings.get_model_config.return_value = {
-            "model_name": "test-model",
-            "base_url": "http://localhost:11434",
-            "temperature": 0.1,
-        }
-        mock_settings.get_embedding_config.return_value = {
-            "model_name": "BAAI/bge-m3",
-            "device": "cpu",
-            "max_length": 512,
-            "batch_size": 1,
-        }
-
         from llama_index.core import Settings
 
         from src.config.integrations import setup_llamaindex

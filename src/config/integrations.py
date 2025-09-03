@@ -12,6 +12,7 @@ import os
 import torch
 from llama_index.core import Settings
 
+from src.config.llm_factory import build_llm
 from src.retrieval.embeddings import BGEM3Embedding
 
 from .settings import settings
@@ -30,26 +31,16 @@ def setup_llamaindex() -> None:
         None: All errors are logged and converted to ``None`` assignments so the
         rest of the app can gracefully degrade.
     """
-    # Configure LLM with unified settings (do not overwrite test/fixture values)
-    try:
-        if Settings.llm is not None:
-            logger.info("LLM already configured; skipping override")
-        else:
-            # Lazy import to avoid heavy dependency at module import time
-            from llama_index.llms.ollama import Ollama  # type: ignore
-
-            model_config = settings.get_model_config()
-
-            Settings.llm = Ollama(
-                model=model_config["model_name"],
-                base_url=model_config["base_url"],
-                temperature=model_config["temperature"],
-                request_timeout=120.0,
-            )
-            logger.info("LLM configured: %s", getattr(Settings.llm, "model", "unknown"))
-    except (ImportError, RuntimeError, ValueError, OSError) as e:
-        logger.warning("Could not configure LLM: %s", e, exc_info=True)
-        Settings.llm = None
+    # Configure LLM via factory (do not overwrite test/fixture values)
+    if Settings.llm is not None:
+        logger.info("LLM already configured; skipping override")
+    else:
+        try:
+            Settings.llm = build_llm(settings)
+            logger.info("LLM configured via factory backend=%s", settings.llm_backend)
+        except (ImportError, RuntimeError, ValueError, OSError) as e:
+            logger.warning("Could not configure LLM: %s", e, exc_info=True)
+            Settings.llm = None
 
     # Configure BGE-M3 embeddings with unified settings
     # (do not overwrite test/fixture values)

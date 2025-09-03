@@ -28,7 +28,7 @@ import asyncio
 import time
 from collections.abc import Generator
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import ollama
 import streamlit as st
@@ -36,21 +36,20 @@ from llama_index.core import VectorStoreIndex
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core.vector_stores import SimpleVectorStore
 from llama_index.llms.ollama import Ollama
-from llama_index.llms.openai import OpenAI
 from loguru import logger
 
-# Conditional import for LlamaCPP to handle BLAS library issues
 try:
-    from llama_index.llms.llama_cpp import LlamaCPP
+    from llama_index.llms.llama_cpp import LlamaCPP  # type: ignore
 
     LLAMACPP_AVAILABLE = True
-except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
+except Exception as _e:  # pragma: no cover - environment dependent
     logger.warning("LlamaCPP not available. Running without LlamaCPP support.")
-    logger.debug("LlamaCPP import failed: %s", e)
-    LlamaCPP = None
+    LlamaCPP = None  # type: ignore
     LLAMACPP_AVAILABLE = False
-
-from typing import cast
+try:
+    from llama_index.llms.openai_like import OpenAILike  # type: ignore
+except Exception:  # pragma: no cover - optional integration
+    OpenAILike = None  # type: ignore
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
@@ -71,6 +70,11 @@ VLLM: _VLLMConfig = cast(Any, SETTINGS.vllm)
 
 
 # Simple wrapper functions for Ollama API calls
+def is_llamacpp_available() -> bool:
+    """Return True if llama.cpp bindings are available in this environment."""
+    return bool(LLAMACPP_AVAILABLE)
+
+
 async def get_ollama_models() -> dict[str, Any]:
     """Get list of available Ollama models."""
     return ollama.list()
@@ -188,9 +192,7 @@ st.sidebar.info(
 )
 
 
-def is_llamacpp_available() -> bool:
-    """Check if LlamaCPP backend is available."""
-    return LLAMACPP_AVAILABLE
+# LlamaCPP is assumed installed; no runtime availability checks
 
 
 use_gpu: bool = st.sidebar.checkbox(
@@ -211,11 +213,7 @@ enable_multimodal: bool = st.sidebar.checkbox(
 st.sidebar.header("Model and Backend")
 with st.sidebar.expander("Advanced Settings"):
     # Show backend availability status
-    backend_options = ["ollama", "lmstudio"]
-    if is_llamacpp_available():
-        backend_options.insert(1, "llamacpp")
-    else:
-        st.sidebar.warning("LlamaCPP backend unavailable (BLAS library issue)")
+    backend_options = ["ollama", "llamacpp", "lmstudio", "vllm"]
 
     backend: str = st.selectbox(
         "Backend", backend_options, index=0, key="backend_select"
@@ -279,24 +277,31 @@ try:
             request_timeout=SETTINGS.ui.request_timeout_seconds,
         )
     elif backend == "llamacpp":
-        if not is_llamacpp_available():
-            st.error(
-                "LlamaCPP backend is not available. Please check the installation "
-                "or use a different backend (Ollama or LM Studio)."
-            )
-        else:
-            N_GPU_LAYERS = -1 if use_gpu else 0
-            llm = LlamaCPP(
-                model_path=SETTINGS.vllm.llamacpp_model_path,
-                context_window=context_size,
-                n_gpu_layers=N_GPU_LAYERS,
-            )
+        N_GPU_LAYERS = -1 if use_gpu else 0
+        llm = LlamaCPP(
+            model_path=SETTINGS.vllm.llamacpp_model_path,
+            context_window=context_size,
+            model_kwargs={"n_gpu_layers": N_GPU_LAYERS},
+        )
     elif backend == "lmstudio":
-        llm = OpenAI(
-            base_url=SETTINGS.vllm.lmstudio_base_url,
+        llm = OpenAILike(
+            api_base=SETTINGS.lmstudio_base_url,
             api_key="not-needed",
             model=model_name,
-            max_tokens=context_size,
+            is_chat_model=True,
+            is_function_calling_model=False,
+            context_window=context_size,
+            timeout=float(SETTINGS.ui.request_timeout_seconds),
+        )
+    elif backend == "vllm":
+        llm = OpenAILike(
+            api_base=SETTINGS.vllm.vllm_base_url,
+            api_key="not-needed",
+            model=model_name,
+            is_chat_model=True,
+            is_function_calling_model=False,
+            context_window=context_size,
+            timeout=float(SETTINGS.ui.request_timeout_seconds),
         )
 except (ValueError, TypeError, RuntimeError, ConnectionError) as e:
     st.error(f"Model initialization error: {e!s}")

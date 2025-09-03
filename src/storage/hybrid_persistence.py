@@ -733,7 +733,9 @@ class HybridPersistenceManager:
                     if not task.done():
                         task.cancel()
                 for task in list(self._background_tasks):
-                    with suppress(Exception):  # pragma: no cover - cancellation
+                    # CancelledError derives from BaseException, not Exception.
+                    # Suppress both to ensure graceful shutdown in tests.
+                    with suppress(Exception, asyncio.CancelledError):  # pragma: no cover
                         await task
                 self._background_tasks.clear()
 

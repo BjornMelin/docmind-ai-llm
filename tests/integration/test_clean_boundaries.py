@@ -426,21 +426,21 @@ class TestLLMBackendBoundaryIntegration:
         """Test LLM backend configuration integration boundaries."""
         # Mock settings for different backends
         mock_settings_instance = MagicMock()
-        mock_settings_instance.vllm.backend = backend
-        mock_settings_instance.vllm.ollama_base_url = "http://localhost:11434"
+        mock_settings_instance.llm_backend = backend
+        mock_settings_instance.ollama_base_url = "http://localhost:11434"
         mock_settings_instance.vllm.vllm_base_url = "http://localhost:8000"
-        mock_settings_instance.vllm.lmstudio_base_url = "http://localhost:1234"
+        mock_settings_instance.lmstudio_base_url = "http://localhost:1234/v1"
         mock_settings.return_value = mock_settings_instance
 
         # Test backend configuration
         settings = mock_settings()
 
-        assert settings.vllm.backend == backend
+        assert settings.llm_backend == backend
 
         # Verify backend-specific URL configuration
         if backend == "ollama":
-            assert "11434" in settings.vllm.ollama_base_url
+            assert "11434" in settings.ollama_base_url
         elif backend == "vllm":
             assert "8000" in settings.vllm.vllm_base_url
         elif backend == "llamacpp":
-            assert "1234" in settings.vllm.lmstudio_base_url
+            assert "1234" in settings.lmstudio_base_url

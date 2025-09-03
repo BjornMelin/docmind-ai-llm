@@ -230,6 +230,16 @@ class DocMindSettings(BaseSettings):
     lmstudio_base_url: str = Field(default="http://localhost:1234/v1")
     enable_gpu_acceleration: bool = Field(default=True)
 
+    # OpenAI-compatible client flags (for LM Studio, vLLM OpenAI mode, llama-cpp server)
+    openai_like_api_key: str = Field(default="not-needed")
+    openai_like_is_chat_model: bool = Field(default=True)
+    openai_like_is_function_calling_model: bool = Field(default=False)
+    openai_like_extra_headers: dict | None = Field(default=None)
+
+    # Global LLM client behavior
+    llm_request_timeout_seconds: int = Field(default=120, ge=5, le=600)
+    llm_streaming_enabled: bool = Field(default=True)
+
     # Advanced Features
     enable_graphrag: bool = Field(default=False)
     enable_dspy_optimization: bool = Field(

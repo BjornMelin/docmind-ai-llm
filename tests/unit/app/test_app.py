@@ -456,13 +456,13 @@ class TestModelInitialization:
                 llm = mock_llamacpp_class(
                     model_path=model_path,
                     context_window=context_size,
-                    n_gpu_layers=n_gpu_layers,
+                    model_kwargs={"n_gpu_layers": n_gpu_layers},
                 )
 
             mock_llamacpp_class.assert_called_once_with(
                 model_path=model_path,
                 context_window=context_size,
-                n_gpu_layers=-1,  # use_gpu = True
+                model_kwargs={"n_gpu_layers": -1},  # use_gpu = True
             )
             assert llm == mock_llm
 
@@ -473,23 +473,27 @@ class TestModelInitialization:
         model_name = "custom-model"
         context_size = 4096
 
-        with patch("src.app.OpenAI") as mock_openai_class:
+        with patch("src.app.OpenAILike") as mock_openailike_class:
             mock_llm = MagicMock()
-            mock_openai_class.return_value = mock_llm
+            mock_openailike_class.return_value = mock_llm
 
             if backend == "lmstudio":
-                llm = mock_openai_class(
-                    base_url=base_url,
+                llm = mock_openailike_class(
+                    api_base=base_url,
                     api_key="not-needed",
                     model=model_name,
-                    max_tokens=context_size,
+                    is_chat_model=True,
+                    is_function_calling_model=False,
+                    context_window=context_size,
                 )
 
-            mock_openai_class.assert_called_once_with(
-                base_url=base_url,
+            mock_openailike_class.assert_called_once_with(
+                api_base=base_url,
                 api_key="not-needed",
                 model=model_name,
-                max_tokens=context_size,
+                is_chat_model=True,
+                is_function_calling_model=False,
+                context_window=context_size,
             )
             assert llm == mock_llm
 
