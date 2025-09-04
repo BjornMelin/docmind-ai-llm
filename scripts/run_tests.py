@@ -455,7 +455,11 @@ else:
                 "src/utils/monitoring.py",
                 "src/agents/coordinator.py",
                 "src/agents/tool_factory.py",
-                "src/agents/tools.py",
+                "src/agents/tools/router_tool.py",
+                "src/agents/tools/planning.py",
+                "src/agents/tools/retrieval.py",
+                "src/agents/tools/synthesis.py",
+                "src/agents/tools/validation.py",
                 "src/app.py",
             ]
 
