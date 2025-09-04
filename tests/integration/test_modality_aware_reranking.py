@@ -6,28 +6,23 @@ verifies that visual nodes are considered when mode is auto/multimodal.
 
 from __future__ import annotations
 
+import types
 from typing import Any
 
-from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
-from src.config import settings
 from src.retrieval import reranking as rr
 
 
-class _FakePostprocessor(BaseNodePostprocessor):
+class _FakePostprocessor:
     def __init__(self, kind: str) -> None:
-        self.kind = kind
+        self._base = 0.6 if kind == "text" else 0.9
 
-    def _postprocess_nodes(
-        self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
+    def postprocess_nodes(
+        self, nodes: list[NodeWithScore], query_str: str | None = None
     ) -> list[NodeWithScore]:
-        # Assign deterministic scores based on kind to validate gating
-        scored: list[NodeWithScore] = []
-        for n in nodes:
-            base = 0.6 if self.kind == "text" else 0.9
-            scored.append(NodeWithScore(node=n.node, score=base))
-        return scored
+        """Return nodes with fixed scores to emulate reranker behavior."""
+        return [NodeWithScore(node=n.node, score=self._base) for n in nodes]
 
 
 def test_multimodal_gating_prefers_visual_nodes_when_present(monkeypatch: Any) -> None:
@@ -46,8 +41,12 @@ def test_multimodal_gating_prefers_visual_nodes_when_present(monkeypatch: Any) -
     inode.node.metadata["modality"] = "pdf_page_image"
     nodes = [tnode, inode]
 
-    settings.retrieval.reranking_top_k = 2
-    settings.retrieval.reranker_mode = "auto"
+    # Provide a simple settings substitute on the module under test
+    rr.settings = types.SimpleNamespace(
+        retrieval=types.SimpleNamespace(
+            reranking_top_k=2, reranker_mode="auto", reranker_normalize_scores=True
+        )
+    )
 
     ranked = rr.MultimodalReranker().postprocess_nodes(
         nodes, QueryBundle(query_str="What does the figure show?")
