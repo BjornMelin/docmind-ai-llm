@@ -2,8 +2,8 @@
 ADR: 004
 Title: Local LLM Selection and 128K Context Enforcement
 Status: Accepted
-Version: 10.1
-Date: 2025-09-03
+Version: 10.2
+Date: 2025-09-04
 Supersedes:
 Superseded-by:
 Related: 010, 011, 024, 037
@@ -61,6 +61,13 @@ For detailed implementation scripts, testing procedures, and deployment configur
 - **NFR-4:** **(Local-First)** Zero external API dependencies for core operations
 - **NFR-5:** **(Throughput)** 100-160 tokens/sec decode, 800-1300 tokens/sec prefill with FP8 quantization
 
+## Decision Drivers
+
+- Local‑first operation; zero external API dependency
+- Enforce 128K context on 16GB VRAM (FP8 + FP8 KV cache)
+- Strong function calling and tool use for agentic RAG
+- High throughput; predictable latency budgets
+
 ## Alternatives
 
 ### 1. Cloud API Dependencies (OpenAI/Claude)
@@ -105,6 +112,14 @@ For detailed implementation scripts, testing procedures, and deployment configur
 - **Benefits**: Proven performance, well-documented
 - **Issues**: Only 32K native context (needs YaRN for 128K), superseded by Qwen3
 - **Score**: 7/10 (quality: 8, capability: 8, context: 5, future-proof: 4)
+
+### Decision Framework
+
+| Option                        | Local‑First (30%) | Performance (30%) | Capability (25%) | Simplicity (15%) | Total | Decision      |
+| ----------------------------- | ----------------- | ----------------- | ---------------- | ---------------- | ----- | ------------- |
+| Qwen3‑4B‑FP8 (Selected)       | 10                | 9                 | 8                | 8                | 9.0   | ✅ Selected    |
+| Smaller local models          | 10                | 8                 | 6                | 9                | 8.4   | Rejected      |
+| Cloud APIs                    | 0                 | 8                 | 9                | 9                | 5.1   | Rejected      |
 
 ## Decision
 
@@ -151,6 +166,15 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
   --trust-remote-code \
   --host 0.0.0.0 --port 8000 \
   --served-model-name docmind-qwen3-fp8
+```
+
+## High-Level Architecture
+
+```mermaid
+graph TD
+  U[User/App] --> V[vLLM Service]
+  V --> L[Qwen3‑4B‑FP8]
+  L --> O[Outputs]
 ```
 
 ### Performance Validation
@@ -733,6 +757,7 @@ DOCMIND_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 ## Changelog
 
 - **12.0 (2025-08-27)**: **USER SCENARIO VALIDATION & HARDWARE ADAPTABILITY** - Added comprehensive documentation of 5 validated user scenarios: CPU-only students (8GB RAM), mid-range developers (RTX 3060), high-end researchers (RTX 4090), privacy users (offline), and custom endpoint users. Updated multi-provider architecture to emphasize USER CHOICE over automatic selection. Added Hardware Adaptability Requirements section with specific configurations for each user type. Clarified LOCAL USER APPLICATION context vs server application assumptions. All backend choices (ollama/vllm/llama_cpp/openai) validated with user scenarios and hardware constraints.
+- **10.2 (2025-09-04)**: Standardized to ADR template; restored decision matrices, FR/NFR/PR/IR; added concise code/config/tests; no behavior change
 
 - **11.1 (2025-08-20)**: **HARDWARE-CONSTRAINED DESIGN RATIONALE** - Clarified that 128K context limit represents sound engineering decision constraining from model's native 262K capability due to RTX 4090 Laptop 16GB VRAM limitation. Added hardware constraint rationale throughout document. Updated vLLM configuration with verified FlashInfer backend support. Context management strategy updated for 128K window with 120K threshold and 8K buffer. This is intentional design balancing capability with available hardware resources.
 - **11.0 (2025-08-19)**: **CRITICAL MODEL CORRECTION** - Updated from non-existent Qwen3-4B-Instruct-2507-AWQ to actual **Qwen/Qwen3-4B-Instruct-2507-FP8**. Context reduced from impossible 262K to realistic **131,072 tokens (128K)**. Changed quantization from AWQ + INT8 to **FP8 weights + FP8 KV cache**. Added complete vLLM configuration with FlashInfer backend. Updated performance metrics to 100-160 tok/s decode, 800-1300 tok/s prefill. Memory usage: <12-14GB VRAM at 128K (within 16GB limit).

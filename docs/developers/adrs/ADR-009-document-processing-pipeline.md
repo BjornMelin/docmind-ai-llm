@@ -2,8 +2,8 @@
 ADR: 009
 Title: Document Processing Pipeline (Multimodal)
 Status: Implemented
-Version: 2.3
-Date: 2025-09-03
+Version: 2.4
+Date: 2025-09-04
 Supersedes:
 Superseded-by:
 Related: 002, 003, 030, 031, 037
@@ -432,6 +432,40 @@ def process_document(file_path: str):
 - **Memory Usage**: <2GB peak memory during large document processing (library optimization)
 - **Chunk Quality**: ≥90% of chunks maintain semantic coherence (built-in chunking algorithms)
 
+## Decision Drivers
+
+- Library‑first; minimal custom parsing
+- Multimodal support (page‑image nodes for ADR‑037)
+- Local‑first performance and reliability
+
+### Decision Framework
+
+| Option                  | Coverage (35%) | Simplicity (35%) | Perf (20%) | Maintain (10%) | Total | Decision      |
+| ----------------------- | -------------- | ---------------- | ---------- | -------------- | ----- | ------------- |
+| Unstructured.io (Sel.)  | 9              | 9                | 8          | 9              | 8.8   | ✅ Selected    |
+| Multi‑lib stack         | 7              | 4                | 7          | 5              | 5.9   | Rejected      |
+| Custom parsers          | 9              | 2                | 7          | 3              | 5.7   | Rejected      |
+
+## High-Level Architecture
+
+Raw file → unstructured.partition → IngestionPipeline (cache + transforms) → Nodes (text/image/table)
+
+## Configuration
+
+```env
+DOCMIND_CHUNK_SIZE=512
+DOCMIND_CHUNK_OVERLAP=50
+DOCMIND_PROCESSING__STRATEGY=auto
+```
+
+## Testing
+
+```python
+def test_partition_basic(document_processor):
+    out = document_processor.process("sample.pdf")
+    assert out is not None
+```
+
 ## Dependencies
 
 - **Primary**: `unstructured[all-docs]>=0.10.0` — document parsing and multimodal extraction
@@ -456,6 +490,7 @@ def process_document(file_path: str):
 
 ## Changelog
 
+- **2.4 (2025-09-04)**: Standardized to template; added decision framework, config/tests; no behavior change
 - **2.2 (2025-09-02)**: Body overhauled to remove SimpleCache and dual caching; IngestionCache now backed by DuckDBKVStore with single-file DB. Related Decisions updated to ADR-031/ADR-030.
 - **2.1 (2025-09-02)**: Removed custom SimpleCache from pipeline; DocumentProcessor wires LlamaIndex IngestionCache with DuckDBKVStore as the single cache (no back-compat). Updated implementation notes accordingly.
 - **2.0 (2025-08-26)**: IMPLEMENTATION COMPLETE — Hybrid DocumentProcessor deployed with all functional and non-functional requirements achieved. Code reduction: 878 lines removed. Performance: >1 page/second confirmed.

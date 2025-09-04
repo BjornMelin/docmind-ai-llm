@@ -15,6 +15,19 @@ def test_llm_context_window_max_enforced_default() -> None:
 
 
 def test_llm_context_window_enforcement_with_vllm_exceeding_cap(monkeypatch) -> None:
+    """If vllm.context_window exceeds the global cap, settings.get_model_config enforces the cap."""
+    # Ensure we exceed the cap
+    monkeypatch.setattr(
+        settings.vllm,
+        "context_window",
+        int(settings.llm_context_window_max) + 10000,
+        raising=True,
+    )
+    cfg = settings.get_model_config()
+    assert cfg["context_window"] == settings.llm_context_window_max
+
+
+def test_llm_context_window_enforcement_with_vllm_exceeding_cap(monkeypatch) -> None:
     """If vLLM context exceeds cap, get_model_config enforces the cap."""
     monkeypatch.setattr(
         settings.vllm, "context_window", settings.llm_context_window_max + 1000

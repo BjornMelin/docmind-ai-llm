@@ -2,8 +2,8 @@
 ADR: 024
 Title: Unified Settings Architecture (Reranker Mode + 128K Cap)
 Status: Implemented
-Version: 2.5
-Date: 2025-09-03
+Version: 2.6
+Date: 2025-09-04
 Supersedes:
 Superseded-by:
 Related: 003, 004, 036, 037
@@ -623,6 +623,7 @@ def test_configuration_simplicity():
 
 ## Changelog
 
+- 2.6 (2025‑09‑04): Standardized to template; verified decision framework; no behavior change
 - **v2.4 (2025-09-03)**: DOCS - Added related-decision references to ADR-035 (SemanticCacheConfig provider block) and ADR-036 (reranker controls consume RetrievalConfig fields)
 - **v2.3 (2025-09-02)**: Added ADR-032/ADR-033 settings toggles (analytics_*and backup_*) and configuration examples; documented DOCMIND_ env mappings.
 - **v2.2 (2025-08-27)**: ✅ **CRITICAL USER FLEXIBILITY PRESERVATION**. Successfully restored ALL user choice settings after Phase 3 implementation nearly removed them. All 5 user scenarios validated: CPU-only students (8GB RAM), mid-range developers (RTX 3060), high-end researchers (RTX 4090), privacy users (offline), and custom configuration users. Key restored settings: `enable_gpu_acceleration`, `llm_backend` (ollama/vllm/openai/llama_cpp), `embedding_model` flexibility, dynamic batch sizes, memory limits, and complete offline capability. Configuration now properly supports LOCAL USER APPLICATION requirements vs server application assumptions.

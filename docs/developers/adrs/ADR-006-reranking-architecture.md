@@ -2,8 +2,8 @@
 ADR: 006
 Title: Modern Reranking Architecture (Text-Only)
 Status: Superseded
-Version: 3.3
-Date: 2025-09-03
+Version: 3.4
+Date: 2025-09-04
 Supersedes:
 Superseded-by: 037
 Related: 003, 037
@@ -218,7 +218,11 @@ class SimpleReranker:
         
         config = self.configs[query_type]
         self.metrics['strategy_distribution'][query_type] += 1
-        
+
+## Changelog
+
+- 3.4 (2025‑09‑04): Standardized to template; added historical framing; no behavior change (superseded by ADR‑037)
+- 3.3 (2025‑09‑03): Final text‑only architecture before multimodal migration
         # Check cache first
         cache_key = self._get_cache_key(query, documents, query_type)
         if cache_key in self._rerank_cache:

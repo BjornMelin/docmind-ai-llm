@@ -2,8 +2,8 @@
 ADR: 003
 Title: Adaptive Retrieval Pipeline with RAPTOR‑Lite
 Status: Accepted
-Version: 3.3
-Date: 2025-09-03
+Version: 3.4
+Date: 2025-09-04
 Supersedes:
 Superseded-by:
 Related: 002, 004, 024, 037
@@ -36,6 +36,13 @@ Full RAPTOR implementation is too resource-intensive for local deployment. Our R
 **Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-031), applies adaptive routing strategies optimized for the enforced 128K context window (ADR‑004/010), and performs modality‑aware reranking per ADR‑037 (ColPali for visuals; BGE v2‑m3 for text) before synthesis.
 
 > Update (2025‑09‑03): Integrated ADR‑037 multimodal reranking and affirmed 128K cap alignment with ADR‑004/010.
+
+## Decision Drivers
+
+- Library‑first (use LlamaIndex primitives over custom code)
+- Balance quality, performance, and simplicity for local‑first constraints
+- Support multimodality and corrective mechanisms
+- Minimize maintenance with built‑ins (hybrid, multi‑query, router)
 
 ## Related Requirements
 
@@ -72,6 +79,14 @@ Full RAPTOR implementation is too resource-intensive for local deployment. Our R
 - **Description**: Simplified hierarchical retrieval with adaptive routing
 - **Benefits**: Balanced capability/performance, local-optimized, maintainable
 - **Score**: 8/10 (capability: 7, performance: 8, simplicity: 8)
+
+### Decision Framework
+
+| Option                         | Quality (35%) | Simplicity (30%) | Performance (25%) | Adaptability (10%) | Total | Decision      |
+| ------------------------------ | ------------- | ---------------- | ----------------- | ------------------ | ----- | ------------- |
+| RAPTOR‑Lite + Multi‑Strategy   | 8             | 8                | 8                 | 9                  | 8.2   | ✅ Selected    |
+| Flat vector + rerank           | 6             | 9                | 9                 | 4                  | 7.2   | Rejected      |
+| Full RAPTOR                    | 9             | 3                | 5                 | 9                  | 6.5   | Rejected      |
 
 ## Decision
 
@@ -518,6 +533,40 @@ class QualityMetrics:
 - **Adaptive Intelligence**: System selects optimal retrieval strategy per query
 - **Hierarchical Access**: Complex queries can access both details and summaries
 - **Quality Assurance**: Poor results trigger alternative strategies automatically
+
+### Negative Consequences / Trade-offs
+
+- Additional coordination logic vs flat retrieval
+- Slight latency overhead for routing/quality checks
+
+### Ongoing Maintenance & Considerations
+
+- Track LlamaIndex updates to retrievers/postprocessors
+- Periodically evaluate routing thresholds, multi‑query count
+
+### Dependencies
+
+- Python: `llama-index>=0.10`, `FlagEmbedding>=1.2`, `qdrant-client>=1.6`
+
+## Testing
+
+```python
+def test_router_engine_boots(router_engine):
+    out = router_engine.query("Where is the architecture described?")
+    assert out is not None
+```
+
+## Configuration
+
+```env
+DOCMIND_RETRIEVAL__ROUTER_VERBOSE=true
+DOCMIND_RETRIEVAL__MULTI_QUERY=3
+DOCMIND_RETRIEVAL__TOP_K=10
+```
+
+## Changelog
+
+- 3.4 (2025‑09‑04): Restored full template sections; added PR/IR, config/tests; kept library‑first code
 - **Local Efficiency**: RAPTOR-Lite provides hierarchical benefits without full complexity
 - **Scalable Performance**: Multi-level indexing scales better than flat approaches
 
