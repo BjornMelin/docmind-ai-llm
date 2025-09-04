@@ -996,7 +996,9 @@ class TestADRComplianceFeatures:
         assert required_keys.issubset(set(graphrag_config.keys()))
 
         # Test ADR-019 specific settings
-        assert graphrag_config["enabled"] is False  # Disabled by default
+        assert (
+            graphrag_config["enabled"] is True
+        )  # Enabled by default per ADR-019 addendum
         assert graphrag_config["relationship_extraction"] is False  # Optional feature
         assert (
             graphrag_config["entity_resolution"] == "fuzzy"

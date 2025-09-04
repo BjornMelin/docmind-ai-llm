@@ -314,7 +314,7 @@ class TestDataFactory:
             {
                 "query": "Explain the architectural differences between CNNs and RNNs, "
                 "including their applications and performance characteristics",
-                "expected_strategy": "multi_query_search",
+                "expected_strategy": "sub_question_search",
                 "expected_complexity": "complex",
                 "expected_docs": 3,
                 "keywords": ["CNN", "RNN", "architecture", "performance"],

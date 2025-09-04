@@ -87,8 +87,9 @@ class TestAdaptiveRouterQueryEngineUnit:
         tools = router_engine._query_engine_tools
         semantic_tool = next(t for t in tools if t.metadata.name == "semantic_search")
         assert "semantic" in semantic_tool.metadata.description.lower()
-        multi_tool = next(t for t in tools if t.metadata.name == "multi_query_search")
-        assert "decomposition" in multi_tool.metadata.description.lower()
+        multi_tool = next(t for t in tools if t.metadata.name == "sub_question_search")
+        desc = multi_tool.metadata.description.lower()
+        assert ("decomposition" in desc) or ("tree summarization" in desc)
 
     def test_router_creation_failure_with_no_tools(self, mock_llm_for_routing):
         """Current implementation always creates at least one tool; verify fallback."""

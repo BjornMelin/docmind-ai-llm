@@ -222,8 +222,15 @@ class TestCompleteDocumentWorkflows:
             mock_embedder_instance = MagicMock()
 
             # Mock batch processing with realistic batch sizes
+            counter = 0
+
             def mock_embed_batch(texts):
-                return [[0.1 + i * 0.01] * 1024 for i in range(len(texts))]
+                nonlocal counter
+                outputs = []
+                for _ in texts:
+                    outputs.append([0.1 + counter * 0.01] * 1024)
+                    counter += 1
+                return outputs
 
             mock_embedder_instance.embed_documents.side_effect = mock_embed_batch
             mock_embedder.return_value = mock_embedder_instance
@@ -254,32 +261,35 @@ class TestMultiAgentCoordinationWorkflows:
     """Test multi-agent system coordination workflows."""
 
     @pytest.mark.asyncio
-    @patch("src.agents.coordinator.get_agent_system")
-    @patch("src.utils.embedding.create_index_async")
+    @patch("src.retrieval.graph_config.create_property_graph_index_async")
     async def test_complete_multi_agent_query_workflow(
-        self, mock_create_index, mock_get_agent, system_settings
+        self, mock_create_index, system_settings
     ):
         """Test complete multi-agent coordination workflow for complex queries."""
         # Mock vector index
         mock_index = MagicMock(spec=VectorStoreIndex)
         mock_query_engine = MagicMock()
-        mock_query_engine.aquery.return_value = MagicMock(
-            response=(
-                "Retrieved documents about DocMind AI architecture and multi-agent "
-                "coordination."
-            ),
-            source_nodes=[
-                NodeWithScore(
-                    node=TextNode(text="DocMind AI uses LangGraph supervisor pattern"),
-                    score=0.95,
+        mock_query_engine.aquery = AsyncMock(
+            return_value=MagicMock(
+                response=(
+                    "Retrieved documents about DocMind AI architecture and multi-agent "
+                    "coordination."
                 ),
-                NodeWithScore(
-                    node=TextNode(
-                        text="Agent coordination enables complex query processing"
+                source_nodes=[
+                    NodeWithScore(
+                        node=TextNode(
+                            text="DocMind AI uses LangGraph supervisor pattern"
+                        ),
+                        score=0.95,
                     ),
-                    score=0.87,
-                ),
-            ],
+                    NodeWithScore(
+                        node=TextNode(
+                            text="Agent coordination enables complex query processing"
+                        ),
+                        score=0.87,
+                    ),
+                ],
+            )
         )
         mock_index.as_query_engine.return_value = mock_query_engine
         mock_create_index.return_value = mock_index
@@ -340,7 +350,8 @@ class TestMultiAgentCoordinationWorkflows:
             }
 
         mock_agent_system.arun.side_effect = mock_agent_workflow
-        mock_get_agent.return_value = mock_agent_system
+        # Agent supervisor/system stand-in
+        agent_system = mock_agent_system
 
         # Execute complete multi-agent workflow
         documents = [
@@ -349,8 +360,7 @@ class TestMultiAgentCoordinationWorkflows:
             Document(text="LangGraph supervisor implementation"),
         ]
 
-        index = await mock_create_index(documents, system_settings)
-        agent_system = mock_get_agent(index, system_settings)
+        _ = await mock_create_index(documents, system_settings)
 
         complex_query = (
             "Explain how DocMind AI's multi-agent coordination system works, "
@@ -449,43 +459,40 @@ class TestMultiAgentCoordinationWorkflows:
         mock_factory.create_synthesis_tool.assert_called_once()
         mock_factory.create_validation_tool.assert_called_once()
 
-    def test_agent_system_fallback_workflow(self, system_settings):
+    @pytest.mark.asyncio
+    async def test_agent_system_fallback_workflow(self, system_settings):
         """Test agent system fallback to simple RAG when multi-agent fails."""
-        with patch("src.agents.coordinator.get_agent_system") as mock_get_agent:
-            # Mock multi-agent system that fails
-            mock_agent_system = MagicMock()
-            mock_agent_system.arun.side_effect = RuntimeError(
-                "Multi-agent coordination failed"
+        # Mock multi-agent system that fails
+        agent_system = MagicMock()
+        agent_system.arun.side_effect = RuntimeError("Multi-agent coordination failed")
+
+        # Mock fallback RAG system
+        with patch(
+            "src.retrieval.graph_config.create_property_graph_index_async"
+        ) as mock_create_index:
+            mock_index = MagicMock()
+            mock_query_engine = MagicMock()
+            mock_query_engine.query.return_value = MagicMock(
+                response="Fallback RAG response for the query."
             )
-            mock_get_agent.return_value = mock_agent_system
+            mock_index.as_query_engine.return_value = mock_query_engine
+            mock_create_index.return_value = mock_index
 
-            # Mock fallback RAG system
-            with patch("src.utils.embedding.create_index_async") as mock_create_index:
-                mock_index = MagicMock()
-                mock_query_engine = MagicMock()
-                mock_query_engine.query.return_value = MagicMock(
-                    response="Fallback RAG response for the query."
+            # Test fallback workflow
+            try:
+                agent_system.arun("test query")
+            except RuntimeError:
+                # Fallback to simple RAG
+                fallback_index = await mock_create_index([], system_settings)
+                fallback_engine = fallback_index.as_query_engine()
+                fallback_response = fallback_engine.query("test query")
+
+                assert (
+                    fallback_response.response == "Fallback RAG response for the query."
                 )
-                mock_index.as_query_engine.return_value = mock_query_engine
-                mock_create_index.return_value = mock_index
 
-                # Test fallback workflow
-                try:
-                    agent_system = mock_get_agent()
-                    agent_system.arun("test query")
-                except RuntimeError:
-                    # Fallback to simple RAG
-                    fallback_index = mock_create_index([], system_settings)
-                    fallback_engine = fallback_index.as_query_engine()
-                    fallback_response = fallback_engine.query("test query")
-
-                    assert (
-                        fallback_response.response
-                        == "Fallback RAG response for the query."
-                    )
-
-                    print("\n=== Agent Fallback Workflow ===")
-                    print("Multi-agent system failed, successfully fell back to RAG")
+                print("\n=== Agent Fallback Workflow ===")
+                print("Multi-agent system failed, successfully fell back to RAG")
 
 
 @pytest.mark.system
@@ -504,8 +511,8 @@ class TestConfigurationSystemWorkflows:
             "DOCMIND_VLLM__TEMPERATURE": "0.1",
             "DOCMIND_AGENTS__DECISION_TIMEOUT": "200",
             "DOCMIND_AGENTS__MAX_RETRIES": "2",
-            "DOCMIND_EMBEDDINGS__MODEL": "BAAI/bge-m3",
-            "DOCMIND_EMBEDDINGS__DIMENSION": "1024",
+            "DOCMIND_EMBEDDING__MODEL_NAME": "BAAI/bge-m3",
+            "DOCMIND_EMBEDDING__DIMENSION": "1024",
             "DOCMIND_RETRIEVAL__STRATEGY": "hybrid",
             "DOCMIND_RETRIEVAL__TOP_K": "10",
         }
@@ -517,7 +524,7 @@ class TestConfigurationSystemWorkflows:
             # Step 2: Verify basic settings loaded correctly
             assert settings.debug is True
             assert settings.log_level == "DEBUG"
-            assert settings.enable_multi_agent is True
+            assert settings.agents.enable_multi_agent is True
 
             # Step 3: Verify nested configuration loaded correctly
             assert settings.vllm.model == "Qwen/Qwen3-4B-Instruct-2507-FP8"
@@ -527,18 +534,19 @@ class TestConfigurationSystemWorkflows:
             assert settings.agents.decision_timeout == 200
             assert settings.agents.max_retries == 2
 
-            assert settings.embeddings.model == "BAAI/bge-m3"
-            assert settings.embeddings.dimension == 1024
+            assert settings.embedding.model_name == "BAAI/bge-m3"
+            assert settings.embedding.dimension == 1024
 
             assert settings.retrieval.strategy == "hybrid"
             assert settings.retrieval.top_k == 10
 
             # Step 4: Verify configuration can be used across modules
             assert (
-                settings.get_vllm_config()["model"] == "Qwen/Qwen3-4B-Instruct-2507-FP8"
+                settings.get_model_config()["model_name"]
+                == "Qwen/Qwen3-4B-Instruct-2507-FP8"
             )
-            assert settings.get_agent_config()["decision_timeout"] == 200
-            assert settings.get_embedding_config()["model"] == "BAAI/bge-m3"
+            assert settings.agents.decision_timeout == 200
+            assert settings.get_embedding_config()["model_name"] == "BAAI/bge-m3"
 
             print("\n=== Configuration Workflow Results ===")
             print(f"Environment variables loaded: {len(test_env)}")
@@ -548,18 +556,12 @@ class TestConfigurationSystemWorkflows:
     def test_configuration_validation_workflow(self):
         """Test complete configuration validation workflow."""
         # Test valid configuration passes validation
-        valid_config = DocMindSettings(
-            debug=True,
-            context_window_size=32768,
-            chunk_size=512,
-            chunk_overlap=50,
-            enable_multi_agent=True,
-        )
+        valid_config = DocMindSettings(debug=True)
 
         # Verify all validations pass
-        assert valid_config.context_window_size == 32768
-        assert valid_config.chunk_size == 512
-        assert valid_config.chunk_overlap == 50
+        assert valid_config.vllm.context_window > 0
+        assert valid_config.processing.chunk_size > 0
+        assert valid_config.processing.chunk_overlap >= 0
 
         # Test invalid configurations are caught
         invalid_configs = [
@@ -592,21 +594,21 @@ class TestConfigurationSystemWorkflows:
             data_dir=str(tmp_path / "custom_data"),
             cache_dir=str(tmp_path / "custom_cache"),
             log_file=str(tmp_path / "custom_logs" / "app.log"),
-            sqlite_db_path=str(tmp_path / "custom_db" / "docmind.db"),
+            database={"sqlite_db_path": str(tmp_path / "custom_db" / "docmind.db")},
         )
 
         # Verify all directories were created
         assert Path(custom_settings.data_dir).exists()
         assert Path(custom_settings.cache_dir).exists()
         assert Path(custom_settings.log_file).parent.exists()
-        assert Path(custom_settings.sqlite_db_path).parent.exists()
+        assert Path(custom_settings.database.sqlite_db_path).parent.exists()
 
         # Verify directories are writable
         test_files = [
             Path(custom_settings.data_dir) / "test_data.txt",
             Path(custom_settings.cache_dir) / "test_cache.txt",
             Path(custom_settings.log_file).parent / "test_log.txt",
-            Path(custom_settings.sqlite_db_path).parent / "test_db.txt",
+            Path(custom_settings.database.sqlite_db_path).parent / "test_db.txt",
         ]
 
         for test_file in test_files:

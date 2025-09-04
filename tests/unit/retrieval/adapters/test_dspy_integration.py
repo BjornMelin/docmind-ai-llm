@@ -326,7 +326,7 @@ class TestGlobalInstance:
 
     def test_get_dspy_retriever_creates_instance(self, mock_llm: Mock):
         """Creates a new instance when none exists and returns it."""
-        with patch("src.dspy_integration.DSPY_RETRIEVER_INSTANCE", None):
+        with patch("src.dspy_integration._DSPY_CACHE", {"inst": None}):
             retriever = get_dspy_retriever(llm=mock_llm)
             assert isinstance(retriever, DSPyLlamaIndexRetriever)
             assert retriever.llm == mock_llm
@@ -339,7 +339,7 @@ class TestGlobalInstance:
 
     def test_get_dspy_retriever_without_llm(self):
         """Creates an instance without an explicit LLM argument."""
-        with patch("src.dspy_integration.DSPY_RETRIEVER_INSTANCE", None):
+        with patch("src.dspy_integration._DSPY_CACHE", {"inst": None}):
             retriever = get_dspy_retriever()
             assert isinstance(retriever, DSPyLlamaIndexRetriever)
 

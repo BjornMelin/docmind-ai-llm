@@ -77,4 +77,4 @@ def test_get_available_strategies_names(mock_vector_index, mock_llm_for_routing)
     names = engine.get_available_strategies()
     # At minimum semantic and multi_query are present
     assert "semantic_search" in names
-    assert "multi_query_search" in names
+    assert "sub_question_search" in names

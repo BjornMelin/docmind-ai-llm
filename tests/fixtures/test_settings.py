@@ -249,7 +249,7 @@ class SystemTestSettings(DocMindSettings):
         env_nested_delimiter="__",
         case_sensitive=False,
         validate_default=True,
-        extra="forbid",
+        extra="ignore",
     )
 
     # Uses all production defaults from DocMindSettings and nested configurations

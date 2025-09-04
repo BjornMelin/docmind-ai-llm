@@ -187,7 +187,7 @@ class TestSettingsValidation:
         settings = DocMindSettings()
         assert settings is not None
         # Check for actual attributes that exist in the unified Settings class
-        assert hasattr(settings, "qdrant_url")
+        assert hasattr(settings.database, "qdrant_url")
         assert hasattr(settings, "enable_gpu_acceleration")
         assert hasattr(settings.processing, "chunk_size")
         assert hasattr(settings.vllm, "model")
