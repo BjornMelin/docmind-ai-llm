@@ -9,7 +9,8 @@ Superseded-by:
 Related: 031, 026
 Tags: cache, duckdb, ingestion
 References:
-- LlamaIndex IngestionCache, DuckDBKVStore
+- [LlamaIndex — Ingestion Cache](https://docs.llamaindex.ai/en/stable/module_guides/loading/documents/ingestion_cache/)
+- [LlamaIndex — DuckDBKVStore](https://docs.llamaindex.ai/en/stable/module_guides/storing/kv_stores/#duckdbkvstore)
 ---
 
 ## Description
@@ -18,7 +19,9 @@ Unify document‑processing cache on LlamaIndex IngestionCache with DuckDBKVStor
 
 ## Context
 
-Custom wrappers duplicated maintained library features; lacked durability.
+- Custom cache wrappers increased maintenance and re-implemented functionality already provided by LlamaIndex.
+- JSON-based persistence lacks robustness/concurrency characteristics for larger caches.
+- We require a single, durable, local-first cache with minimal code surface.
 
 ## Decision Drivers
 
@@ -26,14 +29,17 @@ Custom wrappers duplicated maintained library features; lacked durability.
 
 ## Alternatives
 
-- JSON store — fragile
-- Custom cache — more code
+- A: IngestionCache + JSON (SimpleKVStore) — Pros: simplest; Cons: limited durability/concurrency.
+- B: IngestionCache + DuckDBKVStore — Pros: robust, single-file DB, local-first; Cons: integration dependency.
+- C: Custom SimpleCache wrapper — Pros: known behavior; Cons: re-invents wheel; more code; harder to maintain.
 
 ### Decision Framework
 
-| Option             | Leverage (35%) | Maint (30%) | Perf (25%) | Simp (10%) | Total | Decision |
-| ------------------ | -------------- | ----------- | ---------- | ---------- | ----- | -------- |
-| Ingest+DuckDB (Sel)| 0.95           | 0.9         | 0.9        | 0.9        | 0.92  | ✅ Sel.  |
+| Model / Option         | Solution Leverage (35%) | Maintenance (30%) | Performance (25%) | Simplicity (10%) | Total Score | Decision      |
+| ---------------------- | ----------------------- | ----------------- | ----------------- | ---------------- | ----------- | ------------- |
+| **B: Ingest+DuckDBKV** | 0.95                    | 0.9               | 0.9               | 0.9              | **0.92**    | ✅ **Selected** |
+| A: Ingest+JSON         | 0.8                     | 0.85              | 0.6               | 1.0              | 0.79        | Rejected      |
+| C: Custom Wrapper      | 0.4                     | 0.3               | 0.6               | 0.5              | 0.43        | Rejected      |
 
 ## Decision
 
@@ -50,6 +56,17 @@ Processor → IngestionPipeline → IngestionCache → DuckDB file
 ```python
 def get_cache_path():
     return settings.cache_dir / "docmind.duckdb"
+
+from llama_index.core import IngestionPipeline
+from llama_index.core.storage.docstore.types import RefDocInfo
+from llama_index.core.storage.kvstore import KVDocumentStore
+from llama_index.core.storage.kvstore.duckdb_kvstore import DuckDBKVStore
+from llama_index.core.indices.ingestion.cache import IngestionCache
+
+def make_ingestion_cache(db_path) -> IngestionCache:
+    kv = DuckDBKVStore(db_path=str(db_path))
+    docstore = KVDocumentStore(kvstore=kv)
+    return IngestionCache(docstore=docstore)
 ```
 
 ## Testing

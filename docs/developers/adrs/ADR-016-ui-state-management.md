@@ -9,7 +9,8 @@ Superseded-by:
 Related: 013, 021
 Tags: ui, state, streamlit
 References:
-- Streamlit session_state and caching docs
+- [Streamlit — Session State](https://docs.streamlit.io/develop/api-reference/caching-and-state/session-state)
+- [Streamlit — Caching](https://docs.streamlit.io/develop/api-reference/caching)
 ---
 
 ## Description
@@ -73,6 +74,35 @@ if prompt := st.chat_input("Ask a question"):
     st.session_state['messages'].append({"role":"assistant","content":"Hello!"})
     st.rerun()
 ```
+
+### Extended Patterns
+
+```python
+# Cache examples
+import streamlit as st
+from datetime import timedelta
+
+@st.cache_data(ttl=timedelta(minutes=5))
+def search_documents(query: str, filters: dict):
+    return vector_db.search(query, filters)
+
+@st.cache_resource
+def get_vector_db():
+    from qdrant_client import QdrantClient
+    return QdrantClient(path="./data/qdrant")
+
+# Fragments for partial updates
+@st.fragment(run_every=5)
+def metrics_display():
+    m = get_metrics()
+    st.metric("Documents", m['doc_count'])
+```
+
+### Performance Tips
+
+- Prefer `cache_data` for pure data; `cache_resource` for singletons
+- Use `fragment` to avoid full rerenders for fast dashboards
+- Clear caches selectively during heavy updates
 
 ### Configuration
 

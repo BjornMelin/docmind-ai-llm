@@ -9,7 +9,7 @@ Superseded-by:
 Related: 004, 018
 Tags: prompts, templates, jinja
 References:
-- LlamaIndex RichPromptTemplate
+- [LlamaIndex — Prompt Templates](https://docs.llamaindex.ai/en/stable/module_guides/models/prompts/)
 ---
 
 ## Description
@@ -78,6 +78,45 @@ Question: {{ question }}
 
 def render_prompt(question, tone="neutral", role="analyst"):
     return PROMPT.render(question=question, tone=tone, role=role)
+```
+
+### Template Registry and LLM Param Mapping
+
+```python
+# simple registry
+TEMPLATES = {
+    "qa": Template("You are {{ role }}. Answer {{ style }}.\nQ: {{ q }}"),
+    "summarize": Template("Summarize in a {{ detail }} style.\nText: {{ q }}"),
+}
+
+LLM_PROFILES = {
+    # map modes to generation params
+    "concise": {"temperature": 0.2, "max_tokens": 512},
+    "detailed": {"temperature": 0.4, "max_tokens": 2048},
+}
+
+def build_prompt(mode: str, q: str, role="analyst", style="concisely", detail="concise"):
+    tpl = TEMPLATES[mode]
+    text = tpl.render(q=q, role=role, style=style, detail=detail)
+    params = LLM_PROFILES[detail]
+    return text, params
+```
+
+### Structured Output Pattern
+
+```python
+from pydantic import BaseModel
+
+class Answer(BaseModel):
+    answer: str
+    sources: list[str] = []
+
+STRUCTURED_TEMPLATE = Template(
+    """Return JSON with keys: answer, sources.\nQuestion: {{ q }}"""
+)
+
+def render_structured(q: str):
+    return STRUCTURED_TEMPLATE.render(q=q)
 ```
 
 ### Configuration

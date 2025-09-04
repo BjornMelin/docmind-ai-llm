@@ -9,7 +9,7 @@ Superseded-by:
 Related: 013, 024
 Tags: export, structured-output
 References:
-- Pydantic v2 models
+- [Pydantic v2 — BaseModel](https://docs.pydantic.dev/latest/)
 ---
 
 ## Description
@@ -74,6 +74,12 @@ from pydantic import BaseModel
 class Answer(BaseModel):
     text: str
     sources: list[str]
+
+def export_markdown(ans: Answer, path: str) -> str:
+    md = f"# Answer\n\n{ans.text}\n\n## Sources\n" + "\n".join(f"- {s}" for s in ans.sources)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(md)
+    return path
 ```
 
 ### Configuration

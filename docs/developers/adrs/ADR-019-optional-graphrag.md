@@ -9,7 +9,7 @@ Superseded-by:
 Related: 002, 003, 004, 031
 Tags: graphrag, retrieval, relationships
 References:
-- LlamaIndex PropertyGraphIndex
+- [LlamaIndex — Property Graph Index](https://docs.llamaindex.ai/en/stable/examples/index_structs/struct_indices/PropertyGraphIndex/)
 ---
 
 ## Description
@@ -49,10 +49,25 @@ Docs → entities/relations → in‑mem graph → graph/hybrid retrieval
 ### Implementation Details
 
 ```python
-# skeleton
-def build_graph(docs):
-    # extract entities/relations and populate PropertyGraphIndex
-    return None
+from llama_index.core import PropertyGraphIndex
+from llama_index.core.graph_stores import SimplePropertyGraphStore
+
+def build_graph(docs, llm, embed_model, persist_dir: str | None = "data/graph_store"):
+    store = SimplePropertyGraphStore()
+    return PropertyGraphIndex.from_documents(
+        docs,
+        property_graph_store=store,
+        embed_model=embed_model,
+        show_progress=True,
+    )
+
+def is_graph_query(q: str) -> bool:
+    indicators = [
+        "relationship", "related", "connection", "between",
+        "theme", "pattern", "trend", "compare", "contrast",
+    ]
+    ql = q.lower()
+    return any(k in ql for k in indicators)
 ```
 
 ### Configuration
@@ -68,6 +83,9 @@ DOCMIND_GRAPHRAG__ENABLED=false
 ```python
 def test_graphrag_disabled_by_default(settings):
     assert settings.graphrag.enabled is False
+
+def test_is_graph_query_simple():
+    assert is_graph_query("relationship between A and B") is True
 ```
 
 ## Consequences

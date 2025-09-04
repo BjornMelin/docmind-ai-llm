@@ -9,7 +9,7 @@ Superseded-by:
 Related: 013, 016, 031
 Tags: chat, memory, context
 References:
-- LlamaIndex ChatMemoryBuffer
+- [LlamaIndex — Chat Memory](https://docs.llamaindex.ai/en/stable/module_guides/deploying/chat_engines/chat_memory/)
 ---
 
 ## Description
@@ -71,9 +71,22 @@ UI ↔ session_state ↔ memory buffer ↔ persistence (SQLite)
 ### Implementation Details
 
 ```python
-def trim_messages(messages, max_tokens=120_000):
-    # keep most recent messages within budget
-    return messages
+from llama_index.memory import ChatMemoryBuffer
+
+def get_memory(token_limit: int = 120_000) -> ChatMemoryBuffer:
+    return ChatMemoryBuffer.from_defaults(token_limit=token_limit)
+
+def trim_messages(messages: list[dict], max_tokens=120_000):
+    # minimal rolling window by token budget (replace with tiktoken in app)
+    total = 0
+    out = []
+    for m in reversed(messages):
+        t = len(m.get("content", "").split())
+        if total + t > max_tokens:
+            break
+        out.append(m)
+        total += t
+    return list(reversed(out))
 ```
 
 ### Configuration

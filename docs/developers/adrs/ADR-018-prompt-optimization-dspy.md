@@ -9,7 +9,7 @@ Superseded-by:
 Related: 001, 003, 020
 Tags: prompts, dspy, optimization
 References:
-- DSPy documentation
+- [DSPy — Documentation](https://dspy.ai)
 ---
 
 ## Description
@@ -74,6 +74,29 @@ Queries/examples → DSPy compile → Optimized prompts → Retrieval/answer
 def optimize_query(query: str) -> str:
     # call into dspy optimizer; return improved query
     return query
+```
+
+### Extended Implementation
+
+```python
+# Minimal DSPy query rewriter pattern
+import dspy
+
+class QueryExpansion(dspy.Signature):
+    original_query: str = dspy.InputField()
+    expanded_queries: list[str] = dspy.OutputField()
+    key_concepts: list[str] = dspy.OutputField()
+
+class QueryRewriter(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.expand = dspy.ChainOfThought(QueryExpansion)
+        self.refine = dspy.Predict("query, concepts -> refined_query")
+
+    def forward(self, query: str) -> dict:
+        exp = self.expand(original_query=query)
+        ref = self.refine(query=query, concepts=", ".join(exp.key_concepts))
+        return {"refined": ref.refined_query, "variants": exp.expanded_queries}
 ```
 
 ### Configuration

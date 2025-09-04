@@ -2,14 +2,16 @@
 ADR: 029
 Title: Modern Testing Strategy with Boundary Testing
 Status: Accepted
-Version: 1.0
+Version: 1.1
 Date: 2025-08-29
 Supersedes:
 Superseded-by:
 Related: 014, 026
 Tags: testing, boundary, pytest
 References:
-- pytest, responses/testcontainers docs
+- [pytest — Official Docs](https://docs.pytest.org/)
+- [responses — Requests Mocking](https://github.com/getsentry/responses)
+- [testcontainers — Python](https://testcontainers-python.readthedocs.io/)
 ---
 
 ## Description
@@ -67,6 +69,16 @@ tests → boundaries (API/DB/UI) → metrics
 def test_vector_store_boundary(qdrant):
     # assert retrieval under real client
     pass
+
+@pytest.mark.integration
+def test_qdrant_with_container(qdrant_container):
+    from qdrant_client import QdrantClient
+    c = QdrantClient(url=f"http://localhost:{qdrant_container.port}")
+    assert c.get_collections()
+
+def test_streamlit_page_boot(app_runner):
+    resp = app_runner.open("/chat")
+    assert resp.status_code == 200
 ```
 
 ## Testing
@@ -84,5 +96,7 @@ def test_vector_store_boundary(qdrant):
 - Python: `pytest>=8`, `responses`, `testcontainers`
 
 ## Changelog
+
+- 1.1 (2025‑09‑04): Standardized to template; added requirements
 
 - 1.0 (2025‑08‑29): Accepted boundary strategy
