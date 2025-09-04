@@ -194,6 +194,40 @@ Based on research findings:
 
 ## Design
 
+### Architecture Overview
+
+- Local LLM via vLLM backend with FP8 quantization and FP8 KV cache to enable 128K context on 16GB VRAM.
+- Supervisor/agents (ADR‑011) consume the model; retrieval (ADR‑003) feeds context.
+
+### Implementation Details
+
+```python
+# src/config/llm.py (illustrative)
+VLLM_ENGINE_ARGS = {
+    "max_model_len": 131072,
+    "kv_cache_dtype": "fp8_e5m2",
+}
+
+def build_llm():
+    # return a configured local LLM client (e.g., vLLM/Ollama wrapper)
+    pass
+
+# Supervisor integration (ADR-011)
+SUPERVISOR_CONFIG = {
+    "parallel_tool_calls": True,
+    "output_mode": "structured",
+}
+```
+
+### Configuration
+
+```env
+DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+DOCMIND_VLLM__CONTEXT_WINDOW=131072
+DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2
+DOCMIND_VLLM__TEMPERATURE=0.1
+```
+
 ### Multi-Provider Architecture with User Choice
 
 DocMind AI supports multiple local LLM providers with **USER-CONFIGURABLE** backend selection supporting diverse hardware configurations. The architecture leverages LlamaIndex's native provider support without custom abstraction layers while prioritizing user choice over automatic selection.

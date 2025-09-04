@@ -891,7 +891,7 @@ And vLLM + FlashInfer backend must be configured for 128K context (❌ NOT IMPLE
 - `langgraph-supervisor>=0.0.29` with modern supervisor parameters
 - `langgraph>=0.2.74` for enhanced coordination features
 - `langchain-core>=0.3.0` with structured output support
-- `vllm>=0.10.1` with FlashInfer backend for FP8 optimization
+- `vllm>=0.9.1,<0.10.0` with `flashinfer-python>=0.2.11` for FP8 optimization
 - `dspy-ai>=2.4.0` for automatic prompt optimization (ADR-018)
 - Local LLM (Qwen3-4B-Instruct-2507-FP8) with function calling
 - vLLM backend for model serving and inference

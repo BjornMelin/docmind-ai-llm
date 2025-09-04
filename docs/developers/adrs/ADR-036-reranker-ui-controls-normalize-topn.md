@@ -6,165 +6,133 @@ Version: 1.1.0
 Date: 2025-09-03
 Supersedes:
 Superseded-by:
-Related: 003, 024, 037
-Tags: ui, streamlit, reranking
+Related: 003, 013, 016, 024, 037
+Tags: ui, streamlit, reranking, controls
 References:
-- [Streamlit docs](https://docs.streamlit.io/)
+- [Streamlit — Docs](https://docs.streamlit.io/)
+- [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3)
 ---
 
 ## Description
 
-Expose CrossEncoder/multimodal reranker controls in Streamlit UI: normalize_scores, top_n, and Reranker Mode
-
-Expose three controls in the sidebar to tune reranking behavior: 1) a checkbox to enable sigmoid score normalization, 2) a number input to set `top_n` (1–20), and 3) a radio for `Reranker Mode` (`auto|text|multimodal`). Values persist through the settings model and are consumed by the reranker factory.
+Expose reranker controls in the Streamlit UI: `normalize_scores`, `top_n`, and `reranker_mode` (`auto|text|multimodal`). Values persist via settings and are consumed by the reranker factory.
 
 ## Context
 
-Our reranking uses a sentence-transformers CrossEncoder (`BAAI/bge-reranker-v2-m3`) for text and ColPali for visual nodes (ADR‑037). Operators need lightweight control to adjust reranked list size, normalization, and mode selection without editing environment variables.
+Reranking uses a CrossEncoder for text and ColPali for visual nodes (ADR‑037). Operators need lightweight control to adjust ranked list size, score normalization, and mode without editing environment variables.
 
 ## Decision Drivers
 
-- KISS: two controls only; no extra knobs
+- KISS: minimal controls only; no advanced panel
 - Library-first: reuse existing reranker and settings
-- Operator ergonomics: UI-first tuning; settings persistence
-- Offline determinism: UI tests via Streamlit AppTest
+- Operator ergonomics and persistence
+- Deterministic UI tests
 
 ## Alternatives
 
-- **A**: No UI; config-only via env
-  - Pros: zero UI work; stable
-  - Cons: poor operator feedback loop; less discoverable
-- **B**: Full advanced panel (thresholds, model, device)
-  - Pros: more control
-  - Cons: over-engineered; contradicts KISS and v1 scope
-- **C**: Two controls only [Selected]
-  - Pros: minimal, high-value, testable
-  - Cons: fewer options exposed (by design)
+- A: No UI (env-only) — Pros: simpler; Cons: poor operator feedback
+- B: Full advanced panel — Pros: flexibility; Cons: over-engineered for v1
+- C: Minimal three controls (Selected) — Pros: high value with low complexity
 
 ### Decision Framework
 
-| Option | Simplicity (40%) | Operator Value (30%) | Testability (20%) | Alignment (10%) | Total | Decision |
-|-------|------------------|----------------------|-------------------|-----------------|-------|----------|
-| **C** | 1.0              | 0.9                  | 0.9               | 0.9             | **0.94** | ✅ Selected |
-| A     | 0.9              | 0.4                  | 0.9               | 0.9             | 0.78  | Rejected |
-| B     | 0.5              | 0.9                  | 0.6               | 0.8             | 0.67  | Rejected |
+| Model / Option           | Simplicity (40%) | Operator Value (30%) | Testability (20%) | Alignment (10%) | Total Score | Decision      |
+| ------------------------ | ---------------- | -------------------- | ----------------- | --------------- | ----------- | ------------- |
+| Minimal controls (Sel.)  | 10               | 9                    | 9                 | 9               | **9.4**     | ✅ Selected    |
+| No UI                    | 9                | 4                    | 9                 | 9               | 7.8         | Rejected      |
+| Advanced panel           | 5                | 9                    | 6                 | 8               | 6.7         | Rejected      |
 
 ## Decision
 
-- Add in `src/app.py` (sidebar):
-  - Checkbox `"Reranker: Normalize scores"` (default True)
-  - Number input `"Reranker: Top N"` (min=1, max=20; default from settings)
-  - Radio `"Reranker Mode"` with options `["auto","text","multimodal"]` (default `auto`)
-- Wiring: update `settings.retrieval.reranker_normalize_scores`, `settings.retrieval.reranking_top_k`, and `settings.retrieval.reranker_mode` before constructing reranker(s).
-- Bounds and validation: rely on Streamlit `number_input` and `radio` built-in constraints.
+Add three sidebar controls and wire them to settings before constructing the reranker(s):
+
+- Checkbox: Normalize scores (sigmoid)
+- Number input: Top N (1–20)
+- Radio: Reranker Mode (`auto|text|multimodal`)
 
 ## High-Level Architecture
 
 ```mermaid
 graph TD
-  UI[Streamlit Sidebar Controls]
-  UI --> S[Settings.retrieval]
+  UI[Streamlit Sidebar Controls] --> S[Settings.retrieval]
   S --> F[Reranker Factory]
-  F --> CE[CrossEncoder (BGE-v2-m3) + ColPali]
+  F --> CE[CrossEncoder (text) + ColPali (visual)]
 ```
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- **FR-1**: Toggle sigmoid normalization on/off
-- **FR-2**: Set top_n in [1,20] to control reranked list size
+- FR‑1: Toggle sigmoid normalization on/off
+- FR‑2: Set `top_n` in [1,20]
+- FR‑3: Select reranker mode `auto|text|multimodal`
 
 ### Non-Functional Requirements
 
-- **NFR-1**: Minimal UI surface; no advanced controls in v1.0.0
-- **NFR-2**: Deterministic E2E testing via AppTest
+- NFR‑1: Minimal UI surface in v1.0/1.1
+- NFR‑2: Deterministic tests via Streamlit AppTest
 
 ### Performance Requirements
 
-- **PR-1**: No measurable overhead beyond UI read/write
+- PR‑1: No measurable overhead beyond settings read/write
 
 ### Integration Requirements
 
-- **IR-1**: Read/write via existing settings singleton (ADR-024)
-- **IR-2**: Works with modality-aware reranking (ADR‑037) and UI architecture (ADR-013/ADR-016)
-
-## Related Decisions
-
-- **ADR-006**: Reranking architecture—this ADR adds operator controls for normalization and list size
-- **ADR-013**: UI architecture—controls live in Streamlit sidebar
-- **ADR-016**: UI state management—session_state initialization/persistence
-- **ADR-024**: Unified configuration—fields already defined in RetrievalConfig
+- IR‑1: Read/write via unified settings (ADR‑024)
+- IR‑2: Works with modality-aware reranking (ADR‑037) and UI architecture (ADR‑013/ADR‑016)
 
 ## Design
 
+### Architecture Overview
+
+- Sidebar controls mutate retrieval settings; reranker factory reads settings to construct CrossEncoder/ColPali paths.
+
 ### Implementation Details
 
-**In `src/app.py`:**
+In `src/app.py`:
 
 ```python
 with st.sidebar:
     st.markdown("### Retrieval & Reranking")
-    if "reranker_normalize_scores" not in st.session_state:
-        st.session_state["reranker_normalize_scores"] = settings.retrieval.reranker_normalize_scores
-    if "reranking_top_k" not in st.session_state:
-        st.session_state["reranking_top_k"] = settings.retrieval.reranking_top_k
+    norm = st.checkbox("Reranker: Normalize scores", value=settings.retrieval.reranker_normalize_scores)
+    top_n = st.number_input("Reranker: Top N", min_value=1, max_value=20, value=settings.retrieval.reranking_top_k)
+    mode = st.radio("Reranker Mode", ["auto","text","multimodal"], index=0)
 
-    norm = st.checkbox(
-        "Reranker: Normalize scores",
-        key="reranker_normalize_scores",
-        value=st.session_state["reranker_normalize_scores"],
-    )
-    top_n = st.number_input(
-        "Reranker: Top N",
-        key="reranking_top_k",
-        min_value=1,
-        max_value=20,
-        value=st.session_state["reranking_top_k"],
-    )
-
-# Persist to settings before constructing reranker
-settings.retrieval.reranker_normalize_scores = bool(st.session_state["reranker_normalize_scores"])
-settings.retrieval.reranking_top_k = int(st.session_state["reranking_top_k"])
-
-reranker = create_bge_cross_encoder_reranker(
-    top_n=settings.retrieval.reranking_top_k
-)
+settings.retrieval.reranker_normalize_scores = bool(norm)
+settings.retrieval.reranking_top_k = int(top_n)
+settings.retrieval.reranker_mode = str(mode)
 ```
 
 ### Configuration
 
-No new settings; uses existing `RetrievalConfig.reranker_normalize_scores` and `RetrievalConfig.reranking_top_k` (ADR-024).
+No new settings; uses existing `RetrievalConfig` fields (ADR‑024).
 
 ## Testing
 
-- **E2E (Streamlit AppTest)**: programmatically set checkbox/number and `run()`; assert settings mutated and reranker constructed with expected top_n.
-- **Unit**: factory reads updated settings and applies normalization flag.
+```python
+def test_controls_update_settings(app, settings):
+    # simulate toggling controls and assert settings updated before reranker construction
+    pass
+```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- Minimal operator control that improves practical reranking results
-- Deterministic UI tests; no new API surfaces
+- Minimal operator control improves practical reranking
+- Deterministic UI tests; no new service dependencies
 
 ### Negative Consequences / Trade-offs
 
-- Only two knobs; deeper tuning (thresholds, device) deferred by design
+- Limited tuning surface by design in v1
 
 ### Ongoing Maintenance & Considerations
 
-- Consider exposing additional controls only if justified by operator demand
+- Consider additional controls (e.g., thresholds) only if justified by demand
 
 ### Dependencies
 
-- Streamlit (existing), sentence-transformers (existing)
-
-## References
-
-- BGE reranker semantics: <https://huggingface.co/BAAI/bge-reranker-v2-m3>
-- Streamlit AppTest patterns: <https://github.com/streamlit/docs/tree/main/content/develop/concepts/app-testing>
-- Final research plan: agent-logs/2025-09-02/processing/002_semantic_cache_and_reranker_ui_final_plan.md
+- Python: `streamlit`, `sentence-transformers` (existing)
 
 ## Changelog
 

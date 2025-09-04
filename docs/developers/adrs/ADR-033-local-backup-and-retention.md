@@ -1,89 +1,148 @@
-# ADR-033: Local Backup & Retention
-
-## Metadata
-
-**Status:** Proposed  
-**Version/Date:** v1.0 / 2025-09-02
-
-## Title
-
-Manual Local Backups with Simple Rotation for Core Artifacts
+---
+ADR: 033
+Title: Local Backup & Retention
+Status: Proposed
+Version: 1.0
+Date: 2025-09-02
+Supersedes:
+Superseded-by:
+Related: 030, 031, 032
+Tags: backup, retention, local-first, offline
+References:
+- [Python shutil — File Operations](https://docs.python.org/3/library/shutil.html)
+- [DuckDB — Documentation](https://duckdb.org/docs/)
+- [Qdrant — Persistence](https://qdrant.tech/documentation/guides/quick_start/#persistence)
+---
 
 ## Description
 
-Provide a simple, manual backup mechanism for key local artifacts with a small rotation policy. No background daemons or external services. Backups are created on demand and include the cache DB, Qdrant local data, and (optionally) the analytics DB and documents directory.
+Provide a simple, manual backup mechanism with rotation for key local artifacts (cache DB, Qdrant data, optional analytics DB and documents). No daemons or external services; on-demand backups with predictable restore steps.
 
 ## Context
 
-- Archived ADR-007 proposed an automated BackupManager with scheduled backups and retention.  
-- ADR-030/ADR-031 aim for minimalism and separation of concerns; automated services add complexity.  
-- Users still benefit from a documented, local backup path that’s easy to run and restore.
+Earlier designs discussed background services; the local-first architecture (ADR‑030/031) prioritizes simplicity. Users still benefit from documented local backups that are easy to run and restore without adding runtime complexity.
 
 ## Decision Drivers
 
-- Local-first, offline operation.
-- Keep it simple: single command/script, no daemons.
-- Predictable restore steps; safe file copy semantics.
+- Local-first, offline operation
+- Simplicity: single command; no background jobs
+- Safe restore steps and predictable copy semantics
 
 ## Alternatives
 
-- Automated background tasks (rejected: complexity and surprise cost in local-first app).  
-- External backup services (rejected by default: violate local-only principle).  
-- No backup (acceptable for defaults; this ADR offers an opt-in path).
+- A: Automated background tasks — Pros: convenience; Cons: complexity in local-first app
+- B: External backup services — Pros: durability; Cons: violates offline default
+- C: Manual CLI with rotation (Selected) — Pros: simple, explicit; Cons: user-initiated only
+
+### Decision Framework
+
+| Model / Option                 | Simplicity (40%) | Offline (30%) | Safety (20%) | Maintenance (10%) | Total Score | Decision      |
+| ------------------------------ | ---------------- | ------------- | ------------ | ----------------- | ----------- | ------------- |
+| Manual CLI + Rotation (Sel.)   | 10               | 10            | 9            | 9                 | **9.7**     | ✅ Selected    |
+| Background scheduler           | 5                | 9             | 8            | 6                 | 6.8         | Rejected      |
+| External service               | 6                | 2             | 9            | 7                 | 5.6         | Rejected      |
 
 ## Decision
 
-Implement a CLI/script that creates a timestamped backup directory with copies of selected artifacts and prunes older backups beyond a configured limit.
+Ship a CLI/script that creates a timestamped backup directory and prunes older backups beyond a configured limit. Include the cache DB, Qdrant local data, and optionally analytics DB and documents directory.
+
+## High-Level Architecture
+
+```mermaid
+graph TD
+  A[User] --> B[Backup CLI]
+  B --> C[Copy cache.duckdb]
+  B --> D[Copy Qdrant dir]
+  B --> E[Copy analytics.duckdb (opt)]
+  B --> F[Copy documents dir (opt)]
+  B --> G[Prune old backups]
+```
+
+## Related Requirements
+
+### Functional Requirements
+
+- FR‑1: Create timestamped backup directory in `data/backups/backup_{YYYYMMDD_HHMMSS}`
+- FR‑2: Include cache DB and Qdrant local data; optionally analytics DB and documents
+- FR‑3: Prune backups to keep last N (default 7)
+- FR‑4: Provide restore instructions (copy-back with app stopped)
+
+### Non-Functional Requirements
+
+- NFR‑1: Fully offline; stdlib only
+- NFR‑2: Idempotent and safe (never delete in-progress backup)
+
+### Performance Requirements
+
+- PR‑1: Copy uses efficient shutil operations; avoids partial overwrites
+
+### Integration Requirements
+
+- IR‑1: Paths read from unified settings (ADR‑024/031)
 
 ## Design
 
-### Artifacts
+### Architecture Overview
 
-- Cache DB: `settings.cache_dir / "docmind.duckdb"`
-- Qdrant local data directory
-- Optional analytics DB: `settings.data_dir / "analytics" / "analytics.duckdb"`
-- Optional documents directory (if configured)
+- Single command copies artifacts to a timestamped directory, then prunes by age/count
 
-### Destination
+### Implementation Details
 
-- `settings.data_dir / "backups" / backup_{YYYYMMDD_HHMMSS}`
+In `scripts/backup.py` (illustrative):
 
-### Rotation
+```python
+from pathlib import Path
+import shutil, time
 
-- Keep last N backups (default: 7).  
-- Remove oldest beyond the limit.  
-- Never delete the currently creating backup on failure.
+def create_backup(settings, include_docs=False, include_analytics=False):
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    dest = Path(settings.data_dir)/"backups"/f"backup_{ts}"
+    dest.mkdir(parents=True, exist_ok=False)
+    (dest/"cache").mkdir()
+    shutil.copy2(Path(settings.cache_dir)/"docmind.duckdb", dest/"cache"/"docmind.duckdb")
+    shutil.copytree(settings.qdrant_dir, dest/"qdrant")
+    if include_analytics:
+        (dest/"analytics").mkdir()
+        shutil.copy2(Path(settings.data_dir)/"analytics"/"analytics.duckdb", dest/"analytics"/"analytics.duckdb")
+    if include_docs:
+        shutil.copytree(settings.documents_dir, dest/"documents")
+    return dest
+```
 
-### Safety
+### Configuration
 
-- Ensure handles are closed before copy.  
-- Best-effort behavior; partial backups are identifiable.  
-- Documented restore procedure.
-
-## Configuration
-
-- `backup.enabled`: bool (default: False)  
-- `backup.keep_last`: int (default: 7)
+```env
+DOCMIND_BACKUP__ENABLED=false
+DOCMIND_BACKUP__KEEP_LAST=7
+```
 
 ## Testing
 
-- **Unit**: rotation logic (dry-run path); skip if destinations missing.  
-- **Doc-tests**: Restore instructions verified in documentation.
-
-## Dependencies
-
-- **stdlib only**: `pathlib`, `shutil`, `datetime`
-
-## Related Decisions
-
-- **ADR-031** (Persistence Architecture): Defines which stores exist and remain separate.  
-- **ADR-030** (Cache Unification): Identifies the cache DB to include in backup.  
-- **ADR-032** (Local Analytics): Include analytics DB when enabled.
+```python
+def test_rotation(tmp_path):
+    # create N+2 fake backup dirs, run prune, assert only N left
+    pass
+```
 
 ## Consequences
 
-- **Positive**: Clear, predictable local backups; simple restore steps.  
-- **Trade-offs**: Manual burden; not continuous protection.
+### Positive Outcomes
+
+- Simple, explicit backups with predictable restore steps
+- No background tasks or external dependencies
+
+### Negative Consequences / Trade-offs
+
+- Manual operation; no continuous protection
+
+### Ongoing Maintenance & Considerations
+
+- Document safe restore procedure; ensure app is stopped
+- Validate paths when settings change
+
+### Dependencies
+
+- System/Python: stdlib (`pathlib`, `shutil`, `time`)
 
 ## Changelog
 

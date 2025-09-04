@@ -5,7 +5,7 @@ local large language models. It handles user interface components, model
 selection and configuration, document upload and processing, analysis with
 customizable prompts, and interactive chat functionality with multimodal
 and hybrid search support, enhanced by Agentic RAG, optimizations,
-ColBERT for late-interaction, and auto-quantization.
+and auto-quantization.
 
 The application supports multiple backends (Ollama, LlamaCpp, LM Studio),
 various document formats including basic video/audio, and provides features like session
@@ -37,6 +37,7 @@ from llama_index.core.llms import ChatMessage
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.llms.ollama import Ollama
 from loguru import logger
+from streamlit.errors import StreamlitAPIException
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
@@ -48,12 +49,18 @@ from src.containers import get_multi_agent_coordinator
 from src.prompts import PREDEFINED_PROMPTS
 from src.retrieval.embeddings import setup_clip_for_llamaindex
 from src.retrieval.query_engine import create_adaptive_router_engine
+from src.ui_helpers import build_reranker_controls
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
 from src.utils.multimodal import create_image_documents
 from src.utils.storage import create_vector_store
 
 LLAMACPP_AVAILABLE = False
+# Test-patching placeholders for unit tests (avoid import-time heavy deps)
+# These are intentionally simple so tests can patch them without import side-effects.
+LlamaCPP = None  # type: ignore[assignment]  # pylint: disable=invalid-name
+OpenAILike = None  # type: ignore[assignment]  # pylint: disable=invalid-name
+SimpleVectorStore = None  # type: ignore[assignment]  # pylint: disable=invalid-name
 try:  # Detect availability without importing at module import time
     import importlib
 
@@ -275,7 +282,11 @@ st.sidebar.info(
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
-# ColBERT reranking is now always enabled via native postprocessor (Phase 2.2)
+# Retrieval & Reranking controls (ADR-036/037)
+try:
+    build_reranker_controls(SETTINGS)
+except (ValueError, StreamlitAPIException) as e:  # pragma: no cover - UI resilience
+    logger.warning("Reranker controls failed to initialize: {}", e)
 _parse_media: bool = st.sidebar.checkbox("Parse Video/Audio", value=False)
 enable_multimodal: bool = st.sidebar.checkbox(
     "Enable Multimodal Processing",

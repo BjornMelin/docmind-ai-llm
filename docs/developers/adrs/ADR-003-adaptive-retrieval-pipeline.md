@@ -99,7 +99,7 @@ We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in fe
 
 ## Design
 
-### RAPTOR-Lite Architecture
+### Architecture Overview
 
 ```mermaid
 graph TD
@@ -126,7 +126,7 @@ graph TD
     M -->|Poor| O[Expand Strategy] --> G
 ```
 
-### Library-First Implementation Using LlamaIndex
+### Implementation Details
 
 ```python
 # Use LlamaIndex built-in features instead of custom code
@@ -242,6 +242,17 @@ def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graph
 
 # That's it! 20 lines instead of 200+ lines of custom code
 # LlamaIndex handles all the routing, retrieval, and fusion logic
+```
+
+### Configuration
+
+```env
+# Retrieval routing and strategies
+DOCMIND_RETRIEVAL__ROUTER=auto                 # auto|simple|hierarchical|graph
+DOCMIND_RETRIEVAL__TOP_K=10                    # base top-k per retriever
+DOCMIND_RETRIEVAL__HYBRID__ENABLED=true        # dense+sparse
+DOCMIND_RETRIEVAL__HIERARCHY__ENABLED=true     # RAPTOR-Lite
+DOCMIND_RETRIEVAL__GRAPH__ENABLED=false        # PropertyGraphIndex routing (ADR-019)
 ```
 
 ### Using MetadataFilters for Advanced Retrieval
@@ -363,7 +374,17 @@ def create_filtered_retriever(vector_store, filters: dict):
         combined_results = [NodeWithScore(node=node, score=score) 
                           for node, score in score_map.values()]
         
-        return sorted(combined_results, key=lambda x: x.score, reverse=True)[:10]
+return sorted(combined_results, key=lambda x: x.score, reverse=True)[:10]
+```
+
+Additional helpers (in `src/retrieval/adaptive.py`):
+
+```python
+from llama_index.core.postprocessor import SimilarityPostprocessor
+
+def build_postprocessors():
+    # Add postprocessors here; ADR-037 handles reranker selection
+    return [SimilarityPostprocessor(similarity_cutoff=0.0)]
 ```
 
 ### Using AsyncQueryEngine for Performance

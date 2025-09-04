@@ -605,7 +605,7 @@ export QWEN_TARGET_VRAM_GB=14
 #### Optimal Configuration (RTX 4090)
 
 - **VRAM**: 16GB with 12-14GB usage for 128K context
-- **CUDA**: 12.8+ with PyTorch 2.7.1 support
+- **CUDA**: 12.8+ with PyTorch 2.7.0 support
 - **System RAM**: 32-64GB for optimal performance
 - **Storage**: NVMe SSD for faster model loading
 

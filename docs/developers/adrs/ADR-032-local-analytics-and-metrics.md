@@ -1,91 +1,145 @@
-# ADR-032: Local Analytics & Metrics (DuckDB)
-
-## Metadata
-
-**Status:** Proposed  
-**Version/Date:** v1.0 / 2025-09-02
-
-## Title
-
-Optional Local Analytics Database for Performance and Quality Metrics
+---
+ADR: 032
+Title: Local Analytics & Metrics (DuckDB)
+Status: Proposed
+Version: 1.0
+Date: 2025-09-02
+Supersedes:
+Superseded-by:
+Related: 007, 010, 012, 013, 031, 033
+Tags: analytics, metrics, duckdb, offline, local-first
+References:
+- [DuckDB — Documentation](https://duckdb.org/docs/)
+---
 
 ## Description
 
-Define an optional, local-only analytics database using DuckDB to record lightweight performance and quality metrics. The analytics database is decoupled from the document-processing cache (ADR-030) and the persistence architecture (ADR-031). It is disabled by default and can be enabled by advanced users who want local insights without relying on external services.
+Provide an optional, local-only DuckDB database for lightweight performance and quality metrics. Keep analytics decoupled from document-processing cache (ADR‑030) and persistence (ADR‑031). Disabled by default; opt-in for advanced users who want local insights without external services.
 
 ## Context
 
-- Archived ADR-007 included a full analytics subsystem in DuckDB with multiple metric tables.  
-- ADR-030/ADR-031 simplified cache/persistence and intentionally avoided coupling analytics to the cache DB.  
-- We want to retain the value of local analytics while keeping it optional, minimal, and separate from production responsibilities.
+- ADR‑007 explored broader analytics; later ADR‑030/031 simplified cache/persistence and avoided coupling analytics to cache
+- Need a minimal local analytics path that preserves separation of concerns and remains optional
 
 ## Decision Drivers
 
-- Local-first and offline-friendly; zero external services.
-- Minimal footprint and clear separation of concerns from cache (ADR-030).
-- Optional, opt-in usage to avoid unnecessary complexity for default users.
-- Simple schema with standard tables and straightforward retention.
+- Local-first, offline operation; zero external services
+- Minimal footprint; clear separation from cache (ADR‑030) and vectors (ADR‑031)
+- Optional/opt-in to avoid default complexity
+- Simple schema with straightforward retention
 
 ## Alternatives
 
-- External observability services (rejected: violates local-first by default).
-- Coupling analytics with cache DB (rejected: breaks separation of responsibilities established in ADR-031).
-- No analytics at all (accepted for default; this ADR enables optional opt-in).
+- A: External observability services — Pros: rich UX; Cons: violates local-first
+- B: Couple analytics with cache DB — Pros: fewer files; Cons: mixes concerns (ADR‑031 conflict)
+- C: No analytics — Pros: simplest; Cons: loses local insight (this ADR enables optional opt-in)
+
+### Decision Framework
+
+| Model / Option                  | Local-first (30%) | Simplicity (30%) | Separation (25%) | Maintenance (15%) | Total Score | Decision      |
+| --------------------------------| ----------------- | ---------------- | ---------------- | ----------------- | ----------- | ------------- |
+| Separate DuckDB (Selected)      | 10                | 9                | 10               | 9                 | **9.6**     | ✅ Selected    |
+| Couple with cache               | 9                 | 8                | 4                | 7                 | 7.2         | Rejected      |
+| External service                | 3                 | 6                | 7                | 6                 | 5.2         | Rejected      |
 
 ## Decision
 
-Provide a separate DuckDB analytics database with a minimal standard schema. Off by default. When enabled, the app records metrics by writing to these tables via narrow ingestion helpers with best-effort error handling.
+Create a separate DuckDB analytics DB with a minimal schema. Off by default. When enabled, use narrow ingestion helpers with best-effort writes; analysis tolerates missing data. Retention prunes old records.
+
+## High-Level Architecture
+
+```mermaid
+graph TD
+  A[App] --> B[Analytics Writer]
+  B --> C[DuckDB (analytics.duckdb)]
+  A --> D[Cache (ADR‑030)]
+  A --> E[Vectors (ADR‑031)]
+```
+
+## Related Requirements
+
+### Functional Requirements
+
+- FR‑1: Persist basic query/embedding/reranking/system metrics
+- FR‑2: Provide retention pruning
+
+### Non-Functional Requirements
+
+- NFR‑1: Optional and disabled by default
+- NFR‑2: Local-only; no external services
+
+### Performance Requirements
+
+- PR‑1: Insert latency <5ms per record on local hardware
+
+### Integration Requirements
+
+- IR‑1: Analytics stored separate from cache/vectors
+- IR‑2: Readable by UI analytics page (ADR‑013) when enabled
 
 ## Design
 
-### Database Location
+### Architecture Overview
 
-- `settings.data_dir / "analytics" / "analytics.duckdb"`
+- Single-file DuckDB at `settings.data_dir / "analytics" / "analytics.duckdb"`
+- Minimal tables: query_metrics, embedding_metrics, reranking_metrics, system_metrics
 
-### Minimal Schema
+### Implementation Details
 
-- `query_metrics(timestamp, query_type, latency_ms, result_count, retrieval_strategy, success)`
-- `embedding_metrics(timestamp, model_name, embedding_time_ms, text_length, dimension)`
-- `reranking_metrics(timestamp, query_type, document_count, rerank_time_ms, quality_score)`
-- `system_metrics(timestamp, metric_name, metric_value, metric_unit)`
+In `src/core/analytics.py` (illustrative):
 
-### Retention
+```python
+import duckdb
 
-- Prune records older than a configurable window (e.g., 30/60/90 days).  
-- Pruning runs only when analytics is enabled.
+def get_conn(path: str):
+    return duckdb.connect(path, read_only=False)
 
-### Ingestion
+def ensure_schema(conn):
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS query_metrics(
+      ts TIMESTAMP, query_type TEXT, latency_ms DOUBLE, result_count INT, retrieval_strategy TEXT, success BOOLEAN
+    );
+    """)
+```
 
-- Narrow ingestion helpers collect and write metrics.  
-- Best-effort writes; analysis should tolerate missing data.
+### Configuration
 
-## Configuration
-
-- `analytics.enabled`: bool (default: False)  
-- `analytics.retention_days`: int (default: 60)  
-- `analytics.db_path`: Optional path override (default path above)
+```env
+DOCMIND_ANALYTICS__ENABLED=false
+DOCMIND_ANALYTICS__RETENTION_DAYS=60
+DOCMIND_ANALYTICS__DB_PATH=./data/analytics/analytics.duckdb
+```
 
 ## Testing
 
-- **Unit**: Ensure schema creation succeeds; inserts work for each table; prune operation deletes old rows.  
-- **Integration**: When enabled, write and read a small set of metrics; confirm no interference with cache.
-
-## Dependencies
-
-- `duckdb`
-
-## Related Decisions
-
-- **ADR-010** (Performance Optimization): Can surface FP8 KV cache and agent timing metrics locally.
-- **ADR-012** (Evaluation Strategy): Complements evaluation/quality metrics for local analysis.  
-- **ADR-013** (UI Architecture): Analytics page may read this DB when enabled.
-- **ADR-031** (Persistence Architecture): Keeps analytics separate from cache and ops data.
+```python
+def test_schema_and_insert(tmp_path):
+    # ensure schema creation and one insert works
+    pass
+```
 
 ## Consequences
 
-- **Positive**: Local insight into latency and quality without external services; entirely optional.  
-- **Trade-offs**: Additional disk usage; extra code paths (opt-in only).
+### Positive Outcomes
+
+- Local insight into latency/quality without external services
+- Clean separation from cache and vectors
+- Optional path keeps defaults simple
+
+### Negative Consequences / Trade-offs
+
+- Additional disk usage when enabled
+- Extra code paths (opt-in only)
+
+### Ongoing Maintenance & Considerations
+
+- Monitor DB growth; rely on retention pruning
+- Keep schema minimal; extend cautiously
+
+### Dependencies
+
+- Python: `duckdb`
 
 ## Changelog
 
-- **v1.0 (2025-09-02)**: Initial proposal for optional DuckDB analytics DB and schema.
+- **1.0 (2025-09-02)**: Initial proposal for optional DuckDB analytics DB and schema.

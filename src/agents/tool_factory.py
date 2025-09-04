@@ -2,11 +2,11 @@
 
 This module provides a centralized factory for creating agent tools with
 optimal configuration, reranking, and hybrid search capabilities. Eliminates
-code duplication across different tool creation patterns.
+code duplication across different tool creation patterns. Embeddings are
+standardized on BGE-M3 (dense+sparse) per ADR-002.
 
 Features:
 - Consistent tool metadata and configuration
-- ColBERT reranking integration
 - Hybrid search tool creation
 - Vector and knowledge graph query tools
 - Comprehensive error handling and fallbacks
@@ -35,7 +35,6 @@ from typing import Any
 
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
-from llama_index.postprocessor.colbert_rerank import ColbertRerank
 from loguru import logger
 
 from src.config import settings
@@ -90,39 +89,11 @@ class ToolFactory:
         )
 
     @classmethod
-    def _create_reranker(cls) -> ColbertRerank | None:
-        """Create ColBERT reranker if configured.
-
-        Creates a ColbertRerank postprocessor based on settings configuration.
-        Returns None if no reranker model is specified.
-
-        Returns:
-            ColbertRerank or None: Configured reranker or None if disabled.
-        """
-        if not settings.retrieval.reranker_model:
-            return None
-
-        try:
-            reranker = ColbertRerank(
-                top_n=settings.retrieval.reranking_top_k,
-                model=settings.retrieval.reranker_model,
-                keep_retrieval_score=True,
-            )
-            logger.info(
-                "ColBERT reranker created: %s",
-                settings.retrieval.reranker_model,
-            )
-            return reranker
-        except (RuntimeError, ValueError, AttributeError, ImportError) as e:
-            logger.warning("Failed to create ColBERT reranker: %s", e)
-            return None
-
-    @classmethod
     def create_vector_search_tool(cls, index: Any) -> QueryEngineTool:
-        """Create vector search tool with reranking.
+        """Create vector search tool.
 
         Creates a vector search tool with optimal configuration including
-        similarity search, hybrid search when available, and ColBERT reranking.
+        similarity search and hybrid search when available.
 
         Args:
             index: VectorStoreIndex for semantic similarity search.
@@ -134,14 +105,9 @@ class ToolFactory:
             >>> tool = ToolFactory.create_vector_search_tool(vector_index)
             >>> response = tool.call("Find similar documents")
         """
-        # Create reranker if configured
-        reranker = cls._create_reranker()
-        postprocessors = [reranker] if reranker else []
-
         # Configure query engine with optimal settings
         query_engine = index.as_query_engine(
             similarity_top_k=settings.retrieval.top_k,
-            node_postprocessors=postprocessors,
             verbose=False,
         )
 
@@ -149,11 +115,11 @@ class ToolFactory:
             query_engine,
             "vector_search",
             (
-                "Semantic similarity search using dense embeddings (BGE-Large). "
+                "Semantic similarity search using BGE-M3 embeddings. "
                 "Best for: finding conceptually similar content, answering "
                 "questions about document meaning, summarization, and general "
-                "information retrieval. Uses GPU acceleration when available "
-                "for improved performance."
+                "information retrieval. Uses unified dense+sparse signals per "
+                "ADR-002 (BGE-M3)."
             ),
         )
 
@@ -178,14 +144,9 @@ class ToolFactory:
         if not kg_index:
             return None
 
-        # Create reranker if configured
-        reranker = cls._create_reranker()
-        postprocessors = [reranker] if reranker else []
-
         query_engine = kg_index.as_query_engine(
             similarity_top_k=KG_SIMILARITY_TOP_K,  # KG queries may need more results
             include_text=True,  # Include source text with entities
-            node_postprocessors=postprocessors,
             verbose=False,
         )
 
@@ -204,11 +165,12 @@ class ToolFactory:
 
     @classmethod
     def create_hybrid_search_tool(cls, retriever: Any) -> QueryEngineTool:
-        """Create hybrid search tool with RRF fusion and reranking.
+        """Create hybrid search tool with RRF fusion.
 
-        Creates a hybrid search tool using QueryFusionRetriever
-        with RRF (Reciprocal Rank Fusion) and ColBERT reranking for optimal
-        search performance.
+        Creates a hybrid search tool using QueryFusionRetriever with
+        RRF (Reciprocal Rank Fusion). Aligns with ADR-002 (BGE-M3 hybrid)
+        where dense and sparse signals are combined; fusion weight typically
+        follows RRF alpha≈0.7 when configured upstream.
 
         Args:
             retriever: QueryFusionRetriever with RRF fusion capabilities.
@@ -220,13 +182,8 @@ class ToolFactory:
             >>> tool = ToolFactory.create_hybrid_search_tool(fusion_retriever)
             >>> response = tool.call("Complex query requiring hybrid search")
         """
-        # Create reranker if configured
-        reranker = cls._create_reranker()
-        postprocessors = [reranker] if reranker else []
-
         query_engine = RetrieverQueryEngine(
             retriever=retriever,
-            node_postprocessors=postprocessors,
         )
 
         return cls.create_query_tool(
@@ -234,13 +191,11 @@ class ToolFactory:
             "hybrid_fusion_search",
             (
                 "Advanced hybrid search with QueryFusionRetriever using RRF "
-                "(Reciprocal Rank Fusion) to combine dense (BGE-Large) and "
-                "sparse (SPLADE++) embeddings with ColBERT reranking. "
-                "Best for: comprehensive document retrieval, finding relevant "
-                "content through semantic similarity and keyword matching, "
-                "complex queries requiring both context understanding and "
-                "precise term matching. Provides superior relevance through "
-                "RRF score fusion and ColBERT late-interaction reranking."
+                "(Reciprocal Rank Fusion) over BGE-M3 signals (dense+sparse). "
+                "Best for: comprehensive retrieval that benefits from both "
+                "semantic understanding and exact term matching. Uses the "
+                "BGE-M3 model per ADR-002; typical setup applies RRF fusion "
+                "(alpha≈0.7) as configured in retrieval settings."
             ),
         )
 
@@ -261,13 +216,8 @@ class ToolFactory:
             >>> tool = ToolFactory.create_hybrid_vector_tool(vector_index)
             >>> response = tool.call("Search using hybrid embeddings")
         """
-        # Create reranker if configured
-        reranker = cls._create_reranker()
-        postprocessors = [reranker] if reranker else []
-
         query_engine = index.as_query_engine(
             similarity_top_k=settings.retrieval.top_k,
-            node_postprocessors=postprocessors,
             verbose=False,
         )
 
@@ -275,12 +225,11 @@ class ToolFactory:
             query_engine,
             "hybrid_vector_search",
             (
-                "Hybrid search combining dense (BGE-Large) and sparse "
-                "(SPLADE++) embeddings with ColBERT reranking. "
-                "Best for: semantic search, document retrieval, finding "
-                "similar content, answering questions about document content, "
-                "summarization, and general information extraction. Uses "
-                "hybrid embeddings for both semantic and keyword matching."
+                "Hybrid search using BGE-M3 unified dense+sparse embeddings "
+                "(single-index hybrid, e.g., Qdrant). "
+                "Best for: semantic search and retrieval where both meaning "
+                "and exact term presence matter. Implements ADR-002 by "
+                "leveraging BGE-M3 for dual dense+sparse signals."
             ),
         )
 

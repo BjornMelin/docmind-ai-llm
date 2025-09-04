@@ -10,7 +10,7 @@
 > - **128K Context Support**: Full 131,072 token context window with FP8 KV cache optimization
 > - **VRAM Optimization**: Validated 12-14GB VRAM usage on RTX 4090 Laptop hardware
 > - **Token Efficiency**: Achieved 50-87% token reduction through parallel tool execution
-> - **GPU Stack**: Complete CUDA 12.8+, PyTorch 2.7.1, vLLM 0.10.1+ with FlashInfer
+> - **GPU Stack**: Complete CUDA 12.8+, PyTorch 2.7.0, vLLM 0.9.x + FlashInfer
 >
 > **Final Architecture Update (2025-08-20):** This PRD now documents the final, validated 5-agent LangGraph supervisor system with complete technical specifications and performance validation results.
 
@@ -168,7 +168,7 @@ graph TD
 | Document Parsing   | unstructured             | >=0.15.13    | PDF/Office parsing                    |
 | Vector Database    | qdrant-client            | 1.15.0       | Hybrid vector storage                 |
 | LLM Backends       | ollama, llama-cpp-python, vllm | Latest       | Local LLM Inference                   |
-| GPU Acceleration   | torch, torchao           | >=2.7.1, >=0.1.0 | CUDA support & Quantization           |
+| GPU Acceleration   | torch, torchao           | >=2.7.0, >=0.1.0 | CUDA support & Quantization           |
 | Resilience         | tenacity                 | >=9.1.2      | Production-grade error handling       |
 | Web Interface      | streamlit                | >=1.47.1     | User interface                        |
 

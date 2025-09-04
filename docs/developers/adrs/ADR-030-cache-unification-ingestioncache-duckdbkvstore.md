@@ -1,17 +1,21 @@
-# ADR-030: Cache Unification via LlamaIndex IngestionCache (DuckDBKVStore)
-
-## Metadata
-
-**Status:** Accepted  
-**Version/Date:** v1.1 / 2025-09-03
-
-## Title
-
-Single-Cache Architecture Using LlamaIndex IngestionCache Backed by DuckDBKVStore
+---
+ADR: 030
+Title: Cache Unification via LlamaIndex IngestionCache (DuckDBKVStore)
+Status: Accepted
+Version: 1.1
+Date: 2025-09-03
+Supersedes:
+Superseded-by:
+Related: 025, 026, 031, 035
+Tags: cache, ingestion, duckdb, local-first
+References:
+- [LlamaIndex — Ingestion Pipeline & Cache](https://docs.llamaindex.ai/)
+- [DuckDB — Documentation](https://duckdb.org/docs/)
+---
 
 ## Description
 
-Unify document processing cache on LlamaIndex IngestionCache with a local DuckDB-backed KV store (single file). Remove custom cache wrappers. No back-compat. Library-first, local-first, minimal maintenance.
+Unify document‑processing cache on LlamaIndex IngestionCache with a local DuckDB‑backed KV store (single file). Remove custom cache wrappers. No back‑compat. Library‑first, local‑first, minimal maintenance.
 
 ## Context
 
@@ -21,8 +25,8 @@ Unify document processing cache on LlamaIndex IngestionCache with a local DuckDB
 
 ## Decision Drivers
 
-- KISS and library-first
-- Local-first durability and performance
+- KISS and library‑first
+- Local‑first durability and performance
 - Zero external services
 - Minimal maintenance
 
@@ -36,9 +40,9 @@ Unify document processing cache on LlamaIndex IngestionCache with a local DuckDB
 
 | Model / Option         | Solution Leverage (35%) | Maintenance (30%) | Performance (25%) | Simplicity (10%) | Total Score | Decision      |
 | ---------------------- | ----------------------- | ----------------- | ----------------- | ---------------- | ----------- | ------------- |
-| **B: Ingest+DuckDBKV** | 0.95                    | 0.9               | 0.9               | 0.9              | **0.92**    | ✅ **Selected** |
-| A: Ingest+JSON         | 0.8                     | 0.85              | 0.6               | 1.0              | 0.79        | Rejected      |
-| C: Custom Wrapper      | 0.4                     | 0.3               | 0.6               | 0.5              | 0.43        | Rejected      |
+| B: Ingest+DuckDBKV     | 9.5                     | 9.0               | 9.0               | 9.0              | **9.2**     | ✅ Selected    |
+| A: Ingest+JSON         | 8.0                     | 8.5               | 6.0               | 10.0             | 7.9         | Rejected      |
+| C: Custom Wrapper      | 4.0                     | 3.0               | 6.0               | 5.0              | 4.3         | Rejected      |
 
 ## Decision
 
@@ -57,21 +61,21 @@ graph TD
 
 ### Functional Requirements
 
-- **FR-1:** Persist and retrieve document processing cache entries
-- **FR-2:** Operate fully offline/local-first
+- FR‑1: Persist and retrieve document‑processing cache entries
+- FR‑2: Operate fully offline/local‑first
 
 ### Non-Functional Requirements
 
-- **NFR-1:** (Maintainability) Remove custom cache code
-- **NFR-2:** (Performance) Efficient local IO with single-file DB
+- NFR‑1: Maintainability — remove custom cache code
+- NFR‑2: Performance — efficient local IO with single‑file DB
 
 ### Performance Requirements
 
-- **PR-1:** Cache operations under 10ms typical on consumer hardware
+- PR‑1: Cache ops <10ms typical on consumer hardware
 
 ### Integration Requirements
 
-- **IR-1:** Integrates via LlamaIndex IngestionPipeline
+- IR‑1: Integrates via LlamaIndex IngestionPipeline
 
 ## Related Decisions
 
@@ -84,13 +88,13 @@ graph TD
 
 ### Architecture Overview
 
-- Cache file: `settings.cache_dir/docmind.duckdb` (single-file DB)
+- Cache file: `settings.cache_dir/docmind.duckdb` (single‑file DB)
 - Namespace: `docmind_processing`
 - Removal: delete `src/cache/simple_cache.py`
 
 ### Implementation Details
 
-- DocumentProcessor wires:
+In `src/core/processing.py` (DocumentProcessor wiring):
 
   ```python
   from pathlib import Path
@@ -116,8 +120,8 @@ graph TD
 ### Positive Outcomes
 
 - Eliminates custom cache code
-- Single-file, local-first durability
-- Minimal, library-backed maintenance
+- Single‑file, local‑first durability
+- Minimal, library‑backed maintenance
 
 ### Negative Consequences / Trade-offs
 

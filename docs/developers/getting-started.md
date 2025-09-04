@@ -84,7 +84,7 @@ python scripts/performance_validation.py
 
 - **VRAM Usage**: 12-14GB with FP8 optimization
 - **System Memory**: 32GB recommended
-- **CUDA Toolkit**: 12.8+ (required for PyTorch 2.7.1)
+- **CUDA Toolkit**: 12.8+ (required for PyTorch 2.7.0)
 - **Storage**: NVMe SSD for faster model loading
 
 ## Installation
@@ -116,13 +116,14 @@ uv sync --extra test
 For optimal performance with RTX 4090:
 
 ```bash
-# Phase 1: Install PyTorch 2.7.1 with CUDA 12.8
-uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
+# Phase 1: Install PyTorch 2.7.0 with CUDA 12.8
+uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 \
     --extra-index-url https://download.pytorch.org/whl/cu128
 
-# Phase 2: Install vLLM with FlashInfer support
-uv pip install "vllm[flashinfer]>=0.10.1" \
+# Phase 2: Install vLLM and FlashInfer
+uv pip install "vllm>=0.9.1,<0.10.0" \
     --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install flashinfer-python>=0.2.11
 
 # Phase 3: Install remaining dependencies
 uv sync --extra gpu
@@ -314,7 +315,7 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 
 ```bash
 # Reinstall PyTorch with correct CUDA version
-uv pip install torch==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install torch==2.7.0 --extra-index-url https://download.pytorch.org/whl/cu128
 ```
 
 ### vLLM Installation Issues
@@ -335,8 +336,9 @@ export CUDA_HOME=/usr/local/cuda
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
-# Reinstall vLLM
-uv pip install --force-reinstall "vllm[flashinfer]>=0.10.1"
+# Reinstall vLLM + FlashInfer (runtime pins)
+uv pip install --force-reinstall "vllm>=0.9.1,<0.10.0" --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install --force-reinstall flashinfer-python>=0.2.11
 ```
 
 ### Configuration Issues

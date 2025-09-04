@@ -212,6 +212,17 @@ TODO.md
 session.json
 *.session
 
+# Test runtime data/caches
+integration_test_cache/
+integration_test_data/
+query_workflow_cache/
+query_workflow_data/
+system_test_cache/
+system_test_data/
+test_cache/
+vector_test_cache/
+vector_test_data/
+
 # Temporary files
 *.tmp
 *.temp

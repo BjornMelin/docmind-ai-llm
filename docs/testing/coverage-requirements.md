@@ -93,7 +93,6 @@ coverage_requirements:
     core_modules:
       minimum: 35.0%
       modules:
-        - src/storage/
         - src/retrieval/
         - src/utils/
     

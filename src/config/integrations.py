@@ -72,9 +72,11 @@ def setup_llamaindex() -> None:
         logger.warning("Could not configure embeddings: %s", e, exc_info=True)
         Settings.embed_model = None
 
-    # Set context window and performance settings
+    # Set context window and performance settings (enforce global cap)
     try:
-        Settings.context_window = settings.vllm.context_window
+        Settings.context_window = min(
+            int(settings.vllm.context_window), int(settings.llm_context_window_max)
+        )
         Settings.num_output = settings.vllm.max_tokens
 
         logger.info(

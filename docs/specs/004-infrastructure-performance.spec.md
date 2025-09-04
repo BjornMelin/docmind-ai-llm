@@ -691,9 +691,10 @@ And system status dashboards provide operational visibility
 ### Technical Dependencies (Production Validated)
 
 ```toml
-# Core inference engine - Production validated
-vllm = {version = ">=0.10.1", extras = ["flashinfer"]}  # FlashInfer backend
-torch = ">=2.0.0"  # PyTorch with CUDA 12.8+ support
+# Core inference engine - Production validated (runtime pins)
+vllm = ">=0.9.1,<0.10.0"  # Install FlashInfer explicitly
+flashinfer-python = ">=0.2.11"
+torch = ">=2.7.0,<2.8.0"  # PyTorch with CUDA 12.8+ support
 
 # Configuration management - ADR-024 compliance
 pydantic = ">=2.0.0"  # Type-safe configuration with BaseSettings
