@@ -70,6 +70,7 @@ pytest → fixtures → evaluation helpers → metrics/thresholds
 
 - IR‑1: pytest markers `unit|integration|system` honored
 - IR‑2: CI emits junitxml and JSON report artifacts
+- IR‑3: Tests follow boundary‑first strategy per ADR‑029; internal mocks minimized
 
 ## Design
 

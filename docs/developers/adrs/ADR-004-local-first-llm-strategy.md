@@ -213,23 +213,37 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
 
 ## Changelog
 
-- 12.1 (2025-09-04): Standardized to ADR template; added weighted decision matrix, mermaid architecture, config and testing skeletons; clarified 128K enforcement and dependencies. Updated front‑matter and references.
+- 2025-09-04
+  - 12.1: Standardized to ADR template; added weighted decision matrix, mermaid architecture, config and testing skeletons; clarified 128K enforcement and dependencies. Updated front‑matter and references.
 
-- 12.0 (2025-08-27): USER SCENARIO VALIDATION & HARDWARE ADAPTABILITY — expanded multi‑provider documentation and scenarios.
-- 11.1 (2025-08-20): Hardware-constrained rationale; FlashInfer backend; 120K trim + 8K buffer strategy.
-- 11.0 (2025-08-19): Corrected to Qwen3‑4B‑FP8; enforce 128K; FP8 KV cache; performance/memory updates.
-- 10.0 (2025-08-19): INT8 KV cache optimization analysis.
-- 9.0 (2025-08-19): Initial reality check.
-- 8.0 (2025-08-19): Initial Qwen3‑4B evaluation.
-- 7.0 (2025-08-18): Shift to 32K native + adaptive retrieval.
-- 6.0 (2025-08-18): Hardware upgrade; YaRN configs documented.
-- 5.2 (2025-08-18): Reverted to Qwen3‑14B practicality; multi‑provider support.
-- 5.1 (2025-08-18): MoE corrections.
-- 5.0 (2025-08-18): Experimental MoE attempt.
-- 4.3 (2025-08-18): Context spec corrections.
-- 4.2 (2025-08-18): Naming correction.
-- 4.1 (2025-08-18): Agent integration improvements.
-- 4.0 (2025-08-17): Missing prior entry.
-- 3.0 (2025-08-16): Critical corrections to Qwen3‑14B and context.
-- 2.0 (2025-01-16): Major upgrade to Qwen2.5‑14B.
-- 1.0 (2025-01-16): Initial local LLM strategy.
+- 2025-08-27
+  - 12.0: USER SCENARIO VALIDATION & HARDWARE ADAPTABILITY — expanded multi‑provider documentation and scenarios.
+
+- 2025-08-20
+  - 11.1: Hardware-constrained rationale; FlashInfer backend; 120K trim + 8K buffer strategy.
+
+- 2025-08-19
+  - 11.0: Corrected to Qwen3‑4B‑FP8; enforce 128K; FP8 KV cache; performance/memory updates.
+  - 10.0: INT8 KV cache optimization analysis.
+  - 9.0: Initial reality check.
+  - 8.0: Initial Qwen3‑4B evaluation.
+
+- 2025-08-18
+  - 7.0: Shift to 32K native + adaptive retrieval.
+  - 6.0: Hardware upgrade; YaRN configs documented.
+  - 5.2: Reverted to Qwen3‑14B practicality; multi‑provider support.
+  - 5.1: MoE corrections.
+  - 5.0: Experimental MoE attempt.
+  - 4.3: Context spec corrections.
+  - 4.2: Naming correction.
+  - 4.1: Agent integration improvements.
+
+- 2025-08-17
+  - 4.0: Missing prior entry.
+
+- 2025-08-16
+  - 3.0: Critical corrections to Qwen3‑14B and context.
+
+- 2025-01-16
+  - 2.0: Major upgrade to Qwen2.5‑14B.
+  - 1.0: Initial local LLM strategy.

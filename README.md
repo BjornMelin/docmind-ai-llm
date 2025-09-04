@@ -953,7 +953,7 @@ uv run pytest tests/integration -m integration --no-cov -q
 uv run pytest -m "unit or integration" --cov=src -q
 ```
 
-CI pipeline runs unit tests with coverage and a separate integration job without coverage gating. This keeps coverage gates stable while preserving integration signal.
+CI pipeline runs unit tests with coverage and a separate integration job without coverage gating. This keeps coverage gates stable while preserving integration signal. See ADR‑014 for quality gates/validation and ADR‑029 for the boundary‑first testing strategy.
 
 See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed guidelines. For an overview of the unit test layout and fixture strategy, see tests/README.md.
 
