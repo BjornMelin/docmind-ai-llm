@@ -6,7 +6,7 @@ on query characteristics.
 
 Key features:
 - LLMSingleSelector for automatic strategy selection
-- QueryEngineTool definitions for vector/hybrid/multi_query/graph/multimodal strategies
+- QueryEngineTool definitions for vector/hybrid/sub_question/graph/multimodal strategies
 - Multimodal query detection for CLIP image search
 - Fallback mechanisms for robustness
 - Integration with BGE-M3 embeddings and CrossEncoder reranking
@@ -15,17 +15,20 @@ Key features:
 from typing import Any
 
 from llama_index.core import Settings
-from llama_index.core.query_engine import RetrieverQueryEngine, RouterQueryEngine
+from llama_index.core.query_engine import (
+    RetrieverQueryEngine,
+    RouterQueryEngine,
+    SubQuestionQueryEngine,
+)
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
-from src.config import settings
 from src.retrieval.reranking import MultimodalReranker, build_text_reranker
 
 # Router Engine Configuration Constants
 DEFAULT_DENSE_SIMILARITY_TOP_K = 10
-DEFAULT_MULTI_QUERY_SIMILARITY_TOP_K = 15
+DEFAULT_SUB_QUESTION_SIMILARITY_TOP_K = 15
 DEFAULT_KG_SIMILARITY_TOP_K = 10
 DEFAULT_MULTIMODAL_SIMILARITY_TOP_K = 10
 DEFAULT_IMAGE_SIMILARITY_TOP_K = 5
@@ -42,7 +45,7 @@ class AdaptiveRouterQueryEngine:
     Supported Strategies:
     - Dense semantic search (BGE-M3 dense vectors)
     - Hybrid search (BGE-M3 dense + sparse vectors with RRF fusion)
-    - Multi-query search (query decomposition for complex questions)
+    - Sub-question search (query decomposition for complex questions)
     - Knowledge graph search (GraphRAG relationships, optional)
     - Multimodal search (CLIP image-text cross-modal retrieval)
 
@@ -90,7 +93,9 @@ class AdaptiveRouterQueryEngine:
         Returns:
             List of QueryEngineTool instances for RouterQueryEngine
         """
-        tools = []
+        tools: list[QueryEngineTool] = []
+        hybrid_tool: QueryEngineTool | None = None
+        vector_tool: QueryEngineTool | None = None
 
         # 1. Hybrid Search Tool (Primary - BGE-M3 Dense + Sparse)
         if self.hybrid_retriever:
@@ -101,25 +106,24 @@ class AdaptiveRouterQueryEngine:
                 response_mode="compact",
                 streaming=True,
             )
-            tools.append(
-                QueryEngineTool(
-                    query_engine=hybrid_engine,
-                    metadata=ToolMetadata(
-                        name="hybrid_search",
-                        description=(
-                            "Advanced hybrid search combining BGE-M3 unified dense "
-                            "and sparse embeddings with RRF fusion. This strategy "
-                            "provides the best balance of semantic understanding and "
-                            "keyword precision. Optimal for: comprehensive document "
-                            "retrieval, complex queries requiring both conceptual "
-                            "understanding and specific term matching, technical "
-                            "documentation search, multi-faceted questions needing "
-                            "diverse result types. Uses BGE-M3's 8K context and "
-                            "cross-encoder reranking for superior relevance."
-                        ),
+            hybrid_tool = QueryEngineTool(
+                query_engine=hybrid_engine,
+                metadata=ToolMetadata(
+                    name="hybrid_search",
+                    description=(
+                        "Advanced hybrid search combining BGE-M3 unified dense "
+                        "and sparse embeddings with RRF fusion. This strategy "
+                        "provides the best balance of semantic understanding and "
+                        "keyword precision. Optimal for: comprehensive document "
+                        "retrieval, complex queries requiring both conceptual "
+                        "understanding and specific term matching, technical "
+                        "documentation search, multi-faceted questions needing "
+                        "diverse result types. Uses BGE-M3's 8K context and "
+                        "cross-encoder reranking for superior relevance."
                     ),
-                )
+                ),
             )
+            tools.append(hybrid_tool)
 
         # 2. Dense Semantic Search Tool (BGE-M3 Dense Only)
         dense_engine = self.vector_index.as_query_engine(
@@ -128,50 +132,70 @@ class AdaptiveRouterQueryEngine:
             response_mode="compact",
             streaming=True,
         )
-        tools.append(
-            QueryEngineTool(
-                query_engine=dense_engine,
-                metadata=ToolMetadata(
-                    name="semantic_search",
-                    description=(
-                        "Dense semantic search using BGE-M3 unified 1024-dimensional "
-                        "embeddings for deep conceptual understanding. Excels at: "
-                        "finding semantically similar content, conceptual questions, "
-                        "summarization tasks, meaning-based retrieval, cross-lingual "
-                        "queries, and abstract concept exploration. Uses cosine "
-                        "similarity for precise semantic matching with BGE-M3's "
-                        "multilingual capabilities and 8K context window."
-                    ),
+        vector_tool = QueryEngineTool(
+            query_engine=dense_engine,
+            metadata=ToolMetadata(
+                name="semantic_search",
+                description=(
+                    "Dense semantic search using BGE-M3 unified 1024-dimensional "
+                    "embeddings for deep conceptual understanding. Excels at: "
+                    "finding semantically similar content, conceptual questions, "
+                    "summarization tasks, meaning-based retrieval, cross-lingual "
+                    "queries, and abstract concept exploration. Uses cosine "
+                    "similarity for precise semantic matching with BGE-M3's "
+                    "multilingual capabilities and 8K context window."
                 ),
-            )
+            ),
         )
+        tools.append(vector_tool)
 
-        # 3. Multi-Query Search Tool (Query Decomposition)
-        # Note: This would typically use MultiQueryRetriever from LlamaIndex
-        # For now, using semantic search as base with enhanced description
-        multi_query_engine = self.vector_index.as_query_engine(
-            similarity_top_k=DEFAULT_MULTI_QUERY_SIMILARITY_TOP_K,
-            node_postprocessors=[self.reranker] if self.reranker else [],
-            response_mode="tree_summarize",  # Better for complex queries
-            streaming=True,
-        )
-        tools.append(
-            QueryEngineTool(
-                query_engine=multi_query_engine,
-                metadata=ToolMetadata(
-                    name="multi_query_search",
-                    description=(
-                        "Multi-query search strategy for complex questions requiring "
-                        "decomposition into sub-queries. Optimal for: complex "
-                        "analytical questions, multi-part queries, comparative "
-                        "analysis requests, comprehensive research tasks, questions "
-                        "with multiple aspects or dimensions. Uses tree summarization "
-                        "to synthesize results from multiple query perspectives with "
-                        "BGE-M3 semantic understanding for each sub-component."
-                    ),
-                ),
+        # 3. Sub-Question Search Tool (Query Decomposition via SubQuestionQueryEngine)
+        try:
+            subq_engine = SubQuestionQueryEngine.from_defaults(
+                query_engine_tools=[
+                    t for t in [vector_tool, hybrid_tool] if t is not None
+                ],
+                llm=self.llm,
+                use_async=True,
+                verbose=False,
             )
-        )
+            tools.append(
+                QueryEngineTool(
+                    query_engine=subq_engine,
+                    metadata=ToolMetadata(
+                        name="sub_question_search",
+                        description=(
+                            "Sub-question decomposition strategy for complex, "
+                            "multi-part questions. Optimal for: analytical and "
+                            "compare/contrast queries requiring multiple retrieval "
+                            "hops and synthesis. Uses tree summarization over "
+                            "sub-queries."
+                        ),
+                    ),
+                )
+            )
+        except (ImportError, RuntimeError, ValueError, AttributeError) as e:
+            logger.warning("SubQuestionQueryEngine unavailable: %s", e)
+            # Fallback: expose a tree-summarize vector engine under the same tool name
+            fallback_engine = self.vector_index.as_query_engine(
+                similarity_top_k=DEFAULT_SUB_QUESTION_SIMILARITY_TOP_K,
+                node_postprocessors=[self.reranker] if self.reranker else [],
+                response_mode="tree_summarize",
+                streaming=True,
+            )
+            tools.append(
+                QueryEngineTool(
+                    query_engine=fallback_engine,
+                    metadata=ToolMetadata(
+                        name="sub_question_search",
+                        description=(
+                            "Fallback sub-question search using tree summarization "
+                            "over semantic results when SubQuestionQueryEngine is "
+                            "unavailable."
+                        ),
+                    ),
+                )
+            )
 
         # 4. Knowledge Graph Search Tool (Relationships - Optional)
         if self.kg_index:
@@ -426,8 +450,11 @@ def create_adaptive_router_engine(
         Configured AdaptiveRouterQueryEngine for FEAT-002.1
     """
     # Build reranker if not provided
-    if reranker is None and getattr(settings.retrieval, "use_reranking", True):
-        mode = getattr(settings.retrieval, "reranker_mode", "auto")
+    # Import settings lazily to avoid any potential test-time import shadowing
+    from src.config import settings as app_settings  # local import by design
+
+    if reranker is None and getattr(app_settings.retrieval, "use_reranking", True):
+        mode = getattr(app_settings.retrieval, "reranker_mode", "auto")
         reranker = (
             MultimodalReranker()
             if mode in {"auto", "multimodal"}

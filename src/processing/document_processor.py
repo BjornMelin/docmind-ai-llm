@@ -128,7 +128,7 @@ class UnstructuredTransformation(TransformComponent):
                 def _safe_int(val: Any, default: int) -> int:
                     try:
                         return int(val)  # type: ignore[arg-type]
-                    except Exception:
+                    except (ValueError, TypeError):
                         return default
 
                 def _safe_bool(val: Any, default: bool) -> bool:
@@ -684,7 +684,8 @@ class DocumentProcessor:
         except (OSError, RuntimeError) as e:
             logger.error("Failed to clear cache: {}", e)
             return False
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Boundary: ensure cache clear operation never crashes callers.
             logger.error("Unexpected error clearing cache: {}", e)
             return False
 
@@ -712,6 +713,7 @@ class DocumentProcessor:
         except (OSError, RuntimeError) as e:
             logger.error("Failed to get cache stats: {}", e)
             return {"error": str(e), "processor_type": "hybrid"}
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Boundary: surface error as data instead of crashing monitoring code.
             logger.error("Unexpected error getting cache stats: {}", e)
             return {"error": str(e), "processor_type": "hybrid"}

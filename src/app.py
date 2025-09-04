@@ -27,6 +27,7 @@ Attributes:
 import asyncio
 import time
 from collections.abc import Generator
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -46,13 +47,14 @@ from src.config.settings import DocMindSettings as _DocMindSettings
 from src.config.settings import UIConfig as _UIConfig
 from src.config.settings import VLLMConfig as _VLLMConfig
 from src.containers import get_multi_agent_coordinator
+from src.processing.pdf_pages import pdf_pages_to_image_documents
 from src.prompts import PREDEFINED_PROMPTS
 from src.retrieval.embeddings import setup_clip_for_llamaindex
+from src.retrieval.graph_config import create_property_graph_index
 from src.retrieval.query_engine import create_adaptive_router_engine
 from src.ui_helpers import build_reranker_controls
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
-from src.utils.multimodal import create_image_documents
 from src.utils.storage import create_vector_store
 
 LLAMACPP_AVAILABLE = False
@@ -454,12 +456,60 @@ async def upload_section() -> None:
                         docs, storage_context=storage_context
                     )
 
+                    # Build PropertyGraphIndex (GraphRAG) when enabled (default ON)
+                    st.session_state.kg_index = None
+                    if SETTINGS.enable_graphrag or SETTINGS.get_graphrag_config().get(
+                        "enabled", False
+                    ):
+                        try:
+                            st.session_state.kg_index = create_property_graph_index(
+                                docs, vector_store=qdrant_vs
+                            )
+                        except (
+                            ValueError,
+                            RuntimeError,
+                        ) as kg_e:  # pragma: no cover - optional path
+                            logger.warning("GraphRAG index build skipped: {}", kg_e)
+                            st.session_state.kg_index = None
+
                     # Multimodal index (text + images) controlled by toggle
                     if enable_multimodal:
                         try:
                             setup_clip_for_llamaindex({})
-                            # Create image documents if any image paths are available
-                            image_docs = create_image_documents([])
+                            # Emit page-image nodes from uploaded PDFs
+                            image_docs: list[Any] = []
+                            try:
+                                pdf_docs = [
+                                    d
+                                    for d in docs
+                                    if str(d.metadata.get("source", ""))
+                                    .lower()
+                                    .endswith(".pdf")
+                                ]
+                                for pd in pdf_docs:
+                                    try:
+                                        img_nodes, _out = pdf_pages_to_image_documents(
+                                            Path(str(pd.metadata.get("source")))
+                                        )
+                                        image_docs.extend(img_nodes)
+                                    except (
+                                        OSError,
+                                        RuntimeError,
+                                        ValueError,
+                                        TypeError,
+                                    ) as _e:  # pragma: no cover - optional path
+                                        logger.warning(
+                                            "PDF page-image emission skipped: {}", _e
+                                        )
+                            except (
+                                OSError,
+                                RuntimeError,
+                                ValueError,
+                                TypeError,
+                            ) as _e:  # pragma: no cover - optional path
+                                logger.warning(
+                                    "Multimodal emission scan failed: {}", _e
+                                )
                             if image_docs:
                                 from llama_index.core.indices import (  # pylint: disable=ungrouped-imports
                                     MultiModalVectorStoreIndex,
@@ -493,6 +543,7 @@ async def upload_section() -> None:
                     try:
                         st.session_state.router_engine = create_adaptive_router_engine(
                             vector_index=st.session_state.index,
+                            kg_index=st.session_state.kg_index,
                             multimodal_index=st.session_state.multimodal_index,
                         )
                     except (

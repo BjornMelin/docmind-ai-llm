@@ -124,6 +124,26 @@ class ToolFactory:
         )
 
     @classmethod
+    def create_keyword_tool(cls, index: Any) -> QueryEngineTool:
+        """Create a simple keyword/BM25-style tool when enabled.
+
+        Note: Uses index.as_query_engine as a placeholder keyword retriever to
+        avoid new vendor dependencies. Registration behind flag only.
+        """
+        query_engine = index.as_query_engine(
+            similarity_top_k=settings.retrieval.top_k,
+            verbose=False,
+        )
+        return cls.create_query_tool(
+            query_engine,
+            "keyword_search",
+            (
+                "Keyword-based retrieval (BM25-style). Useful for exact term "
+                "matching and boolean-style queries. Disabled by default."
+            ),
+        )
+
+    @classmethod
     def create_kg_search_tool(cls, kg_index: Any) -> QueryEngineTool | None:
         """Create knowledge graph search tool.
 
@@ -296,6 +316,14 @@ class ToolFactory:
         # Add basic vector search as additional option
         tools.append(cls.create_vector_search_tool(vector_index))
         logger.info("Added vector search tool")
+
+        # Optionally add keyword tool behind flag
+        if getattr(settings.retrieval, "enable_keyword_tool", False):
+            try:
+                tools.append(cls.create_keyword_tool(vector_index))
+                logger.info("Added optional keyword search tool")
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pragma: no cover - defensive
+                logger.warning("Keyword tool registration failed: %s", e)
 
         logger.info("Created %d tools for agent", len(tools))
         return tools

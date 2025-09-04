@@ -188,7 +188,7 @@ async def get_cache_stats() -> dict[str, Any]:
         logger.debug(f"Cache statistics: type={stats.get('cache_type', 'unknown')}")
         logger.debug(f"Cache path: {stats.get('db_path')}")
         return stats
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.warning(f"Failed to read cache stats: {e}")
         return {"cache_type": "duckdb_kvstore", "error": str(e)}
 
