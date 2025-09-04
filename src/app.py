@@ -37,6 +37,7 @@ from llama_index.core.llms import ChatMessage
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.llms.ollama import Ollama
 from loguru import logger
+from streamlit.errors import StreamlitAPIException
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
@@ -48,6 +49,7 @@ from src.containers import get_multi_agent_coordinator
 from src.prompts import PREDEFINED_PROMPTS
 from src.retrieval.embeddings import setup_clip_for_llamaindex
 from src.retrieval.query_engine import create_adaptive_router_engine
+from src.ui_helpers import build_reranker_controls
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
 from src.utils.multimodal import create_image_documents
@@ -56,9 +58,9 @@ from src.utils.storage import create_vector_store
 LLAMACPP_AVAILABLE = False
 # Test-patching placeholders for unit tests (avoid import-time heavy deps)
 # These are intentionally simple so tests can patch them without import side-effects.
-LlamaCPP = None  # type: ignore[assignment]
-OpenAILike = None  # type: ignore[assignment]
-SimpleVectorStore = None  # type: ignore[assignment]
+LlamaCPP = None  # type: ignore[assignment]  # pylint: disable=invalid-name
+OpenAILike = None  # type: ignore[assignment]  # pylint: disable=invalid-name
+SimpleVectorStore = None  # type: ignore[assignment]  # pylint: disable=invalid-name
 try:  # Detect availability without importing at module import time
     import importlib
 
@@ -281,34 +283,10 @@ use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
 # Retrieval & Reranking controls (ADR-036/037)
-with st.sidebar:
-    st.markdown("### Retrieval & Reranking")
-    try:
-        mode = st.radio(
-            "Reranker Mode",
-            options=["auto", "text", "multimodal"],
-            index=["auto", "text", "multimodal"].index(
-                getattr(SETTINGS.retrieval, "reranker_mode", "auto")
-            ),
-            key="reranker_mode",
-        )
-        norm = st.checkbox(
-            "Normalize scores",
-            value=bool(getattr(SETTINGS.retrieval, "reranker_normalize_scores", True)),
-            key="reranker_normalize_scores",
-        )
-        top_n = st.number_input(
-            "Top N",
-            min_value=1,
-            max_value=20,
-            value=int(getattr(SETTINGS.retrieval, "reranking_top_k", 10)),
-            key="reranking_top_k",
-        )
-        SETTINGS.retrieval.reranker_mode = mode
-        SETTINGS.retrieval.reranker_normalize_scores = bool(norm)
-        SETTINGS.retrieval.reranking_top_k = int(top_n)
-    except Exception as _e:  # pragma: no cover - UI resilience
-        logger.warning("Reranking controls not initialized: {}", _e)
+try:
+    build_reranker_controls(SETTINGS)
+except (ValueError, StreamlitAPIException) as e:  # pragma: no cover - UI resilience
+    logger.warning("Reranker controls failed to initialize: {}", e)
 _parse_media: bool = st.sidebar.checkbox("Parse Video/Audio", value=False)
 enable_multimodal: bool = st.sidebar.checkbox(
     "Enable Multimodal Processing",

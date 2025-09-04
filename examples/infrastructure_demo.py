@@ -18,7 +18,7 @@ from src.utils.monitoring import get_system_info
 
 try:
     import torch
-except Exception:  # torch may be unavailable in some envs
+except ImportError:  # torch may be unavailable in some envs
     torch = None  # type: ignore
 
 
@@ -26,8 +26,7 @@ async def demo_system_and_gpu():
     """Show basic system info and optional CUDA stats (if available)."""
     print("=== System/GPU Monitoring Demo ===")
 
-    info = get_system_info()
-    if info:
+    if info := get_system_info():
         print("System Info:")
         print(f"  CPU %: {info.get('cpu_percent')}%")
         print(f"  Mem %: {info.get('memory_percent')}%")
@@ -51,7 +50,7 @@ async def demo_system_and_gpu():
         print(f"  Memory Allocated: {allocated_gb:.2f} GB")
         print(f"  Memory Reserved:  {reserved_gb:.2f} GB")
         print(f"  Total Memory:     {total_gb:.2f} GB")
-    except Exception as e:  # keep demo resilient
+    except (RuntimeError, AssertionError) as e:  # keep demo resilient
         print(f"GPU info unavailable: {e}")
 
 

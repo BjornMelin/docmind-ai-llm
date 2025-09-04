@@ -667,48 +667,34 @@ class TestErrorHandlingSystemWorkflows:
         for scenario, result in recovery_results.items():
             print(f"{scenario}: {result}")
 
-    def test_graceful_degradation_workflow(self, system_settings):
+    @pytest.mark.parametrize(
+        ("kwargs", "check"),
+        [
+            (
+                {"agents": {"enable_multi_agent": False}},
+                lambda s: s.agents.enable_multi_agent is False,
+            ),
+            (
+                {"retrieval": {"use_reranking": False}},
+                lambda s: s.retrieval.use_reranking is False,
+            ),
+            (
+                {"retrieval": {"use_sparse_embeddings": False}},
+                lambda s: s.retrieval.use_sparse_embeddings is False,
+            ),
+            (
+                {"monitoring": {"enable_performance_logging": False}},
+                lambda s: s.monitoring.enable_performance_logging is False,
+            ),
+        ],
+    )
+    def test_graceful_degradation_workflow(self, system_settings, kwargs, check):
         """Test graceful system degradation when components fail."""
-        # Test system behavior with various component failures
-        degradation_scenarios = [
-            "multi_agent_disabled",
-            "reranking_disabled",
-            "sparse_embeddings_disabled",
-            "performance_logging_disabled",
-        ]
-
-        for scenario in degradation_scenarios:
-            # Create settings with specific feature disabled
-            if scenario == "multi_agent_disabled":
-                degraded_settings = DocMindSettings(
-                    agents={"enable_multi_agent": False}
-                )
-                assert degraded_settings.agents.enable_multi_agent is False
-
-            elif scenario == "reranking_disabled":
-                degraded_settings = DocMindSettings(retrieval={"use_reranking": False})
-                assert degraded_settings.retrieval.use_reranking is False
-
-            elif scenario == "sparse_embeddings_disabled":
-                degraded_settings = DocMindSettings(
-                    retrieval={"use_sparse_embeddings": False}
-                )
-                assert degraded_settings.retrieval.use_sparse_embeddings is False
-
-            elif scenario == "performance_logging_disabled":
-                degraded_settings = DocMindSettings(
-                    monitoring={"enable_performance_logging": False}
-                )
-                assert degraded_settings.monitoring.enable_performance_logging is False
-
-            # Verify system still functions with degraded capabilities
-            assert degraded_settings.vllm.context_window > 0
-            assert degraded_settings.processing.chunk_size > 0
-            assert degraded_settings.retrieval.top_k > 0
-
-        print("\n=== Graceful Degradation Workflow ===")
-        print(f"Degradation scenarios tested: {len(degradation_scenarios)}")
-        print("All scenarios maintained core functionality")
+        degraded_settings = DocMindSettings(**kwargs)
+        assert check(degraded_settings)
+        assert degraded_settings.vllm.context_window > 0
+        assert degraded_settings.processing.chunk_size > 0
+        assert degraded_settings.retrieval.top_k > 0
 
 
 @pytest.mark.system

@@ -9,7 +9,7 @@ Usage:
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -94,7 +94,7 @@ class RetrievalConfig(BaseModel):
     reranker_normalize_scores: bool = Field(default=True)
     # ADR-024/036/037: explicit reranker mode selection
     # auto: modality-aware (visual+text); text: text-only; multimodal: force both
-    reranker_mode: str = Field(default="auto")  # Literal["auto","text","multimodal"]
+    reranker_mode: Literal["auto", "text", "multimodal"] = Field(default="auto")
 
     # RRF Fusion Settings
     rrf_alpha: int = Field(default=60, ge=10, le=100)
