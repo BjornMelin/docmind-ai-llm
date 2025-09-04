@@ -2,119 +2,153 @@
 ADR: 023
 Title: Document Analysis Mode Strategy
 Status: Accepted
-Version: 2.1
-Date: 2025-08-19
+Version: 1.1
+Date: 2025-09-02
 Supersedes:
 Superseded-by:
-Related: 001, 003, 013
-Tags: analysis, modes
+Related: 001, 003, 009, 011, 016, 022
+Tags: analysis, modes, routing, parallel, aggregation
 References:
-- [Project ADRs README](./README.md)
+- [LlamaIndex — Query Pipeline](https://docs.llamaindex.ai/)
 ---
 
 ## Description
 
-Define a small set of analysis modes (e.g., summary, deep‑dive, compare) mapped to retrieval/LLM settings. Expose via UI.
+Provide two analysis modes for uploaded documents: Separate (per‑document analysis in parallel) and Combined (holistic multi‑document analysis). Use LlamaIndex QueryPipeline with conditional routing and lightweight aggregation to deliver flexible, performant analysis.
 
 ## Context
 
-Different tasks need different retrieval depth and response style.
+Users need document‑specific insights and cross‑document synthesis. Separate mode preserves context and supports comparisons; Combined mode surfaces patterns and unified summaries. We require fast parallelism for Separate mode, simple aggregation, and UI control for mode selection. Solution leverages QueryPipeline and the existing agent orchestration (ADR‑001/011).
 
 ## Decision Drivers
 
-- Clear UX; minimal settings surface
-- Reuse existing pipeline knobs
+- Flexibility to support per‑document and holistic analysis
+- Parallel performance for Separate mode
+- Simple aggregation and clear result presentation
+- Minimal additional complexity; library‑first approach
 
 ## Alternatives
 
-- Many hidden toggles — confusing
-- Single mode — inflexible
+- A: Combined only — simple, but no doc‑specific insights
+- B: Sequential per‑doc — simple, but slow; no synthesis
+- C: Manual mode without optimization — flexible, but inconsistent
+- D: QueryPipeline + conditional routing (Selected) — parallel + synthesis; modest coordination
 
 ### Decision Framework
 
-| Option           | UX (40%) | Simplicity (40%) | Coverage (20%) | Total | Decision |
-| ---------------- | -------- | ---------------- | -------------- | ----- | -------- |
-| Few named modes  | 9        | 9                | 8              | 8.8   | ✅ Sel.  |
+| Model / Option                            | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision      |
+| ----------------------------------------- | ---------------- | ----------------- | ---------------- | ----------------- | ----------- | ------------- |
+| D: QueryPipeline + routing (Selected)     | 9                | 9                 | 7                | 8                 | **8.6**     | ✅ Selected    |
+| B: Sequential individual                   | 6                | 4                 | 9                | 8                 | 6.2         | Rejected      |
+| A: Combined only                           | 4                | 6                 | 9                | 9                 | 5.8         | Rejected      |
+| C: Manual w/o optimization                 | 7                | 5                 | 7                | 7                 | 6.2         | Rejected      |
 
 ## Decision
 
-Implement 3–4 named modes with sensible defaults for retrieval depth, reranking, and output format.
+Adopt a conditional analysis strategy with QueryPipeline routing: Separate mode runs per‑document pipelines in parallel; Combined mode uses a unified index; aggregation merges insights and comparisons. Auto mode selects based on document count/size. Integrates with the 5‑agent system (ADR‑001/011).
 
 ## High-Level Architecture
 
-Mode → preset → pipeline settings → response
+```mermaid
+graph TD
+  U[Upload + Mode Selection] --> R[Mode Router]
+  R -->|Separate| P[Parallel Per-Doc Pipelines]
+  R -->|Combined| C[Unified Pipeline]
+  P --> A[Aggregator]
+  C --> A
+  A --> V[Results + Synthesis]
+```
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- FR‑1: Provide 3–4 named analysis modes
-- FR‑2: Each mode maps to retrieval/reranking presets
+- FR‑1: Separate mode produces individual results per document
+- FR‑2: Combined mode produces unified cross‑document result
+- FR‑3: Separate mode executes in parallel
+- FR‑4: Aggregation merges insights and comparisons
 
 ### Non-Functional Requirements
 
-- NFR‑1: Clear UX; easy to extend
+- NFR‑1 (Performance): 3–5x speedup for Separate mode with ≥4 docs
+- NFR‑2 (Memory): Bounded resource use per worker
+- NFR‑3 (Quality): Comparable output quality across modes
 
 ### Performance Requirements
 
-- PR‑1: Mode switching has no measurable UI latency (>100ms)
+- PR‑1: Mode selection <100ms; aggregation <500ms
 
 ### Integration Requirements
 
-- IR‑1: Exposed in UI (ADR‑013)
-- IR‑2: Backed by settings registry (ADR‑024)
+- IR‑1: UI exposes mode selection (ADR‑016); export formats follow ADR‑022
+- IR‑2: Retrieval adapts to mode (ADR‑003)
 
 ## Design
 
 ### Architecture Overview
 
-- Mode → preset → pipeline knobs (retrieval depth, reranker, output style)
+- Separate: spawn parallel per‑document pipelines; preserve doc context
+- Combined: build unified index; synthesize across documents
+- Aggregation: merge insights, comparisons, and action items
 
 ### Implementation Details
 
+In `src/analysis/modes.py` (illustrative):
+
 ```python
-ANALYSIS_MODES = {
-  "summary": {"top_k": 5},
-  "deep": {"top_k": 20},
-}
+from concurrent.futures import ThreadPoolExecutor
+
+def analyze(documents, query, mode, settings):
+    mode = auto_select(mode, len(documents), settings)
+    if mode == "separate":
+        with ThreadPoolExecutor(max_workers=settings.max_workers) as ex:
+            return [ex.submit(run_single, d, query).result() for d in documents]
+    return [run_combined(documents, query)]
 ```
 
 ### Configuration
 
 ```env
-DOCMIND_ANALYSIS__DEFAULT_MODE=summary
+DOCMIND_ANALYSIS__MODE=auto   # separate|combined|auto
+DOCMIND_ANALYSIS__MAX_WORKERS=4
 ```
 
 ## Testing
 
-- Snapshot outputs per mode for a small corpus
-
 ```python
-@pytest.mark.unit
-def test_default_mode(settings):
-    assert settings.analysis.default_mode == "summary"
+import pytest
+
+@pytest.mark.asyncio
+async def test_parallel_separate(fake_docs, analyzer):
+    res = await analyzer.analyze_documents(fake_docs, "q", mode="separate")
+    assert len(res.individual_results) == len(fake_docs)
 ```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- Predictable behavior; easy to document
+- Flexible user choice of modes; fast parallel Separate mode
+- Cross‑document synthesis in Combined mode
+- Clean integration with existing agents and retrieval
 
 ### Negative Consequences / Trade-offs
 
-- More presets to maintain
-
-### Dependencies
-
-- None specific
+- Additional routing/aggregation complexity
+- Higher resource use in parallel paths
 
 ### Ongoing Maintenance & Considerations
 
-- Keep number of modes low; ensure each has clear, documented behavior
+-.Tune thresholds for auto selection as datasets vary
+
+- Keep aggregation minimal; extend only with clear value
+
+### Dependencies
+
+- Python: `concurrent.futures`, `asyncio`
+- LlamaIndex: QueryPipeline, VectorStoreIndex
 
 ## Changelog
 
-- 2.1 (2025‑09‑04): Standardized to template; added requirements/config/tests
-
-- 2.0 (2025‑08‑19): Accepted; minimal named modes
+- **1.1 (2025-09-02)**: No change required; cache unification speeds both modes without architectural impact.
+- **1.0 (2025-08-18)**: Initial document analysis mode strategy with parallel individual processing, unified combined analysis, and intelligent result aggregation

@@ -1,239 +1,208 @@
 ---
 ADR: 013
-Title: Streamlit UI Architecture (Multipage, Native Components)
+Title: User Interface Architecture (Streamlit Multipage)
 Status: Accepted
-Version: 3.2
+Version: 3.1
 Date: 2025-09-03
 Supersedes:
 Superseded-by:
-Related: 001, 009, 016, 021, 032, 036
-Tags: ui, streamlit, state, analytics
+Related: 001, 003, 004, 009, 016, 021, 032, 036
+Tags: streamlit, ui, navigation, state, analytics, chat
 References:
-- [Streamlit — Official Docs](https://docs.streamlit.io/)
-- [Streamlit State & Caching](https://docs.streamlit.io/develop/api-reference/caching)
+- [Streamlit — Docs](https://docs.streamlit.io/)
+- [Streamlit — Multipage Apps](https://docs.streamlit.io/develop/concepts/multipage-apps)
+- [Streamlit — Chat Elements](https://docs.streamlit.io/develop/api-reference/chat)
+- [Streamlit — Caching (cache_data, cache_resource)](https://docs.streamlit.io/develop/api-reference/caching)
+- [Plotly — Python Graphing Library](https://plotly.com/python/)
 ---
 
 ## Description
 
-Adopt a clean, multipage Streamlit UI using native components for navigation, state, streaming, and caching. Avoid custom UI frameworks and heavy component stacks; keep pages small and focused.
+Adopt a Streamlit-based, programmatic multipage UI that favors native components, native caching/state, and native streaming. Provide chat, documents, analytics, and settings pages with a consistent, simple architecture integrated with agentic retrieval, document processing, and local metrics.
 
 ## Context
 
-The app needs agentic chat, document management, analytics, and settings in a local‑first desktop flow. Streamlit’s native features cover these without extra layers.
+The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), adaptive retrieval (ADR‑003), local analytics (ADR‑032), and reranker controls (ADR‑036) while remaining simple and maintainable. Prior approaches mixed ad‑hoc state and external components; this ADR standardizes on native Streamlit patterns for predictable behavior and minimal code.
 
 ## Decision Drivers
 
-- Simplicity and performance with native components
-- Clear session state and caching model
-- Minimal dependencies; fast iteration
+- Simplicity and maintainability (KISS, library‑first)
+- Native Streamlit features for state, caching, and streaming
+- Programmatic multipage navigation without custom routing
+- Smooth integration with state (ADR‑016) and settings (ADR‑024)
+- Fast local performance and low setup friction
 
 ## Alternatives
 
-- Directory‑based pages only — limited UX/state
-- Gradio — quick, but constrained for multipage apps
-- FastAPI+React — overkill for local desktop app
+- A: Directory‑based multipage Streamlit — Pros: simple; Cons: limited navigation/state patterns
+- B: Gradio — Pros: rapid ML UI; Cons: weaker multipage, customization limits
+- C: FastAPI + React — Pros: maximal flexibility; Cons: overkill for local‑first
+- D: Programmatic Streamlit (Selected) — Pros: native, fast, minimal code; Cons: fewer deep customization hooks
 
 ### Decision Framework
 
-| Option               | Dev Speed (40%) | UX (30%) | Simplicity (20%) | Perf (10%) | Total | Decision      |
-| -------------------- | --------------- | -------- | ---------------- | ---------- | ----- | ------------- |
-| Streamlit native     | 10              | 9        | 9                | 8          | 9.3   | ✅ Selected    |
-| FastAPI+React        | 5               | 10       | 4                | 9          | 6.7   | Rejected      |
-| Gradio               | 9               | 6        | 8                | 8          | 7.8   | Rejected      |
+| Model / Option                 | Simplicity (35%) | UX (30%) | Integration (20%) | Maintenance (15%) | Total Score | Decision      |
+| ------------------------------ | ---------------- | -------- | ----------------- | ----------------- | ----------- | ------------- |
+| Programmatic Streamlit (Sel.)  | 9                | 9        | 9                 | 9                 | **9.0**     | ✅ Selected    |
+| Directory‑based multipage      | 8                | 6        | 6                 | 7                 | 6.9         | Rejected      |
+| Gradio                         | 9                | 6        | 5                 | 8                 | 6.9         | Rejected      |
+| FastAPI + React                | 4                | 9        | 9                 | 5                 | 6.4         | Rejected      |
 
 ## Decision
 
-Use native Streamlit (pages, session_state, cache, chat streaming) for all UI needs. Keep files short and cohesive.
+We adopt Streamlit’s programmatic multipage pattern with native components and caching. Pages: Chat (native streaming), Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only when necessary), Analytics (Plotly charts), and Settings (forms). Sidebar exposes reranker controls `normalize_scores` and `top_n` (ADR‑036). State uses `st.session_state`; caching uses `st.cache_data` and `st.cache_resource`.
 
 ## High-Level Architecture
 
-Entry (`app.py`) → Navigation → {Chat, Documents, Analytics, Settings}
+```mermaid
+graph TD
+  A[src/app.py] --> B[Navigation (st.Page/st.navigation)]
+  B --> C[Chat]
+  B --> D[Documents]
+  B --> E[Analytics]
+  B --> F[Settings]
+  C --> G[Agent/RAG Services]
+  D --> H[Document/Index Services]
+  E --> I[Metrics/Analytics Services]
+  F --> J[Settings/Config Services]
+  K[st.session_state] --> C
+  K --> D
+  K --> E
+  K --> F
+  L[st.cache_data/resource] --> C
+  L --> D
+  L --> E
+  L --> F
+```
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- FR‑1: Multipage navigation and persistent session state
-- FR‑2: Chat with streaming responses and source display
-- FR‑3: Documents table with filters and bulk actions
-- FR‑4: Analytics dashboard with core metrics
+- FR‑1: Multipage navigation via `st.Page`/`st.navigation`
+- FR‑2: Document table with sorting/filtering (prefer `st.dataframe`; AgGrid optional)
+- FR‑3: Chat page streams token output natively
+- FR‑4: Analytics dashboard with charts (Plotly)
+- FR‑5: Settings forms for model and feature flags
+- FR‑6: Cross‑page session state and chat history
 
 ### Non-Functional Requirements
 
-- NFR‑1: <2s page load; <100ms UI interactions
-- NFR‑2: Minimal dependencies; native components first
+- NFR‑1 (Performance): <2s page load, <100ms interactive response
+- NFR‑2 (Accessibility): Keyboard navigation; readable theme
+- NFR‑3 (Maintainability): <500 LOC per page; minimal custom code
 
 ### Performance Requirements
 
-- PR‑1: Chat streaming token updates render within 50ms/frame
-- PR‑2: Table interactions update under 150ms P95 for 1k rows
+- PR‑1: Chat streaming updates at >10 tokens/sec for small responses
+- PR‑2: Analytics charts render <300ms with cached data
 
 ### Integration Requirements
 
-- IR‑1: `.streamlit/config.toml` governs theme
-- IR‑2: UI toggles map to ADR‑024 settings
+- IR‑1: Sidebar exposes `normalize_scores` and `top_n` (ADR‑036)
+- IR‑2: Use unified settings (ADR‑024) and state model (ADR‑016)
 
 ## Design
 
 ### Architecture Overview
 
-- `app.py` bootstraps pages and theme
-- Pages: `pages/chat.py`, `pages/documents.py`, `pages/analytics.py`, `pages/settings.py`
-- State: `st.session_state` with a light dataclass wrapper (optional)
+- Programmatic pages defined in `src/app.py` using `st.Page` and `st.navigation`
+- Native session state for cross‑page context; no custom state manager
+- Native caching for data/resources; avoid bespoke caches
 
 ### Implementation Details
 
-```python
-# pages/chat.py (skeleton)
-import streamlit as st
-
-def stream_tokens(question: str):
-    for t in ("Thinking... ", "Answer ", "here."):
-        yield t
-
-st.title("Chat")
-if prompt := st.chat_input("Ask a question"):
-    with st.chat_message("user"):
-        st.write(prompt)
-    with st.chat_message("assistant"):
-        full = st.write_stream(stream_tokens(prompt))
-        st.session_state.setdefault("messages", []).append({"role": "assistant", "content": full})
-```
-
-### Extended Implementation Guide
-
-```python
-# Streaming with sources and status
-import streamlit as st
-import time
-from typing import Iterator, AsyncGenerator
-
-def stream_llm_response(q: str) -> Iterator[str]:
-    # connect to LLM client in app code
-    for t in ["Thinking… ", "answer ", "tokens."]:
-        yield t
-        time.sleep(0.01)
-
-def stream_with_sources(query: str, sources: list[dict]):
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        buf = ""
-        slot = st.empty()
-        for chunk in stream_llm_response(query):
-            buf += chunk
-            slot.markdown(buf)
-    with col2:
-        st.subheader("Sources")
-        for src in sources:
-            with st.expander(src.get("title", "Source")):
-                st.write((src.get("text") or "")[:200] + "…")
-
-def process_documents_with_status(uploaded_files):
-    with st.status("Processing documents…", expanded=True) as status:
-        try:
-            st.write("🔍 Validating files…")
-            time.sleep(0.2)
-            st.write("📄 Parsing and extracting content…")
-            st.write("🧮 Creating embeddings…")
-            st.write("💾 Storing in vector database…")
-            status.update(label="✅ Processing complete!", state="complete")
-        except Exception as e:  # replace with specific exceptions in app code
-            status.update(label="🚨 Error processing documents", state="error")
-            st.error(f"Processing failed: {e}")
-
-def safe_operation_with_feedback(name: str):
-    def deco(fn):
-        def wrapper(*args, **kwargs):
-            try:
-                with st.spinner(f"{name}…"):
-                    return fn(*args, **kwargs)
-            except Exception as e:  # replace with specific exceptions in app code
-                st.error(f"{name} failed: {e}")
-                return None
-        return wrapper
-    return deco
-```
-
-### Entry Point Skeleton (`app.py`)
+In `src/app.py`:
 
 ```python
 import streamlit as st
 
-st.set_page_config(page_title="DocMind AI", page_icon="📄", layout="wide")
+st.set_page_config(page_title="DocMind AI", page_icon="📄", layout="wide", initial_sidebar_state="expanded")
 
-pages = {
-    "Chat": st.Page("pages/chat.py", title="Chat", icon="💬", default=True),
-    "Documents": st.Page("pages/documents.py", title="Documents", icon="📁"),
-    "Analytics": st.Page("pages/analytics.py", title="Analytics", icon="📊"),
-    "Settings": st.Page("pages/settings.py", title="Settings", icon="⚙️"),
-}
+chat = st.Page("src/pages/chat.py", title="Chat", icon="💬", default=True)
+docs = st.Page("src/pages/documents.py", title="Documents", icon="📁")
+analytics = st.Page("src/pages/analytics.py", title="Analytics", icon="📊")
+settings = st.Page("src/pages/settings.py", title="Settings", icon="⚙️")
 
-st.navigation({"Main": [pages["Chat"], pages["Documents"]], "System": [pages["Analytics"], pages["Settings"]]}).run()
+nav = st.navigation({"Main": [chat, docs], "System": [analytics, settings]})
+st.logo("assets/docmind_logo.png", icon_image="assets/docmind_icon.png")
+nav.run()
 ```
-
-### Implementation Phases
-
-- Foundation: app.py, base pages, theme, session schema
-- Core: chat streaming, document upload/table, settings, basic analytics
-- Integration: hook ADR‑001/003/009/032 flows
-- Polish: loading/error states, a11y, caching, tests
 
 ### Configuration
 
-- `.streamlit/config.toml` for theme
-- Env toggles map to ADR‑024 settings
+`.streamlit/config.toml`:
 
 ```toml
-# .streamlit/config.toml
 [theme]
-base = "light"
 primaryColor = "#4A90E2"
-```
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8F9FA"
+textColor = "#2C3E50"
+font = "Inter"
 
-```env
-DOCMIND_UI__SHOW_ADVANCED=false
+[runner]
+fastReruns = true
+enforceSerializableSessionState = false
+
+[server]
+enableCORS = false
+enableWebsocketCompression = true
+enableXsrfProtection = true
+maxUploadSize = 1000
+
+[browser]
+gatherUsageStats = false
 ```
 
 ## Testing
 
-- Smoke tests for page boot and basic interactions
-- Snapshot tests for key components when feasible
+Use pytest with lightweight smoke tests and streaming checks.
 
 ```python
-def test_chat_page_boot(app_runner):
-    resp = app_runner.open("/chat")
-    assert resp.status_code == 200
+import pytest
+
+def test_pages_construct():
+    import streamlit as st
+    st.Page("src/pages/chat.py", title="Chat", icon="💬", default=True)
+    st.Page("src/pages/documents.py", title="Documents", icon="📁")
+
+@pytest.mark.asyncio
+async def test_streaming_generator(mock_llm):
+    async for token in mock_llm.astream("hi"):
+        assert isinstance(token, str)
+        break
 ```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- Fast iteration, minimal code, native reliability
-- Clear state/caching patterns
+- Native Streamlit primitives; minimal custom infrastructure
+- Faster development and simpler maintenance
+- Consistent UX with programmatic navigation
+- Easy integration with reranker controls and analytics
 
 ### Negative Consequences / Trade-offs
 
-- Less control than a full web stack
-
-### Dependencies
-
-- Python: `streamlit>=1.36`
-- Optional: `plotly>=5.17`
+- Less fine‑grained control vs. custom web stack
+- Optional components (AgGrid) introduce extra deps if used
 
 ### Ongoing Maintenance & Considerations
 
-- Track Streamlit release notes for changes to chat/streaming APIs
-- Keep pages small and cohesive; factor shared bits into tiny helpers
-- Avoid non‑native components unless a clear, measurable need emerges
+- Track Streamlit release notes for `st.Page`/`st.navigation` changes
+- Monitor page load and interaction latency; profile slow render paths
+- Keep pages under 500 LOC; refactor heavy logic to services
 
-### Monitoring Metrics
+### Dependencies
 
-- Page load and interaction latency
-- Cache hit rate and session state size
-- Table render performance on large datasets
+- Python: `streamlit>=1.36.0`, `plotly>=5.17.0`
+- Optional: `streamlit-aggrid>=0.3.4` (if large tables require it)
+- Assets: Logo/icon files under `assets/`
 
 ## Changelog
 
-- 3.2 (2025‑09‑04): Standardized to template; added PR/IR, config/tests
-- 3.1 (2025‑09‑03): Accepted modernized native multipage UI
+- **3.1 (2025-09-03)**: DOCS - Added related-decision reference to ADR-036 (Reranker UI controls)
+- **3.0 (2025-08-17)**: Accepted version reflecting premium Streamlit multipage UI and modern patterns
+- **2.0 (2025-08-17)**: MAJOR — Complete redesign with modern multipage architecture, component integration, advanced state management, and production-ready performance optimization
+- **1.0 (2025-01-16)**: Initial user interface architecture with basic Streamlit implementation

@@ -1,116 +1,145 @@
 ---
 ADR: 035
-Title: Application-Level Semantic Cache with GPTCache (SQLite + FAISS)
+Title: Application-Level Semantic Cache v1.1 with GPTCache (SQLite + FAISS)
 Status: Accepted
-Version: 1.1.1
+Version: 1.1.0
 Date: 2025-09-03
 Supersedes:
 Superseded-by:
-Related: 030, 031
-Tags: cache, semantic, gptcache
+Related: 004, 014, 024, 030, 031
+Tags: cache, semantic, gptcache, sqlite, faiss, offline
 References:
-- [GPTCache — Documentation](https://gptcache.readthedocs.io/)
+- [GPTCache — GitHub](https://github.com/zilliztech/GPTCache)
+- [GPTCache — Docs](https://gptcache.readthedocs.io/en/latest/)
+- [LiteLLM Proxy — Caching](https://docs.litellm.ai/docs/proxy/caching)
+- [Qdrant — Payload/Filters](https://qdrant.tech/documentation/concepts/payload/)
 ---
 
 ## Description
 
-Adopt an optional, in‑process semantic cache for prompt→response pairs using GPTCache with SQLite + FAISS. Feature‑flagged (Off by default).
+Adopt an optional, in-process semantic cache for repeated prompt responses using GPTCache with SQLite storage and FAISS vectors. Feature-flagged (default Off) and exposed via a thin provider-agnostic adapter to keep call sites stable.
 
 ## Context
 
-Separates response caching from processing cache (ADR‑030). Keeps ops minimal and deterministic.
+We want to reduce cost/latency for repeated prompts while preserving offline determinism and minimal ops. ADR‑030/031 cover processing cache; this ADR focuses on application-level semantic response caching and remains separate by design.
 
 ## Decision Drivers
 
-- KISS; offline‑deterministic CI; safe‑by‑default
+- KISS & library-first; zero extra services
+- Offline-deterministic tests (no network/GPU)
+- Minimal config; safe-by-default
+- Privacy: avoid storing raw prompts; namespace keys
 
 ## Alternatives
 
-- Qdrant‑backed semantic cache — heavier dep
-- LiteLLM Proxy semantic cache (redis/qdrant via proxy) — adds services
+- A: Qdrant-backed semantic cache — Pros: strong filters; Cons: heavier dep/surface
+- B: LiteLLM Proxy cache — Pros: mature; Cons: adds proxy service; violates offline CI
+- C: GPTCache (Selected) — Pros: in-process, file-backed, deterministic tests; Cons: FAISS footprint
 
 ### Decision Framework
 
-| Option                    | Simplicity (35%) | Offline (25%) | Ops (20%) | Fit (20%) | Total | Decision      |
-| ------------------------- | ---------------- | ------------- | --------- | --------- | ----- | ------------- |
-| GPTCache (Sel.)           | 0.95             | 1.0           | 0.95      | 0.85      | 0.94  | ✅ Selected    |
-| Qdrant semantic cache     | 0.70             | 0.9           | 0.70      | 0.90      | 0.79  | Rejected      |
-| Proxy‑backed cache        | 0.55             | 0.3           | 0.40      | 0.80      | 0.51  | Rejected      |
+| Model / Option               | Simplicity (35%) | Offline CI (25%) | Ops Overhead (20%) | Library Fit (20%) | Total Score | Decision      |
+| ---------------------------- | ---------------- | ---------------- | ------------------ | ----------------- | ----------- | ------------- |
+| GPTCache (Selected)          | 9.5              | 10               | 9.5                | 8.5               | **9.4**     | ✅ Selected    |
+| Qdrant-backed                | 7.0              | 9.0              | 7.0                | 9.0               | 7.9         | Rejected      |
+| LiteLLM Proxy                | 5.5              | 3.0              | 4.0                | 8.0               | 5.1         | Rejected      |
 
 ## Decision
 
-Use GPTCache behind a thin provider adapter with minimal parameters (e.g., score_threshold).
+Adopt GPTCache (SQLite + FAISS) behind a thin adapter for v1.1.0. Default Off; enable via settings. Guard cacheability by temperature and size; store prompt hashes and namespaces for privacy and isolation. Fail-safe: bypass cache on errors.
 
 ## High-Level Architecture
 
-App → provider adapter → GPTCache (SQLite + FAISS)
-
-### Architecture Overview
-
-- Adapter encapsulates GPTCache; callers see a simple get/set API
+```mermaid
+graph TD
+  A[Query Text] --> B[Embed]
+  B --> C[SemanticCache Adapter]
+  C -->|get| D[GPTCache (SQLite + FAISS)]
+  D -->|hit| E[Return Cached]
+  D -->|miss| F[LLM Generate]
+  F -->|set| D
+  F --> E
+```
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- FR‑1: Cache prompt→response pairs; configurable threshold
+- FR‑1: Optionally serve responses from a semantic cache on near-duplicate prompts
+- FR‑2: Provide provider-agnostic adapter interface
 
 ### Non-Functional Requirements
 
-- NFR‑1: Local‑only; deterministic behavior in CI
+- NFR‑1: Offline/local; deterministic tests
+- NFR‑2: Minimal config; feature-flag default Off
+- NFR‑3: Privacy-preserving (hash prompts; namespace keys)
 
 ### Performance Requirements
 
-- PR‑1: Lookups ≤5ms; inserts ≤20ms typical
+- PR‑1: `get()` latency under ~75ms on consumer laptops
 
 ### Integration Requirements
 
-- IR‑1: Feature flag; adapter hides GPTCache internals
+- IR‑1: Add `settings.semantic_cache` block (ADR‑024)
+- IR‑2: Integrate at pre-generation stage (read→compute→write)
 
 ## Design
 
+### Architecture Overview
+
+- Adapter `ISemanticCache(get/set/expire)` in `src/utils/semantic_cache.py`
+- Provider `GPTCacheSemanticCache` configured with SQLite + FAISS; TTL enforced on read
+- Namespacing for env/model/template/settings-hash + prompt_hash
+
 ### Implementation Details
 
-```python
-from gptcache import cache
-from gptcache.manager import get_data_manager
-from gptcache.embedding import Onnx
-from gptcache.similarity_evaluation.distance import SearchDistanceEvaluation
+In `src/utils/semantic_cache.py` (illustrative):
 
-def get_semantic_cache(db_path: str = "./data/gptcache.sqlite"):
-    data_manager = get_data_manager("sqlite,faiss", data_dir=db_path)
-    cache.init(
-        embedding_func=Onnx(),
-        data_manager=data_manager,
-        similarity_evaluation=SearchDistanceEvaluation(),
-    )
-    return cache
+```python
+from typing import Protocol, Callable
+from hashlib import sha256
+from loguru import logger
+
+class ISemanticCache(Protocol):
+    def get(self, prompt: str, meta: dict, embedding: list[float] | None = None) -> str | None: ...
+    def set(self, prompt: str, response: str, meta: dict, embedding: list[float] | None = None) -> None: ...
 ```
 
 ### Configuration
 
 ```env
-DOCMIND_CACHE__SEMANTIC_ENABLED=false
-DOCMIND_CACHE__SEMANTIC_PATH=./data/gptcache.sqlite
+DOCMIND_SEMANTIC_CACHE__ENABLED=false
+DOCMIND_SEMANTIC_CACHE__PROVIDER=gptcache
+DOCMIND_SEMANTIC_CACHE__SCORE_THRESHOLD=0.85
+DOCMIND_SEMANTIC_CACHE__TTL_SECONDS=1209600
+DOCMIND_SEMANTIC_CACHE__TOP_K=5
+DOCMIND_SEMANTIC_CACHE__MAX_RESPONSE_BYTES=24000
+DOCMIND_SEMANTIC_CACHE__NAMESPACE=default
 ```
 
 ## Testing
 
-- Deterministic cache hits/misses; threshold behavior
+```python
+def test_cache_hit_miss(mock_cache, deterministic_embed):
+    # miss -> set -> hit sequence with thresholds and TTL
+    pass
+```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- Lower latency/cost on repeats; local only
+- Minimal, in-process semantic cache; offline deterministic
+- Clear privacy posture; provider abstraction for future migration
 
 ### Negative Consequences / Trade-offs
 
-- Requires careful threshold tuning to avoid stale hits
+- FAISS dependency footprint; read-time TTL vs scheduled cleanup
 
 ### Ongoing Maintenance & Considerations
 
-- Monitor cache size and hit rate; clear/rehydrate cache on major model changes
+- Tune `score_threshold` after observing hit quality
+- Consider lightweight cleanup to trim expired rows
 
 ### Dependencies
 
@@ -118,5 +147,4 @@ DOCMIND_CACHE__SEMANTIC_PATH=./data/gptcache.sqlite
 
 ## Changelog
 
-- 1.1.1 (2025‑09‑04): Standardized to template; added decision framework
-- 1.1.0 (2025‑09‑03): Accepted optional semantic cache
+- **1.1.0 (2025-09-03)**: Initial accepted version.

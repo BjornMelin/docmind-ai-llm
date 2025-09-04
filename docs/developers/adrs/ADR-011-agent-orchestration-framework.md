@@ -48,6 +48,15 @@ DocMind AI relies on multiple agent roles that must coordinate while preserving 
 
 Adopt LangGraph Supervisor for five‑agent coordination with minimal customization. Surface small, explicit configuration for logging, parallel tool calls (ADR‑010), and guardrails.
 
+### Agent Roles and Coordinator
+
+- `Supervisor/Coordinator`: Central controller that routes, hands off, and collects outcomes; owns prompt and guardrails
+- `Router`: Chooses retrieval path (hybrid, hierarchical, graph) based on query/metadata
+- `Planner`: Decomposes complex queries into sub‑tasks (optional early‑exit for simple queries)
+- `Retrieval`: Executes adaptive retrieval (ADR‑003), including multimodal reranking (ADR‑037)
+- `Synthesis`: Aggregates evidence into a coherent answer with citations
+- `Validation`: Checks relevance/faithfulness; may trigger correction or re‑route
+
 ## High-Level Architecture
 
 User → Supervisor → {Router → Planner → Retrieval → Synthesis → Validation} → Response
@@ -101,13 +110,37 @@ graph TD
 # src/agents/supervisor.py (skeleton)
 from langgraph_supervisor import create_supervisor
 
+SUPERVISOR_PROMPT = (
+    "You are a supervisor coordinating a modern 5‑agent RAG system. "
+    "Route, plan, retrieve, synthesize, and validate answers. Prefer minimal steps."
+)
+
 def create_app(llm, tools):
     agents = make_agents(llm, tools)  # router, planner, retrieval, synthesis, validation
-    return create_supervisor(agents=agents, model=llm, config={
-        "parallel_tool_calls": True,
-        "output_mode": "structured",
-    })
+    return create_supervisor(
+        agents=agents,
+        model=llm,
+        prompt=SUPERVISOR_PROMPT,
+        config={
+            # Verified modern parameters from LangGraph supervisor docs
+            "parallel_tool_calls": True,          # concurrent agent/tool paths
+            "output_mode": "structured",          # richer outputs + metadata
+            "create_forward_message_tool": True,  # direct passthrough when needed
+            "add_handoff_back_messages": True,    # track coordination handoffs
+        },
+        # Optional hooks for context/window management
+        pre_model_hook=trim_context_hook,  # enforce 128K cap (ADR‑004/010)
+        post_model_hook=collect_metrics_hook,
+    )
 ```
+
+### Supervisor Configuration (Key Options)
+
+- `parallel_tool_calls`: Enable concurrent tool/agent branches to reduce tokens (50–87%)
+- `output_mode="structured"`: Include metadata fields for observability and UI
+- `create_forward_message_tool`: Allow direct message passthrough when no processing is needed
+- `add_handoff_back_messages`: Emit coordination breadcrumbs for debugging and audits
+- `pre_model_hook`/`post_model_hook`: Trim context (e.g., at ~120K) and log metrics
 
 ### Configuration
 
@@ -151,5 +184,6 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Changelog
 
+- 6.2 (2025‑09‑04): Restored explicit agent role list and supervisor configuration details (parallel_tool_calls, output_mode, create_forward_message_tool, add_handoff_back_messages) with hook notes and prompt
 - 6.1 (2025‑09‑04): Standardized to template; added diagram, PR/IR, config/tests
 - 6.0 (2025‑08‑19): Accepted Supervisor implementation; integrates ADR‑003/004/010

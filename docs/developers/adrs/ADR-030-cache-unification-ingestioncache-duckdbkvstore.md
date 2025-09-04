@@ -1,21 +1,21 @@
 ---
 ADR: 030
-Title: Cache Unification via IngestionCache (DuckDBKVStore)
+Title: Cache Unification via LlamaIndex IngestionCache (DuckDBKVStore)
 Status: Accepted
 Version: 1.1
 Date: 2025-09-03
 Supersedes:
 Superseded-by:
-Related: 031, 026
-Tags: cache, duckdb, ingestion
+Related: 025, 026, 031, 035
+Tags: cache, ingestion, duckdb, local-first
 References:
-- [LlamaIndex — Ingestion Cache](https://docs.llamaindex.ai/en/stable/module_guides/loading/documents/ingestion_cache/)
-- [LlamaIndex — DuckDBKVStore](https://docs.llamaindex.ai/en/stable/module_guides/storing/kv_stores/#duckdbkvstore)
+- [LlamaIndex — Ingestion Pipeline & Cache](https://docs.llamaindex.ai/)
+- [DuckDB — Documentation](https://duckdb.org/docs/)
 ---
 
 ## Description
 
-Unify document‑processing cache on LlamaIndex IngestionCache with DuckDBKVStore (single‑file DB). Remove custom caches and JSON persistence.
+Unify document‑processing cache on LlamaIndex IngestionCache with a local DuckDB‑backed KV store (single file). Remove custom cache wrappers. No back‑compat. Library‑first, local‑first, minimal maintenance.
 
 ## Context
 
@@ -25,7 +25,10 @@ Unify document‑processing cache on LlamaIndex IngestionCache with DuckDBKVStor
 
 ## Decision Drivers
 
-- KISS; local‑first; durability
+- KISS and library‑first
+- Local‑first durability and performance
+- Zero external services
+- Minimal maintenance
 
 ## Alternatives
 
@@ -37,89 +40,108 @@ Unify document‑processing cache on LlamaIndex IngestionCache with DuckDBKVStor
 
 | Model / Option         | Solution Leverage (35%) | Maintenance (30%) | Performance (25%) | Simplicity (10%) | Total Score | Decision      |
 | ---------------------- | ----------------------- | ----------------- | ----------------- | ---------------- | ----------- | ------------- |
-| **B: Ingest+DuckDBKV** | 0.95                    | 0.9               | 0.9               | 0.9              | **0.92**    | ✅ **Selected** |
-| A: Ingest+JSON         | 0.8                     | 0.85              | 0.6               | 1.0              | 0.79        | Rejected      |
-| C: Custom Wrapper      | 0.4                     | 0.3               | 0.6               | 0.5              | 0.43        | Rejected      |
+| B: Ingest+DuckDBKV     | 9.5                     | 9.0               | 9.0               | 9.0              | **9.2**     | ✅ Selected    |
+| A: Ingest+JSON         | 8.0                     | 8.5               | 6.0               | 10.0             | 7.9         | Rejected      |
+| C: Custom Wrapper      | 4.0                     | 3.0               | 6.0               | 5.0              | 4.3         | Rejected      |
 
 ## Decision
 
-Use IngestionCache + DuckDBKVStore at `settings.cache_dir/docmind.duckdb` as the single processing cache.
+Adopt **LlamaIndex IngestionCache + DuckDBKVStore** as the single cache for document processing. Remove custom caches and JSON-based persistence. Store cache file at `settings.cache_dir/docmind.duckdb`.
 
 ## High-Level Architecture
 
-Processor → IngestionPipeline → IngestionCache → DuckDB file
+```mermaid
+graph TD
+    A[DocumentProcessor] --> B[IngestionPipeline]
+    B --> C[IngestionCache]
+    C --> D[DuckDBKVStore (docmind.duckdb)]
+```
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- FR‑1: Cache processed nodes keyed by content hash
-- FR‑2: Expose simple hit/miss stats
+- FR‑1: Persist and retrieve document‑processing cache entries
+- FR‑2: Operate fully offline/local‑first
 
 ### Non-Functional Requirements
 
-- NFR‑1: Durable single‑file DB; local‑only
+- NFR‑1: Maintainability — remove custom cache code
+- NFR‑2: Performance — efficient local IO with single‑file DB
 
 ### Performance Requirements
 
-- PR‑1: Cache lookups <5ms typical; writes <50ms
+- PR‑1: Cache ops <10ms typical on consumer hardware
 
 ### Integration Requirements
 
-- IR‑1: Wires into ADR‑009 and ADR‑003; no custom wrappers
+- IR‑1: Integrates via LlamaIndex IngestionPipeline
 
-### Architecture Overview
+## Related Decisions
 
-- Single ingestion cache layer decoupled from vector store
+- **ADR-031**: Local-first persistence; vectors in Qdrant, cache via DuckDBKVStore
+- **ADR-025**: Simplified caching; now unified on IngestionCache(DuckDBKVStore)
+- **ADR-026**: Test/production separation; removes SimpleCache from src
+- **ADR-035**: Application-level semantic cache (GPTCache) — separate from document-processing cache described here
 
 ## Design
 
+### Architecture Overview
+
+- Cache file: `settings.cache_dir/docmind.duckdb` (single‑file DB)
+- Namespace: `docmind_processing`
+- Removal: delete `src/cache/simple_cache.py`
+
 ### Implementation Details
 
-```python
-def get_cache_path():
-    return settings.cache_dir / "docmind.duckdb"
+In `src/core/processing.py` (DocumentProcessor wiring):
 
-from llama_index.core import IngestionPipeline
-from llama_index.core.storage.docstore.types import RefDocInfo
-from llama_index.core.storage.kvstore import KVDocumentStore
-from llama_index.core.storage.kvstore.duckdb_kvstore import DuckDBKVStore
-from llama_index.core.indices.ingestion.cache import IngestionCache
+  ```python
+  from pathlib import Path
+  from llama_index.core.ingestion import IngestionCache
+  from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
-def make_ingestion_cache(db_path) -> IngestionCache:
-    kv = DuckDBKVStore(db_path=str(db_path))
-    docstore = KVDocumentStore(kvstore=kv)
-    return IngestionCache(docstore=docstore)
-```
+  cache_db = Path(settings.cache_dir) / "docmind.duckdb"
+  kv = DuckDBKVStore(db_path=str(cache_db))
+  self.cache = IngestionCache(cache=kv, collection="docmind_processing")
+  ```
 
 ### Configuration
 
-```env
-DOCMIND_CACHE__PATH=./data/docmind.duckdb
-```
+- No additional env vars required beyond `DOCMIND_*` for cache directory paths.
 
 ## Testing
 
-- Verify cache hits/misses; performance under local IO
+- Unit tests for store/retrieve, clear (delete file), and minimal stats.
+- Integration: pipeline re-run should show unchanged outputs with fast second run.
 
 ## Consequences
 
 ### Positive Outcomes
 
-- Durable, simple cache; less code
+- Eliminates custom cache code
+- Single‑file, local‑first durability
+- Minimal, library‑backed maintenance
 
 ### Negative Consequences / Trade-offs
 
-- Single‑file DB may grow; requires occasional compaction
+- Requires proper LlamaIndex DuckDB KV integration package
+- Stats may be minimal unless a count API is exposed
 
 ### Ongoing Maintenance & Considerations
 
-- Monitor file size; implement a periodic vacuum/cleanup routine if needed
+- Track LlamaIndex integration package updates
+- Keep cache DB isolated from analytics; avoid coupling responsibilities
 
 ### Dependencies
 
-- Python: `llama-index>=0.10`, `duckdb`
+- Python: `duckdb`, `llama-index-*` packages exposing `DuckDBKVStore`
+
+## References
+
+- LlamaIndex docs: DuckDB vector/document/index stores; KV store integration modules
 
 ## Changelog
 
-- 1.1 (2025‑09‑03): Accepted unified cache
+- **1.1 (2025-09-03)**: DOCS - Clarified separation from application-level semantic cache (ADR-035) in Related Decisions
+- **1.0 (2025-09-02)**: Initial accepted version.
