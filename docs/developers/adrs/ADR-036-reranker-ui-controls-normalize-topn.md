@@ -68,6 +68,10 @@ graph TD
   F --> CE[CrossEncoder (BGE-v2-m3) + ColPali]
 ```
 
+### Architecture Overview
+
+- Sidebar controls → settings → reranker factory → postprocessors
+
 ## Related Requirements
 
 ### Functional Requirements

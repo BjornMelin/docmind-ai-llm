@@ -68,6 +68,10 @@ UI ↔ session_state ↔ memory buffer ↔ persistence (SQLite)
 
 ## Design
 
+### Architecture Overview
+
+- UI state ↔ memory buffer ↔ persistent store; trim to budget
+
 ### Implementation Details
 
 ```python
@@ -110,6 +114,10 @@ DOCMIND_CHAT__MAX_TOKENS=120000
 ### Negative Consequences / Trade-offs
 
 - Requires tuning trim thresholds
+
+### Ongoing Maintenance & Considerations
+
+- Review trim policy when context window or model changes
 
 ### Dependencies
 

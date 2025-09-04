@@ -66,6 +66,10 @@ LLM → Pydantic validation → export helper
 
 ## Design
 
+### Architecture Overview
+
+- LLM output → Pydantic model `Answer` → export helper (Markdown/PDF)
+
 ### Implementation Details
 
 ```python
@@ -112,6 +116,10 @@ def test_answer_model_roundtrip():
 ### Dependencies
 
 - Python: `pydantic>=2`
+
+### Ongoing Maintenance & Considerations
+
+- Version models if fields change; document export formats
 
 ## Changelog
 

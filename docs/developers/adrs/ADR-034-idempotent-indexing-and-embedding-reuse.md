@@ -2,14 +2,14 @@
 ADR: 034
 Title: Idempotent Indexing & Embedding Reuse
 Status: Proposed
-Version: 1.0
+Version: 1.1
 Date: 2025-09-02
 Supersedes:
 Superseded-by:
 Related: 030, 031, 002
 Tags: indexing, embeddings, reuse
 References:
-- Qdrant upsert semantics
+- [Qdrant — Upsert/Points API](https://qdrant.tech/documentation/concepts/points/)
 ---
 
 ## Description
@@ -54,11 +54,19 @@ Ingestion → hash/ID → check store → embed or skip → upsert
 
 - NFR‑1: Deterministic IDs across runs
 
+### Performance Requirements
+
+- PR‑1: Skip unchanged embeddings; reduce re‑index time ≥50%
+
 ### Integration Requirements
 
 - IR‑1: Upsert via Qdrant using stable IDs
 
 ## Design
+
+### Architecture Overview
+
+- Ingestion → hash/ID → check store → embed or skip → upsert
 
 ### Implementation Details
 
@@ -75,10 +83,33 @@ def content_hash(text: str) -> str:
 
 - Less compute; consistent IDs
 
+### Negative Consequences / Trade-offs
+
+- Requires careful hash policy updates when parsers change
+
+### Ongoing Maintenance & Considerations
+
+- Recompute hashes if tokenization or chunking strategy changes materially
+
 ### Dependencies
 
 - Python: `qdrant-client`
 
+## Testing
+
+```python
+def test_idempotent_upsert(mocker):
+    # stub: ensure upsert called once per unique id
+    pass
+```
+
+### Configuration
+
+```env
+DOCMIND_INDEX__ID_NAMESPACE=docmind
+```
+
 ## Changelog
 
+- 1.1 (2025‑09‑04): Standardized to template; added decision framework and design stub
 - 1.0 (2025‑09‑02): Proposed reuse policy

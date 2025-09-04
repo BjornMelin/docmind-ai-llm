@@ -77,6 +77,11 @@ graph LR
 
 ## Design
 
+### Architecture Overview
+
+- Single CrossEncoder reranks text nodes before synthesis
+- Router (ADR‑003) feeds text nodes into reranker when mode=`text|auto`
+
 ### Implementation Details (Historical)
 
 ```python

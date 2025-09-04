@@ -143,6 +143,12 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 - Python: `langgraph>=0.2`, `langchain-core>=0.3`, `langgraph-supervisor>=0.0.29`
 
+### Ongoing Maintenance & Considerations
+
+- Track LangGraph breaking changes; pin versions in lockfile
+- Periodically review agent prompts and routing heuristics with logs
+- Keep supervisor config minimal; avoid custom state machines
+
 ## Changelog
 
 - 6.1 (2025‑09‑04): Standardized to template; added diagram, PR/IR, config/tests

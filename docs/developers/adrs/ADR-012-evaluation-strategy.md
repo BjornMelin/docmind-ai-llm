@@ -73,6 +73,10 @@ Tests → DeepEval metrics → Reports (CI) → Fix/iterate
 
 ## Design
 
+### Architecture Overview
+
+- Unit tests validate logic; integration tests validate pipeline; DeepEval provides quality metrics.
+
 ### Implementation Details
 
 ```python
@@ -127,6 +131,11 @@ DOCMIND_EVAL__THRESHOLD_LATENCY_P95=1.5
 ### Dependencies
 
 - Python: `deepeval` (pinned), `pytest>=8`
+
+### Ongoing Maintenance & Considerations
+
+- Review golden datasets and thresholds quarterly to prevent drift
+- Keep evaluation runtime under agreed budgets; split slow tests into nightly jobs
 
 ## Changelog
 

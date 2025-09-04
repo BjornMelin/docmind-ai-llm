@@ -100,6 +100,84 @@ if prompt := st.chat_input("Ask a question"):
         st.session_state.setdefault("messages", []).append({"role": "assistant", "content": full})
 ```
 
+### Extended Implementation Guide
+
+```python
+# Streaming with sources and status
+import streamlit as st
+import time
+from typing import Iterator, AsyncGenerator
+
+def stream_llm_response(q: str) -> Iterator[str]:
+    # connect to LLM client in app code
+    for t in ["Thinking… ", "answer ", "tokens."]:
+        yield t
+        time.sleep(0.01)
+
+def stream_with_sources(query: str, sources: list[dict]):
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        buf = ""
+        slot = st.empty()
+        for chunk in stream_llm_response(query):
+            buf += chunk
+            slot.markdown(buf)
+    with col2:
+        st.subheader("Sources")
+        for src in sources:
+            with st.expander(src.get("title", "Source")):
+                st.write((src.get("text") or "")[:200] + "…")
+
+def process_documents_with_status(uploaded_files):
+    with st.status("Processing documents…", expanded=True) as status:
+        try:
+            st.write("🔍 Validating files…")
+            time.sleep(0.2)
+            st.write("📄 Parsing and extracting content…")
+            st.write("🧮 Creating embeddings…")
+            st.write("💾 Storing in vector database…")
+            status.update(label="✅ Processing complete!", state="complete")
+        except Exception as e:  # replace with specific exceptions in app code
+            status.update(label="🚨 Error processing documents", state="error")
+            st.error(f"Processing failed: {e}")
+
+def safe_operation_with_feedback(name: str):
+    def deco(fn):
+        def wrapper(*args, **kwargs):
+            try:
+                with st.spinner(f"{name}…"):
+                    return fn(*args, **kwargs)
+            except Exception as e:  # replace with specific exceptions in app code
+                st.error(f"{name} failed: {e}")
+                return None
+        return wrapper
+    return deco
+```
+
+### Entry Point Skeleton (`app.py`)
+
+```python
+import streamlit as st
+
+st.set_page_config(page_title="DocMind AI", page_icon="📄", layout="wide")
+
+pages = {
+    "Chat": st.Page("pages/chat.py", title="Chat", icon="💬", default=True),
+    "Documents": st.Page("pages/documents.py", title="Documents", icon="📁"),
+    "Analytics": st.Page("pages/analytics.py", title="Analytics", icon="📊"),
+    "Settings": st.Page("pages/settings.py", title="Settings", icon="⚙️"),
+}
+
+st.navigation({"Main": [pages["Chat"], pages["Documents"]], "System": [pages["Analytics"], pages["Settings"]]}).run()
+```
+
+### Implementation Phases
+
+- Foundation: app.py, base pages, theme, session schema
+- Core: chat streaming, document upload/table, settings, basic analytics
+- Integration: hook ADR‑001/003/009/032 flows
+- Polish: loading/error states, a11y, caching, tests
+
 ### Configuration
 
 - `.streamlit/config.toml` for theme
@@ -142,6 +220,18 @@ def test_chat_page_boot(app_runner):
 
 - Python: `streamlit>=1.36`
 - Optional: `plotly>=5.17`
+
+### Ongoing Maintenance & Considerations
+
+- Track Streamlit release notes for changes to chat/streaming APIs
+- Keep pages small and cohesive; factor shared bits into tiny helpers
+- Avoid non‑native components unless a clear, measurable need emerges
+
+### Monitoring Metrics
+
+- Page load and interaction latency
+- Cache hit rate and session state size
+- Table render performance on large datasets
 
 ## Changelog
 

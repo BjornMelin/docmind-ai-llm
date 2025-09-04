@@ -67,6 +67,10 @@ Queries/examples → DSPy compile → Optimized prompts → Retrieval/answer
 
 ## Design
 
+### Architecture Overview
+
+- Examples/queries → DSPy compile → optimized prompts/rewrites → retrieval
+
 ### Implementation Details
 
 ```python
@@ -127,6 +131,11 @@ def test_optimize_query_noop_when_disabled(settings):
 ### Dependencies
 
 - Python: `dspy` (pinned)
+
+### Ongoing Maintenance & Considerations
+
+- Keep example sets small and curated; revisit periodically
+- Guard optimizations behind a flag; fall back to baseline on failures
 
 ## Changelog
 

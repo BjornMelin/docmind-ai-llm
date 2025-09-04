@@ -133,6 +133,12 @@ def test_bgem3_shape(embed_model):
 - Python: `FlagEmbedding>=1.2.0`, `torch>=2.0.0`, `llama-index>=0.10`
 - Models: `BAAI/bge-m3`, `openai/clip-vit-base-patch32`
 
+### Ongoing Maintenance & Considerations
+
+- Track FlagEmbedding and LlamaIndex releases for embedding API changes
+- Re‑evaluate batch sizes when hardware or drivers change
+- Validate hybrid performance quarterly with a small benchmark set
+
 ## Changelog
 
 - 4.2 (2025‑09‑04): Standardized to template; added PR/IR, config/tests; no behavior change

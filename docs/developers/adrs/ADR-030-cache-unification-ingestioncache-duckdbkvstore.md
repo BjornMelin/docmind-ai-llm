@@ -69,6 +69,12 @@ def make_ingestion_cache(db_path) -> IngestionCache:
     return IngestionCache(docstore=docstore)
 ```
 
+### Configuration
+
+```env
+DOCMIND_CACHE__PATH=./data/docmind.duckdb
+```
+
 ## Testing
 
 - Verify cache hits/misses; performance under local IO
@@ -78,6 +84,14 @@ def make_ingestion_cache(db_path) -> IngestionCache:
 ### Positive Outcomes
 
 - Durable, simple cache; less code
+
+### Negative Consequences / Trade-offs
+
+- Single‑file DB may grow; requires occasional compaction
+
+### Ongoing Maintenance & Considerations
+
+- Monitor file size; implement a periodic vacuum/cleanup routine if needed
 
 ### Dependencies
 

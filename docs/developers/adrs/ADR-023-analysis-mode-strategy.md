@@ -2,14 +2,14 @@
 ADR: 023
 Title: Document Analysis Mode Strategy
 Status: Accepted
-Version: 2.0
+Version: 2.1
 Date: 2025-08-19
 Supersedes:
 Superseded-by:
 Related: 001, 003, 013
 Tags: analysis, modes
 References:
-- Project README (analysis modes)
+- [Project ADRs README](./README.md)
 ---
 
 ## Description
@@ -63,7 +63,12 @@ Mode → preset → pipeline settings → response
 
 - IR‑1: Exposed in UI (ADR‑013)
 - IR‑2: Backed by settings registry (ADR‑024)
+
 ## Design
+
+### Architecture Overview
+
+- Mode → preset → pipeline knobs (retrieval depth, reranker, output style)
 
 ### Implementation Details
 
@@ -104,6 +109,12 @@ def test_default_mode(settings):
 
 - None specific
 
+### Ongoing Maintenance & Considerations
+
+- Keep number of modes low; ensure each has clear, documented behavior
+
 ## Changelog
+
+- 2.1 (2025‑09‑04): Standardized to template; added requirements/config/tests
 
 - 2.0 (2025‑08‑19): Accepted; minimal named modes

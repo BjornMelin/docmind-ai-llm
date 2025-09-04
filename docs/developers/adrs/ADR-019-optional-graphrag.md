@@ -44,7 +44,31 @@ Expose GraphRAG behind a feature flag; use built‑in PropertyGraphIndex and sim
 
 Docs → entities/relations → in‑mem graph → graph/hybrid retrieval
 
+## Related Requirements
+
+### Functional Requirements
+
+- FR‑1: Extract entities/relations and support graph traversal
+- FR‑2: Hybrid retrieval with graph + vector when beneficial
+
+### Non-Functional Requirements
+
+- NFR‑1: Local‑only; zero new infra by default
+- NFR‑2: Graph build runs in background; cancelable
+
+### Performance Requirements
+
+- PR‑1: Graph build throughput ≥ 50 docs/hour on target hardware
+
+### Integration Requirements
+
+- IR‑1: Feature flag gating; integrates with ADR‑003 router
+
 ## Design
+
+### Architecture Overview
+
+- Docs → property graph build (optional) → router selects graph/hybrid per query
 
 ### Implementation Details
 
@@ -97,6 +121,11 @@ def test_is_graph_query_simple():
 ### Negative Consequences / Trade-offs
 
 - Additional preprocessing time when enabled
+
+### Ongoing Maintenance & Considerations
+
+- Rebuild graph incrementally; persist across sessions when size grows
+- Monitor latency impact of graph queries; gate via router thresholds
 
 ### Dependencies
 

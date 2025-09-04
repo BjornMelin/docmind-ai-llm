@@ -66,6 +66,10 @@ Settings → select template → render → call LLM
 
 ## Design
 
+### Architecture Overview
+
+- Mode/role/tone selectors → template registry → rendered prompt + LLM params
+
 ### Implementation Details
 
 ```python
@@ -149,6 +153,10 @@ def test_render_prompt_defaults():
 ### Dependencies
 
 - Python: `jinja2`
+
+### Ongoing Maintenance & Considerations
+
+- Keep template set small; document options; version templates when schema changes
 
 ## Changelog
 

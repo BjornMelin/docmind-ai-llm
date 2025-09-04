@@ -69,6 +69,10 @@ Host `.env` → compose env → container app (`streamlit run app.py`)
 
 ## Design
 
+### Architecture Overview
+
+- Single docker-compose with local services; environment-driven configuration
+
 ### Implementation Details
 
 ```dockerfile
@@ -125,6 +129,11 @@ services:
 ### Dependencies
 
 - Docker, Docker Compose, (optional) NVIDIA Container Toolkit
+
+### Ongoing Maintenance & Considerations
+
+- Pin base image; track security updates and rebuild regularly
+- Keep compose minimal and documented; avoid adding services by default
 
 ## Changelog
 

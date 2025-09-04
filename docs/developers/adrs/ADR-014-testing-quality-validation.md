@@ -9,8 +9,8 @@ Superseded-by:
 Related: 012, 003, 004, 010
 Tags: testing, quality, pytest, deepeval
 References:
-- Pytest docs
-- DeepEval docs
+- [pytest — Official Docs](https://docs.pytest.org/)
+- [DeepEval — Documentation](https://docs.confident-ai.com/)
 ---
 
 ## Description
@@ -61,7 +61,21 @@ pytest → fixtures → evaluation helpers → metrics/thresholds
 - NFR‑1: Offline, local; reproducible
 - NFR‑2: Unit <5s; integration <30s; system <5m
 
+### Performance Requirements
+
+- PR‑1: RAG quality suite completes under 5 minutes locally
+- PR‑2: Latency probe asserts P95 budget per ADR‑010
+
+### Integration Requirements
+
+- IR‑1: pytest markers `unit|integration|system` honored
+- IR‑2: CI emits junitxml and JSON report artifacts
+
 ## Design
+
+### Architecture Overview
+
+- tests → fixtures → DeepEval helpers → metrics → reports
 
 ### Implementation Details
 
@@ -74,6 +88,39 @@ def test_retrieval_thresholds(rag_eval):
     res = rag_eval.evaluate([{"query":"Q","answer":"A","contexts":["C"]}])
     assert res.metrics["precision"] >= 0.6
 ```
+
+### Extended Implementation
+
+```python
+# Golden dataset pattern + DeepEval
+from pathlib import Path
+import json
+from deepeval import assert_test
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
+from deepeval.test_case import LLMTestCase
+
+def load_golden(path: str = "tests/data/golden.json") -> list[LLMTestCase]:
+    data = json.loads(Path(path).read_text())
+    cases = []
+    for c in data.get("cases", []):
+        cases.append(LLMTestCase(
+            input=c["query"],
+            expected_output=c.get("expected"),
+            actual_output=c.get("actual", ""),
+            retrieval_context=c.get("contexts", []),
+        ))
+    return cases
+
+def test_golden_quality():
+    metrics = [AnswerRelevancyMetric(threshold=0.7), FaithfulnessMetric(threshold=0.8)]
+    for case in load_golden():
+        assert_test(case, metrics)
+```
+
+### CI Outline
+
+- Run unit/integration first; then RAG quality with CPU‑only flags
+- Upload JSON reports for inspection
 
 ### Configuration
 
@@ -95,6 +142,11 @@ def test_retrieval_thresholds(rag_eval):
 ### Negative Consequences / Trade-offs
 
 - Threshold tuning required as models evolve
+
+### Ongoing Maintenance & Considerations
+
+- Review thresholds quarterly to avoid flakiness
+- Keep golden datasets small; pin seeds and hashes where applicable
 
 ### Dependencies
 

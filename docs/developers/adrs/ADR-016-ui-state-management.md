@@ -58,7 +58,19 @@ Pages → session_state (dict) + cache_data/resource → UI
 
 - NFR‑1: Simple code paths; <200 LOC per page
 
+### Performance Requirements
+
+- PR‑1: State updates render under 50ms typical
+
+### Integration Requirements
+
+- IR‑1: Aligns with ADR‑013 page structure; no custom managers
+
 ## Design
+
+### Architecture Overview
+
+- Pages use `session_state`; expensive ops cached; partial updates via `fragment`
 
 ### Implementation Details
 
@@ -122,6 +134,11 @@ def metrics_display():
 ### Negative Consequences / Trade-offs
 
 - Fewer knobs than custom layers
+
+### Ongoing Maintenance & Considerations
+
+- Avoid storing large payloads in session_state; prefer lightweight refs
+- Clear caches selectively after heavy updates
 
 ### Dependencies
 
