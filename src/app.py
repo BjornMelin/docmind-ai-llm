@@ -54,6 +54,11 @@ from src.utils.multimodal import create_image_documents
 from src.utils.storage import create_vector_store
 
 LLAMACPP_AVAILABLE = False
+# Test-patching placeholders for unit tests (avoid import-time heavy deps)
+# These are intentionally simple so tests can patch them without import side-effects.
+LlamaCPP = None  # type: ignore[assignment]
+OpenAILike = None  # type: ignore[assignment]
+SimpleVectorStore = None  # type: ignore[assignment]
 try:  # Detect availability without importing at module import time
     import importlib
 
