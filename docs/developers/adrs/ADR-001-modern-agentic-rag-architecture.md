@@ -2,16 +2,17 @@
 ADR: 001
 Title: Modern Agentic RAG Architecture
 Status: Accepted
-Version: 7.1
+Version: 7.2
 Date: 2025-08-19
 Supersedes:
 Superseded-by:
 Related: 003, 004, 010, 011, 012, 015, 016, 018, 019, 024, 030
 Tags: agents, rag, langgraph, supervisor, local-first
 References:
-- LangGraph Supervisor (library docs)
-- DSPy (prompt optimization)
-- LlamaIndex (retrieval components)
+- [LangGraph — Official Docs](https://langchain-ai.github.io/langgraph/)
+- [LangGraph Multi‑Agent Patterns (Supervisor)](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/#multi-agent)
+- [DSPy — Documentation](https://dspy.ai)
+- [LlamaIndex — Retrieval Components](https://docs.llamaindex.ai)
 ---
 
 ## Description
@@ -45,7 +46,7 @@ Fixed pipelines cannot adapt to query complexity or recover from poor retrieval.
 
 ## Decision
 
-Use LangGraph Supervisor to coordinate five roles: routing, planning, retrieval, synthesis, and validation. Keep implementation library‑first, minimize custom orchestration, and run on the local LLM (see ADR‑004). Integrates with adaptive retrieval (ADR‑003) and unified settings (ADR‑024).
+We adopt a supervisor‑coordinated five‑agent architecture using LangGraph to orchestrate routing, planning, retrieval, synthesis, and validation. We minimize custom orchestration, rely on library primitives, and run fully local per ADR‑004. This consolidates previous ad‑hoc flows into a single, maintainable pattern integrated with ADR‑003 and ADR‑024.
 
 ## High-Level Architecture
 
@@ -128,6 +129,9 @@ DOCMIND_LOG_LEVEL=INFO
 - Validate logs contain agent transitions and outcomes
 
 ```python
+import pytest
+
+@pytest.mark.unit
 def test_agent_routing(supervisor_app):
     res = supervisor_app.invoke({"messages": [{"role": "user", "content": "find summary"}]})
     assert "messages" in res

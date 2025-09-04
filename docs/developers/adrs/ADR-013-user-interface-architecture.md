@@ -9,7 +9,8 @@ Superseded-by:
 Related: 001, 009, 016, 021, 032, 036
 Tags: ui, streamlit, state, analytics
 References:
-- Streamlit docs (navigation, caching, chat)
+- [Streamlit — Official Docs](https://docs.streamlit.io/)
+- [Streamlit State & Caching](https://docs.streamlit.io/develop/api-reference/caching)
 ---
 
 ## Description

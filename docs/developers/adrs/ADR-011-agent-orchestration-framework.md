@@ -9,7 +9,9 @@ Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024
 Tags: orchestration, agents, langgraph, supervisor
 References:
-- LangGraph Supervisor (prebuilt patterns)
+- [LangGraph Supervisor — GitHub](https://github.com/langchain-ai/langgraph-supervisor-py)
+- [LangGraph — Official Docs](https://langchain-ai.github.io/langgraph/)
+- [LangGraph Multi‑Agent Patterns (Supervisor)](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/#multi-agent)
 ---
 
 ## Description

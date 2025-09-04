@@ -9,8 +9,8 @@ Superseded-by:
 Related: 001, 004, 011, 030, 032
 Tags: performance, fp8, context, parallelism, vllm
 References:
-- vLLM Engine Args (max_model_len, kv_cache_dtype)
-- FlashInfer attention backend
+- [vLLM — Engine Args](https://docs.vllm.ai/en/latest/models/engine_args.html)
+- [FlashInfer — Attention Kernels](https://github.com/flashinfer-ai/flashinfer)
 ---
 
 ## Description

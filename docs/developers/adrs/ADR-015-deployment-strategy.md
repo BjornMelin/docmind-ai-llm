@@ -9,7 +9,7 @@ Superseded-by:
 Related: 004, 010, 011, 013, 024, 026
 Tags: deployment, docker, local-first
 References:
-- Docker Compose docs
+- [Docker Compose — Docs](https://docs.docker.com/compose/)
 ---
 
 ## Description

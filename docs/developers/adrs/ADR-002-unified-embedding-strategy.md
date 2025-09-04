@@ -2,16 +2,17 @@
 ADR: 002
 Title: Unified Embedding Strategy with BGE‑M3
 Status: Accepted
-Version: 4.2
+Version: 4.3
 Date: 2025-09-02
 Supersedes:
 Superseded-by:
 Related: 003, 006, 009, 031, 034, 001
 Tags: embeddings, retrieval, hybrid, multimodal, local-first
 References:
-- BAAI/bge-m3
-- CLIP ViT‑B/32
-- LlamaIndex embedding interfaces
+- [BAAI/bge-m3 — Hugging Face](https://huggingface.co/BAAI/bge-m3)
+- [OpenAI CLIP ViT‑B/32 — Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)
+- [LlamaIndex — Embeddings](https://docs.llamaindex.ai/en/stable/module_guides/models/embeddings/)
+- [Qdrant — Documentation](https://qdrant.tech/documentation/)
 ---
 
 ## Description
@@ -45,11 +46,18 @@ Separate dense and sparse models increase coordination cost and memory. BGE‑M3
 
 ## Decision
 
-Adopt BGE‑M3 (1024‑dim) for unified dense+sparse text, plus CLIP ViT‑B/32 (512‑dim) for images. Store vectors in Qdrant (ADR‑031) and use within the adaptive pipeline (ADR‑003).
+We adopt BGE‑M3 (1024‑dim) for unified dense+sparse text embeddings and CLIP ViT‑B/32 (512‑dim) for images. Vectors are stored in Qdrant (ADR‑031) and consumed by the adaptive retrieval pipeline (ADR‑003). This replaces the previous three‑model setup to reduce complexity and memory while maintaining quality.
 
 ## High-Level Architecture
 
-Chunking (ADR‑009) → BGE‑M3 text vectors + CLIP image vectors → Qdrant → Hybrid retrieval (ADR‑003)
+```mermaid
+graph LR
+  C[Chunking (ADR‑009)] --> T[BGE‑M3 Text Vectors]
+  C --> I[CLIP Image Vectors]
+  T --> Q[Qdrant]
+  I --> Q
+  Q --> H[Hybrid Retrieval (ADR‑003)]
+```
 
 ## Related Requirements
 

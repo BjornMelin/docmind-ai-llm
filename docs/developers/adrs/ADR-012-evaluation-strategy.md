@@ -9,7 +9,7 @@ Superseded-by:
 Related: 001, 003, 004, 010, 014
 Tags: evaluation, quality, pytest, deepeval
 References:
-- DeepEval documentation
+- [DeepEval — Documentation](https://docs.confident-ai.com/)
 ---
 
 ## Description
