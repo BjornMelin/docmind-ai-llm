@@ -13,10 +13,11 @@ disable=
     import-outside-toplevel,
     fixme,
     import-error,
-    duplicate-code
+    duplicate-code,
+    no-member,
 
 [FORMAT]
-max-line-length=100
+max-line-length=88
 indent-string='    '
 
 [BASIC]
