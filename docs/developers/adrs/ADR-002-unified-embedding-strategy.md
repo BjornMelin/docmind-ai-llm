@@ -65,11 +65,6 @@ Chunking (ADR‑009) → BGE‑M3 text vectors + CLIP image vectors → Qdrant �
 - NFR‑2: Maintain or improve retrieval accuracy
 - NFR‑3: Fully offline on consumer hardware
 
-### Performance Requirements
-
-- PR‑1: <50ms per‑chunk embedding on RTX 4090 Laptop
-- PR‑2: Batch encode throughput scales linearly to configured batch size
-
 ### Integration Requirements
 
 - IR‑1: Use LlamaIndex embedding interfaces
@@ -79,11 +74,6 @@ Chunking (ADR‑009) → BGE‑M3 text vectors + CLIP image vectors → Qdrant �
 
 - PR‑1: <50ms per‑chunk embedding on RTX 4090 Laptop
 - PR‑2: Efficient hybrid query latency via unified vectors
-
-### Integration Requirements
-
-- IR‑1: Use LlamaIndex embedding interfaces
-- IR‑2: Persist in Qdrant with hybrid search enabled
 
 ## Design
 
