@@ -1,271 +1,146 @@
-# ADR-012: Evaluation with DeepEval
-
-## Title
-
-Leverage DeepEval for All Quality Assurance
-
-## Version/Date
-
-4.0 / 2025-08-19
-
-## Status
-
-Accepted
+---
+ADR: 012
+Title: Evaluation with DeepEval
+Status: Accepted
+Version: 4.0
+Date: 2025-08-19
+Supersedes:
+Superseded-by:
+Related: 001, 003, 004, 010, 018
+Tags: evaluation, metrics, deepeval, quality
+References:
+- [DeepEval](https://github.com/confident-ai/deepeval)
+---
 
 ## Description
 
-Use DeepEval library for all evaluation needs leveraging Qwen3-4B-Instruct-2507's 262K context capability for evaluation scenarios. DeepEval provides RAG evaluation with large context processing, including metrics for the 5-agent system utilizing 262K context windows, multi-stage retrieval quality assessment, DSPy optimization effectiveness measurement, and document evaluation within single context spans without chunking limitations.
+Adopt DeepEval for quality evaluation (RAG and LLM) with minimal glue. Replace custom evaluators with library metrics; keep tests local and deterministic.
 
 ## Context
 
-The original ADR-012 had 1000+ lines of custom evaluation code including:
+Custom evaluation code was large and brittle. DeepEval provides ready metrics for relevance, faithfulness, context precision/recall, toxicity, and latency that fit our needs with little code.
 
-- Custom retrieval evaluators
-- Custom generation evaluators  
-- Custom metrics calculations
-- Custom quality tracking
+## Decision Drivers
 
-This is over-engineering when DeepEval already provides these features with simple function calls.
+- Reduce custom evaluation code
+- Use standard metrics; keep tests local/offline
+- Integrate with agentic pipelines for regression checks
 
-**Enhanced Requirements:**
+## Alternatives
 
-- **Multi-Agent Evaluation** (ADR-011): Assess the effectiveness of the 5-agent coordination system
-- **DSPy Evaluation** (ADR-018): Measure prompt optimization effectiveness and query rewriting quality
-- **GraphRAG Assessment** (ADR-019): Evaluate PropertyGraphIndex performance for relationship queries
-- **Performance Metrics** (ADR-010): Evaluate cache effectiveness and overall system performance
+- A: Custom evaluators — Flexible but heavy to maintain
+- B: DeepEval (Selected) — Library‑first, minimal glue
+- C: Ad‑hoc spot checks — Insufficient rigor
+
+### Decision Framework
+
+| Model / Option         | Rigor (35%) | Simplicity (35%) | Local (20%) | Maintenance (10%) | Total | Decision      |
+| ---------------------- | ----------- | ---------------- | ----------- | ----------------- | ----- | ------------- |
+| DeepEval (Selected)    | 8           | 9                | 9           | 9                 | **8.6** | ✅ Selected    |
+| Custom evaluators      | 9           | 3                | 9           | 4                 | 6.6   | Rejected      |
+| Spot checks            | 3           | 9                | 9           | 9                 | 6.0   | Rejected      |
 
 ## Decision
 
-We will use **DeepEval directly** for all evaluation:
+Use DeepEval metrics for RAG and LLM evaluation; maintain small wrappers to run locally with our models.
 
-### Simple Evaluation Setup
+## High-Level Architecture
+
+```mermaid
+graph TD
+  Q[Questions] --> E[DeepEval Runner]
+  C[Contexts] --> E
+  A[Answers] --> E
+  E --> M[Metrics + Reports]
+```
+
+## Related Requirements
+
+### Functional Requirements
+
+- FR‑1: Evaluate answers using relevance/faithfulness and context metrics
+- FR‑2: Capture latency and basic quality signals in CI
+
+### Non-Functional Requirements
+
+- NFR‑1: Offline/local determinism
+- NFR‑2: Minimal code; library‑first
+
+### Performance Requirements
+
+- PR‑1: Evaluation overhead per case <300ms locally
+
+### Integration Requirements
+
+- IR‑1: Runnable in CI with local models
+
+## Design
+
+### Architecture Overview
+
+- DeepEval runner consumes questions, contexts, and answers to produce metrics and reports.
+- Runs locally with our selected LLM; wrappers keep setup minimal and deterministic.
+
+### Implementation Details
+
+In `tests/eval/test_rag.py` (illustrative):
 
 ```python
 from deepeval import evaluate
-from deepeval.metrics import (
-    AnswerRelevancyMetric,
-    FaithfulnessMetric,
-    ContextualPrecisionMetric,
-    ContextualRecallMetric,
-    ContextualRelevancyMetric,
-    HallucinationMetric,
-    ToxicityMetric,
-    BiasMetric,
-    LatencyMetric
-)
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
 from deepeval.test_case import LLMTestCase
 
-class DocMindEvaluator:
-    """Simple wrapper around DeepEval for DocMind evaluation."""
-    
-    def __init__(self):
-        # Initialize metrics with local LLM (Qwen3-14B)
-        self.metrics = [
-            AnswerRelevancyMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
-            FaithfulnessMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
-            ContextualPrecisionMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
-            ContextualRecallMetric(threshold=0.7, model="Qwen/Qwen3-14B"),
-            HallucinationMetric(threshold=0.1, model="Qwen/Qwen3-14B"),
-            LatencyMetric(max_latency=3.0),
-        ]
-        
-        # DSPy-specific evaluation metrics (ADR-018)
-        self.dspy_metrics = {
-            "query_optimization_improvement": 0.0,  # Before/after retrieval quality
-            "optimization_time": 0.0,  # Time to optimize queries
-            "cache_hit_rate": 0.0,  # Optimized query cache hits
-        }
-        
-        # GraphRAG-specific evaluation metrics (ADR-019)
-        self.graphrag_metrics = {
-            "relationship_extraction_quality": 0.0,  # Entity/relationship accuracy
-            "multi_hop_reasoning_success": 0.0,  # Complex query success rate
-            "graph_construction_time": 0.0,  # Time to build PropertyGraphIndex
-        }
-        
-        # Multi-agent coordination metrics (ADR-011)
-        self.agent_metrics = {
-            "query_router_accuracy": 0.0,  # Routing decision effectiveness
-            "query_planner_success": 0.0,  # Planning decomposition quality
-            "retrieval_expert_performance": 0.0,  # Retrieval quality with optimizations
-            "result_synthesizer_coherence": 0.0,  # Multi-source combination quality
-            "response_validator_precision": 0.0,  # Validation accuracy
-            "agent_coordination_latency": 0.0,  # Overall orchestration overhead
-        }
-    
-    def evaluate_response(self, query: str, response: str, contexts: List[str], latency: float):
-        """Evaluate a single RAG response."""
-        
-        # Create test case
-        test_case = LLMTestCase(
-            input=query,
-            actual_output=response,
-            retrieval_context=contexts,
-            latency=latency
-        )
-        
-        # Run evaluation
-        results = evaluate(
-            test_cases=[test_case],
-            metrics=self.metrics,
-            print_results=False,
-            use_cache=True
-        )
-        
-        return {
-            'passed': results.test_passed,
-            'scores': results.scores,
-            'reasons': results.reasons
-        }
-    
-    def batch_evaluate(self, test_cases: List[Dict]):
-        """Evaluate multiple responses."""
-        
-        cases = [
-            LLMTestCase(
-                input=tc['query'],
-                actual_output=tc['response'],
-                retrieval_context=tc['contexts'],
-                latency=tc.get('latency', 0)
-            )
-            for tc in test_cases
-        ]
-        
-        return evaluate(
-            test_cases=cases,
-            metrics=self.metrics,
-            print_results=True
-        )
-
-# Usage in Streamlit
-evaluator = DocMindEvaluator()
-
-# After generating response
-result = evaluator.evaluate_response(
-    query=user_query,
-    response=generated_answer,
-    contexts=retrieved_docs,
-    latency=response_time
-)
-
-# Display in UI
-if result['passed']:
-    st.success(f"✅ Quality Check Passed (Score: {result['scores']['average']:.2f})")
-else:
-    st.warning(f"⚠️ Quality Issues Detected: {result['reasons']}")
+def evaluate_response(query: str, answer: str, contexts: list[str]):
+    metrics = [
+        AnswerRelevancyMetric(threshold=0.7, model="local-llm"),
+        FaithfulnessMetric(threshold=0.7, model="local-llm"),
+        # Optional: context precision/recall metrics
+        # ContextualPrecisionMetric(threshold=0.7, model="local-llm"),
+        # ContextualRecallMetric(threshold=0.7, model="local-llm"),
+    ]
+    case = LLMTestCase(input=query, actual_output=answer, retrieval_context=contexts)
+    return evaluate(test_cases=[case], metrics=metrics, print_results=False)
 ```
 
-### Continuous Monitoring with DeepEval
+### Configuration
+
+```env
+DOCMIND_EVAL__ENABLED=true
+```
+
+## Testing
 
 ```python
-from deepeval import track
-
-# Track metrics over time
-@track(metrics=["answer_relevancy", "faithfulness", "latency"])
-def generate_response(query: str) -> str:
-    # Your RAG pipeline here
-    response = rag_pipeline.query(query)
-    return response
-
-# DeepEval automatically tracks and stores metrics
+def test_eval_passes(mini_corpus, rag_answer):
+    # smoke: ensure metrics run and produce scores
+    pass
 ```
 
-### Testing with DeepEval + Pytest
+## Consequences
 
-```python
-import pytest
-from deepeval import assert_test
-from deepeval.metrics import AnswerRelevancyMetric
+### Positive Outcomes
 
-def test_rag_quality():
-    """Test RAG response quality."""
-    
-    metric = AnswerRelevancyMetric(threshold=0.7)
-    test_case = LLMTestCase(
-        input="What is the capital of France?",
-        actual_output="The capital of France is Paris.",
-        retrieval_context=["France is a country in Europe. Its capital is Paris."]
-    )
-    
-    assert_test(test_case, [metric])
-```
+- Standardized metrics and simpler code
+- Repeatable, local evaluation in CI
 
-## What DeepEval Provides Out-of-the-Box
+### Negative Consequences / Trade-offs
 
-1. **RAG Metrics**: All standard RAG evaluation metrics pre-implemented
-2. **Local LLM Support**: Works with Ollama, LlamaCpp, any local model
-3. **Caching**: Automatic caching of evaluation results
-4. **Visualization**: Built-in dashboard and reporting
-5. **CI/CD Integration**: Works with pytest, GitHub Actions
-6. **Benchmarking**: Compare against standard datasets
-7. **Synthetic Data**: Generate test cases automatically
-8. **Observability**: Integration with LangSmith, Weights & Biases
+- Library evolution requires periodic updates
 
-## Benefits of Using DeepEval
+### Ongoing Maintenance & Considerations
 
-- **Zero Custom Code**: All evaluation logic is in the library
-- **Battle-Tested**: Used by 100+ companies in production
-- **Maintained**: Active development and community
-- **Comprehensive**: Covers all aspects of RAG evaluation
-- **Fast Setup**: 5 minutes to full evaluation suite
+- Freeze metric thresholds to stabilize CI
 
-## What We Removed
+### Dependencies
 
-- ❌ 1000+ lines of custom evaluation code
-- ❌ Custom metric calculations
-- ❌ Custom quality tracking database
-- ❌ Custom dashboard code
-- ❌ Custom test harnesses
-
-## Alternative: RAGAS
-
-If DeepEval doesn't meet needs, RAGAS is another good choice:
-
-```python
-from ragas import evaluate
-from ragas.metrics import (
-    faithfulness,
-    answer_relevancy,
-    context_recall,
-    context_precision
-)
-
-result = evaluate(
-    dataset=your_dataset,
-    metrics=[faithfulness, answer_relevancy, context_recall, context_precision]
-)
-```
-
-## Dependencies
-
-```toml
-[project.dependencies]
-deepeval = "^1.0.0"
-# or
-ragas = "^0.2.0"
-```
-
-## Related Decisions
-
-- **ADR-001** (Modern Agentic RAG Architecture): Provides the 5-agent system architecture being evaluated
-- **ADR-010** (Performance Optimization Strategy): Performance metrics complement DeepEval quality metrics
-- **ADR-011** (Agent Orchestration Framework): Defines the 5-agent coordination patterns requiring evaluation
-
-## Monitoring Metrics
-
-DeepEval automatically tracks:
-
-- Response relevancy and faithfulness
-- Retrieval precision and recall
-- Hallucination rates
-- Latency percentiles
-- Error rates and types
+- Python: `deepeval`
 
 ## Changelog
 
-- **3.3 (2025-08-18)**: **REVERTED** - Confirmed Qwen3-14B as evaluation model after rejecting impractical 30B MoE model
-- **3.2 (2025-08-18)**: CORRECTED - Updated Qwen3-14B-Instruct to correct official name Qwen3-14B (no separate instruct variant exists)
-- **3.1 (2025-08-18)**: Added DSPy-specific evaluation metrics for query optimization effectiveness and GraphRAG evaluation criteria for relationship extraction quality and multi-hop reasoning assessment
-- **3.0 (2025-08-17)**: FINALIZED - Updated with Qwen3-14B model selection, accepted status
-- **2.0 (2025-08-17)**: SIMPLIFIED - Use DeepEval library instead of custom code
-- **1.0 (2025-01-16)**: Original version with 1000+ lines of custom evaluation
+- 4.0 (2025-08-19): DeepEval adopted; accepted
+- 3.3 (2025-08-18): Reverted to Qwen3‑14B eval model
+- 3.2 (2025-08-18): Corrected model naming
+- 3.1 (2025-08-18): Added DSPy/GraphRAG‑specific metrics
+- 3.0 (2025-08-17): Finalized with Qwen3‑14B; accepted status
+- 2.0 (2025-08-17): Simplified to DeepEval
+- 1.0 (2025-01-16): Original large custom evaluation
