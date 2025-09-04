@@ -51,11 +51,11 @@ Adopt Qdrant for vectors, LlamaIndex IngestionCache with DuckDBKVStore for proce
 
 ```mermaid
 graph TD
-    A[App] --> B[DocumentProcessor]
-    B --> C[IngestionPipeline]
-    C --> D[IngestionCache (DuckDBKVStore)]
-    B --> E[Vector Store (Qdrant)]
-    A --> F[Operational (SQLite, optional)]
+    A["App"] --> B["DocumentProcessor"]
+    B --> C["IngestionPipeline"]
+    C --> D["IngestionCache (DuckDBKVStore)"]
+    B --> E["Vector Store (Qdrant)"]
+    A --> F["Operational (SQLite, optional)"]
 ```
 
 ## Related Requirements

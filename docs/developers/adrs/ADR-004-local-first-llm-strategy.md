@@ -60,11 +60,11 @@ We will adopt **Qwen/Qwen3-4B-Instruct-2507-FP8** on **vLLM** with enforced 128K
 
 ```mermaid
 flowchart LR
-  UI[Streamlit UI] -->|prompts| AG[Agents (ADR-011)]
-  RAG[RAG + Router (ADR-003)] -->|context chunks| AG
-  AG -->|chat/completions| VLLM[vLLM Server\nQwen3-4B FP8 @128K]
+  UI["Streamlit UI"] -->|prompts| AG["Agents (ADR-011)"]
+  RAG["RAG + Router (ADR-003)"] -->|context chunks| AG
+  AG -->|chat/completions| VLLM["vLLM Server<br/>Qwen3-4B FP8 @128K"]
   VLLM -->|tokens| AG
-  subgraph GPU[RTX 4090 Laptop (16GB VRAM)]
+  subgraph GPU
     VLLM
   end
 ```

@@ -52,9 +52,9 @@ Adopt **LlamaIndex IngestionCache + DuckDBKVStore** as the single cache for docu
 
 ```mermaid
 graph TD
-    A[DocumentProcessor] --> B[IngestionPipeline]
-    B --> C[IngestionCache]
-    C --> D[DuckDBKVStore (docmind.duckdb)]
+    A["DocumentProcessor"] --> B["IngestionPipeline"]
+    B --> C["IngestionCache"]
+    C --> D["DuckDBKVStore (docmind.duckdb)"]
 ```
 
 ## Related Requirements

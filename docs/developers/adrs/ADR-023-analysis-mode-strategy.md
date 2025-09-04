@@ -51,12 +51,12 @@ Adopt a conditional analysis strategy with QueryPipeline routing: Separate mode 
 
 ```mermaid
 graph TD
-  U[Upload + Mode Selection] --> R[Mode Router]
-  R -->|Separate| P[Parallel Per-Doc Pipelines]
-  R -->|Combined| C[Unified Pipeline]
-  P --> A[Aggregator]
+  U["Upload + Mode Selection"] --> R["Mode Router"]
+  R -->|Separate| P["Parallel Per-Doc Pipelines"]
+  R -->|Combined| C["Unified Pipeline"]
+  P --> A["Aggregator"]
   C --> A
-  A --> V[Results + Synthesis]
+  A --> V["Results + Synthesis"]
 ```
 
 ## Related Requirements

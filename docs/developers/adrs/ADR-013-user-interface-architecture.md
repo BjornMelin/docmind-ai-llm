@@ -56,20 +56,20 @@ We adopt Streamlit’s programmatic multipage pattern with native components and
 
 ```mermaid
 graph TD
-  A[src/app.py] --> B[Navigation (st.Page/st.navigation)]
-  B --> C[Chat]
-  B --> D[Documents]
-  B --> E[Analytics]
-  B --> F[Settings]
-  C --> G[Agent/RAG Services]
-  D --> H[Document/Index Services]
-  E --> I[Metrics/Analytics Services]
-  F --> J[Settings/Config Services]
-  K[st.session_state] --> C
+  A["src/app.py"] --> B["Navigation (st.Page/st.navigation)"]
+  B --> C["Chat"]
+  B --> D["Documents"]
+  B --> E["Analytics"]
+  B --> F["Settings"]
+  C --> G["Agent/RAG Services"]
+  D --> H["Document/Index Services"]
+  E --> I["Metrics/Analytics Services"]
+  F --> J["Settings/Config Services"]
+  K["st.session_state"] --> C
   K --> D
   K --> E
   K --> F
-  L[st.cache_data/resource] --> C
+  L["st.cache_data/resource"] --> C
   L --> D
   L --> E
   L --> F

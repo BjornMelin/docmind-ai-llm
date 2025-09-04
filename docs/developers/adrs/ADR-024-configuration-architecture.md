@@ -51,11 +51,11 @@ Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Set
 
 ```mermaid
 graph TD
-  E[.env / Env Vars] --> P[Pydantic BaseSettings]
-  P --> A[App Settings (paths, flags, UI)]
-  E --> L[LlamaIndex Settings]
-  L --> M[LLM/Embedding/Processing]
-  A --> U[Agents, UI, Services]
+  E[".env / Env Vars"] --> P["Pydantic BaseSettings"]
+  P --> A["App Settings (paths, flags, UI)"]
+  E --> L["LlamaIndex Settings"]
+  L --> M["LLM/Embedding/Processing"]
+  A --> U["Agents, UI, Services"]
   M --> U
 ```
 

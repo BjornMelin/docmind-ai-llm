@@ -49,11 +49,11 @@ Provide a feature‑flagged PropertyGraphIndex path using in‑memory store and 
 
 ```mermaid
 graph TD
-  D[Documents] --> G[PropertyGraphIndex]
-  Q[Qdrant Vectors] --> G
-  G --> R[Graph Retrieval]
-  Q --> H[Vector Retrieval]
-  R --> S[Hybrid Results]
+  D["Documents"] --> G["PropertyGraphIndex"]
+  Q["Qdrant Vectors"] --> G
+  G --> R["Graph Retrieval"]
+  Q --> H["Vector Retrieval"]
+  R --> S["Hybrid Results"]
   H --> S
 ```
 

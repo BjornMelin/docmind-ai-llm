@@ -88,13 +88,13 @@ Adopt a minimal, SQLite-backed key-value cache for document processing results. 
 
 ```mermaid
 graph TD
-    A[Document Upload] --> B[Document Processor]
-    B --> C[Cache Key Generation]
-    C --> D[SQLite SimpleKVStore]
-    D --> E{Cache Hit?}
-    E -->|Yes| F[Return Cached Result]
-    E -->|No| G[Process Document]
-    G --> H[Store Result]
+    A["Document Upload"] --> B["Document Processor"]
+    B --> C["Cache Key Generation"]
+    C --> D["SQLite SimpleKVStore"]
+    D --> E{"Cache Hit?"}
+    E -->|Yes| F["Return Cached Result"]
+    E -->|No| G["Process Document"]
+    G --> H["Store Result"]
     H --> F
 ```
 

@@ -110,34 +110,34 @@ We will use **Native Streamlit Components** without unnecessary libraries:
 
 ```mermaid
 graph TD
-    A[app.py Entry Point] --> B[st.navigation]
-    B --> C[Chat Page]
-    B --> D[Documents Page]  
-    B --> E[Analytics Page]
-    B --> F[Settings Page]
+    A["app.py Entry Point"] --> B["st.navigation"]
+    B --> C["Chat Page"]
+    B --> D["Documents Page"]  
+    B --> E["Analytics Page"]
+    B --> F["Settings Page"]
     
-    C --> G[Chat Components]
-    D --> H[AgGrid Components]
-    E --> I[Plotly Dashboards]
-    F --> J[Config Components]
+    C --> G["Chat Components"]
+    D --> H["AgGrid Components"]
+    E --> I["Plotly Dashboards"]
+    F --> J["Config Components"]
     
-    G --> K[Agent Service Layer]
-    H --> L[Document Service Layer]
-    I --> M[Metrics Service Layer]
-    J --> N[Settings Service Layer]
+    G --> K["Agent Service Layer"]
+    H --> L["Document Service Layer"]
+    I --> M["Metrics Service Layer"]
+    J --> N["Settings Service Layer"]
     
-    K --> O[Agentic RAG Pipeline]
-    L --> P[Document Processing]
-    M --> Q[Observability System]
-    N --> R[Persistence Layer]
+    K --> O["Agentic RAG Pipeline"]
+    L --> P["Document Processing"]
+    M --> Q["Observability System"]
+    N --> R["Persistence Layer"]
     
-    S[Session State Manager] --> C
+    S["Session State Manager"] --> C
     S --> D
     S --> E  
     S --> F
     
-    T[Cache Manager] --> U[st.cache_data]
-    T --> V[st.cache_resource]
+    T["Cache Manager"] --> U["st.cache_data"]
+    T --> V["st.cache_resource"]
 ```
 
 ### Modern Streamlit Implementation

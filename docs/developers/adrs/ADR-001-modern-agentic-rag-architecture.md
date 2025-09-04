@@ -56,14 +56,14 @@ Use a five‑agent pattern coordinated by a supervisor:
 
 ```mermaid
 graph TD
-  U[User Query] --> S[Supervisor]
-  S --> R[Router]
-  S --> P[Planner]
-  S --> T[Retrieval]
-  S --> Y[Synthesis]
-  S --> V[Validation]
+  U["User Query"] --> S["Supervisor"]
+  S --> R["Router"]
+  S --> P["Planner"]
+  S --> T["Retrieval"]
+  S --> Y["Synthesis"]
+  S --> V["Validation"]
   T -->|Docs| Y
-  V -->|Pass| O[Answer]
+  V -->|Pass| O["Answer"]
   V -->|Fail| S
 ```
 

@@ -52,11 +52,11 @@ Adopt GPTCache (SQLite + FAISS) behind a thin adapter for v1.1.0. Default Off; e
 
 ```mermaid
 graph TD
-  A[Query Text] --> B[Embed]
-  B --> C[SemanticCache Adapter]
-  C -->|get| D[GPTCache (SQLite + FAISS)]
-  D -->|hit| E[Return Cached]
-  D -->|miss| F[LLM Generate]
+  A["Query Text"] --> B["Embed"]
+  B --> C["SemanticCache Adapter"]
+  C -->|get| D["GPTCache (SQLite + FAISS)"]
+  D -->|hit| E["Return Cached"]
+  D -->|miss| F["LLM Generate"]
   F -->|set| D
   F --> E
 ```

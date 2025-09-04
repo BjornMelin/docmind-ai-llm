@@ -52,11 +52,11 @@ Adopt BGE‑M3 (1024‑dim) for unified dense+sparse text embeddings and CLIP Vi
 
 ```mermaid
 graph LR
-  C[Chunking (ADR‑009)] --> T[BGE‑M3 Text Vectors]
-  C --> I[CLIP Image Vectors]
-  T --> Q[Qdrant]
+  C["Chunking (ADR-009)"] --> T["BGE-M3 Text Vectors"]
+  C --> I["CLIP Image Vectors"]
+  T --> Q["Qdrant"]
   I --> Q
-  Q --> H[Hybrid Retrieval (ADR‑003)]
+  Q --> H["Hybrid Retrieval (ADR-003)"]
 ```
 
 ## Related Requirements

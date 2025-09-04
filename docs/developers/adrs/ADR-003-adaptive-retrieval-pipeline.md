@@ -1,247 +1,162 @@
 ---
 ADR: 003
-Title: Adaptive Retrieval Pipeline with RAPTOR‑Lite
+Title: Adaptive Retrieval Pipeline (RAPTOR‑Lite + Router)
 Status: Accepted
-Version: 3.3
-Date: 2025-09-03
+Version: 3.4
+Date: 2025-09-04
 Supersedes:
 Superseded-by:
-Related: 002, 004, 024, 037
-Tags: retrieval, routing, raptor, hybrid, reranking
+Related: 001, 002, 004, 024, 031, 037
+Tags: retrieval, routing, hybrid, raptor-lite, reranking
 References:
+- [LlamaIndex RouterQueryEngine](https://docs.llamaindex.ai/en/stable/api_reference/query_engine/router_query_engine/)
+- [LlamaIndex Hybrid / BM25](https://docs.llamaindex.ai/en/stable/examples/retrievers/BM25Retriever/)
 - [LlamaIndex Node Postprocessors](https://docs.llamaindex.ai/en/stable/module_guides/querying/node_postprocessors/)
-- [LlamaIndex BM25 / hybrid examples](https://docs.llamaindex.ai/en/stable/examples/retrievers/BM25Retriever/)
+- [MetadataFilters](https://docs.llamaindex.ai/en/stable/api_reference/vector_stores/types/#metadatafilters)
 ---
 
 ## Description
 
-Implements an adaptive retrieval pipeline that combines simplified hierarchical retrieval (RAPTOR-Lite), multi-strategy routing, and corrective mechanisms. The system automatically selects optimal retrieval approaches based on query characteristics while maintaining hierarchical document organization for complex information synthesis without the full complexity of RAPTOR.
-
-**Enhanced Capabilities:**
-
-- **DSPy Query Optimization** (ADR-018): Automatic query rewriting and expansion for improved retrieval quality
-- **Optional GraphRAG Integration** (ADR-019): PropertyGraphIndex for relationship-based and multi-hop retrieval when enabled
+Adopt a library‑first, adaptive retrieval pipeline using LlamaIndex router + built‑in retrievers, providing RAPTOR‑Lite hierarchical benefits with local performance. Adds routing, hybrid dense+sparse, query decomposition, and optional GraphRAG — all tuned for the enforced 128K context (ADR‑004/010).
 
 ## Context
 
-Current retrieval is limited to flat vector similarity search with basic reranking. Modern retrieval challenges require:
+Flat vector search underperforms on complex queries, lacks hierarchical awareness, and cannot adapt across query types. Full RAPTOR is too heavy for local 16GB VRAM deployments. We need an adaptive, locally efficient pipeline that preserves hierarchical synthesis and integrates cleanly with embeddings (ADR‑002), storage (ADR‑031), agents (ADR‑011), and 128K LLM limits (ADR‑004).
 
-1. **Hierarchical Understanding**: Queries need both specific details and high-level context
-2. **Strategy Adaptation**: Different queries benefit from different retrieval approaches
-3. **Quality Correction**: Poor initial retrieval should trigger alternative strategies
-4. **Local Efficiency**: Complex retrieval must work within consumer hardware constraints
+## Decision Drivers
 
-Full RAPTOR implementation is too resource-intensive for local deployment. Our RAPTOR-Lite approach maintains hierarchical benefits while optimizing for local-first constraints.
+- Local‑first performance on consumer GPUs
+- Higher answer quality for complex/multi‑hop queries
+- Maintainability: prefer LlamaIndex built‑ins over custom code
+- Predictable context usage within 128K cap
+- Seamless fit with ADR‑002/004/011/024/031/037
 
-**Integration Flow**: The pipeline consumes BGE-M3 embeddings (ADR-002) stored in Qdrant (ADR-031), applies adaptive routing strategies optimized for the enforced 128K context window (ADR‑004/010), and performs modality‑aware reranking per ADR‑037 (ColPali for visuals; BGE v2‑m3 for text) before synthesis.
+## Alternatives
 
-> Update (2025‑09‑03): Integrated ADR‑037 multimodal reranking and affirmed 128K cap alignment with ADR‑004/010.
+- A: Flat vector retrieval — Pros: simple, fast; Cons: poor for complex synthesis. Rejected.
+- B: Full RAPTOR — Pros: strong hierarchy; Cons: heavy compute/memory, complex. Rejected for local.
+- C: RAPTOR‑Lite + Multi‑Strategy (Selected) — Pros: balanced capability/latency; Cons: added orchestration.
+
+### Decision Framework
+
+| Model / Option                     | Solution Leverage (30%) | Application Value (30%) | Maintenance (20%) | Adaptability (20%) | Total | Decision |
+| ---------------------------------- | ----------------------- | ----------------------- | ----------------- | ------------------ | ----- | -------- |
+| RAPTOR‑Lite + Router (Selected)    | 5                       | 4                       | 5                 | 5                  | 4.7   | ✅ Selected |
+| Flat Vector Only                   | 3                       | 2                       | 5                 | 2                  | 2.9   | Rejected |
+| Full RAPTOR                        | 4                       | 4                       | 2                 | 4                  | 3.6   | Rejected |
+
+## Decision
+
+Adopt **LlamaIndex RouterQueryEngine** with built‑in **HybridRetriever** (dense+sparse, RRF), **MultiQueryRetriever** (decomposition), and **MetadataFilters**. Optionally enable **PropertyGraphIndex** for relationship queries (ADR‑019). Reranking remains modality‑aware per ADR‑037. All components respect the **128K context cap** from ADR‑004.
+
+## High-Level Architecture
+
+```mermaid
+graph TD
+  D["Documents"] --> P["Chunk + Metadata (ADR-009)"]
+  P --> V["Vector Store (Qdrant, ADR-031)"]
+  Q["Query"] --> R{"Router"}
+  R -->|simple| VS["Vector Search"]
+  R -->|hybrid| HS["Hybrid Dense+Sparse"]
+  R -->|decompose| MQ["Multi-Query"]
+  R -->|relations| GR["GraphRAG"]
+  VS --> RR["Rerank (ADR-037)"]
+  HS --> RR
+  MQ --> RR
+  GR --> RR
+  RR --> LLM["LLM @128K (ADR-004)"]
+```
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- **FR-1:** Route queries to optimal retrieval strategy based on characteristics
-- **FR-2:** Provide hierarchical document access for multi-level information needs
-- **FR-3:** Correct poor retrieval results through alternative strategies
-- **FR-4:** Support both specific fact queries and broad synthesis queries
+- **FR-1:** Route queries to optimal strategy (vector/hybrid/decompose/graph).
+- **FR-2:** Provide hierarchical signals (section/summary usage) without full RAPTOR.
+- **FR-3:** Retry/expand strategy when quality is low.
+- **FR-4:** Support both precise facts and broad synthesis.
 
 ### Non-Functional Requirements
 
-- **NFR-1:** **(Performance)** Hierarchical retrieval overhead <1 second optimized for 128K context constraints
-- **NFR-2:** **(Memory)** RAPTOR-Lite tree storage <500MB for 10,000 documents within 128K context limits
-- **NFR-3:** **(Quality)** ≥15% improvement in complex query answering vs flat retrieval
-- **NFR-4:** **(Local-First)** All hierarchical processing occurs locally
+- **NFR-1 (Performance):** Additional routing overhead ≤300ms P95.
+- **NFR-2 (Memory):** Hierarchy metadata ≤500MB for 10k docs.
+- **NFR-3 (Quality):** ≥15% improvement on complex queries vs flat baseline.
+- **NFR-4 (Local-First):** All retrieval runs locally.
 
-## Alternatives
+### Performance Requirements
 
-### 1. Flat Vector Retrieval (Current)
+- **PR-1:** End-to-end retrieval + rerank P95 <2s on target machine.
+- **PR-2:** Router decision accuracy ≥90% on evaluation set.
 
-- **Description**: Single-level similarity search with reranking
-- **Issues**: Cannot synthesize across document sections, poor for complex queries
-- **Score**: 4/10 (simplicity: 9, capability: 2, scalability: 3)
+### Integration Requirements
 
-### 2. Full RAPTOR Implementation
-
-- **Description**: Complete recursive tree with clustering and summarization
-- **Issues**: Too resource-intensive, complex for local deployment, over-engineered
-- **Score**: 5/10 (capability: 9, performance: 2, complexity: 3)
-
-### 3. RAPTOR-Lite + Multi-Strategy (Selected)
-
-- **Description**: Simplified hierarchical retrieval with adaptive routing
-- **Benefits**: Balanced capability/performance, local-optimized, maintainable
-- **Score**: 8/10 (capability: 7, performance: 8, simplicity: 8)
-
-## Decision
-
-We will implement **Multi-Strategy Adaptive Routing using LlamaIndex built-in features**:
-
-### Core Components (Library-First Approach)
-
-1. **RouterQueryEngine**: LlamaIndex's built-in query routing instead of custom routing
-2. **HybridRetriever**: Built-in hybrid search combining dense and sparse retrieval
-3. **MultiQueryRetriever**: Automatic query decomposition for complex queries
-4. **MetadataFilters**: Built-in filtering without custom logic
-5. **AsyncQueryEngine**: Native async support for performance
-6. **DSPy Query Optimization**: Automatic query rewriting and expansion (ADR-018)
-7. **Optional PropertyGraphIndex**: Graph-based retrieval for relationship queries (ADR-019)
-
-## Related Decisions
-
-- **ADR-002** (Unified Embedding Strategy): Provides BGE-M3 embeddings for hierarchical indexing
-- **ADR-037** (Multimodal Reranking): Modality‑aware reranking with ColPali (visual) and BGE v2‑m3 (text)
-- **ADR-031** (Local-First Persistence Architecture): Accesses Qdrant vector storage for similarity search operations
-- **ADR-001** (Modern Agentic RAG): Uses adaptive retrieval for intelligent routing
-- **ADR-011** (Agent Orchestration Framework): Orchestrates adaptive retrieval decisions
-- **ADR-018** (DSPy Prompt Optimization): Provides automatic query optimization for improved retrieval
-- **ADR-019** (Optional GraphRAG): Adds graph-based retrieval capabilities for complex relationship queries
+- **IR-1:** Use LlamaIndex `Settings` and official components (no custom wrappers).
+- **IR-2:** Provide async paths for streaming and batching.
+- **IR-3:** Respect ADR‑004 context cap in prompt assembly.
 
 ## Design
 
 ### Architecture Overview
 
-```mermaid
-graph TD
-    A[Documents] --> B[Chunk Extraction]
-    B --> C[Section Grouping]
-    C --> D[Section Summaries]
-    D --> E[Hierarchical Index]
-    
-    F[Query] --> G{Strategy Router}
-    G -->|Simple| H[Vector Search]
-    G -->|Complex| I[Hierarchical Search]
-    G -->|Hybrid| J[Multi-Level Search]
-    G -->|Recent| K[Web Search]
-    G -->|Relationships| O[GraphRAG Search]
-    
-    H --> L[Results]
-    I --> L
-    J --> L
-    K --> L
-    O --> L
-    
-    L --> M{Quality Check}
-    M -->|Good| N[Return Results]
-    M -->|Poor| O[Expand Strategy] --> G
-```
+- Library‑first: Router + Hybrid + MultiQuery + MetadataFilters; optional GraphRAG.
+- Reranking: ADR‑037 handles modality‑aware reranking before LLM synthesis.
+- Config‑driven: ADR‑024 `DocMindSettings` toggles strategies and params.
 
 ### Implementation Details
 
 ```python
-# Use LlamaIndex built-in features instead of custom code
+# src/retrieval/query_engine.py (skeleton)
 from llama_index.core.query_engine import RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
-from llama_index.core.retrievers import (
-    HybridRetriever,
-    MultiQueryRetriever,
-    RecursiveRetriever
-)
-from llama_index.core.node_parser import (
-    SemanticSplitterNodeParser
-)
-# NOTE: Document processing uses direct Unstructured.io chunk_by_title() per ADR-009
-from llama_index.core.vector_stores import MetadataFilters
-from llama_index.core import QueryBundle, Settings
+from llama_index.core.retrievers import HybridRetriever, MultiQueryRetriever
+from llama_index.core.tools import QueryEngineTool
+from llama_index.core import Settings
 
-# REMOVED: Custom hierarchical implementation
-# LlamaIndex provides RecursiveRetriever for hierarchical retrieval
-
-def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graphrag=False):
-    """Create router-based adaptive retriever using LlamaIndex built-ins with DSPy and GraphRAG integration.
-    
-    IMPORTANT: This retrieval component works with document chunks that have been processed
-    by ResilientDocumentProcessor using direct Unstructured.io integration (ADR-009).
-    Document processing and chunking is handled upstream by:
-    - Direct partition() calls for document processing
-    - Direct chunk_by_title() for semantic chunking
-    
-    This function focuses on retrieval strategy routing and query optimization.
-    """
-    
-    # NOTE: Document chunking handled by ResilientDocumentProcessor (ADR-009)
-    # Document processing results cached via IngestionCache (ADR-030) backed by DuckDBKVStore
-    # semantic_splitter = SemanticSplitterNodeParser(  # Available for special cases only
-    #     embed_model=Settings.embed_model,
-    #     breakpoint_percentile_threshold=95,
-    #     buffer_size=1
-    # )
-    
-    # Initialize DSPy optimization if enabled (ADR-018)
-    if enable_dspy:
-        from src.dspy_integration import DSPyLlamaIndexRetriever
-        base_retriever = DSPyLlamaIndexRetriever(
-            index=vector_store,
-            enable_dspy=True
-        )
-    else:
-        base_retriever = vector_store.as_retriever(similarity_top_k=10)
-    
-    # Use built-in hybrid retriever
+def build_adaptive_query_engine(index, llm, *, enable_graphrag: bool = False):
+    # Base retrievers
+    vector_retriever = index.as_retriever(similarity_top_k=10)
     hybrid_retriever = HybridRetriever(
-        vector_retriever=vector_store.as_retriever(similarity_top_k=5),
-        keyword_retriever=vector_store.as_retriever(mode="keyword", top_k=5),
-        fusion_mode="reciprocal_rank"  # Built-in RRF fusion
+        vector_retriever=index.as_retriever(similarity_top_k=5),
+        keyword_retriever=index.as_retriever(mode="keyword", top_k=5),
+        fusion_mode="reciprocal_rank",
     )
-    
-    # Use MultiQueryRetriever for query decomposition
-    multi_query_retriever = MultiQueryRetriever.from_defaults(
-        retriever=hybrid_retriever,
-        llm=llm,
-        num_queries=3  # Generate 3 sub-queries automatically
+    multi_retriever = MultiQueryRetriever.from_defaults(
+        retriever=hybrid_retriever, llm=llm, num_queries=3
     )
-    
-    # Create query engines for different strategies
-    from llama_index.core import VectorStoreIndex
-    from llama_index.core.tools import QueryEngineTool
-    
-    # Vector search tool with optional DSPy optimization
-    vector_tool = QueryEngineTool.from_defaults(
-        query_engine=base_retriever.as_query_engine() if enable_dspy else vector_store.as_query_engine(similarity_top_k=10),
-        name="vector_search",
-        description="Best for semantic similarity and simple factual queries"
-    )
-    
-    # Hybrid search tool  
-    hybrid_tool = QueryEngineTool.from_defaults(
-        query_engine=hybrid_retriever.as_query_engine(),
-        name="hybrid_search",
-        description="Best for complex queries needing both keywords and semantics"
-    )
-    
-    # Multi-query tool for decomposition
-    multi_tool = QueryEngineTool.from_defaults(
-        query_engine=multi_query_retriever.as_query_engine(),
-        name="multi_query",
-        description="Best for complex questions that need to be broken down"
-    )
-    
-    # Create base tools list
-    tools = [vector_tool, hybrid_tool, multi_tool]
-    
-    # Optional GraphRAG tool (ADR-019)
-    if enable_graphrag:
-        from src.graphrag_integration import OptionalGraphRAG
-        graph_rag = OptionalGraphRAG(enabled=True, vector_store=vector_store)
-        
-        graphrag_tool = QueryEngineTool.from_defaults(
-            query_engine=graph_rag.as_query_engine(),
-            name="graph_search",
-            description="Best for relationship queries, multi-hop reasoning, and thematic analysis"
-        )
-        tools.append(graphrag_tool)
 
-    # Create RouterQueryEngine to automatically route queries
-    router_engine = RouterQueryEngine(
+    tools = [
+        QueryEngineTool.from_defaults(
+            query_engine=vector_retriever.as_query_engine(),
+            name="vector_search",
+            description="Semantic similarity for simple factual queries",
+        ),
+        QueryEngineTool.from_defaults(
+            query_engine=hybrid_retriever.as_query_engine(),
+            name="hybrid_search",
+            description="Dense+sparse for keyword + semantic needs",
+        ),
+        QueryEngineTool.from_defaults(
+            query_engine=multi_retriever.as_query_engine(),
+            name="multi_query",
+            description="Decompose complex questions into subqueries",
+        ),
+    ]
+
+    if enable_graphrag:
+        from src.retrieval.graph_config import build_graph_query_engine
+        tools.append(
+            QueryEngineTool.from_defaults(
+                query_engine=build_graph_query_engine(index),
+                name="graph_search",
+                description="Relationship/multi‑hop retrieval",
+            )
+        )
+
+    return RouterQueryEngine(
         selector=LLMSingleSelector.from_defaults(llm=llm),
         query_engine_tools=tools,
-        verbose=True  # Log routing decisions
+        verbose=True,
     )
-    
-    return router_engine
-
-# That's it! 20 lines instead of 200+ lines of custom code
-# LlamaIndex handles all the routing, retrieval, and fusion logic
 ```
 
 ### Configuration
@@ -249,142 +164,30 @@ def create_adaptive_retriever(vector_store, llm, enable_dspy=False, enable_graph
 ```env
 # Retrieval routing and strategies
 DOCMIND_RETRIEVAL__ROUTER=auto                 # auto|simple|hierarchical|graph
-DOCMIND_RETRIEVAL__TOP_K=10                    # base top-k per retriever
-DOCMIND_RETRIEVAL__HYBRID__ENABLED=true        # dense+sparse
-DOCMIND_RETRIEVAL__HIERARCHY__ENABLED=true     # RAPTOR-Lite
-DOCMIND_RETRIEVAL__GRAPH__ENABLED=false        # PropertyGraphIndex routing (ADR-019)
+DOCMIND_RETRIEVAL__TOP_K=10                    # per‑retriever default
+DOCMIND_RETRIEVAL__HYBRID=true                 # dense+sparse with RRF
+DOCMIND_RETRIEVAL__HIERARCHY=true              # RAPTOR‑Lite signals only
+DOCMIND_RETRIEVAL__GRAPH=false                 # PropertyGraphIndex routing (ADR‑019)
+
+# Reranking (ADR‑037)
+DOCMIND_RETRIEVAL__RERANKING_TOP_K=5
+DOCMIND_RETRIEVAL__RERANKER_MODE=auto          # auto|text|multimodal
 ```
 
 ### Using MetadataFilters for Advanced Retrieval
 
 ```python
-from llama_index.core.vector_stores import (
-    MetadataFilters,
-    MetadataFilter,
-    FilterOperator,
-    FilterCondition
-)
+from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator, FilterCondition
 
-def create_filtered_retriever(vector_store, filters: dict):
-    """Use built-in metadata filtering instead of custom logic."""
-    
-    # Build metadata filters
-    metadata_filters = MetadataFilters(
-        filters=[
-            MetadataFilter(
-                key="doc_type",
-                value=filters.get("doc_type", "any"),
-                operator=FilterOperator.EQ
-            ),
-            MetadataFilter(
-                key="date",
-                value=filters.get("after_date", "2024-01-01"),
-                operator=FilterOperator.GTE
-            )
-        ],
-        condition=FilterCondition.AND
-    )
-    
-    # Create retriever with filters
-    return vector_store.as_retriever(
-        similarity_top_k=10,
-        filters=metadata_filters
-    )
-    
-    def _hierarchical_retrieve(self, query: str, top_k: int = 10) -> List[NodeWithScore]:
-        """Retrieve using RAPTOR-Lite hierarchy."""
-        results = []
-        
-        # Search level 1 (section summaries) first
-        if self.hierarchical_index.level_index[1]:
-            level1_results = self._search_level(query, level=1, top_k=5)
-            
-            # For each relevant section, get its chunks
-            for section_result in level1_results:
-                section_node = self.hierarchical_index.nodes[section_result.node.id_]
-                if section_node.children_ids:
-                    for chunk_id in section_node.children_ids:
-                        chunk_node = self.hierarchical_index.nodes[chunk_id]
-                        # Re-score chunk in context of section relevance
-                        score = section_result.score * 0.8  # Discount for indirection
-                        results.append(NodeWithScore(
-                            node=Document(text=chunk_node.content, id_=chunk_id),
-                            score=score
-                        ))
-        
-        # Add direct chunk matches
-        chunk_results = self._search_level(query, level=0, top_k=5)
-        results.extend(chunk_results)
-        
-        # Deduplicate and sort by score
-        seen_ids = set()
-        unique_results = []
-        for result in sorted(results, key=lambda x: x.score, reverse=True):
-            if result.node.id_ not in seen_ids:
-                unique_results.append(result)
-                seen_ids.add(result.node.id_)
-        
-        return unique_results[:top_k]
-    
-    def _search_level(self, query: str, level: int, top_k: int) -> List[NodeWithScore]:
-        """Search specific hierarchy level."""
-        query_embedding = Settings.embed_model.get_text_embedding(query)
-        results = []
-        
-        for node_id in self.hierarchical_index.level_index[level]:
-            node = self.hierarchical_index.nodes[node_id]
-            
-            # Get or compute node embedding
-            if node.embedding is None:
-                node.embedding = Settings.embed_model.get_text_embedding(node.content)
-            
-            # Compute similarity
-            similarity = np.dot(query_embedding, node.embedding) / (
-                np.linalg.norm(query_embedding) * np.linalg.norm(node.embedding)
-            )
-            
-            results.append(NodeWithScore(
-                node=Document(text=node.content, id_=node_id),
-                score=float(similarity)
-            ))
-        
-        return sorted(results, key=lambda x: x.score, reverse=True)[:top_k]
-    
-    def _hybrid_retrieve(self, query: str) -> List[NodeWithScore]:
-        """Combine multiple retrieval strategies."""
-        vector_results = self._vector_retrieve(query, top_k=5)
-        hierarchical_results = self._hierarchical_retrieve(query, top_k=5)
-        
-        # Simple score fusion
-        all_results = []
-        all_results.extend([(r, 0.6) for r in vector_results])  # Weight vector higher for precision
-        all_results.extend([(r, 0.4) for r in hierarchical_results])  # Lower weight for recall
-        
-        # Combine scores for same documents
-        score_map = {}
-        for result, weight in all_results:
-            doc_id = result.node.id_
-            if doc_id in score_map:
-                score_map[doc_id] = (score_map[doc_id][0], 
-                                   score_map[doc_id][1] + result.score * weight)
-            else:
-                score_map[doc_id] = (result.node, result.score * weight)
-        
-        # Sort by combined score
-        combined_results = [NodeWithScore(node=node, score=score) 
-                          for node, score in score_map.values()]
-        
-return sorted(combined_results, key=lambda x: x.score, reverse=True)[:10]
-```
+def filtered_retriever(index, *, doc_type: str | None = None, after_date: str | None = None):
+    filters = []
+    if doc_type:
+        filters.append(MetadataFilter(key="doc_type", value=doc_type, operator=FilterOperator.EQ))
+    if after_date:
+        filters.append(MetadataFilter(key="date", value=after_date, operator=FilterOperator.GTE))
 
-Additional helpers (in `src/retrieval/adaptive.py`):
-
-```python
-from llama_index.core.postprocessor import SimilarityPostprocessor
-
-def build_postprocessors():
-    # Add postprocessors here; ADR-037 handles reranker selection
-    return [SimilarityPostprocessor(similarity_cutoff=0.0)]
+    meta = MetadataFilters(filters=filters, condition=FilterCondition.AND)
+    return index.as_retriever(similarity_top_k=10, filters=meta)
 ```
 
 ### Using AsyncQueryEngine for Performance
@@ -392,217 +195,72 @@ def build_postprocessors():
 ```python
 from llama_index.core.query_engine import AsyncQueryEngine
 from llama_index.core.callbacks import TokenCountingHandler
-import asyncio
 
-async def create_async_pipeline(vector_store, llm):
-    """Use built-in async support for better performance."""
-    
-    # Token counting with built-in handler
-    token_counter = TokenCountingHandler()
-    Settings.callback_manager.add_handler(token_counter)
-    
-    # Create async query engine
-    async_engine = AsyncQueryEngine.from_defaults(
-        retriever=vector_store.as_retriever(),
-        llm=llm,
-        streaming=True  # Enable streaming responses
-    )
-    
-    # Use built-in retry policy
-    from llama_index.core.retry import RetryPolicy
-    async_engine.retry_policy = RetryPolicy(
-        max_retries=3,
-        retry_on_exceptions=[Exception],
-        backoff_factor=2.0
-    )
-    
-    return async_engine
+async def build_async_engine(index, llm):
+    handler = TokenCountingHandler()
+    Settings.callback_manager.add_handler(handler)
+    return AsyncQueryEngine.from_defaults(retriever=index.as_retriever(), llm=llm, streaming=True)
+```
 
-# Essential RAPTOR-Lite Functions for Hierarchical Document Processing
-def _create_section_summaries(documents: List[Document], llm) -> Dict[str, str]:
-    """Create section summaries for hierarchical indexing."""
-    summaries = {}
-    
-    # Group documents by section (based on metadata or content patterns)
-    sections = _group_documents_by_section(documents)
-    
-    for section_id, section_docs in sections.items():
-        # Combine section content
-        section_content = "\n\n".join([doc.text for doc in section_docs])
-        
-        # Generate summary using local LLM
-        summary_prompt = f"""
-        Summarize the following section concisely, focusing on key concepts and themes:
-        
-        {section_content[:100000]}  # Sized for 128K context window (see ADR-010)
-        
-        Summary:"""
-        
-        summary = llm.complete(summary_prompt).text.strip()
-        summaries[section_id] = summary
-    
-    return summaries
+## Testing
 
-def _summarize_cluster(cluster_docs: List[Document], llm) -> str:
-    """Summarize a cluster of related documents."""
-    if not cluster_docs:
-        return ""
-    
-    # Combine cluster content
-    cluster_content = "\n\n".join([doc.text[:1000] for doc in cluster_docs])  # Limit per doc
-    
-    summary_prompt = f"""
-    Create a brief summary that captures the main themes of these related documents:
-    
-    {cluster_content[:3000]}
-    
-    Key themes and concepts:"""
-    
-    return llm.complete(summary_prompt).text.strip()
+```python
+# tests/unit/test_adaptive_retrieval.py (skeleton)
+import pytest
 
-def _extract_topic(text: str, llm) -> str:
-    """Extract the main topic or theme from text."""
-    topic_prompt = f"""
-    Identify the main topic or theme of this text in 2-4 words:
-    
-    {text[:1000]}
-    
-    Main topic:"""
-    
-    return llm.complete(topic_prompt).text.strip()
+@pytest.mark.unit
+def test_router_exposes_expected_tools(adaptive_engine):
+    names = {t.metadata.name for t in adaptive_engine._tools}
+    assert {"vector_search", "hybrid_search", "multi_query"}.issubset(names)
 
-def _group_documents_by_section(documents: List[Document]) -> Dict[str, List[Document]]:
-    """Group documents by logical sections for hierarchical organization."""
-    sections = {}
-    
-    for doc in documents:
-        # Simple section grouping based on document metadata or content patterns
-        section_id = doc.metadata.get("section", "general")
-        if section_id not in sections:
-            sections[section_id] = []
-        sections[section_id].append(doc)
-    
-    return sections
+@pytest.mark.integration
+def test_metadata_filters_reduce_result_set(index_with_metadata):
+    r_all = index_with_metadata.as_retriever(similarity_top_k=10)
+    r_filtered = filtered_retriever(index_with_metadata, doc_type="report")
+    assert len(r_filtered.retrieve("quarterly revenue")) <= len(r_all.retrieve("quarterly revenue"))
 
-class QualityMetrics:
-    """Helper class for retrieval quality assessment."""
-    
-    def _calculate_relevance(self, query: str, results: List[NodeWithScore]) -> float:
-        """Estimate relevance based on keyword overlap and scores."""
-        query_words = set(query.lower().split())
-        total_relevance = 0.0
-        
-        for result in results[:3]:  # Top 3 for efficiency
-            content_words = set(result.node.text.lower().split())
-            overlap = len(query_words.intersection(content_words)) / len(query_words)
-            score_weight = result.score
-            total_relevance += overlap * score_weight
-        
-        return min(total_relevance / 3.0, 1.0)
-    
-    def _calculate_coverage(self, query: str, results: List[NodeWithScore]) -> float:
-        """Estimate query coverage based on result diversity."""
-        if len(results) < 2:
-            return 0.5
-        
-        # Simple diversity measure
-        embeddings = []
-        for result in results[:5]:
-            embedding = Settings.embed_model.get_text_embedding(result.node.text[:500])
-            embeddings.append(embedding)
-        
-        # Calculate average pairwise distance
-        total_distance = 0.0
-        pairs = 0
-        for i in range(len(embeddings)):
-            for j in range(i + 1, len(embeddings)):
-                distance = 1.0 - np.dot(embeddings[i], embeddings[j]) / (
-                    np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j])
-                )
-                total_distance += distance
-                pairs += 1
-        
-        avg_distance = total_distance / max(pairs, 1)
-        return min(avg_distance, 1.0)
-    
-    def should_retry(self, metrics: Dict[str, float]) -> bool:
-        """Determine if retrieval should be retried with different strategy."""
-        return (metrics["relevance"] < 0.3 or 
-                metrics["coverage"] < 0.4 or 
-                metrics["confidence"] < 0.2)
+@pytest.mark.asyncio
+async def test_latency_budget(async_adaptive_engine):
+    import time
+    start = time.monotonic()
+    _ = await async_adaptive_engine.aquery("Summarize Q2 revenue by region")
+    assert time.monotonic() - start < 2.0  # PR-1
 ```
 
 ## Consequences
 
 ### Positive Outcomes
 
-- **Adaptive Intelligence**: System selects optimal retrieval strategy per query
-- **Hierarchical Access**: Complex queries can access both details and summaries
-- **Quality Assurance**: Poor results trigger alternative strategies automatically
-- **Local Efficiency**: RAPTOR-Lite provides hierarchical benefits without full complexity
-- **Scalable Performance**: Multi-level indexing scales better than flat approaches
+- Adaptive strategy selection improves complex query quality.
+- Hierarchical signals without full RAPTOR complexity.
+- Clean, maintainable integration via official LlamaIndex features.
+- Predictable context usage aligned to 128K constraints.
 
 ### Negative Consequences / Trade-offs
 
-- **Indexing Complexity**: Building hierarchical index adds processing time
-- **Storage Overhead**: Additional storage for section summaries and hierarchy
-- **Strategy Latency**: Router decisions add 100-300ms per query
-- **Maintenance**: More complex index structure requires careful updates
+- Router adds up to ~300ms overhead per query.
+- Multiple strategies increase surface area for tuning.
+- Optional GraphRAG introduces additional index maintenance.
 
-### Performance Targets
+### Ongoing Maintenance & Considerations
 
-- **Hierarchy Build**: <5 minutes for 1000 documents on consumer hardware
-- **Storage Overhead**: <50% increase vs flat index for hierarchical structure
-- **Retrieval Latency**: <500ms additional overhead for hierarchical vs vector search
-- **Quality Improvement**: ≥15% better performance on complex queries
+- Monitor strategy distribution and success; adjust thresholds and top‑k.
+- Re‑evaluate reranker mode and top‑k as dataset modality mix changes.
+- Track LlamaIndex API changes; pin versions in `pyproject.toml`.
+- Periodically benchmark against flat baseline to confirm value.
 
-## Dependencies
+### Dependencies
 
-- **Python**: `scikit-learn>=1.3.0` for clustering, `numpy>=1.24.0`
-- **LlamaIndex**: Core retrieval and embedding interfaces
-- **Models**: BGE-M3 embeddings; Qwen3-4B-Instruct-2507 with 128K context (see ADR-004 and ADR-010)
-- **Caching**: IngestionCache + DuckDBKVStore (ADR-030) for document processing cache
-
-Note: Model/context specifics are governed by ADR-004 (Local-First LLM Strategy) and ADR-010 (Performance Optimization). This ADR focuses on retrieval architecture.
-
-## Monitoring Metrics
-
-- Strategy selection distribution and effectiveness
-- Hierarchical vs flat retrieval quality comparison
-- Index build time and storage requirements
-- Retry frequency and success rates
-- Query complexity vs retrieval strategy correlation
-
-## Implementation Status
-
-✅ **FULLY IMPLEMENTED** (Commit c54883d - 2025-08-21)
-
-### Completed Components
-
-- **RouterQueryEngine**: `src/retrieval/query_engine.py` - Adaptive strategy selection with LLMSingleSelector
-- **Document Processing Cache**: IngestionCache backed by DuckDBKVStore (ADR-030)
-- **Strategy Implementation**:
-  - Dense semantic search (BGE-M3 dense vectors)
-  - Hybrid search (BGE-M3 dense + sparse with RRF fusion)
-  - Multi-query search (query decomposition)
-  - Knowledge graph search (PropertyGraphIndex optional)
-- **Performance Achieved**:
-  - <50ms strategy selection overhead (target met)
-  - <2s P95 query latency including reranking (target met)
-  - >90% correct strategy selection accuracy
-
-### Key Features Implemented
-
-- ✅ LLMSingleSelector for automatic strategy selection
-- ✅ QueryEngineTool definitions for all strategies
-- ✅ Fallback mechanisms for robustness
-- ✅ Integration with BGE-M3 embeddings and CrossEncoder reranking
+- System: Qdrant (ADR‑031) for vector storage.
+- Python: `llama-index-core>=0.12`, `numpy>=1.24`, `scikit-learn>=1.3` (if clustering used).
+- Models: BGE‑M3 embeddings (ADR‑002), LLM per ADR‑004.
 
 ## Changelog
 
-- **3.2 (2025-09-02)**: Standardized to 128K context (see ADR-004/ADR-010); removed 262K mentions; updated cache references to ADR-030; added governance note for model/context
-- **3.1 (2025-08-21)**: IMPLEMENTATION COMPLETE — RouterQueryEngine fully deployed with all adaptive strategies operational
-- **3.0 (2025-08-19)**: CONTEXT WINDOW INCREASE — Updated for Qwen3-4B-Instruct-2507 with 262K context enabling document processing without chunking limitations. Retrieval strategies now leverage large context windows for processing entire documents in single passes. Section summaries can utilize up to 100K tokens (vs previous 4K limit). Updated document understanding through extended context retention.
-- **2.1 (2025-08-18)**: Added DSPy query optimization and PropertyGraphIndex as retrieval strategy for enhanced query processing and relationship-based retrieval
-- **2.0 (2025-08-17)**: Major enhancement with multi-strategy routing and DSPy integration
-- **1.0 (2025-01-16)**: Initial design for adaptive retrieval pipeline with RAPTOR-Lite hierarchical indexing
+- 3.4 (2025-09-04): Standardized to ADR template; added weighted decision matrix, high‑level architecture section, explicit PR/IR requirements, testing skeletons; moved dependencies under Consequences.
+- 3.2 (2025-09-02): Standardized to 128K context (ADR‑004/010), updated cache refs (ADR‑030).
+- 3.1 (2025-08-21): IMPLEMENTATION COMPLETE — RouterQueryEngine deployed with adaptive strategies.
+- 3.0 (2025-08-19): (Deprecated) 262K context mention — superseded by 128K enforcement.
+- 2.1 (2025-08-18): Added DSPy optimization and PropertyGraphIndex option.
+- 2.0 (2025-08-17): Multi‑strategy routing and DSPy integration.
+- 1.0 (2025-01-16): Initial RAPTOR‑Lite concept.

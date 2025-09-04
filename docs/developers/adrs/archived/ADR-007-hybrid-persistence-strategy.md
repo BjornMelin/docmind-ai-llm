@@ -178,21 +178,21 @@ vector_store = QdrantVectorStore(
 
 ```mermaid
 graph TD
-    A[Application Layer] --> B[Unified Storage Interface]
+    A["Application Layer"] --> B["Unified Storage Interface"]
     
-    B --> C[Hot Cache]
-    B --> D[SQLite - Operational]
-    B --> E[DuckDB - Analytics]
-    B --> F[Vector Storage]
-    B --> G[Document Storage]
+    B --> C["Hot Cache"]
+    B --> D["SQLite - Operational"]
+    B --> E["DuckDB - Analytics"]
+    B --> F["Vector Storage"]
+    B --> G["Document Storage"]
     
-    C --> H[Redis-compatible Memory]
-    D --> I[User Sessions, Settings]
-    E --> J[Metrics, Performance Data]
-    F --> K[Qdrant Vector Storage]
-    G --> L[LZ4 Compressed JSON]
+    C --> H["Redis-compatible Memory"]
+    D --> I["User Sessions, Settings"]
+    E --> J["Metrics, Performance Data"]
+    F --> K["Qdrant Vector Storage"]
+    G --> L["LZ4 Compressed JSON"]
     
-    M[Backup System] --> D
+    M["Backup System"] --> D
     M --> E
     M --> F
     M --> G

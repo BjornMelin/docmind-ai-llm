@@ -48,10 +48,10 @@ Use DeepEval metrics for RAG and LLM evaluation; maintain small wrappers to run 
 
 ```mermaid
 graph TD
-  Q[Questions] --> E[DeepEval Runner]
-  C[Contexts] --> E
-  A[Answers] --> E
-  E --> M[Metrics + Reports]
+  Q["Questions"] --> E["DeepEval Runner"]
+  C["Contexts"] --> E
+  A["Answers"] --> E
+  E --> M["Metrics + Reports"]
 ```
 
 ## Related Requirements
