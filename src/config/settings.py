@@ -43,6 +43,18 @@ class VLLMConfig(BaseModel):
     )
 
 
+class SemanticCacheConfig(BaseModel):
+    """Application-level semantic cache configuration (ADR-035)."""
+
+    enabled: bool = Field(default=False)
+    provider: Literal["gptcache", "none"] = Field(default="gptcache")
+    score_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    ttl_seconds: int = Field(default=1_209_600, ge=60)  # 14 days
+    top_k: int = Field(default=5, ge=1, le=50)
+    max_response_bytes: int = Field(default=24_000, ge=1024)
+    namespace: str = Field(default="default")
+
+
 class ProcessingConfig(BaseModel):
     """Document processing configuration (ADR-009)."""
 
@@ -54,6 +66,12 @@ class ProcessingConfig(BaseModel):
     chunk_overlap: int = Field(default=50, ge=0, le=200)
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     debug_chunk_flow: bool = Field(default=False)
+
+
+class ChatConfig(BaseModel):
+    """Chat memory configuration (ADR-021)."""
+
+    sqlite_path: Path = Field(default=Path("./data/docmind.db"))
 
 
 class AgentConfig(BaseModel):
@@ -72,6 +90,13 @@ class AgentConfig(BaseModel):
     max_workflow_depth: int = Field(default=5, ge=2, le=10)
     enable_agent_state_compression: bool = Field(default=True)
     chat_memory_limit_tokens: int = Field(default=66560, ge=32768, le=98304)
+
+
+class AnalysisConfig(BaseModel):
+    """Analysis mode settings (ADR-023)."""
+
+    mode: Literal["auto", "separate", "combined"] = Field(default="auto")
+    max_workers: int = Field(default=4, ge=1, le=32)
 
 
 class EmbeddingConfig(BaseModel):
@@ -102,6 +127,14 @@ class RetrievalConfig(BaseModel):
     rrf_fusion_weight_dense: float = Field(default=0.7, ge=0, le=1)
     rrf_fusion_weight_sparse: float = Field(default=0.3, ge=0, le=1)
     use_sparse_embeddings: bool = Field(default=True)
+    # Router and feature toggles (ADR-003)
+    router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
+    hybrid_enabled: bool = Field(default=True)
+    hierarchy_enabled: bool = Field(default=True)
+    graph_enabled: bool = Field(default=False)
+    # Reranker model
+    # (text-only CrossEncoder; ADR-006 legacy, ADR-037 multimodal supersedes)
+    reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
 
 
 class CacheConfig(BaseModel):
@@ -110,6 +143,9 @@ class CacheConfig(BaseModel):
     enable_document_caching: bool = Field(default=True)
     ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     max_size_mb: int = Field(default=1000, ge=100, le=10000)
+    # Path configuration for DuckDB KV store
+    dir: Path = Field(default=Path("./cache"))
+    filename: str = Field(default="docmind.duckdb")
 
 
 class DatabaseConfig(BaseModel):
@@ -124,6 +160,17 @@ class DatabaseConfig(BaseModel):
     # SQL Database
     sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
     enable_wal_mode: bool = Field(default=True)
+
+
+class GraphRAGConfig(BaseModel):
+    """GraphRAG configuration (ADR-019)."""
+
+    enabled: bool = Field(default=False)
+    relationship_extraction: bool = Field(default=False)
+    entity_resolution: Literal["fuzzy", "exact"] = Field(default="fuzzy")
+    max_hops: int = Field(default=2, ge=1, le=5)
+    max_triplets: int = Field(default=1000, ge=100, le=10000)
+    chunk_size: int = Field(default=1024, ge=128, le=8192)
 
 
 class UIConfig(BaseModel):
@@ -248,9 +295,8 @@ class DocMindSettings(BaseSettings):
         default=False
     )  # Changed to False per user feedback
     enable_multimodal: bool = Field(default=False)
-    analysis_modes: str = Field(default="detailed,summary,comparison")
 
-    # === DSPY OPTIMIZATION PARAMETERS ===
+    # DSPy optimization parameters
     dspy_optimization_iterations: int = Field(default=10, ge=5, le=50)
     dspy_optimization_samples: int = Field(default=20, ge=5, le=100)
     dspy_max_retries: int = Field(default=3, ge=1, le=10)
@@ -258,7 +304,7 @@ class DocMindSettings(BaseSettings):
     dspy_metric_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
     enable_dspy_bootstrapping: bool = Field(default=True)
 
-    # === GRAPHRAG CONFIGURATION ===
+    # GraphRAG legacy (prefer nested graphrag_cfg)
     graphrag_relationship_extraction: bool = Field(default=False)
     graphrag_entity_resolution: str = Field(default="fuzzy")
     graphrag_max_hops: int = Field(default=2, ge=1, le=5)
@@ -277,9 +323,13 @@ class DocMindSettings(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    # New nested configs (ADR-024 planned)
+    semantic_cache: SemanticCacheConfig = Field(default_factory=SemanticCacheConfig)
+    chat: ChatConfig = Field(default_factory=ChatConfig)
+    analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+    graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
 
     # Top-level LLM context window cap (ADR-004/024)
-    # Ensure backends (e.g., vLLM) enforce this limit via server args.
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
     def model_post_init(self, __context: Any) -> None:
@@ -338,6 +388,10 @@ class DocMindSettings(BaseSettings):
             "max_document_size_mb": self.processing.max_document_size_mb,
         }
 
+    def get_cache_db_path(self) -> Path:
+        """Return full path to DuckDB KV store file (ADR-030)."""
+        return (self.cache.dir or self.cache_dir) / self.cache.filename
+
     # === ADR COMPLIANCE CONFIGURATION METHODS ===
 
     def get_agent_orchestration_config(self) -> dict[str, Any]:
@@ -366,6 +420,19 @@ class DocMindSettings(BaseSettings):
 
     def get_graphrag_config(self) -> dict[str, Any]:
         """Get GraphRAG configuration for ADR-019."""
+        # Prefer nested configuration; fallback to legacy top-level fields
+        if hasattr(self, "graphrag_cfg") and isinstance(
+            self.graphrag_cfg, GraphRAGConfig
+        ):
+            c = self.graphrag_cfg
+            return {
+                "enabled": c.enabled,
+                "relationship_extraction": c.relationship_extraction,
+                "entity_resolution": c.entity_resolution,
+                "max_hops": c.max_hops,
+                "max_triplets": c.max_triplets,
+                "chunk_size": c.chunk_size,
+            }
         return {
             "enabled": self.enable_graphrag,
             "relationship_extraction": self.graphrag_relationship_extraction,
@@ -373,6 +440,30 @@ class DocMindSettings(BaseSettings):
             "max_hops": self.graphrag_max_hops,
             "max_triplets": self.graphrag_max_triplets,
             "chunk_size": self.graphrag_chunk_size,
+        }
+
+    def get_semantic_cache_config(self) -> dict[str, Any]:
+        """Semantic cache configuration for ADR-035."""
+        c = self.semantic_cache
+        return {
+            "enabled": c.enabled,
+            "provider": c.provider,
+            "score_threshold": c.score_threshold,
+            "ttl_seconds": c.ttl_seconds,
+            "top_k": c.top_k,
+            "max_response_bytes": c.max_response_bytes,
+            "namespace": c.namespace,
+        }
+
+    def get_chat_config(self) -> dict[str, Any]:
+        """Chat memory configuration for ADR-021."""
+        return {"sqlite_path": str(self.chat.sqlite_path)}
+
+    def get_analysis_config(self) -> dict[str, Any]:
+        """Analysis mode configuration for ADR-023."""
+        return {
+            "mode": self.analysis.mode,
+            "max_workers": self.analysis.max_workers,
         }
 
     def get_ui_config(self) -> dict[str, Any]:
@@ -393,13 +484,17 @@ settings = DocMindSettings()
 # Module exports
 __all__ = [
     "AgentConfig",
+    "AnalysisConfig",
     "CacheConfig",
+    "ChatConfig",
     "DatabaseConfig",
     "DocMindSettings",
     "EmbeddingConfig",
+    "GraphRAGConfig",
     "MonitoringConfig",
     "ProcessingConfig",
     "RetrievalConfig",
+    "SemanticCacheConfig",
     "UIConfig",
     "VLLMConfig",
     "settings",
