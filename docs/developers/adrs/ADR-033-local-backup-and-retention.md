@@ -2,14 +2,15 @@
 ADR: 033
 Title: Local Backup & Retention
 Status: Proposed
-Version: 1.0
+Version: 1.1
 Date: 2025-09-02
 Supersedes:
 Superseded-by:
 Related: 030, 031
 Tags: backup, retention, local
 References:
-- shutil, tarfile
+- [Python — shutil](https://docs.python.org/3/library/shutil.html)
+- [Python — tarfile](https://docs.python.org/3/library/tarfile.html)
 ---
 
 ## Description
@@ -45,16 +46,68 @@ Ship a CLI/script that copies cache DB, Qdrant data, and optional docs into a ti
 
 CLI → snapshot dir → retain N most recent
 
+## Related Requirements
+
+### Functional Requirements
+
+- FR‑1: Archive config/data dirs; prune old archives
+
+### Non-Functional Requirements
+
+- NFR‑1: Local‑only; predictable schedule
+
+### Performance Requirements
+
+- PR‑1: Backup completes within 2 minutes for typical data sizes
+
+### Integration Requirements
+
+- IR‑1: Toggle via settings; path configurable
+
+## Design
+
+### Architecture Overview
+
+- On demand, single command snapshots; simple retention by count
+
+### Implementation Details
+
+- Use `tarfile` for archive and `shutil` for file operations
+
+### Configuration
+
+```env
+DOCMIND_BACKUP__ENABLED=true
+DOCMIND_BACKUP__RETENTION=5
+```
+
 ## Consequences
 
 ### Positive Outcomes
 
 - Predictable backups; minimal code
 
+### Negative Consequences / Trade-offs
+
+- Disk usage grows until pruning occurs
+
+### Ongoing Maintenance & Considerations
+
+- Periodically test restore process end‑to‑end
+
 ### Dependencies
 
 - Python stdlib
 
+## Testing
+
+```python
+def test_backup_paths(tmp_path):
+    # stub: ensure backup/restore paths resolve under tmp
+    pass
+```
+
 ## Changelog
 
+- 1.1 (2025‑09‑04): Standardized to template; added decision framework
 - 1.0 (2025‑09‑02): Proposed manual backup

@@ -56,11 +56,19 @@ tests → boundaries (API/DB/UI) → metrics
 
 - NFR‑1: Unit <5s; Integration <30s; System <5m
 
+### Performance Requirements
+
+- PR‑1: Boundary tests complete within CI budget (<5m)
+
 ### Integration Requirements
 
-- IR‑1: pytest markers and CI gates via junitxml
+- IR‑1: CI emits junitxml; track boundary coverage metrics
 
 ## Design
+
+### Architecture Overview
+
+- tests → real boundaries (API/DB/UI) → assertions; keep mocks minimal
 
 ### Implementation Details
 
@@ -87,9 +95,23 @@ def test_streamlit_page_boot(app_runner):
 
 ## Consequences
 
+### Configuration
+
+```env
+DOCMIND_TEST__BOUNDARY_CI_BUDGET_MINUTES=5
+```
+
 ### Positive Outcomes
 
 - Fewer brittle tests; clearer failures
+
+### Negative Consequences / Trade-offs
+
+- Harder to isolate some internal edge cases; cover with unit tests
+
+### Ongoing Maintenance & Considerations
+
+- Periodically audit mock usage; prefer boundary coverage where feasible
 
 ### Dependencies
 

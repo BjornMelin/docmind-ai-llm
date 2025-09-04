@@ -66,6 +66,10 @@ pytest → fixtures → settings instance → tests
 
 ## Design
 
+### Architecture Overview
+
+- pytest → fixtures configure Pydantic Settings → tests
+
 ### Implementation Details
 
 ```python
@@ -87,6 +91,12 @@ def test_settings_isolation(app_settings):
 ```
 
 ## Consequences
+
+### Configuration
+
+```env
+DOCMIND_TEST__DEBUG=true
+```
 
 ### Positive Outcomes
 

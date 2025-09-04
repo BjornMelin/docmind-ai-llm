@@ -49,6 +49,29 @@ Use IngestionCache + DuckDBKVStore at `settings.cache_dir/docmind.duckdb` as the
 
 Processor → IngestionPipeline → IngestionCache → DuckDB file
 
+## Related Requirements
+
+### Functional Requirements
+
+- FR‑1: Cache processed nodes keyed by content hash
+- FR‑2: Expose simple hit/miss stats
+
+### Non-Functional Requirements
+
+- NFR‑1: Durable single‑file DB; local‑only
+
+### Performance Requirements
+
+- PR‑1: Cache lookups <5ms typical; writes <50ms
+
+### Integration Requirements
+
+- IR‑1: Wires into ADR‑009 and ADR‑003; no custom wrappers
+
+### Architecture Overview
+
+- Single ingestion cache layer decoupled from vector store
+
 ## Design
 
 ### Implementation Details
