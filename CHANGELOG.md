@@ -30,6 +30,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Robust E2E tests for Streamlit app using `st.testing.v1.AppTest` with boundary-only mocks for heavy libs (torch, spacy, FlagEmbedding, Unstructured, Qdrant, LlamaIndex, Ollama) and resilient assertions (no brittle UI string matching).
 - Coverage gate scoped to changed subsystems: `src/processing` and `src/config` with `fail_under=29.71%`.
 
+- Multimodal reranking (ADR‑037): ColPali (visual) + BGE v2‑m3 (text), auto‑gated per node modality with fusion and top‑K truncation; builders for text/visual rerankers; integration test added.
+- UI controls (ADR‑036): Sidebar Reranker Mode (`auto|text|multimodal`), Normalize scores, Top N.
+- Configuration (ADR‑024): `retrieval.reranker_mode` and global `llm_context_window_max=131072`.
+- Ingestion (ADR‑009): PDF page image emission via `pdf_pages_to_image_documents()` tagging `metadata.modality="pdf_page_image"`.
+
 ### Changed
 
 - Removed legacy/deprecated splitters (SentenceSplitter-based chunkers) and all backward-compatibility paths in favor of Unstructured-first approach.
@@ -46,6 +51,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Cache stats: `SimpleCache` now derives `total_documents` from underlying KVStore instead of internal counters.
 - .env.example: added missing mappings for processing (new_after_n_chars, combine_text_under_n_chars, multipage_sections, debug_chunk_flow), retrieval (reranker_normalize_scores), cache (ttl_seconds, max_size_mb), DB (qdrant_timeout), and vLLM base URLs.
 - Router Query Engine integration: passed `llm=self.llm` into `RetrieverQueryEngine.from_args` to avoid accidental network calls via global settings.
+- Retrieval pipeline (ADR‑003): inject reranker by mode (auto/multimodal → `MultimodalReranker`, text → text‑only builder). Updated `src/retrieval/__init__.py` docstring to ADR‑037.
 
 ### Fixed
 
@@ -53,12 +59,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Prevented import-time failures by lazily importing Ollama in `setup_llamaindex()` and avoiding heavy integration side effects at module import.
 - E2E and integration tests: ensured async mocks are awaited; stabilized partition side-effects to accept kwargs; improved deterministic patches for Unstructured element detection.
 - Unit tests: added reranker factory properties test; tightened exception expectations and removed unused mocks where applicable.
+- Tests: replaced brittle full‑app UI import with deterministic unit/integration coverage to avoid side effects.
 
 ### Removed
 
 - Legacy chunkers and compatibility shims.
 - Implicit side-effect initialization from `src/config/__init__.py` (explicit `initialize_integrations()` only where needed).
 - Test-compatibility logic from production code (src/). Tests now own the compatibility shims and patches.
+- ColBERT reranker integration and legacy BGECrossEncoder path; all related tests deleted. No backward compatibility retained.
 
 ### Testing & Tooling
 
@@ -67,6 +75,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Deterministic, offline test execution via mocks/stubs; no GPU/network required.
 - Ruff: formatted and lint-clean on changed files.
 - Pylint: changed modules meet quality gate; unrelated large modules earmarked for a future maintenance pass.
+- Scoped pylint to `src/` for refactor; dependencies updated: replace `llama-index-postprocessor-colbert-rerank` with `llama-index-postprocessor-colpali-rerank`.
 
 ### Migration Notes
 
