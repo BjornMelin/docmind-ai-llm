@@ -249,6 +249,14 @@ class ErrorResponse(BaseModel):
         default=None,
         description="Additional error details",
     )
+    traceback: str | None = Field(
+        default=None,
+        description="Error traceback (debug mode only)",
+    )
+    suggestion: str | None = Field(
+        default=None,
+        description="Suggested resolution",
+    )
 
 
 class PdfPageImageNode(BaseModel):
@@ -268,15 +276,6 @@ class PdfPageImageNode(BaseModel):
     )
     source_path: str = Field(description="Path to source PDF")
     hash: str = Field(description="SHA-256 hash of image bytes")
-
-    traceback: str | None = Field(
-        default=None,
-        description="Error traceback (debug mode only)",
-    )
-    suggestion: str | None = Field(
-        default=None,
-        description="Suggested resolution",
-    )
 
 
 class AnalysisOutput(BaseModel):
