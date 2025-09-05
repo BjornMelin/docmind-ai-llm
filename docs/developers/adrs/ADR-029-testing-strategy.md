@@ -1,9 +1,9 @@
 ---
 ADR: 029
-Title: Modern Testing Strategy with Boundary Testing
+Title: Boundary‑First Testing Strategy
 Status: Accepted
-Version: 1.1
-Date: 2025-08-29
+Version: 1.2
+Date: 2025-09-04
 Supersedes:
 Superseded-by:
 Related: 014, 026
@@ -16,61 +16,38 @@ References:
 
 ## Description
 
-Adopt boundary testing patterns; reduce internal mocking; set realistic coverage goals. Keep tests fast and focused on boundaries.
-
-## Context
-
-Over‑mocked tests were brittle and noisy. Boundary tests cut mocks and raise real coverage.
-
-## Decision Drivers
-
-- Maintainability; reliability; dev speed
-
-## Alternatives
-
-- Keep heavy mocks — brittle
-- Rewrite from scratch — risky
-
-### Decision Framework
-
-| Option              | Maintain (35%) | Reliability (25%) | Effort (20%) | Coverage (20%) | Total | Decision |
-| ------------------- | ------------- | ----------------- | ------------ | -------------- | ----- | -------- |
-| Boundary + libs     | 9             | 9                 | 7            | 8              | 8.3   | ✅ Sel.  |
+Keep tests simple, fast, and realistic by focusing at system boundaries (API/DB/UI). Prefer real integrations (containers, local services) over mocking internals.
 
 ## Decision
 
-Use pytest + responses/testcontainers where needed; avoid mocking internals.
-
-## High-Level Architecture
-
-tests → boundaries (API/DB/UI) → metrics
+- Use pytest as the single test runner.
+- Prefer boundary tests; minimize internal mocks.
+- Use `responses` for HTTP and `testcontainers` for services as needed.
+- Keep suites lean; aim for deterministic, local runs.
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- FR‑1: Focus tests at boundaries (API/DB/UI)
-- FR‑2: Replace internal mocks with real boundaries
+- FR‑1: Focus tests at boundaries (API/DB/UI).
+- FR‑2: Replace internal mocks with real boundaries where practical.
 
 ### Non-Functional Requirements
 
-- NFR‑1: Unit <5s; Integration <30s; System <5m
+- NFR‑1: Unit <5s; Integration <30s; System <5m.
 
 ### Performance Requirements
 
-- PR‑1: Boundary tests complete within CI budget (<5m)
+- PR‑1: Boundary suites fit CI budget (<5m total).
 
 ### Integration Requirements
 
-- IR‑1: CI emits junitxml; track boundary coverage metrics
+- IR‑1: CI emits junitxml and JSON artifacts; track boundary coverage metrics.
+- IR‑2: All suites must meet ADR‑014 gates (quality thresholds, reporting).
 
 ## Design
 
-### Architecture Overview
-
-- tests → real boundaries (API/DB/UI) → assertions; keep mocks minimal
-
-### Implementation Details
+### Core Patterns
 
 ```python
 @pytest.mark.integration
@@ -91,15 +68,9 @@ def test_streamlit_page_boot(app_runner):
 
 ## Testing
 
-- Monitor mock counts and effective coverage
+- Monitor mock counts and effective coverage.
 
 ## Consequences
-
-### Configuration
-
-```env
-DOCMIND_TEST__BOUNDARY_CI_BUDGET_MINUTES=5
-```
 
 ### Positive Outcomes
 
@@ -115,10 +86,10 @@ DOCMIND_TEST__BOUNDARY_CI_BUDGET_MINUTES=5
 
 ### Dependencies
 
-- Python: `pytest>=8`, `responses`, `testcontainers`
+- Python: `pytest>=8`, `responses`, `testcontainers`.
 
 ## Changelog
 
-- 1.1 (2025‑09‑04): Standardized to template; added requirements
-
-- 1.0 (2025‑08‑29): Accepted boundary strategy
+- 1.2 (2025‑09‑04): Consolidated; simplified sections; added IR‑2 linking to ADR‑014.
+- 1.1 (2025‑09‑04): Standardized to template; added requirements.
+- 1.0 (2025‑08‑29): Accepted boundary strategy.

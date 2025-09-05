@@ -63,14 +63,14 @@ User → Supervisor → {Router → Planner → Retrieval → Synthesis → Vali
 
 ```mermaid
 graph TD
-  U[User] --> S[Supervisor]
-  S --> R[Router]
-  R -->|complex| P[Planner]
-  R -->|simple| T[Retrieval]
+  U["User"] --> S["Supervisor"]
+  S --> R["Router"]
+  R -->|complex| P["Planner"]
+  R -->|simple| T["Retrieval"]
   P --> T
-  T --> Y[Synthesis]
-  Y --> V[Validation]
-  V --> O[Response]
+  T --> Y["Synthesis"]
+  Y --> V["Validation"]
+  V --> O["Response"]
 ```
 
 ## Related Requirements

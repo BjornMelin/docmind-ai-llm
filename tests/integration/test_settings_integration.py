@@ -273,9 +273,11 @@ class TestSettingsProductionPatterns:
                 mock_client = Mock()
                 mock_qdrant.return_value = mock_client
 
-                # Should be able to create client with settings
-                if hasattr(settings, "qdrant_url"):
-                    client = mock_qdrant(url=settings.qdrant_url)
+                # Should be able to create client with nested database settings
+                if hasattr(settings, "database") and hasattr(
+                    settings.database, "qdrant_url"
+                ):
+                    client = mock_qdrant(url=settings.database.qdrant_url)
                     assert client is not None
 
     def test_concurrent_settings_access(self, settings_env):

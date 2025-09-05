@@ -472,8 +472,9 @@ class TestProductionHealthChecks:
         memory_gb = psutil.virtual_memory().total / (1024**3)
 
         resource_checks = {
-            "max_memory_reasonable": settings.max_memory_gb <= memory_gb,
-            "max_vram_reasonable": settings.max_vram_gb <= 80,  # Reasonable upper bound
+            "max_memory_reasonable": settings.monitoring.max_memory_gb <= memory_gb,
+            # Reasonable upper bound for typical single-GPU dev rigs
+            "max_vram_reasonable": settings.monitoring.max_vram_gb <= 80,
             "context_window_reasonable": settings.vllm.context_window <= 200000,
         }
 
@@ -485,8 +486,8 @@ class TestProductionHealthChecks:
             passed,
             {
                 "system_memory_gb": round(memory_gb, 1),
-                "configured_max_memory_gb": settings.max_memory_gb,
-                "configured_max_vram_gb": settings.max_vram_gb,
+                "configured_max_memory_gb": settings.monitoring.max_memory_gb,
+                "configured_max_vram_gb": settings.monitoring.max_vram_gb,
                 **resource_checks,
             },
         )

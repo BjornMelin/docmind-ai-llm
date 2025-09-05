@@ -125,8 +125,8 @@ class TestRunner:
         result.command = " ".join(command)
 
         print(f"\n{'=' * 60}")
-        print(f"🧪 {description}")
-        print(f"📋 Command: {result.command}")
+        print(f"TEST: {description}")
+        print(f"Command: {result.command}")
         print("=" * 60)
 
         start_time = time.time()
@@ -152,33 +152,33 @@ class TestRunner:
                 self._parse_pytest_output(result)
 
             if result.exit_code == 0:
-                print(f"✅ {description} completed successfully")
+                print(f"OK: {description} completed successfully")
                 if result.passed > 0:
                     print(
                         f"   📊 {result.passed} passed, "
                         f"{result.failed} failed, {result.skipped} skipped"
                     )
             else:
-                print(f"❌ {description} failed with exit code {result.exit_code}")
+                print(f"FAIL: {description} failed with exit code {result.exit_code}")
                 if result.failed > 0:
                     print(
                         f"   📊 {result.passed} passed, "
                         f"{result.failed} failed, {result.skipped} skipped"
                     )
 
-            print(f"   ⏱️  Duration: {result.duration:.2f}s")
+            print(f"   Duration: {result.duration:.2f}s")
 
         except subprocess.TimeoutExpired:
             result.duration = time.time() - start_time
             result.exit_code = -1
             result.output = "Test execution timed out after 30 minutes"
-            print(f"⏰ {description} timed out")
+            print(f"TIMEOUT: {description} timed out")
 
         except Exception as e:
             result.duration = time.time() - start_time
             result.exit_code = -1
             result.output = f"Execution error: {e}"
-            print(f"💥 {description} failed with error: {e}")
+            print(f"ERROR: {description} failed with error: {e}")
 
         self.results.append(result)
         return result
@@ -340,23 +340,23 @@ class TestRunner:
 
     def run_tiered_tests(self) -> None:
         """Run all tests in pyramid order: unit → integration (no system tests)."""
-        print("\n\ud83c\udfc1 Running Tiered Test Strategy")
+        print("\nRunning Tiered Test Strategy")
         print("=" * 50)
-        print("\u27a1\ufe0f Tier 1: Unit Tests (mocked dependencies)")
+        print("Tier 1: Unit Tests (mocked dependencies)")
         result_unit = self.run_unit_tests()
 
         if result_unit.exit_code != 0:
-            print("\u274c Unit tests failed. Stopping tiered execution.")
+            print("Unit tests failed. Stopping tiered execution.")
             return
 
-        print("\n\u27a1\ufe0f Tier 2: Integration Tests (lightweight models)")
+        print("\nTier 2: Integration Tests (lightweight models)")
         result_integration = self.run_integration_tests()
 
         if result_integration.exit_code != 0:
-            print("\u274c Integration tests failed. Stopping tiered execution.")
+            print("Integration tests failed. Stopping tiered execution.")
             return
 
-        print("\n\u2705 All tiered tests passed! GPU smoke tests available via --gpu")
+        print("\nAll tiered tests passed! GPU smoke tests available via --gpu")
 
     def validate_imports(self) -> TestResult:
         """Validate that all modules can be imported."""
@@ -370,18 +370,18 @@ import sys
 import importlib
 
 modules = [
-    'src.models.core', 'src.utils.core', 'src.utils.document',
-    'src.utils.monitoring',
-    'src.agents.coordinator', 'src.agents.tool_factory', 'src.agents.tools'
+    'src.utils.core', 'src.utils.document', 'src.utils.monitoring',
+    'src.agents.coordinator', 'src.agents.tool_factory', 'src.agents.tools',
+    'src.config.settings', 'src.processing.document_processor'
 ]
 
 failed = []
 for module in modules:
     try:
         importlib.import_module(module)
-        print(f'✅ {module}')
+        print(f'OK {module}')
     except Exception as e:
-        print(f'❌ {module}: {e}')
+        print(f'FAIL {module}: {e}')
         failed.append(module)
 
 if failed:
@@ -396,7 +396,7 @@ else:
     def generate_coverage_report(self) -> None:
         """Generate detailed coverage analysis."""
         print("\n" + "=" * 60)
-        print("📊 COVERAGE ANALYSIS")
+        print("COVERAGE ANALYSIS")
         print("=" * 60)
 
         # Run coverage report command
@@ -424,10 +424,10 @@ else:
             covered_lines = sum(f["summary"]["covered_lines"] for f in files.values())
             overall_pct = (covered_lines / total_lines) * 100 if total_lines > 0 else 0
 
-            print(f"\n📈 OVERALL COVERAGE: {overall_pct:.1f}%")
-            print(f"   Total lines: {total_lines}")
-            print(f"   Covered lines: {covered_lines}")
-            print(f"   Missing lines: {total_lines - covered_lines}")
+            print(f"\nOVERALL COVERAGE: {overall_pct:.1f}%")
+            print(f"  Total lines: {total_lines}")
+            print(f"  Covered lines: {covered_lines}")
+            print(f"  Missing lines: {total_lines - covered_lines}")
 
             # Find low coverage files
             low_coverage_files = []
@@ -439,7 +439,7 @@ else:
                     low_coverage_files.append((filename, coverage_pct))
 
             if low_coverage_files:
-                print("\n🔍 FILES WITH LOW COVERAGE (<80%):")
+                print("\nFILES WITH LOW COVERAGE (<80%):")
                 print("-" * 50)
                 for filename, coverage_pct in sorted(
                     low_coverage_files, key=lambda x: x[1]
@@ -455,18 +455,22 @@ else:
                 "src/utils/monitoring.py",
                 "src/agents/coordinator.py",
                 "src/agents/tool_factory.py",
-                "src/agents/tools.py",
+                "src/agents/tools/router_tool.py",
+                "src/agents/tools/planning.py",
+                "src/agents/tools/retrieval.py",
+                "src/agents/tools/synthesis.py",
+                "src/agents/tools/validation.py",
                 "src/app.py",
             ]
 
-            print("\n🎯 CRITICAL FILE COVERAGE:")
+            print("\nCRITICAL FILE COVERAGE:")
             print("-" * 50)
             for critical in critical_files:
                 found = False
                 for filename, file_data in files.items():
                     if critical in filename:
                         coverage_pct = file_data["summary"]["percent_covered"]
-                        status = "✅" if coverage_pct >= 80 else "⚠️"
+                        status = "OK" if coverage_pct >= 80 else "WARN"
                         print(f"   {status} {filename}: {coverage_pct:.1f}%")
                         found = True
                         break
@@ -479,7 +483,7 @@ else:
     def print_summary(self) -> None:
         """Print comprehensive test execution summary."""
         print("\n" + "=" * 80)
-        print("📋 TEST EXECUTION SUMMARY")
+        print("TEST EXECUTION SUMMARY")
         print("=" * 80)
 
         total_passed = sum(r.passed for r in self.results)
@@ -488,22 +492,22 @@ else:
         total_errors = sum(r.errors for r in self.results)
         total_duration = sum(r.duration for r in self.results)
 
-        print("📊 OVERALL STATISTICS:")
-        print(f"   ✅ Passed:  {total_passed}")
-        print(f"   ❌ Failed:  {total_failed}")
-        print(f"   ⏭️  Skipped: {total_skipped}")
-        print(f"   💥 Errors:  {total_errors}")
-        print(f"   ⏱️  Total Duration: {total_duration:.1f}s")
+        print("OVERALL STATS:")
+        print(f"   Passed:  {total_passed}")
+        print(f"   Failed:  {total_failed}")
+        print(f"   Skipped: {total_skipped}")
+        print(f"   Errors:  {total_errors}")
+        print(f"   Total Duration: {total_duration:.1f}s")
 
         print("\n🔍 DETAILED RESULTS:")
         print("-" * 60)
 
         for result in self.results:
-            status = "✅" if result.exit_code == 0 else "❌"
+            status = "OK" if result.exit_code == 0 else "FAIL"
             print(f"   {status} {result.command}")
             if result.passed > 0 or result.failed > 0:
                 print(
-                    f"      📊 {result.passed}P {result.failed}F "
+                    f"      {result.passed}P {result.failed}F "
                     f"{result.skipped}S - {result.duration:.1f}s"
                 )
             else:
@@ -527,15 +531,15 @@ else:
                 print()
 
         # Print recommended actions
-        print("\n💡 RECOMMENDATIONS:")
+        print("\nRECOMMENDATIONS:")
         if total_failed > 0:
             print("   🔧 Fix failing tests before deployment")
         if total_failed == 0 and total_passed > 0:
-            print("   🎉 All tests passing! Ready for deployment")
+            print("   All tests passing! Ready for deployment")
 
-        print("   📄 Coverage report: htmlcov/index.html")
-        print("   📊 Coverage data: coverage.json")
-        print("   🧪 Re-run specific tests: pytest tests/test_<name>.py -v")
+        print("   Coverage report: htmlcov/index.html")
+        print("   Coverage data: coverage.json")
+        print("   Re-run specific tests: pytest tests/test_<name>.py -v")
 
 
 def main():
@@ -606,7 +610,7 @@ Examples:
     project_root = Path(__file__).parent.parent  # Go up to project root from scripts/
     runner = TestRunner(project_root)
 
-    print("🧪 DocMind AI Test Suite")
+    print("DocMind AI Test Suite")
     print("=" * 50)
 
     # Clean artifacts if requested
@@ -634,8 +638,8 @@ Examples:
             runner.run_all_tests()
         else:
             # Default: Run tiered test strategy (unit → integration → system)
-            print("\n🎯 Running Default Tiered Test Strategy")
-            print("\n📚 Learn more about test tiers:")
+            print("\nRunning Default Tiered Test Strategy")
+            print("\nTiers:")
             print("   --unit: Fast tests with mocks (development)")
             print("   --integration: Lightweight models (PR validation)")
             print("   --gpu: Manual GPU smoke tests (staging/release)")
@@ -663,7 +667,7 @@ Examples:
     except KeyboardInterrupt:
         print("\n⚠️  Test execution interrupted by user")
     except Exception as e:
-        print(f"\n💥 Unexpected error: {e}")
+        print(f"\nUnexpected error: {e}")
         sys.exit(1)
 
     # Print summary
@@ -672,10 +676,10 @@ Examples:
     # Exit with appropriate code
     failed_runs = sum(1 for r in runner.results if r.exit_code != 0)
     if failed_runs > 0:
-        print(f"\n❌ {failed_runs} test run(s) failed")
+        print(f"\n{failed_runs} test run(s) failed")
         sys.exit(1)
     else:
-        print("\n✅ All test runs completed successfully")
+        print("\nAll test runs completed successfully")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide describes DocMind AI’s testing approach and how to run and write tests. It follows a boundary-first strategy and a three-tier structure (unit, integration, system).
+This guide describes DocMind AI’s testing approach and how to run and write tests. It follows a boundary-first strategy and a three-tier structure (unit, integration, system). For CI quality gates and validation, see ADR‑014; for the boundary‑first strategy decision, see ADR‑029.
 
 ## Philosophy
 

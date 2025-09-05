@@ -48,9 +48,9 @@ Integrate a DSPy query‑rewriter step before retrieval and compile prompts prog
 
 ```mermaid
 graph TD
-  Q[User Query] --> W[DSPy Rewriter]
-  W --> R[Retrieval]
-  R --> A[Answer]
+  Q["User Query"] --> W["DSPy Rewriter"]
+  W --> R["Retrieval"]
+  R --> A["Answer"]
 ```
 
 ## Related Requirements

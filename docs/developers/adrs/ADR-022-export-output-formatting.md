@@ -50,10 +50,10 @@ Build a small Export Manager that renders JSON (model_dump) and Markdown (Jinja2
 
 ```mermaid
 graph TD
-  R[Results (Pydantic)] --> E[Export Manager]
-  E --> J[JSON]
-  E --> M[Markdown]
-  E --> C[Rich Console]
+  R["Results (Pydantic)"] --> E["Export Manager"]
+  E --> J["JSON"]
+  E --> M["Markdown"]
+  E --> C["Rich Console"]
 ```
 
 ## Related Requirements

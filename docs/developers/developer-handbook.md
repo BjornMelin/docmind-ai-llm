@@ -719,6 +719,8 @@ This configuration architecture ensures maintainable, clean, and compliant confi
 
 ## Testing Strategies
 
+See ADR‑029 for the boundary‑first strategy and ADR‑014 for CI quality gates and validation.
+
 DocMind AI implements a comprehensive three-tier testing strategy:
 
 ### Testing Framework Setup

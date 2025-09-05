@@ -46,10 +46,10 @@ Adopt Streamlit native state and caching. For conversational memory, integrate w
 
 ```mermaid
 graph TD
-  UI[Pages/Components] --> S[st.session_state]
-  UI --> C1[st.cache_data]
-  UI --> C2[st.cache_resource]
-  S --> P[Persistence (ADR‑021)]
+  UI["Pages/Components"] --> S["st.session_state"]
+  UI --> C1["st.cache_data"]
+  UI --> C2["st.cache_resource"]
+  S --> P["Persistence (ADR-021)"]
 ```
 
 ## Related Requirements

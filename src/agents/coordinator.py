@@ -53,8 +53,8 @@ from loguru import logger
 
 from src.agents.tools import (
     plan_query,
-    retrieve_documents,
     route_query,
+    router_tool,
     synthesize_results,
     validate_response,
 )
@@ -259,7 +259,7 @@ class MultiAgentCoordinator:
 
             retrieval_agent = create_react_agent(
                 self.llm,
-                tools=[retrieve_documents],
+                tools=[router_tool],
                 state_schema=MultiAgentState,
                 name="retrieval_agent",
             )
@@ -468,10 +468,28 @@ class MultiAgentCoordinator:
             )
 
         try:
+            # Compose InjectedState/tools_data overrides (router, toggles, reranker)
+            defaults: dict[str, Any] = {
+                "enable_dspy": settings.enable_dspy_optimization,
+                "enable_graphrag": (
+                    getattr(settings, "enable_graphrag", False)
+                    or settings.get_graphrag_config().get("enabled", False)
+                ),
+                "enable_multimodal": getattr(settings, "enable_multimodal", False),
+                "reranker_normalize_scores": (
+                    settings.retrieval.reranker_normalize_scores
+                ),
+                "reranking_top_k": settings.retrieval.reranking_top_k,
+                "reranker_mode": settings.retrieval.reranker_mode,
+            }
+
+            # Merge caller-provided overrides last (they win)
+            tools_data: dict[str, Any] = {**defaults, **(settings_override or {})}
+
             # Initialize state with optimization parameters
             initial_state = MultiAgentState(
                 messages=[HumanMessage(content=query)],
-                tools_data=settings_override or {},
+                tools_data=tools_data,
                 context=context,
                 total_start_time=start_time,
                 output_mode="structured",  # ADR-011

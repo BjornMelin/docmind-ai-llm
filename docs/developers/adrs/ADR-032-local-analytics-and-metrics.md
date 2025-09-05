@@ -50,10 +50,10 @@ Create a separate DuckDB analytics DB with a minimal schema. Off by default. Whe
 
 ```mermaid
 graph TD
-  A[App] --> B[Analytics Writer]
-  B --> C[DuckDB (analytics.duckdb)]
-  A --> D[Cache (ADR‑030)]
-  A --> E[Vectors (ADR‑031)]
+  A["App"] --> B["Analytics Writer"]
+  B --> C["DuckDB (analytics.duckdb)"]
+  A --> D["Cache (ADR-030)"]
+  A --> E["Vectors (ADR-031)"]
 ```
 
 ## Related Requirements

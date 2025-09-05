@@ -157,7 +157,7 @@ class TestAgentErrorRecovery:
         # When: Executing with partial failures
         with patch("src.agents.tools.ToolFactory") as mock_factory:
 
-            def create_mixed_tools(*args, **kwargs):
+            def create_mixed_tools(*args, **kwargs):  # pylint: disable=unused-argument
                 # Only return tools that are available
                 available_tools = []
                 if mock_state["tools_data"]["vector"]:
@@ -237,7 +237,7 @@ class TestAgentErrorRecovery:
         # Simulate memory exhaustion in initial tool aggregation path
         call_count = {"create_tools": 0}
 
-        def memory_exhaustion_simulation(*args, **kwargs):
+        def memory_exhaustion_simulation(*args, **kwargs):  # pylint: disable=unused-argument
             call_count["create_tools"] += 1
             raise MemoryError("Insufficient memory for tool execution")
 
@@ -318,7 +318,7 @@ class TestAgentErrorRecovery:
 
         validation_attempt = 0
 
-        def validation_failure_simulation(query, response, state):
+        def validation_failure_simulation(_query, _response, _state):
             nonlocal validation_attempt
             validation_attempt += 1
 
@@ -327,11 +327,10 @@ class TestAgentErrorRecovery:
                     '{"valid": false, "confidence": 0.2, "suggested_action": "retry", '
                     '"issues": ["low_quality"]}'
                 )
-            else:
-                return (
-                    '{"valid": true, "confidence": 0.8, "suggested_action": "accept", '
-                    '"issues": []}'
-                )
+            return (
+                '{"valid": true, "confidence": 0.8, "suggested_action": "accept", '
+                '"issues": []}'
+            )
 
         # When: Validation fails initially then succeeds
         with patch(
@@ -437,15 +436,15 @@ class TestAsyncErrorRecovery:
 
             try:
                 # Simulate operation that fails
-                raise Exception("Simulated async operation failure")
-            except Exception:
+                raise RuntimeError("Simulated async operation failure")
+            except RuntimeError:
                 # Cleanup resources
                 await cleanup_mock_resource(resource1)
                 await cleanup_mock_resource(resource2)
                 raise
 
         # Execute with expected failure
-        with pytest.raises(Exception, match="Simulated async operation failure"):
+        with pytest.raises(RuntimeError, match="Simulated async operation failure"):
             await async_operation_with_cleanup()
 
         # Then: Resources are properly cleaned up
@@ -463,7 +462,7 @@ class TestAsyncErrorRecovery:
 
         async def failing_operation(name):
             await asyncio.sleep(0.01)
-            raise Exception(f"Failed: {name}")
+            raise RuntimeError(f"Failed: {name}")
 
         # When: Running concurrent operations with some failures
         async def concurrent_operations_with_failures():

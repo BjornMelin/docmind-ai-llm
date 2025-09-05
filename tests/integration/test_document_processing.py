@@ -17,6 +17,10 @@ from src.models.processing import (
 from src.processing.document_processor import (
     DocumentProcessor,
 )
+
+# pylint: disable=redefined-outer-name
+# Rationale: pytest fixtures are intentionally injected and shadow same-named
+# objects in test functions; this matches pytest patterns and improves clarity.
 from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
 
 
@@ -113,9 +117,8 @@ class TestDocumentProcessorCore:
         assert isinstance(proc, DocumentProcessor)
 
     @pytest.mark.asyncio
-    async def test_process_txt_document(
-        self, test_settings, test_documents, mock_unstructured_partition
-    ):
+    @pytest.mark.usefixtures("mock_unstructured_partition")
+    async def test_process_txt_document(self, test_settings, test_documents):
         """Test processing of TXT documents with mocking."""
         proc = DocumentProcessor(test_settings)
         result = await proc.process_document_async(test_documents["txt"])
@@ -123,9 +126,8 @@ class TestDocumentProcessorCore:
         assert result.elements
 
     @pytest.mark.asyncio
-    async def test_process_md_document(
-        self, test_settings, test_documents, mock_unstructured_partition
-    ):
+    @pytest.mark.usefixtures("mock_unstructured_partition")
+    async def test_process_md_document(self, test_settings, test_documents):
         """Test processing of Markdown documents."""
         proc = DocumentProcessor(test_settings)
         result = await proc.process_document_async(test_documents["md"])
@@ -145,9 +147,8 @@ class TestDocumentProcessorCore:
         assert len(result.elements) == 0
 
     @pytest.mark.asyncio
-    async def test_large_document_performance(
-        self, test_settings, test_documents, mock_unstructured_partition
-    ):
+    @pytest.mark.usefixtures("mock_unstructured_partition")
+    async def test_large_document_performance(self, test_settings, test_documents):
         """Test performance handling of large documents."""
         proc = DocumentProcessor(test_settings)
         result = await proc.process_document_async(test_documents["large"])

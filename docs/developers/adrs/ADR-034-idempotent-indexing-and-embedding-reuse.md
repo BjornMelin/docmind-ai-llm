@@ -50,11 +50,11 @@ Compute content hashes (document- and node-level) and use deterministic node IDs
 
 ```mermaid
 graph TD
-  A[File] --> B[Process (ADR‑009)]
-  B --> C[Hash + Stable IDs]
-  C -->|changed| D[Embed + Upsert]
-  C -->|unchanged| E[Skip Embed; Upsert/No-op]
-  D --> Q[Qdrant]
+  A["File"] --> B["Process (ADR-009)"]
+  B --> C["Hash + Stable IDs"]
+  C -->|changed| D["Embed + Upsert"]
+  C -->|unchanged| E["Skip Embed; Upsert/No-op"]
+  D --> Q["Qdrant"]
   E --> Q
 ```
 

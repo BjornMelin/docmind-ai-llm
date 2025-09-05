@@ -49,9 +49,9 @@ Use ChatMemoryBuffer for context and SimpleChatStore (SQLite/WAL) for persistenc
 
 ```mermaid
 graph TD
-  U[User] --> B[ChatMemoryBuffer]
-  B --> S[SimpleChatStore (SQLite)]
-  B --> T[Trim/Condense > threshold]
+  U["User"] --> B["ChatMemoryBuffer"]
+  B --> S["SimpleChatStore (SQLite)"]
+  B --> T["Trim/Condense > threshold"]
 ```
 
 ## Related Requirements

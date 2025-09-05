@@ -54,9 +54,9 @@ Add three sidebar controls and wire them to settings before constructing the rer
 
 ```mermaid
 graph TD
-  UI[Streamlit Sidebar Controls] --> S[Settings.retrieval]
-  S --> F[Reranker Factory]
-  F --> CE[CrossEncoder (text) + ColPali (visual)]
+  UI["Streamlit Sidebar Controls"] --> S["Settings.retrieval"]
+  S --> F["Reranker Factory"]
+  F --> CE["CrossEncoder (text) + ColPali (visual)"]
 ```
 
 ## Related Requirements

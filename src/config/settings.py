@@ -1,13 +1,14 @@
-"""Unified DocMind AI configuration using Pydantic Settings V2.
+"""Unified DocMind AI configuration using Pydantic Settings v2.
 
-This module provides the main configuration architecture:
-- Unified Pydantic BaseSettings with environment variable mapping
-- Nested configuration models for complex areas
+Provides a typed, nested configuration model with environment variable
+mapping. Prefer nested fields and `DOCMIND_{SECTION}__{FIELD}` env vars.
 
 Usage:
-    from src.config import settings
+    from src.config.settings import settings
+    print(settings.embedding.model_name)
 """
 
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
 
@@ -135,6 +136,8 @@ class RetrievalConfig(BaseModel):
     # Reranker model
     # (text-only CrossEncoder; ADR-006 legacy, ADR-037 multimodal supersedes)
     reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
+    # Optional keyword tool (BM25) registration flag (disabled by default)
+    enable_keyword_tool: bool = Field(default=False)
 
 
 class CacheConfig(BaseModel):
@@ -165,7 +168,7 @@ class DatabaseConfig(BaseModel):
 class GraphRAGConfig(BaseModel):
     """GraphRAG configuration (ADR-019)."""
 
-    enabled: bool = Field(default=False)
+    enabled: bool = Field(default=True)
     relationship_extraction: bool = Field(default=False)
     entity_resolution: Literal["fuzzy", "exact"] = Field(default="fuzzy")
     max_hops: int = Field(default=2, ge=1, le=5)
@@ -234,7 +237,7 @@ class DocMindSettings(BaseSettings):
         env_prefix="DOCMIND_",
         env_nested_delimiter="__",
         case_sensitive=False,
-        extra="ignore",  # CRITICAL: Changed from "forbid" to fix validation errors
+        extra="ignore",
     )
 
     # Core Application
@@ -290,7 +293,13 @@ class DocMindSettings(BaseSettings):
     llm_streaming_enabled: bool = Field(default=True)
 
     # Advanced Features
-    enable_graphrag: bool = Field(default=False)
+    enable_graphrag: bool = Field(
+        default=True,
+        description=(
+            "GraphRAG configuration (ADR-019). Breaking change: default is True "
+            "(was False). Disable explicitly to revert to prior behavior."
+        ),
+    )
     enable_dspy_optimization: bool = Field(
         default=False
     )  # Changed to False per user feedback
@@ -323,12 +332,18 @@ class DocMindSettings(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
-    # New nested configs (ADR-024 planned)
+    # Additional nested configs (ADR-024)
     semantic_cache: SemanticCacheConfig = Field(default_factory=SemanticCacheConfig)
     chat: ChatConfig = Field(default_factory=ChatConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
 
+    # Compatibility alias fields mapped to nested configs. These allow
+    # ergonomic top-level overrides via environment variables.
+    context_window_size: int | None = Field(default=None)
+    chunk_size: int | None = Field(default=None)
+    chunk_overlap: int | None = Field(default=None)
+    enable_multi_agent: bool | None = Field(default=None)
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
@@ -339,9 +354,46 @@ class DocMindSettings(BaseSettings):
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
         if self.database.sqlite_db_path.parent != self.data_dir:
             self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Apply compatibility alias fields to nested configs if provided
+        if self.context_window_size is not None:
+            if int(self.context_window_size) <= 0:
+                raise ValueError("context_window_size must be > 0")
+            with suppress(Exception):
+                self.vllm.context_window = int(self.context_window_size)
+        if self.chunk_size is not None:
+            if int(self.chunk_size) <= 0:
+                raise ValueError("chunk_size must be > 0")
+            with suppress(Exception):
+                self.processing.chunk_size = int(self.chunk_size)
+        if self.chunk_overlap is not None:
+            if self.chunk_size is not None and int(self.chunk_overlap) > int(
+                self.chunk_size
+            ):
+                raise ValueError("chunk_overlap cannot exceed chunk_size")
+            with suppress(Exception):
+                self.processing.chunk_overlap = int(self.chunk_overlap)
+        if self.enable_multi_agent is not None:
+            with suppress(Exception):
+                self.agents.enable_multi_agent = bool(self.enable_multi_agent)
+
+    def get_vllm_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
+        """Get vLLM configuration for client setup."""
+        return {
+            "model": self.vllm.model,
+            "context_window": self.vllm.context_window,
+            "temperature": self.vllm.temperature,
+        }
+
+    def get_agent_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
+        """Return agent configuration as a simple mapping."""
+        return {
+            "decision_timeout": self.agents.decision_timeout,
+            "max_retries": self.agents.max_retries,
+            "enable_multi_agent": self.agents.enable_multi_agent,
+        }
 
     def get_vllm_env_vars(self) -> dict[str, str]:
-        """Get vLLM environment variables for process setup."""
+        """Return environment variables for vLLM process setup."""
         return {
             "VLLM_ATTENTION_BACKEND": self.vllm.attention_backend,
             "VLLM_KV_CACHE_DTYPE": self.vllm.kv_cache_dtype,
@@ -372,9 +424,11 @@ class DocMindSettings(BaseSettings):
             "model_name": self.embedding.model_name,
             "device": "cuda" if self.enable_gpu_acceleration else "cpu",
             "max_length": self.embedding.max_length,
-            "batch_size": self.embedding.batch_size_gpu
-            if self.enable_gpu_acceleration
-            else self.embedding.batch_size_cpu,
+            "batch_size": (
+                self.embedding.batch_size_gpu
+                if self.enable_gpu_acceleration
+                else self.embedding.batch_size_cpu
+            ),
             "trust_remote_code": True,
         }
 
@@ -502,9 +556,5 @@ __all__ = [
 
 
 def get_vllm_env_vars() -> dict[str, str]:
-    """Module-level proxy for tests to patch vLLM env vars provider.
-
-    Returns:
-        dict[str, str]: Environment variables for vLLM processes.
-    """
+    """Module-level helper returning vLLM environment variables."""
     return settings.get_vllm_env_vars()

@@ -39,7 +39,7 @@ def test_get_collection_info_exists(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(storage_mod, "create_sync_client", lambda: _CM())
+    monkeypatch.setattr(storage_mod, "create_sync_client", _CM)
 
     out = storage_mod.get_collection_info("col")
     assert out["exists"] is True
@@ -59,7 +59,7 @@ def test_get_collection_info_not_exists(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(storage_mod, "create_sync_client", lambda: _CM())
+    monkeypatch.setattr(storage_mod, "create_sync_client", _CM)
     out = storage_mod.get_collection_info("col")
     assert out == {"exists": False, "error": "Collection not found"}
 
@@ -78,7 +78,7 @@ def test_test_connection_success(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(storage_mod, "create_sync_client", lambda: _CM())
+    monkeypatch.setattr(storage_mod, "create_sync_client", _CM)
     out = storage_mod.test_connection()
     assert out["connected"] is True
     assert out["collections_count"] == 2
@@ -94,7 +94,7 @@ def test_test_connection_error(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(storage_mod, "create_sync_client", lambda: _CM())
+    monkeypatch.setattr(storage_mod, "create_sync_client", _CM)
     out = storage_mod.test_connection()
     assert out["connected"] is False
 
@@ -114,7 +114,7 @@ def test_clear_collection_exists(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(storage_mod, "create_sync_client", lambda: _CM())
+    monkeypatch.setattr(storage_mod, "create_sync_client", _CM)
     assert storage_mod.clear_collection("x") is True
 
 
@@ -130,5 +130,5 @@ def test_clear_collection_missing(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(storage_mod, "create_sync_client", lambda: _CM())
+    monkeypatch.setattr(storage_mod, "create_sync_client", _CM)
     assert storage_mod.clear_collection("x") is False

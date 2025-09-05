@@ -24,6 +24,10 @@ import pytest
 
 from src.config.settings import DocMindSettings
 
+# pylint: disable=redefined-outer-name
+# Rationale: pytest fixture names intentionally shadow same-named objects when
+# injected into tests; keeping names aligns with pytest patterns and readability.
+
 
 @pytest.fixture
 def integration_settings(tmp_path):
@@ -72,7 +76,8 @@ class TestDocumentProcessingIntegration:
 class TestEmbeddingsIntegration:
     """Integration tests for unified embeddings behavior."""
 
-    def test_bgem3_unified_embeddings_interface(self, integration_settings):
+    @pytest.mark.usefixtures("integration_settings")
+    def test_bgem3_unified_embeddings_interface(self):
         """Ensure BGEM3Embedding exposes unified embedding outputs.
 
         The underlying FlagEmbedding model is monkeypatched to avoid downloads.
@@ -91,6 +96,7 @@ class TestEmbeddingsIntegration:
                 self.device = device
 
             def encode(self, texts, **kwargs):
+                """Return deterministic fake dense/sparse/colbert outputs for tests."""
                 return_dense = kwargs.get("return_dense", True)
                 return_sparse = kwargs.get("return_sparse", True)
                 return_colbert_vecs = kwargs.get("return_colbert_vecs", True)
@@ -227,7 +233,8 @@ class TestResourceManagementIntegration:
     """Integration tests for memory context."""
 
     @pytest.mark.asyncio
-    async def test_gpu_memory_context(self, integration_settings):
+    @pytest.mark.usefixtures("integration_settings")
+    async def test_gpu_memory_context(self):
         """Validate gpu_memory_context context manager works without cache coupling."""
         from src.utils.storage import gpu_memory_context
 

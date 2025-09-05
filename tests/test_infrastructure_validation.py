@@ -171,8 +171,8 @@ def test_integration_tier_fixtures(integration_settings, lightweight_embedding_m
 def test_system_tier_fixtures(system_settings):
     """Test that system-tier fixtures work properly."""
     # Test system settings use full models
-    assert system_settings.embedding_dimension == 1024
-    assert "bge-large" in system_settings.embedding.model_name
+    assert system_settings.embedding.dimension == 1024
+    assert "bge-m3" in system_settings.embedding.model_name.lower()
     assert system_settings.retrieval.use_reranking is True
 
 

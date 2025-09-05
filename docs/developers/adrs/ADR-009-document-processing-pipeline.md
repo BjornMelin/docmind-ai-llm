@@ -52,12 +52,12 @@ We adopt Unstructured for parsing and multimodal extraction, orchestrated by Lla
 
 ```mermaid
 graph TD
-  U[Upload] --> P[unstructured.partition]
-  P --> S[Semantic/Title Split]
-  S --> N[Nodes + Metadata]
-  N --> C[IngestionCache (DuckDBKVStore)]
-  N --> E[Embeddings (ADR‑002)]
-  E --> R[Adaptive Retrieval (ADR‑003)]
+  U["Upload"] --> P["unstructured.partition"]
+  P --> S["Semantic / Title Split"]
+  S --> N["Nodes + Metadata"]
+  N --> C["IngestionCache (DuckDBKVStore)"]
+  N --> E["Embeddings (ADR-002)"]
+  E --> R["Adaptive Retrieval (ADR-003)"]
 ```
 
 ## Related Requirements

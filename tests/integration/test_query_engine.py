@@ -66,8 +66,8 @@ class TestAdaptiveRouterQueryEngineIntegration:
     def test_strategy_selection_multi_query_complex(
         self, mock_vector_index, mock_llm_for_routing
     ):
-        """Selects multi_query_search for complex analytical prompts."""
-        mock_llm_for_routing.response_text = "multi_query_search"
+        """Selects sub_question_search for complex analytical prompts."""
+        mock_llm_for_routing.response_text = "sub_question_search"
         router_engine = AdaptiveRouterQueryEngine(
             vector_index=mock_vector_index,
             llm=mock_llm_for_routing,
@@ -75,7 +75,7 @@ class TestAdaptiveRouterQueryEngineIntegration:
         multi_tool = next(
             t
             for t in router_engine._query_engine_tools
-            if t.metadata.name == "multi_query_search"
+            if t.metadata.name == "sub_question_search"
         )
         multi_tool.query_engine.query = MagicMock(
             return_value=MagicMock(response="Multi-query comprehensive response")
@@ -121,6 +121,17 @@ class TestAdaptiveRouterQueryEngineFactories:
             llm=mock_llm_for_routing,
         )
         assert isinstance(router_engine, AdaptiveRouterQueryEngine)
+
+    def test_multimodal_tool_not_registered_without_index(
+        self, mock_vector_index, mock_llm_for_routing
+    ):
+        """Does not include multimodal_search when no multimodal index is provided."""
+        router_engine = create_adaptive_router_engine(
+            vector_index=mock_vector_index,
+            llm=mock_llm_for_routing,
+        )
+        names = router_engine.get_available_strategies()
+        assert "multimodal_search" not in names
 
     def test_configure_router_settings(self, mock_vector_index, mock_llm_for_routing):
         """Configures router settings without raising exceptions."""

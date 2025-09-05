@@ -50,12 +50,12 @@ Ship a CLI/script that creates a timestamped backup directory and prunes older b
 
 ```mermaid
 graph TD
-  A[User] --> B[Backup CLI]
-  B --> C[Copy cache.duckdb]
-  B --> D[Copy Qdrant dir]
-  B --> E[Copy analytics.duckdb (opt)]
-  B --> F[Copy documents dir (opt)]
-  B --> G[Prune old backups]
+  A["User"] --> B["Backup CLI"]
+  B --> C["Copy cache.duckdb"]
+  B --> D["Copy Qdrant dir"]
+  B --> E["Copy analytics.duckdb (opt)"]
+  B --> F["Copy documents dir (opt)"]
+  B --> G["Prune old backups"]
 ```
 
 ## Related Requirements

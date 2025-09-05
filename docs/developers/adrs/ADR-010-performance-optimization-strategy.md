@@ -50,10 +50,10 @@ Use FP8 KV cache (`fp8_e5m2`) with vLLM + FlashInfer and enable parallel tool ex
 
 ```mermaid
 graph TD
-  M[LLM (vLLM + FP8 KV)] --> S[Supervisor]
-  S -->|parallel_tool_calls| T1[Tool A]
-  S --> T2[Tool B]
-  S --> T3[Tool C]
+  M["LLM (vLLM + FP8 KV)"] --> S["Supervisor"]
+  S -->|parallel_tool_calls| T1["Tool A"]
+  S --> T2["Tool B"]
+  S --> T3["Tool C"]
 ```
 
 ## Related Requirements

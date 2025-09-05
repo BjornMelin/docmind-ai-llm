@@ -69,8 +69,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Evaluation methodologies and metrics
 - **[ADR-014 — Testing and Quality Validation Framework](ADR-014-testing-quality-validation.md)**  
   Scope: DeepEval + pytest strategy and CI integration
-- **[ADR-029 — Modern Testing Strategy with Boundary Testing](ADR-029-testing-strategy.md)**  
-  Scope: Unit/integration boundary tests and coverage focus
+- **[ADR-029 — Boundary‑First Testing Strategy](ADR-029-testing-strategy.md)**  
+  Scope: Unit/integration boundary tests and coverage focus (see ADR‑014 for gates)
 
 ## Prompt & LLM Optimization
 
