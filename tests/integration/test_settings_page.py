@@ -35,8 +35,7 @@ def test_settings_apply_runtime_rebinds_llm(settings_app_test: AppTest) -> None:
 
     # Find and click the "Apply runtime" button
     # Use a robust match: click any button whose label contains "Apply runtime"
-    buttons = [b for b in app.button if "Apply runtime" in str(b)]
-    if buttons:
+    if buttons := [b for b in app.button if "Apply runtime" in str(b)]:
         buttons[0].click().run()
     else:
         # Fallback: click the first button (Settings has only two: Apply, Save)
@@ -57,18 +56,15 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     # Model field
     text_inputs = list(app.text_input)
     # Find model input by label
-    model_inputs = [w for w in text_inputs if "Model (id or GGUF path)" in str(w)]
-    if model_inputs:
+    if model_inputs := [w for w in text_inputs if "Model (id or GGUF path)" in str(w)]:
         model_inputs[0].set_value("Hermes-2-Pro-Llama-3-8B").run()
 
     # LM Studio base URL (must end with /v1)
-    lmstudio_inputs = [w for w in text_inputs if "LM Studio base URL" in str(w)]
-    if lmstudio_inputs:
+    if lmstudio_inputs := [w for w in text_inputs if "LM Studio base URL" in str(w)]:
         lmstudio_inputs[0].set_value("http://localhost:1234/v1").run()
 
     # Click Save
-    save_buttons = [b for b in app.button if str(b).strip().endswith("Save")]
-    if save_buttons:
+    if save_buttons := [b for b in app.button if str(b).strip().endswith("Save")]:
         save_buttons[0].click().run()
     else:
         # The second button is Save in the page layout

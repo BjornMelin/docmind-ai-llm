@@ -31,7 +31,7 @@ def _persist_env(vars_to_set: dict[str, str]) -> None:
             if "=" in line:
                 k, v = line.split("=", 1)
                 existing[k.strip()] = v.strip()
-    existing.update(vars_to_set)
+    existing |= vars_to_set
     content = "\n".join(f"{k}={v}" for k, v in existing.items()) + "\n"
     env_path.write_text(content)
 

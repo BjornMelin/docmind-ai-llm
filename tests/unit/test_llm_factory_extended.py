@@ -19,18 +19,16 @@ def test_vllm_top_level_overrides_and_api_base_precedence(
 ) -> None:
     """Top-level model/context take priority; api_base uses top-level vllm_base_url."""
     # Stub OpenAILike to capture constructor args
-    captured: dict = {}
-
     class _OpenAILike:
-        def __init__(self, *, model, api_base, context_window=None, timeout=None, **_):  # type: ignore[no-untyped-def]
-            captured.update(
-                {
-                    "model": model,
-                    "api_base": api_base,
-                    "context_window": context_window,
-                    "timeout": timeout,
-                }
-            )
+        def __init__(
+            self,
+            *,
+            model: str,
+            api_base: str,
+            context_window: int | None = None,
+            timeout: float | int | None = None,
+            **_: object,
+        ) -> None:
             # store attributes for potential downstream assertions
             self.model = model
             self.api_base = api_base
@@ -74,17 +72,15 @@ def test_llamacpp_local_uses_gpu_layers_and_context(
     Based on enable_gpu_acceleration and context window.
     """
     # Stub LlamaCPP to capture params
-    captured_local: dict = {}
-
     class _LlamaCPP:
-        def __init__(self, *, model_path, context_window=None, model_kwargs=None, **_):  # type: ignore[no-untyped-def]
-            captured_local.update(
-                {
-                    "model_path": model_path,
-                    "context_window": context_window,
-                    "model_kwargs": model_kwargs or {},
-                }
-            )
+        def __init__(
+            self,
+            *,
+            model_path: str,
+            context_window: int | None = None,
+            model_kwargs: dict[str, object] | None = None,
+            **_: object,
+        ) -> None:
             self.model_path = model_path
             self.context_window = context_window
             self.model_kwargs = model_kwargs or {}
@@ -103,9 +99,9 @@ def test_llamacpp_local_uses_gpu_layers_and_context(
         enable_gpu_acceleration=True,
         # ensure local path mode by leaving llamacpp_base_url unset
     )
-    _ = build_llm(cfg1)
-    assert captured_local.get("context_window") == 2048
-    assert captured_local.get("model_kwargs", {}).get("n_gpu_layers") == -1
+    llm1 = build_llm(cfg1)
+    assert getattr(llm1, "context_window", None) == 2048
+    assert getattr(llm1, "model_kwargs", {}).get("n_gpu_layers") == -1
 
     # Case 2: CPU only → n_gpu_layers = 0
     cfg2 = DocMindSettings(
@@ -114,9 +110,9 @@ def test_llamacpp_local_uses_gpu_layers_and_context(
         context_window=1024,
         enable_gpu_acceleration=False,
     )
-    _ = build_llm(cfg2)
-    assert captured_local.get("context_window") == 1024
-    assert captured_local.get("model_kwargs", {}).get("n_gpu_layers") == 0
+    llm2 = build_llm(cfg2)
+    assert getattr(llm2, "context_window", None) == 1024
+    assert getattr(llm2, "model_kwargs", {}).get("n_gpu_layers") == 0
 
 
 def test_invalid_context_window_raises_value_error() -> None:

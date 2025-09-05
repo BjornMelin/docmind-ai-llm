@@ -18,16 +18,24 @@ def provider_badge(cfg: DocMindSettings) -> None:
         cfg: Current unified settings.
     """
     provider = cfg.llm_backend
-    model = cfg.model or cfg.vllm.model
+    vllm_cfg = getattr(cfg, "vllm", None)
+    model = cfg.model or (getattr(vllm_cfg, "model", None) if vllm_cfg else None)
     base_url: str | None = None
     if provider == "ollama":
         base_url = cfg.ollama_base_url
     elif provider == "lmstudio":
         base_url = cfg.lmstudio_base_url
     elif provider == "vllm":
-        base_url = cfg.vllm_base_url or cfg.vllm.vllm_base_url
+        base_url = cfg.vllm_base_url or (
+            getattr(vllm_cfg, "vllm_base_url", None) if vllm_cfg else None
+        )
     elif provider == "llamacpp":
-        base_url = cfg.llamacpp_base_url or str(cfg.vllm.llamacpp_model_path)
+        if cfg.llamacpp_base_url:
+            base_url = cfg.llamacpp_base_url
+        else:
+            base_url = (
+                str(getattr(vllm_cfg, "llamacpp_model_path", "")) if vllm_cfg else None
+            )
 
     badge = (
         f"<span style='padding:4px 8px;border-radius:12px;"

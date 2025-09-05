@@ -617,7 +617,7 @@ class DocMindSettings(BaseSettings):
                 # Also accept explicit localhost with ports
                 host = parsed.hostname or ""
                 return host in {"localhost", "127.0.0.1"}
-            except Exception:  # pragma: no cover - defensive
+            except (ValueError, TypeError):  # pragma: no cover - defensive
                 return False
 
         urls = [
