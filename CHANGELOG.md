@@ -4,25 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
-## [1.1.0] - 2025-09-05
-
-### Added
-- Integration test for reranker toggle parity (Quick vs Agentic): `tests/integration/test_reranker_parity.py`.
-- New utils unit tests to raise coverage: document helpers, core async contexts, monitoring timers.
-
-### Changed
-- Refactor agents tools into cohesive modules with stable aggregator exports:
-  `src/agents/tools/{router_tool.py,planning.py,retrieval.py,synthesis.py,validation.py,constants.py,__init__.py}`.
-- Tools now import patch points (ToolFactory, logger, ChatMemoryBuffer, time) via aggregator for resilient tests.
-- Retrieval tool hardened: explicit strategy path by default; conditional aggregator fast‑path for resilience scenarios; DSPy optional with short‑query fallback.
-- Planning tweaks for list/categorize decomposition; timing via aggregator time.
-- Validation thresholds tuned for source overlap (inclusive) via constants.
-- Test runner `scripts/run_tests.py` updated to ASCII‑only output and corrected import validation list.
-
-### Fixed
-- Stabilized supervisor shims in integration tests (compile/stream signatures) and ensured InjectedState overrides visibility.
-- Addressed flaky/residual lint warnings across test suites; ensured ruff clean and pylint tests ≥ 9.8.
-
 ## [1.0.0] - 2025-09-02
 
 ### Added
@@ -54,10 +35,23 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Configuration (ADR‑024): `retrieval.reranker_mode` and global `llm_context_window_max=131072`.
 - Ingestion (ADR‑009): PDF page image emission via `pdf_pages_to_image_documents()` tagging `metadata.modality="pdf_page_image"`.
 
+- Integration test for reranker toggle parity (Quick vs Agentic): `tests/integration/test_reranker_parity.py`.
+- New utils unit tests to raise coverage: document helpers, core async contexts, monitoring timers.
+
 ### Changed
 
 - Agents tools refactor: split `src/agents/tools.py` into cohesive modules under `src/agents/tools/` (`router_tool.py`, `planning.py`, `retrieval.py`, `synthesis.py`, `validation.py`, `telemetry.py`) with `src.agents.tools` as an aggregator. Public API preserved via re-exports; targeted `cyclic-import` disables added where necessary.
 - Linting: re-enabled complexity rules (`too-many-statements`, `too-many-branches`, `too-many-nested-blocks`) and fixed violations by extracting helpers. Imports organized per Ruff; helper signatures annotated to satisfy `ANN001`.
+
+- Tools now import patch points (ToolFactory, logger, ChatMemoryBuffer, time) via aggregator for resilient tests.
+- Retrieval tool hardened: explicit strategy path by default; conditional aggregator fast‑path for resilience scenarios; DSPy optional with short‑query fallback.
+- Planning tweaks for list/categorize decomposition; timing via aggregator time.
+- Validation thresholds tuned for source overlap (inclusive) via constants.
+- Test runner `scripts/run_tests.py` updated to ASCII‑only output and corrected import validation list.
+
+### Fixed
+- Stabilized supervisor shims in integration tests (compile/stream signatures) and ensured InjectedState overrides visibility.
+- Addressed flaky/residual lint warnings across test suites; ensured ruff clean and pylint tests ≥ 9.8.
 
 - Removed legacy/deprecated splitters (SentenceSplitter-based chunkers) and all backward-compatibility paths in favor of Unstructured-first approach.
 - Updated `src/processing/document_processor.py` to:
