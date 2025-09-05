@@ -35,7 +35,7 @@ from unstructured.partition.auto import partition
 
 from src.config.settings import settings as app_settings
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
-from src.processing.utils import is_unstructured_like
+from src.processing.utils import is_unstructured_like, sha256_id
 
 
 class ProcessingError(Exception):
@@ -324,6 +324,18 @@ class UnstructuredTransformation(TransformComponent):
                     k: v for k, v in element_metadata.items() if v is not None
                 }
 
+            # Derive page number (if available) for deterministic IDs
+            page_no = 0
+            try:
+                page_no = int(element_metadata.get("page_number", 0))
+            except Exception:
+                page_no = 0
+
+            # Compute deterministic node id (source_path + page_no + normalized text)
+            det_id = sha256_id(
+                str(file_path), str(page_no), str(getattr(element, "text", ""))
+            )
+
             # Combine original node metadata with element metadata
             combined_metadata = {
                 **(original_node.metadata or {}),
@@ -334,6 +346,9 @@ class UnstructuredTransformation(TransformComponent):
                 else "Unknown",
                 "processing_strategy": self.strategy.value,
                 "source_file": str(file_path),
+                "parent_id": getattr(original_node, "doc_id", None)
+                or getattr(original_node, "id_", None),
+                "node_id": det_id,
             }
 
             # Create Document node for this element (safe attribute access)
@@ -341,6 +356,7 @@ class UnstructuredTransformation(TransformComponent):
                 text=str(getattr(element, "text", ""))
                 if getattr(element, "text", "")
                 else "",
+                doc_id=det_id,
                 metadata=combined_metadata,
                 # Preserve original node's excluded metadata keys and relationships
                 excluded_embed_metadata_keys=original_node.excluded_embed_metadata_keys,
@@ -572,6 +588,53 @@ class DocumentProcessor:
 
             # Convert LlamaIndex nodes to DocumentElements for compatibility
             processed_elements = self._convert_nodes_to_elements(nodes)
+
+            # If PDF, emit page-image nodes for multimodal reranking (SPEC-002)
+            if file_path.suffix.lower() == ".pdf":
+                # Lazy import to avoid importing PyMuPDF unless needed
+                from src.processing.pdf_pages import save_pdf_page_images
+
+                images_dir = (
+                    Path(getattr(self.settings, "cache_dir", "./cache"))
+                    / "page_images"
+                    / file_path.stem
+                )
+                page_images = await asyncio.to_thread(
+                    save_pdf_page_images, file_path, images_dir, 180
+                )
+
+                # Build deterministic PdfPageImageNode-equivalent elements
+                image_elements: list[DocumentElement] = []
+                for img in page_images:
+                    img_path = Path(img["image_path"])  # guaranteed by save function
+                    # Hash image bytes to bind node id to rendered content
+                    img_hash = ""
+                    try:
+                        with open(img_path, "rb") as f:
+                            img_hash = hashlib.sha256(f.read()).hexdigest()
+                    except Exception as _e:
+                        img_hash = ""
+
+                    node_id = sha256_id(
+                        str(file_path), str(img.get("page_no", 0)), img_hash
+                    )
+                    image_elements.append(
+                        DocumentElement(
+                            text="",  # images carry metadata only here
+                            category="Image",
+                            metadata={
+                                "modality": "pdf_page_image",
+                                "page_no": img.get("page_no", 0),
+                                "bbox": img.get("bbox", [0.0, 0.0, 0.0, 0.0]),
+                                "image_path": str(img_path),
+                                "source_file": str(file_path),
+                                "node_id": node_id,
+                                "parent_id": document_hash,
+                            },
+                        )
+                    )
+
+                processed_elements.extend(image_elements)
 
             processing_time = time.time() - start_time
 
