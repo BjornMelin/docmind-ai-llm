@@ -8,6 +8,6 @@
 | FR-005 | Qdrant named vectors hybrid | ADR-005/006 | 005,006 | src/retrieval/query_engine.py | tests_retrieval/* | test | Planned |
 | FR-007 | BGE rerank + ColPali | ADR-007 | 007 | src/retrieval/reranking.py | tests_rerank/* | test | Planned |
 | FR-009 | GraphRAG PropertyGraphIndex | ADR-008 | 008 | src/retrieval/graph_config.py | tests_graph/* | test | Planned |
-| FR-010 | Streamlit multipage | ADR-012 | 012 | src/app.py; src/pages/04_settings.py | tests/unit/test_integrations_runtime.py | inspection | In repo |
-| FR-012 | Multi-provider UI | ADR-009 | 009 | src/config/llm_factory.py; src/pages/04_settings.py | tests/unit/test_llm_factory.py; tests/unit/test_integrations_runtime.py | demo | In repo |
+| FR-010 | Streamlit multipage | ADR-012 | 012 | src/app.py; src/pages/04_settings.py | tests/unit/test_integrations_runtime.py; tests/integration/test_settings_page.py | inspection | Completed |
+| FR-012 | Multi-provider UI | ADR-009 | 009 | src/config/llm_factory.py; src/pages/04_settings.py | tests/unit/test_llm_factory.py; tests/unit/test_llm_factory_extended.py; tests/unit/test_integrations_runtime.py; tests/integration/test_settings_page.py | test | Completed |
 | FR-014 | LangGraph supervisor | ADR-001 | 001 | src/agents/* | tests_agents/* | test | In repo |

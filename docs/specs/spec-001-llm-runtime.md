@@ -43,7 +43,7 @@ from src.config.llm_factory import build_llm
 ## Integration Points
 
 - `src/config/integrations.py::setup_llamaindex()` to inject Settings.llm and context caps.
-- UI: `src/pages/settings.py` provider select, model text input, server URL fields.
+- UI: `src/pages/04_settings.py` provider select, model text input, server URL fields.
 - Chat page uses `Settings.llm` directly.
 
 ## File Operations
@@ -57,7 +57,7 @@ from src.config.llm_factory import build_llm
 - `src/config/settings.py`: Add fields for all providers (urls, flags), validation, defaults.
 - `src/config/llm_factory.py`: Ensure correct backend mapping, timeouts, context_window handling, GPU offload for llama.cpp.
 - `src/config/integrations.py`: Do not overwrite pre-set test LLMs. Set `Settings.context_window` and `Settings.num_output`.
-- `src/pages/settings.py`: Add controls to change provider, model id/path, URLs, and save.
+- `src/pages/04_settings.py`: Add controls to change provider, model id/path, URLs, and save.
 
 ### DELETE
 
