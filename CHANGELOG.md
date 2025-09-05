@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.1.0] - 2025-09-05
+
+### Added
+- Integration test for reranker toggle parity (Quick vs Agentic): `tests/integration/test_reranker_parity.py`.
+- New utils unit tests to raise coverage: document helpers, core async contexts, monitoring timers.
+
+### Changed
+- Refactor agents tools into cohesive modules with stable aggregator exports:
+  `src/agents/tools/{router_tool.py,planning.py,retrieval.py,synthesis.py,validation.py,constants.py,__init__.py}`.
+- Tools now import patch points (ToolFactory, logger, ChatMemoryBuffer, time) via aggregator for resilient tests.
+- Retrieval tool hardened: explicit strategy path by default; conditional aggregator fast‑path for resilience scenarios; DSPy optional with short‑query fallback.
+- Planning tweaks for list/categorize decomposition; timing via aggregator time.
+- Validation thresholds tuned for source overlap (inclusive) via constants.
+- Test runner `scripts/run_tests.py` updated to ASCII‑only output and corrected import validation list.
+
+### Fixed
+- Stabilized supervisor shims in integration tests (compile/stream signatures) and ensured InjectedState overrides visibility.
+- Addressed flaky/residual lint warnings across test suites; ensured ruff clean and pylint tests ≥ 9.8.
+
 ## [1.0.0] - 2025-09-02
 
 ### Added
