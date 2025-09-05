@@ -15,15 +15,18 @@ from src.agents.tools import router_tool
 
 class _FakeResponse:
     def __init__(self, text: str, selected: str | None = None):
+        """Store response text and optional selector metadata."""
         self.response = text
         self.metadata = {"selector_result": selected} if selected else {}
 
 
 class _FakeRouter:
     def __init__(self, selected: str | None = None):
+        """Initialize with an optional selected strategy."""
         self._selected = selected
 
     def query(self, q: str):
+        """Return a fake response object for the query."""
         return _FakeResponse(f"ok: {q}", selected=self._selected)
 
 

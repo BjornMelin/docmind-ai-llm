@@ -1,8 +1,8 @@
 """Integration test: supervisor + router_tool + InjectedState overrides.
 
 Uses the deterministic supervisor_stream_shim fixture to validate that
-tools_data overrides are present in the final state seen by the coordinator's
-_extract_response seam.
+tools_data overrides are present in the final state seen by the
+coordinator's _extract_response seam.
 """
 
 from __future__ import annotations
@@ -12,6 +12,9 @@ from unittest.mock import patch as _patch
 import pytest
 
 from src.agents.coordinator import MultiAgentCoordinator
+
+# pylint: disable=protected-access
+# Rationale: tests set minimal coordinator internals to avoid heavy setup.
 
 
 @pytest.mark.integration
@@ -37,11 +40,12 @@ def test_supervisor_injected_state_router_engine_visible(supervisor_stream_shim)
             coord.enable_fallback = False
             coord.max_agent_timeout = 5
             coord._setup_complete = True
-            coord.compiled_graph = supervisor_stream_shim.compile()  # type: ignore[attr-defined]
+            compiled = supervisor_stream_shim.compile()  # type: ignore[attr-defined]
+            coord.compiled_graph = compiled
 
         observed_final_state = {}
 
-        def _capture(final_state, *args, **kwargs):
+        def _capture(final_state, *_args, **_kwargs):
             nonlocal observed_final_state
             observed_final_state = dict(final_state)
             # Return a minimal AgentResponse-like object

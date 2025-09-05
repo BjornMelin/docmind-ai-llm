@@ -6,7 +6,7 @@ Covers configuration, state management, workflow setup, and error handling.
 # NOTE: We intentionally exercise a few hook helpers via private methods
 # (e.g., _create_post_model_hook) because no equivalent public seam exists.
 # Keep private access minimal and well-documented.
-# pylint: disable=protected-access
+# pylint: disable=protected-access,redefined-outer-name,unused-argument
 
 from unittest.mock import Mock, patch
 
@@ -152,7 +152,8 @@ class TestContextManager:
 class TestMultiAgentCoordinator:
     """Comprehensive tests for MultiAgentCoordinator class."""
 
-    def test_coordinator_initialization_defaults(self, test_settings):
+    @pytest.mark.usefixtures("test_settings")
+    def test_coordinator_initialization_defaults(self):
         """Test coordinator initialization with default parameters."""
         with (
             patch("src.config.setup_llamaindex"),
@@ -173,7 +174,8 @@ class TestMultiAgentCoordinator:
             assert coordinator.max_agent_timeout == app_settings.agents.decision_timeout
             assert coordinator._setup_complete is False
 
-    def test_coordinator_initialization_custom_params(self, test_settings):
+    @pytest.mark.usefixtures("test_settings")
+    def test_coordinator_initialization_custom_params(self):
         """Test coordinator initialization with custom parameters."""
         custom_model = "custom/model"
         custom_context = 64000
@@ -200,7 +202,6 @@ class TestMultiAgentCoordinator:
         pydantic BaseSettings instance directly (which forbids setattr on
         non-fields). Provide a subclass overriding get_vllm_env_vars.
         """
-        from tests.fixtures.test_settings import MockDocMindSettings
 
         class _OverrideSettings(MockDocMindSettings):
             def get_vllm_env_vars(self):  # type: ignore[override]

@@ -37,6 +37,9 @@ from src.agents.tools import (
     validate_response,
 )
 
+# pylint: disable=protected-access
+# Rationale: tests exercise minimal private hooks where no public seam exists.
+
 
 @pytest.mark.asyncio
 @pytest.mark.unit
@@ -137,6 +140,7 @@ class TestAsyncAgentCommunication:
 
         # When: Executing coordinated async operations
         async def simulate_agent_coordination():
+            """Simulate routing and retrieval timings end-to-end."""
             # Simulate router agent timing
             router_start = time.perf_counter()
             with patch("src.agents.tools.ToolFactory"):
@@ -224,6 +228,7 @@ class TestAsyncAgentCommunication:
 
         # When: Executing tools in parallel
         async def parallel_tool_execution():
+            """Run three tool calls in parallel threads."""
             with patch("src.agents.tools.ToolFactory") as mock_factory:
                 mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
@@ -289,6 +294,7 @@ class TestAsyncAgentCommunication:
 
         # When: Using coordinator hooks for pre/post model behavior
         async def async_context_workflow():
+            """Run pre/post hooks around a simple routed call."""
             # Simulate token estimation in async context
             token_count = context_manager.estimate_tokens(messages)
 
@@ -352,6 +358,7 @@ class TestAsyncAgentCommunication:
 
         # When: Persisting and retrieving state across async operations
         async def async_state_workflow():
+            """Persist and reload state across async boundaries."""
             # Save initial state
             checkpoint = memory.put(thread_config, initial_state.dict(), {}, {})
 

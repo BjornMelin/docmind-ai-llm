@@ -17,6 +17,10 @@ from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import AgentResponse
 from src.models.processing import ProcessingResult
 from src.processing.document_processor import DocumentProcessor
+
+# pylint: disable=redefined-outer-name
+# Rationale: pytest fixture names intentionally shadow same-named objects when
+# injected into tests; keeping names aligns with pytest patterns and readability.
 from tests.fixtures.sample_documents import create_sample_documents
 from tests.fixtures.test_settings import IntegrationTestSettings
 
@@ -29,7 +33,7 @@ def _fake_supervisor_graph(final_text: str):
             self.text = text
             self._supervisor_ref = supervisor_ref
 
-        def stream(self, initial_state, config=None, stream_mode: str = "values"):
+        def stream(self, initial_state=None, config=None, stream_mode: str = "values"):
             """Yield a single final state with the provided text."""
             # Mark ainvoke as called for legacy assertions
             with contextlib.suppress(Exception):
@@ -45,7 +49,7 @@ def _fake_supervisor_graph(final_text: str):
             # legacy attribute used in some assertions
             self.ainvoke = Mock()
 
-        def compile(self, checkpointer=None):
+        def compile(self, checkpointer=None):  # pylint: disable=unused-argument
             """Return compiled shim that supports .stream()."""
             return _Compiled(self._text, self)
 
@@ -146,7 +150,8 @@ class TestCompleteQueryWorkflow:
                 def __init__(self) -> None:
                     self.count = 0
 
-                def stream(self, initial_state, config=None, stream_mode="values"):
+                def stream(self, initial_state=None, config=None, stream_mode="values"):
+                    """Yield once; raise on first call for failure simulation."""
                     self.count += 1
                     if self.count == 1:
                         raise RuntimeError("Simulated coordination failure")
@@ -159,7 +164,7 @@ class TestCompleteQueryWorkflow:
                 def __init__(self) -> None:
                     self.ainvoke = Mock()
 
-                def compile(self, checkpointer=None):
+                def compile(self, checkpointer=None):  # pylint: disable=unused-argument
                     return _FlakyCompiled()
 
             mock_supervisor.return_value = _FlakySupervisor()

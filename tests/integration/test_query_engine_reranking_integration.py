@@ -37,6 +37,7 @@ class TestQueryEngineRerankingIntegration:
         mock_llm_for_routing,
         performance_test_nodes,
     ):
+        # pylint: disable=too-many-positional-arguments
         """Validate router + stub reranker pipeline works and sorts nodes."""
         # Mock router to return initial results
         mock_router = MagicMock()
