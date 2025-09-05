@@ -80,3 +80,91 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     contents = env_file.read_text()
     assert "DOCMIND_MODEL=Hermes-2-Pro-Llama-3-8B" in contents
     assert "DOCMIND_LMSTUDIO_BASE_URL=http://localhost:1234/v1" in contents
+
+
+def test_settings_toggle_providers_and_apply(settings_app_test: AppTest, monkeypatch) -> None:
+    """Toggle each provider and Apply runtime, asserting LLM kind per provider.
+
+    Stubs provider adapters to deterministic classes with a 'kind' attribute
+    so we can assert which path the factory used.
+    """
+    # Stub OpenAILike / Ollama / LlamaCPP
+    class _OLike:
+        def __init__(self, *_, **__):
+            self.kind = "openai_like"
+
+    class _Ollama:
+        def __init__(self, *_, **__):
+            self.kind = "ollama"
+
+    class _LCpp:
+        def __init__(self, *_, **__):
+            self.kind = "llama_cpp"
+
+    import sys as _sys
+    from types import ModuleType as _ModuleType
+
+    openai_like_mod = _ModuleType("llama_index.llms.openai_like")
+    openai_like_mod.OpenAILike = _OLike  # type: ignore[attr-defined]
+    ollama_mod = _ModuleType("llama_index.llms.ollama")
+    ollama_mod.Ollama = _Ollama  # type: ignore[attr-defined]
+    llama_cpp_mod = _ModuleType("llama_index.llms.llama_cpp")
+    llama_cpp_mod.LlamaCPP = _LCpp  # type: ignore[attr-defined]
+    monkeypatch.setitem(_sys.modules, "llama_index.llms.openai_like", openai_like_mod)
+    monkeypatch.setitem(_sys.modules, "llama_index.llms.ollama", ollama_mod)
+    monkeypatch.setitem(_sys.modules, "llama_index.llms.llama_cpp", llama_cpp_mod)
+
+    app = settings_app_test.run()
+    assert not app.exception
+
+    # Find provider selectbox
+    providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
+    assert providers, "Provider selectbox not found"
+    provider_sel = providers[0]
+
+    # Helpers
+    def _click_apply() -> None:
+        btns = [b for b in app.button if "Apply runtime" in str(b)]
+        (btns[0] if btns else app.button[0]).click().run()
+
+    def _set_text(label: str, value: str) -> None:
+        fields = [w for w in app.text_input if label in str(w)]
+        if fields:
+            fields[0].set_value(value).run()
+
+    # 1) Ollama
+    provider_sel.select("ollama").run()
+    _set_text("Ollama base URL", "http://localhost:11434")
+    _set_text("Model (id or GGUF path)", "test-ollama")
+    _click_apply()
+    from llama_index.core import Settings as LISettings  # lazy import here
+
+    assert getattr(LISettings.llm, "kind", None) == "ollama"
+
+    # 2) vLLM
+    provider_sel.select("vllm").run()
+    _set_text("vLLM base URL", "http://localhost:8000")
+    _set_text("Model (id or GGUF path)", "test-vllm")
+    _click_apply()
+    assert getattr(LISettings.llm, "kind", None) == "openai_like"
+
+    # 3) LM Studio
+    provider_sel.select("lmstudio").run()
+    _set_text("LM Studio base URL", "http://localhost:1234/v1")
+    _set_text("Model (id or GGUF path)", "test-lms")
+    _click_apply()
+    assert getattr(LISettings.llm, "kind", None) == "openai_like"
+
+    # 4) llama.cpp server path → OpenAILike
+    provider_sel.select("llamacpp").run()
+    _set_text("llama.cpp server URL (optional)", "http://localhost:8080/v1")
+    _set_text("Model (id or GGUF path)", "ignored-for-server")
+    _click_apply()
+    assert getattr(LISettings.llm, "kind", None) == "openai_like"
+
+    # 5) llama.cpp local path → LlamaCPP
+    provider_sel.select("llamacpp").run()
+    _set_text("llama.cpp server URL (optional)", "")
+    _set_text("GGUF model path (LlamaCPP local)", "/tmp/model.gguf")
+    _click_apply()
+    assert getattr(LISettings.llm, "kind", None) == "llama_cpp"
