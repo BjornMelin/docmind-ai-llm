@@ -36,68 +36,74 @@ def build_llm(settings: DocMindSettings) -> Any:
         ValueError: If ``settings.llm_backend`` is unsupported.
     """
     backend = settings.llm_backend
+    # Resolve model/context/timeout with top-level overrides when provided
+    model_name = settings.model or settings.vllm.model
+    context_window = int(settings.context_window or settings.vllm.context_window)
+    timeout_s = float(
+        getattr(
+            settings, "llm_request_timeout_seconds", settings.ui.request_timeout_seconds
+        )
+    )
 
     if backend == "ollama":
         from llama_index.llms.ollama import Ollama  # type: ignore
 
         return Ollama(
             base_url=settings.ollama_base_url,
-            model=settings.vllm.model,
-            request_timeout=float(
-                getattr(
-                    settings,
-                    "llm_request_timeout_seconds",
-                    settings.ui.request_timeout_seconds,
-                )
-            ),
+            model=model_name,
+            request_timeout=timeout_s,
+            context_window=context_window,
         )
 
     if backend == "vllm":
         from llama_index.llms.openai_like import OpenAILike  # type: ignore
 
+        api_base = settings.vllm_base_url or settings.vllm.vllm_base_url
         return OpenAILike(
-            model=settings.vllm.model,
-            api_base=settings.vllm.vllm_base_url,
+            model=model_name,
+            api_base=api_base,
             api_key=getattr(settings, "openai_like_api_key", "not-needed"),
             is_chat_model=getattr(settings, "openai_like_is_chat_model", True),
             is_function_calling_model=getattr(
                 settings, "openai_like_is_function_calling_model", False
             ),
-            context_window=settings.vllm.context_window,
-            timeout=float(
-                getattr(
-                    settings,
-                    "llm_request_timeout_seconds",
-                    settings.ui.request_timeout_seconds,
-                )
-            ),
+            context_window=context_window,
+            timeout=timeout_s,
         )
 
     if backend == "lmstudio":
         from llama_index.llms.openai_like import OpenAILike  # type: ignore
 
         return OpenAILike(
-            model=settings.vllm.model,
+            model=model_name,
             api_base=settings.lmstudio_base_url,
             api_key=getattr(settings, "openai_like_api_key", "not-needed"),
             is_chat_model=True,
             is_function_calling_model=False,
-            context_window=settings.vllm.context_window,
-            timeout=float(
-                getattr(
-                    settings,
-                    "llm_request_timeout_seconds",
-                    settings.ui.request_timeout_seconds,
-                )
-            ),
+            context_window=context_window,
+            timeout=timeout_s,
         )
 
     if backend == "llamacpp":
+        # Support both server (OpenAI-compatible) and local library
+        if settings.llamacpp_base_url:
+            from llama_index.llms.openai_like import OpenAILike  # type: ignore
+
+            return OpenAILike(
+                model=model_name,
+                api_base=settings.llamacpp_base_url,
+                api_key=getattr(settings, "openai_like_api_key", "not-needed"),
+                is_chat_model=True,
+                is_function_calling_model=False,
+                context_window=context_window,
+                timeout=timeout_s,
+            )
+
         from llama_index.llms.llama_cpp import LlamaCPP  # type: ignore
 
         return LlamaCPP(
             model_path=str(settings.vllm.llamacpp_model_path),
-            context_window=settings.vllm.context_window,
+            context_window=context_window,
             model_kwargs={
                 "n_gpu_layers": -1 if settings.enable_gpu_acceleration else 0,
             },

@@ -11,6 +11,7 @@ Usage:
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -277,10 +278,55 @@ class DocMindSettings(BaseSettings):
     )
 
     # Backend Configuration
-    llm_backend: str = Field(default="ollama")
+    llm_backend: Literal["vllm", "ollama", "lmstudio", "llamacpp"] = Field(
+        default="ollama"
+    )
+    # Top-level model controls (mirrors nested vllm.* when provided)
+    model: str | None = Field(
+        default=None,
+        description=(
+            "Preferred model identifier (or GGUF path for LlamaCPP). If set,"
+            " overrides nested vllm.model at runtime."
+        ),
+    )
+    context_window: int | None = Field(
+        default=None,
+        ge=1024,
+        le=200000,
+        description=(
+            "Global context window cap. If set, overrides nested vllm.context_window"
+        ),
+    )
     ollama_base_url: str = Field(default="http://localhost:11434")
     lmstudio_base_url: str = Field(default="http://localhost:1234/v1")
+    vllm_base_url: str | None = Field(
+        default=None, description="vLLM server endpoint (OpenAI or native)"
+    )
+    llamacpp_base_url: str | None = Field(
+        default=None, description="Optional llama.cpp server (OpenAI-compatible)"
+    )
     enable_gpu_acceleration: bool = Field(default=True)
+
+    # Security for endpoints
+    allow_remote_endpoints: bool = Field(
+        default=False,
+        description=(
+            "When False, only localhost/127.0.0.1 endpoints are allowed for LLMs"
+        ),
+    )
+    endpoint_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost",
+            "http://127.0.0.1",
+            "https://localhost",
+            "https://127.0.0.1",
+        ]
+    )
+
+    # Feature flags
+    guided_json_enabled: bool = Field(
+        default=False, description="Structured outputs available (SPEC-007 prep)"
+    )
 
     # OpenAI-compatible client flags (for LM Studio, vLLM OpenAI mode, llama-cpp server)
     openai_like_api_key: str = Field(default="not-needed")
@@ -355,6 +401,18 @@ class DocMindSettings(BaseSettings):
         if self.database.sqlite_db_path.parent != self.data_dir:
             self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
         # Apply compatibility alias fields to nested configs if provided
+        # Keep nested vllm.* in sync with top-level overrides when present
+        if self.model:
+            with suppress(Exception):
+                self.vllm.model = str(self.model)
+        if self.context_window:
+            if int(self.context_window) <= 0:
+                raise ValueError("context_window must be > 0")
+            with suppress(Exception):
+                self.vllm.context_window = int(self.context_window)
+        if self.vllm_base_url:
+            with suppress(Exception):
+                self.vllm.vllm_base_url = str(self.vllm_base_url)
         if self.context_window_size is not None:
             if int(self.context_window_size) <= 0:
                 raise ValueError("context_window_size must be > 0")
@@ -376,11 +434,15 @@ class DocMindSettings(BaseSettings):
             with suppress(Exception):
                 self.agents.enable_multi_agent = bool(self.enable_multi_agent)
 
+        # Validate base URLs and security posture
+        self._validate_endpoints_security()
+        self._validate_lmstudio_url()
+
     def get_vllm_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
         """Get vLLM configuration for client setup."""
         return {
-            "model": self.vllm.model,
-            "context_window": self.vllm.context_window,
+            "model": self.model or self.vllm.model,
+            "context_window": int(self.context_window or self.vllm.context_window),
             "temperature": self.vllm.temperature,
         }
 
@@ -408,10 +470,11 @@ class DocMindSettings(BaseSettings):
     def get_model_config(self) -> dict[str, Any]:
         """Get model configuration for LlamaIndex setup."""
         return {
-            "model_name": self.vllm.model,
+            "model_name": self.model or self.vllm.model,
             # Enforce cap consistently
             "context_window": min(
-                self.vllm.context_window, self.llm_context_window_max
+                int(self.context_window or self.vllm.context_window),
+                self.llm_context_window_max,
             ),
             "max_tokens": self.vllm.max_tokens,
             "temperature": self.vllm.temperature,
@@ -530,6 +593,52 @@ class DocMindSettings(BaseSettings):
             "streamlit_port": self.ui.streamlit_port,
             "enable_dark_mode": self.ui.enable_dark_mode,
         }
+
+    # === Validation helpers ===
+    def _validate_endpoints_security(self) -> None:
+        """Validate endpoint URLs against security policy.
+
+        When ``allow_remote_endpoints`` is False, only localhost/127.0.0.1
+        URLs are permitted. Users may extend ``endpoint_allowlist``.
+        """
+        if self.allow_remote_endpoints:
+            return
+
+        def _is_allowed(url: str | None) -> bool:
+            if not url:
+                return True
+            try:
+                parsed = urlparse(url)
+                if not parsed.scheme or not parsed.netloc:
+                    return True  # empty or malformed handled elsewhere
+                for prefix in self.endpoint_allowlist:
+                    if url.startswith(prefix):
+                        return True
+                # Also accept explicit localhost with ports
+                host = parsed.hostname or ""
+                return host in {"localhost", "127.0.0.1"}
+            except (ValueError, TypeError):  # pragma: no cover - defensive
+                return False
+
+        urls = [
+            self.ollama_base_url,
+            self.lmstudio_base_url,
+            self.vllm_base_url or self.vllm.vllm_base_url,
+            self.llamacpp_base_url,
+        ]
+        for url in urls:
+            if not _is_allowed(url):
+                raise ValueError(
+                    "Remote endpoints are disabled. Set allow_remote_endpoints=True "
+                    "or use localhost URLs."
+                )
+
+    def _validate_lmstudio_url(self) -> None:
+        """Ensure LM Studio base URL ends with /v1 as required by its API."""
+        if self.lmstudio_base_url and not self.lmstudio_base_url.rstrip("/").endswith(
+            "v1"
+        ):
+            raise ValueError("LM Studio base URL must end with /v1")
 
 
 # Global settings instance - primary interface for the application

@@ -1,0 +1,15 @@
+# Specs Index
+
+- [spec-001-llm-runtime.md](./spec-001-llm-runtime.md)
+- [spec-002-ingestion-pipeline.md](./spec-002-ingestion-pipeline.md)
+- [spec-003-embeddings.md](./spec-003-embeddings.md)
+- [spec-004-hybrid-retrieval.md](./spec-004-hybrid-retrieval.md)
+- [spec-005-reranking.md](./spec-005-reranking.md)
+- [spec-006-graphrag.md](./spec-006-graphrag.md)
+- [spec-007-multi-agent-supervisor.md](./spec-007-multi-agent-supervisor.md)
+- [spec-008-ui-streamlit.md](./spec-008-ui-streamlit.md)
+- [spec-009-persistence-caching.md](./spec-009-persistence-caching.md)
+- [spec-010-evaluation.md](./spec-010-evaluation.md)
+- [spec-011-security-privacy.md](./spec-011-security-privacy.md)
+- [spec-012-observability.md](./spec-012-observability.md)
+- [spec-013-packaging-model-download.md](./spec-013-packaging-model-download.md)

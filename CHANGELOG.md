@@ -30,6 +30,27 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Robust E2E tests for Streamlit app using `st.testing.v1.AppTest` with boundary-only mocks for heavy libs (torch, spacy, FlagEmbedding, Unstructured, Qdrant, LlamaIndex, Ollama) and resilient assertions (no brittle UI string matching).
 - Coverage gate scoped to changed subsystems: `src/processing` and `src/config` with `fail_under=29.71%`.
 
+- LLM runtime (SPEC‑001: Multi‑provider runtime & UI):
+  - Unified LLM factory `src/config/llm_factory.py` using LlamaIndex adapters:
+    - vLLM/LM Studio/llama.cpp server via `OpenAILike` (OpenAI‑compatible)
+    - Ollama via `llama_index.llms.ollama.Ollama`
+    - Local llama.cpp via `LlamaCPP(model_path=…, model_kwargs={"n_gpu_layers": -1|0})`
+    - Respects `model`, `context_window`, and `llm_request_timeout_seconds`
+  - New Settings page `src/pages/04_settings.py` with provider dropdown, URL fields, model/path input, context window, timeout, GPU toggle
+    - “Apply runtime” rebinds `Settings.llm` (force)
+    - “Save” persists to `.env` via a minimal updater
+  - Provider badge `src/ui/components/provider_badge.py` shows provider/model/base_url on Chat and Settings
+  - Security validation: `allow_remote_endpoints` default False with `endpoint_allowlist`; LM Studio URL must end with `/v1`
+  - Observability: logs provider/model/base_url on apply, simple counters (`provider_used`, `streaming_enabled`)
+  - Chat wiring: `src/app.py` uses `Settings.llm` for agent system after `initialize_integrations()`
+  - Docs/specs: SPEC‑001 checklist checked; RTM updated for FR‑010/FR‑012
+  - Tests:
+    - Factory type assertions: `tests/unit/test_llm_factory.py`
+    - Extended factory behavior (overrides, /v1, llama.cpp local): `tests/unit/test_llm_factory_extended.py`
+    - Runtime rebind: `tests/unit/test_integrations_runtime.py`
+    - Settings Apply/Save roundtrip: `tests/integration/test_settings_page.py`
+    - Provider toggle + apply (ollama/vllm/lmstudio/llamacpp server+local): `tests/integration/test_settings_page.py`
+
 - Multimodal reranking (ADR‑037): ColPali (visual) + BGE v2‑m3 (text), auto‑gated per node modality with fusion and top‑K truncation; builders for text/visual rerankers; integration test added.
 - UI controls (ADR‑036): Sidebar Reranker Mode (`auto|text|multimodal`), Normalize scores, Top N.
 - Configuration (ADR‑024): `retrieval.reranker_mode` and global `llm_context_window_max=131072`.
@@ -48,6 +69,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Planning tweaks for list/categorize decomposition; timing via aggregator time.
 - Validation thresholds tuned for source overlap (inclusive) via constants.
 - Test runner `scripts/run_tests.py` updated to ASCII‑only output and corrected import validation list.
+
+- UI/runtime (SPEC‑001): removed legacy in‑app backend selection and ad‑hoc LLM construction; centralized provider selection and LLM creation via Settings page + unified factory with strict endpoint validation.
 
 ### Fixed
 - Stabilized supervisor shims in integration tests (compile/stream signatures) and ensured InjectedState overrides visibility.

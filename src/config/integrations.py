@@ -1,13 +1,19 @@
 """LlamaIndex and vLLM integration setup.
 
 This module configures LlamaIndex global ``Settings`` and vLLM environment
-variables using the unified configuration. It intentionally replaces complex
-bespoke setup code with clear, KISS functions to ensure reliability and ease of
-testing.
+variables using the unified configuration (SPEC-001). It provides a single
+definitive binding point for the active LLM backend via the factory.
+
+Key behaviors:
+- No network at import time
+- Respect existing Settings unless forced
+- Hardware-aware LlamaCPP params
+- Optional structured-output flag for vLLM (SPEC-007 prep)
 """
 
 import logging
 import os
+from contextlib import suppress
 
 import torch
 from llama_index.core import Settings
@@ -20,32 +26,72 @@ from .settings import settings
 logger = logging.getLogger(__name__)
 
 
-def setup_llamaindex() -> None:
+def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:
     """Configure LlamaIndex ``Settings`` with unified configuration.
 
-    Sets up the global LLM and embedding model. Heavy dependencies are lazily
-    imported and failures result in ``Settings.llm``/``Settings.embed_model``
-    being set to ``None``.
+    Args:
+        force_llm: When True, rebind ``Settings.llm`` even if already set.
+        force_embed: When True, rebind ``Settings.embed_model`` even if set.
 
-    Raises:
-        None: All errors are logged and converted to ``None`` assignments so the
-        rest of the app can gracefully degrade.
+    Notes:
+        - Heavy libs are imported lazily. Errors are logged and converted to
+          ``None`` assignments so the app can degrade gracefully.
+        - Also sets ``Settings.context_window`` and ``Settings.num_output``.
+        - Sets ``settings.guided_json_enabled`` when backend is vLLM.
+
+    Flag Documentation:
+        - force_llm: If True, forces reconfiguration of the global LLM even
+          when one is already present. Useful in tests or when switching models
+          at runtime via the Settings UI. Caveat: This affects the global
+          ``Settings.llm``; in interactive or multi-user contexts, forcing a
+          rebind can impact other users or ongoing sessions.
+        - force_embed: If True, forces reconfiguration of the global embedding
+          model even when one is already present. Similar caveats to ``force_llm``
+          apply in multi-user scenarios.
+
+        Best practice: Use force flags only when you are certain that overriding
+        global configuration will not disrupt other users or in-flight requests.
     """
-    # Configure LLM via factory (do not overwrite test/fixture values)
-    if Settings.llm is not None:
+    # Configure LLM via factory
+    if Settings.llm is not None and not force_llm:
         logger.info("LLM already configured; skipping override")
     else:
         try:
             Settings.llm = build_llm(settings)
-            logger.info("LLM configured via factory backend=%s", settings.llm_backend)
+            # Observability: log provider + model + base_url once
+            provider = settings.llm_backend
+            model_name = settings.model or settings.vllm.model
+            base_url: str | None
+            if provider == "ollama":
+                base_url = settings.ollama_base_url
+            elif provider == "lmstudio":
+                base_url = settings.lmstudio_base_url
+            elif provider == "vllm":
+                base_url = settings.vllm_base_url or settings.vllm.vllm_base_url
+            elif provider == "llamacpp":
+                base_url = settings.llamacpp_base_url or str(
+                    settings.vllm.llamacpp_model_path
+                )
+            else:
+                base_url = None
+
+            logger.info(
+                "LLM configured via factory: provider=%s model=%s base_url=%s",
+                provider,
+                model_name,
+                base_url,
+            )
+            # Simple counters (log-based)
+            logger.info("counter.provider_used: %s", provider)
+            streaming = bool(getattr(settings, "llm_streaming_enabled", True))
+            logger.info("counter.streaming_enabled: %s", streaming)
         except (ImportError, RuntimeError, ValueError, OSError) as e:
             logger.warning("Could not configure LLM: %s", e, exc_info=True)
             Settings.llm = None
 
-    # Configure BGE-M3 embeddings with unified settings
-    # (do not overwrite test/fixture values)
+    # Configure BGE-M3 embeddings
     try:
-        if Settings.embed_model is not None:
+        if Settings.embed_model is not None and not force_embed:
             logger.info("Embed model already configured; skipping override")
         else:
             embedding_config = settings.get_embedding_config()
@@ -75,7 +121,8 @@ def setup_llamaindex() -> None:
     # Set context window and performance settings (enforce global cap)
     try:
         Settings.context_window = min(
-            int(settings.vllm.context_window), int(settings.llm_context_window_max)
+            int(settings.context_window or settings.vllm.context_window),
+            int(settings.llm_context_window_max),
         )
         Settings.num_output = settings.vllm.max_tokens
 
@@ -86,6 +133,10 @@ def setup_llamaindex() -> None:
         )
     except (AttributeError, ValueError) as e:
         logger.warning("Could not set context configuration: %s", e, exc_info=True)
+
+    # Structured outputs capability flag (SPEC-007 prep)
+    with suppress(Exception):  # pragma: no cover - defensive
+        settings.guided_json_enabled = settings.llm_backend == "vllm"
 
 
 def setup_vllm_env() -> None:
@@ -136,14 +187,24 @@ def get_vllm_server_command() -> list[str]:
     return cmd
 
 
-def initialize_integrations() -> None:
+def initialize_integrations(
+    *, force_llm: bool = False, force_embed: bool = False
+) -> None:
     """Initialize both vLLM environment and LlamaIndex ``Settings``.
+
+    Args:
+        force_llm: Force-rebind ``Settings.llm``.
+        force_embed: Force-rebind ``Settings.embed_model``.
 
     Calls :func:`setup_vllm_env` and :func:`setup_llamaindex` in order.
     """
     setup_vllm_env()
-    setup_llamaindex()
-    logger.info("All integrations initialized successfully")
+    setup_llamaindex(force_llm=force_llm, force_embed=force_embed)
+    logger.info(
+        "All integrations initialized successfully (force_llm=%s, force_embed=%s)",
+        force_llm,
+        force_embed,
+    )
 
 
 # Convenience exports
