@@ -101,11 +101,11 @@ Feature: LLM provider selection
 
 ## Detailed Checklist
 
-- [ ] Add UI select for provider with options: ollama, vllm, lmstudio, llamacpp.
-- [ ] Validate base URLs: vLLM may be raw server or OpenAI-compatible; LM Studio requires `/v1`.
-- [ ] LlamaCPP uses `model_kwargs={"n_gpu_layers": -1 if GPU else 0}`.
-- [ ] Hook `Settings.llm` inside `setup_llamaindex()` only if not already set.
-- [ ] Persist settings to `.env` via existing settings save util.
+- [x] Add UI select for provider with options: ollama, vllm, lmstudio, llamacpp.
+- [x] Validate base URLs: vLLM may be raw server or OpenAI-compatible; LM Studio requires `/v1`.
+- [x] LlamaCPP uses `model_kwargs={"n_gpu_layers": -1 if GPU else 0}`.
+- [x] Hook `Settings.llm` inside `setup_llamaindex()` only if not already set (allow force rebind).
+- [x] Persist settings to `.env` via existing settings save util (minimal updater implemented).
 
 ## Git Plan
 
