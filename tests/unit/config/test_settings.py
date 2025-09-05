@@ -43,7 +43,7 @@ class TestSettingsDefaults:
 
     def test_application_metadata_defaults(self):
         """Test application metadata has correct defaults."""
-        s = settings
+        s = DocMindSettings()
 
         assert s.app_name == "DocMind AI"
         assert s.app_version == "2.0.0"
@@ -51,7 +51,7 @@ class TestSettingsDefaults:
 
     def test_multi_agent_defaults(self):
         """Test multi-agent coordination defaults are properly configured."""
-        s = settings
+        s = DocMindSettings()
 
         # Multi-agent should be enabled by default (from AgentConfig)
         assert s.agents.enable_multi_agent is True
@@ -61,7 +61,7 @@ class TestSettingsDefaults:
 
     def test_llm_backend_defaults(self):
         """Test LLM backend defaults are properly configured for local-first."""
-        s = settings
+        s = DocMindSettings()
 
         assert s.llm_backend == "ollama"  # Ollama backend for local-first
         assert (
@@ -72,7 +72,7 @@ class TestSettingsDefaults:
 
     def test_model_optimization_defaults(self):
         """Test model optimization settings are correctly configured."""
-        s = settings
+        s = DocMindSettings()
 
         # vLLM optimization settings from VLLMConfig
         assert s.vllm.kv_cache_dtype == "fp8_e5m2"  # FP8 KV cache
@@ -102,7 +102,8 @@ class TestSettingsDefaults:
 
     def test_retrieval_defaults(self):
         """Test retrieval configuration defaults."""
-        s = settings
+        with patch.dict(os.environ, {}, clear=True):
+            s = DocMindSettings()
 
         # Retrieval settings from RetrievalConfig
         assert s.retrieval.strategy == "hybrid"  # Hybrid is optimal
@@ -457,8 +458,8 @@ class TestLLMBackendValidation:
     """Test LLM backend validation and warnings."""
 
     def test_valid_llm_backends(self):
-        """Test all valid LLM backends are accepted."""
-        valid_backends = ["ollama", "llamacpp", "vllm", "openai"]
+        """Test all valid LLM backends are accepted (strict set)."""
+        valid_backends = ["ollama", "llamacpp", "vllm", "lmstudio"]
 
         for backend in valid_backends:
             s = DocMindSettings(llm_backend=backend)
@@ -466,7 +467,7 @@ class TestLLMBackendValidation:
 
     def test_valid_backend_acceptance(self):
         """Test valid backends are accepted without warnings."""
-        for backend in ["ollama", "llamacpp", "vllm", "openai"]:
+        for backend in ["ollama", "llamacpp", "vllm", "lmstudio"]:
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 DocMindSettings(llm_backend=backend)
@@ -566,7 +567,8 @@ class TestConfigurationMethods:
 
     def test_get_model_config(self):
         """Test get_model_config returns correct model configuration."""
-        s = settings
+        with patch.dict(os.environ, {}, clear=True):
+            s = DocMindSettings()
         model_config = s.get_model_config()
 
         expected_keys = {
@@ -676,7 +678,8 @@ class TestCentralizedConstants:
 
     def test_default_processing_constants(self):
         """Test default processing value constants."""
-        s = settings
+        with patch.dict(os.environ, {}, clear=True):
+            s = DocMindSettings()
 
         assert s.monitoring.default_batch_size == 20
         assert s.monitoring.default_confidence_threshold == 0.8
@@ -809,11 +812,7 @@ class TestEdgeCasesAndErrorHandling:
             assert s.vllm.temperature == 0.5
 
     def test_string_field_acceptance(self):
-        """Test string fields accept valid values (no constraints currently)."""
-        # These fields currently accept any string value
-        s1 = DocMindSettings(llm_backend="custom_backend")
-        assert s1.llm_backend == "custom_backend"
-
+        """Test unconstrained string fields accept values; llm_backend is strict."""
         s2 = DocMindSettings(retrieval={"strategy": "custom_strategy"})
         assert s2.retrieval.strategy == "custom_strategy"
 

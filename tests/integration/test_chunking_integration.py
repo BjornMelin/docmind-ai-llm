@@ -89,6 +89,7 @@ async def test_by_title_section_boundaries(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
+        patch("src.processing.pdf_pages.save_pdf_page_images", return_value=[]),
     ):
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
@@ -146,6 +147,7 @@ async def test_basic_fallback_heading_sparse(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
+        patch("src.processing.pdf_pages.save_pdf_page_images", return_value=[]),
     ):
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
@@ -200,6 +202,7 @@ async def test_table_isolation(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
+        patch("src.processing.pdf_pages.save_pdf_page_images", return_value=[]),
     ):
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
@@ -249,6 +252,7 @@ async def test_clustered_titles_form_separate_sections(tmp_path):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
+        patch("src.processing.pdf_pages.save_pdf_page_images", return_value=[]),
     ):
         processor = DocumentProcessor()
         result = await processor.process_document_async(test_file)
@@ -349,6 +353,7 @@ async def test_multipage_sections_propagation(tmp_path, multipage):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
+        patch("src.processing.pdf_pages.save_pdf_page_images", return_value=[]),
     ):
         processor = DocumentProcessor(settings=settings)
         await processor.process_document_async(test_file)
@@ -400,6 +405,7 @@ async def test_combine_text_under_n_chars_forwarded(tmp_path, combine_under):
         patch("src.processing.document_processor.IngestionPipeline", _FakePipeline),
         patch("src.processing.document_processor.IngestionCache"),
         patch("src.processing.document_processor.SimpleDocumentStore"),
+        patch("src.processing.pdf_pages.save_pdf_page_images", return_value=[]),
     ):
         processor = DocumentProcessor(settings=settings)
         await processor.process_document_async(test_file)
