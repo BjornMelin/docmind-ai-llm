@@ -188,6 +188,7 @@ ai-research/
 .spec-updates/
 agent-logs/
 docs/specs/.workflow/
+docs/specs/.archived/
 
 # Model caches and embeddings
 embeddings_cache/
