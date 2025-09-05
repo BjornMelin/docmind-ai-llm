@@ -76,6 +76,7 @@ class RegressionTracker:
             # The following are not currently emitted by the monitor;
             # keep for future use
             "memory_usage_peak": ["memory_usage_peak"],
+            "gpu_vram_peak_mb": ["gpu_vram_peak_mb"],
             "embedding_latency": ["embedding_latency"],
             "retrieval_latency": ["retrieval_latency"],
             "llm_inference_time": ["llm_inference_time"],
@@ -146,3 +147,10 @@ class RegressionTracker:
             "threshold_pct": threshold_pct,
             "increase_pct": pct_increase,
         }
+
+    def get_trend_analysis(self, metric: str, days_back: int = 30) -> dict[str, Any]:
+        """Simple stub trend analysis; returns a stable trend with zero samples.
+
+        A future implementation can persist daily snapshots and compute a real trend.
+        """
+        return {"trend_direction": "stable", "data_points": 0}

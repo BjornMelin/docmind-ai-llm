@@ -23,12 +23,26 @@ import argparse
 import contextlib
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+try:
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover - optional
+    psutil = None  # type: ignore
+try:
+    import resource  # type: ignore
+except Exception:  # pragma: no cover - optional
+    resource = None  # type: ignore
+try:
+    import torch  # type: ignore
+except Exception:  # pragma: no cover - optional
+    torch = None  # type: ignore
 
 # Import existing regression tracker
 sys.path.append(str(Path(__file__).parent.parent))
@@ -56,6 +70,7 @@ CRITICAL_METRICS = [
     "test_collection_time",
     "average_test_duration",
     "memory_usage_peak",
+    "gpu_vram_peak_mb",
     "embedding_latency",
     "retrieval_latency",
     "llm_inference_time",
@@ -98,6 +113,15 @@ class PerformanceMonitor:
             logger.info("Starting test suite performance measurement...")
             start_time = time.time()
 
+            # Prepare memory tracking (CPU + GPU)
+            if (
+                torch is not None
+                and hasattr(torch.cuda, "is_available")
+                and torch.cuda.is_available()
+            ):
+                with contextlib.suppress(Exception):
+                    torch.cuda.reset_peak_memory_stats()
+
             # Base pytest command with performance tracking
             cmd = [
                 "uv",
@@ -125,6 +149,39 @@ class PerformanceMonitor:
 
             # Parse pytest output for timing information
             performance_data = self._parse_pytest_output(result.stdout, result.stderr)
+            # Collect CPU peak memory (best-effort)
+            cpu_peak_mb = None
+            try:
+                if resource is not None:
+                    ru = resource.getrusage(resource.RUSAGE_SELF)
+                    peak = getattr(ru, "ru_maxrss", 0)
+                    # macOS returns bytes; Linux returns kilobytes
+                    if sys.platform == "darwin":
+                        cpu_peak_mb = float(peak) / (1024.0 * 1024.0)
+                    else:
+                        cpu_peak_mb = float(peak) / 1024.0
+            except Exception:
+                cpu_peak_mb = None
+            if cpu_peak_mb is None and psutil is not None:
+                try:
+                    proc = psutil.Process(os.getpid())
+                    cpu_peak_mb = float(proc.memory_info().rss) / (1024.0 * 1024.0)
+                except Exception:
+                    cpu_peak_mb = None
+
+            # Collect GPU peak memory (if available)
+            gpu_peak_mb = None
+            try:
+                if (
+                    torch is not None
+                    and hasattr(torch.cuda, "is_available")
+                    and torch.cuda.is_available()
+                ):
+                    peak_bytes = torch.cuda.max_memory_allocated(0)
+                    gpu_peak_mb = float(peak_bytes) / (1024.0 * 1024.0)
+            except Exception:
+                gpu_peak_mb = None
+
             performance_data.update(
                 {
                     "total_duration": duration,
@@ -133,6 +190,10 @@ class PerformanceMonitor:
                     "command": " ".join(cmd),
                 }
             )
+            if cpu_peak_mb is not None:
+                performance_data["memory_usage_peak"] = cpu_peak_mb
+            if gpu_peak_mb is not None:
+                performance_data["gpu_vram_peak_mb"] = gpu_peak_mb
 
             logger.info("Test suite completed in %.2fs", duration)
             return performance_data
@@ -326,6 +387,22 @@ class PerformanceMonitor:
                     performance_data["average_duration"],
                     "seconds",
                     "latency",
+                )
+
+            if "memory_usage_peak" in performance_data:
+                self.regression_tracker.record_performance(
+                    "memory_usage_peak",
+                    performance_data["memory_usage_peak"],
+                    "MB",
+                    "memory",
+                )
+
+            if performance_data.get("gpu_vram_peak_mb"):
+                self.regression_tracker.record_performance(
+                    "gpu_vram_peak_mb",
+                    performance_data["gpu_vram_peak_mb"],
+                    "MB",
+                    "memory",
                 )
 
             logger.info("Performance baseline recorded successfully")

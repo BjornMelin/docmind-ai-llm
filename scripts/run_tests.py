@@ -20,15 +20,15 @@ GPU Smoke Tests:
     - Real hardware testing for releases
 
 Usage:
-    python run_tests.py                  # Run tiered tests (unit → integration)
-    python run_tests.py --unit           # Run unit tests only
-    python run_tests.py --integration    # Run integration tests only
-    python run_tests.py --gpu            # Run GPU tests only
-    python run_tests.py --fast           # Run unit + integration tests
-    python run_tests.py --performance    # Run performance benchmarks
-    python run_tests.py --smoke          # Run basic smoke tests
-    python run_tests.py --coverage       # Generate detailed coverage report
-    python run_tests.py --clean          # Clean test artifacts
+    uv run python run_tests.py                  # Run tiered tests (unit → integration)
+    uv run python run_tests.py --unit           # Run unit tests only
+    uv run python run_tests.py --integration    # Run integration tests only
+    uv run python run_tests.py --gpu            # Run GPU tests only
+    uv run python run_tests.py --fast           # Run unit + integration tests
+    uv run python run_tests.py --performance    # Run performance benchmarks
+    uv run python run_tests.py --smoke          # Run basic smoke tests
+    uv run python run_tests.py --coverage       # Generate detailed coverage report
+    uv run python run_tests.py --clean          # Clean test artifacts
 """
 
 import argparse

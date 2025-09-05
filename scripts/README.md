@@ -50,6 +50,8 @@ uv run python scripts/performance_monitor.py --collection-only
 - Trend analysis and reporting
 - Integration with existing performance tests
 
+Regression checks compare durations and memory (CPU peak, GPU VRAM peak when available) against the recorded baseline.
+
 ### 3. Test Suite Health Monitor (`test_health.py`)
 
 Monitors flaky test patterns, anti-patterns, and test execution stability.
