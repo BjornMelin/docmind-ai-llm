@@ -73,10 +73,10 @@ Feature: Ingestion pipeline
 
 ## Detailed Checklist
 
-- [ ] Use `strategy="auto"`; when tables/images detected prefer `hi_res` else `fast`.
-- [ ] Set OCR agent via Unstructured when needed.
-- [ ] Persist DuckDBKV cache at `./cache/docmind.duckdb` with `IngestionCache`.
-- [ ] Emit deterministic IDs via `sha256(normalized_text)`.
+- [x] Use `strategy="auto"` policy implemented via strategy mapping and configuration per file type; pages with tables/images handled with high‑resolution path; scanned/no text handled via OCR path; text‑dominant via fast path.
+- [x] OCR path available for scanned/image‑only inputs; text nodes are produced under OCR.
+- [x] Persist DuckDBKV cache at `./cache/docmind.duckdb` through `IngestionCache`.
+- [x] Emit deterministic IDs using SHA‑256 of normalized content + source/page lineage; include page‑image nodes with bbox.
 
 ## Git Plan
 
