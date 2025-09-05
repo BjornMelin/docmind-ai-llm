@@ -18,6 +18,7 @@ def test_vllm_top_level_overrides_and_api_base_precedence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Top-level model/context take priority; api_base uses top-level vllm_base_url."""
+
     # Stub OpenAILike to capture constructor args
     class _OpenAILike:
         def __init__(
@@ -71,6 +72,7 @@ def test_llamacpp_local_uses_gpu_layers_and_context(
 
     Based on enable_gpu_acceleration and context window.
     """
+
     # Stub LlamaCPP to capture params
     class _LlamaCPP:
         def __init__(
