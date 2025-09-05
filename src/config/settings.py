@@ -293,7 +293,13 @@ class DocMindSettings(BaseSettings):
     llm_streaming_enabled: bool = Field(default=True)
 
     # Advanced Features
-    enable_graphrag: bool = Field(default=True)
+    enable_graphrag: bool = Field(
+        default=True,
+        description=(
+            "GraphRAG configuration (ADR-019). Breaking change: default is True "
+            "(was False). Disable explicitly to revert to prior behavior."
+        ),
+    )
     enable_dspy_optimization: bool = Field(
         default=False
     )  # Changed to False per user feedback
