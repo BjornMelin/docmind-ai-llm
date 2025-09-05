@@ -82,12 +82,15 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     assert "DOCMIND_LMSTUDIO_BASE_URL=http://localhost:1234/v1" in contents
 
 
-def test_settings_toggle_providers_and_apply(settings_app_test: AppTest, monkeypatch) -> None:
+def test_settings_toggle_providers_and_apply(
+    settings_app_test: AppTest, monkeypatch
+) -> None:
     """Toggle each provider and Apply runtime, asserting LLM kind per provider.
 
     Stubs provider adapters to deterministic classes with a 'kind' attribute
     so we can assert which path the factory used.
     """
+
     # Stub OpenAILike / Ollama / LlamaCPP
     class _OLike:
         def __init__(self, *_, **__):

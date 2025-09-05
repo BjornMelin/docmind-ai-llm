@@ -14,9 +14,10 @@ from src.config.llm_factory import build_llm
 from src.config.settings import DocMindSettings
 
 
-def test_vllm_top_level_overrides_and_api_base_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Top-level model/context take precedence; api_base uses top-level vllm_base_url."""
-
+def test_vllm_top_level_overrides_and_api_base_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Top-level model/context take priority; api_base uses top-level vllm_base_url."""
     # Stub OpenAILike to capture constructor args
     captured: dict = {}
 
@@ -59,13 +60,19 @@ def test_vllm_top_level_overrides_and_api_base_precedence(monkeypatch: pytest.Mo
 
 def test_lmstudio_url_must_end_with_v1() -> None:
     """LM Studio base URL must end with /v1; validation should raise."""
-    with pytest.raises(ValueError):
-        DocMindSettings(llm_backend="lmstudio", lmstudio_base_url="http://localhost:1234")
+    with pytest.raises(ValueError, match="LM Studio base URL must end with /v1"):
+        DocMindSettings(
+            llm_backend="lmstudio", lmstudio_base_url="http://localhost:1234"
+        )
 
 
-def test_llamacpp_local_uses_gpu_layers_and_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Local llama.cpp path uses n_gpu_layers based on enable_gpu_acceleration and context window."""
+def test_llamacpp_local_uses_gpu_layers_and_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """llama.cpp path uses n_gpu_layers.
 
+    Based on enable_gpu_acceleration and context window.
+    """
     # Stub LlamaCPP to capture params
     captured_local: dict = {}
 
@@ -110,4 +117,3 @@ def test_llamacpp_local_uses_gpu_layers_and_context(monkeypatch: pytest.MonkeyPa
     _ = build_llm(cfg2)
     assert captured_local.get("context_window") == 1024
     assert captured_local.get("model_kwargs", {}).get("n_gpu_layers") == 0
-
