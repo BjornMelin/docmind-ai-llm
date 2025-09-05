@@ -30,4 +30,4 @@ def test_get_system_info_error_returns_empty():
 
     with patch("psutil.cpu_percent", side_effect=OSError("boom")):
         info = monitoring.get_system_info()
-    assert info == {}
+    assert not info

@@ -9,6 +9,9 @@ import pytest
 
 from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
 
+# pylint: disable=redefined-outer-name
+# Rationale: pytest fixtures intentionally shadow same-named references in tests.
+
 
 @pytest.fixture
 def test_settings():
@@ -31,13 +34,7 @@ class TestLoggingSetup:
         from src.utils.monitoring import setup_logging
 
         # Test logging setup without external dependencies
-        try:
-            setup_logging(log_level=test_settings.log_level)
-            # If no exception, setup succeeded
-            assert True
-        except Exception as e:
-            # Should not fail for valid log levels
-            pytest.fail(f"Logging setup failed: {e}")
+        setup_logging(log_level=test_settings.log_level)
 
     def test_log_level_validation(self):
         """Test log level validation."""
@@ -52,7 +49,7 @@ class TestLoggingSetup:
 class TestPerformanceMonitoring:
     """Test performance monitoring functionality."""
 
-    def test_simple_performance_monitor_init(self, test_settings):
+    def test_simple_performance_monitor_init(self):
         """Test SimplePerformanceMonitor initialization."""
         from src.utils.monitoring import SimplePerformanceMonitor
 
@@ -132,12 +129,9 @@ class TestSystemInformation:
         from src.utils.monitoring import get_system_info
 
         # Should handle system information collection gracefully
-        try:
-            info = get_system_info()
-            # Either returns info dict or handles errors
-            assert info is None or isinstance(info, dict)
-        except (RuntimeError, OSError, ValueError) as exc:
-            pytest.skip(f"System info unavailable: {exc}")
+        info = get_system_info()
+        # Either returns info dict or handles errors
+        assert info is None or isinstance(info, dict)
 
 
 @pytest.mark.unit
@@ -152,33 +146,21 @@ class TestErrorLogging:
         operation = "test_operation"
 
         # Should handle error logging without external dependencies
-        try:
-            log_error_with_context(test_error, operation)
-            # If no exception, logging succeeded
-            assert True
-        except Exception as e:
-            # Should not fail during error logging
-            pytest.fail(f"Error logging failed: {e}")
+        log_error_with_context(test_error, operation)
 
     def test_log_performance_metrics(self):
         """Test performance metrics logging."""
         from src.utils.monitoring import log_performance
 
         # Should handle performance logging with explicit signature
-        try:
-            log_performance(
-                operation="test_op", duration_seconds=1.23, memory_used=1024
-            )
-            assert True
-        except Exception as e:
-            pytest.fail(f"Performance logging failed: {e}")
+        log_performance(operation="test_op", duration_seconds=1.23, memory_used=1024)
 
 
 @pytest.mark.unit
 class TestMonitoringIntegration:
     """Test monitoring system integration."""
 
-    def test_monitoring_workflow(self, test_settings):
+    def test_monitoring_workflow(self):
         """Test complete monitoring workflow."""
         from src.utils.monitoring import SimplePerformanceMonitor, performance_timer
 

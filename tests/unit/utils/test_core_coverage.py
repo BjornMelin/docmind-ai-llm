@@ -100,7 +100,7 @@ def test_managed_gpu_operation(monkeypatch):
     assert mock_torch.cuda.empty_cache.called
 
 
-def test_async_timer_decorator(monkeypatch):
+def test_async_timer_decorator():
     """Test async timer decorator executes function correctly."""
     calls = {"count": 0}
 

@@ -75,7 +75,7 @@ class TestDetectHardware:
                 assert result["vram_total_gb"] is None
 
     @pytest.mark.parametrize(
-        ("exception_type", "expected_log_level"),
+        ("exception_type", "unused_expected_log_level"),
         [
             (RuntimeError("CUDA error"), "warning"),
             (OSError("System error"), "warning"),
@@ -84,7 +84,9 @@ class TestDetectHardware:
             (ModuleNotFoundError("Module error"), "error"),
         ],
     )
-    def test_detect_hardware_error_handling(self, exception_type, expected_log_level):
+    def test_detect_hardware_error_handling(
+        self, exception_type, unused_expected_log_level
+    ):
         """Test error handling during hardware detection."""
         with patch("torch.cuda.is_available", side_effect=exception_type):
             result = detect_hardware()
@@ -172,7 +174,7 @@ class TestValidateStartupConfiguration:
         """Test Qdrant connection error handling."""
         with (
             patch("qdrant_client.QdrantClient", side_effect=exception_type),
-            pytest.raises(RuntimeError, match="Critical configuration errors"),
+            pytest.raises(RuntimeError, match=error_pattern),
         ):
             validate_startup_configuration(mock_settings)
 
@@ -499,7 +501,8 @@ class TestAsyncTimer:
         result = await flexible_func(*func_args, **func_kwargs)
         assert result == expected_result
 
-    async def test_async_timer_timing_accuracy(self, perf_counter_boundary):
+    @pytest.mark.usefixtures("perf_counter_boundary")
+    async def test_async_timer_timing_accuracy(self):
         """Test that async timer measures time using deterministic perf_counter."""
 
         @async_timer
@@ -599,8 +602,6 @@ class TestUtilsCoreEdgeCases:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                import time
-
                 time.sleep(0.001)  # Simulate slow response
             return []
 

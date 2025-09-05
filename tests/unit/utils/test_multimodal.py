@@ -166,10 +166,9 @@ class TestValidateVramUsage:
         mock_empty_cache.assert_called_once()
 
     @patch("torch.cuda.memory_allocated")
-    @patch("torch.cuda.empty_cache")
     @patch("torch.cuda.is_available")
     def test_validate_vram_usage_with_images(
-        self, mock_cuda_available, mock_empty_cache, mock_memory_allocated
+        self, mock_cuda_available, mock_memory_allocated
     ):
         """Test VRAM validation with image processing."""
         mock_cuda_available.return_value = True
@@ -188,23 +187,20 @@ class TestValidateVramUsage:
         assert mock_clip.get_image_embedding.call_count <= MAX_TEST_IMAGES
 
     @pytest.mark.parametrize(
-        ("exception_type", "expected_result"),
+        "exception_type",
         [
-            (RuntimeError("CUDA out of memory"), 0.0),
-            (ValueError("Invalid image"), 0.0),
-            (TypeError("Type error"), 0.0),
+            RuntimeError("CUDA out of memory"),
+            ValueError("Invalid image"),
+            TypeError("Type error"),
         ],
     )
     @patch("torch.cuda.memory_allocated")
-    @patch("torch.cuda.empty_cache")
     @patch("torch.cuda.is_available")
     def test_validate_vram_usage_error_handling(
         self,
         mock_cuda_available,
-        mock_empty_cache,
         mock_memory_allocated,
         exception_type,
-        expected_result,
     ):
         """Test VRAM validation error handling."""
         mock_cuda_available.return_value = True
@@ -217,7 +213,7 @@ class TestValidateVramUsage:
 
         result = validate_vram_usage(mock_clip, mock_images)
 
-        # Should still return baseline VRAM measurement
+        # Should still return baseline VRAM measurement (non-negative number)
         assert isinstance(result, float)
         assert result >= 0.0
 
@@ -335,17 +331,17 @@ class TestCrossModalSearch:
             mock_index, query="test", search_type="unsupported_type"
         )
 
-        assert results == []
+        assert not results
 
     @pytest.mark.parametrize(
-        ("search_type", "query", "query_image", "expected_calls"),
+        ("search_type", "query", "query_image"),
         [
-            ("text_to_image", "sunset", None, "as_query_engine"),
-            ("image_to_image", None, Mock(spec=Image.Image), "as_retriever"),
+            ("text_to_image", "sunset", None),
+            ("image_to_image", None, Mock(spec=Image.Image)),
         ],
     )
     async def test_cross_modal_search_method_selection(
-        self, search_type, query, query_image, expected_calls
+        self, search_type, query, query_image
     ):
         """Test that correct methods are called for different search types."""
         mock_index = Mock()
@@ -561,7 +557,7 @@ class TestCreateImageDocuments:
         ):
             result = create_image_documents(image_paths)
 
-            assert result == []
+            assert not result
             mock_logger.error.assert_called_once()
 
 
@@ -693,7 +689,7 @@ class TestMultimodalUtilsEdgeCases:
     def test_create_image_documents_empty_paths(self):
         """Test create_image_documents with empty path list."""
         result = create_image_documents([])
-        assert result == []
+        assert not result
 
     def test_batch_process_images_empty_images(self):
         """Test batch_process_images with empty image list."""
