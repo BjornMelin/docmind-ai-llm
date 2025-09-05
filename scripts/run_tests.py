@@ -666,7 +666,8 @@ Examples:
 
         # Generate coverage report if requested or if running comprehensive tests
         if args.coverage or (
-            not args.paths and not any(
+            not args.paths
+            and not any(
                 [
                     args.fast,
                     args.unit,

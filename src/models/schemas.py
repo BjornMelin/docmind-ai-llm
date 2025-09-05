@@ -255,7 +255,7 @@ class PdfPageImageNode(BaseModel):
     """Schema describing a page-image artifact for multimodal reranking.
 
     Emitted during ingestion for PDF documents with deterministic ID and lineage
-    metadata per SPEC-002.
+    metadata.
     """
 
     node_id: str = Field(description="Deterministic node identifier (sha256)")

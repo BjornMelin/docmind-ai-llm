@@ -1,4 +1,4 @@
-"""Unit tests for PDF page image emission utilities (SPEC-002).
+"""Unit tests for PDF page image emission utilities.
 
 Offline and deterministic: PyMuPDF is patched with a lightweight stub.
 """

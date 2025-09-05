@@ -1,4 +1,4 @@
-"""Integration tests for SPEC-002 ingestion pipeline behaviors.
+"""Integration tests for ingestion pipeline behaviors (PDF page images, OCR).
 
 These tests avoid heavy I/O by patching Unstructured and PyMuPDF surfaces.
 """
@@ -23,11 +23,14 @@ async def test_pdf_with_tables_emits_page_image_nodes(tmp_path: Path) -> None:
     pdf.write_text("dummy")
 
     # Partition returns a table-like element and a text element
+    from unittest.mock import Mock
+
     class _El:
         def __init__(self, text: str, category: str) -> None:
             self.text = text
             self.category = category
-            self.metadata = SimpleNamespace(page_number=1)
+            self.metadata = Mock()
+            self.metadata.page_number = 1
 
     parts = [_El("Table 1", "Table"), _El("Para", "NarrativeText")]
 

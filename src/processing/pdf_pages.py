@@ -1,4 +1,4 @@
-"""PDF page image emission utilities (ADR-009, SPEC-002).
+"""PDF page image emission utilities.
 
 Generates page-image artifacts for PDFs with stable filenames and bounding
 boxes, and provides a convenience converter to LlamaIndex ImageDocument nodes

@@ -408,7 +408,7 @@ class DocumentProcessor:
             ".bmp": ProcessingStrategy.OCR_ONLY,
         }
 
-        # Initialize DuckDB-backed cache for LlamaIndex IngestionPipeline (ADR-030)
+        # Initialize DuckDB-backed cache for LlamaIndex IngestionPipeline
         cache_dir = Path(getattr(self.settings, "cache_dir", "./cache"))
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_db = cache_dir / "docmind.duckdb"
@@ -589,7 +589,7 @@ class DocumentProcessor:
             # Convert LlamaIndex nodes to DocumentElements for compatibility
             processed_elements = self._convert_nodes_to_elements(nodes)
 
-            # If PDF, emit page-image nodes for multimodal reranking (SPEC-002)
+            # If PDF, emit page-image nodes for multimodal reranking
             if file_path.suffix.lower() == ".pdf":
                 # Lazy import to avoid importing PyMuPDF unless needed
                 from src.processing.pdf_pages import save_pdf_page_images
@@ -603,7 +603,7 @@ class DocumentProcessor:
                     save_pdf_page_images, file_path, images_dir, 180
                 )
 
-                # Build deterministic PdfPageImageNode-equivalent elements
+                # Build deterministic page-image metadata elements
                 image_elements: list[DocumentElement] = []
                 for img in page_images:
                     img_path = Path(img["image_path"])  # guaranteed by save function

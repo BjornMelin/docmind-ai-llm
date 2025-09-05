@@ -1,4 +1,4 @@
-"""Unit tests for deterministic IDs and lineage in processing (SPEC-002)."""
+"""Unit tests for deterministic IDs and lineage in processing."""
 
 from __future__ import annotations
 
