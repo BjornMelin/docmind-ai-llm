@@ -117,3 +117,17 @@ def test_llamacpp_local_uses_gpu_layers_and_context(
     _ = build_llm(cfg2)
     assert captured_local.get("context_window") == 1024
     assert captured_local.get("model_kwargs", {}).get("n_gpu_layers") == 0
+
+
+def test_invalid_context_window_raises_value_error() -> None:
+    """Invalid context_window should raise ValueError via validation."""
+    with pytest.raises(
+        ValueError,
+        match=r"(must be > 0|greater than or equal to 1024)",
+    ):
+        DocMindSettings(context_window=0)  # type: ignore[call-arg]
+    with pytest.raises(
+        ValueError,
+        match=r"(must be > 0|greater than or equal to 1024)",
+    ):
+        DocMindSettings(context_window=-1024)  # type: ignore[call-arg]

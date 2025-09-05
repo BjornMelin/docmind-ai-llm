@@ -6,6 +6,7 @@ toggle. Supports applying runtime immediately and saving to .env.
 
 from __future__ import annotations
 
+import os
 from contextlib import suppress
 from pathlib import Path
 
@@ -108,6 +109,14 @@ def main() -> None:
         "GGUF model path (LlamaCPP local)",
         value=str(settings.vllm.llamacpp_model_path),
     )
+    gguf_valid = False
+    if gguf_path:
+        if os.path.exists(gguf_path) and gguf_path.lower().endswith(".gguf"):
+            gguf_valid = True
+        else:
+            st.error(
+                "Invalid GGUF model path. File must exist and have a .gguf extension."
+            )
 
     st.subheader("Security")
     allow_remote = st.checkbox(
@@ -131,8 +140,10 @@ def main() -> None:
             settings.lmstudio_base_url = lmstudio_url  # type: ignore[assignment]
             settings.llamacpp_base_url = llamacpp_url or None  # type: ignore[assignment]
             # nested path
-            with suppress(Exception):  # pragma: no cover - UI guard
-                settings.vllm.llamacpp_model_path = Path(gguf_path)
+            # Update GGUF path only when valid
+            if gguf_valid and gguf_path:
+                with suppress(Exception):  # pragma: no cover - UI guard
+                    settings.vllm.llamacpp_model_path = Path(gguf_path)
             settings.allow_remote_endpoints = bool(allow_remote)  # type: ignore[assignment]
 
             _apply_runtime(settings)

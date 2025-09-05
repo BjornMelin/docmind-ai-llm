@@ -38,6 +38,19 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
           ``None`` assignments so the app can degrade gracefully.
         - Also sets ``Settings.context_window`` and ``Settings.num_output``.
         - Sets ``settings.guided_json_enabled`` when backend is vLLM.
+
+    Flag Documentation:
+        - force_llm: If True, forces reconfiguration of the global LLM even
+          when one is already present. Useful in tests or when switching models
+          at runtime via the Settings UI. Caveat: This affects the global
+          ``Settings.llm``; in interactive or multi-user contexts, forcing a
+          rebind can impact other users or ongoing sessions.
+        - force_embed: If True, forces reconfiguration of the global embedding
+          model even when one is already present. Similar caveats to ``force_llm``
+          apply in multi-user scenarios.
+
+        Best practice: Use force flags only when you are certain that overriding
+        global configuration will not disrupt other users or in-flight requests.
     """
     # Configure LLM via factory
     if Settings.llm is not None and not force_llm:
