@@ -175,6 +175,7 @@ cython_debug/
 
 # Project specific
 CLAUDE.md
+.claude/
 AGENTS.md
 logs/
 docmind_ai.log
