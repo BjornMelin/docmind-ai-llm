@@ -63,6 +63,15 @@ class TestRouterTool:
         # selected_strategy may be absent; ensure no crash
         assert "error" not in result
 
+    def test_router_tool_omits_strategy_fields_without_metadata(self):
+        """When selector metadata is absent, strategy fields are omitted."""
+        engine = _FakeRouter(selected=None)
+        state = {"tools_data": {"router_engine": engine}}
+        out = json.loads(router_tool.invoke({"query": "ping", "state": state}))
+        assert "selected_strategy" not in out
+        assert "multimodal_used" not in out
+        assert "hybrid_used" not in out
+
     def test_router_tool_query_exception(self):
         """When router_engine.query raises, returns error JSON."""
 
