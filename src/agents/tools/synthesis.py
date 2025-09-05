@@ -8,7 +8,7 @@ from typing import Annotated
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
-from src.agents.tools import logger, time
+from src.agents import tools as tools_mod
 
 from .constants import MAX_RETRIEVAL_RESULTS, SIMILARITY_THRESHOLD
 
@@ -21,7 +21,7 @@ def synthesize_results(
 ) -> str:
     """Combine and synthesize results from multiple retrieval operations."""
     try:
-        start_time = time.perf_counter()
+        start_time = tools_mod.time.perf_counter()
 
         # Parse sub-results
         try:
@@ -29,7 +29,7 @@ def synthesize_results(
                 json.loads(sub_results) if isinstance(sub_results, str) else sub_results
             )
         except json.JSONDecodeError:
-            logger.error("Invalid JSON in sub_results")
+            tools_mod.logger.error("Invalid JSON in sub_results")
             return json.dumps(
                 {
                     "documents": [],
@@ -51,7 +51,7 @@ def synthesize_results(
                 if "processing_time_ms" in result:
                     total_processing_time += result["processing_time_ms"]
 
-        logger.info(
+        tools_mod.logger.info(
             "Synthesizing %d documents from %d sources",
             len(all_documents),
             len(results_list),
@@ -91,7 +91,7 @@ def synthesize_results(
         max_results = MAX_RETRIEVAL_RESULTS
         final_documents = ranked_documents[:max_results]
 
-        processing_time = time.perf_counter() - start_time
+        processing_time = tools_mod.time.perf_counter() - start_time
 
         synthesis_metadata = {
             "original_count": len(all_documents),
@@ -111,11 +111,13 @@ def synthesize_results(
             "original_query": original_query,
         }
 
-        logger.info("Synthesis complete: %d final documents", len(final_documents))
+        tools_mod.logger.info(
+            "Synthesis complete: %d final documents", len(final_documents)
+        )
         return json.dumps(result_data, default=str)
 
     except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Result synthesis failed: %s", e)
+        tools_mod.logger.error("Result synthesis failed: %s", e)
         return json.dumps({"documents": [], "error": str(e), "synthesis_metadata": {}})
 
 

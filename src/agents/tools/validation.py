@@ -8,7 +8,7 @@ from typing import Annotated
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
-from src.agents.tools import logger, time
+from src.agents import tools as tools_mod
 
 from .constants import (
     ACCEPT_CONFIDENCE_THRESHOLD,
@@ -38,7 +38,7 @@ def validate_response(
 ) -> str:
     """Validate generated response quality and integrity."""
     try:
-        start_time = time.perf_counter()
+        start_time = tools_mod.time.perf_counter()
 
         source_docs = _parse_sources(sources)
 
@@ -82,7 +82,7 @@ def validate_response(
         else:
             suggested_action = "regenerate"
 
-        processing_time = time.perf_counter() - start_time
+        processing_time = tools_mod.time.perf_counter() - start_time
 
         validation_result = {
             "valid": confidence >= VALIDATION_CONFIDENCE_THRESHOLD,
@@ -95,7 +95,7 @@ def validate_response(
             "issue_count": len(issues),
         }
 
-        logger.info(
+        tools_mod.logger.info(
             "Response validation: %.2f confidence, %s action",
             confidence,
             suggested_action,
@@ -103,7 +103,7 @@ def validate_response(
         return json.dumps(validation_result)
 
     except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Response validation failed: %s", e)
+        tools_mod.logger.error("Response validation failed: %s", e)
         return json.dumps(
             {
                 "valid": False,
@@ -160,7 +160,7 @@ def _check_source_attribution(source_docs: list | None, response: str):
         if isinstance(doc, dict):
             doc_content = doc.get("content", doc.get("text", ""))
             doc_words = set(doc_content.lower().split())
-            if len(doc_words.intersection(response_words)) > MAX_SENTENCE_WORD_OVERLAP:
+            if len(doc_words.intersection(response_words)) >= MAX_SENTENCE_WORD_OVERLAP:
                 return None, 1.0
 
     return (
