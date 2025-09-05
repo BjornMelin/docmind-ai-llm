@@ -201,6 +201,17 @@ def process_query_with_agent_system(
         successful. A minimal fallback namespace is returned on invalid mode.
     """
     if mode_ == "multi_agent":
+        # Provide router_engine to coordinator via settings_override (only when present)
+        try:
+            router_engine = getattr(st.session_state, "router_engine", None)
+        except Exception:  # pragma: no cover - UI/session guard
+            router_engine = None
+
+        if router_engine is not None:
+            overrides = {"router_engine": router_engine}
+            return agent_system_.process_query(
+                query, context=memory, settings_override=overrides
+            )
         return agent_system_.process_query(query, context=memory)
     # Return a minimal response envelope for error cases
     return SimpleNamespace(content="Processing error")
