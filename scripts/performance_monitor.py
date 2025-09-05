@@ -353,7 +353,11 @@ class PerformanceMonitor:
 
             # Check critical metrics
             for metric in CRITICAL_METRICS:
-                regression_check = self.regression_tracker.check_regression(metric)
+                regression_check = self.regression_tracker.check_regression(
+                    metric,
+                    current_data=current_data or self.results,
+                    threshold_pct=float(self.config.get("regression_threshold", 20)),
+                )
 
                 if regression_check.get("regression_detected"):
                     regressions_found = True

@@ -417,7 +417,7 @@ VLLM_KV_CACHE_DTYPE=fp8_e5m2
 python scripts/system_validation.py
 
 # Run performance tests
-python scripts/performance_validation.py
+uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 # Analyze logs
 tail -f logs/app.log | grep "ERROR\|WARNING"

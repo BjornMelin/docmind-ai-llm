@@ -58,7 +58,7 @@ print('✅ ADR compliance verified')
 "
 
 # Test system health
-python scripts/performance_validation.py
+uv run python scripts/performance_monitor.py --run-tests --check-regressions
 ```
 
 ## Prerequisites
@@ -214,11 +214,11 @@ print(f'✅ Qdrant: {settings.qdrant.url}')
 ### 2. System Health Check
 
 ```bash
-# Comprehensive validation (includes model loading)
-python scripts/performance_validation.py
+# Comprehensive validation
+uv run python scripts/performance_monitor.py --run-tests --check-regressions --report
 
-# Quick environment check (no model loading)
-SKIP_MODEL_TEST=true python scripts/performance_validation.py
+# Quick environment check (no full test suite)
+uv run python scripts/performance_monitor.py --collection-only --report
 ```
 
 ### 3. Start the Application
@@ -251,7 +251,7 @@ pytest tests/integration/ -v             # Cross-component tests
 python scripts/run_tests.py              # Full test suite
 
 # Performance testing
-python scripts/performance_validation.py
+uv run python scripts/performance_monitor.py --run-tests --report
 ```
 
 ### 2. IDE Setup

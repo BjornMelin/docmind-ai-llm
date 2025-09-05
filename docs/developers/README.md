@@ -89,7 +89,7 @@ uv run python scripts/run_tests.py --integration  # Integration tests
 
 # Code Quality (detailed in Developer Handbook)
 ruff format . && ruff check . --fix      # Format and lint
-python scripts/performance_validation.py # Performance check
+uv run python scripts/performance_monitor.py --run-tests --check-regressions # Performance check
 ```
 
 ### Configuration Pattern

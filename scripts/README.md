@@ -6,7 +6,7 @@ This directory contains comprehensive test quality gates and monitoring infrastr
 
 ### 1. Coverage Threshold Checker (`check_coverage.py`)
 
-Enforces >80% coverage for new code with detailed reporting.
+Target gates: 80% line and 75% branch coverage with detailed reporting. Note: CI currently enforces a lower fail-under (29.71%) defined in `pyproject.toml` and is trending upward. Override thresholds on-demand with `--threshold`/`--branch-threshold`.
 
 ```bash
 # Basic usage
@@ -21,7 +21,7 @@ uv run python scripts/check_coverage.py --new-code-only --diff-from main
 
 **Features:**
 
-- Line and branch coverage validation  
+- Line and branch coverage validation (targets)  
 - New code coverage tracking
 - Detailed HTML reports
 - CI/CD integration support

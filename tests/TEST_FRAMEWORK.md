@@ -50,7 +50,7 @@ def test_real_embedding_pipeline(integration_settings, lightweight_embedding_mod
 
 ```bash
 # Manual GPU smoke test (outside CI)
-python scripts/gpu_validation.py
+uv run python scripts/test_gpu.py --quick
 
 # Optional GPU tests via pytest
 pytest -m "requires_gpu" --timeout=600

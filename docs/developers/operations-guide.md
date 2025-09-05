@@ -880,7 +880,7 @@ env | grep VLLM_  # Should show FlashInfer backend
 env | grep CUDA_  # Check CUDA settings
 
 # Performance validation
-python scripts/performance_validation.py
+uv run python scripts/performance_monitor.py --run-tests --check-regressions
 ```
 
 #### Agent Coordination Issues
@@ -959,7 +959,7 @@ grep -i error /app/logs/docmind.log | tail -20
 
 ```bash
 # Performance validation
-python scripts/performance_validation.py
+uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 # Update dependencies (if needed)
 uv sync --upgrade
@@ -1375,7 +1375,7 @@ tests/integration/test_refactored_pipeline_standalone.py     # MockAppSettings c
 tests/TEST_FRAMEWORK.md                                     # Documentation updates
 tests/performance/test_validation_demo.py                   # Remove _sync_nested_models() calls
 tests/integration/test_structural_integration_workflows.py  # Remove sync dependencies
-tests/performance/test_structural_performance_validation.py # Performance test cleanup
+scripts/performance_monitor.py --run-tests --report # Performance test cleanup
 ```
 
 **Production Code Contamination Patterns Identified:**

@@ -733,7 +733,7 @@ DocMind AI is designed for complete offline operation:
 
    ```bash
    nvidia-smi  # Check GPU availability
-   python scripts/gpu_validation.py  # Validate CUDA setup
+   uv run python scripts/test_gpu.py --quick  # Validate CUDA setup
    ```
 
 ### Model Requirements
@@ -849,7 +849,7 @@ python -c "import torch; torch.cuda.empty_cache()"
 
 ```bash
 # Run performance validation script
-python scripts/performance_validation.py
+uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 # Expected results for RTX 4090:
 # - Decode: 120-180 tokens/second
