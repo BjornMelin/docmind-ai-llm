@@ -6,14 +6,14 @@ Relies on Streamlit AppTest to run src/pages/04_settings.py in a temp cwd.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 
-@pytest.fixture()
+@pytest.fixture
 def settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     """Create an AppTest instance for the Settings page with temp cwd.
 
@@ -24,10 +24,8 @@ def settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     monkeypatch.chdir(tmp_path)
 
     # Build AppTest for the Settings page file
-    page_path = (
-        Path(__file__).resolve().parents[2] / "src" / "pages" / "04_settings.py"
-    )
-    yield AppTest.from_file(str(page_path))
+    page_path = Path(__file__).resolve().parents[2] / "src" / "pages" / "04_settings.py"
+    return AppTest.from_file(str(page_path))
 
 
 def test_settings_apply_runtime_rebinds_llm(settings_app_test: AppTest) -> None:
@@ -82,4 +80,3 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     contents = env_file.read_text()
     assert "DOCMIND_MODEL=Hermes-2-Pro-Llama-3-8B" in contents
     assert "DOCMIND_LMSTUDIO_BASE_URL=http://localhost:1234/v1" in contents
-
