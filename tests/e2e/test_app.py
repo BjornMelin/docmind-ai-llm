@@ -409,48 +409,17 @@ def test_app_hardware_detection(mock_pull, app_test):
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-@patch(
-    "ollama.list",
-    return_value={
-        "models": [{"name": "qwen3-4b-instruct-2507:latest"}, {"name": "llama3:8b"}]
-    },
-)
-def test_app_model_selection_and_backend_configuration(
-    mock_ollama_list, mock_pull, app_test
-):
-    """Test model selection and backend configuration functionality.
+def test_app_renders_and_shows_chat(mock_pull, app_test):
+    """App renders successfully and chat section is present.
 
-    Validates that users can select different backends (Ollama, LM Studio)
-    and that model lists are properly retrieved and displayed.
-
-    Args:
-        mock_ollama_list: Mock Ollama models list.
-        mock_pull: Mock ollama.pull function.
-        app_test: Streamlit app test fixture.
+    Settings are managed on Settings page in the new UI, so backend selection
+    is no longer in the main app sidebar. This test verifies the app renders
+    without exceptions and the chat section exists.
     """
     app = app_test.run()
-
-    # Verify models list was invoked at least once
-    assert mock_ollama_list.called
-
-    # Test that backend selection works
-    backend_selectboxes = [
-        elem
-        for elem in app.selectbox
-        if "Backend" in str(elem) or "ollama" in str(elem).lower()
-    ]
-
-    if backend_selectboxes:
-        # Select Ollama backend and verify no errors
-        backend_selectboxes[0].select("ollama")
-        app.run()
-
-    # Verify no critical exceptions occurred
     assert not app.exception, f"App failed with exception: {app.exception}"
-
-    # Check that model selection components are present
     app_str = str(app)
-    assert "Model" in app_str or "Backend" in app_str or hasattr(app, "selectbox")
+    assert "Chat with Documents" in app_str or hasattr(app, "chat_input")
 
 
 @patch("ollama.pull", return_value={"status": "success"})

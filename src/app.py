@@ -33,16 +33,17 @@ from typing import Any, cast
 
 import ollama
 import streamlit as st
+from llama_index.core import Settings as LISettings
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.core.llms import ChatMessage
 from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.llms.ollama import Ollama
 from loguru import logger
 from streamlit.errors import StreamlitAPIException
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.tool_factory import ToolFactory
 from src.config import settings
+from src.config.integrations import initialize_integrations
 from src.config.settings import DocMindSettings as _DocMindSettings
 from src.config.settings import UIConfig as _UIConfig
 from src.config.settings import VLLMConfig as _VLLMConfig
@@ -52,6 +53,7 @@ from src.prompts import PREDEFINED_PROMPTS
 from src.retrieval.embeddings import setup_clip_for_llamaindex
 from src.retrieval.graph_config import create_property_graph_index
 from src.retrieval.query_engine import create_adaptive_router_engine
+from src.ui.components.provider_badge import provider_badge
 from src.ui_helpers import build_reranker_controls
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
@@ -61,6 +63,7 @@ LLAMACPP_AVAILABLE = False
 # Test-patching placeholders for unit tests (avoid import-time heavy deps)
 # These are intentionally simple so tests can patch them without import side-effects.
 LlamaCPP = None  # type: ignore[assignment]  # pylint: disable=invalid-name
+Ollama = None  # type: ignore[assignment]  # pylint: disable=invalid-name
 OpenAILike = None  # type: ignore[assignment]  # pylint: disable=invalid-name
 SimpleVectorStore = None  # type: ignore[assignment]  # pylint: disable=invalid-name
 try:  # Detect availability without importing at module import time
@@ -243,6 +246,7 @@ if "index" not in st.session_state:
     st.session_state.index = None
 
 st.title("🧠 DocMind AI: Local LLM Document Analysis")
+provider_badge(SETTINGS)
 
 # Dynamic theming with Streamlit 1.47.0
 theme: str = st.selectbox(
@@ -289,9 +293,6 @@ st.sidebar.info(
 )
 
 
-# LlamaCPP is assumed installed; no runtime availability checks
-
-
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
@@ -310,116 +311,11 @@ enable_multimodal: bool = st.sidebar.checkbox(
 # Single ReActAgent (simplified architecture)
 
 
-# Model and Backend Selection with Auto-Download
-st.sidebar.header("Model and Backend")
-with st.sidebar.expander("Advanced Settings"):
-    # Show backend availability status
-    backend_options = ["ollama", "llamacpp", "lmstudio", "vllm"]
-
-    backend: str = st.selectbox(
-        "Backend", backend_options, index=0, key="backend_select"
-    )
-    context_size: int = st.selectbox(
-        "Context Size",
-        SETTINGS.ui.context_size_options,
-        index=1,
-        key="context_size_select",
-    )
-
-model_options: list[str] = []
-if backend == "ollama":
-    ollama_url: str = st.sidebar.text_input(
-        "Ollama URL", value=SETTINGS.ollama_base_url, key="ollama_url"
-    )
-    try:
-        # Use sync model listing to avoid asyncio event loop conflicts
-        models_response = ollama.list()  # Direct sync call
-        items: list[Any] = []
-        if isinstance(models_response, dict):
-            items = models_response.get("models", [])
-        elif isinstance(models_response, list):
-            items = models_response
-        # Be resilient to varied shapes: dicts with name/model, or plain strings
-        model_options = []
-        for it in items:
-            if isinstance(it, dict):
-                name = it.get("name") or it.get("model")
-                if name:
-                    model_options.append(name)
-                else:
-                    model_options.append(str(it))
-            else:
-                model_options.append(str(it))
-    except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError) as e:
-        st.sidebar.error(f"Error fetching models: {e!s}")
-model_name: str = (
-    st.sidebar.selectbox(
-        "Model", model_options or [SUGGESTED_MODEL], key="model_select"
-    )
-    + QUANT_SUFFIX
-)
-
-# Auto-download if not present (quick win for UX)
-if backend == "ollama" and model_name not in model_options:
-    try:
-        with st.sidebar.status("Downloading model..."):
-            # Use sync model pulling to avoid asyncio event loop conflicts
-            ollama.pull(model_name)  # Direct sync call
-            st.sidebar.success("Model downloaded!")
-    except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
-        st.sidebar.error(f"Download failed: {e!s}")
-
-llm: Any | None = None
+"""Initialize LLM via unified integrations (no network at import time)."""
 try:
-    if backend == "ollama":
-        llm = Ollama(
-            base_url=ollama_url,
-            model=model_name,
-            request_timeout=SETTINGS.ui.request_timeout_seconds,
-        )
-    elif backend == "llamacpp":
-        from llama_index.llms.llama_cpp import (  # pylint: disable=ungrouped-imports
-            LlamaCPP,
-        )  # local import to avoid hard dependency
-
-        n_gpu_layers = -1 if use_gpu else 0
-        llm = LlamaCPP(
-            model_path=SETTINGS.vllm.llamacpp_model_path,
-            context_window=context_size,
-            model_kwargs={"n_gpu_layers": n_gpu_layers},
-        )
-    elif backend == "lmstudio":
-        from llama_index.llms.openai_like import (  # pylint: disable=ungrouped-imports
-            OpenAILike,
-        )
-
-        llm = OpenAILike(
-            api_base=SETTINGS.lmstudio_base_url,
-            api_key="not-needed",
-            model=model_name,
-            is_chat_model=True,
-            is_function_calling_model=False,
-            context_window=context_size,
-            timeout=float(SETTINGS.ui.request_timeout_seconds),
-        )
-    elif backend == "vllm":
-        from llama_index.llms.openai_like import (  # pylint: disable=ungrouped-imports
-            OpenAILike,
-        )
-
-        llm = OpenAILike(
-            api_base=SETTINGS.vllm.vllm_base_url,
-            api_key="not-needed",
-            model=model_name,
-            is_chat_model=True,
-            is_function_calling_model=False,
-            context_window=context_size,
-            timeout=float(SETTINGS.ui.request_timeout_seconds),
-        )
-except (ValueError, TypeError, RuntimeError, ConnectionError) as e:
-    st.error(f"Model initialization error: {e!s}")
-    logger.error("Model init error: {}", e)
-    st.stop()
+    initialize_integrations()
+except Exception as e:  # pragma: no cover - resilience
+    logger.warning("Integrations init issue: {}", e)
 
 
 # Async Document Upload Section with Media Parsing and Error Handling
@@ -615,7 +511,7 @@ async def run_analysis() -> None:
                     tools_for_agent = create_tools_from_index(st.session_state.index)
                     coordinator, agent_mode = get_agent_system(
                         _tools=tools_for_agent,
-                        _llm=llm,
+                        _llm=LISettings.llm,
                         _memory=st.session_state.memory,
                     )
                     analysis_output = await asyncio.to_thread(
@@ -658,7 +554,7 @@ def _render_analyze_button() -> None:
                     sync_tools = create_tools_from_index(st.session_state.index)
                     sync_coordinator, sync_agent_mode = get_agent_system(
                         _tools=sync_tools,
-                        _llm=llm,
+                        _llm=LISettings.llm,
                         _memory=st.session_state.memory,
                     )
                     sync_analysis_output = process_query_with_agent_system(
@@ -697,7 +593,7 @@ if user_input:
                 st.session_state.agent_system, st.session_state.agent_mode = (
                     get_agent_system(
                         _tools=tools,
-                        _llm=llm,
+                        _llm=LISettings.llm,
                         _memory=st.session_state.memory,
                     )
                 )
