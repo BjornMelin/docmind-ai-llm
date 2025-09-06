@@ -99,8 +99,8 @@ class QualityGateRunner:
             self.failures.append(f"Quality gate script not found: {script_path}")
             return False
 
-        # Build command
-        cmd = ["python", str(script_path)]
+        # Build command (use uv to ensure project environment and deps)
+        cmd = ["uv", "run", "python", str(script_path)]
         cmd.extend(gate_config["args"])
         if additional_args:
             cmd.extend(additional_args)

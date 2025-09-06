@@ -277,7 +277,7 @@ class DocMindSettings(BaseSettings):
         description="How many backups to retain during rotation",
     )
 
-    # Backend Configuration
+    # Backend Configuration (strict, supported only)
     llm_backend: Literal["vllm", "ollama", "lmstudio", "llamacpp"] = Field(
         default="ollama"
     )

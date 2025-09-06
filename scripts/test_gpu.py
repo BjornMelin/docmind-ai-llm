@@ -320,7 +320,7 @@ def main():
         print("\n📊 Step 5: Performance Benchmarks")
 
         # Run performance validation script
-        cmd = ["uv", "run", "python", "scripts/performance_validation.py"]
+        cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
         exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200)
         exit_codes.append(exit_code)
         test_results["benchmark"] = exit_code == 0

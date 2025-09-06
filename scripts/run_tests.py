@@ -20,15 +20,15 @@ GPU Smoke Tests:
     - Real hardware testing for releases
 
 Usage:
-    python run_tests.py                  # Run tiered tests (unit → integration)
-    python run_tests.py --unit           # Run unit tests only
-    python run_tests.py --integration    # Run integration tests only
-    python run_tests.py --gpu            # Run GPU tests only
-    python run_tests.py --fast           # Run unit + integration tests
-    python run_tests.py --performance    # Run performance benchmarks
-    python run_tests.py --smoke          # Run basic smoke tests
-    python run_tests.py --coverage       # Generate detailed coverage report
-    python run_tests.py --clean          # Clean test artifacts
+    uv run python run_tests.py                  # Run tiered tests (unit → integration)
+    uv run python run_tests.py --unit           # Run unit tests only
+    uv run python run_tests.py --integration    # Run integration tests only
+    uv run python run_tests.py --gpu            # Run GPU tests only
+    uv run python run_tests.py --fast           # Run unit + integration tests
+    uv run python run_tests.py --performance    # Run performance benchmarks
+    uv run python run_tests.py --smoke          # Run basic smoke tests
+    uv run python run_tests.py --coverage       # Generate detailed coverage report
+    uv run python run_tests.py --clean          # Clean test artifacts
 """
 
 import argparse
@@ -605,6 +605,13 @@ Examples:
         help="Validate that all modules can be imported",
     )
 
+    # Accept optional positional test paths/patterns for direct pytest invocation
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Optional test paths or patterns to pass directly to pytest.",
+    )
+
     args = parser.parse_args()
 
     project_root = Path(__file__).parent.parent  # Go up to project root from scripts/
@@ -618,8 +625,17 @@ Examples:
         runner.clean_artifacts()
 
     try:
+        # If explicit test paths were supplied, run them directly via pytest
+        if args.paths:
+            cmd = ["uv", "run", "pytest", *args.paths, "-v", "--tb=short"]
+            if args.coverage:
+                cmd += ["--cov=src", "--cov-report=term-missing"]
+            else:
+                # Avoid project-wide coverage thresholds when running ad-hoc paths
+                cmd += ["--no-cov"]
+            runner.run_command(cmd, "Direct pytest (paths)")
         # Run specific test categories based on tiered strategy
-        if args.validate_imports:
+        elif args.validate_imports:
             runner.validate_imports()
         elif args.smoke:
             runner.run_smoke_tests()
@@ -650,7 +666,8 @@ Examples:
 
         # Generate coverage report if requested or if running comprehensive tests
         if args.coverage or (
-            not any(
+            not args.paths
+            and not any(
                 [
                     args.fast,
                     args.unit,

@@ -6,22 +6,22 @@ This directory contains comprehensive test quality gates and monitoring infrastr
 
 ### 1. Coverage Threshold Checker (`check_coverage.py`)
 
-Enforces >80% coverage for new code with detailed reporting.
+Target gates: 80% line and 75% branch coverage with detailed reporting. Note: CI currently enforces a lower fail-under (29.71%) defined in `pyproject.toml` and is trending upward. Override thresholds on-demand with `--threshold`/`--branch-threshold`.
 
 ```bash
 # Basic usage
-python scripts/check_coverage.py --threshold 80 --fail-under
+uv run python scripts/check_coverage.py --threshold 80 --fail-under
 
 # Generate detailed report with HTML output
-python scripts/check_coverage.py --collect --report --html
+uv run python scripts/check_coverage.py --collect --report --html
 
 # Check only new/modified code
-python scripts/check_coverage.py --new-code-only --diff-from main
+uv run python scripts/check_coverage.py --new-code-only --diff-from main
 ```
 
 **Features:**
 
-- Line and branch coverage validation  
+- Line and branch coverage validation (targets)  
 - New code coverage tracking
 - Detailed HTML reports
 - CI/CD integration support
@@ -33,13 +33,13 @@ Monitors test execution times and detects >20% performance degradations.
 
 ```bash
 # Run performance monitoring with regression detection
-python scripts/performance_monitor.py --run-tests --check-regressions
+uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 # Establish performance baseline
-python scripts/performance_monitor.py --run-tests --baseline
+uv run python scripts/performance_monitor.py --run-tests --baseline
 
 # Quick collection time check
-python scripts/performance_monitor.py --collection-only
+uv run python scripts/performance_monitor.py --collection-only
 ```
 
 **Features:**
@@ -50,19 +50,21 @@ python scripts/performance_monitor.py --collection-only
 - Trend analysis and reporting
 - Integration with existing performance tests
 
+Regression checks compare durations and memory (CPU peak, GPU VRAM peak when available) against the recorded baseline.
+
 ### 3. Test Suite Health Monitor (`test_health.py`)
 
 Monitors flaky test patterns, anti-patterns, and test execution stability.
 
 ```bash
 # Comprehensive health analysis
-python scripts/test_health.py --analyze --runs 10
+uv run python scripts/test_health.py --analyze --runs 10
 
 # Check for code anti-patterns
-python scripts/test_health.py --patterns --test-dirs tests/
+uv run python scripts/test_health.py --patterns --test-dirs tests/
 
 # Monitor test stability
-python scripts/test_health.py --stability --days 7
+uv run python scripts/test_health.py --stability --days 7
 ```
 
 **Features:**
@@ -79,19 +81,19 @@ Orchestrates all quality gates with comprehensive reporting.
 
 ```bash
 # Run all quality gates
-python scripts/run_quality_gates.py --all
+uv run python scripts/run_quality_gates.py --all
 
 # Quick validation (coverage only)
-python scripts/run_quality_gates.py --quick
+uv run python scripts/run_quality_gates.py --quick
 
 # CI/CD pipeline (coverage + performance)
-python scripts/run_quality_gates.py --ci
+uv run python scripts/run_quality_gates.py --ci
 
 # Individual gates
-python scripts/run_quality_gates.py --coverage --performance --health
+uv run python scripts/run_quality_gates.py --coverage --performance --health
 
 # Include pre-commit hooks
-python scripts/run_quality_gates.py --all --pre-commit
+uv run python scripts/run_quality_gates.py --all --pre-commit
 ```
 
 ## Configuration Files
@@ -153,40 +155,40 @@ Comprehensive pre-commit hooks including custom quality gates:
 
 ```bash
 # Before committing
-python scripts/run_quality_gates.py --quick
+uv run python scripts/run_quality_gates.py --quick
 pre-commit run --all-files
 
 # Before pushing  
-python scripts/run_quality_gates.py --ci --report
+uv run python scripts/run_quality_gates.py --ci --report
 
 # Full validation
-python scripts/run_quality_gates.py --all --pre-commit --report
+uv run python scripts/run_quality_gates.py --all --pre-commit --report
 ```
 
 ### CI/CD Integration
 
 ```bash
 # Fast CI validation
-python scripts/run_quality_gates.py --ci --continue-on-failure
+uv run python scripts/run_quality_gates.py --ci --continue-on-failure
 
 # Staging validation
-python scripts/run_quality_gates.py --all --report
+uv run python scripts/run_quality_gates.py --all --report
 
 # Performance baseline update
-python scripts/performance_monitor.py --run-tests --baseline --save
+uv run python scripts/performance_monitor.py --run-tests --baseline --save
 ```
 
 ### Troubleshooting
 
 ```bash
 # Identify flaky tests
-python scripts/test_health.py --flakiness --runs 10 --report
+uv run python scripts/test_health.py --flakiness --runs 10 --report
 
 # Debug coverage issues  
-python scripts/check_coverage.py --collect --report --new-code-only
+uv run python scripts/check_coverage.py --collect --report --new-code-only
 
 # Monitor performance trends
-python scripts/performance_monitor.py --report --days 30
+uv run python scripts/performance_monitor.py --report --days 30
 ```
 
 ## Success Criteria

@@ -44,7 +44,9 @@ async def test_by_title_heuristic_titles_trigger_chunk_by_title(
     We synthesize elements with a specified count of Title and NarrativeText
     and assert which chunker is invoked.
     """
-    test_file = tmp_path / "doc.pdf"
+    # Use a non-PDF extension to avoid invoking PDF page image rendering,
+    # which is unrelated to this heuristic test and can slow/hang on mocks.
+    test_file = tmp_path / "doc.txt"
     test_file.write_text("x")
 
     # Build synthetic parts
