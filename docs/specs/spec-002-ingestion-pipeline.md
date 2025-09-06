@@ -32,6 +32,16 @@ Standardize ingestion using **Unstructured** (`partition(auto)`) with strategy m
 - Page images: `src/processing/pdf_pages.py::save_pdf_page_images()` renders stable `__page-<n>.png` files (idempotent) and returns `page_no`, `image_path`, `bbox`; `DocumentProcessor` appends `pdf_page_image` metadata elements to the result
 - Deterministic IDs: `src/processing/utils.py::sha256_id()` normalizes and hashes `(source_path, page_no, text_or_image_hash)`
 
+### Rationale & Alternatives (Library‑First)
+
+- Why not use `partition(..., chunking_strategy=...)` end‑to‑end?
+  - Unstructured exposes `chunking_strategy` on some partitioners, but does not surface all tuning knobs (e.g., `combine_text_under_n_chars`, `multipage_sections`) across file types via the `partition` facade. Selecting chunker explicitly (`chunk_by_title` vs `basic`) keeps the heuristic and parameterization in our control while still leveraging the built‑in chunkers.
+  - We considered `llama_index.readers.file.unstructured` readers; however, integrating Unstructured directly as a `TransformComponent` lets us (a) preserve full Unstructured metadata, (b) control chunking heuristics, and (c) plug into `IngestionCache` seamlessly. This reduces custom code elsewhere and centralizes ingestion logic.
+  - LlamaIndex splitters (e.g., `SentenceSplitter`, `TokenTextSplitter`) are powerful, but our target is layout‑aware chunking that Unstructured already provides (by‑title/table‑aware). We use LlamaIndex only for orchestration/caching.
+
+- Why DuckDBKVStore for caching?
+  - Official LlamaIndex supports KV stores (Redis/DuckDB). DuckDBKVStore is local‑first, requires zero services, and works well for CI and offline testing. It also keeps the cache as a single file (`./cache/docmind.duckdb`), simplifying lifecycle and stats.
+
 ## Key Libraries
 
 - `unstructured.partition.auto.partition`
@@ -39,6 +49,8 @@ Standardize ingestion using **Unstructured** (`partition(auto)`) with strategy m
 - `llama_index.core.ingestion.IngestionPipeline`, `IngestionCache`
 - `llama_index.storage.kvstore.duckdb.DuckDBKVStore`
 - `fitz` (PyMuPDF) for page rendering
+
+See also: LlamaIndex TransformComponent examples and KV cache usage in the official docs; Unstructured chunker signatures (`chunk_by_title`, `chunk_elements`) for supported parameters.
 
 ## Touched Files
 
