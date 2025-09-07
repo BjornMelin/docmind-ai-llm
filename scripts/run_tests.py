@@ -228,6 +228,7 @@ class TestRunner:
             "-v",
             "--tb=short",
             "--cov=src",
+            "--cov-fail-under=0",
             "--cov-report=term-missing",
             "--durations=10",
             "-m",

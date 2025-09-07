@@ -37,6 +37,7 @@ from llama_index.core import Settings as LISettings
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.core.llms import ChatMessage
 from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.embeddings.clip import ClipEmbedding
 from loguru import logger
 from streamlit.errors import StreamlitAPIException
 
@@ -50,7 +51,6 @@ from src.config.settings import VLLMConfig as _VLLMConfig
 from src.containers import get_multi_agent_coordinator
 from src.processing.pdf_pages import pdf_pages_to_image_documents
 from src.prompts import PREDEFINED_PROMPTS
-from src.retrieval.embeddings import setup_clip_for_llamaindex
 from src.retrieval.graph_config import create_property_graph_index
 from src.retrieval.query_engine import create_adaptive_router_engine
 from src.ui.components.provider_badge import provider_badge
@@ -382,7 +382,10 @@ async def upload_section() -> None:
                     # Multimodal index (text + images) controlled by toggle
                     if enable_multimodal:
                         try:
-                            setup_clip_for_llamaindex({})
+                            # Use ClipEmbedding directly in LI contexts
+                            LISettings.embed_model = ClipEmbedding(
+                                model_name="openai/clip-vit-base-patch32"
+                            )
                             # Emit page-image nodes from uploaded PDFs
                             image_docs: list[Any] = []
                             try:

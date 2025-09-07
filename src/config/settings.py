@@ -104,11 +104,11 @@ class AnalysisConfig(BaseModel):
 class EmbeddingConfig(BaseModel):
     """Embedding configuration (SPEC-003; ADR-002/004).
 
-    Text uses BGE‑M3. Images use tiered backbones (OpenCLIP/SigLIP) with
+    Text uses BGE-M3. Images use tiered backbones (OpenCLIP/SigLIP) with
     hardware-aware defaults. All knobs remain optional and conservative.
     """
 
-    # Text (BGE‑M3)
+    # Text (BGE-M3)
     model_name: str = Field(default="BAAI/bge-m3")
     dimension: int = Field(default=1024, ge=256, le=4096)
     max_length: int = Field(default=8192, ge=512, le=16384)

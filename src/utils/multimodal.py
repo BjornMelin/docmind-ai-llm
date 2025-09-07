@@ -9,8 +9,9 @@ offline and deterministic.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 from loguru import logger
@@ -45,7 +46,6 @@ async def generate_image_embeddings(clip: Any, image: Any) -> np.ndarray:
     Returns:
         L2-normalized numpy vector.
     """
-
     raw = await asyncio.to_thread(clip.get_image_embedding, image)
     if hasattr(raw, "cpu") and callable(raw.cpu):  # torch tensor path
         vec = raw.cpu().numpy()
@@ -60,7 +60,6 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
 
     When CUDA is unavailable or any CUDA call fails, returns 0.0.
     """
-
     if torch is None:
         return 0.0
     try:
@@ -80,20 +79,21 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
             pass
         after = float(torch.cuda.memory_allocated())  # type: ignore[attr-defined]
         # Encourage memory release
-        with contextlib_suppress():
+        with ContextlibSuppress():
             torch.cuda.empty_cache()  # type: ignore[attr-defined]
         return max(0.0, (after - before) / (1024**3))
     except Exception:
         return 0.0
 
 
-def batch_process_images(clip: Any, images: list[Any], *, batch_size: int | None = None) -> np.ndarray:
+def batch_process_images(
+    clip: Any, images: list[Any], *, batch_size: int | None = None
+) -> np.ndarray:
     """Process images in batches and return a (N, D) matrix.
 
     Errors for individual images are logged and converted to zero vectors to
     preserve alignment. When ``images`` is empty, returns ``np.array([])``.
     """
-
     if not images:
         return np.array([])
 
@@ -105,9 +105,9 @@ def batch_process_images(clip: Any, images: list[Any], *, batch_size: int | None
             try:
                 emb = clip.get_image_embedding(img)
                 if hasattr(emb, "cpu") and callable(emb.cpu):  # torch tensor
-                    arr = emb.cpu().numpy().astype(np.float32)
+                    arr = emb.cpu().numpy()
                 else:
-                    arr = np.asarray(emb, dtype=np.float32)
+                    arr = np.asarray(emb)
                 out.append(arr)
             except Exception as exc:  # pragma: no cover - exercised via tests
                 logger.error("Image embedding failed: %s", exc)
@@ -130,19 +130,25 @@ async def cross_modal_search(
 
     Returns a list of result dicts with stable keys for tests.
     """
-
     results: list[dict[str, Any]] = []
     if search_type == "text_to_image" and query is not None:
+        if not query:
+            return []
         response = await asyncio.to_thread(index.as_query_engine().query, query)
+        nodes = getattr(response, "source_nodes", [])
+        if not isinstance(nodes, list | tuple):
+            return []
         rank = 1
-        for node in getattr(response, "source_nodes", [])[:top_k]:
+        for node in nodes[:top_k]:
             text = getattr(getattr(node, "node", {}), "text", "")
             if len(text) > TEXT_TRUNCATION_LIMIT:
                 text = text[:TEXT_TRUNCATION_LIMIT]
             results.append(
                 {
                     "score": getattr(node, "score", 0.0),
-                    "image_path": getattr(getattr(node, "node", {}), "metadata", {}).get("image_path"),
+                    "image_path": getattr(
+                        getattr(node, "node", {}), "metadata", {}
+                    ).get("image_path"),
                     "text": text,
                     "rank": rank,
                 }
@@ -158,7 +164,9 @@ async def cross_modal_search(
             results.append(
                 {
                     "similarity": getattr(node, "score", 0.0),
-                    "image_path": getattr(getattr(node, "node", {}), "metadata", {}).get("image_path"),
+                    "image_path": getattr(
+                        getattr(node, "node", {}), "metadata", {}
+                    ).get("image_path"),
                     "text": getattr(getattr(node, "node", {}), "text", ""),
                     "rank": rank,
                 }
@@ -170,12 +178,13 @@ async def cross_modal_search(
     return results
 
 
-def create_image_documents(image_paths: Iterable[str], metadata: dict[str, Any] | None = None) -> list[ImageDocument]:
+def create_image_documents(
+    image_paths: Iterable[str], metadata: dict[str, Any] | None = None
+) -> list[ImageDocument]:
     """Create ``ImageDocument`` entries for paths, skipping failures.
 
     Errors constructing individual documents are logged and skipped.
     """
-
     docs: list[ImageDocument] = []
     meta = metadata or {"source": "multimodal"}
     for p in image_paths:
@@ -198,8 +207,10 @@ async def validate_end_to_end_pipeline(
     This stitches together image embedding, a toy entity relationship summary,
     and a final response string that references key components.
     """
-
     # Image embedding (normalized) drives a dummy similarity metric
+    import time
+
+    start = time.perf_counter()
     emb = await generate_image_embeddings(clip, query_image)
     similarity = float(np.clip(np.dot(emb, emb), 0.0, 1.0))  # == 1.0 when normalized
 
@@ -216,25 +227,40 @@ async def validate_end_to_end_pipeline(
         f"Entity relationships detected: {', '.join(entities)}."
     )
 
+    end = time.perf_counter()
+
     return {
-        "final_response": final + " Combined with entity relationships and multimodal context.",
+        "final_response": final
+        + " Combined with entity relationships and multimodal context.",
         "entity_relationships": {
             "entities_found": entities,
             "relationship_count": relationships,
         },
-        "similarity": similarity,
+        "visual_similarity": {
+            "embedding_dim": int(emb.shape[0] if emb.ndim == 1 else emb.shape[-1]),
+            "norm": float(np.linalg.norm(emb)),
+            "score": similarity,
+        },
+        "pipeline_time": end - start,
     }
 
 
-class contextlib_suppress:  # pragma: no cover - tiny helper
+class ContextlibSuppress:  # pragma: no cover - tiny helper
     """Lightweight contextlib.suppress clone to avoid importing contextlib here."""
 
     def __init__(self, *exceptions: type[BaseException]):
+        """Initialize with exception classes to suppress."""
         self.exceptions = exceptions or (Exception,)
 
-    def __enter__(self) -> None:  # noqa: D401 - trivial
+    def __enter__(self) -> None:
+        """Enter context without side effects."""
         return None
 
-    def __exit__(self, exc_type, exc, tb) -> bool:  # type: ignore[override]
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: Any | None,
+    ) -> bool:  # type: ignore[override]
+        """Suppress listed exceptions by returning True when matched."""
         return exc_type is not None and issubclass(exc_type, self.exceptions)
-

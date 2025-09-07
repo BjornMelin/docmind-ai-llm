@@ -1,3 +1,8 @@
+"""Unit tests for ImageEmbedder.
+
+Backends are monkeypatched to avoid heavy imports and downloads.
+"""
+
 import numpy as np
 import pytest
 
@@ -6,10 +11,11 @@ from src.models.embeddings import ImageEmbedder
 
 @pytest.mark.unit
 def test_image_embedder_backbone_shapes_vitl_and_vith():
+    """Backbone selection returns expected dimensionality (768 vs 1024)."""
     # Patch to avoid importing real backends
     ie = ImageEmbedder(device="cpu")
 
-    def fake_encode(images, *, backbone=None, **_):  # noqa: ANN001
+    def fake_encode(images, *, backbone=None, **_):
         dim = 768 if backbone == "openclip_vitl14" else 1024
         return np.ones((len(images), dim), dtype=np.float32)
 
@@ -25,9 +31,10 @@ def test_image_embedder_backbone_shapes_vitl_and_vith():
 
 @pytest.mark.unit
 def test_image_embedder_normalization_property():
+    """Outputs are L2-normalized when requested."""
     ie = ImageEmbedder(device="cpu")
 
-    def fake_encode(images, *, backbone=None, normalize=True, **_):  # noqa: ANN001
+    def fake_encode(images, *, backbone=None, normalize=True, **_):
         dim = 768
         x = np.random.randn(len(images), dim).astype(np.float32)
         if normalize:
@@ -35,7 +42,8 @@ def test_image_embedder_normalization_property():
         return x
 
     ie.encode_image = fake_encode  # type: ignore[method-assign]
-    out = ie.encode_image([object(), object()], backbone="openclip_vitl14", normalize=True)
+    out = ie.encode_image(
+        [object(), object()], backbone="openclip_vitl14", normalize=True
+    )
     norms = np.linalg.norm(out, axis=1)
     assert np.allclose(norms, 1.0, atol=1e-5)
-
