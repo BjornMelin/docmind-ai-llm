@@ -94,8 +94,11 @@ def batch_process_images(
 ) -> np.ndarray:
     """Process images in batches and return a (N, D) matrix.
 
-    Errors for individual images are logged and converted to zero vectors to
-    preserve alignment. When ``images`` is empty, returns ``np.array([])``.
+    - When ``output_dim`` is provided, validates that produced embeddings
+      match the expected dimension and raises ``ValueError`` on mismatch.
+    - Otherwise, errors for individual images are logged and converted to
+      zero vectors with a default dimension.
+    - When ``images`` is empty, returns ``np.array([])``.
     """
     if not images:
         return np.array([])
@@ -112,6 +115,14 @@ def batch_process_images(
                     arr = emb.cpu().numpy()
                 else:
                     arr = np.asarray(emb)
+                # Optional strict validation of output dimensionality
+                if (
+                    output_dim is not None
+                    and not (arr.ndim == 1 and arr.shape[0] == dim)
+                ):
+                    raise ValueError(
+                        f"Model output dimension {arr.shape} != expected ({dim},)"
+                    )
                 out.append(arr)
             except Exception as exc:  # pragma: no cover - exercised via tests
                 logger.error("Image embedding failed: %s", exc)
