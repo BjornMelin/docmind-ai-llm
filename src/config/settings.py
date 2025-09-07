@@ -102,13 +102,34 @@ class AnalysisConfig(BaseModel):
 
 
 class EmbeddingConfig(BaseModel):
-    """BGE-M3 embedding configuration (ADR-002)."""
+    """Embedding configuration (SPEC-003; ADR-002/004).
 
+    Text uses BGE‑M3. Images use tiered backbones (OpenCLIP/SigLIP) with
+    hardware-aware defaults. All knobs remain optional and conservative.
+    """
+
+    # Text (BGE‑M3)
     model_name: str = Field(default="BAAI/bge-m3")
     dimension: int = Field(default=1024, ge=256, le=4096)
     max_length: int = Field(default=8192, ge=512, le=16384)
-    batch_size_gpu: int = Field(default=12, ge=1, le=128)
-    batch_size_cpu: int = Field(default=4, ge=1, le=32)
+    enable_sparse: bool = Field(default=True)
+    normalize_text: bool = Field(default=True)
+    batch_size_text_gpu: int = Field(default=12, ge=1, le=128)
+    batch_size_text_cpu: int = Field(default=4, ge=1, le=64)
+
+    # Images
+    image_backbone: Literal[
+        "auto",
+        "openclip_vitl14",
+        "openclip_vith14",
+        "siglip_base",
+        "bge_visualized",
+    ] = Field(default="auto")
+    normalize_image: bool = Field(default=True)
+    batch_size_image: int = Field(default=8, ge=1, le=64)
+
+    # Device selection (auto|cpu|cuda)
+    embed_device: Literal["auto", "cpu", "cuda"] = Field(default="auto")
 
 
 class RetrievalConfig(BaseModel):
@@ -482,16 +503,33 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_embedding_config(self) -> dict[str, Any]:
-        """Get embedding configuration for BGE-M3 setup."""
+        """Get embedding configuration for embedding factories.
+
+        Returns a flat mapping used by factory helpers while keeping the
+        class-based configuration as the single source of truth.
+        """
+        device = (
+            ("cuda" if self.enable_gpu_acceleration else "cpu")
+            if self.embedding.embed_device == "auto"
+            else self.embedding.embed_device
+        )
         return {
+            # Text
             "model_name": self.embedding.model_name,
-            "device": "cuda" if self.enable_gpu_acceleration else "cpu",
+            "device": device,
             "max_length": self.embedding.max_length,
-            "batch_size": (
-                self.embedding.batch_size_gpu
-                if self.enable_gpu_acceleration
-                else self.embedding.batch_size_cpu
+            "batch_size_text": (
+                self.embedding.batch_size_text_gpu
+                if device == "cuda"
+                else self.embedding.batch_size_text_cpu
             ),
+            "normalize_text": self.embedding.normalize_text,
+            "enable_sparse": self.embedding.enable_sparse,
+            # Images
+            "image_backbone": self.embedding.image_backbone,
+            "batch_size_image": self.embedding.batch_size_image,
+            "normalize_image": self.embedding.normalize_image,
+            # Misc
             "trust_remote_code": True,
         }
 

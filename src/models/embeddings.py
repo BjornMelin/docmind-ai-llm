@@ -1,19 +1,32 @@
-"""Embedding-specific Pydantic models for DocMind AI BGE-M3 Embedding Pipeline.
+"""Unified embedding models and light-weight embedders.
 
-This module contains data models specifically designed for the BGE-M3 embedding
-operations, following requirements for 8K context unified embeddings
-with dense, sparse, and ColBERT multi-vector representations.
+This module provides small, library-first helpers for the SPEC-003 embedding
+stack while keeping imports lazy to preserve offline determinism for tests.
 
-Models:
-    EmbeddingParameters: Configuration parameters for BGE-M3 embedding operations
-    EmbeddingResult: Result of BGE-M3 embedding operations with dense/sparse/colbert
-    EmbeddingError: Custom exception for embedding processing errors
+Contents:
+- Pydantic models describing parameters/results for text embeddings.
+- TextEmbedder using BGE-M3 (dense + sparse) via FlagEmbedding (lazy import).
+- ImageEmbedder with tiered backbones (OpenCLIP/SigLIP; optional Visualized‑BGE),
+  loaded lazily and normalized outputs.
+- UnifiedEmbedder that routes items to the appropriate embedder.
+
+Notes:
+- No downloads or heavy imports occur at import time. Backends are loaded on
+  first use. Tests can monkeypatch the private ``_backend`` or the protected
+  ``_encode_*`` methods to avoid any network / GPU usage.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, Iterable, Literal, Union
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
+
+try:  # Optional torch for normalization and device checks
+    import torch
+except Exception:  # pragma: no cover - torch may be unavailable in CI
+    torch = None  # type: ignore[assignment]
 
 
 class EmbeddingParameters(BaseModel):
@@ -72,3 +85,344 @@ class EmbeddingResult(BaseModel):
 
 class EmbeddingError(Exception):
     """Custom exception for embedding processing errors."""
+
+
+# ===== Implementation helpers =====
+def _l2_normalize(arr: np.ndarray, axis: int = -1) -> np.ndarray:
+    """L2-normalize a numpy array, guarding zero-norm rows.
+
+    Args:
+        arr: Input array.
+        axis: Axis to normalize over.
+
+    Returns:
+        Normalized array with the same shape/dtype.
+    """
+
+    norm = np.linalg.norm(arr, axis=axis, keepdims=True)
+    # Avoid division by zero: only divide where norm > 0
+    safe = np.where(norm > 0, arr / norm, arr)
+    return safe.astype(arr.dtype, copy=False)
+
+
+def _select_device(explicit: str | None = None) -> str:
+    """Choose a device string ('cuda' or 'cpu') based on availability.
+
+    A user-provided ``explicit`` overrides auto-detection.
+    """
+
+    if explicit:
+        return explicit
+    if torch is not None and getattr(torch, "cuda", None) and torch.cuda.is_available():
+        return "cuda"
+    # Apple Silicon MPS is out-of-scope here; fall back to CPU for simplicity
+    return "cpu"
+
+
+# ===== Text: BGE‑M3 =====
+class TextEmbedder:
+    """Text embedding via BGE‑M3 with optional sparse output.
+
+    Library-first usage of FlagEmbedding.BGEM3FlagModel, imported lazily only
+    when needed. All outputs can be L2-normalized for deterministic behavior.
+    """
+
+    def __init__(
+        self,
+        *,
+        model_name: str = "BAAI/bge-m3",
+        device: str | None = None,
+        use_fp16: bool | None = None,
+        default_batch_size: int = 12,
+        seed: int = 42,
+    ) -> None:
+        self.model_name = model_name
+        self.device = _select_device(device)
+        self.use_fp16 = bool(use_fp16) if use_fp16 is not None else (self.device == "cuda")
+        self.default_batch_size = int(default_batch_size)
+        self._backend: Any | None = None
+        self.seed = int(seed)
+
+    # --- Backend loading ---
+    def _ensure_loaded(self) -> None:
+        if self._backend is not None:
+            return
+        try:
+            from FlagEmbedding import BGEM3FlagModel  # type: ignore
+        except Exception as exc:  # pragma: no cover - exercised via unit mocks
+            raise ImportError(
+                "FlagEmbedding is required for TextEmbedder. Install with: uv add FlagEmbedding"
+            ) from exc
+
+        if torch is not None:
+            try:
+                torch.manual_seed(self.seed)
+            except Exception:  # pragma: no cover - defensive
+                pass
+
+        self._backend = BGEM3FlagModel(self.model_name, use_fp16=self.use_fp16, devices=[self.device])
+
+    # --- Encoding ---
+    def encode_text(
+        self,
+        texts: list[str],
+        *,
+        return_dense: bool = True,
+        return_sparse: bool = True,
+        batch_size: int | None = None,
+        normalize: bool = True,
+        device: str | None = None,
+        max_length: int = 8192,
+    ) -> dict[str, Any]:
+        """Encode a batch of texts to dense and/or sparse representations.
+
+        Returns a dictionary with optional keys: ``dense`` (np.ndarray [N,1024])
+        and ``sparse`` (list[dict[int,float]]). The backend is invoked with
+        the official flags for BGEM3 dense+sparse output.
+        """
+
+        if not texts:
+            out: dict[str, Any] = {}
+            if return_dense:
+                out["dense"] = np.empty((0, 1024), dtype=np.float32)
+            if return_sparse:
+                out["sparse"] = []
+            return out
+
+        self._ensure_loaded()
+
+        bs = int(batch_size or self.default_batch_size)
+        if device:
+            # Allow per-call override
+            self.device = device
+
+        outputs = self._backend.encode(  # type: ignore[call-arg]
+            texts,
+            batch_size=bs,
+            max_length=max_length,
+            return_dense=return_dense,
+            return_sparse=return_sparse,
+            return_colbert_vecs=False,
+        )
+
+        result: dict[str, Any] = {}
+        if return_dense and "dense_vecs" in outputs and outputs["dense_vecs"] is not None:
+            dense = np.asarray(outputs["dense_vecs"], dtype=np.float32)
+            if normalize and dense.size:
+                dense = _l2_normalize(dense)
+            result["dense"] = dense
+
+        if return_sparse and "lexical_weights" in outputs and outputs["lexical_weights"] is not None:
+            # Already a list[dict[int,float]]
+            result["sparse"] = outputs["lexical_weights"]
+
+        return result
+
+
+# ===== Images: OpenCLIP / SigLIP (tiered) =====
+_BackboneName = Literal[
+    "auto",
+    "openclip_vitl14",
+    "openclip_vith14",
+    "siglip_base",
+    "bge_visualized",
+]
+
+
+class ImageEmbedder:
+    """Tiered image embedder with lazy, library-first backends.
+
+    Selection logic (heuristic):
+    - CPU/low-VRAM → OpenCLIP ViT-L/14 (768D)
+    - Mid-GPU → SigLIP base-patch16-224 (768D)
+    - High-GPU → OpenCLIP ViT-H/14 (1024D)
+    - Optional Visualized‑BGE (off by default)
+    """
+
+    def __init__(
+        self,
+        *,
+        backbone: _BackboneName = "auto",
+        device: str | None = None,
+        default_batch_size: int = 8,
+        seed: int = 42,
+    ) -> None:
+        self.backbone = backbone
+        self.device = _select_device(device)
+        self.default_batch_size = int(default_batch_size)
+        self.seed = int(seed)
+        self._backend: Any | None = None  # model/module
+        self._preprocess: Any | None = None  # callable for images → tensor
+        self._dim: int | None = None
+
+    # --- Backend loading helpers ---
+    def _choose_auto_backbone(self) -> _BackboneName:
+        if self.device == "cpu" or torch is None or not torch.cuda.is_available():
+            return "openclip_vitl14"
+        try:  # Estimate total VRAM
+            total = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover
+            total = 8.0
+        if total >= 20.0:
+            return "openclip_vith14"
+        return "siglip_base"
+
+    def _load_openclip(self, model_name: str) -> None:
+        import importlib
+
+        open_clip = importlib.import_module("open_clip")
+        model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained="laion2b_s34b_b79k")
+        model.eval()
+        if self.device == "cuda":  # move if needed
+            model = model.to("cuda")
+        self._backend = model
+        self._preprocess = preprocess
+        # Dimensions: ViT-L/14 → 768, ViT-H/14 → 1024 (common OpenCLIP configs)
+        self._dim = 1024 if "ViT-H-14" in model_name or model_name.endswith("H-14") else 768
+
+    def _load_siglip(self) -> None:
+        from transformers import SiglipModel, SiglipProcessor  # type: ignore
+
+        model_id = "google/siglip-base-patch16-224"
+        model = SiglipModel.from_pretrained(model_id, device_map=None)
+        if self.device == "cuda":
+            model = model.to("cuda")
+        processor = SiglipProcessor.from_pretrained(model_id)
+        self._backend = model
+        self._preprocess = processor
+        self._dim = 768
+
+    def _load_bge_visualized(self) -> None:
+        # Optional path; raise clear error if selected without deps
+        raise RuntimeError(
+            "bge_visualized backbone is disabled by default. Enable explicitly with proper GPUs and dependencies."
+        )
+
+    def _ensure_loaded(self, override: _BackboneName | None = None) -> None:
+        if self._backend is not None:
+            return
+        name = override or self.backbone or "auto"
+        if name == "auto":
+            name = self._choose_auto_backbone()
+
+        if name == "openclip_vitl14":
+            self._load_openclip("ViT-L-14")
+        elif name == "openclip_vith14":
+            self._load_openclip("ViT-H-14")
+        elif name == "siglip_base":
+            self._load_siglip()
+        elif name == "bge_visualized":
+            self._load_bge_visualized()
+        else:  # pragma: no cover - defensive
+            raise ValueError(f"Unknown backbone: {name}")
+
+    # --- Encoding ---
+    def encode_image(
+        self,
+        images: list[Any],  # PIL.Image.Image or array-like
+        *,
+        backbone: _BackboneName | None = None,
+        batch_size: int | None = None,
+        normalize: bool = True,
+        device: str | None = None,
+    ) -> np.ndarray:
+        """Encode images and return L2-normalized features.
+
+        Args:
+            images: List of PIL images (or compatible). Empty list returns shape (0,d).
+            backbone: Optional backbone override for this call.
+            batch_size: Optional batch size; defaults to constructor value.
+            normalize: Whether to L2-normalize outputs.
+            device: Optional device override.
+        """
+
+        if not images:
+            # Use a conservative default dimension when empty; normalize no-op
+            dim = self._dim or (1024 if (backbone == "openclip_vith14") else 768)
+            return np.empty((0, dim), dtype=np.float32)
+
+        if device:
+            self.device = device
+        self._ensure_loaded(backbone)
+
+        bs = int(batch_size or self.default_batch_size)
+        feats: list[np.ndarray] = []
+
+        # OpenCLIP path exposes a torchvision-like preprocess
+        if self._preprocess and hasattr(self._preprocess, "__call__") and hasattr(self._backend, "encode_image"):
+            import math
+
+            for i in range(0, len(images), bs):
+                batch = images[i : i + bs]
+                tensors = [self._preprocess(img) for img in batch]
+                # Stack to [B, C, H, W]
+                if torch is not None:
+                    x = torch.stack(tensors)  # type: ignore[arg-type]
+                    if self.device == "cuda":
+                        x = x.to("cuda")
+                    with torch.no_grad():
+                        f = self._backend.encode_image(x)
+                        f = f / f.norm(dim=-1, keepdim=True) if normalize else f
+                        feats.append(f.detach().cpu().numpy().astype(np.float32))
+                else:  # pragma: no cover - tests patch before calling
+                    # Fallback: pretend zeros to keep shape contract
+                    feats.append(np.zeros((len(batch), int(self._dim or 768)), dtype=np.float32))
+
+            return np.concatenate(feats, axis=0) if feats else np.empty((0, int(self._dim or 768)), dtype=np.float32)
+
+        # SigLIP path via HF processors
+        if self._preprocess and hasattr(self._backend, "get_image_features"):
+            # Processor returns dict with pixel_values
+            proc = self._preprocess
+            out_list: list[np.ndarray] = []
+            for i in range(0, len(images), bs):
+                batch = images[i : i + bs]
+                if torch is None:  # pragma: no cover
+                    out_list.append(np.zeros((len(batch), int(self._dim or 768)), dtype=np.float32))
+                    continue
+                inputs = proc(images=batch, return_tensors="pt")
+                pix = inputs.get("pixel_values")
+                if self.device == "cuda":
+                    pix = pix.to("cuda")
+                with torch.no_grad():
+                    f = self._backend.get_image_features(pixel_values=pix)
+                    if normalize:
+                        f = f / f.norm(dim=-1, keepdim=True)
+                    out_list.append(f.detach().cpu().numpy().astype(np.float32))
+            return np.concatenate(out_list, axis=0)
+
+        raise RuntimeError("Image backend not initialized correctly")
+
+
+class UnifiedEmbedder:
+    """Simple router that delegates to TextEmbedder and ImageEmbedder."""
+
+    def __init__(self, *, text: TextEmbedder | None = None, image: ImageEmbedder | None = None) -> None:
+        self.text = text or TextEmbedder()
+        self.image = image or ImageEmbedder()
+
+    def encode(self, items: list[Union[str, Any]]) -> dict[str, Any]:
+        texts: list[str] = []
+        imgs: list[Any] = []
+        for it in items:
+            if isinstance(it, str):
+                texts.append(it)
+            else:
+                imgs.append(it)
+
+        out: dict[str, Any] = {}
+        if texts:
+            out.update(self.text.encode_text(texts))
+        if imgs:
+            out["image_dense"] = self.image.encode_image(imgs)
+        return out
+
+    def encode_pair(self, texts: Iterable[str], images: Iterable[Any]) -> dict[str, Any]:
+        res: dict[str, Any] = {}
+        t_list = list(texts)
+        i_list = list(images)
+        if t_list:
+            res.update(self.text.encode_text(t_list))
+        if i_list:
+            res["image_dense"] = self.image.encode_image(i_list)
+        return res

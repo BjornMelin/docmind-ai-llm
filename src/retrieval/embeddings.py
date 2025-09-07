@@ -443,3 +443,17 @@ def configure_bgem3_settings() -> None:
     except (ImportError, RuntimeError, ValueError) as e:
         logger.error("Failed to configure BGE-M3 settings: %s", e)
         raise
+from src.models.embeddings import UnifiedEmbedder
+
+
+
+# === New unified embedder route (SPEC-003) ===
+def get_unified_embedder() -> UnifiedEmbedder:
+    """Factory for the new UnifiedEmbedder.
+
+    Returns a router exposing text (BGE‑M3 dense+sparse) and image encoders
+    (OpenCLIP/SigLIP-tiered). The existing BGEM3Embedding and CLIP helpers
+    remain for compatibility with LlamaIndex wrappers and tests.
+    """
+
+    return UnifiedEmbedder()
