@@ -527,10 +527,11 @@ else:
                 print(f"   Command: {result.command}")
                 print(f"   Exit Code: {result.exit_code}")
                 if result.output:
-                    # Show last few lines of output
-                    output_lines = result.output.split("\n")[-20:]
-                    print("   Last output lines:")
-                    for line in output_lines:
+                    # Show a generous tail of output for diagnosis
+                    output_lines = result.output.split("\n")
+                    tail = 300 if len(output_lines) > 300 else len(output_lines)
+                    print("   Last output (tail):")
+                    for line in output_lines[-tail:]:
                         if line.strip():
                             print(f"     {line}")
                 print()
