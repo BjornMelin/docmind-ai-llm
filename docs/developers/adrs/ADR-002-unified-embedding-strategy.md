@@ -10,6 +10,7 @@ Related: 003, 006, 009, 031, 034, 001
 Tags: embeddings, retrieval, hybrid, multimodal, local-first
 References:
 - [BAAI/bge-m3 — Hugging Face](https://huggingface.co/BAAI/bge-m3)
+- [SigLIP — Transformers Docs](https://huggingface.co/docs/transformers/en/model_doc/siglip)
 - [OpenAI CLIP ViT‑B/32 — Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)
 - [LlamaIndex — Embeddings](https://docs.llamaindex.ai/en/stable/module_guides/models/embeddings/)
 - [Qdrant — Documentation](https://qdrant.tech/documentation/)
@@ -178,7 +179,7 @@ def test_bgem3_shape(embed_model):
 ### Dependencies
 
 - Python: `FlagEmbedding>=1.2.0`, `torch>=2.0.0`, `llama-index>=0.10`
-- Models: `BAAI/bge-m3`, `openai/clip-vit-base-patch32`
+- Models: `BAAI/bge-m3`, `google/siglip-base-patch16-224` (default); Optional: OpenCLIP ViT‑L/14 or ViT‑H/14
 
 ### Ongoing Maintenance & Considerations
 

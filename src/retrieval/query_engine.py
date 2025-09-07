@@ -12,19 +12,29 @@ Key features:
 - Integration with BGE-M3 embeddings and CrossEncoder reranking
 """
 
+import os
+from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
+import numpy as np
 from llama_index.core import Settings
 from llama_index.core.query_engine import (
     RetrieverQueryEngine,
     RouterQueryEngine,
     SubQuestionQueryEngine,
 )
+from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
+from qdrant_client import QdrantClient
+from qdrant_client import models as qmodels
 
+from src.models.embeddings import TextEmbedder
+from src.processing.utils import sha256_id
 from src.retrieval.reranking import MultimodalReranker, build_text_reranker
+from src.utils.storage import get_client_config
 
 # Router Engine Configuration Constants
 DEFAULT_DENSE_SIMILARITY_TOP_K = 10
@@ -33,6 +43,140 @@ DEFAULT_KG_SIMILARITY_TOP_K = 10
 DEFAULT_MULTIMODAL_SIMILARITY_TOP_K = 10
 DEFAULT_IMAGE_SIMILARITY_TOP_K = 5
 QUERY_TRUNCATE_LENGTH = 100
+FUSED_TOP_K_DEFAULT = 60
+SPARSE_PREFETCH_DEFAULT = 400
+DENSE_PREFETCH_DEFAULT = 200
+
+
+@dataclass
+class _HybridParams:
+    collection: str
+    fused_top_k: int = FUSED_TOP_K_DEFAULT
+    prefetch_sparse: int = SPARSE_PREFETCH_DEFAULT
+    prefetch_dense: int = DENSE_PREFETCH_DEFAULT
+    fusion_mode: str = os.getenv("DOCMIND_FUSION", "rrf").lower()
+
+
+class ServerHybridRetriever:
+    """Retriever that uses Qdrant Query API server-side fusion (RRF/DBSF).
+
+    - Computes BGE-M3 dense+sparse for the query text.
+    - Prefetches sparse+dense using named vectors 'text-sparse'/'text-dense'.
+    - De-dups by page_id before final fused cut.
+    - Returns LlamaIndex NodeWithScore list.
+    """
+
+    def __init__(self, params: _HybridParams) -> None:
+        """Initialize with Qdrant client and a text embedder.
+
+        Args:
+            params: Hybrid retrieval parameters (collection, limits, fusion).
+        """
+        self.params = params
+        self._client = QdrantClient(**get_client_config())
+        self._embedder = TextEmbedder(device=None)
+
+    def _embed_query(self, text: str) -> tuple[np.ndarray, dict[int, float]]:
+        out = self._embedder.encode_text([text], return_dense=True, return_sparse=True)
+        dense = out.get("dense")
+        sparse = out.get("sparse")
+        if not isinstance(dense, np.ndarray) or dense.shape[0] == 0:
+            raise RuntimeError("Dense embedding failed for query")
+        dense_vec = dense[0].tolist()
+        sp_map: dict[int, float] = {}
+        if isinstance(sparse, list) and sparse:
+            # Using first (single) query mapping
+            sp_map = {int(i): float(v) for i, v in sparse[0].items()}
+        return np.asarray(dense_vec, dtype=np.float32), sp_map
+
+    def _sparse_to_qdrant(
+        self, sp_map: dict[int, float]
+    ) -> qmodels.SparseVector | None:
+        if not sp_map:
+            return None
+        # stable index order
+        idxs = sorted(sp_map.keys())
+        vals = [float(sp_map[i]) for i in idxs]
+        return qmodels.SparseVector(indices=idxs, values=vals)
+
+    def _fusion(self) -> qmodels.FusionQuery:
+        mode = self.params.fusion_mode
+        if mode == "dbsf":
+            return qmodels.FusionQuery(fusion=qmodels.Fusion.DBSF)
+        return qmodels.FusionQuery(fusion=qmodels.Fusion.RRF)
+
+    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+        """Execute a server-side hybrid query (RRF/DBSF) and de-dup by page_id."""
+        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+        t0 = perf_counter()
+        dense_vec, sp_map = self._embed_query(qtext)
+        sparse_vec = self._sparse_to_qdrant(sp_map)
+
+        prefetch: list[qmodels.Prefetch] = []
+        if sparse_vec is not None:
+            prefetch.append(
+                qmodels.Prefetch(
+                    query=sparse_vec,
+                    using="text-sparse",
+                    limit=self.params.prefetch_sparse,
+                )
+            )
+        prefetch.append(
+            qmodels.Prefetch(
+                query=qmodels.VectorInput(vector=dense_vec.tolist()),
+                using="text-dense",
+                limit=self.params.prefetch_dense,
+            )
+        )
+
+        result = self._client.query_points(
+            collection_name=self.params.collection,
+            prefetch=prefetch,
+            query=self._fusion(),
+            limit=self.params.fused_top_k,
+            with_payload=[
+                "doc_id",
+                "page_id",
+                "chunk_id",
+                "text",
+                "modality",
+                "image_path",
+            ],
+        )
+
+        # De-dup by page_id before final cut
+        best: dict[str, tuple[float, Any]] = {}
+        for p in result.points:
+            payload = p.payload or {}
+            key = str(payload.get("page_id") or p.id)
+            score = float(getattr(p, "score", 0.0))
+            cur = best.get(key)
+            if cur is None or score > cur[0]:
+                best[key] = (score, p)
+
+        # Preserve ranking by score desc
+        dedup_sorted = sorted(best.values(), key=lambda x: x[0], reverse=True)
+        nodes: list[NodeWithScore] = []
+        for score, p in dedup_sorted[: self.params.fused_top_k]:
+            payload = p.payload or {}
+            text = payload.get("text") or ""
+            # Deterministic node id based on available identifiers
+            nid = str(p.id) if p.id is not None else sha256_id(text)
+            node = TextNode(text=text, id_=nid)
+            node.metadata.update({k: v for k, v in payload.items() if k != "text"})
+            nodes.append(NodeWithScore(node=node, score=score))
+
+        t1 = perf_counter()
+        latency_ms = (t1 - t0) * 1000.0
+        logger.info(
+            "Qdrant hybrid: top_k=%d dense=%d sparse=%d fusion=%s latency=%.1fms",
+            self.params.fused_top_k,
+            self.params.prefetch_dense,
+            self.params.prefetch_sparse,
+            self.params.fusion_mode,
+            latency_ms,
+        )
+        return nodes
 
 
 class AdaptiveRouterQueryEngine:
@@ -124,6 +268,36 @@ class AdaptiveRouterQueryEngine:
                 ),
             )
             tools.append(hybrid_tool)
+        else:
+            # Provide server-side hybrid by default with Query API
+            try:
+                from src.config import settings as app_settings
+
+                collection = app_settings.database.qdrant_collection
+                params = _HybridParams(collection=collection)
+                retriever = ServerHybridRetriever(params)
+                hybrid_engine = RetrieverQueryEngine.from_args(
+                    retriever=retriever,
+                    llm=self.llm,
+                    node_postprocessors=[self.reranker] if self.reranker else [],
+                    response_mode="compact",
+                    streaming=True,
+                )
+                tools.append(
+                    QueryEngineTool(
+                        query_engine=hybrid_engine,
+                        metadata=ToolMetadata(
+                            name="hybrid_search",
+                            description=(
+                                "Server-side hybrid via Qdrant Query API. "
+                                "RRF default; DBSF optional. "
+                                "Prefetch dense+sparse; de-dup page_id; fused_top_k=60."
+                            ),
+                        ),
+                    )
+                )
+            except Exception as e:  # pragma: no cover - fails open to dense
+                logger.warning("Server hybrid unavailable: %s", e)
 
         # 2. Dense Semantic Search Tool (BGE-M3 Dense Only)
         dense_engine = self.vector_index.as_query_engine(

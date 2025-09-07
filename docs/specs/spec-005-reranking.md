@@ -9,7 +9,7 @@ related_requirements:
   - FR-RER-001: Text rerank SHALL use BAAI/bge-reranker-v2-m3.
   - FR-RER-002: Visual rerank SHOULD default to SigLIP text–image similarity; ColPali MAY be enabled optionally on capable GPUs.
   - NFR-QUAL-001: reranking SHALL be always‑on with internal caps/timeouts and fail‑open behavior (no UI toggle).
-related_adrs: ["ADR-007","ADR-036"]
+related_adrs: ["ADR-037","ADR-024","ADR-036"]
 ---
 
 

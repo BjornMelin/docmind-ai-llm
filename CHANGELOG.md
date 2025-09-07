@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.1.0] - 2025-09-07
+
+### Added
+
+- Hybrid retrieval (SPEC‑004): Qdrant server‑side fusion via Query API
+  - Named vectors `text-dense` (BGE‑M3 1024D) and `text-sparse` (sparse index)
+  - Prefetch dense≈200 / sparse≈400; default fusion RRF; DBSF experimental via env `DOCMIND_FUSION`
+  - De‑dup by `page_id` before fused cut; fused_top_k≈60; telemetry
+
+- Reranking (SPEC‑005; ADR‑037):
+  - Default visual re‑score with SigLIP text–image cosine (timeout 150ms)
+  - Text BGE v2‑m3 CrossEncoder (timeout 250ms)
+  - Optional ColPali policy (VRAM ≥8–12GB, small‑K ≤16, visual‑heavy); cascade SigLIP prune → ColPali final; fail‑open
+  - Rank‑level RRF merge across modalities; always‑on (no UI toggles; ops env only)
+
+- PDF page images: WebP default (q≈70, method=6), JPEG fallback; DPI≈200; long‑edge≈2000px; simple pHash for dedup hints.
+
+### Changed
+
+- ADR/specs alignment: ADR‑036 marked Superseded by ADR‑024 v2.7 and SPEC‑005; ADR‑002 reflects SigLIP default; SPEC‑004/005 cross‑refs updated.
+
+
 ## [1.0.0] - 2025-09-02
 
 ### Added

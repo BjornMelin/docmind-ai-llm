@@ -116,9 +116,8 @@ def batch_process_images(
                 else:
                     arr = np.asarray(emb)
                 # Optional strict validation of output dimensionality
-                if (
-                    output_dim is not None
-                    and not (arr.ndim == 1 and arr.shape[0] == dim)
+                if output_dim is not None and not (
+                    arr.ndim == 1 and arr.shape[0] == dim
                 ):
                     raise ValueError(
                         f"Model output dimension {arr.shape} != expected ({dim},)"

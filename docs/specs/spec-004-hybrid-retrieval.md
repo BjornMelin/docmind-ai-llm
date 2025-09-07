@@ -10,7 +10,7 @@ related_requirements:
   - FR-RET-002: Deterministic point IDs and idempotent upserts.
   - FR-RET-003: Prefer FastEmbed BM42 for sparse; fallback to BM25 when unavailable.
   - NFR-PERF-003: fused_top_k=60; server‑side hybrid latency ≤ 120–200 ms (dataset/hardware dependent).
-related_adrs: ["ADR-005","ADR-006","ADR-010"]
+related_adrs: ["ADR-005","ADR-006","ADR-010","ADR-024"]
 ---
 
 

@@ -209,3 +209,41 @@ __all__ = [
     "setup_llamaindex",
     "setup_vllm_env",
 ]
+
+
+# === Unified Embedder Factory (optional app wiring) ===
+def get_unified_embedder():  # pragma: no cover - simple factory
+    """Return a UnifiedEmbedder configured from settings.
+
+    Uses the unified device selection and enables strict image type checks.
+    This is a lightweight entry point for app code to opt into the
+    library-first TextEmbedder (BGE-M3) and ImageEmbedder (OpenCLIP/SigLIP).
+    """
+    from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
+
+    emb_cfg = settings.get_embedding_config()
+    device = emb_cfg.get("device", "cpu")
+    text = TextEmbedder(device=device)
+    image = ImageEmbedder(device=device)
+    return UnifiedEmbedder(text=text, image=image, strict_image_types=True)
+
+
+def get_clip_like_image_embedder():  # pragma: no cover - convenience adapter
+    """Adapter that exposes `get_image_embedding(img)` using UnifiedEmbedder.
+
+    This makes it drop-in compatible with existing multimodal helpers that
+    expect a `clip`-like object while avoiding heavy third-party imports.
+    """
+    import numpy as _np
+
+    u = get_unified_embedder()
+
+    class _ClipLike:
+        def get_image_embedding(self, image: object) -> _np.ndarray:
+            arr = u.image.encode_image([image])
+            if arr.shape[0] == 0:
+                dim = int(u.image._dim or 768)  # best-effort dimension
+                return _np.zeros(dim, dtype=_np.float32)
+            return arr[0]
+
+    return _ClipLike()

@@ -41,6 +41,10 @@ from qdrant_client.http.models import (
 
 from src.config import settings
 
+# Preferred sparse models (logging/telemetry; selection handled by fastembed if present)
+PREFERRED_SPARSE_MODEL = "Qdrant/bm42-all-minilm-l6-v2-attentions"
+FALLBACK_SPARSE_MODEL = "Qdrant/bm25"
+
 # =============================================================================
 # Database Operations (formerly from database.py)
 # =============================================================================
@@ -157,6 +161,11 @@ async def setup_hybrid_collection_async(
             },
         )
         logger.success("Created hybrid collection: %s", collection_name)
+        logger.info(
+            "Sparse model preference: %s (fallback %s)",
+            PREFERRED_SPARSE_MODEL,
+            FALLBACK_SPARSE_MODEL,
+        )
 
     # Create sync client for QdrantVectorStore compatibility
     sync_client = QdrantClient(url=settings.database.qdrant_url)
@@ -221,6 +230,11 @@ def setup_hybrid_collection(
             },
         )
         logger.success("Created hybrid collection: %s", collection_name)
+        logger.info(
+            "Sparse model preference: %s (fallback %s)",
+            PREFERRED_SPARSE_MODEL,
+            FALLBACK_SPARSE_MODEL,
+        )
 
     try:
         return QdrantVectorStore(
