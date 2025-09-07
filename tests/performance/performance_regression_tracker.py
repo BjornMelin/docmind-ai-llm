@@ -140,7 +140,7 @@ class RegressionTracker:
         factor = (current_value / baseline_value) if baseline_value else 1.0
 
         return {
-            "regression_detected": bool(regression),
+            "regression_detected": regression,
             "baseline_value": baseline_value,
             "current_value": current_value,
             "regression_factor": factor,

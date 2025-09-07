@@ -94,7 +94,7 @@ def test_save_pdf_page_images_multi_page(tmp_path: Path) -> None:
         assert len(items) == 2
         assert [it["page_no"] for it in items] == [1, 2]
         names = [Path(it["image_path"]).name for it in items]
-        assert names == [f"{pdf_path.stem}__page-1.png", f"{pdf_path.stem}__page-2.png"]
+    assert names == [f"{pdf_path.stem}__page-1.png", f"{pdf_path.stem}__page-2.png"]
 
 
 @pytest.mark.unit
@@ -148,3 +148,52 @@ def test_save_pdf_page_images_refresh_on_pdf_update(tmp_path: Path) -> None:
         after = Path(items2[0]["image_path"]).stat().st_mtime
         assert after >= new_pdf_time
         assert after > before
+
+
+@pytest.mark.unit
+def test_save_pdf_page_images_idempotent_when_images_up_to_date(tmp_path: Path) -> None:
+    """Does not re-render when PNGs exist and are up-to-date (idempotent)."""
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_text("dummy")
+
+    render_calls = {"count": 0}
+
+    class _Page:
+        def __init__(self) -> None:
+            self.rect = SimpleNamespace(x0=0.0, y0=0.0, x1=10.0, y1=10.0)
+
+        def get_pixmap(self, matrix=None):  # pragma: no cover - behavior is counted
+            render_calls["count"] += 1
+
+            class _Pix:
+                def save(self, path: str) -> None:
+                    with open(path, "wb") as f:
+                        f.write(b"PNG")
+
+            return _Pix()
+
+    class _Doc:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def __iter__(self):
+            return iter([_Page()])
+
+    with patch("src.processing.pdf_pages.fitz.open", return_value=_Doc()):
+        from src.processing.pdf_pages import save_pdf_page_images
+
+        out_dir = tmp_path / "images"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # First render should call renderer once
+        items1 = save_pdf_page_images(pdf_path, out_dir, dpi=144)
+        assert len(items1) == 1
+        assert render_calls["count"] == 1
+
+        # Second render without changing PDF mtime should be idempotent (no new render)
+        items2 = save_pdf_page_images(pdf_path, out_dir, dpi=144)
+        assert len(items2) == 1
+        assert render_calls["count"] == 1

@@ -114,26 +114,10 @@ class PerformanceMonitor:
             start_time = time.time()
 
             # Prepare memory tracking (CPU + GPU)
-            if (
-                torch is not None
-                and hasattr(torch.cuda, "is_available")
-                and torch.cuda.is_available()
-            ):
-                with contextlib.suppress(Exception):
-                    torch.cuda.reset_peak_memory_stats()
+            self._maybe_reset_gpu_peak()
 
             # Base pytest command with performance tracking
-            cmd = [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "pytest",
-                "--durations=10",  # Show 10 slowest tests
-                "--tb=short",
-                "-q",  # Quiet mode
-                *test_args,
-            ]
+            cmd = self._build_pytest_cmd(test_args)
 
             # Run with timeout
             result = subprocess.run(
@@ -149,38 +133,9 @@ class PerformanceMonitor:
 
             # Parse pytest output for timing information
             performance_data = self._parse_pytest_output(result.stdout, result.stderr)
-            # Collect CPU peak memory (best-effort)
-            cpu_peak_mb = None
-            try:
-                if resource is not None:
-                    ru = resource.getrusage(resource.RUSAGE_SELF)
-                    peak = getattr(ru, "ru_maxrss", 0)
-                    # macOS returns bytes; Linux returns kilobytes
-                    if sys.platform == "darwin":
-                        cpu_peak_mb = float(peak) / (1024.0 * 1024.0)
-                    else:
-                        cpu_peak_mb = float(peak) / 1024.0
-            except Exception:
-                cpu_peak_mb = None
-            if cpu_peak_mb is None and psutil is not None:
-                try:
-                    proc = psutil.Process(os.getpid())
-                    cpu_peak_mb = float(proc.memory_info().rss) / (1024.0 * 1024.0)
-                except Exception:
-                    cpu_peak_mb = None
-
-            # Collect GPU peak memory (if available)
-            gpu_peak_mb = None
-            try:
-                if (
-                    torch is not None
-                    and hasattr(torch.cuda, "is_available")
-                    and torch.cuda.is_available()
-                ):
-                    peak_bytes = torch.cuda.max_memory_allocated(0)
-                    gpu_peak_mb = float(peak_bytes) / (1024.0 * 1024.0)
-            except Exception:
-                gpu_peak_mb = None
+            # CPU/GPU peaks
+            cpu_peak_mb = self._read_cpu_peak_mb()
+            gpu_peak_mb = self._read_gpu_peak_mb()
 
             performance_data.update(
                 {
@@ -214,6 +169,58 @@ class PerformanceMonitor:
                 "error": str(e),
                 "timestamp": datetime.now().isoformat(),
             }
+
+    # --- Internal helpers (extracted for clarity) ---
+    def _build_pytest_cmd(self, test_args: list[str]) -> list[str]:
+        return [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "pytest",
+            "--durations=10",
+            "--tb=short",
+            "-q",
+            *test_args,
+        ]
+
+    def _maybe_reset_gpu_peak(self) -> None:
+        if (
+            torch is not None
+            and hasattr(torch.cuda, "is_available")
+            and torch.cuda.is_available()
+        ):
+            with contextlib.suppress(Exception):
+                torch.cuda.reset_peak_memory_stats()
+
+    def _read_cpu_peak_mb(self) -> float | None:
+        with contextlib.suppress(Exception):
+            if resource is not None:
+                ru = resource.getrusage(resource.RUSAGE_SELF)
+                peak = getattr(ru, "ru_maxrss", 0)
+                return (
+                    float(peak) / (1024.0 * 1024.0)
+                    if sys.platform == "darwin"
+                    else float(peak) / 1024.0
+                )
+        if psutil is not None:
+            with contextlib.suppress(Exception):
+                proc = psutil.Process(os.getpid())
+                return float(proc.memory_info().rss) / (1024.0 * 1024.0)
+        return None
+
+    def _read_gpu_peak_mb(self) -> float | None:
+        try:
+            if (
+                torch is not None
+                and hasattr(torch.cuda, "is_available")
+                and torch.cuda.is_available()
+            ):
+                peak_bytes = torch.cuda.max_memory_allocated(0)
+                return float(peak_bytes) / (1024.0 * 1024.0)
+        except Exception:
+            return None
+        return None
 
     def measure_test_collection_time(self) -> dict[str, Any]:
         """Measure test collection performance.
