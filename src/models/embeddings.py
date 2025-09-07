@@ -6,7 +6,7 @@ stack while keeping imports lazy to preserve offline determinism for tests.
 Contents:
 - Pydantic models describing parameters/results for text embeddings.
 - TextEmbedder using BGE-M3 (dense + sparse) via FlagEmbedding (lazy import).
-- ImageEmbedder with tiered backbones (OpenCLIP/SigLIP; optional Visualized‑BGE),
+- ImageEmbedder with tiered backbones (OpenCLIP/SigLIP; optional Visualized-BGE),
   loaded lazily and normalized outputs.
 - UnifiedEmbedder that routes items to the appropriate embedder.
 
@@ -18,7 +18,8 @@ Notes:
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Literal, Union
+from collections.abc import Iterable
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -98,7 +99,6 @@ def _l2_normalize(arr: np.ndarray, axis: int = -1) -> np.ndarray:
     Returns:
         Normalized array with the same shape/dtype.
     """
-
     norm = np.linalg.norm(arr, axis=axis, keepdims=True)
     # Avoid division by zero: only divide where norm > 0
     safe = np.where(norm > 0, arr / norm, arr)
@@ -110,7 +110,6 @@ def _select_device(explicit: str | None = None) -> str:
 
     A user-provided ``explicit`` overrides auto-detection.
     """
-
     if explicit:
         return explicit
     if torch is not None and getattr(torch, "cuda", None) and torch.cuda.is_available():
@@ -119,9 +118,9 @@ def _select_device(explicit: str | None = None) -> str:
     return "cpu"
 
 
-# ===== Text: BGE‑M3 =====
+# ===== Text: BGE-M3 =====
 class TextEmbedder:
-    """Text embedding via BGE‑M3 with optional sparse output.
+    """Text embedding via BGE-M3 with optional sparse output.
 
     Library-first usage of FlagEmbedding.BGEM3FlagModel, imported lazily only
     when needed. All outputs can be L2-normalized for deterministic behavior.
@@ -136,9 +135,20 @@ class TextEmbedder:
         default_batch_size: int = 12,
         seed: int = 42,
     ) -> None:
+        """Create a TextEmbedder with lazy-loaded BGEM3 backend.
+
+        Args:
+            model_name: HF model id ("BAAI/bge-m3").
+            device: Preferred device ("cpu"|"cuda"|None for auto).
+            use_fp16: Optional FP16 toggle (defaults to True on CUDA).
+            default_batch_size: Batch size when none is provided.
+            seed: Seed for reproducible behavior when torch is present.
+        """
         self.model_name = model_name
         self.device = _select_device(device)
-        self.use_fp16 = bool(use_fp16) if use_fp16 is not None else (self.device == "cuda")
+        self.use_fp16 = (
+            bool(use_fp16) if use_fp16 is not None else (self.device == "cuda")
+        )
         self.default_batch_size = int(default_batch_size)
         self._backend: Any | None = None
         self.seed = int(seed)
@@ -150,17 +160,21 @@ class TextEmbedder:
         try:
             from FlagEmbedding import BGEM3FlagModel  # type: ignore
         except Exception as exc:  # pragma: no cover - exercised via unit mocks
-            raise ImportError(
-                "FlagEmbedding is required for TextEmbedder. Install with: uv add FlagEmbedding"
-            ) from exc
+            msg = (
+                "FlagEmbedding is required for TextEmbedder. "
+                "Install with: uv add FlagEmbedding"
+            )
+            raise ImportError(msg) from exc
 
         if torch is not None:
-            try:
-                torch.manual_seed(self.seed)
-            except Exception:  # pragma: no cover - defensive
-                pass
+            from contextlib import suppress
 
-        self._backend = BGEM3FlagModel(self.model_name, use_fp16=self.use_fp16, devices=[self.device])
+            with suppress(Exception):  # determinism best-effort
+                torch.manual_seed(self.seed)
+
+        self._backend = BGEM3FlagModel(
+            self.model_name, use_fp16=self.use_fp16, devices=[self.device]
+        )
 
     # --- Encoding ---
     def encode_text(
@@ -180,7 +194,6 @@ class TextEmbedder:
         and ``sparse`` (list[dict[int,float]]). The backend is invoked with
         the official flags for BGEM3 dense+sparse output.
         """
-
         if not texts:
             out: dict[str, Any] = {}
             if return_dense:
@@ -206,13 +219,21 @@ class TextEmbedder:
         )
 
         result: dict[str, Any] = {}
-        if return_dense and "dense_vecs" in outputs and outputs["dense_vecs"] is not None:
+        if (
+            return_dense
+            and "dense_vecs" in outputs
+            and outputs["dense_vecs"] is not None
+        ):
             dense = np.asarray(outputs["dense_vecs"], dtype=np.float32)
             if normalize and dense.size:
                 dense = _l2_normalize(dense)
             result["dense"] = dense
 
-        if return_sparse and "lexical_weights" in outputs and outputs["lexical_weights"] is not None:
+        if (
+            return_sparse
+            and "lexical_weights" in outputs
+            and outputs["lexical_weights"] is not None
+        ):
             # Already a list[dict[int,float]]
             result["sparse"] = outputs["lexical_weights"]
 
@@ -236,7 +257,7 @@ class ImageEmbedder:
     - CPU/low-VRAM → OpenCLIP ViT-L/14 (768D)
     - Mid-GPU → SigLIP base-patch16-224 (768D)
     - High-GPU → OpenCLIP ViT-H/14 (1024D)
-    - Optional Visualized‑BGE (off by default)
+    - Optional Visualized-BGE (off by default)
     """
 
     def __init__(
@@ -247,6 +268,15 @@ class ImageEmbedder:
         default_batch_size: int = 8,
         seed: int = 42,
     ) -> None:
+        """Create an ImageEmbedder with lazy backbone selection.
+
+        Args:
+            backbone: One of
+                "auto|openclip_vitl14|openclip_vith14|siglip_base|bge_visualized".
+            device: Preferred device ("cpu"|"cuda"|None for auto).
+            default_batch_size: Images per batch.
+            seed: Reserved for future randomized transforms.
+        """
         self.backbone = backbone
         self.device = _select_device(device)
         self.default_batch_size = int(default_batch_size)
@@ -271,14 +301,42 @@ class ImageEmbedder:
         import importlib
 
         open_clip = importlib.import_module("open_clip")
-        model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained="laion2b_s34b_b79k")
+        model, _, preprocess = open_clip.create_model_and_transforms(
+            model_name, pretrained="laion2b_s34b_b79k"
+        )
         model.eval()
         if self.device == "cuda":  # move if needed
             model = model.to("cuda")
         self._backend = model
         self._preprocess = preprocess
-        # Dimensions: ViT-L/14 → 768, ViT-H/14 → 1024 (common OpenCLIP configs)
-        self._dim = 1024 if "ViT-H-14" in model_name or model_name.endswith("H-14") else 768
+        # Derive output dimension from model when possible
+        dim: int | None = None
+        try:
+            visual = getattr(model, "visual", None)
+            if visual is not None:
+                dim = int(getattr(visual, "output_dim", 0)) or None
+            if dim is None and hasattr(model, "embed_dim"):
+                dim = int(model.embed_dim)  # type: ignore[arg-type]
+        except Exception:  # pragma: no cover - defensive introspection
+            dim = None
+
+        # Fallback probe: pass a single dummy image through encode_image
+        if dim is None and torch is not None:  # pragma: no cover - heavy path
+            try:
+                import numpy as _np
+
+                dummy = _np.zeros((224, 224, 3), dtype=_np.uint8)
+                t = self._preprocess(dummy) if callable(self._preprocess) else None
+                if t is not None:
+                    if self.device == "cuda":
+                        t = t.to("cuda")
+                    with torch.no_grad():
+                        f = model.encode_image(t.unsqueeze(0))
+                        dim = int(f.shape[-1])
+            except Exception:
+                dim = None
+
+        self._dim = dim or (1024 if ("H-14" in model_name) else 768)
 
     def _load_siglip(self) -> None:
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
@@ -290,12 +348,32 @@ class ImageEmbedder:
         processor = SiglipProcessor.from_pretrained(model_id)
         self._backend = model
         self._preprocess = processor
-        self._dim = 768
+        # Prefer config projection dim when available
+        try:
+            self._dim = int(getattr(model.config, "projection_dim", 0)) or None  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive
+            self._dim = None
+        if self._dim is None:
+            # Fallback probe via a tiny batch to determine dim
+            try:  # pragma: no cover - heavy path
+                import numpy as _np
+
+                dummy = _np.zeros((224, 224, 3), dtype=_np.uint8)
+                inputs = processor(images=[dummy], return_tensors="pt")
+                pix = inputs.get("pixel_values")
+                if self.device == "cuda":
+                    pix = pix.to("cuda")
+                with torch.no_grad():
+                    f = model.get_image_features(pixel_values=pix)
+                    self._dim = int(f.shape[-1])
+            except Exception:
+                self._dim = 768
 
     def _load_bge_visualized(self) -> None:
         # Optional path; raise clear error if selected without deps
         raise RuntimeError(
-            "bge_visualized backbone is disabled by default. Enable explicitly with proper GPUs and dependencies."
+            "bge_visualized backbone is disabled by default. "
+            "Enable explicitly with proper GPUs and dependencies."
         )
 
     def _ensure_loaded(self, override: _BackboneName | None = None) -> None:
@@ -335,10 +413,10 @@ class ImageEmbedder:
             normalize: Whether to L2-normalize outputs.
             device: Optional device override.
         """
-
         if not images:
-            # Use a conservative default dimension when empty; normalize no-op
-            dim = self._dim or (1024 if (backbone == "openclip_vith14") else 768)
+            # Ensure backend is loaded to infer dimension; normalize no-op
+            self._ensure_loaded(backbone)
+            dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
 
         if device:
@@ -349,9 +427,11 @@ class ImageEmbedder:
         feats: list[np.ndarray] = []
 
         # OpenCLIP path exposes a torchvision-like preprocess
-        if self._preprocess and hasattr(self._preprocess, "__call__") and hasattr(self._backend, "encode_image"):
-            import math
-
+        if (
+            self._preprocess
+            and callable(self._preprocess)
+            and hasattr(self._backend, "encode_image")
+        ):
             for i in range(0, len(images), bs):
                 batch = images[i : i + bs]
                 tensors = [self._preprocess(img) for img in batch]
@@ -366,9 +446,14 @@ class ImageEmbedder:
                         feats.append(f.detach().cpu().numpy().astype(np.float32))
                 else:  # pragma: no cover - tests patch before calling
                     # Fallback: pretend zeros to keep shape contract
-                    feats.append(np.zeros((len(batch), int(self._dim or 768)), dtype=np.float32))
+                    inferred = int(self._dim or 768)
+                    feats.append(np.zeros((len(batch), inferred), dtype=np.float32))
 
-            return np.concatenate(feats, axis=0) if feats else np.empty((0, int(self._dim or 768)), dtype=np.float32)
+            return (
+                np.concatenate(feats, axis=0)
+                if feats
+                else np.empty((0, int(self._dim or 768)), dtype=np.float32)
+            )
 
         # SigLIP path via HF processors
         if self._preprocess and hasattr(self._backend, "get_image_features"):
@@ -378,7 +463,8 @@ class ImageEmbedder:
             for i in range(0, len(images), bs):
                 batch = images[i : i + bs]
                 if torch is None:  # pragma: no cover
-                    out_list.append(np.zeros((len(batch), int(self._dim or 768)), dtype=np.float32))
+                    inferred = int(self._dim or 768)
+                    out_list.append(np.zeros((len(batch), inferred), dtype=np.float32))
                     continue
                 inputs = proc(images=batch, return_tensors="pt")
                 pix = inputs.get("pixel_values")
@@ -397,11 +483,15 @@ class ImageEmbedder:
 class UnifiedEmbedder:
     """Simple router that delegates to TextEmbedder and ImageEmbedder."""
 
-    def __init__(self, *, text: TextEmbedder | None = None, image: ImageEmbedder | None = None) -> None:
+    def __init__(
+        self, *, text: TextEmbedder | None = None, image: ImageEmbedder | None = None
+    ) -> None:
+        """Initialize with optional custom sub-embedders."""
         self.text = text or TextEmbedder()
         self.image = image or ImageEmbedder()
 
-    def encode(self, items: list[Union[str, Any]]) -> dict[str, Any]:
+    def encode(self, items: list[str | Any]) -> dict[str, Any]:
+        """Encode a mixed list of strings and images via routing."""
         texts: list[str] = []
         imgs: list[Any] = []
         for it in items:
@@ -417,7 +507,10 @@ class UnifiedEmbedder:
             out["image_dense"] = self.image.encode_image(imgs)
         return out
 
-    def encode_pair(self, texts: Iterable[str], images: Iterable[Any]) -> dict[str, Any]:
+    def encode_pair(
+        self, texts: Iterable[str], images: Iterable[Any]
+    ) -> dict[str, Any]:
+        """Encode separate lists of texts and images in one call."""
         res: dict[str, Any] = {}
         t_list = list(texts)
         i_list = list(images)

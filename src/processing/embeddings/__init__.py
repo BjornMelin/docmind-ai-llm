@@ -1,20 +1,17 @@
-"""DocMind AI BGE-M3 Embeddings Module.
+"""DocMind AI Embeddings (Library-First).
 
-This module implements BGE-M3 8K context embeddings optimized for the document
-processing pipeline with unified dense/sparse embeddings, batch processing,
-and semantic caching integration following ADR-009 requirements.
+This package exposes helpers and models for the embedding pipeline, aligned
+with SPEC-003:
 
 Components:
-    retrieval.embeddings: BGEM3Embedding with 8K context window and GPU optimization
-    models: Embedding-specific Pydantic models (interfaces only)
+- LlamaIndex BGEM3Index/BGEM3Retriever (tri-mode text: dense+sparse+ColBERT)
+- LlamaIndex ClipEmbedding for image vectors in LI contexts
+- Pydantic models for embedding parameters and results
 
-Key Features:
-- BGE-M3 unified dense/sparse embeddings with 8K context window
-- Optimal batch processing for document chunks
-- GPU memory optimization for RTX 4090
-- Semantic similarity caching integration
-- Async processing with memory management
-- Performance targets: <50ms per chunk, <3GB VRAM usage
+Key Principles:
+- Prefer library implementations over custom wrappers
+- Derive image dimensions at runtime (no hard-coded OpenCLIP/SigLIP dims)
+- Keep tests fast/offline via stubs/monkeypatching
 """
 
 from src.models.embeddings import (
@@ -22,11 +19,12 @@ from src.models.embeddings import (
     EmbeddingParameters,
     EmbeddingResult,
 )
-from src.retrieval.embeddings import BGEM3Embedding
+from src.retrieval.bge_m3_index import build_bge_m3_index, build_bge_m3_retriever
 
 __all__ = [
-    "BGEM3Embedding",
     "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",
+    "build_bge_m3_index",
+    "build_bge_m3_retriever",
 ]

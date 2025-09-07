@@ -240,15 +240,14 @@ class AdaptiveRouterQueryEngine:
                     metadata=ToolMetadata(
                         name="multimodal_search",
                         description=(
-                            "Multimodal search using CLIP for cross-modal image-text "
-                            "retrieval with ViT-B/32 embeddings. Specialized for: "
-                            "image-related queries, visual content questions, diagrams "
-                            "and charts analysis, text-to-image search ('show me "
-                            "diagrams of...'), image-to-text search, visual similarity "
-                            "matching. Combines CLIP's 512-dimensional embeddings for "
-                            "both text and images with cross-modal understanding. "
-                            "Optimized for <1.4GB VRAM usage while maintaining high "
-                            "accuracy for visual and textual content correlation."
+                            "Multimodal search using CLIP backbones for cross-modal "
+                            "image-text retrieval. Specialized for: image-related "
+                            "queries, visual content questions, diagrams and charts "
+                            "analysis, text-to-image search, image-to-text search, "
+                            "and visual similarity matching. Embeddings are derived "
+                            "at runtime from the selected backbone. Optimized for "
+                            "low VRAM usage while maintaining high accuracy for "
+                            "visual/textual content correlation."
                         ),
                     ),
                 )
