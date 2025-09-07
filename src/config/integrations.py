@@ -23,6 +23,7 @@ from llama_index.core import Settings
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 from src.config.llm_factory import build_llm
+from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
 
 from .settings import settings
 
@@ -251,13 +252,22 @@ def get_unified_embedder():  # pragma: no cover - simple factory
     This is a lightweight entry point for app code to opt into the
     library-first TextEmbedder (BGE-M3) and ImageEmbedder (OpenCLIP/SigLIP).
     """
-    from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
-
-    emb_cfg = settings.get_embedding_config()
-    device = emb_cfg.get("device", "cpu")
-    text = TextEmbedder(device=device)
-    image = ImageEmbedder(device=device)
+    device = "cuda" if settings.enable_gpu_acceleration else "cpu"
+    text = TextEmbedder(model_name=settings.embedding.model_name, device=device)
+    image = ImageEmbedder(backbone="siglip_base", device=device)
     return UnifiedEmbedder(text=text, image=image, strict_image_types=True)
+
+
+def get_image_embedder(
+    backbone: str = "siglip_base",
+) -> ImageEmbedder:  # pragma: no cover - simple factory
+    """Return an ImageEmbedder with the requested backbone.
+
+    Default backbone is SigLIP (preferred). Accepts "openclip_vitl14",
+    "openclip_vith14", or "siglip_base".
+    """
+    device = "cuda" if settings.enable_gpu_acceleration else "cpu"
+    return ImageEmbedder(backbone=backbone, device=device)
 
 
 def get_clip_like_image_embedder():  # pragma: no cover - convenience adapter

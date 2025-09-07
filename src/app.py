@@ -441,6 +441,13 @@ async def upload_section() -> None:
                                     "Multimodal emission scan failed: {}", _e
                                 )
                             if image_docs:
+                                # Preview a few thumbnails
+                                from contextlib import suppress
+                                # UI resilience: ignore preview errors in offline/CI
+                                with suppress(Exception):  # pragma: no cover
+                                    thumbs = [d.image_path for d in image_docs[:3]]
+                                    st.caption("Page image previews")
+                                    st.image(thumbs, width=180)
                                 from llama_index.core.indices import (  # pylint: disable=ungrouped-imports
                                     MultiModalVectorStoreIndex,
                                 )
