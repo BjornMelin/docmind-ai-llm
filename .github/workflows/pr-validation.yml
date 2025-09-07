@@ -54,7 +54,7 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: uv sync --group test --group dev
+        run: uv sync --group test --group dev --group quality
 
       - name: Lint + Unit
         uses: ./.github/actions/python-ci
@@ -96,7 +96,7 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: uv sync --group test --group dev
+        run: uv sync --group test --group dev --group quality
 
       - name: Lint + Integration
         uses: ./.github/actions/python-ci
@@ -138,7 +138,7 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: uv sync --group test --group dev
+        run: uv sync --group test --group dev --group quality
 
       - name: Lint + Full
         uses: ./.github/actions/python-ci
