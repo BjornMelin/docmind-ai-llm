@@ -6,13 +6,10 @@ ColPali (visual) and BGE v2-m3 CrossEncoder (text).
 """
 
 # BGE-M3 and CLIP embeddings (consolidated)
-from .embeddings import (
-    BGEM3Embedding,
-    ClipConfig,
-    configure_bgem3_settings,
-    create_bgem3_embedding,
-    create_clip_embedding,
-    setup_clip_for_llamaindex,
+from .bge_m3_index import (
+    build_bge_m3_index,
+    build_bge_m3_retriever,
+    get_default_bge_m3_retriever,
 )
 
 # Property graph configuration
@@ -59,8 +56,6 @@ from .reranking import (
 
 __all__ = [
     "AdaptiveRouterQueryEngine",
-    "BGEM3Embedding",
-    "ClipConfig",
     "DSPyABTest",
     "DSPyConfig",
     "DSPyOptimizer",
@@ -69,23 +64,22 @@ __all__ = [
     "OptimizationMode",
     "PropertyGraphConfig",
     "QueryStrategy",
+    "build_bge_m3_index",
+    "build_bge_m3_retriever",
     "build_text_reranker",
     "build_visual_reranker",
     "calculate_entity_confidence",
     "classify_query_strategy",
-    "configure_bgem3_settings",
     "configure_router_settings",
     "create_adaptive_router_engine",
-    "create_bgem3_embedding",
-    "create_clip_embedding",
     "create_property_graph_index",
     "create_property_graph_index_async",
     "create_tech_schema",
     "extend_property_graph_index",
     "extract_entities",
     "extract_relationships",
+    "get_default_bge_m3_retriever",
     "measure_quality_improvement",
     "progressive_optimization_pipeline",
-    "setup_clip_for_llamaindex",
     "traverse_graph",
 ]

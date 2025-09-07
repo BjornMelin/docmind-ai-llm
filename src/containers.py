@@ -28,40 +28,17 @@ from typing import Any
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config import settings
 from src.processing.document_processor import DocumentProcessor
-from src.retrieval.embeddings import create_bgem3_embedding
+from src.retrieval.bge_m3_index import build_bge_m3_index, build_bge_m3_retriever
 
 
-def get_embedding_model(
-    *,
-    model_name: str | None = None,
-    device: str | None = None,
-    max_length: int | None = None,
-    use_fp16: bool | None = None,
-) -> Any:
-    """Create and return the embedding model instance.
+def get_embedding_model(*, nodes: list[Any] | None = None) -> Any:
+    """Create and return the tri-mode BGEM3 retriever (index + retriever).
 
-    Constructs a BGE-M3 embedding model using application settings with optional
-    overrides. The returned object implements the LlamaIndex embedding interface.
-
-    Args:
-      model_name: Optional model identifier override (defaults to settings).
-      device: Optional target device (for example, "cuda" or "cpu").
-      max_length: Optional maximum token length for embeddings.
-      use_fp16: Optional FP16 toggle. If None, a device-appropriate default is
-        selected by the factory.
-
-    Returns:
-      Any: A configured BGEM3Embedding instance.
+    This replaces the legacy embedding-model factory with a library-first
+    index+retriever composition using LlamaIndex BGEM3Index.
     """
-    cfg = settings.get_embedding_config()
-    resolved: dict[str, Any] = {
-        "model_name": model_name or cfg.get("model_name"),
-        "device": device or cfg.get("device", "cuda"),
-        "max_length": max_length or cfg.get("max_length"),
-    }
-    if use_fp16 is not None:
-        resolved["use_fp16"] = use_fp16
-    return create_bgem3_embedding(**resolved)
+    idx = build_bge_m3_index(nodes or [], model_name=settings.embedding.model_name)
+    return build_bge_m3_retriever(idx, weights_for_different_modes=[0.4, 0.2, 0.4])
 
 
 def get_document_processor(*, config: Any | None = None) -> DocumentProcessor:
