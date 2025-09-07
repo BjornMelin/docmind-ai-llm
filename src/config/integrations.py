@@ -15,11 +15,12 @@ import logging
 import os
 from contextlib import suppress
 
-import torch
 from llama_index.core import Settings
 
+# For embeddings, prefer LlamaIndex ClipEmbedding as a safe default.
+from llama_index.embeddings.clip import ClipEmbedding
+
 from src.config.llm_factory import build_llm
-from src.retrieval.embeddings import BGEM3Embedding
 
 from .settings import settings
 
@@ -89,30 +90,16 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             logger.warning("Could not configure LLM: %s", e, exc_info=True)
             Settings.llm = None
 
-    # Configure BGE-M3 embeddings
+    # Configure embeddings (multimodal CLIP default; tri-mode BGE-M3 uses retrievers)
     try:
         if Settings.embed_model is not None and not force_embed:
             logger.info("Embed model already configured; skipping override")
         else:
-            embedding_config = settings.get_embedding_config()
-
-            # Prefer FP16 when on CUDA; BGEM3 internally handles dtype
-            use_fp16 = (
-                embedding_config["device"] == "cuda" and torch.cuda.is_available()
-            )
-
-            Settings.embed_model = BGEM3Embedding(
-                model_name=embedding_config["model_name"],
-                device=embedding_config["device"],
-                max_length=embedding_config["max_length"],
-                batch_size=embedding_config["batch_size"],
-                use_fp16=use_fp16,
+            Settings.embed_model = ClipEmbedding(
+                model_name="openai/clip-vit-base-patch32"
             )
             logger.info(
-                "Embedding model configured: %s (device=%s, fp16=%s)",
-                embedding_config.get("model_name"),
-                embedding_config.get("device"),
-                use_fp16,
+                "Embedding model configured: ClipEmbedding openai/clip-vit-base-patch32"
             )
     except (ImportError, RuntimeError, ValueError, OSError) as e:
         logger.warning("Could not configure embeddings: %s", e, exc_info=True)
