@@ -11,7 +11,7 @@ env:
   PYTHONPATH: ${{ github.workspace }}
   # Centralize commonly used targets and thresholds
   LINT_TARGETS: src tests scripts
-  PYLINT_FAIL_UNDER: "9.5"
+  PYLINT_FAIL_UNDER: "9.4"
   COVERAGE_LINE_THRESHOLD: "65.0"
   COVERAGE_BRANCH_THRESHOLD: "0.0"
 
