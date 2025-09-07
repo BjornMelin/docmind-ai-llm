@@ -119,9 +119,10 @@ def test_settings_toggle_providers_and_apply(
             "ollama": _Ollama,
             "vllm": _OLike,
             "lmstudio": _OLike,
-            "llamacpp": _LCpp
-            if not getattr(settings, "llamacpp_base_url", None)
-            else _OLike,
+            # Prefer positive condition for readability
+            "llamacpp": _OLike
+            if getattr(settings, "llamacpp_base_url", None)
+            else _LCpp,
         }
         cls = mapping.get(settings.llm_backend, _OLike)
         return cls()

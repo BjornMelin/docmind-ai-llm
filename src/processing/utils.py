@@ -10,21 +10,8 @@ from typing import Any
 
 
 def _normalize_text(value: str) -> str:
-    """Normalize text for stable hashing.
-
-    - Strips leading/trailing whitespace
-    - Collapses internal whitespace to a single space
-
-    Args:
-        value: Input text
-
-    Returns:
-        Normalized text suitable for hashing
-    """
-    if not value:
-        return ""
-    # Collapse runs of whitespace and strip
-    return " ".join(value.split()).strip()
+    """Normalize text for stable hashing (trim + collapse whitespace)."""
+    return "" if not value else " ".join(value.split()).strip()
 
 
 def sha256_id(*parts: str | bytes) -> str:
@@ -73,4 +60,4 @@ def is_unstructured_like(element: Any) -> bool:
     return not mod.startswith("unittest")
 
 
-__all__ = ["_normalize_text", "is_unstructured_like", "sha256_id"]
+__all__ = ["is_unstructured_like", "sha256_id"]

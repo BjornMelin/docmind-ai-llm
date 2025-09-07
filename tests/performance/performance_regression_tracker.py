@@ -55,7 +55,7 @@ class RegressionTracker:
         baseline = self._load_baseline()
         baseline.setdefault("metrics", {})
         baseline["metrics"][metric] = {
-            "value": float(value),
+            "value": value,
             "unit": unit,
             "kind": kind,
             "metadata": metadata or {},
@@ -99,7 +99,7 @@ class RegressionTracker:
                 val = self._extract_current_value(metric, data)
                 if val is not None:
                     return val
-            except (OSError, ValueError, UnicodeDecodeError):
+            except (OSError, ValueError):
                 continue
         return None
 

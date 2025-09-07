@@ -7,6 +7,8 @@ for downstream pipeline usage.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -49,6 +51,10 @@ def _render_pdf_pages(
 
             if needs_render:
                 page.get_pixmap(matrix=mat).save(str(img_path))
+                # Ensure deterministic mtime ordering for downstream caches/tests:
+                # set the image mtime to at least the source PDF's mtime.
+                with contextlib.suppress(OSError):
+                    os.utime(img_path, (pdf_mtime, pdf_mtime))
 
             results.append((idx, img_path, page.rect))
 

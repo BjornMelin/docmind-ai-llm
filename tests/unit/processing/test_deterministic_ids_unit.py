@@ -39,8 +39,8 @@ async def test_element_node_id_and_parent_id_present(tmp_path: Path) -> None:
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
-        def run(self, documents=None, show_progress=False):
-            nodes = documents or []
+        def run(self, nodes=None, documents=None, show_progress=False):
+            nodes = nodes or documents or []
             for t in self.transformations:
                 nodes = t(nodes)
             return nodes

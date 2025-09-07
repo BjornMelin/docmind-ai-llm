@@ -430,9 +430,20 @@ class PerformanceMonitor:
 
             # Check critical metrics
             for metric in CRITICAL_METRICS:
+                # Ensure we pass a dict to the regression tracker; fall back sensibly
+                if current_data is not None:
+                    metric_data = current_data
+                elif isinstance(self.results, dict):
+                    metric_data = self.results
+                elif isinstance(self.results, list) and self.results:
+                    # Assume results is a list of dicts; take the latest entry
+                    metric_data = self.results[-1]
+                else:
+                    metric_data = {}
+
                 regression_check = self.regression_tracker.check_regression(
                     metric,
-                    current_data=current_data or self.results,
+                    current_data=metric_data,
                     threshold_pct=float(self.config.get("regression_threshold", 20)),
                 )
 
