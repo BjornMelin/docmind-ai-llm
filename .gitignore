@@ -286,3 +286,5 @@ relative/
 debug_*.py
 scratch_*.py
 experiment_*.py
+# Local GitHub metadata
+.gh/
