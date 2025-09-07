@@ -161,12 +161,24 @@ async def setup_hybrid_collection_async(
     # Create sync client for QdrantVectorStore compatibility
     sync_client = QdrantClient(url=settings.database.qdrant_url)
 
-    return QdrantVectorStore(
-        client=sync_client,
-        collection_name=collection_name,
-        enable_hybrid=True,
-        batch_size=settings.monitoring.default_batch_size,
-    )
+    try:
+        return QdrantVectorStore(
+            client=sync_client,
+            collection_name=collection_name,
+            enable_hybrid=True,
+            batch_size=settings.monitoring.default_batch_size,
+        )
+    except ImportError as e:  # fastembed optional for hybrid sparse
+        logger.warning(
+            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
+            e,
+        )
+        return QdrantVectorStore(
+            client=sync_client,
+            collection_name=collection_name,
+            enable_hybrid=False,
+            batch_size=settings.monitoring.default_batch_size,
+        )
 
 
 def setup_hybrid_collection(
@@ -210,12 +222,24 @@ def setup_hybrid_collection(
         )
         logger.success("Created hybrid collection: %s", collection_name)
 
-    return QdrantVectorStore(
-        client=client,
-        collection_name=collection_name,
-        enable_hybrid=True,
-        batch_size=settings.monitoring.default_batch_size,
-    )
+    try:
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=True,
+            batch_size=settings.monitoring.default_batch_size,
+        )
+    except ImportError as e:  # fastembed optional for hybrid sparse
+        logger.warning(
+            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
+            e,
+        )
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=False,
+            batch_size=settings.monitoring.default_batch_size,
+        )
 
 
 def create_vector_store(
@@ -235,12 +259,24 @@ def create_vector_store(
     """
     client = QdrantClient(url=settings.database.qdrant_url)
 
-    return QdrantVectorStore(
-        client=client,
-        collection_name=collection_name,
-        enable_hybrid=enable_hybrid,
-        batch_size=settings.monitoring.default_batch_size,
-    )
+    try:
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=enable_hybrid,
+            batch_size=settings.monitoring.default_batch_size,
+        )
+    except ImportError as e:  # fastembed optional for hybrid sparse
+        logger.warning(
+            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
+            e,
+        )
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=False,
+            batch_size=settings.monitoring.default_batch_size,
+        )
 
 
 def get_collection_info(collection_name: str) -> dict[str, Any]:
