@@ -3,17 +3,18 @@ name: CI
 on:
   pull_request:
     branches: [ main, development ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
   push:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 env:
-  # Ensure imports like `import src` and `import tests.*` work in all steps
-  PYTHONPATH: ${{ github.workspace }}
-  # Centralize commonly used targets and thresholds
-  LINT_TARGETS: src tests scripts
   PYLINT_FAIL_UNDER: "9.4"
-  COVERAGE_LINE_THRESHOLD: "65.0"
-  COVERAGE_BRANCH_THRESHOLD: "0.0"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,7 +27,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.10"]
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,53 +44,30 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
-      - name: Cache pytest and coverage
+      - name: Install uv (with cache)
+        id: setup-uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Cache uv
         uses: actions/cache@v4
         with:
-          path: |
-            .pytest_cache
-            coverage
-          key: ${{ runner.os }}-py${{ matrix.python-version }}-pytestcov-${{ hashFiles('pyproject.toml', 'uv.lock', 'src/**', 'tests/**') }}
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-uv-${{ hashFiles('uv.lock') }}
           restore-keys: |
-            ${{ runner.os }}-py${{ matrix.python-version }}-pytestcov-
-            ${{ runner.os }}-pytestcov-
+            ${{ runner.os }}-py${{ matrix.python-version }}-uv-
+            ${{ runner.os }}-uv-
 
       - name: Install dependencies
         run: uv sync --group test --group dev
 
-      - name: Build Python file list (src + tests + scripts)
-        shell: bash
-        run: |
-          set -euo pipefail
-          LIST_FILE="$RUNNER_TEMP/pyfiles.txt"
-          if command -v fd >/dev/null 2>&1; then
-            fd -H -t f -e py $LINT_TARGETS >"$LIST_FILE"
-          else
-            find $LINT_TARGETS -type f -name '*.py' | sort >"$LIST_FILE"
-          fi
-          echo "PY_FILES_LIST=$LIST_FILE" >> "$GITHUB_ENV"
-
-      - name: Ruff format (check only)
-        run: uv run ruff format --check .
-
-      - name: Ruff lint (all)
-        run: uv run ruff check .
-
-      - name: Pylint (enforce score >= ${{ env.PYLINT_FAIL_UNDER }})
-        run: |
-          xargs -a "$PY_FILES_LIST" uv run pylint -j 0 --fail-under=${{ env.PYLINT_FAIL_UNDER }} --rcfile=pyproject.toml
-
-      - name: Unit tests (via runner)
-        run: |
-          uv run python scripts/run_tests.py --unit
-
-      - name: Coverage summary (unit)
-        if: always()
-        run: |
-          echo "## Coverage Summary (Unit)" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          uv run coverage report --show-missing >> $GITHUB_STEP_SUMMARY || echo "(No coverage data)" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+      - name: Lint + Unit
+        uses: ./.github/actions/python-ci
+        with:
+          run_type: unit
+          coverage: 'false'
 
   integration:
     name: Integration Tests (Linux)
@@ -115,18 +93,23 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-uv-
+            ${{ runner.os }}-uv-
+
       - name: Install dependencies
         run: uv sync --group test --group dev
 
-      - name: Integration tests (via runner)
-        run: |
-          uv run python scripts/run_tests.py --integration
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "Integration tests executed (no gating)." >> $GITHUB_STEP_SUMMARY
+      - name: Lint + Integration
+        uses: ./.github/actions/python-ci
+        with:
+          run_type: integration
+          coverage: 'false'
 
   full:
     name: Full Test Suite (All tests)
@@ -152,51 +135,36 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
-      - name: Cache pytest and coverage
+      - name: Cache uv
         uses: actions/cache@v4
         with:
-          path: |
-            .pytest_cache
-            coverage
-          key: ${{ runner.os }}-py${{ matrix.python-version }}-pytestcov-${{ hashFiles('pyproject.toml', 'uv.lock', 'src/**', 'tests/**') }}
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-uv-${{ hashFiles('uv.lock') }}
           restore-keys: |
-            ${{ runner.os }}-py${{ matrix.python-version }}-pytestcov-
-            ${{ runner.os }}-pytestcov-
+            ${{ runner.os }}-py${{ matrix.python-version }}-uv-
+            ${{ runner.os }}-uv-
 
       - name: Install dependencies
         run: uv sync --group test --group dev
 
-      - name: Build Python file list (src + tests + scripts)
-        shell: bash
-        run: |
-          set -euo pipefail
-          LIST_FILE="$RUNNER_TEMP/pyfiles.txt"
-          if command -v fd >/dev/null 2>&1; then
-            fd -H -t f -e py $LINT_TARGETS >"$LIST_FILE"
-          else
-            find $LINT_TARGETS -type f -name '*.py' | sort >"$LIST_FILE"
-          fi
-          echo "PY_FILES_LIST=$LIST_FILE" >> "$GITHUB_ENV"
+      - name: Lint + Full
+        uses: ./.github/actions/python-ci
+        with:
+          run_type: full
+          coverage: 'true'
 
-      - name: Ruff lint (all)
-        run: uv run ruff check .
-
-      - name: Pylint (enforce score >= ${{ env.PYLINT_FAIL_UNDER }})
-        run: |
-          xargs -a "$PY_FILES_LIST" uv run pylint -j 0 --fail-under=${{ env.PYLINT_FAIL_UNDER }} --rcfile=pyproject.toml
-
-      - name: Run all tests via runner (with coverage)
-        run: |
-          uv run python scripts/run_tests.py --coverage
-
-      - name: Enforce coverage thresholds (gated)
-        run: |
-          uv run python scripts/run_quality_gates.py --ci --report
-
-      - name: Coverage summary (All tests)
+      - name: Upload coverage HTML
         if: always()
-        run: |
-          echo "## Coverage Summary (All)" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          uv run coverage report --show-missing >> $GITHUB_STEP_SUMMARY || echo "(No coverage data)" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov
+          if-no-files-found: ignore
+
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore

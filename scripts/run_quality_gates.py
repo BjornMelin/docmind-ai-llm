@@ -28,8 +28,11 @@ from pathlib import Path
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
-except Exception:  # pragma: no cover - fallback for older runtimes
-    tomllib = None  # type: ignore[assignment]
+except Exception:  # pragma: no cover - fallback for Python 3.10
+    try:
+        import tomli as tomllib  # type: ignore[assignment]
+    except Exception:  # pragma: no cover - last resort
+        tomllib = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

@@ -33,6 +33,7 @@ Usage:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -232,6 +233,8 @@ class TestRunner:
             "-m",
             "unit",
         ]
+        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+            command += ["-n", "auto"]
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
 
     def run_integration_tests(self) -> TestResult:
@@ -304,6 +307,8 @@ class TestRunner:
             "unit or integration",
             "--maxfail=5",
         ]
+        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+            command += ["-n", "auto"]
         return self.run_command(command, "All Tests with Coverage (unit+integration)")
 
     def run_smoke_tests(self) -> TestResult:
