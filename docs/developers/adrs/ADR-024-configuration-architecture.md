@@ -226,12 +226,8 @@ def setup_llamaindex() -> None:
     if Settings.llm is None:
         Settings.llm = build_llm(settings)
     if Settings.embed_model is None:
-        cfg = settings.get_embedding_config()
-        Settings.embed_model = BGEM3Embedding(
-            model_name=cfg["model_name"], device=cfg["device"],
-            max_length=cfg["max_length"], batch_size=cfg["batch_size"],
-            use_fp16=(cfg["device"] == "cuda")
-        )
+        from llama_index.embeddings.clip import ClipEmbedding
+        Settings.embed_model = ClipEmbedding(model_name="openai/clip-vit-base-patch32")
     Settings.context_window = settings.vllm.context_window
     Settings.num_output = settings.vllm.max_tokens
 

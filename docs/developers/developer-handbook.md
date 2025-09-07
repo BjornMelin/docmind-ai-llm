@@ -896,15 +896,17 @@ class TestPerformanceTargets:
         assert coordination_time < 200, f"Coordination took {coordination_time}ms"
     
     def test_embedding_generation_performance(self):
-        """Test embedding generation speed."""
-        embedder = BGEM3EmbeddingManager(settings.embedding)
-        
+        """Test embedding generation speed (LI MockEmbedding example)."""
+        from llama_index.core.embeddings import MockEmbedding
+
+        embedder = MockEmbedding(embed_dim=1024)
+
         test_text = "Sample document text for performance testing"
-        
+
         start_time = time.time()
-        embedding = embedder.get_dense_embedding(test_text)
+        embedding = embedder.get_text_embedding(test_text)
         generation_time = (time.time() - start_time) * 1000
-        
+
         assert generation_time < 50, f"Embedding took {generation_time}ms"
         assert len(embedding) == 1024, "Should generate 1024D dense embedding"
 ```
@@ -1291,31 +1293,31 @@ uv update
 
 ## Advanced Implementation Details
 
-### BGE-M3 Unified Embeddings Implementation
+### BGE-M3 Unified Embeddings (Library-First)
 
-DocMind AI uses BGE-M3 for unified dense + sparse embeddings:
+DocMind AI uses LlamaIndex's native BGEM3Index/BGEM3Retriever for unified dense + sparse (+ optional ColBERT) retrieval. Example:
 
 ```python
-class BGEM3EmbeddingManager:
-    """Advanced BGE-M3 embedding manager with optimization."""
-    
-    def __init__(self, config: EmbeddingConfig):
-        self.config = config
-        self.model = None
-        self.tokenizer = None
-        self._batch_size = config.batch_size
-        
-    async def initialize(self):
-        """Initialize model with FP16 optimization."""
-        from FlagEmbedding import BGEM3FlagModel
-        
-        self.model = BGEM3FlagModel(
-            model_name_or_path=self.config.model_name,
-            use_fp16=True,  # FP16 for RTX 4090 optimization
-            device="cuda" if torch.cuda.is_available() else "cpu"
-        )
-        
-    async def get_unified_embeddings(
+from llama_index.core.schema import Document as LIDocument
+from src.retrieval.bge_m3_index import build_bge_m3_index, build_bge_m3_retriever
+
+docs = [LIDocument(text="Hello world"), LIDocument(text="DocMind AI")]
+index = build_bge_m3_index(docs, model_name="BAAI/bge-m3")
+retriever = build_bge_m3_retriever(index, weights_for_different_modes=[0.4, 0.2, 0.4])
+
+# Retrieve (tri-mode)
+results = retriever.retrieve("unified embeddings")
+for r in results:
+    print(r.node.get_text(), r.score)
+```
+
+For images in LlamaIndex contexts, prefer ClipEmbedding:
+
+```python
+from llama_index.embeddings.clip import ClipEmbedding
+clip = ClipEmbedding(model_name="openai/clip-vit-base-patch32")
+# Derive dims at runtime from model outputs; do not hard-code
+```
         self, 
         texts: List[str]
     ) -> Dict[str, Any]:
