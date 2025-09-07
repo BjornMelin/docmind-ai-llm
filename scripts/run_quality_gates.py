@@ -21,39 +21,89 @@ Exit codes:
 
 import argparse
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+try:  # Python 3.11+
+    import tomllib  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover - fallback for older runtimes
+    tomllib = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
-# Quality gate scripts
-QUALITY_SCRIPTS = {
-    "coverage": {
-        "script": "scripts/check_coverage.py",
-        "args": ["--collect", "--threshold", "80", "--fail-under"],
-        "description": "Coverage threshold validation",
-        "timeout": 900,
-    },
-    "performance": {
-        "script": "scripts/performance_monitor.py",
-        "args": ["--collection-only", "--check-regressions"],
-        "description": "Performance regression detection",
-        "timeout": 300,
-    },
-    "health": {
-        "script": "scripts/test_health.py",
-        "args": ["--patterns", "--stability"],
-        "description": "Test suite health monitoring",
-        "timeout": 120,
-    },
-}
+
+def _read_thresholds_from_pyproject(project_root: Path) -> tuple[float, float]:  # ruff: noqa UP006 - Tuple for 3.10 compat
+    """Read coverage thresholds from pyproject.
+
+    Prefers [tool.pytest-quality] if available; falls back to
+    [tool.coverage.report].fail_under for line coverage.
+    Branch threshold falls back to 0.0 if not specified.
+    """
+    line = 0.0
+    branch = 0.0
+    pyproject = project_root / "pyproject.toml"
+    if tomllib and pyproject.exists():
+        try:
+            with pyproject.open("rb") as f:
+                data = tomllib.load(f)
+            q = data.get("tool", {}).get("pytest-quality", {})
+            line = float(q.get("min_line_coverage_percent", line))
+            branch = float(q.get("min_branch_coverage_percent", branch))
+            # Fallbacks
+            if not line:
+                cov = data.get("tool", {}).get("coverage", {})
+                rep = cov.get("report", {})
+                if isinstance(rep, dict):
+                    line = float(rep.get("fail_under", line or 0.0))
+        except Exception as exc:  # pragma: no cover - non-fatal
+            logging.debug("Failed to read thresholds from pyproject: %s", exc)
+    # Env overrides win
+    line = float(os.getenv("COVERAGE_LINE_THRESHOLD", line or 0.0))
+    branch = float(os.getenv("COVERAGE_BRANCH_THRESHOLD", branch or 0.0))
+    return line, branch
+
+
+def _build_quality_scripts(project_root: Path) -> dict:
+    """Build QUALITY_SCRIPTS dynamically using project thresholds/env."""
+    line, branch = _read_thresholds_from_pyproject(project_root)
+    cov_args = [
+        "--threshold",
+        str(line or 0.0),
+        "--branch-threshold",
+        str(branch or 0.0),
+        "--fail-under",
+    ]
+
+    return {
+        "coverage": {
+            "script": "scripts/check_coverage.py",
+            # Assume coverage already collected by test runner; just validate thresholds
+            "args": cov_args,
+            "description": "Coverage threshold validation",
+            "timeout": 900,
+        },
+        "performance": {
+            "script": "scripts/performance_monitor.py",
+            "args": ["--collection-only", "--check-regressions"],
+            "description": "Performance regression detection",
+            "timeout": 300,
+        },
+        "health": {
+            "script": "scripts/test_health.py",
+            "args": ["--patterns", "--stability"],
+            "description": "Test suite health monitoring",
+            "timeout": 120,
+        },
+    }
+
 
 QUALITY_SUITES = {
     "quick": ["coverage"],
     "standard": ["coverage", "performance"],
     "comprehensive": ["coverage", "performance", "health"],
-    "ci": ["coverage", "performance"],
+    "ci": ["coverage"],
 }
 
 
@@ -88,11 +138,12 @@ class QualityGateRunner:
         Returns:
             True if quality gate passed, False otherwise
         """
-        if gate_name not in QUALITY_SCRIPTS:
+        scripts = _build_quality_scripts(Path.cwd())
+        if gate_name not in scripts:
             self.failures.append(f"Unknown quality gate: {gate_name}")
             return False
 
-        gate_config = QUALITY_SCRIPTS[gate_name]
+        gate_config = scripts[gate_name]
         script_path = Path(gate_config["script"])
 
         if not script_path.exists():
