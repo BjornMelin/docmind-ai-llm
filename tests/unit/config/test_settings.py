@@ -599,13 +599,17 @@ class TestConfigurationMethods:
         expected_keys = {
             "model_name",
             "device",
+            "dimension",
             "max_length",
             "batch_size_text",
+            "batch_size_text_gpu",
+            "batch_size_text_cpu",
             "normalize_text",
             "enable_sparse",
             "image_backbone",
             "batch_size_image",
             "normalize_image",
+            "embed_device",
             "trust_remote_code",
         }
 

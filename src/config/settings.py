@@ -524,6 +524,9 @@ class DocMindSettings(BaseSettings):
                 if device == "cuda"
                 else self.embedding.batch_size_text_cpu
             ),
+            # Expose raw batch sizes for downstream consumers
+            "batch_size_text_gpu": self.embedding.batch_size_text_gpu,
+            "batch_size_text_cpu": self.embedding.batch_size_text_cpu,
             "normalize_text": self.embedding.normalize_text,
             "enable_sparse": self.embedding.enable_sparse,
             # Images
