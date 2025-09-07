@@ -44,13 +44,6 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
-      - name: Install uv (with cache)
-        id: setup-uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
-
       - name: Cache uv
         uses: actions/cache@v4
         with:
