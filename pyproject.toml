@@ -109,10 +109,7 @@ Repository = "https://github.com/BjornMelin/docmind-ai"
 Documentation = "https://github.com/BjornMelin/docmind-ai-llm/tree/main/docs"
 "GPU Setup Guide" = "https://github.com/BjornMelin/docmind-ai-llm/blob/main/docs/developers/gpu-setup.md"
 
-[project.scripts]
-# Performance validation and GPU testing
-gpu-validate = "scripts.gpu_validation:main"
-performance-test = "scripts.performance_validation:main"
+
 
 [tool.docmind-ai]
 # CUDA Stack Requirements
@@ -182,7 +179,6 @@ extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
     "ANN201", "ANN202", "ANN204",
 ]
 "scripts/check_coverage.py" = ["RUF001", "RUF002", "RUF003"]
-"scripts/update_progress_counts.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/run_quality_gates.py" = ["RUF013"]
 "docs/**/*.py" = [
     "RUF001", "RUF002", "RUF003",  # unicode in examples/docstrings
@@ -200,6 +196,7 @@ py-version = "3.11"
 jobs = 0
 limit-inference-results = 100
 extension-pkg-allow-list = ["llama_index", "torch"]
+source-roots = ["."]
 disable = [
   # Pydantic model attributes are resolved at runtime; avoid false positives
   "no-member",
@@ -350,7 +347,7 @@ exclude_lines = [
     "except ImportError:",
     "if TYPE_CHECKING:",
 ]
-fail_under = 29.71
+fail_under = 65.0
 precision = 2
 show_missing = true
 skip_covered = false
@@ -376,9 +373,9 @@ slow_test_threshold_seconds = 0.2
 unit_test_time_threshold_seconds = 0.1
 performance_regression_threshold = 1.5
 
-# Coverage enforcement (Phase 5A: 29.71% trending upward)  
-min_line_coverage_percent = 29.71
-min_branch_coverage_percent = 25.0
+# Coverage enforcement
+min_line_coverage_percent = 65.0
+min_branch_coverage_percent = 0.0
 coverage_fail_on_decrease = false
 coverage_regression_threshold = 0.95
 

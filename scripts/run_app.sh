@@ -18,8 +18,9 @@ if [ ! -f "src/app.py" ]; then
     exit 1
 fi
 
-# Set default port if not specified
-PORT=${DOCMIND_STREAMLIT_PORT:-8501}
+# Set default port from unified settings env; fall back to 8501
+# Note: prefer nested settings key DOCMIND_UI__STREAMLIT_PORT
+PORT=${DOCMIND_UI__STREAMLIT_PORT:-8501}
 
 echo "📋 Configuration:"
 echo "   Port: $PORT"

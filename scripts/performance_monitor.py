@@ -23,12 +23,26 @@ import argparse
 import contextlib
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+try:
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover - optional
+    psutil = None  # type: ignore
+try:
+    import resource  # type: ignore
+except Exception:  # pragma: no cover - optional
+    resource = None  # type: ignore
+try:
+    import torch  # type: ignore
+except Exception:  # pragma: no cover - optional
+    torch = None  # type: ignore
 
 # Import existing regression tracker
 sys.path.append(str(Path(__file__).parent.parent))
@@ -56,6 +70,7 @@ CRITICAL_METRICS = [
     "test_collection_time",
     "average_test_duration",
     "memory_usage_peak",
+    "gpu_vram_peak_mb",
     "embedding_latency",
     "retrieval_latency",
     "llm_inference_time",
@@ -98,18 +113,11 @@ class PerformanceMonitor:
             logger.info("Starting test suite performance measurement...")
             start_time = time.time()
 
+            # Prepare memory tracking (CPU + GPU)
+            self._maybe_reset_gpu_peak()
+
             # Base pytest command with performance tracking
-            cmd = [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "pytest",
-                "--durations=10",  # Show 10 slowest tests
-                "--tb=short",
-                "-q",  # Quiet mode
-                *test_args,
-            ]
+            cmd = self._build_pytest_cmd(test_args)
 
             # Run with timeout
             result = subprocess.run(
@@ -125,6 +133,10 @@ class PerformanceMonitor:
 
             # Parse pytest output for timing information
             performance_data = self._parse_pytest_output(result.stdout, result.stderr)
+            # CPU/GPU peaks
+            cpu_peak_mb = self._read_cpu_peak_mb()
+            gpu_peak_mb = self._read_gpu_peak_mb()
+
             performance_data.update(
                 {
                     "total_duration": duration,
@@ -133,6 +145,10 @@ class PerformanceMonitor:
                     "command": " ".join(cmd),
                 }
             )
+            if cpu_peak_mb is not None:
+                performance_data["memory_usage_peak"] = cpu_peak_mb
+            if gpu_peak_mb is not None:
+                performance_data["gpu_vram_peak_mb"] = gpu_peak_mb
 
             logger.info("Test suite completed in %.2fs", duration)
             return performance_data
@@ -153,6 +169,58 @@ class PerformanceMonitor:
                 "error": str(e),
                 "timestamp": datetime.now().isoformat(),
             }
+
+    # --- Internal helpers (extracted for clarity) ---
+    def _build_pytest_cmd(self, test_args: list[str]) -> list[str]:
+        return [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "pytest",
+            "--durations=10",
+            "--tb=short",
+            "-q",
+            *test_args,
+        ]
+
+    def _maybe_reset_gpu_peak(self) -> None:
+        if (
+            torch is not None
+            and hasattr(torch.cuda, "is_available")
+            and torch.cuda.is_available()
+        ):
+            with contextlib.suppress(Exception):
+                torch.cuda.reset_peak_memory_stats()
+
+    def _read_cpu_peak_mb(self) -> float | None:
+        with contextlib.suppress(Exception):
+            if resource is not None:
+                ru = resource.getrusage(resource.RUSAGE_SELF)
+                peak = getattr(ru, "ru_maxrss", 0)
+                return (
+                    float(peak) / (1024.0 * 1024.0)
+                    if sys.platform == "darwin"
+                    else float(peak) / 1024.0
+                )
+        if psutil is not None:
+            with contextlib.suppress(Exception):
+                proc = psutil.Process(os.getpid())
+                return float(proc.memory_info().rss) / (1024.0 * 1024.0)
+        return None
+
+    def _read_gpu_peak_mb(self) -> float | None:
+        try:
+            if (
+                torch is not None
+                and hasattr(torch.cuda, "is_available")
+                and torch.cuda.is_available()
+            ):
+                peak_bytes = torch.cuda.max_memory_allocated(0)
+                return float(peak_bytes) / (1024.0 * 1024.0)
+        except Exception:
+            return None
+        return None
 
     def measure_test_collection_time(self) -> dict[str, Any]:
         """Measure test collection performance.
@@ -328,6 +396,22 @@ class PerformanceMonitor:
                     "latency",
                 )
 
+            if "memory_usage_peak" in performance_data:
+                self.regression_tracker.record_performance(
+                    "memory_usage_peak",
+                    performance_data["memory_usage_peak"],
+                    "MB",
+                    "memory",
+                )
+
+            if performance_data.get("gpu_vram_peak_mb"):
+                self.regression_tracker.record_performance(
+                    "gpu_vram_peak_mb",
+                    performance_data["gpu_vram_peak_mb"],
+                    "MB",
+                    "memory",
+                )
+
             logger.info("Performance baseline recorded successfully")
 
         except (RuntimeError, ValueError) as e:
@@ -353,7 +437,22 @@ class PerformanceMonitor:
 
             # Check critical metrics
             for metric in CRITICAL_METRICS:
-                regression_check = self.regression_tracker.check_regression(metric)
+                # Ensure we pass a dict to the regression tracker; fall back sensibly
+                if current_data is not None:
+                    metric_data = current_data
+                elif isinstance(self.results, dict):
+                    metric_data = self.results
+                elif isinstance(self.results, list) and self.results:
+                    # Assume results is a list of dicts; take the latest entry
+                    metric_data = self.results[-1]
+                else:
+                    metric_data = {}
+
+                regression_check = self.regression_tracker.check_regression(
+                    metric,
+                    current_data=metric_data,
+                    threshold_pct=float(self.config.get("regression_threshold", 20)),
+                )
 
                 if regression_check.get("regression_detected"):
                     regressions_found = True

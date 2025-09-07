@@ -973,7 +973,7 @@ print('✅ All ADR requirements validated')
 "
 
 # Performance validation
-python scripts/performance_validation.py
+uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 # GPU configuration check
 python -c "

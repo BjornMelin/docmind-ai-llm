@@ -20,19 +20,20 @@ GPU Smoke Tests:
     - Real hardware testing for releases
 
 Usage:
-    python run_tests.py                  # Run tiered tests (unit → integration)
-    python run_tests.py --unit           # Run unit tests only
-    python run_tests.py --integration    # Run integration tests only
-    python run_tests.py --gpu            # Run GPU tests only
-    python run_tests.py --fast           # Run unit + integration tests
-    python run_tests.py --performance    # Run performance benchmarks
-    python run_tests.py --smoke          # Run basic smoke tests
-    python run_tests.py --coverage       # Generate detailed coverage report
-    python run_tests.py --clean          # Clean test artifacts
+    uv run python run_tests.py                  # Run tiered tests (unit → integration)
+    uv run python run_tests.py --unit           # Run unit tests only
+    uv run python run_tests.py --integration    # Run integration tests only
+    uv run python run_tests.py --gpu            # Run GPU tests only
+    uv run python run_tests.py --fast           # Run unit + integration tests
+    uv run python run_tests.py --performance    # Run performance benchmarks
+    uv run python run_tests.py --smoke          # Run basic smoke tests
+    uv run python run_tests.py --coverage       # Generate detailed coverage report
+    uv run python run_tests.py --clean          # Clean test artifacts
 """
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -232,6 +233,7 @@ class TestRunner:
             "-m",
             "unit",
         ]
+        # Run unit tests serially in CI for stability across environments
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
 
     def run_integration_tests(self) -> TestResult:
@@ -304,6 +306,9 @@ class TestRunner:
             "unit or integration",
             "--maxfail=5",
         ]
+        ci_env = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
+        if ci_env and sys.version_info >= (3, 11):
+            command += ["-n", "auto"]
         return self.run_command(command, "All Tests with Coverage (unit+integration)")
 
     def run_smoke_tests(self) -> TestResult:
@@ -522,10 +527,11 @@ else:
                 print(f"   Command: {result.command}")
                 print(f"   Exit Code: {result.exit_code}")
                 if result.output:
-                    # Show last few lines of output
-                    output_lines = result.output.split("\n")[-20:]
-                    print("   Last output lines:")
-                    for line in output_lines:
+                    # Show a generous tail of output for diagnosis
+                    output_lines = result.output.split("\n")
+                    tail = 300 if len(output_lines) > 300 else len(output_lines)
+                    print("   Last output (tail):")
+                    for line in output_lines[-tail:]:
                         if line.strip():
                             print(f"     {line}")
                 print()
@@ -605,6 +611,13 @@ Examples:
         help="Validate that all modules can be imported",
     )
 
+    # Accept optional positional test paths/patterns for direct pytest invocation
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Optional test paths or patterns to pass directly to pytest.",
+    )
+
     args = parser.parse_args()
 
     project_root = Path(__file__).parent.parent  # Go up to project root from scripts/
@@ -618,8 +631,17 @@ Examples:
         runner.clean_artifacts()
 
     try:
+        # If explicit test paths were supplied, run them directly via pytest
+        if args.paths:
+            cmd = ["uv", "run", "pytest", *args.paths, "-v", "--tb=short"]
+            if args.coverage:
+                cmd += ["--cov=src", "--cov-report=term-missing"]
+            else:
+                # Avoid project-wide coverage thresholds when running ad-hoc paths
+                cmd += ["--no-cov"]
+            runner.run_command(cmd, "Direct pytest (paths)")
         # Run specific test categories based on tiered strategy
-        if args.validate_imports:
+        elif args.validate_imports:
             runner.validate_imports()
         elif args.smoke:
             runner.run_smoke_tests()
@@ -650,7 +672,8 @@ Examples:
 
         # Generate coverage report if requested or if running comprehensive tests
         if args.coverage or (
-            not any(
+            not args.paths
+            and not any(
                 [
                     args.fast,
                     args.unit,

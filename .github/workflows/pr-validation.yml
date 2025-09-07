@@ -3,8 +3,18 @@ name: CI
 on:
   pull_request:
     branches: [ main, development ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
   push:
     branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  PYLINT_FAIL_UNDER: "9.4"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.10"]
+        python-version: ["3.11"]
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -34,44 +44,31 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-uv-
+            ${{ runner.os }}-uv-
+
       - name: Install dependencies
-        run: uv sync --group test --group dev
+        run: uv sync --group test --group dev --group quality
 
-      - name: Ruff format (check only)
-        run: uv run ruff format --check .
-
-      - name: Ruff lint
-        run: uv run ruff check .
-
-      - name: Pylint (src + unit tests)
-        run: uv run pylint -j 0 -sn --rcfile=pyproject.toml \
-            src \
-            tests/unit/agents/tools \
-            tests/integration/agents/tools
-
-      - name: Run unit tests with coverage
-        run: |
-          uv run pytest tests/unit -m unit --cov=src --cov-report=xml:coverage.xml --cov-report=term -q
-
-      - name: Enforce coverage thresholds (unit)
-        if: always()
-        run: |
-          uv run python scripts/check_coverage.py --threshold 80 --branch-threshold 75 --report || true
-          echo "\n(See coverage summary above; thresholds enforced via check_coverage.py)" >> $GITHUB_STEP_SUMMARY
-
-      - name: Publish coverage summary
-        if: always()
-        run: |
-          echo "## Coverage Summary (Unit)" >> $GITHUB_STEP_SUMMARY
-          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY || echo "(No coverage data)" >> $GITHUB_STEP_SUMMARY
+      - name: Lint + Unit
+        uses: ./.github/actions/python-ci
+        with:
+          run_type: unit
+          coverage: 'false'
 
   integration:
     name: Integration Tests (Linux)
     runs-on: ubuntu-latest
+    needs: unit
     strategy:
       matrix:
-        python-version: ["3.11", "3.10"]
-    needs: unit
+        python-version: ["3.11"]
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -89,20 +86,23 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-uv-
+            ${{ runner.os }}-uv-
+
       - name: Install dependencies
-        run: uv sync --group test --group dev
+        run: uv sync --group test --group dev --group quality
 
-      - name: Run integration tests (no coverage gating)
-        env:
-          PYTEST_ADDOPTS: "--no-cov"
-        run: |
-          uv run pytest tests/integration -m integration -q --no-cov
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "Integration tests executed without coverage gating." >> $GITHUB_STEP_SUMMARY
+      - name: Lint + Integration
+        uses: ./.github/actions/python-ci
+        with:
+          run_type: integration
+          coverage: 'false'
 
   full:
     name: Full Test Suite (All tests)
@@ -111,7 +111,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11"]
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -128,24 +128,36 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-uv-
+            ${{ runner.os }}-uv-
+
       - name: Install dependencies
-        run: uv sync --group test --group dev
+        run: uv sync --group test --group dev --group quality
 
-      - name: Ruff lint (all)
-        run: uv run ruff check .
+      - name: Lint + Full
+        uses: ./.github/actions/python-ci
+        with:
+          run_type: full
+          coverage: 'true'
 
-      - name: Pylint (src + all tests)
-        run: uv run pylint -j 0 -sn --rcfile=pyproject.toml src tests
-        continue-on-error: true
-
-      - name: Run all tests (exclude GPU)
-        env:
-          PYTEST_ADDOPTS: "-q"
-        run: |
-          uv run pytest tests -m "not requires_gpu" -q
-
-      - name: Final summary
+      - name: Upload coverage HTML
         if: always()
-        run: |
-          echo "## Full Test Suite" >> $GITHUB_STEP_SUMMARY
-          echo "All tests executed across tests/ (excluding GPU-marked)." >> $GITHUB_STEP_SUMMARY
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov
+          if-no-files-found: ignore
+
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore

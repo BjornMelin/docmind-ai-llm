@@ -259,6 +259,25 @@ class ErrorResponse(BaseModel):
     )
 
 
+class PdfPageImageNode(BaseModel):
+    """Schema describing a page-image artifact for multimodal reranking.
+
+    Emitted during ingestion for PDF documents with deterministic ID and lineage
+    metadata.
+    """
+
+    node_id: str = Field(description="Deterministic node identifier (sha256)")
+    page_no: int = Field(ge=1, description="1-based page number")
+    bbox: tuple[float, float, float, float] = Field(
+        description="Page bounding box as (x0,y0,x1,y1)"
+    )
+    modality: Literal["pdf_page_image"] = Field(
+        default="pdf_page_image", description="Modality marker"
+    )
+    source_path: str = Field(description="Path to source PDF")
+    hash: str = Field(description="SHA-256 hash of image bytes")
+
+
 class AnalysisOutput(BaseModel):
     """Structured output schema for document analysis results.
 

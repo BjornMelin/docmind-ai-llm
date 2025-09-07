@@ -140,7 +140,10 @@ async def test_property_chunking_param_forwarding(
     # Ensure ordering: combine_under < new_after < max_chars
     assume(combine_under < new_after < max_chars)
 
-    test_file = tmp_path / "doc.pdf"
+    # Use a TXT file instead of PDF to avoid heavy I/O operations (like PDF
+    # parsing/rendering) during unit testing, while still validating chunking
+    # parameter forwarding behavior.
+    test_file = tmp_path / "doc.txt"
     test_file.write_text("x")
 
     settings = _mk_settings(
