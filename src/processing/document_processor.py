@@ -295,10 +295,13 @@ class UnstructuredTransformation(TransformComponent):
         nodes = []
 
         def _safe_json_value(val: Any) -> Any:
-            """Coerce values to JSON-serializable forms."""
-            if isinstance(val, (str | int | float | bool)) or val is None:
+            """Coerce values to JSON-serializable forms.
+
+            Note: avoid ``isinstance(x, A | B)`` which is invalid at runtime.
+            """
+            if isinstance(val, (str, int, float, bool)) or val is None:  # noqa: UP038
                 return val
-            if isinstance(val, (list | tuple)):
+            if isinstance(val, (list, tuple)):  # noqa: UP038
                 return [_safe_json_value(v) for v in val]
             if isinstance(val, dict):
                 return {k: _safe_json_value(v) for k, v in val.items()}
@@ -449,6 +452,27 @@ class DocumentProcessor:
         logger.debug("Selected strategy '{}' for file: {}", strategy, file_path)
         return strategy
 
+    def _get_max_document_size_mb(self) -> int:
+        """Resolve max document size from settings (nested preferred).
+
+        Prefer ``settings.processing.max_document_size_mb``. If a top-level
+        ``settings.max_document_size_mb`` is present (legacy/testing convenience),
+        use it as a fallback. Defaults to 100MB if neither found or invalid.
+        """
+        # Nested (authoritative)
+        from contextlib import suppress
+
+        with suppress(Exception):
+            val = self.settings.processing.max_document_size_mb
+            if isinstance(val, (int, float)) and val > 0:  # noqa: UP038
+                return int(val)
+        # Top-level (fallback for older tests/mocks)
+        with suppress(Exception):
+            val = self.settings.max_document_size_mb
+            if isinstance(val, (int, float)) and val > 0:  # noqa: UP038
+                return int(val)
+        return 100
+
     def get_strategy_for_file(self, file_path: str | Path) -> ProcessingStrategy:
         """Get processing strategy based on file extension.
 
@@ -549,7 +573,7 @@ class DocumentProcessor:
             raise ProcessingError(f"File not found: {file_path}")
 
         file_size_mb = file_path.stat().st_size / (1024 * 1024)
-        max_size = getattr(self.settings, "max_document_size_mb", 100)
+        max_size = self._get_max_document_size_mb()
         if file_size_mb > max_size:
             raise ProcessingError(
                 f"Document size ({file_size_mb:.1f}MB) exceeds limit ({max_size}MB)"
