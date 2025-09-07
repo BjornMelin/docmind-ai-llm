@@ -233,9 +233,7 @@ class TestRunner:
             "-m",
             "unit",
         ]
-        ci_env = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
-        if ci_env and sys.version_info >= (3, 11):
-            command += ["-n", "auto"]
+        # Run unit tests serially in CI for stability across environments
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
 
     def run_integration_tests(self) -> TestResult:

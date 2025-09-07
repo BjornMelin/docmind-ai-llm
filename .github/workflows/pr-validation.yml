@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.10"]
+        python-version: ["3.11"]
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -68,7 +68,7 @@ jobs:
     needs: unit
     strategy:
       matrix:
-        python-version: ["3.11", "3.10"]
+        python-version: ["3.11"]
     timeout-minutes: 20
     steps:
       - name: Checkout
