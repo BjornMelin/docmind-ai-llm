@@ -288,3 +288,4 @@ scratch_*.py
 experiment_*.py
 # Local GitHub metadata
 .gh/
+.gh_*
