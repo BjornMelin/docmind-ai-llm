@@ -30,6 +30,21 @@ def test_image_embedder_backbone_shapes_vitl_and_vith():
 
 
 @pytest.mark.unit
+def test_image_embedder_backbone_shape_siglip_base():
+    """SigLIP base backbone shape is 768D by convention."""
+    ie = ImageEmbedder(device="cpu")
+
+    def fake_encode(images, *, backbone=None, **_):
+        dim = 768 if backbone == "siglip_base" else 1024
+        return np.ones((len(images), dim), dtype=np.float32)
+
+    ie.encode_image = fake_encode  # type: ignore[method-assign]
+
+    arr = ie.encode_image([object()], backbone="siglip_base")
+    assert arr.shape == (1, 768)
+
+
+@pytest.mark.unit
 def test_image_embedder_normalization_property():
     """Outputs are L2-normalized when requested."""
     ie = ImageEmbedder(device="cpu")

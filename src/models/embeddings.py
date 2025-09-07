@@ -195,9 +195,11 @@ class TextEmbedder:
         the official flags for BGEM3 dense+sparse output.
         """
         if not texts:
+            # Derive from known BGEM3 dense dimension (1024D) without touching backend
+            dense_dim = 1024
             out: dict[str, Any] = {}
             if return_dense:
-                out["dense"] = np.empty((0, 1024), dtype=np.float32)
+                out["dense"] = np.empty((0, dense_dim), dtype=np.float32)
             if return_sparse:
                 out["sparse"] = []
             return out
@@ -205,9 +207,13 @@ class TextEmbedder:
         self._ensure_loaded()
 
         bs = int(batch_size or self.default_batch_size)
-        if device:
-            # Allow per-call override
-            self.device = device
+        # Do not mutate instance device during encode; per-call overrides are not
+        # supported because the BGEM3 backend binds to the device at load time.
+        if device and device != self.device:
+            raise ValueError(
+                "Per-call device override is not supported; "
+                "instantiate TextEmbedder(device=...) instead."
+            )
 
         outputs = self._backend.encode(  # type: ignore[call-arg]
             texts,
@@ -419,8 +425,8 @@ class ImageEmbedder:
             dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
 
-        if device:
-            self.device = device
+        # Resolve effective device for this call without mutating instance state
+        effective_device = device or self.device
         self._ensure_loaded(backbone)
 
         bs = int(batch_size or self.default_batch_size)
@@ -436,18 +442,17 @@ class ImageEmbedder:
                 batch = images[i : i + bs]
                 tensors = [self._preprocess(img) for img in batch]
                 # Stack to [B, C, H, W]
-                if torch is not None:
-                    x = torch.stack(tensors)  # type: ignore[arg-type]
-                    if self.device == "cuda":
-                        x = x.to("cuda")
-                    with torch.no_grad():
-                        f = self._backend.encode_image(x)
-                        f = f / f.norm(dim=-1, keepdim=True) if normalize else f
-                        feats.append(f.detach().cpu().numpy().astype(np.float32))
-                else:  # pragma: no cover - tests patch before calling
-                    # Fallback: pretend zeros to keep shape contract
-                    inferred = int(self._dim or 768)
-                    feats.append(np.zeros((len(batch), inferred), dtype=np.float32))
+                if torch is None:  # pragma: no cover - explicit failure in prod
+                    raise RuntimeError(
+                        "OpenCLIP image feature extraction requires torch."
+                    )
+                x = torch.stack(tensors)  # type: ignore[arg-type]
+                if effective_device == "cuda":
+                    x = x.to("cuda")
+                with torch.no_grad():
+                    f = self._backend.encode_image(x)
+                    f = f / f.norm(dim=-1, keepdim=True) if normalize else f
+                    feats.append(f.detach().cpu().numpy().astype(np.float32))
 
             return (
                 np.concatenate(feats, axis=0)
@@ -463,12 +468,12 @@ class ImageEmbedder:
             for i in range(0, len(images), bs):
                 batch = images[i : i + bs]
                 if torch is None:  # pragma: no cover
-                    inferred = int(self._dim or 768)
-                    out_list.append(np.zeros((len(batch), inferred), dtype=np.float32))
-                    continue
+                    raise RuntimeError(
+                        "SigLIP image feature extraction requires torch."
+                    )
                 inputs = proc(images=batch, return_tensors="pt")
                 pix = inputs.get("pixel_values")
-                if self.device == "cuda":
+                if effective_device == "cuda":
                     pix = pix.to("cuda")
                 with torch.no_grad():
                     f = self._backend.get_image_features(pixel_values=pix)

@@ -517,6 +517,7 @@ class DocMindSettings(BaseSettings):
             # Text
             "model_name": self.embedding.model_name,
             "device": device,
+            "dimension": self.embedding.dimension,
             "max_length": self.embedding.max_length,
             "batch_size_text": (
                 self.embedding.batch_size_text_gpu
@@ -530,6 +531,7 @@ class DocMindSettings(BaseSettings):
             "batch_size_image": self.embedding.batch_size_image,
             "normalize_image": self.embedding.normalize_image,
             # Misc
+            "embed_device": self.embedding.embed_device,
             "trust_remote_code": True,
         }
 

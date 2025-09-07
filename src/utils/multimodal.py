@@ -87,7 +87,11 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
 
 
 def batch_process_images(
-    clip: Any, images: list[Any], *, batch_size: int | None = None
+    clip: Any,
+    images: list[Any],
+    *,
+    batch_size: int | None = None,
+    output_dim: int | None = None,
 ) -> np.ndarray:
     """Process images in batches and return a (N, D) matrix.
 
@@ -99,7 +103,8 @@ def batch_process_images(
 
     bs = int(batch_size or max(1, len(images)))
     out: list[np.ndarray] = []
-    zero = np.zeros(EMBEDDING_DIMENSIONS, dtype=np.float32)
+    dim = int(output_dim or EMBEDDING_DIMENSIONS)
+    zero = np.zeros(dim, dtype=np.float32)
     for i in range(0, len(images), bs):
         for img in images[i : i + bs]:
             try:
@@ -114,7 +119,7 @@ def batch_process_images(
                 out.append(zero)
 
     # Ensure consistent shape to pass tests; pad/truncate as needed
-    mat = np.vstack([v if v.shape == (EMBEDDING_DIMENSIONS,) else zero for v in out])
+    mat = np.vstack([v if v.shape == (dim,) else zero for v in out])
     return mat
 
 
@@ -136,7 +141,7 @@ async def cross_modal_search(
             return []
         response = await asyncio.to_thread(index.as_query_engine().query, query)
         nodes = getattr(response, "source_nodes", [])
-        if not isinstance(nodes, list | tuple):
+        if not isinstance(nodes, (list, tuple)):  # noqa: UP038 (3.11 compat)
             return []
         rank = 1
         for node in nodes[:top_k]:
