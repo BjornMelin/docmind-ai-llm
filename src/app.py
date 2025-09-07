@@ -293,6 +293,24 @@ st.sidebar.info(
 )
 
 
+# Startup prompt: summarize active defaults for new sessions
+st.markdown(
+    """
+    <details>
+    <summary><b>Start Summarization</b></summary>
+    <ul>
+      <li>Hybrid: Qdrant Query API (RRF; DBSF optional).</li>
+      <li>Prefetch dense≈200, sparse≈400; fused_top_k=60; de-dup by page_id.</li>
+      <li>Reranking: BGE (text) + SigLIP (visual); optional ColPali.</li>
+      <li>Rank-level RRF merge; fail-open on timeouts.</li>
+      <li>Local-first: Qdrant on 127.0.0.1; HF offline; models cached.</li>
+    </ul>
+    </details>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )

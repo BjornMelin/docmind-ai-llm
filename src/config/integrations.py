@@ -133,6 +133,10 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
     with suppress(Exception):  # pragma: no cover - defensive
         settings.guided_json_enabled = settings.llm_backend == "vllm"
 
+    # Local-first defaults (offline and localhost enforcement)
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 
 def setup_vllm_env() -> None:
     """Set vLLM environment variables from unified settings.

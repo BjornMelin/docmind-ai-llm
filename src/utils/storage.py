@@ -293,6 +293,28 @@ def create_vector_store(
         )
 
 
+def persist_image_metadata(
+    client: QdrantClient,
+    collection_name: str,
+    point_id: str | int,
+    metadata: dict[str, Any],
+) -> bool:
+    """Persist additional image metadata (e.g., phash) to Qdrant payload.
+
+    Returns True on success, False on error.
+    """
+    try:
+        client.update_payload(
+            collection_name=collection_name,
+            points=[point_id],
+            payload=metadata,
+        )
+        return True
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("update_payload failed for %s: %s", point_id, exc)
+        return False
+
+
 def get_collection_info(collection_name: str) -> dict[str, Any]:
     """Get information about a Qdrant collection.
 

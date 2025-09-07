@@ -95,6 +95,11 @@ Feature: Hybrid retrieval (server‑side fusion)
     Given the same setup
     When I switch fusion to DBSF
     Then results SHALL be fused server‑side using DBSF
+
+  Scenario: Fallback dense-only when sparse unavailable
+    Given fastembed is not installed or sparse embeddings are disabled
+    When I query
+    Then the system SHALL fall back to dense-only retrieval and log the fallback
 ```
 
 ## References

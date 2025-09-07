@@ -73,6 +73,10 @@ Feature: Reranking modes
   Scenario: Visual rerank (optional ColPali)
     Given ColPali plugin installed and a suitable GPU
     Then ColPali MAY re‑score image/page nodes with top_n<=10 and 400 ms timeout
+
+  Scenario: Fail-open on timeouts
+    Given reranking timeouts occur in any stage
+    Then the final ranked list SHALL fall back to the fused retrieval order and record a timeout event
 ```
 
 ## References

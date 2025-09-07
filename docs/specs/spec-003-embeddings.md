@@ -81,6 +81,11 @@ Feature: Embedding stack
     When I encode a PNG
     Then I obtain a normalized vector with the expected dimension for the selected backbone
 
+  Scenario: Offline operation
+    Given HF offline flags are set and models are predownloaded
+    When I request embeddings
+    Then no network egress SHALL occur and the local cache SHALL be used
+
   Scenario: Eliminate duplicate/legacy wrappers
     Given the codebase
     Then no BGEM3Embedding or ad‑hoc CLIP wrapper remains and tests use LI classes
