@@ -29,6 +29,23 @@ from .settings import settings
 logger = logging.getLogger(__name__)
 
 
+def _is_localhost(url: str | None) -> bool:
+    """Return True if URL is localhost/127.0.0.1.
+
+    Empty/None returns True (treated as local default).
+    """
+    if not url:
+        return True
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        return host in {"localhost", "127.0.0.1"}
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
 def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:
     """Configure LlamaIndex ``Settings`` with unified configuration.
 
@@ -78,6 +95,17 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             else:
                 base_url = None
 
+            # Enforce local-only endpoints unless allowlist override
+            allow_remote = os.getenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "").lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+            if (not allow_remote) and (not _is_localhost(base_url)):
+                raise ValueError(
+                    "Remote endpoint forbidden by default. Set "
+                    "DOCMIND_ALLOW_REMOTE_ENDPOINTS=true to override."
+                )
             logger.info(
                 "LLM configured via factory: provider=%s model=%s base_url=%s",
                 provider,
