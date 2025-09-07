@@ -166,6 +166,8 @@ async def setup_hybrid_collection_async(
             PREFERRED_SPARSE_MODEL,
             FALLBACK_SPARSE_MODEL,
         )
+        if settings.retrieval.named_vectors_multi_head_enabled:
+            logger.info("Named-vectors multi-head feature flag is enabled (no-op)")
 
     # Create sync client for QdrantVectorStore compatibility
     sync_client = QdrantClient(url=settings.database.qdrant_url)
@@ -235,6 +237,8 @@ def setup_hybrid_collection(
             PREFERRED_SPARSE_MODEL,
             FALLBACK_SPARSE_MODEL,
         )
+        if settings.retrieval.named_vectors_multi_head_enabled:
+            logger.info("Named-vectors multi-head feature flag is enabled (no-op)")
 
     try:
         return QdrantVectorStore(

@@ -150,6 +150,8 @@ class RetrievalConfig(BaseModel):
     rrf_fusion_weight_dense: float = Field(default=0.7, ge=0, le=1)
     rrf_fusion_weight_sparse: float = Field(default=0.3, ge=0, le=1)
     use_sparse_embeddings: bool = Field(default=True)
+    # Feature flag for future named-vectors multi-head support (no-op now)
+    named_vectors_multi_head_enabled: bool = Field(default=False)
     # Router and feature toggles (ADR-003)
     router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
     hybrid_enabled: bool = Field(default=True)

@@ -41,6 +41,9 @@ def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
     # Convert to PIL Image from raw samples
     mode = "RGB" if pix.n < 4 else "RGBA"
     img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
+    # Strip EXIF/metadata explicitly
+    if hasattr(img, "info"):
+        img.info.pop("exif", None)
     if mode == "RGBA":
         img = img.convert("RGB")
 

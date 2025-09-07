@@ -4,6 +4,7 @@ Configures LlamaIndex mocks, provides ChatMessage factory, LangGraph in-memory
 checkpointer, and a deterministic LangChain LLM for agent tests.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -132,3 +133,9 @@ def lightweight_embedding_model():
             return [[0.0] * 8 for _ in texts]
 
     return _LightweightModel()
+"""Global test configuration for offline/CI-friendly runs."""
+
+def pytest_sessionstart(session):  # pragma: no cover - test harness hook
+    """Set HF offline flags to prevent network egress in CI."""
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")

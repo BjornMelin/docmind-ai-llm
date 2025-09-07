@@ -314,6 +314,16 @@ st.markdown(
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
+# Device fallback notice
+try:  # pragma: no cover - UI messaging only
+    import torch  # type: ignore
+
+    if not getattr(torch, "cuda", None) or not torch.cuda.is_available():  # type: ignore[attr-defined]
+        st.info(
+            "GPU not available. Visual reranking runs on CPU; expect higher latency."
+        )
+except Exception:
+    st.warning("PyTorch not installed. Running in text-only or CPU fallback modes.")
 # Retrieval & Reranking controls (ADR-036/037)
 try:
     build_reranker_controls(SETTINGS)
@@ -421,6 +431,9 @@ async def upload_section() -> None:
                                         img_nodes, _out = pdf_pages_to_image_documents(
                                             Path(str(pd.metadata.get("source")))
                                         )
+                                        # annotate backbone to avoid cross-family fusion
+                                        for nd in img_nodes:
+                                            nd.metadata["image_backbone"] = "clip"
                                         image_docs.extend(img_nodes)
                                     except (
                                         OSError,
@@ -443,6 +456,7 @@ async def upload_section() -> None:
                             if image_docs:
                                 # Preview a few thumbnails
                                 from contextlib import suppress
+
                                 # UI resilience: ignore preview errors in offline/CI
                                 with suppress(Exception):  # pragma: no cover
                                     thumbs = [d.image_path for d in image_docs[:3]]
