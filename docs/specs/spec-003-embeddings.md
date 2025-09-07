@@ -38,27 +38,33 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
 ## Migration and Cleanup Plan (no back‑compat)
 
 1) Text pipeline standardization
+
 - Adopt LlamaIndex BGEM3Index + BGEM3Retriever as the primary retrieval path for BGE‑M3 tri‑mode.
 - Remove custom sparse/ColBERT glue and any BGEM3‑specific wrappers beyond a thin adapter (if needed by non‑LI callsites).
 
 2) Image pipeline consolidation
+
 - Use LlamaIndex ClipEmbedding for CLIP where the pipeline already uses LI; keep SigLIP for non‑LI contexts.
 - Remove ad‑hoc CLIP heuristics and redundant wrappers; centralize any required device/batch settings in config.
 - Derive embedding dimensions from model outputs at runtime (no hard‑coded OpenCLIP/SigLIP dims).
 
 3) Code deletions and refactors
+
 - Remove `BGEM3Embedding` (LI adapter) after migrating tests and callsites to BGEM3Index/BGEM3Retriever.
 - Remove CLIP VRAM heuristic helpers and any nonessential image preprocess shims.
 - Keep a single, minimal UnifiedEmbedder only if it provides value beyond LI composition; otherwise remove it and use LI objects directly.
 
 4) Tests
+
 - Update tests to target BGEM3Index/BGEM3Retriever outputs and ClipEmbedding (with stubbed backends). Remove tests that assert previous wrapper‑specific shapes/keys.
 
 5) Configuration
+
 - Keep SPEC‑003 knobs in `settings.embedding` but narrow to: model id, enable_sparse, device, batch sizes, image backbone.
 - Document that `enable_sparse=True` implies FlagEmbedding + LI retriever path; TEI is unsupported for sparse.
 
 6) Quality gates
+
 - All modules must pass `ruff` (format+lint) and `pylint --fail-under=9.5`.
 - No legacy/duplicate code remains; no deprecation notes or back‑compat toggles.
 
@@ -89,6 +95,7 @@ Feature: Embedding stack
 5. Run quality gates; address lint and style; finalize docs.
 
 ### Status Tracking (2025‑09‑07)
+
 - Phase 1: Completed
 - Phase 2: Completed — callers migrated; imports updated; tests no longer import legacy symbols.
 - Phase 3: Completed — ad‑hoc CLIP helpers removed; LI ClipEmbedding used; image dims derived at runtime.
