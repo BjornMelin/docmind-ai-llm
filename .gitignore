@@ -38,6 +38,8 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+.ruff_cache/
+coverage/
 .tox/
 .nox/
 .coverage
@@ -189,6 +191,10 @@ ai-research/
 agent-logs/
 docs/specs/.workflow/
 docs/specs/.archived/
+
+# Performance test artifacts
+tests/performance/reports/
+tests/performance/baselines/baseline.json
 
 # Model caches and embeddings
 embeddings_cache/
