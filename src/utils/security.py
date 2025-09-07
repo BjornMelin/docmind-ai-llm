@@ -36,4 +36,3 @@ def build_owner_filter(owner_id: str) -> dict[str, Any]:
             }
         ]
     }
-

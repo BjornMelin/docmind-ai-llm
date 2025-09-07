@@ -133,7 +133,10 @@ def lightweight_embedding_model():
             return [[0.0] * 8 for _ in texts]
 
     return _LightweightModel()
+
+
 """Global test configuration for offline/CI-friendly runs."""
+
 
 def pytest_sessionstart(session):  # pragma: no cover - test harness hook
     """Set HF offline flags to prevent network egress in CI."""
