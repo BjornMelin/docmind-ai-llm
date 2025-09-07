@@ -9,6 +9,7 @@ offline and deterministic.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -74,12 +75,10 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
                 except Exception as exc:  # pragma: no cover - exercised via tests
                     logger.error("Image embedding error during VRAM check: %s", exc)
                     break
-        else:
-            # No images provided; baseline probe only
-            pass
+        # else: no images provided; baseline probe only
         after = float(torch.cuda.memory_allocated())  # type: ignore[attr-defined]
         # Encourage memory release
-        with ContextlibSuppress():
+        with contextlib.suppress(Exception):
             torch.cuda.empty_cache()  # type: ignore[attr-defined]
         return max(0.0, (after - before) / (1024**3))
     except Exception:
@@ -118,8 +117,8 @@ def batch_process_images(
                 logger.error("Image embedding failed: %s", exc)
                 out.append(zero)
 
-    # Ensure consistent shape to pass tests; pad/truncate as needed
-    mat = np.vstack([v if v.shape == (dim,) else zero for v in out])
+    # Validate/normalize shapes; pad to expected D when needed
+    mat = np.vstack([(v if (v.ndim == 1 and v.shape[0] == dim) else zero) for v in out])
     return mat
 
 
@@ -143,8 +142,7 @@ async def cross_modal_search(
         nodes = getattr(response, "source_nodes", [])
         if not isinstance(nodes, (list, tuple)):  # noqa: UP038 (3.11 compat)
             return []
-        rank = 1
-        for node in nodes[:top_k]:
+        for rank, node in enumerate(nodes[:top_k], start=1):
             text = getattr(getattr(node, "node", {}), "text", "")
             if len(text) > TEXT_TRUNCATION_LIMIT:
                 text = text[:TEXT_TRUNCATION_LIMIT]
@@ -158,14 +156,12 @@ async def cross_modal_search(
                     "rank": rank,
                 }
             )
-            rank += 1
         return results
 
     if search_type == "image_to_image" and query_image is not None:
         # A retriever path is used in tests; we only shape outputs
         retrieved = await asyncio.to_thread(index.as_retriever().retrieve, query_image)
-        rank = 1
-        for node in retrieved[:top_k]:
+        for rank, node in enumerate(retrieved[:top_k], start=1):
             results.append(
                 {
                     "similarity": getattr(node, "score", 0.0),
@@ -176,7 +172,6 @@ async def cross_modal_search(
                     "rank": rank,
                 }
             )
-            rank += 1
         return results
 
     # Unsupported type or missing inputs → empty results
@@ -250,22 +245,4 @@ async def validate_end_to_end_pipeline(
     }
 
 
-class ContextlibSuppress:  # pragma: no cover - tiny helper
-    """Lightweight contextlib.suppress clone to avoid importing contextlib here."""
-
-    def __init__(self, *exceptions: type[BaseException]):
-        """Initialize with exception classes to suppress."""
-        self.exceptions = exceptions or (Exception,)
-
-    def __enter__(self) -> None:
-        """Enter context without side effects."""
-        return None
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: Any | None,
-    ) -> bool:  # type: ignore[override]
-        """Suppress listed exceptions by returning True when matched."""
-        return exc_type is not None and issubclass(exc_type, self.exceptions)
+# ContextlibSuppress replaced with stdlib contextlib.suppress

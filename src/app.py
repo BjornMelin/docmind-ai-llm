@@ -382,7 +382,9 @@ async def upload_section() -> None:
                     # Multimodal index (text + images) controlled by toggle
                     if enable_multimodal:
                         try:
-                            # Use ClipEmbedding directly in LI contexts
+                            # Temporarily switch to CLIP for image embeddings only,
+                            # preserving the global text embedder (BGE-M3).
+                            _prev_embed_model = LISettings.embed_model
                             LISettings.embed_model = ClipEmbedding(
                                 model_name="openai/clip-vit-base-patch32"
                             )
@@ -440,12 +442,19 @@ async def upload_section() -> None:
                                 )
                             else:
                                 st.session_state.multimodal_index = None
+                            # Always restore the previous text embedder
+                            LISettings.embed_model = _prev_embed_model
                         except (
                             ValueError,
                             RuntimeError,
                         ) as mm_e:  # pragma: no cover - optional path
                             logger.warning("Multimodal index setup skipped: {}", mm_e)
                             st.session_state.multimodal_index = None
+                            # Ensure we restore the previous text embedder on error
+                            from contextlib import suppress
+
+                            with suppress(Exception):  # pragma: no cover - defensive
+                                LISettings.embed_model = _prev_embed_model
                     else:
                         st.session_state.multimodal_index = None
 

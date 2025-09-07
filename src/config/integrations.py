@@ -17,8 +17,10 @@ from contextlib import suppress
 
 from llama_index.core import Settings
 
-# For embeddings, prefer LlamaIndex ClipEmbedding as a safe default.
-from llama_index.embeddings.clip import ClipEmbedding
+# Text embeddings should default to BGE-M3 (1024D) for consistency with
+# tri-mode retrieval tooling and VectorStoreIndex usage. Use LlamaIndex's
+# HuggingFaceEmbedding wrapper to keep a library-first, lightweight setup.
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 from src.config.llm_factory import build_llm
 
@@ -90,16 +92,22 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             logger.warning("Could not configure LLM: %s", e, exc_info=True)
             Settings.llm = None
 
-    # Configure embeddings (multimodal CLIP default; tri-mode BGE-M3 uses retrievers)
+    # Configure text embeddings (default to BGE-M3 1024D for global usage)
     try:
         if Settings.embed_model is not None and not force_embed:
             logger.info("Embed model already configured; skipping override")
         else:
-            Settings.embed_model = ClipEmbedding(
-                model_name="openai/clip-vit-base-patch32"
+            emb_cfg = settings.get_embedding_config()
+            model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
+            device = emb_cfg.get("device", "cpu")
+            Settings.embed_model = HuggingFaceEmbedding(
+                model_name=model_name,
+                device=device,
             )
             logger.info(
-                "Embedding model configured: ClipEmbedding openai/clip-vit-base-patch32"
+                "Embedding model configured: HuggingFaceEmbedding %s (device=%s)",
+                model_name,
+                device,
             )
     except (ImportError, RuntimeError, ValueError, OSError) as e:
         logger.warning("Could not configure embeddings: %s", e, exc_info=True)

@@ -112,9 +112,13 @@ def _select_device(explicit: str | None = None) -> str:
     """
     if explicit:
         return explicit
-    if torch is not None and getattr(torch, "cuda", None) and torch.cuda.is_available():
-        return "cuda"
-    # Apple Silicon MPS is out-of-scope here; fall back to CPU for simplicity
+    if torch is not None:
+        if getattr(torch, "cuda", None) and torch.cuda.is_available():
+            return "cuda"
+        # Apple Silicon MPS support when available
+        mps = getattr(getattr(torch, "backends", object()), "mps", None)
+        if mps is not None and getattr(mps, "is_available", lambda: False)():
+            return "mps"
     return "cpu"
 
 
@@ -152,6 +156,7 @@ class TextEmbedder:
         self.default_batch_size = int(default_batch_size)
         self._backend: Any | None = None
         self.seed = int(seed)
+        self._dense_dim: int | None = 1024  # default for BGE-M3
 
     # --- Backend loading ---
     def _ensure_loaded(self) -> None:
@@ -175,6 +180,23 @@ class TextEmbedder:
         self._backend = BGEM3FlagModel(
             self.model_name, use_fp16=self.use_fp16, devices=[self.device]
         )
+        # Best-effort inference of dense dimension
+        try:  # pragma: no cover - relies on backend specifics
+            out = self._backend.encode(
+                ["a"],
+                batch_size=1,
+                max_length=16,
+                return_dense=True,
+                return_sparse=False,
+                return_colbert_vecs=False,
+            )
+            dv = out.get("dense_vecs")
+            if dv is not None:
+                arr = np.asarray(dv, dtype=np.float32)
+                self._dense_dim = int(arr.shape[-1])
+        except Exception:
+            # Keep default
+            self._dense_dim = self._dense_dim or 1024
 
     # --- Encoding ---
     def encode_text(
@@ -195,8 +217,8 @@ class TextEmbedder:
         the official flags for BGEM3 dense+sparse output.
         """
         if not texts:
-            # Derive from known BGEM3 dense dimension (1024D) without touching backend
-            dense_dim = 1024
+            # Use inferred or default dense dimension without loading backend
+            dense_dim = int(self._dense_dim or 1024)
             out: dict[str, Any] = {}
             if return_dense:
                 out["dense"] = np.empty((0, dense_dim), dtype=np.float32)
@@ -420,9 +442,8 @@ class ImageEmbedder:
             device: Optional device override.
         """
         if not images:
-            # Ensure backend is loaded to infer dimension; normalize no-op
-            self._ensure_loaded(backbone)
-            dim = int(self._dim or 768)
+            # For empty input, avoid heavy loading when possible
+            dim = int(self._dim or (1024 if (backbone == "openclip_vith14") else 768))
             return np.empty((0, dim), dtype=np.float32)
 
         # Resolve effective device for this call without mutating instance state
@@ -489,25 +510,47 @@ class UnifiedEmbedder:
     """Simple router that delegates to TextEmbedder and ImageEmbedder."""
 
     def __init__(
-        self, *, text: TextEmbedder | None = None, image: ImageEmbedder | None = None
+        self,
+        *,
+        text: TextEmbedder | None = None,
+        image: ImageEmbedder | None = None,
+        strict_image_types: bool = False,
     ) -> None:
         """Initialize with optional custom sub-embedders."""
         self.text = text or TextEmbedder()
         self.image = image or ImageEmbedder()
+        self.strict_image_types = bool(strict_image_types)
 
     def encode(self, items: list[str | Any]) -> dict[str, Any]:
-        """Encode a mixed list of strings and images via routing."""
+        """Encode a mixed list of strings and images via routing, with type checks."""
         texts: list[str] = []
         imgs: list[Any] = []
         for it in items:
             if isinstance(it, str):
                 texts.append(it)
             else:
+                if self.strict_image_types:
+                    try:
+                        from PIL import Image as _PILImage  # type: ignore
+
+                        pil_type = _PILImage.Image
+                    except Exception:  # pragma: no cover - optional
+                        pil_type = None  # type: ignore[assignment]
+
+                    import numpy as _np
+
+                    supported = (_np.ndarray,) + (
+                        (pil_type,) if pil_type is not None else ()
+                    )
+                    if not isinstance(it, supported):
+                        t = type(it)
+                        msg = f"Unsupported image type: {t}. Supported: {supported}"
+                        raise TypeError(msg)
                 imgs.append(it)
 
         out: dict[str, Any] = {}
         if texts:
-            out.update(self.text.encode_text(texts))
+            out |= self.text.encode_text(texts)
         if imgs:
             out["image_dense"] = self.image.encode_image(imgs)
         return out
@@ -520,7 +563,7 @@ class UnifiedEmbedder:
         t_list = list(texts)
         i_list = list(images)
         if t_list:
-            res.update(self.text.encode_text(t_list))
+            res |= self.text.encode_text(t_list)
         if i_list:
             res["image_dense"] = self.image.encode_image(i_list)
         return res
