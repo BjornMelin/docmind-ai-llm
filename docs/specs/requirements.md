@@ -1,6 +1,6 @@
 # DocMind AI — Software Requirements Specification (SRS)
 
-Version: 1.0.0 • Date: 2025-09-05 • Owner: Eng/Arch
+Version: 1.1.0 • Date: 2025-09-07 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -32,11 +32,11 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 FR-001 The system **shall** ingest documents using Unstructured with `strategy=auto` and apply OCR fallback when needed. Source: ADR‑002; Accept: see AC‑FR‑001.  
 FR-002 The system **shall** build a LlamaIndex `IngestionPipeline` with per-node+transform caching (DuckDBKV). Source: ADR‑010; Accept: AC‑FR‑002.  
 FR-003 The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. Source: ADR‑002; Accept: AC‑FR‑003.  
-FR-004 The system **shall** embed text with BGE‑M3 and images with OpenCLIP/SigLIP (selectable by hardware). Source: ADR‑004; Accept: AC‑FR‑004.  
-FR-005 The system **shall** persist vectors in Qdrant with named vectors `dense` and `sparse` and enable server-side hybrid queries. Source: ADR‑005/006; Accept: AC‑FR‑005.  
-FR-006 The system **shall** support client-side RRF fusion as a fallback mechanism configurable in settings. Source: ADR‑006; Accept: AC‑FR‑006.  
-FR-007 The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with ColPali. Source: ADR‑007; Accept: AC‑FR‑007.  
-FR-008 The system **shall** expose reranker controls (normalize scores, top‑N, mode auto|text|multimodal). Source: ADR‑036; Accept: AC‑FR‑008.  
+FR-004 The system **shall** embed text with BGE‑M3 and images with SigLIP by default (OpenCLIP MAY be selected explicitly). Source: ADR‑002; Accept: AC‑FR‑004.  
+FR-005 The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally. Source: SPEC‑004/ADR‑005/006; Accept: AC‑FR‑005.  
+FR-006 The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. Source: SPEC‑004; Accept: AC‑FR‑006.  
+FR-007 The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). Source: SPEC‑005/ADR‑037; Accept: AC‑FR‑007.  
+FR-008 The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables. Source: ADR‑024; Accept: AC‑FR‑008.  
 FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex with default LLMSynonymRetriever and a UI toggle. Source: ADR‑008; Accept: AC‑FR‑009.  
 FR-010 The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. Source: ADR‑012; Accept: AC‑FR‑010.  
 FR-011 The system **shall** implement native chat streaming via `st.chat_message` + `st.chat_input` + `st.write_stream`. Source: ADR‑012; Accept: AC‑FR‑011.  
@@ -62,8 +62,8 @@ NFR‑REL‑002 Cache hits **shall** be deterministic across runs given same inp
 ### Performance efficiency
 
 NFR‑PERF‑001 Chat p50 end‑to‑end latency ≤2.0 s on mid‑GPU profile; ≤6.0 s on CPU‑only profile. Verification: test.  
-NFR‑PERF‑002 Rerank P95 for top‑20 ≤150 ms on 4070‑class GPU. Verification: test.  
-NFR‑PERF‑003 Qdrant hybrid query p50 ≤80 ms for 10k corpus on local machine. Verification: test.
+NFR‑PERF‑002 Rerank P95 for text top‑40 ≤150 ms on 4070‑class GPU; visual SigLIP top‑10 ≤150 ms; ColPali top‑10 ≤400 ms when enabled. Verification: test.  
+NFR‑PERF‑003 Qdrant hybrid query p50 ≤120–200 ms for fused_top_k=60 on local machine. Verification: test.
 
 ### Usability
 
@@ -89,7 +89,7 @@ NFR‑PORT‑001 Single definitive architecture; no prod/local forks; configurat
 
 ## 4. Data and Interface Requirements
 
-- Vector store: Qdrant collection with named vectors `dense` (float32) and `sparse` (CSR), deterministic point IDs = SHA‑256(content). Hybrid queries enabled.  
+- Vector store: Qdrant collection with named vectors `text-dense` (float32) and `text-sparse` (CSR), deterministic point IDs = SHA‑256(content). Hybrid queries enabled with server‑side fusion.  
 - Ingestion cache: DuckDBKV; pipeline caches node+transform hashes.  
 - LLM API: OpenAI‑compatible for vLLM/Ollama/LM Studio/llama.cpp server.  
 - UI contracts: `st.Page` navigation, chat stream, status blocks, fragments.  

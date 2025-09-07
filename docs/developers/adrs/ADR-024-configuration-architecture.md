@@ -1,12 +1,12 @@
 ---
 ADR: 024
-Title: Unified Settings Architecture (Reranker Mode + 128K Cap)
+Title: Unified Settings Architecture (Always‑On Hybrid/Rerank + 128K Cap)
 Status: Accepted
-Version: 2.6
+Version: 2.7
 Date: 2025-09-04
 Supersedes:
 Superseded-by:
-Related: 001, 003, 004, 016, 022, 032, 033, 035, 036, 037
+Related: 001, 003, 004, 016, 022, 032, 033, 035, 037
 Tags: configuration, settings, llamaindex, pydantic
 References:
 - [LlamaIndex — Settings](https://docs.llamaindex.ai/en/stable/module_guides/supporting_modules/settings/)
@@ -16,7 +16,7 @@ References:
 
 ## Description
 
-Adopt a unified configuration model: app‑specific settings via Pydantic `BaseSettings` and LLM/embedding configuration via LlamaIndex `Settings`. Expose `retrieval.reranker_mode` (`auto|text|multimodal`) and enforce `llm.context_window_max=131072` (128K) consistently across backends.
+Adopt a unified configuration model: app‑specific settings via Pydantic `BaseSettings` and LLM/embedding configuration via LlamaIndex `Settings`. Hybrid retrieval and reranking are always‑on with internal caps/timeouts (no UI toggles). Enforce `llm.context_window_max=131072` (128K) consistently across backends.
 
 ## Context
 
@@ -27,7 +27,7 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 - Library‑first: prefer LlamaIndex `Settings` + Pydantic `BaseSettings`
 - Simplicity: eliminate custom layers and duplicative validators
 - Flexibility: support CPU‑only → high‑end GPU profiles via env
-- Consistency: expose reranker mode and enforce 128K context cap
+- Consistency: enforce 128K context cap; eliminate fragile UI toggles for reranking/hybrid
 
 ## Alternatives
 
@@ -45,7 +45,7 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 ## Decision
 
-Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Add `retrieval.reranker_mode` and enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions.
+Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions.
 
 ## High-Level Architecture
 
@@ -65,8 +65,8 @@ graph TD
 
 - FR‑1: Centralize app settings via Pydantic `BaseSettings`
 - FR‑2: Configure LLM/embeddings via LlamaIndex `Settings`
-- FR‑3: Expose `retrieval.reranker_mode` for UI and pipelines
-- FR‑4: Enforce `llm.context_window_max=131072` cap
+- FR‑3: Enforce `llm.context_window_max=131072` cap
+- FR‑4: Keep hybrid and reranking always‑on with internal caps/timeouts and ops env overrides only
 
 ### Non-Functional Requirements
 
@@ -80,8 +80,15 @@ graph TD
 
 ### Integration Requirements
 
-- IR‑1: UI reads/writes reranker mode (ADR‑036)
-- IR‑2: Works across agent orchestration and retrieval (ADR‑001/003)
+- IR‑1: Works across agent orchestration and retrieval (ADR‑001/003)
+
+## Local‑First & Privacy Guarantees
+
+- Qdrant is run locally (Docker/embedded) and bound to `127.0.0.1`. All Query API hybrid fusion (RRF/DBSF) executes inside that local process. No cloud APIs are required or contacted.
+- Embedding/reranking models (BGE‑M3, BGE Reranker, SigLIP, optional ColPali) are loaded from local cache; set `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` and pre‑download weights to prevent any network access.
+- FastEmbed sparse (BM42/BM25) runs locally on CPU/GPU; no external lexical services are used.
+- The app enforces `allow_remote_endpoints=false` by default and rejects non‑localhost base URLs.
+- Observability remains local; no third‑party telemetry is enabled by default.
 
 ## Design
 
@@ -136,10 +143,9 @@ class EmbeddingConfig(BaseModel):
 class RetrievalConfig(BaseModel):
     strategy: str = "hybrid"
     top_k: int = 10
-    use_reranking: bool = True
+    # always-on reranking (caps/timeouts internal)
     reranking_top_k: int = 5
     reranker_normalize_scores: bool = True
-    reranker_mode: Literal["auto","text","multimodal"] = "auto"
     rrf_alpha: int = 60
     rrf_k_constant: int = 60
     rrf_fusion_weight_dense: float = 0.7
@@ -226,8 +232,8 @@ def setup_llamaindex() -> None:
     if Settings.llm is None:
         Settings.llm = build_llm(settings)
     if Settings.embed_model is None:
-        from llama_index.embeddings.clip import ClipEmbedding
-        Settings.embed_model = ClipEmbedding(model_name="openai/clip-vit-base-patch32")
+        from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+        Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-m3", device="cuda" if settings.enable_gpu_acceleration else "cpu")
     Settings.context_window = settings.vllm.context_window
     Settings.num_output = settings.vllm.max_tokens
 
@@ -434,6 +440,8 @@ def test_env_mapping(monkeypatch):
 - Python: `pydantic-settings>=2.0`, `llama-index>=0.12`
 
 ## Changelog
+
+- 2.7 (2025-09-07): Always‑on hybrid/rerank (no UI toggles); embed default BGE‑M3; updated examples and requirements
 
 - 2.6 (2025‑09‑04): Standardized to template; verified decision framework; no behavior change
 - v2.4 (2025-09-03): DOCS - Added related references to ADR-035 (SemanticCacheConfig) and ADR-036 (UI reranker controls)

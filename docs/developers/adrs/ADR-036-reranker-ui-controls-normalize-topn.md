@@ -1,11 +1,11 @@
 ---
 ADR: 036
 Title: Reranker UI Controls (normalize_scores, top_n, mode)
-Status: Accepted
-Version: 1.1.0
+Status: Superseded
+Version: 1.2.0
 Date: 2025-09-03
 Supersedes:
-Superseded-by:
+Superseded-by: ADR-024 (v2.7) and SPEC-005 (2025‑09‑07 finalized defaults)
 Related: 003, 013, 016, 024, 037
 Tags: ui, streamlit, reranking, controls
 References:
@@ -15,7 +15,7 @@ References:
 
 ## Description
 
-Expose reranker controls in the Streamlit UI: `normalize_scores`, `top_n`, and `reranker_mode` (`auto|text|multimodal`). Values persist via settings and are consumed by the reranker factory.
+Reranking is now always‑on with internal caps/timeouts and fail‑open behavior. UI controls for `normalize_scores`, `top_n`, and `reranker_mode` have been removed to reduce complexity and prevent footguns. Operators may use ops‑only env overrides when absolutely necessary.
 
 ## Context
 
@@ -34,15 +34,17 @@ Reranking uses a CrossEncoder for text and ColPali for visual nodes (ADR‑037).
 - B: Full advanced panel — Pros: flexibility; Cons: over-engineered for v1
 - C: Minimal three controls (Selected) — Pros: high value with low complexity
 
-### Decision Framework
+### Decision Framework (Superseded)
 
-| Model / Option           | Simplicity (40%) | Operator Value (30%) | Testability (20%) | Alignment (10%) | Total Score | Decision      |
-| ------------------------ | ---------------- | -------------------- | ----------------- | --------------- | ----------- | ------------- |
-| Minimal controls (Sel.)  | 10               | 9                    | 9                 | 9               | **9.4**     | ✅ Selected    |
-| No UI                    | 9                | 4                    | 9                 | 9               | 7.8         | Rejected      |
-| Advanced panel           | 5                | 9                    | 6                 | 8               | 6.7         | Rejected      |
+| Model / Option                                 | Simplicity (40%) | Operator Value (30%) | Testability (20%) | Alignment (10%) | Total Score | Decision          |
+| ---------------------------------------------- | ---------------- | -------------------- | ----------------- | --------------- | ----------- | ----------------- |
+| **Always‑on (internal caps/timeouts)**         | 10               | 8                    | 9                 | 10              | **9.3**     | ✅ Superseding     |
+| Minimal three controls (historical selection)  | 8                | 8                    | 9                 | 8               | 8.3         | Historical (repl.) |
+| Full advanced panel                            | 5                | 9                    | 6                 | 7               | 6.6         | Rejected          |
 
-## Decision
+The minimal‑controls approach has been superseded by always‑on reranking with internal guardrails and telemetry. Any future UI exposure must be justified by measured operator value and retained simplicity.
+
+## Decision (Historical; Superseded)
 
 Add three sidebar controls and wire them to settings before constructing the reranker(s):
 
@@ -136,4 +138,5 @@ def test_controls_update_settings(app, settings):
 
 ## Changelog
 
+- **1.2.0 (2025-09-07)**: Marked Superseded by ADR‑024 v2.7 / SPEC‑005; added supersession decision framework
 - **1.0.0 (2025-09-03)**: Initial accepted version.
