@@ -334,9 +334,21 @@ class UnstructuredTransformation(TransformComponent):
             except Exception:
                 page_no = 0
 
-            # Compute deterministic node id (source_path + page_no + normalized text)
+            # Compute deterministic node id including a per-element discriminator to
+            # avoid collisions for blank/non-text elements that can occur on the same
+            # page.
+            if element_metadata.get("element_id"):
+                discriminator = str(element_metadata["element_id"])
+            elif element_metadata.get("coordinates"):
+                discriminator = str(element_metadata["coordinates"])  # JSON-safe
+            else:
+                discriminator = str(i)
+
             det_id = sha256_id(
-                str(file_path), str(page_no), str(getattr(element, "text", ""))
+                str(file_path),
+                str(page_no),
+                str(getattr(element, "text", "")),
+                discriminator,
             )
 
             # Combine original node metadata with element metadata
