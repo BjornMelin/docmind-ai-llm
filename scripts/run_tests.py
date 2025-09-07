@@ -233,7 +233,8 @@ class TestRunner:
             "-m",
             "unit",
         ]
-        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+        ci_env = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
+        if ci_env and sys.version_info >= (3, 11):
             command += ["-n", "auto"]
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
 
@@ -307,7 +308,8 @@ class TestRunner:
             "unit or integration",
             "--maxfail=5",
         ]
-        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+        ci_env = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
+        if ci_env and sys.version_info >= (3, 11):
             command += ["-n", "auto"]
         return self.run_command(command, "All Tests with Coverage (unit+integration)")
 
