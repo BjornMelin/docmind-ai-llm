@@ -270,9 +270,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                 pruned = base[:SIGLIP_PRUNE_M]
                 cr = build_visual_reranker(
                     top_n=min(COLPALI_FINAL_M, settings.retrieval.reranking_top_k)
-                ).postprocess_nodes(
-                    pruned, query_str=query_bundle.query_str
-                )
+                ).postprocess_nodes(pruned, query_str=query_bundle.query_str)
                 lists.append(cr)
         except Exception as exc:
             logger.warning("ColPali rerank error: {} — continue without", exc)
