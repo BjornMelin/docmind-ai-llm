@@ -8,6 +8,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Added
 
+- SPEC‑003: Unified embeddings
+  - BGE‑M3 text embeddings with dense+sparse outputs via LI factories
+  - Tiered image embeddings (OpenCLIP ViT‑L/H, SigLIP base) with LI ClipEmbedding
+  - Runtime dimension derivation; deterministic offline tests
+  - Legacy wrappers removed; LI‑first wiring throughout
+
 - Unstructured-first document chunking in the processing stack:
   - Partition via `unstructured.partition.auto.partition()`;
   - Chunk via `unstructured.chunking.title.chunk_by_title` with small-section smoothing and `multipage_sections=true`;
