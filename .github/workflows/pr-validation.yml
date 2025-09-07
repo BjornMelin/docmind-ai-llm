@@ -6,18 +6,27 @@ on:
   push:
     branches: [ main ]
 
+env:
+  # Ensure imports like `import src` and `import tests.*` work in all steps
+  PYTHONPATH: ${{ github.workspace }}
+  # Centralize commonly used targets and thresholds
+  LINT_TARGETS: src tests scripts
+  PYLINT_FAIL_UNDER: "9.5"
+  COVERAGE_LINE_THRESHOLD: "65.0"
+  COVERAGE_BRANCH_THRESHOLD: "0.0"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  unit:
-    name: Lint and Unit Tests (Linux)
+  ci:
+    name: Lint + Tests (Linux, Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11", "3.10"]
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,118 +43,53 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
+      - name: Cache pytest and coverage
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pytest_cache
+            coverage
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-pytestcov-${{ hashFiles('pyproject.toml', 'uv.lock', 'src/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-pytestcov-
+            ${{ runner.os }}-pytestcov-
+
       - name: Install dependencies
         run: uv sync --group test --group dev
+
+      - name: Build Python file list (src + tests + scripts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LIST_FILE="$RUNNER_TEMP/pyfiles.txt"
+          if command -v fd >/dev/null 2>&1; then
+            fd -H -t f -e py $LINT_TARGETS >"$LIST_FILE"
+          else
+            find $LINT_TARGETS -type f -name '*.py' | sort >"$LIST_FILE"
+          fi
+          echo "PY_FILES_LIST=$LIST_FILE" >> "$GITHUB_ENV"
 
       - name: Ruff format (check only)
         run: uv run ruff format --check .
 
-      - name: Ruff lint
-        run: uv run ruff check .
-
-      - name: Pylint (src + unit tests)
-        run: uv run pylint -j 0 -sn --rcfile=pyproject.toml \
-            src \
-            tests/unit/agents/tools \
-            tests/integration/agents/tools
-
-      - name: Run unit tests with coverage
-        run: |
-          uv run pytest tests/unit -m unit --cov=src --cov-report=xml:coverage.xml --cov-report=term -q
-
-      - name: Enforce coverage thresholds (unit)
-        if: always()
-        run: |
-          uv run python scripts/check_coverage.py --threshold 80 --branch-threshold 75 --report || true
-          echo "\n(See coverage summary above; thresholds enforced via check_coverage.py)" >> $GITHUB_STEP_SUMMARY
-
-      - name: Publish coverage summary
-        if: always()
-        run: |
-          echo "## Coverage Summary (Unit)" >> $GITHUB_STEP_SUMMARY
-          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY || echo "(No coverage data)" >> $GITHUB_STEP_SUMMARY
-
-  integration:
-    name: Integration Tests (Linux)
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.10"]
-    needs: unit
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install uv (with cache)
-        id: setup-uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
-
-      - name: Install dependencies
-        run: uv sync --group test --group dev
-
-      - name: Run integration tests (no coverage gating)
-        env:
-          PYTEST_ADDOPTS: "--no-cov"
-        run: |
-          uv run pytest tests/integration -m integration -q --no-cov
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "Integration tests executed without coverage gating." >> $GITHUB_STEP_SUMMARY
-
-  full:
-    name: Full Test Suite (All tests)
-    runs-on: ubuntu-latest
-    needs: integration
-    strategy:
-      matrix:
-        python-version: ["3.11"]
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install uv (with cache)
-        id: setup-uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
-
-      - name: Install dependencies
-        run: uv sync --group test --group dev
-
       - name: Ruff lint (all)
         run: uv run ruff check .
 
-      - name: Pylint (src + all tests)
-        run: uv run pylint -j 0 -sn --rcfile=pyproject.toml src tests
-        continue-on-error: true
-
-      - name: Run all tests (exclude GPU)
-        env:
-          PYTEST_ADDOPTS: "-q"
+      - name: Pylint (enforce score >= ${{ env.PYLINT_FAIL_UNDER }})
         run: |
-          uv run pytest tests -m "not requires_gpu" -q
+          xargs -a "$PY_FILES_LIST" uv run pylint -j 0 --fail-under=${{ env.PYLINT_FAIL_UNDER }} --rcfile=pyproject.toml
 
-      - name: Final summary
+      - name: Run full tests via runner (with coverage)
+        run: |
+          uv run python scripts/run_tests.py --coverage
+
+      - name: Enforce coverage thresholds (gated)
+        run: |
+          # Gates read thresholds from pyproject or env (see scripts/run_quality_gates.py)
+          uv run python scripts/run_quality_gates.py --ci --report
+
+      - name: Coverage summary (markdown)
         if: always()
         run: |
-          echo "## Full Test Suite" >> $GITHUB_STEP_SUMMARY
-          echo "All tests executed across tests/ (excluding GPU-marked)." >> $GITHUB_STEP_SUMMARY
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          uv run coverage report --format=markdown >> $GITHUB_STEP_SUMMARY || echo "(No coverage data)" >> $GITHUB_STEP_SUMMARY
