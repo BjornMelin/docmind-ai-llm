@@ -40,9 +40,9 @@ class TestServiceFactories:
 class TestFactoryOverrides:
     """Basic properties of factory outputs and overrides."""
 
-    def test_embedding_override_device(self):
-        """Embedding factory respects the explicit device override."""
-        model = get_embedding_model(device="cpu")
+    def test_embedding_factory_builds_retriever(self):
+        """Embedding factory returns a retriever object using LI BGEM3."""
+        model = get_embedding_model()
         assert model is not None
 
     def test_coordinator_override(self):

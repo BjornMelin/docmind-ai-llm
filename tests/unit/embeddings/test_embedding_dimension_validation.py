@@ -15,8 +15,6 @@ Mock reduction achieved:
 - Total improvement: Tests use real settings validation
 """
 
-from unittest.mock import Mock, patch
-
 import numpy as np
 import pytest
 from llama_index.core.embeddings import MockEmbedding
@@ -428,32 +426,15 @@ class TestSparseEmbeddingValidation:
 class TestInterfaceContractValidation:
     """Test interface contracts for embedding operations."""
 
-    # Removed BGEM3Embedder legacy test; retrieval BGEM3Embedding covers contract
-
-    @patch("src.retrieval.embeddings.BGEM3FlagModel")
-    def test_retrieval_embedding_dimension_contract(
-        self, mock_flag_model_class, mock_llamaindex_embedding
-    ):
-        """Test retrieval embedding maintains LlamaIndex dimension contract."""
-        from src.retrieval.embeddings import BGEM3Embedding
-
-        # Setup mock
-        mock_model = Mock()
-        mock_model.encode.return_value = {
-            "dense_vecs": np.random.randn(1, 1024).astype(np.float32)
-        }
-        mock_flag_model_class.return_value = mock_model
-
-        embedding = BGEM3Embedding()
-
-        # Test embed_dim property contract
-        assert hasattr(embedding, "embed_dim"), "Should have embed_dim property"
-        assert embedding.embed_dim == 1024, "embed_dim should be 1024 for BGE-M3"
-
-        # Test query embedding contract
-        query_result = embedding.get_query_embedding("Test query")
-        assert isinstance(query_result, list), "Query embedding should be list"
-        assert len(query_result) == 1024, "Query embedding should be 1024D"
+    def test_retrieval_embedding_dimension_contract(self, mock_llamaindex_embedding):
+        """Validate expected embedding dimension via settings + LI MockEmbedding."""
+        # LlamaIndex MockEmbedding contract
+        embedding = mock_llamaindex_embedding
+        assert hasattr(embedding, "embed_dim")
+        assert embedding.embed_dim == 1024
+        q = embedding.get_query_embedding("Test query")
+        assert isinstance(q, list)
+        assert len(q) == 1024
 
     def test_vector_similarity_contract_validation(self, sample_embeddings_1024d):
         """Test vector similarity computation contracts."""

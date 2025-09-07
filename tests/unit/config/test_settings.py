@@ -169,8 +169,8 @@ class TestSettingsDefaults:
         assert s.embedding.dimension == 1024
         assert s.embedding.max_length == 8192
         assert s.embedding.model_name == "BAAI/bge-m3"
-        assert s.embedding.batch_size_gpu == 12
-        assert s.embedding.batch_size_cpu == 4
+        assert s.embedding.batch_size_text_gpu == 12
+        assert s.embedding.batch_size_text_cpu == 4
 
         # Hybrid retrieval constants
         assert s.retrieval.rrf_alpha == 60  # RRF fusion alpha parameter
@@ -600,7 +600,12 @@ class TestConfigurationMethods:
             "model_name",
             "device",
             "max_length",
-            "batch_size",
+            "batch_size_text",
+            "normalize_text",
+            "enable_sparse",
+            "image_backbone",
+            "batch_size_image",
+            "normalize_image",
             "trust_remote_code",
         }
 
@@ -662,8 +667,8 @@ class TestCentralizedConstants:
         assert s.embedding.dimension == 1024
         assert s.embedding.max_length == 8192
         assert s.embedding.model_name == "BAAI/bge-m3"
-        assert s.embedding.batch_size_gpu == 12  # Optimized for GPU
-        assert s.embedding.batch_size_cpu == 4  # Conservative for CPU
+        assert s.embedding.batch_size_text_gpu == 12  # Optimized for GPU
+        assert s.embedding.batch_size_text_cpu == 4  # Conservative for CPU
 
     def test_hybrid_retrieval_constants(self):
         """Test hybrid retrieval constants are research-backed."""

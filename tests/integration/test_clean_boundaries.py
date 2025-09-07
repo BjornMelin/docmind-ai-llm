@@ -76,9 +76,9 @@ class TestSettingsBoundaryIntegration:
         embedding_config = s.embedding
         assert embedding_config.model_name is not None
         assert embedding_config.dimension > 0
-        # Batch size depends on backend; check at least one > 0
-        assert (embedding_config.batch_size_gpu > 0) or (
-            embedding_config.batch_size_cpu > 0
+        # Batch size depends on backend; check at least one > 0 (text)
+        assert (embedding_config.batch_size_text_gpu > 0) or (
+            embedding_config.batch_size_text_cpu > 0
         )
 
     @patch.dict(
@@ -166,7 +166,7 @@ class TestAgentCoordinationBoundaryIntegration:
 class TestDocumentProcessingBoundaryIntegration:
     """Test document processing integration with external service boundaries."""
 
-    @patch("src.retrieval.embeddings.BGEM3Embedding")
+    @patch("src.retrieval.bge_m3_index.build_bge_m3_retriever")
     @patch("src.processing.document_processor.DocumentProcessor")
     def test_document_embedder_boundary_integration(
         self, mock_processor, mock_embedder
@@ -363,7 +363,7 @@ class TestErrorHandlingBoundaryIntegration:
         with pytest.raises(RuntimeError, match="Supervisor failed"):
             coord._setup_agent_graph()  # pylint: disable=protected-access
 
-    @patch("src.retrieval.embeddings.BGEM3Embedding")
+    @patch("src.retrieval.bge_m3_index.build_bge_m3_retriever")
     def test_embedder_error_boundary_handling(self, mock_embedder):
         """Test error handling at embedder boundaries."""
         # Mock embedder with initialization error
