@@ -636,7 +636,14 @@ class DocumentProcessor:
                     try:
                         with open(img_path, "rb") as f:
                             img_hash = hashlib.sha256(f.read()).hexdigest()
-                    except Exception as _e:
+                    except Exception as err:
+                        # Log and continue with empty hash; keeps pipeline resilient
+                        logger.warning(
+                            "Failed to hash page image for {} ({}): {}",
+                            file_path,
+                            img_path,
+                            err,
+                        )
                         img_hash = ""
 
                     node_id = sha256_id(

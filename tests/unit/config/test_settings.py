@@ -475,6 +475,13 @@ class TestLLMBackendValidation:
                 backend_warnings = [warn for warn in w if backend in str(warn.message)]
                 assert len(backend_warnings) == 0
 
+    def test_invalid_llm_backend_is_rejected(self):
+        """Unsupported backend names should raise a validation error."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            DocMindSettings(llm_backend="openai")  # no longer in strict set
+
 
 class TestEnvironmentVariableOverrides:
     """Test environment variable overrides work correctly."""
