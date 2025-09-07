@@ -146,10 +146,10 @@ class RetrievalConfig(BaseModel):
     # always-on reranking (caps/timeouts internal)
     reranking_top_k: int = 5
     reranker_normalize_scores: bool = True
-    rrf_alpha: int = 60
-    rrf_k_constant: int = 60
-    rrf_fusion_weight_dense: float = 0.7
-    rrf_fusion_weight_sparse: float = 0.3
+    # server-side fusion controls
+    fused_top_k: int = 60
+    rrf_k: int = 60
+    fusion_mode: Literal["rrf","dbsf"] = "rrf"  # env-gated; dbsf only if supported
     use_sparse_embeddings: bool = True
 
 class ProcessingConfig(BaseModel):

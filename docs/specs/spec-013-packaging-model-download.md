@@ -28,6 +28,15 @@ from huggingface_hub import hf_hub_download
 
 - `tools/models/pull.py`: CLI accepting model ids and target cache dir.
 
+### Model IDs (default set)
+
+- Text embeddings: `BAAI/bge-m3`
+- Text reranker: `BAAI/bge-reranker-v2-m3`
+- Image/text (multimodal): `google/siglip-base-patch16-224`
+- Sparse (BM42): `Qdrant/bm42-all-minilm-l6-v2-attentions`
+
+Offline flags to set before runtime: `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`.
+
 ## Acceptance Criteria
 
 ```gherkin

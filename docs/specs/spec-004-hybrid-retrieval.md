@@ -22,11 +22,11 @@ Implement hybrid retrieval with **Qdrant** named vectors `text-dense` and `text-
 
 - Collection Schema
   - `text-dense`: VectorParams(size=1024, distance=COSINE) for BGE‑M3.
-  - `text-sparse`: SparseVectorParams(index=SparseIndexParams()) for FastEmbed BM42/BM25.
+  - `text-sparse`: SparseVectorParams(index=SparseIndexParams(), modifier=models.Modifier.IDF) for FastEmbed BM42/BM25.
   - Precreate collections with these exact names if managing schema outside LlamaIndex.
 
 - Query API (server‑side fusion)
-  - Use `prefetch` for sparse and dense, then set `fusion` to `rrf` (default) or `dbsf` (experimental). Example:
+  - Use `prefetch` for sparse and dense, then set `fusion` to `rrf` (default) or `dbsf` (experimental; env‑gated). Example:
 
 ```python
 from qdrant_client import QdrantClient, models
@@ -47,6 +47,7 @@ result = client.query_points(
             limit=200,
         ),
     ],
+    # env: HYBRID_FUSION_MODE=rrf|dbsf
     query=models.FusionQuery(fusion=models.Fusion.RRF),
     limit=60,
     with_payload=["doc_id", "page_id", "chunk_id", "text", "has_image"],
@@ -61,7 +62,7 @@ result = client.query_points(
 
 ## Development Notes
 
-- De‑duplication: Collapse by `page_id` before the final fused cut (`limit`) to prevent over-representing a single page.
+- De‑duplication: Collapse by `page_id` before the final fused cut (`limit`) to prevent over‑representing a single page. Use a fused candidate buffer (e.g., fused_top_k=60), dedup, then slice to top_k.
 - Latency targets: p50 120–200 ms for fused_top_k=60 on typical local setup; tune prefetch limits to stay within SLOs.
 - Telemetry: log prefetch sizes, fusion mode, fused_top_k, and query latency.
 

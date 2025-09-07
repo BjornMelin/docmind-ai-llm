@@ -84,6 +84,8 @@ graph LR
 - All embedding models (BGE‑M3 for text; SigLIP for images) run locally and are loaded from local caches; set `HF_HUB_OFFLINE=1` and pre‑download model weights to avoid network access.
 - No external APIs or cloud endpoints are required for embedding; the vector store (Qdrant) runs locally on `127.0.0.1`.
 
+Note on model roles: Embeddings = BGE‑M3 (text) and SigLIP (images). Reranking uses BGE v2‑m3 (text cross‑encoder) with SigLIP visual re‑score via normalized cosine; ColPali is optional on capable GPUs.
+
 ### Performance Requirements
 
 - PR‑1: <50ms per‑chunk embedding on RTX 4090 Laptop

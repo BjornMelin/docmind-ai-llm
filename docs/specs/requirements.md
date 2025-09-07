@@ -33,7 +33,7 @@ FR-001 The system **shall** ingest documents using Unstructured with `strategy=a
 FR-002 The system **shall** build a LlamaIndex `IngestionPipeline` with per-node+transform caching (DuckDBKV). Source: ADR‑010; Accept: AC‑FR‑002.  
 FR-003 The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. Source: ADR‑002; Accept: AC‑FR‑003.  
 FR-004 The system **shall** embed text with BGE‑M3 and images with SigLIP by default (OpenCLIP MAY be selected explicitly). Source: ADR‑002; Accept: AC‑FR‑004.  
-FR-005 The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally. Source: SPEC‑004/ADR‑005/006; Accept: AC‑FR‑005.  
+FR-005 The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally via environment when supported by Qdrant. The sparse index **SHALL** prefer FastEmbed BM42 with IDF modifier; fallback to BM25 when BM42 is unavailable. Source: SPEC‑004/ADR‑005/006; Accept: AC‑FR‑005.  
 FR-006 The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. Source: SPEC‑004; Accept: AC‑FR‑006.  
 FR-007 The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). Source: SPEC‑005/ADR‑037; Accept: AC‑FR‑007.  
 FR-008 The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables. Source: ADR‑024; Accept: AC‑FR‑008.  
@@ -73,6 +73,7 @@ NFR‑USE‑001 Streamlit UI navigable with keyboard; forms avoid unnecessary re
 
 NFR‑SEC‑001 Default egress disabled; only local endpoints allowed unless explicitly configured. Verification: inspection.  
 NFR‑SEC‑002 Local data **shall** remain on device; logging excludes sensitive content.
+NFR‑SEC‑003 Optional AES‑GCM encryption‑at‑rest available; off by default. Verification: test.
 
 ### Compatibility
 
@@ -131,4 +132,24 @@ Scenario: Switch provider from vLLM to Ollama
   Given Settings provider=vllm and model=A
   When I change provider to "ollama" and model=B and press Save
   Then subsequent chats shall hit the Ollama base_url and model=B
+FR‑SEC‑IMG‑ENC The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. Keys SHALL be provisioned via env/keystore and never logged in plaintext. Source: SPEC‑011; Accept: AC‑FR‑SEC‑IMG‑ENC.  
+```
+
+### AC‑FR‑005‑B
+
+```gherkin
+Scenario: Unique pages in final results
+  Given fused_top_k=60 and top_k=10
+  When hybrid retrieval returns results
+  Then the final 10 SHALL be unique by page_id (fallback to source_file:page_number)
+```
+
+### AC‑FR‑SEC‑IMG‑ENC
+
+```gherkin
+Scenario: Encrypt page image at rest
+  Given AES‑GCM keys and a page image
+  When I enable encryption and ingest
+  Then the stored object SHALL be .enc, metadata SHALL include {encrypted: true, kid}
+  And a decrypt step SHALL restore the original bytes
 ```

@@ -21,8 +21,8 @@ Improve retrieval quality by applying **BGE Cross-Encoder** for text nodes and *
 
 - Pipeline
   - Stage 1: Qdrant server-side hybrid returns fused candidates (text+image nodes).
-  - Stage 2: Apply text rerank (`BAAI/bge-reranker-v2-m3`) to text nodes (top_n ≤ 40, timeout 250 ms).
-  - Stage 3: Apply visual rerank: SigLIP text–image cosine to image/page nodes (top_n ≤ 10, timeout 150 ms).
+  - Stage 2: Apply text rerank (`BAAI/bge-reranker-v2-m3`) to text nodes (top_n ≤ 40, timeout 250 ms); rerank MUST be cancellable or batched with early exit on timeout.
+  - Stage 3: Apply visual rerank: SigLIP text–image cosine to image/page nodes (top_n ≤ 10, timeout 150 ms). Scoring uses normalized cosine similarity; recommended prompt template for zero-shot: "This is a photo of {label}."
   - Optional Stage 3b: If enabled and thresholds met, apply ColPali visual rerank (top_n ≤ 10, timeout 400 ms).
   - Stage 4: Rank-level RRF merge of modality-specific results; fail-open to fused order on timeouts.
 

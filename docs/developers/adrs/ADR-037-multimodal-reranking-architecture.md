@@ -46,7 +46,7 @@ Prior reranking (ADR‑006) used a single text CrossEncoder (`bge‑reranker‑v
 
 ## Decision
 
-Use SigLIP text–image cosine re‑score for nodes with `metadata.modality in {"image","pdf_page_image"}` by default, and BGE v2‑m3 CrossEncoder for text nodes. Optionally enable ColPali on GPUs for higher visual precision. Merge modality reranks by rank‑level RRF. Supersedes ADR‑006.
+Use SigLIP normalized cosine re‑score for nodes with `metadata.modality in {"image","pdf_page_image"}` by default, and BGE v2‑m3 CrossEncoder for text nodes. Optionally enable ColPali on GPUs for higher visual precision. Merge modality reranks by rank‑level RRF. Supersedes ADR‑006. Activation gating MUST be env-only and SHOULD consider visual_fraction, small K (≤16), VRAM, and latency budget; fail-open on timeouts. Telemetry SHALL log activation decisions and per-stage latencies.
 
 ## High-Level Architecture
 

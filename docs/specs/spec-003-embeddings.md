@@ -32,6 +32,7 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
   - Transformers SigLIP (default) via `SiglipModel` + `SiglipProcessor`, using `get_image_features()` / `get_text_features()`.
   - OpenCLIP optionally via `open_clip.create_model_and_transforms('ViT-L-14'|'ViT-H-14', pretrained=...)` when explicitly required.
   - In LlamaIndex contexts, use a SigLIP adapter or `TextImageReranker` equivalents; avoid legacy CLIP-first wrappers.
+  - Metadata: set `image_backbone="siglip"` for image/page nodes; default DPI≈200 for page image renders.
 
 - Hosting note: Hugging Face Text Embeddings Inference (TEI) is dense‑only for BGE‑M3. Do not use TEI when sparse/ColBERT are required.
 

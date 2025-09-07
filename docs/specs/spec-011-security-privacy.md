@@ -32,3 +32,20 @@ Feature: Egress control
     Given a non-allowlisted base_url
     Then the app SHALL refuse to connect and show a clear error
 ```
+
+```gherkin
+Scenario: AES‑GCM round-trip
+  Given encryption enabled and a test image
+  When I encrypt to .enc and then decrypt
+  Then the decrypted bytes SHALL match the original and metadata SHALL include encrypted=true and kid
+```
+
+### Encryption of Page Images (AES‑GCM)
+
+The system MAY encrypt page images at rest using AES‑GCM when enabled.
+
+- Keys: Provided via environment/keystore; never logged in plaintext.
+- Metadata: `encrypted=true`, `alg="AES-256-GCM"`, `kid` recorded; pHash computed prior to encryption.
+- Files: Use `.enc` extension; decrypt via provided utility before reading bytes.
+- AAD: SHOULD include non‑sensitive context (e.g., page_id) to bind ciphertext to metadata.
+- Rotation: Keys SHOULD support rotation; new ingests use the new kid; old objects remain decryptable while key material exists.
