@@ -31,9 +31,9 @@ from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client import models as qmodels
 
-from src.models.embeddings import TextEmbedder
 from src.processing.utils import sha256_id
 from src.retrieval.reranking import MultimodalReranker
+from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
 from src.utils.security import build_owner_filter
 from src.utils.storage import get_client_config
 
@@ -56,6 +56,7 @@ class _HybridParams:
     prefetch_sparse: int = SPARSE_PREFETCH_DEFAULT
     prefetch_dense: int = DENSE_PREFETCH_DEFAULT
     fusion_mode: str = "rrf"
+    dedup_key: str = "page_id"
 
 
 class ServerHybridRetriever:
@@ -75,21 +76,21 @@ class ServerHybridRetriever:
         """
         self.params = params
         self._client = QdrantClient(**get_client_config())
-        self._embedder = TextEmbedder(device=None)
 
-    def _embed_query(self, text: str) -> tuple[np.ndarray, dict[int, float]]:
-        """Encode query text into dense and sparse vectors."""
-        out = self._embedder.encode_text([text], return_dense=True, return_sparse=True)
-        dense = out.get("dense")
-        sparse = out.get("sparse")
-        if not isinstance(dense, np.ndarray) or dense.shape[0] == 0:
-            raise RuntimeError("Dense embedding failed for query")
-        dense_vec = dense[0].tolist()
-        sp_map: dict[int, float] = {}
-        if isinstance(sparse, list) and sparse:
-            # Using first (single) query mapping
-            sp_map = {int(i): float(v) for i, v in sparse[0].items()}
-        return np.asarray(dense_vec, dtype=np.float32), sp_map
+    def _embed_query(self, text: str) -> tuple[np.ndarray, qmodels.SparseVector | None]:
+        """Encode query text into dense and sparse vectors.
+
+        Dense uses LlamaIndex Settings.embed_model to align with index-time
+        embeddings. Sparse uses FastEmbed (BM42 → BM25 fallback) to align with
+        Qdrant hybrid sparse indexing; returns empty mapping when unavailable.
+        """
+        # Dense via LI Settings for alignment
+        dvec = Settings.embed_model.get_query_embedding(text)  # type: ignore[attr-defined]
+        dense_vec = np.asarray(dvec, dtype=np.float32)
+
+        # Sparse via FastEmbed for alignment with Qdrant hybrid sparse
+        svec = _encode_sparse_query(text)
+        return dense_vec, svec
 
     def _sparse_to_qdrant(
         self, sp_map: dict[int, float]
@@ -120,8 +121,7 @@ class ServerHybridRetriever:
         """
         qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
         t0 = perf_counter()
-        dense_vec, sp_map = self._embed_query(qtext)
-        sparse_vec = self._sparse_to_qdrant(sp_map)
+        dense_vec, sparse_vec = self._embed_query(qtext)
 
         prefetch: list[qmodels.Prefetch] = []
         if sparse_vec is not None:
@@ -135,7 +135,7 @@ class ServerHybridRetriever:
         d_list = dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
         prefetch.append(
             qmodels.Prefetch(
-                query=d_list,  # plain vector for dense prefetch
+                query=qmodels.VectorInput(vector=d_list),
                 using="text-dense",
                 limit=self.params.prefetch_dense,
             )
@@ -151,7 +151,7 @@ class ServerHybridRetriever:
                     key="owner_id", match=qmodels.MatchValue(value=owner)
                 )
                 qfilter = qmodels.Filter(must=[cond])
-            except Exception:
+            except (TypeError, ValueError, RuntimeError):
                 # Fallback to dict-based helper if client types mismatch
                 fdict = build_owner_filter(owner)
                 qfilter = qmodels.Filter(**fdict)  # type: ignore[arg-type]
@@ -172,12 +172,13 @@ class ServerHybridRetriever:
             ],
         )
 
-        # De-dup by page_id before final cut
+        # De-dup by configured key before final cut
         best: dict[str, tuple[float, Any]] = {}
         orig = len(result.points)
         for p in result.points:
             payload = p.payload or {}
-            key = str(payload.get("page_id") or p.id)
+            key_name = (self.params.dedup_key or "page_id").strip()
+            key = str(payload.get(key_name) or p.id)
             score = float(getattr(p, "score", 0.0))
             cur = best.get(key)
             if cur is None or score > cur[0]:
@@ -201,6 +202,12 @@ class ServerHybridRetriever:
         try:
             from src.utils.telemetry import log_jsonl
 
+            # Emit sparse fallback flag when no sparse prefetch was used
+            if sparse_vec is None:
+                try:
+                    log_jsonl({"retrieval.sparse_fallback": True})
+                except Exception:  # pragma: no cover - defensive
+                    pass
             log_jsonl(
                 {
                     "retrieval.fusion_mode": self.params.fusion_mode,
@@ -212,7 +219,7 @@ class ServerHybridRetriever:
                     "dedup.before": int(orig),
                     "dedup.after": len(best),
                     "dedup.dropped": int(dedup_filtered),
-                    "dedup.key": "page_id",
+                    "dedup.key": (self.params.dedup_key or "page_id"),
                 }
             )
         except Exception:  # pylint: disable=broad-exception-caught
@@ -334,12 +341,16 @@ class AdaptiveRouterQueryEngine:
                 fusion_mode = str(
                     getattr(app_settings.retrieval, "fusion_mode", "rrf")
                 ).lower()
+                dedup_key = str(
+                    getattr(app_settings.retrieval, "dedup_key", "page_id")
+                ).lower()
                 params = _HybridParams(
                     collection=collection,
                     fused_top_k=fused_top,
                     prefetch_sparse=SPARSE_PREFETCH_DEFAULT,
                     prefetch_dense=DENSE_PREFETCH_DEFAULT,
                     fusion_mode=fusion_mode,
+                    dedup_key=dedup_key,
                 )
                 retriever = ServerHybridRetriever(params)
                 hybrid_engine = RetrieverQueryEngine.from_args(
@@ -363,7 +374,7 @@ class AdaptiveRouterQueryEngine:
                     )
                 )
             # If hybrid construction fails, warn and continue with dense-only
-            except Exception as e:  # pragma: no cover - broad except by design
+            except (ValueError, RuntimeError) as e:  # pragma: no cover - optional
                 logger.warning("Server hybrid unavailable: %s", e)
 
         # 2. Dense Semantic Search Tool (BGE-M3 Dense Only)
