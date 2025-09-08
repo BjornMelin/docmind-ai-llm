@@ -46,6 +46,7 @@ ignore = ["D203", "D213", "S301", "S603", "S607", "S108"]
 
 ```python
 # Good: Clear function with type hints and docstring
+```python
 def process_documents(files: List[Path], chunk_size: int = 1000) -> List[Document]:
     """Process uploaded documents into chunks for analysis.
     
