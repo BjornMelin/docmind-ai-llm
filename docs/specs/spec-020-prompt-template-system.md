@@ -1,6 +1,6 @@
 # SPEC-020 — Prompt Template System (Full Replacement)
 
-Status: Planned (Breaking)
+Status: Completed
 
 Owners: Retrieval/UX Core
 
