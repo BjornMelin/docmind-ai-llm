@@ -46,6 +46,7 @@ FR-014 The system **shall** run a LangGraph‑supervised multi‑agent flow with
 FR-015 The system **shall** persist ingestion cache via DuckDBKV and operational metadata via SQLite WAL. Source: ADR‑010; Accept: AC‑FR‑015.  
 FR-016 The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR) and E2E (RAGAS) runnable offline. Source: ADR‑011; Accept: AC‑FR‑016.  
 FR-017 The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally.
+FR-020 The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets (tones/roles/lengths). It SHALL expose minimal APIs to list templates, get metadata, render text prompts, and format chat messages, and SHALL fully replace legacy `src/prompts.py` constants without back‑compat shims. Source: ADR‑020/SPEC‑020; Accept: AC‑FR‑020.
 
 ## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010
 
@@ -107,7 +108,7 @@ NFR‑PORT‑001 Single definitive architecture; no prod/local forks; configurat
 
 ## 7. Verification methods per requirement
 
-- FR‑001..017: Test, analysis, or demonstration; see RTM.
+- FR‑001..017,020: Test, analysis, or demonstration; see RTM.
 
 ## 8. Traceability seeds
 
@@ -152,4 +153,15 @@ Scenario: Encrypt page image at rest
   When I enable encryption and ingest
   Then the stored object SHALL be .enc, metadata SHALL include {encrypted: true, kid}
   And a decrypt step SHALL restore the original bytes
+```
+
+### AC‑FR‑020
+
+```gherkin
+Scenario: Template catalog and rendering
+  Given default templates and presets on disk
+  When the UI lists templates and a user selects one
+  And the system renders with default context
+  Then a non‑empty prompt/message is produced without errors
+  And no references to src/prompts.py remain in the repository
 ```

@@ -49,4 +49,4 @@ The system MAY encrypt page images at rest using AES‑GCM when enabled.
 - Files: Use `.enc` extension; decrypt via provided utility before reading bytes.
 - AAD: SHOULD include non‑sensitive context (e.g., page_id) to bind ciphertext to metadata.
 - Rotation: Keys SHOULD support rotation; new ingests use the new kid; old objects remain decryptable while key material exists.
- - Consumption: Consumers (e.g., SigLIP/ColPali visual rerank) SHALL decrypt to a temporary file for processing and MUST clean up the temp file on success or timeout.
+- Consumption: Consumers (e.g., SigLIP/ColPali visual rerank) SHALL decrypt to a temporary file for processing and MUST clean up the temp file on success or timeout.

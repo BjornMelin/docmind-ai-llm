@@ -37,7 +37,7 @@ Improve retrieval quality by applying **BGE Cross-Encoder** for text nodes and *
 
 - Keep UI free of reranker toggles; provide ops env overrides only.
 - Early-exit: if there are no image/page nodes, skip visual rerank stage entirely.
- - Cancellation semantics: batch-wise early-exit only (deterministic subsets), no mid-batch truncation; single reranker integration path with auto-detect (prefer direct FlagEmbedding; else LI wrapper).
+- Cancellation semantics: batch-wise early-exit only (deterministic subsets), no mid-batch truncation; single reranker integration path with auto-detect (prefer direct FlagEmbedding; else LI wrapper).
 
 ## Libraries and Imports
 

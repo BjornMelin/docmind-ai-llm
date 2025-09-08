@@ -17,3 +17,4 @@
 | FR-010 | Streamlit multipage | ADR-012 | 012 | src/app.py; src/pages/04_settings.py | tests/unit/test_integrations_runtime.py; tests/integration/test_settings_page.py | inspection | Completed |
 | FR-012 | Multi-provider UI | ADR-009 | 009 | src/config/llm_factory.py; src/pages/04_settings.py | tests/unit/test_llm_factory.py; tests/unit/test_llm_factory_extended.py; tests/unit/test_integrations_runtime.py; tests/integration/test_settings_page.py | test | Completed |
 | FR-014 | LangGraph supervisor | ADR-001 | 001 | src/agents/* | tests_agents/* | test | In repo |
+| FR-020 | Prompt Template System (RichPromptTemplate, file-based) | ADR‑020 | 020 | src/prompting/*; templates/prompts/*; templates/presets/* | tests/unit/prompting/*; tests/integration/test_prompt_registry.py; tests/e2e/test_prompt_system.py | test | Planned |
