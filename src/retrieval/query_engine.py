@@ -379,19 +379,19 @@ class AdaptiveRouterQueryEngine:
                     response_mode="compact",
                     streaming=True,
                 )
-                tools.append(
-                    QueryEngineTool(
-                        query_engine=hybrid_engine,
-                        metadata=ToolMetadata(
-                            name="hybrid_search",
-                            description=(
-                                "Server-side hybrid via Qdrant Query API. "
-                                "RRF default; DBSF optional. "
-                                "Prefetch dense+sparse; de-dup page_id; fused_top_k=60."
-                            ),
+                # Store tool so sub-question routing also sees server hybrid
+                hybrid_tool = QueryEngineTool(
+                    query_engine=hybrid_engine,
+                    metadata=ToolMetadata(
+                        name="hybrid_search",
+                        description=(
+                            "Server-side hybrid via Qdrant Query API. "
+                            "RRF default; DBSF optional. "
+                            "Prefetch dense+sparse; de-dup page_id; fused_top_k=60."
                         ),
-                    )
+                    ),
                 )
+                tools.append(hybrid_tool)
             # If hybrid construction fails, warn and continue with dense-only
             except (ValueError, RuntimeError) as e:  # pragma: no cover - optional
                 logger.warning("Server hybrid unavailable: %s", e)
