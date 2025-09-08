@@ -142,7 +142,12 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
         if Settings.embed_model is not None and not force_embed:
             logger.info("Embed model already configured; skipping override")
         else:
-            emb_cfg = settings.get_embedding_config()
+            # Some tests patch `settings` with a lightweight namespace lacking
+            # helper methods; default to BGE-M3 CPU in that case.
+            if hasattr(settings, "get_embedding_config"):
+                emb_cfg = settings.get_embedding_config()
+            else:  # pragma: no cover - exercised in unit stubs
+                emb_cfg = {"model_name": "BAAI/bge-m3", "device": "cpu"}
             model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
             device = emb_cfg.get("device", "cpu")
             Settings.embed_model = ClipEmbedding(
