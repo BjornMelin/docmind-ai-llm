@@ -1084,7 +1084,7 @@ The unified configuration architecture (ADR-024) has successfully consolidated t
 - **Parser Integration**: Unstructured.io hi-res parsing functional
 - **Embedding System**: BGE-M3 unified dense+sparse embeddings working
 - **Vector Storage**: Qdrant integration with RRF fusion operational
-- **Reranking**: BGE-reranker-v2-m3 with ColBERT late interaction active
+- **Reranking**: Always-on BGE Cross-Encoder (text) + SigLIP (visual) with rank-level RRF; optional ColPali on capable GPUs. Batch-wise cancellation; fail-open on timeouts.
 
 ### Performance Validation ✅
 

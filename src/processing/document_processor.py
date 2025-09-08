@@ -331,7 +331,7 @@ class UnstructuredTransformation(TransformComponent):
             page_no = 0
             try:
                 page_no = int(element_metadata.get("page_number", 0))
-            except Exception:
+            except (ValueError, TypeError):
                 page_no = 0
 
             # Compute deterministic node id including a per-element discriminator to
@@ -648,7 +648,7 @@ class DocumentProcessor:
                     try:
                         with open(img_path, "rb") as f:
                             img_hash = hashlib.sha256(f.read()).hexdigest()
-                    except Exception as err:
+                    except (OSError, ValueError, RuntimeError) as err:
                         # Log and continue with empty hash; keeps pipeline resilient
                         logger.warning(
                             "Failed to hash page image for {} ({}): {}",

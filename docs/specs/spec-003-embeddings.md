@@ -93,9 +93,9 @@ Feature: Embedding stack
 
 ## Implementation Phases (high level)
 
-1. Introduce LI BGEM3Index/BGEM3Retriever wiring and migrate retrieval paths.
-2. Replace CLIP usage with LI ClipEmbedding where applicable; keep SigLIP path for non‑LI use.
-3. Remove duplicate wrappers (BGEM3Embedding, ad‑hoc CLIP helpers), adjust imports/usages.
+1. Use LI Settings for query-time dense and FastEmbed for sparse queries; use Qdrant Query API server-side fusion.
+2. Prefer SigLIP for images; use OpenCLIP only when explicitly required.
+3. Remove duplicate wrappers (BGEM3 tri-mode helpers, ad‑hoc CLIP helpers), adjust imports/usages.
 4. Rewrite/realign tests to new interfaces; maintain fast offline stubs.
 5. Run quality gates; address lint and style; finalize docs.
 
@@ -109,7 +109,7 @@ Feature: Embedding stack
 
 ## References
 
-- FlagEmbedding BGEM3 (dense/sparse/ColBERT) — official tutorials and APIs.
-- LlamaIndex BGEM3Index/BGEM3Retriever; ClipEmbedding; vector store integrations.
-- Transformers SigLIP docs; OpenCLIP model zoo and transforms.
-- TEI (HF) limitations for BGE‑M3 sparse/ColBERT (dense‑only).
+- FastEmbed (BM42/BM25) sparse embeddings — indices/values and tokenizer sources
+- LlamaIndex Settings for dense query alignment; Qdrant Query API hybrid
+- Transformers SigLIP docs; OpenCLIP model zoo and transforms
+- TEI (HF) limitations for BGE‑M3 sparse (dense-only)
