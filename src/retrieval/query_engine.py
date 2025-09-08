@@ -119,14 +119,21 @@ class ServerHybridRetriever:
             try:
                 if isinstance(sparse_vec, dict):
                     # Deterministic ordering by index
-                    idxs, vals = zip(*sorted(sparse_vec.items())) if sparse_vec else ([], [])
+                    idxs, vals = (
+                        zip(*sorted(sparse_vec.items()), strict=False)
+                        if sparse_vec
+                        else ([], [])
+                    )
                     sv = qmodels.SparseVector(indices=list(idxs), values=list(vals))  # type: ignore[arg-type]
                 else:
                     sv = sparse_vec  # already typed or supported format
             except Exception:
                 # Last-resort fallback: attempt to wrap values as needed
                 if isinstance(sparse_vec, dict):
-                    sv = qmodels.SparseVector(indices=list(sparse_vec.keys()), values=list(sparse_vec.values()))  # type: ignore[arg-type]
+                    sv = qmodels.SparseVector(
+                        indices=list(sparse_vec.keys()),
+                        values=list(sparse_vec.values()),
+                    )  # type: ignore[arg-type]
                 else:
                     sv = sparse_vec
             prefetch.append(
@@ -139,11 +146,13 @@ class ServerHybridRetriever:
         d_list = dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
         # Prefer typed VectorInput when available as a real class; otherwise pass list
         vi_query: Any = d_list
-        VI = getattr(qmodels, "VectorInput", None)
-        if VI is not None:
+        vi = getattr(qmodels, "VectorInput", None)
+        if vi is not None:
             try:  # support older client versions where VectorInput was a model
-                vi_query = VI(vector=d_list)
-            except TypeError:  # new clients expose it as typing.Union and cannot be instantiated
+                vi_query = vi(vector=d_list)
+            except (
+                TypeError
+            ):  # new clients expose it as typing.Union and cannot be instantiated
                 vi_query = d_list
         prefetch.append(
             qmodels.Prefetch(

@@ -338,10 +338,10 @@ def app_test(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
 
     # Ensure submodule attribute is present for patch traversal
-    try:
+    from contextlib import suppress
+
+    with suppress(Exception):
         import src.utils.core  # noqa: F401
-    except Exception:
-        pass
 
     with (
         # Boundary mocking: external service calls only

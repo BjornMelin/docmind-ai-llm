@@ -108,13 +108,19 @@ def _rrf_merge(
 
 _SIGLIP_CACHE: dict[tuple[int, int, str], tuple[Any, Any, str]] = {}
 
+
 def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     """Lazy-load SigLIP model+processor and choose device.
 
     Returns:
         tuple[Any, Any, str]: Tuple of (model, processor, device_str).
     """
-    from transformers import SiglipModel as _TSiglipModel, SiglipProcessor as _TSiglipProcessor  # type: ignore
+    from transformers import (
+        SiglipModel as _TSiglipModel,
+    )  # type: ignore
+    from transformers import (
+        SiglipProcessor as _TSiglipProcessor,
+    )
 
     # Device selection
     device = "cpu"
@@ -190,6 +196,7 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
         try:
             from src.utils.security import decrypt_file  # type: ignore
         except Exception:  # pragma: no cover - defensive
+
             def decrypt_file(p: str) -> str:  # type: ignore
                 return p
 
@@ -740,9 +747,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                         log_jsonl(
                             {
                                 "rerank.stage": "colpali",
-                                "rerank.topk": int(
-                                    settings.retrieval.reranking_top_k
-                                ),
+                                "rerank.topk": int(settings.retrieval.reranking_top_k),
                                 "rerank.latency_ms": int(_now_ms() - v_start),
                                 "rerank.timeout": False,
                                 "rerank.batch_size": 8 if _has_cuda_vram(1.0) else 2,
@@ -753,9 +758,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                         log_jsonl(
                             {
                                 "rerank.stage": "colpali",
-                                "rerank.topk": int(
-                                    settings.retrieval.reranking_top_k
-                                ),
+                                "rerank.topk": int(settings.retrieval.reranking_top_k),
                                 "rerank.latency_ms": int(_now_ms() - v_start),
                                 "rerank.timeout": True,
                             }
