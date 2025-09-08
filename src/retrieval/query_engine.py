@@ -93,16 +93,6 @@ class ServerHybridRetriever:
         svec = _encode_sparse_query(text)
         return dense_vec, svec
 
-    def _sparse_to_qdrant(
-        self, sp_map: dict[int, float]
-    ) -> qmodels.SparseVector | None:
-        """Convert sparse map to Qdrant sparse vector format."""
-        if not sp_map:
-            return None
-        # stable index order
-        idxs = sorted(sp_map.keys())
-        vals = [float(sp_map[i]) for i in idxs]
-        return qmodels.SparseVector(indices=idxs, values=vals)
 
     def _fusion(self) -> qmodels.FusionQuery:
         """Create fusion query based on configured mode."""
