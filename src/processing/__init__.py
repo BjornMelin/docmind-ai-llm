@@ -24,8 +24,8 @@ from src.models.processing import (
 )
 from src.processing.document_processor import (
     DocumentProcessor,
-    UnstructuredTransformation,
     ProcessingError,
+    UnstructuredTransformation,
 )
 from src.processing.pdf_pages import (
     pdf_pages_to_image_documents,
@@ -39,15 +39,15 @@ from src.processing.utils import (
 __all__ = [
     "DocumentElement",
     "DocumentProcessor",
-    "UnstructuredTransformation",
     "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",
+    "ProcessingError",
     "ProcessingResult",
     "ProcessingStrategy",
-    "ProcessingError",
+    "UnstructuredTransformation",
+    "is_unstructured_like",
     "pdf_pages_to_image_documents",
     "save_pdf_page_images",
     "sha256_id",
-    "is_unstructured_like",
 ]

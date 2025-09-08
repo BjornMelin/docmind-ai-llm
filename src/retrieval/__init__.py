@@ -19,7 +19,6 @@ from .graph_config import (
 )
 
 # DSPy query optimization removed in favor of server-side hybrid + reranking
-
 # Adaptive router query engine
 from .query_engine import (
     AdaptiveRouterQueryEngine,
