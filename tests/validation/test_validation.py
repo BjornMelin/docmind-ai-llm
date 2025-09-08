@@ -67,7 +67,7 @@ class TestImportValidation:
         """Test that ADR-009 compliant document processing modules can be imported."""
         adr009_modules = [
             "src.processing.document_processor",
-            "src.retrieval.bge_m3_index",
+            "src.retrieval.query_engine",
         ]
 
         for module_name in adr009_modules:
@@ -78,9 +78,9 @@ class TestImportValidation:
                 # Test that key classes are available
                 if module_name == "src.processing.document_processor":
                     assert hasattr(module, "DocumentProcessor")
-                elif module_name == "src.retrieval.bge_m3_index":
-                    # Ensure LI BGEM3 factory helpers exist
-                    assert hasattr(module, "build_bge_m3_index")
+                elif module_name == "src.retrieval.query_engine":
+                    # Ensure server-side hybrid retriever is available
+                    assert hasattr(module, "ServerHybridRetriever")
 
             except ImportError as e:
                 pytest.fail(f"Failed to import ADR-009 module {module_name}: {e}")
@@ -150,7 +150,7 @@ class TestImportValidation:
         # ADR-009 compliant file structure
         adr009_files = [
             "src/processing/document_processor.py",
-            "src/retrieval/bge_m3_index.py",
+            "src/retrieval/query_engine.py",
         ]
 
         for file_path in required_files:

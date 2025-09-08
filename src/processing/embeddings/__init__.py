@@ -4,7 +4,6 @@ This package exposes helpers and models for the embedding pipeline, aligned
 with SPEC-003:
 
 Components:
-- LlamaIndex BGEM3Index/BGEM3Retriever (tri-mode text: dense+sparse+ColBERT)
 - LlamaIndex ClipEmbedding for image vectors in LI contexts
 - Pydantic models for embedding parameters and results
 
@@ -19,12 +18,9 @@ from src.models.embeddings import (
     EmbeddingParameters,
     EmbeddingResult,
 )
-from src.retrieval.bge_m3_index import build_bge_m3_index, build_bge_m3_retriever
 
 __all__ = [
     "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",
-    "build_bge_m3_index",
-    "build_bge_m3_retriever",
 ]

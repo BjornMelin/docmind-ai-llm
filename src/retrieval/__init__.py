@@ -1,16 +1,9 @@
 """Retrieval & Search System.
 
-Implements BGE-M3 unified embeddings and RouterQueryEngine adaptive retrieval
-per ADR-002 and ADR-003, with modality-aware reranking (ADR-037) using
-ColPali (visual) and BGE v2-m3 CrossEncoder (text).
+Implements RouterQueryEngine adaptive retrieval per ADR-003, with
+server-side hybrid retrieval (Qdrant Query API) and modality-aware reranking
+(ADR-037) using text and visual rerankers.
 """
-
-# BGE-M3 and CLIP embeddings (consolidated)
-from .bge_m3_index import (
-    build_bge_m3_index,
-    build_bge_m3_retriever,
-    get_default_bge_m3_retriever,
-)
 
 # Property graph configuration
 from .graph_config import (
@@ -64,8 +57,6 @@ __all__ = [
     "OptimizationMode",
     "PropertyGraphConfig",
     "QueryStrategy",
-    "build_bge_m3_index",
-    "build_bge_m3_retriever",
     "build_text_reranker",
     "build_visual_reranker",
     "calculate_entity_confidence",
@@ -78,7 +69,6 @@ __all__ = [
     "extend_property_graph_index",
     "extract_entities",
     "extract_relationships",
-    "get_default_bge_m3_retriever",
     "measure_quality_improvement",
     "progressive_optimization_pipeline",
     "traverse_graph",

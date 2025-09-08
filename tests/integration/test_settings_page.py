@@ -151,8 +151,8 @@ def test_settings_toggle_providers_and_apply(
             self.kind = "embed_dummy"
 
     monkeypatch.setattr(
-        # BGEM3Embedding removed; patch LI retriever builder if needed
-        "src.retrieval.bge_m3_index.build_bge_m3_retriever",
+        # Patch hybrid retriever class to avoid heavy deps during Apply runtime
+        "src.retrieval.query_engine.ServerHybridRetriever",
         _DummyEmbed,
         raising=False,
     )
