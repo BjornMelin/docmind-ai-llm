@@ -72,7 +72,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
     """
     results = {"valid": True, "warnings": [], "errors": [], "info": []}
 
-    # Check Qdrant connectivity
+    # Check Qdrant connectivity (graceful offline)
     try:
         client = qdrant_client.QdrantClient(url=app_settings.database.qdrant_url)
         client.get_collections()
@@ -85,6 +85,9 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
         results["valid"] = False
     except OSError as e:
         results["errors"].append(f"Qdrant network error: {e}")
+        results["valid"] = False
+    except Exception as e:  # pragma: no cover - catch transport-specific exceptions
+        results["errors"].append(f"Qdrant error: {e}")
         results["valid"] = False
 
     # Check GPU configuration
@@ -104,9 +107,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
 
     # Configuration validation complete
 
-    if not results["valid"]:
-        error_msg = "Critical configuration errors:\n" + "\n".join(results["errors"])
-        raise RuntimeError(error_msg)
+    # Do not raise: return structured result for callers/tests to handle
 
     return results
 
