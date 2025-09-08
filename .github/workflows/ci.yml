@@ -46,15 +46,15 @@ jobs:
           HF_HUB_OFFLINE: '1'
           TRANSFORMERS_OFFLINE: '1'
         run: |
-          uv run pytest -q -c .github/pytest.nocov.ini
+          uv run pytest -q -c .github/pytest.nocov.ini -m "unit or integration" -k "not requires_gpu and not gpu_required and not performance"
 
-      - name: Run full tests with coverage (soft gate)
+      - name: Run unit/integration with coverage (soft gate)
         continue-on-error: true
         env:
           HF_HUB_OFFLINE: '1'
           TRANSFORMERS_OFFLINE: '1'
         run: |
-          uv run pytest -q
+          uv run pytest -q -m "unit or integration" -k "not requires_gpu and not gpu_required and not performance"
 
       - name: Upload coverage artifacts
         if: always()

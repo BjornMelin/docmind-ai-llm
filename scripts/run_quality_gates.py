@@ -28,11 +28,15 @@ from pathlib import Path
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
-except Exception:  # pragma: no cover - fallback for Python 3.10
+
+    TOML_PARSER = tomllib
+except ModuleNotFoundError:  # pragma: no cover - fallback for older Python
     try:
-        import tomli as tomllib  # type: ignore[assignment]
-    except Exception:  # pragma: no cover - last resort
-        tomllib = None  # type: ignore[assignment]
+        import tomli
+
+        TOML_PARSER = tomli
+    except ModuleNotFoundError:  # pragma: no cover - last resort
+        TOML_PARSER = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +51,10 @@ def _read_thresholds_from_pyproject(project_root: Path) -> tuple[float, float]:
     line = 0.0
     branch = 0.0
     pyproject = project_root / "pyproject.toml"
-    if tomllib and pyproject.exists():
+    if TOML_PARSER and pyproject.exists():
         try:
             with pyproject.open("rb") as f:
-                data = tomllib.load(f)
+                data = TOML_PARSER.load(f)
             q = data.get("tool", {}).get("pytest-quality", {})
             line = float(q.get("min_line_coverage_percent", line))
             branch = float(q.get("min_branch_coverage_percent", branch))
@@ -60,7 +64,7 @@ def _read_thresholds_from_pyproject(project_root: Path) -> tuple[float, float]:
                 rep = cov.get("report", {})
                 if isinstance(rep, dict):
                     line = float(rep.get("fail_under", line or 0.0))
-        except Exception as exc:  # pragma: no cover - non-fatal
+        except (OSError, ValueError) as exc:  # pragma: no cover - non-fatal
             logging.debug("Failed to read thresholds from pyproject: %s", exc)
     # Env overrides win
     line = float(os.getenv("COVERAGE_LINE_THRESHOLD", line or 0.0))
@@ -198,7 +202,7 @@ class QualityGateRunner:
             self.failures.append(error_msg)
             logger.error("⏰ %s", error_msg)
             return False
-        except Exception as e:
+        except (OSError, ValueError) as e:
             error_msg = f"Error running {gate_name}: {e}"
             self.failures.append(error_msg)
             logger.error("💥 %s", error_msg)
@@ -292,7 +296,7 @@ class QualityGateRunner:
             self.failures.append(error_msg)
             logger.error("💥 %s", error_msg)
             return False
-        except Exception as e:
+        except (OSError, ValueError) as e:
             error_msg = f"Error running pre-commit hooks: {e}"
             self.failures.append(error_msg)
             logger.error("💥 %s", error_msg)

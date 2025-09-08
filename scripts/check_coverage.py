@@ -645,7 +645,7 @@ def main() -> int:
             for warning in analyzer.warnings:
                 print(f"  • {warning}")
 
-    except Exception as e:
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
         logger.exception("Unexpected error during coverage checking")
         print(f"❌ Unexpected error: {e}")
         exit_code = 2
