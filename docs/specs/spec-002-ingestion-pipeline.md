@@ -93,10 +93,10 @@ Feature: Ingestion pipeline
   - Tests: `tests/integration/test_chunking_integration.py`, `tests/unit/processing/*`
 - FR-ING-002 (deterministic IDs & lineage):
   - Code: `src/processing/utils.py::sha256_id`, `src/processing/document_processor.py` (node_id, parent_id)
-  - Tests: `tests/unit/processing/test_deterministic_ids_unit.py` (added), chunking unit/integration assertions
+  - Tests: `tests/unit/processing/test_deterministic_ids.py` (added), chunking unit/integration assertions
 - FR-ING-003 (page images):
   - Code: `src/processing/pdf_pages.py`, `src/processing/document_processor.py` emission with modality=pdf_page_image
-  - Tests: `tests/integration/test_ingestion_pipeline_pdf_images.py`, `tests/unit/processing/test_pdf_pages_unit.py`
+  - Tests: `tests/integration/test_ingestion_pipeline_pdf_images.py`, `tests/unit/processing/test_pdf_pages_helpers.py`
 
 ## Validation & Quality
 

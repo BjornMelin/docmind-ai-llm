@@ -48,22 +48,41 @@ graph TB
 
 ```text
 tests/
-├── unit/                    # Tier 1: Fast unit tests with mocks
-│   ├── conftest.py         # Unit test fixtures
-│   ├── agents/             # Agent system unit tests
-│   ├── processing/         # Document processing tests
-│   └── utils/              # Utility function tests
-├── integration/             # Tier 2: Cross-component tests
-│   ├── conftest.py         # Integration fixtures
-│   ├── test_pipelines/     # End-to-end pipeline tests
-│   └── test_workflows/     # Business workflow tests
-├── system/                  # Tier 3: Full system tests
-│   └── test_gpu_workflows.py
-├── performance/             # Performance benchmarks
-├── validation/              # Production readiness tests
-├── fixtures/                # Shared test fixtures
-├── _mocks/                  # Mock implementations
-└── conftest.py             # Global test configuration
+├── unit/                         # Tier 1: Fast unit tests with mocks
+│   ├── conftest.py              # Unit test fixtures
+│   ├── agents/                  # Agent system unit tests (+ tools/)
+│   ├── app/                     # App entrypoints (main/app)
+│   ├── cache/                   # Ingestion cache
+│   ├── config/                  # Settings + runtime mapping
+│   ├── containers/              # Container wiring
+│   ├── core/                    # Exceptions, invariants, spaCy manager
+│   ├── integrations/            # Cross-cutting adapters (e.g., DSPy)
+│   ├── models/                  # Pydantic models
+│   │   └── embeddings/          # Text/image/unified embedder suites
+│   ├── processing/              # Unstructured + LlamaIndex pipeline
+│   ├── prompts/                 # Prompt templates
+│   ├── retrieval/               # Retrieval domain
+│   │   ├── query_engine/
+│   │   ├── qdrant/
+│   │   ├── dedup/
+│   │   ├── embeddings/
+│   │   ├── pipeline/
+│   │   ├── sparse/
+│   │   ├── telemetry/
+│   │   ├── rbac/
+│   │   └── reranking/
+│   │       ├── text/ visual/ siglip/ rrf/ infra/
+│   ├── telemetry/               # Global telemetry
+│   ├── ui/                      # UI utils/components
+│   └── utils/                   # Utilities by feature
+│       ├── core/ document/ monitoring/ multimodal/
+│       ├── security/ siglip_adapter/ storage/
+│       └── __init__.py (optional)
+├── integration/                  # Tier 2: Cross-component tests
+├── system/                       # Tier 3: Full system tests
+├── performance/                  # Benchmarks
+├── validation/                   # Production readiness tests
+└── conftest.py                  # Global test configuration
 ```
 
 ### Test Execution
