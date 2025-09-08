@@ -9,13 +9,7 @@ from src.retrieval.query_engine import ServerHybridRetriever, _HybridParams
 
 @dataclass
 class _Pt:
-    """Mock point object for Qdrant query results.
-
-    Attributes:
-        id: Unique identifier for the point.
-        score: Similarity score for the point.
-        payload: Metadata dictionary containing document information.
-    """
+    """Mock point for Qdrant query results."""
 
     id: int
     score: float
@@ -23,11 +17,7 @@ class _Pt:
 
 
 class _Resp:
-    """Mock response object for Qdrant query results.
-
-    Args:
-        points: List of point objects returned from the query.
-    """
+    """Mock response for Qdrant query results."""
 
     def __init__(self, points):
         self.points = points

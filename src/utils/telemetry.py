@@ -56,7 +56,10 @@ def log_jsonl(event: dict[str, Any]) -> None:
         rate = float(os.getenv("DOCMIND_TELEMETRY_SAMPLE", "1.0"))
     except (ValueError, TypeError):
         rate = 1.0
-    if rate < 1.0 and random.random() > max(0.0, min(1.0, rate)):  # noqa: S311
+    # Clamp sampling rate into [0,1] once, then sample.
+    # rate=1.0 logs all events; rate=0.0 logs none.
+    rate = max(0.0, min(1.0, rate))
+    if rate < 1.0 and random.random() >= rate:  # noqa: S311
         return
 
     rec = {

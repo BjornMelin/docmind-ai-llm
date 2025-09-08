@@ -4,8 +4,6 @@ We stub the LI cached builder to avoid heavy deps and assert cooperative
 cancellation stats are emitted even when using the fallback path.
 """
 
-import builtins
-
 from llama_index.core.schema import NodeWithScore, TextNode
 
 from src.retrieval import reranking as rr
@@ -30,15 +28,15 @@ class _FakeLI:
 
 
 def test_fallback_li_adapter_cancellation(monkeypatch):
-    # Force ImportError for FlagEmbedding only
-    real_import = builtins.__import__
+    # Force ImportError for FlagEmbedding only by shadowing __import__ in rr module
+    real_import = __import__
 
-    def fake_import(name, globs=None, locs=None, fromlist=(), level=0):
+    def fake_import(name, *a, **k):
         if name == "FlagEmbedding":
             raise ImportError("no flagembedding")
-        return real_import(name, globs, locs, fromlist, level)
+        return real_import(name, *a, **k)
 
-    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setattr(rr, "__import__", fake_import, raising=False)
 
     # Stub LI builder
     monkeypatch.setattr(rr, "_build_text_reranker_cached", lambda top_n: _FakeLI(top_n))

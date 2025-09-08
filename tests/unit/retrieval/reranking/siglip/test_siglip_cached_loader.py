@@ -30,15 +30,16 @@ def test_siglip_loader_cached(monkeypatch):
             calls["proc"] += 1
             return SimpleNamespace()
 
-    monkeypatch.setitem(rr.__dict__, "TEXT_TRUNCATION_LIMIT", 9999)
-    monkeypatch.setitem(rr.__dict__, "SIGLIP_TIMEOUT_MS", 10)
-    monkeypatch.setitem(rr.__dict__, "COLPALI_TIMEOUT_MS", 10)
-    monkeypatch.setitem(
-        rr.__dict__,
+    monkeypatch.setattr(rr, "TEXT_TRUNCATION_LIMIT", 9999, raising=False)
+    monkeypatch.setattr(rr, "SIGLIP_TIMEOUT_MS", 10, raising=False)
+    monkeypatch.setattr(rr, "COLPALI_TIMEOUT_MS", 10, raising=False)
+    monkeypatch.setattr(
+        rr,
         "settings",
         SimpleNamespace(
             embedding=SimpleNamespace(siglip_model_id="google/siglip-base-patch16-224")
         ),
+        raising=False,
     )
 
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")

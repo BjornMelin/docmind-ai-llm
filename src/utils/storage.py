@@ -64,7 +64,7 @@ def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> No
             cur = cfg["text-sparse"]
             # cur is SparseVectorParams; getattr safe for older clients
             cur_mod = getattr(cur, "modifier", None)
-            if cur_mod != qmodels.Modifier.IDF:
+            if cur_mod is None or cur_mod != qmodels.Modifier.IDF:
                 logger.info(
                     "Updating sparse modifier to IDF for collection '%s'",
                     collection_name,

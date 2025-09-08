@@ -25,17 +25,15 @@ def test_li_backend_batch_error_fall_open(monkeypatch):
 
     # Force LI path selection
     monkeypatch.setattr(rr, "_build_text_reranker_cached", lambda top_n: _BadLI())
-    # Also ensure FlagEmbedding import fails
-    import builtins as _bi
-
-    real_import = _bi.__import__
+    # Also ensure FlagEmbedding import fails by shadowing __import__ in rr module
+    real_import = __import__
 
     def fake_import(name, *a, **k):
         if name == "FlagEmbedding":
             raise ImportError("no flagembedding")
         return real_import(name, *a, **k)
 
-    monkeypatch.setattr(_bi, "__import__", fake_import)
+    monkeypatch.setattr(rr, "__import__", fake_import, raising=False)
 
     adapter = rr.build_text_reranker(top_n=5, batch_size=3, timeout_ms=9999)
     nodes = _mk_nodes(5)
