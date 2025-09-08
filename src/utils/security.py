@@ -68,7 +68,7 @@ def encrypt_file(path: str) -> str:
                 p.unlink()
         # Do not delete plaintext automatically to allow caller control
         return str(out_path)
-    except (OSError, ValueError, RuntimeError):
+    except Exception:
         return path
 
 
