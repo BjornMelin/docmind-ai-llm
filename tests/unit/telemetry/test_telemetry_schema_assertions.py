@@ -24,6 +24,9 @@ def test_canonical_keys_present(tmp_path):
             "rerank.topk": 5,
             "rerank.latency_ms": 5,
             "rerank.timeout": False,
+            "rerank.batch_size": 4,
+            "rerank.processed_count": 12,
+            "rerank.processed_batches": 3,
         }
     )
     data = [
@@ -47,6 +50,11 @@ def test_canonical_keys_present(tmp_path):
     assert e["rerank.stage"] in {"text", "visual", "colpali", "final"}
     assert isinstance(e["rerank.topk"], int)
     assert isinstance(e["rerank.timeout"], bool)
+    # Optional extended keys when present
+    if e["rerank.stage"] == "text":
+        assert isinstance(e.get("rerank.batch_size", 0), int)
+        assert isinstance(e.get("rerank.processed_count", 0), int)
+        assert isinstance(e.get("rerank.processed_batches", 0), int)
 
 
 def test_log_jsonl_writes_event(tmp_path):
