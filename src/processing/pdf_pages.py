@@ -66,7 +66,7 @@ def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
         if getattr(settings.processing, "encrypt_page_images", False):
             out = encrypt_file(out)
         return Path(out), _phash(img)
-    except Exception:
+    except (OSError, ValueError):
         # Fallback to JPEG
         jpg_path = target_stem.with_suffix(".jpg")
         img.save(jpg_path, format="JPEG", quality=75)
@@ -79,12 +79,15 @@ def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
 def _render_pdf_pages(
     pdf_path: Path, out_dir: Path, dpi: int = 200
 ) -> list[tuple[int, Path, fitz.Rect, str]]:
-    """Render each page to a stable PNG file, refreshing as needed.
+    """Render each page to a stable image file (WebP preferred; JPEG fallback).
 
-    - Stable filename: ``<stem>__page-<n>.png`` (1-based)
-    - Idempotent but refreshes images if the source PDF is newer than existing PNGs.
+    - Stable filename stem: ``<stem>__page-<n>`` (1-based), extension ``.webp``
+      when supported, otherwise ``.jpg``. When encryption is enabled, files are
+      written as ``*.enc``.
+    - Idempotent but refreshes images if the source PDF is newer than existing
+      artifacts.
 
-    Returns list of tuples ``(page_no, image_path, page_rect)``.
+    Returns list of tuples ``(page_no, image_path, page_rect, phash)``.
     """
     pdf_path = Path(pdf_path)
     out_dir = Path(out_dir)
@@ -130,7 +133,7 @@ def _render_pdf_pages(
                         to_open = tmp
                     with Image.open(to_open) as im:
                         ph = _phash(im)
-                except Exception:
+                except (OSError, ValueError, RuntimeError):
                     ph = ""
                 finally:
                     if tmp:
@@ -179,11 +182,12 @@ def pdf_pages_to_image_documents(
 
 
 def save_pdf_page_images(pdf_path: Path, out_dir: Path, dpi: int = 200) -> list[dict]:
-    """Render each PDF page to a PNG with a stable filename and return metadata.
+    """Render each PDF page to a stable image (WebP/JPEG) and return metadata.
 
-    - Stable filename format: ``<stem>__page-<n>.png`` (1-based page numbering)
-    - Returns one item per page with page number, image path, and page bbox
-    - Idempotent: existing PNG files are not re-written
+    - Stable filename format: ``<stem>__page-<n>.<webp|jpg>``; encrypted outputs
+      end with ``.enc`` when AES‑GCM is enabled.
+    - Returns one item per page with page number, image path, bbox, phash, and
+      optional encryption metadata (kid).
 
     Args:
         pdf_path: Path to the source PDF
@@ -191,7 +195,7 @@ def save_pdf_page_images(pdf_path: Path, out_dir: Path, dpi: int = 200) -> list[
         dpi: Render resolution (dots per inch)
 
     Returns:
-        A list of dicts: {"page_no": int, "image_path": str, "bbox": [x0,y0,x1,y1]}
+        A list of dicts with page metadata.
     """
     entries = _render_pdf_pages(Path(pdf_path), Path(out_dir), dpi)
 
