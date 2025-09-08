@@ -28,16 +28,20 @@ from pathlib import Path
 
 try:  # Python 3.11+
     import tomllib  # type: ignore[attr-defined]
-except Exception:  # pragma: no cover - fallback for Python 3.10
+
+    TOML_PARSER = tomllib
+except ModuleNotFoundError:  # pragma: no cover - fallback for older Python
     try:
-        import tomli as tomllib  # type: ignore[assignment]
-    except Exception:  # pragma: no cover - last resort
-        tomllib = None  # type: ignore[assignment]
+        import tomli
+
+        TOML_PARSER = tomli
+    except ModuleNotFoundError:  # pragma: no cover - last resort
+        TOML_PARSER = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
 
-def _read_thresholds_from_pyproject(project_root: Path) -> tuple[float, float]:  # ruff: noqa UP006 - Tuple for 3.10 compat
+def _read_thresholds_from_pyproject(project_root: Path) -> tuple[float, float]:
     """Read coverage thresholds from pyproject.
 
     Prefers [tool.pytest-quality] if available; falls back to
@@ -47,10 +51,10 @@ def _read_thresholds_from_pyproject(project_root: Path) -> tuple[float, float]: 
     line = 0.0
     branch = 0.0
     pyproject = project_root / "pyproject.toml"
-    if tomllib and pyproject.exists():
+    if TOML_PARSER and pyproject.exists():
         try:
             with pyproject.open("rb") as f:
-                data = tomllib.load(f)
+                data = TOML_PARSER.load(f)
             q = data.get("tool", {}).get("pytest-quality", {})
             line = float(q.get("min_line_coverage_percent", line))
             branch = float(q.get("min_branch_coverage_percent", branch))
@@ -60,7 +64,7 @@ def _read_thresholds_from_pyproject(project_root: Path) -> tuple[float, float]: 
                 rep = cov.get("report", {})
                 if isinstance(rep, dict):
                     line = float(rep.get("fail_under", line or 0.0))
-        except Exception as exc:  # pragma: no cover - non-fatal
+        except (OSError, ValueError) as exc:  # pragma: no cover - non-fatal
             logging.debug("Failed to read thresholds from pyproject: %s", exc)
     # Env overrides win
     line = float(os.getenv("COVERAGE_LINE_THRESHOLD", line or 0.0))
@@ -159,13 +163,14 @@ class QualityGateRunner:
         if additional_args:
             cmd.extend(additional_args)
 
-        logger.info(f"Running {gate_config['description']}...")
+        logger.info("Running %s...", gate_config["description"])
 
         try:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=gate_config["timeout"],
             )
 
@@ -179,11 +184,11 @@ class QualityGateRunner:
             }
 
             if result.returncode == 0:
-                logger.info(f"✅ {gate_config['description']} - PASSED")
+                logger.info("✅ %s - PASSED", gate_config["description"])
                 if self.verbose and result.stdout:
                     print(result.stdout)
             else:
-                logger.error(f"❌ {gate_config['description']} - FAILED")
+                logger.error("❌ %s - FAILED", gate_config["description"])
                 self.failures.append(f"{gate_name}: {gate_config['description']}")
                 if result.stdout:
                     print("STDOUT:", result.stdout)
@@ -195,12 +200,12 @@ class QualityGateRunner:
         except subprocess.TimeoutExpired:
             error_msg = f"{gate_name} exceeded timeout of {gate_config['timeout']}s"
             self.failures.append(error_msg)
-            logger.error(f"⏰ {error_msg}")
+            logger.error("⏰ %s", error_msg)
             return False
-        except Exception as e:
+        except (OSError, ValueError) as e:
             error_msg = f"Error running {gate_name}: {e}"
             self.failures.append(error_msg)
-            logger.error(f"💥 {error_msg}")
+            logger.error("💥 %s", error_msg)
             return False
 
     def run_quality_suite(
@@ -220,7 +225,7 @@ class QualityGateRunner:
             return False
 
         gates = QUALITY_SUITES[suite_name]
-        logger.info(f"Running {suite_name} quality suite ({len(gates)} gates)...")
+        logger.info("Running %s quality suite (%d gates)...", suite_name, len(gates))
 
         all_passed = True
         for gate_name in gates:
@@ -248,6 +253,7 @@ class QualityGateRunner:
                 ["pre-commit", "install"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=60,
             )
 
@@ -256,6 +262,7 @@ class QualityGateRunner:
                 ["pre-commit", "run", "--all-files"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=600,
             )
 
@@ -280,19 +287,19 @@ class QualityGateRunner:
         except subprocess.TimeoutExpired:
             error_msg = "Pre-commit hooks exceeded timeout of 600s"
             self.failures.append(error_msg)
-            logger.error(f"⏰ {error_msg}")
+            logger.error("⏰ %s", error_msg)
             return False
         except FileNotFoundError:
             error_msg = (
                 "pre-commit command not found - install with: pip install pre-commit"
             )
             self.failures.append(error_msg)
-            logger.error(f"💥 {error_msg}")
+            logger.error("💥 %s", error_msg)
             return False
-        except Exception as e:
+        except (OSError, ValueError) as e:
             error_msg = f"Error running pre-commit hooks: {e}"
             self.failures.append(error_msg)
-            logger.error(f"💥 {error_msg}")
+            logger.error("💥 %s", error_msg)
             return False
 
     def generate_report(self) -> str:

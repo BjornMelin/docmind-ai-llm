@@ -309,34 +309,7 @@ def app_test(tmp_path, monkeypatch):
         enable_performance_logging=False,
     )
 
-    # Provide a lightweight replacement module for src.utils.core to avoid heavy imports
-    from types import ModuleType
-
-    core_pkg = ModuleType("src.utils")
-    core_stub = ModuleType("src.utils.core")
-
-    def _validate_startup_configuration(_settings=None):
-        return True
-
-    def _detect_hardware():
-        return {"gpu_name": "stub", "vram_total_gb": 0, "cuda_available": False}
-
-    def _load_documents_unstructured(*_, **__):
-        return []
-
-    core_stub.validate_startup_configuration = _validate_startup_configuration
-    core_stub.detect_hardware = _detect_hardware
-    core_stub.load_documents_unstructured = _load_documents_unstructured
-    # Ensure 'src' package has 'utils' attribute for pkgutil.resolve_name
-    import src as _src
-
-    _src.utils = core_pkg
-    monkeypatch.setitem(sys.modules, "src.utils", core_pkg)
-    monkeypatch.setitem(sys.modules, "src.utils.core", core_stub)
-    # Also provide src.utils.document with the loader function
-    doc_mod = ModuleType("src.utils.document")
-    doc_mod.load_documents_unstructured = _load_documents_unstructured
-    monkeypatch.setitem(sys.modules, "src.utils.document", doc_mod)
+    # No replacement of src.utils; rely on real modules and patch per-test where needed
 
     # Stub out agents modules to avoid heavy imports & pydantic issues
     from types import ModuleType
@@ -363,6 +336,12 @@ def app_test(tmp_path, monkeypatch):
     agents_factory.ToolFactory = _TF
     monkeypatch.setitem(sys.modules, "src.agents.coordinator", agents_coord)
     monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
+
+    # Ensure submodule attribute is present for patch traversal
+    from contextlib import suppress
+
+    with suppress(Exception):
+        import src.utils.core  # noqa: F401
 
     with (
         # Boundary mocking: external service calls only

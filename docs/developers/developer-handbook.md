@@ -896,15 +896,17 @@ class TestPerformanceTargets:
         assert coordination_time < 200, f"Coordination took {coordination_time}ms"
     
     def test_embedding_generation_performance(self):
-        """Test embedding generation speed."""
-        embedder = BGEM3EmbeddingManager(settings.embedding)
-        
+        """Test embedding generation speed (LI MockEmbedding example)."""
+        from llama_index.core.embeddings import MockEmbedding
+
+        embedder = MockEmbedding(embed_dim=1024)
+
         test_text = "Sample document text for performance testing"
-        
+
         start_time = time.time()
-        embedding = embedder.get_dense_embedding(test_text)
+        embedding = embedder.get_text_embedding(test_text)
         generation_time = (time.time() - start_time) * 1000
-        
+
         assert generation_time < 50, f"Embedding took {generation_time}ms"
         assert len(embedding) == 1024, "Should generate 1024D dense embedding"
 ```
@@ -1291,74 +1293,76 @@ uv update
 
 ## Advanced Implementation Details
 
-### BGE-M3 Unified Embeddings Implementation
+### Hybrid Retrieval (Library-First, Server‑Side)
 
-DocMind AI uses BGE-M3 for unified dense + sparse embeddings:
+DocMind AI uses Qdrant's Query API server‑side hybrid search with named vectors:
 
 ```python
-class BGEM3EmbeddingManager:
-    """Advanced BGE-M3 embedding manager with optimization."""
+from qdrant_client import QdrantClient, models
+from llama_index.core import Settings
+from src.retrieval.sparse_query import encode_to_qdrant
+
+client = QdrantClient(url="http://localhost:6333")
+
+query = "unified embeddings"
+dense = Settings.embed_model.get_query_embedding(query)  # BGE-M3 via LI
+sparse = encode_to_qdrant(query)  # FastEmbed BM42→BM25
+
+prefetch = [
+    models.Prefetch(query=models.VectorInput(vector=dense), using="text-dense", limit=200),
+]
+if sparse is not None:
+    prefetch.append(models.Prefetch(query=sparse, using="text-sparse", limit=400))
+
+res = client.query_points(
+    collection_name="docmind_docs",
+    prefetch=prefetch,
+    query=models.FusionQuery(fusion=models.Fusion.RRF),
+    limit=10,
+)
+```
+
+```python
+def get_unified_embeddings(
+    self,
+    texts: List[str]
+) -> Dict[str, Any]:
+    """Generate both dense and sparse embeddings efficiently."""
     
-    def __init__(self, config: EmbeddingConfig):
-        self.config = config
-        self.model = None
-        self.tokenizer = None
-        self._batch_size = config.batch_size
+    # Batch processing for efficiency
+    results = {"dense": [], "sparse": []}
+    
+    for i in range(0, len(texts), self._batch_size):
+        batch = texts[i:i + self._batch_size]
         
-    async def initialize(self):
-        """Initialize model with FP16 optimization."""
-        from FlagEmbedding import BGEM3FlagModel
-        
-        self.model = BGEM3FlagModel(
-            model_name_or_path=self.config.model_name,
-            use_fp16=True,  # FP16 for RTX 4090 optimization
-            device="cuda" if torch.cuda.is_available() else "cpu"
+        # Generate all embedding types in one call
+        batch_embeddings = self.model.encode(
+            batch,
+            return_dense=True,
+            return_sparse=True,
+            # no colbert vectors in final architecture
         )
         
-    async def get_unified_embeddings(
-        self, 
-        texts: List[str]
-    ) -> Dict[str, Any]:
-        """Generate both dense and sparse embeddings efficiently."""
+        results["dense"].extend(batch_embeddings["dense_vecs"])
+        results["sparse"].extend(batch_embeddings["lexical_weights"])
         
-        # Batch processing for efficiency
-        results = {
-            "dense": [],
-            "sparse": [],
-            "colbert": []  # For potential ColBERT usage
-        }
-        
-        for i in range(0, len(texts), self._batch_size):
-            batch = texts[i:i + self._batch_size]
-            
-            # Generate all embedding types in one call
-            batch_embeddings = self.model.encode(
-                batch,
-                return_dense=True,
-                return_sparse=True,
-                return_colbert_vecs=False  # Disabled for memory efficiency
-            )
-            
-            results["dense"].extend(batch_embeddings["dense_vecs"])
-            results["sparse"].extend(batch_embeddings["lexical_weights"])
-            
-        return results
-    
-    def _optimize_sparse_embeddings(self, sparse_embeddings: List[Dict]) -> List[Dict]:
-        """Optimize sparse embeddings for storage efficiency."""
-        optimized = []
-        
-        for embedding in sparse_embeddings:
-            # Keep only top-k sparse dimensions
-            sorted_items = sorted(
-                embedding.items(), 
-                key=lambda x: x[1], 
-                reverse=True
-            )[:100]  # Top 100 dimensions
-            
-            optimized.append(dict(sorted_items))
-            
-        return optimized
+    return results
+
+def _optimize_sparse_embeddings(self, sparse_embeddings: List[Dict]) -> List[Dict]:
+    """Optimize sparse embeddings for storage efficiency."""
+    optimized = []
+
+    for embedding in sparse_embeddings:
+        # Keep only top-k sparse dimensions
+        sorted_items = sorted(
+            embedding.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:100]  # Top 100 dimensions
+
+        optimized.append(dict(sorted_items))
+
+    return optimized
 ```
 
 ### Hybrid Search with RRF Fusion

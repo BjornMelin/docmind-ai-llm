@@ -1,8 +1,8 @@
 ---
 ADR: 037
-Title: Multimodal Reranking with ColPali (visual) and BGE v2‑m3 (text)
-Status: Accepted
-Version: 1.0
+Title: Multimodal Reranking with SigLIP Visual Re‑score (default) and ColPali (optional) + BGE v2‑m3 (text)
+Status: Implemented
+Version: 1.2
 Date: 2025-09-03
 Supersedes: 006
 Superseded-by:
@@ -17,7 +17,7 @@ References:
 
 ## Description
 
-Adopt a dual-path reranking architecture: ColPali for image/PDF-page nodes and BGE v2‑m3 CrossEncoder for text nodes. Selection is automatic per-node based on `metadata.modality`, and results are fused in the adaptive retrieval pipeline.
+Adopt a dual‑path reranking architecture: default SigLIP text–image cosine re‑score for image/PDF‑page nodes (fast, zero‑service), and BGE v2‑m3 CrossEncoder for text nodes. ColPali remains an optional “pro” visual reranker on capable GPUs. Selection is automatic per‑node based on `metadata.modality`, and results are merged at rank‑level (RRF) in the adaptive retrieval pipeline.
 
 ## Context
 
@@ -25,7 +25,7 @@ Prior reranking (ADR‑006) used a single text CrossEncoder (`bge‑reranker‑v
 
 ## Decision Drivers
 
-- Multimodal relevance across text and visual nodes
+- Multimodal relevance across text and visual nodes with fast defaults
 - Library-first using LlamaIndex postprocessors
 - No new infra; keep local-first and GPU-friendly
 - Alignment with adaptive retrieval and UI controls
@@ -34,19 +34,19 @@ Prior reranking (ADR‑006) used a single text CrossEncoder (`bge‑reranker‑v
 
 - A: ColBERT only — Pros: fast text LI; Cons: text-only, no images
 - B: BGE v2‑m3 only — Pros: strong text X‑encoder; Cons: no visual semantics
-- C: ColPali + BGE v2‑m3 (Selected) — Pros: covers visual + text; Cons: two models
+- C: SigLIP re‑score (default) + optional ColPali + BGE v2‑m3 (Selected) — Pros: covers visual + text with fast default; Cons: optional 2nd visual model increases VRAM when enabled
 
 ### Decision Framework
 
-| Model / Option           | Coverage (35%) | Quality (30%) | Perf (20%) | Ops Simplicity (15%) | Total | Decision      |
-| ------------------------ | -------------- | ------------- | ---------- | -------------------- | ----- | ------------- |
-| ColPali + BGE v2‑m3      | 10             | 9             | 8          | 8                    | **9.0** | ✅ Selected |
-| ColBERT only            | 5              | 8             | 9          | 9                    | 7.3   | Rejected      |
-| BGE v2‑m3 only          | 6              | 9             | 9          | 9                    | 7.8   | Rejected      |
+| Model / Option                                          | Quality on Visual Docs (35%) | Latency/VRAM (30%) | Integration Simplicity (20%) | Adaptability (15%) | Total Score | Decision |
+| ------------------------------------------------------- | ---------------------------- | ------------------ | ---------------------------- | ------------------ | ----------- | -------- |
+| **SigLIP default + optional ColPali (Selected)**        | 8                            | 9                  | 9                            | 9                  | **8.6**     | ✅ Selected |
+| ColPali default + fallback to SigLIP                    | 9                            | 6                  | 7                            | 8                  | 7.7         | Rejected |
+| SigLIP only                                             | 7                            | 10                 | 10                           | 7                  | 8.1         | Rejected |
 
 ## Decision
 
-Use ColPali for nodes with `metadata.modality in {"image","pdf_page_image"}` and BGE v2‑m3 CrossEncoder otherwise. Keep top‑N and normalization controlled by settings/UI. Supersedes ADR‑006.
+Use SigLIP normalized cosine re‑score for nodes with `metadata.modality in {"image","pdf_page_image"}` by default, and BGE v2‑m3 CrossEncoder for text nodes. Optionally enable ColPali on GPUs for higher visual precision. Merge modality reranks by rank‑level RRF. Supersedes ADR‑006. Activation gating MUST be env-only and SHOULD consider visual_fraction, small K (≤16), VRAM, and latency budget; fail-open on timeouts. Telemetry SHALL log activation decisions and per-stage latencies.
 
 ## High-Level Architecture
 
@@ -74,7 +74,13 @@ Retriever → Mixed nodes (text + images) → Gate per-node modality → Rerank 
 ### Integration Requirements
 
 - **IR‑1:** Integrate as LlamaIndex `node_postprocessors`
-- **IR‑2:** Configurable via `RetrievalConfig` and Streamlit controls
+- **IR‑2:** Internal caps/timeouts only (no UI toggles); ops env overrides allowed
+
+## Local‑First & Privacy
+
+- All reranking (BGE text, SigLIP visual, optional ColPali) runs locally; models are loaded from local cache.
+- Qdrant server‑side hybrid fusion executes in the local Qdrant process on `127.0.0.1`; no external APIs are involved.
+- Set `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` and pre‑download weights to ensure zero network egress at runtime.
 
 ## Design
 
@@ -91,7 +97,7 @@ Retriever → Mixed nodes (text + images) → Gate per-node modality → Rerank 
 from typing import List
 from llama_index.core.schema import NodeWithScore
 from llama_index.core.postprocessor import SentenceTransformerRerank  # text
-from llama_index.postprocessor.colpali_rerank import ColPaliRerank   # visual
+from llama_index.postprocessor.colpali_rerank import ColPaliRerank   # visual (optional)
 from src.config import settings
 
 def _make_text_reranker(top_n: int):
@@ -115,7 +121,9 @@ def multimodal_rerank(nodes: List[NodeWithScore], query: str) -> List[NodeWithSc
     out: list[NodeWithScore] = []
     if text_nodes:
         out += _make_text_reranker(settings.retrieval.reranking_top_k).postprocess_nodes(text_nodes, query_str=query)
-    if img_nodes:
+    # Default SigLIP re‑score is implemented in‑project using transformers text/image features
+    # Optional ColPali path if installed and enabled by ops
+    if img_nodes and getattr(settings.retrieval, "enable_colpali", False):
         out += _make_visual_reranker(settings.retrieval.reranking_top_k).postprocess_nodes(img_nodes, query_str=query)
 
     # fuse and de-dup by node id, keep highest score
@@ -129,9 +137,47 @@ def multimodal_rerank(nodes: List[NodeWithScore], query: str) -> List[NodeWithSc
 
 ### Configuration
 
-- `RetrievalConfig.reranker_mode`: `auto|text|multimodal` (default: `auto`)
-- `RetrievalConfig.reranker_normalize_scores`: bool (default: True)
-- `RetrievalConfig.reranking_top_k`: int (default: 10)
+- Internal caps/timeouts and optional `RetrievalConfig.enable_colpali` (bool); reranking/hybrid always‑on.
+
+**In `.env` or `settings.py`:**
+
+```env
+# Activation toggle for optional visual reranker
+DOCMIND_RETRIEVAL__ENABLE_COLPALI=true
+
+# Top‑K caps used by rerankers
+DOCMIND_RETRIEVAL__RERANKING_TOP_K=16
+DOCMIND_RETRIEVAL__SIGLIP_PRUNE_TOPK=64      # cascade prune before ColPali
+DOCMIND_RETRIEVAL__COLPALI_FINAL_TOPK=16     # final K for ColPali
+
+# Timeouts (milliseconds)
+DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS=250
+DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS=150
+DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS=400
+
+# Heuristic thresholds for activation (see Activation Policy)
+DOCMIND_RETRIEVAL__VISUAL_FRACTION_THRESHOLD=0.35
+DOCMIND_RETRIEVAL__MIN_VRAM_GB=8
+DOCMIND_RETRIEVAL__ADDITIONAL_LATENCY_BUDGET_MS=30
+
+### Telemetry (Required)
+
+Emit per‑stage metrics in JSONL with canonical keys:
+
+- `rerank.stage` = `text` | `visual` | `colpali`
+- `rerank.topk` (int), `rerank.latency_ms` (int), `rerank.timeout` (bool)
+- `retrieval.fusion_mode` and `retrieval.latency_ms` for surrounding stages
+- `dedup.before`/`dedup.after`/`dedup.dropped` for pre‑merge de‑duplication
+```
+
+### Activation Policy (Heuristic)
+
+- Enable ColPali when ALL apply:
+  - `visual_fraction` of corpus ≥ `VISUAL_FRACTION_THRESHOLD` (or corpus flagged visual‑heavy), and
+  - `RERANKING_TOP_K` ≤ 16, and
+  - available GPU VRAM ≥ 8–12 GB, and
+  - additional latency budget ≥ ~30 ms per query.
+- Cascade on constrained GPUs: first apply SigLIP prune to `SIGLIP_PRUNE_TOPK` (e.g., 64), then apply ColPali on `COLPALI_FINAL_TOPK` (e.g., 16).
 
 ## Testing
 
@@ -169,4 +215,6 @@ async def test_auto_gating_text_and_image_nodes(sample_nodes):
 
 ## Changelog
 
+- **1.2 (2025-09-07):** Clarified required telemetry keys and fail‑open behavior; no UI toggles, env‑only overrides.
+- **1.1 (2025-09-07):** Set SigLIP as default visual re‑score; ColPali optional via policy; added decision framework and guardrails; aligned with SPEC‑005
 - **1.0 (2025-09-03):** Initial accepted version; supersedes ADR‑006

@@ -4,6 +4,7 @@ Configures LlamaIndex mocks, provides ChatMessage factory, LangGraph in-memory
 checkpointer, and a deterministic LangChain LLM for agent tests.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -39,6 +40,32 @@ def mock_llamaindex_settings():
     # Use typical embedding dimension; adjust per test as needed
     Settings.embed_model = MockEmbedding(embed_dim=1024)
     return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def rng_seed() -> None:
+    """Seed global RNGs for deterministic test runs.
+
+    Applies to Python's random, NumPy, and PyTorch (if available).
+    """
+    import random
+
+    random.seed(1337)
+    try:
+        import numpy as np  # type: ignore
+
+        np.random.seed(1337)
+    except ImportError:
+        # NumPy not installed; ignore
+        ...
+    try:
+        import torch  # type: ignore
+
+        if hasattr(torch, "manual_seed"):
+            torch.manual_seed(1337)
+    except ImportError:
+        # Torch not installed; ignore
+        ...
 
 
 @pytest.fixture
@@ -132,3 +159,12 @@ def lightweight_embedding_model():
             return [[0.0] * 8 for _ in texts]
 
     return _LightweightModel()
+
+
+"""Global test configuration for offline/CI-friendly runs."""
+
+
+def pytest_sessionstart(session):  # pragma: no cover - test harness hook
+    """Set HF offline flags to prevent network egress in CI."""
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")

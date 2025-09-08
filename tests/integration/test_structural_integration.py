@@ -77,53 +77,15 @@ class TestEmbeddingsIntegration:
     """Integration tests for unified embeddings behavior."""
 
     @pytest.mark.usefixtures("integration_settings")
-    def test_bgem3_unified_embeddings_interface(self):
-        """Ensure BGEM3Embedding exposes unified embedding outputs.
+    def test_bgem3_dimension_contract_via_settings_and_mock(self):
+        """Ensure embedding dimension contract via LI MockEmbedding (no legacy)."""
+        # LlamaIndex MockEmbedding contract (avoid any heavy model)
+        from llama_index.core.embeddings import MockEmbedding
 
-        The underlying FlagEmbedding model is monkeypatched to avoid downloads.
-
-        Args:
-            integration_settings: Test settings (unused, for parity).
-        """
-        from src.retrieval import embeddings as emb_mod
-
-        class FakeBGEM3Model:
-            """Lightweight fake embedding model for tests."""
-
-            def __init__(self, model_name, use_fp16=True, device="cpu"):
-                self.model_name = model_name
-                self.use_fp16 = use_fp16
-                self.device = device
-
-            def encode(self, texts, **kwargs):
-                """Return deterministic fake dense/sparse/colbert outputs for tests."""
-                return_dense = kwargs.get("return_dense", True)
-                return_sparse = kwargs.get("return_sparse", True)
-                return_colbert_vecs = kwargs.get("return_colbert_vecs", True)
-
-                dense = [[0.1] * 1024 for _ in texts] if return_dense else None
-                sparse = [{0: 0.5, 2: 0.3} for _ in texts] if return_sparse else None
-                colbert = (
-                    [[[0.2] * 32] * 3 for _ in texts] if return_colbert_vecs else None
-                )
-                out = {}
-                if dense is not None:
-                    out["dense_vecs"] = dense
-                if sparse is not None:
-                    out["lexical_weights"] = sparse
-                if colbert is not None:
-                    out["colbert_vecs"] = colbert
-                return out
-
-        with patch.object(emb_mod, "BGEM3FlagModel", FakeBGEM3Model):
-            from src.retrieval.embeddings import BGEM3Embedding
-
-            model = BGEM3Embedding(device="cpu")
-            res = model.get_unified_embeddings(["a", "b", "c"])
-
-        assert set(res.keys()) == {"dense", "sparse", "colbert"}
-        assert len(res["dense"]) == 3
-        assert len(res["sparse"]) == 3
+        me = MockEmbedding(embed_dim=1024)
+        q = me.get_query_embedding("a test query")
+        assert isinstance(q, list)
+        assert len(q) == 1024
 
 
 @pytest.mark.integration

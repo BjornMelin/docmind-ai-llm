@@ -16,7 +16,7 @@ def test_setup_llamaindex_success() -> None:
     with (
         patch("src.config.integrations.settings") as _mock_settings,
         patch("src.config.integrations.build_llm") as mock_build_llm,
-        patch("src.retrieval.embeddings.BGEM3Embedding") as mock_embed,
+        patch("src.config.integrations.HuggingFaceEmbedding") as mock_embed,
     ):
         mock_llm = object()
         mock_build_llm.return_value = mock_llm
@@ -45,7 +45,10 @@ def test_setup_llamaindex_failure_paths() -> None:
     with (
         patch("src.config.integrations.settings") as _mock_settings,
         patch("src.config.integrations.build_llm", side_effect=ImportError("boom")),
-        patch("src.retrieval.embeddings.BGEM3Embedding", side_effect=RuntimeError("x")),
+        patch(
+            "src.config.integrations.HuggingFaceEmbedding",
+            side_effect=RuntimeError("x"),
+        ),
     ):
         from llama_index.core import Settings
 
@@ -62,7 +65,7 @@ def test_setup_llamaindex_failure_paths() -> None:
         )
         embed_ok = (Settings.embed_model is None) or (
             Settings.embed_model.__class__.__name__
-            in {"MockEmbedding", "BGEM3Embedding"}
+            in {"MockEmbedding", "HuggingFaceEmbedding"}
         )
         assert llm_ok
         assert embed_ok

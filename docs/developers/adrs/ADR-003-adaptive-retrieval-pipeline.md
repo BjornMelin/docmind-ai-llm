@@ -1,7 +1,7 @@
 ---
 ADR: 003
 Title: Adaptive Retrieval Pipeline (RAPTOR‑Lite + Router)
-Status: Accepted
+Status: Implemented
 Version: 3.4
 Date: 2025-09-04
 Supersedes:
@@ -170,8 +170,7 @@ DOCMIND_RETRIEVAL__HIERARCHY=true              # RAPTOR‑Lite signals only
 DOCMIND_RETRIEVAL__GRAPH=false                 # PropertyGraphIndex routing (ADR‑019)
 
 # Reranking (ADR‑037)
-DOCMIND_RETRIEVAL__RERANKING_TOP_K=5
-DOCMIND_RETRIEVAL__RERANKER_MODE=auto          # auto|text|multimodal
+DOCMIND_RETRIEVAL__RERANKING_TOP_K=5           # always-on; single integration path (no mode toggle)
 ```
 
 ### Using MetadataFilters for Advanced Retrieval

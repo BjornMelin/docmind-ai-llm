@@ -22,8 +22,7 @@ HYBRID MODEL ORGANIZATION STRATEGY:
 
 2. **Domain-Specific Models** (colocated with usage):
    - Agent models: src/agents/models.py (AgentResponse, MultiAgentState)
-   - Retrieval models: src/retrieval/*/*.py (ClipConfig, PropertyGraphConfig,
-     DSPyConfig)
+   - Retrieval models: src/retrieval/*/*.py (PropertyGraphConfig)
    - Configuration models: src/config/*.py (VLLMConfig)
    - Feature-specific models: Kept with their respective modules
 

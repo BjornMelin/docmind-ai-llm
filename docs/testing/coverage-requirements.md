@@ -9,7 +9,7 @@
 uv run python -m pytest tests/unit/config/test_settings.py --cov=src --cov-report=term-missing
 
 # Coverage for specific module
-uv run python -m pytest tests/unit/test_agents/ --cov=src/agents --cov-report=term-missing
+uv run python -m pytest tests/unit/agents/ --cov=src/agents --cov-report=term-missing
 
 # HTML coverage report for detailed analysis
 uv run python -m pytest tests/unit/ --cov=src --cov-report=html
@@ -26,7 +26,7 @@ uv run python -m pytest tests/unit/ tests/integration/ \
     --cov-report=xml
 
 # Module-specific coverage requirements
-uv run python -m pytest tests/unit/test_agents/ \
+uv run python -m pytest tests/unit/agents/ \
     --cov=src/agents \
     --cov-fail-under=40
 ```
@@ -109,7 +109,7 @@ coverage_requirements:
     infrastructure:
       minimum: 25.0%
       modules:
-        - src/core/infrastructure/
+        - src/core/
 ```
 
 #### Coverage Trend Monitoring

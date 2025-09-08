@@ -68,6 +68,7 @@ class ProcessingConfig(BaseModel):
     chunk_overlap: int = Field(default=50, ge=0, le=200)
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     debug_chunk_flow: bool = Field(default=False)
+    encrypt_page_images: bool = Field(default=False)
 
 
 class ChatConfig(BaseModel):
@@ -102,13 +103,35 @@ class AnalysisConfig(BaseModel):
 
 
 class EmbeddingConfig(BaseModel):
-    """BGE-M3 embedding configuration (ADR-002)."""
+    """Embedding configuration (SPEC-003; ADR-002/004).
 
+    Text uses BGE-M3. Images use tiered backbones (OpenCLIP/SigLIP) with
+    hardware-aware defaults. All knobs remain optional and conservative.
+    """
+
+    # Text (BGE-M3)
     model_name: str = Field(default="BAAI/bge-m3")
     dimension: int = Field(default=1024, ge=256, le=4096)
     max_length: int = Field(default=8192, ge=512, le=16384)
-    batch_size_gpu: int = Field(default=12, ge=1, le=128)
-    batch_size_cpu: int = Field(default=4, ge=1, le=32)
+    enable_sparse: bool = Field(default=True)
+    normalize_text: bool = Field(default=True)
+    batch_size_text_gpu: int = Field(default=12, ge=1, le=128)
+    batch_size_text_cpu: int = Field(default=4, ge=1, le=64)
+
+    # Images
+    image_backbone: Literal[
+        "auto",
+        "openclip_vitl14",
+        "openclip_vith14",
+        "siglip_base",
+        "bge_visualized",
+    ] = Field(default="auto")
+    siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
+    normalize_image: bool = Field(default=True)
+    batch_size_image: int = Field(default=8, ge=1, le=64)
+
+    # Device selection (auto|cpu|cuda)
+    embed_device: Literal["auto", "cpu", "cuda"] = Field(default="auto")
 
 
 class RetrievalConfig(BaseModel):
@@ -119,16 +142,20 @@ class RetrievalConfig(BaseModel):
     use_reranking: bool = Field(default=True)
     reranking_top_k: int = Field(default=5, ge=1, le=20)
     reranker_normalize_scores: bool = Field(default=True)
-    # ADR-024/036/037: explicit reranker mode selection
-    # auto: modality-aware (visual+text); text: text-only; multimodal: force both
-    reranker_mode: Literal["auto", "text", "multimodal"] = Field(default="auto")
 
-    # RRF Fusion Settings
-    rrf_alpha: int = Field(default=60, ge=10, le=100)
-    rrf_k_constant: int = Field(default=60, ge=10, le=100)
-    rrf_fusion_weight_dense: float = Field(default=0.7, ge=0, le=1)
-    rrf_fusion_weight_sparse: float = Field(default=0.3, ge=0, le=1)
+    # Server-side fusion settings (ADR-024 v2.8)
+    fusion_mode: Literal["rrf", "dbsf"] = Field(
+        default="rrf", description="Server-side fusion mode (RRF default)"
+    )
+    fused_top_k: int = Field(
+        default=60, ge=10, le=1000, description="Prefetch/fused candidate cap"
+    )
+    rrf_k: int = Field(default=60, ge=1, le=256, description="RRF k-constant")
     use_sparse_embeddings: bool = Field(default=True)
+    # Deduplication key used before final fused cut
+    dedup_key: Literal["page_id", "doc_id"] = Field(default="page_id")
+    # Feature flag for future named-vectors multi-head support (no-op now)
+    named_vectors_multi_head_enabled: bool = Field(default=False)
     # Router and feature toggles (ADR-003)
     router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
     hybrid_enabled: bool = Field(default=True)
@@ -384,8 +411,8 @@ class DocMindSettings(BaseSettings):
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
 
-    # Compatibility alias fields mapped to nested configs. These allow
-    # ergonomic top-level overrides via environment variables.
+    # Alias fields mapped to nested configs for ergonomic top-level
+    # environment overrides.
     context_window_size: int | None = Field(default=None)
     chunk_size: int | None = Field(default=None)
     chunk_overlap: int | None = Field(default=None)
@@ -393,6 +420,8 @@ class DocMindSettings(BaseSettings):
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
+    # Pydantic v2 uses a context parameter; pylint's base stub differs.
+    # pylint: disable=arguments-differ
     def model_post_init(self, __context: Any) -> None:
         """Create necessary directories after initialization."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -400,7 +429,7 @@ class DocMindSettings(BaseSettings):
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
         if self.database.sqlite_db_path.parent != self.data_dir:
             self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Apply compatibility alias fields to nested configs if provided
+        # Apply alias fields to nested configs if provided
         # Keep nested vllm.* in sync with top-level overrides when present
         if self.model:
             with suppress(Exception):
@@ -482,16 +511,38 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_embedding_config(self) -> dict[str, Any]:
-        """Get embedding configuration for BGE-M3 setup."""
+        """Get embedding configuration for embedding factories.
+
+        Returns a flat mapping used by factory helpers while keeping the
+        class-based configuration as the single source of truth.
+        """
+        device = (
+            ("cuda" if self.enable_gpu_acceleration else "cpu")
+            if self.embedding.embed_device == "auto"
+            else self.embedding.embed_device
+        )
         return {
+            # Text
             "model_name": self.embedding.model_name,
-            "device": "cuda" if self.enable_gpu_acceleration else "cpu",
+            "device": device,
+            "dimension": self.embedding.dimension,
             "max_length": self.embedding.max_length,
-            "batch_size": (
-                self.embedding.batch_size_gpu
-                if self.enable_gpu_acceleration
-                else self.embedding.batch_size_cpu
+            "batch_size_text": (
+                self.embedding.batch_size_text_gpu
+                if device == "cuda"
+                else self.embedding.batch_size_text_cpu
             ),
+            # Expose raw batch sizes for downstream consumers
+            "batch_size_text_gpu": self.embedding.batch_size_text_gpu,
+            "batch_size_text_cpu": self.embedding.batch_size_text_cpu,
+            "normalize_text": self.embedding.normalize_text,
+            "enable_sparse": self.embedding.enable_sparse,
+            # Images
+            "image_backbone": self.embedding.image_backbone,
+            "batch_size_image": self.embedding.batch_size_image,
+            "normalize_image": self.embedding.normalize_image,
+            # Misc
+            "embed_device": self.embedding.embed_device,
             "trust_remote_code": True,
         }
 
@@ -537,7 +588,7 @@ class DocMindSettings(BaseSettings):
 
     def get_graphrag_config(self) -> dict[str, Any]:
         """Get GraphRAG configuration for ADR-019."""
-        # Prefer nested configuration; fallback to legacy top-level fields
+        # Prefer nested configuration; fallback to top-level fields
         if hasattr(self, "graphrag_cfg") and isinstance(
             self.graphrag_cfg, GraphRAGConfig
         ):

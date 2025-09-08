@@ -1,8 +1,8 @@
 ---
 ADR: 002
 Title: Unified Embedding Strategy with BGE‑M3
-Status: Accepted
-Version: 4.1
+Status: Implemented
+Version: 4.3
 Date: 2025-09-02
 Supersedes:
 Superseded-by:
@@ -10,6 +10,7 @@ Related: 003, 006, 009, 031, 034, 001
 Tags: embeddings, retrieval, hybrid, multimodal, local-first
 References:
 - [BAAI/bge-m3 — Hugging Face](https://huggingface.co/BAAI/bge-m3)
+- [SigLIP — Transformers Docs](https://huggingface.co/docs/transformers/en/model_doc/siglip)
 - [OpenAI CLIP ViT‑B/32 — Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)
 - [LlamaIndex — Embeddings](https://docs.llamaindex.ai/en/stable/module_guides/models/embeddings/)
 - [Qdrant — Documentation](https://qdrant.tech/documentation/)
@@ -17,7 +18,7 @@ References:
 
 ## Description
 
-Replace the three‑model setup (BGE‑large + SPLADE + CLIP) with a two‑model approach: **BGE‑M3** for unified dense+sparse text and **CLIP ViT‑B/32** for images. Reduces complexity and memory while improving retrieval quality.
+Replace the three‑model setup (BGE‑large + SPLADE + CLIP) with a two‑model approach: **BGE‑M3** for unified dense+sparse text and **SigLIP** for images. Reduces complexity and memory while improving retrieval quality.
 
 ## Context
 
@@ -46,14 +47,14 @@ Separate dense and sparse models increase coordination cost and memory. BGE‑M3
 
 ## Decision
 
-Adopt BGE‑M3 (1024‑dim) for unified dense+sparse text embeddings and CLIP ViT‑B/32 (512‑dim) for images. Vectors are stored in Qdrant (ADR‑031) and consumed by the adaptive retrieval pipeline (ADR‑003). This replaces the previous three‑model setup to reduce complexity and memory while maintaining quality.
+Adopt BGE‑M3 (1024‑dim) for unified dense+sparse text embeddings and SigLIP base (projection_dim ≈ 768) for images. Vectors are stored in Qdrant (ADR‑031) and consumed by the adaptive retrieval pipeline (ADR‑003). This replaces the previous three‑model setup to reduce complexity and memory while maintaining quality.
 
 ## High-Level Architecture
 
 ```mermaid
 graph LR
   C["Chunking (ADR-009)"] --> T["BGE-M3 Text Vectors"]
-  C --> I["CLIP Image Vectors"]
+  C --> I["SigLIP Image Vectors"]
   T --> Q["Qdrant"]
   I --> Q
   Q --> H["Hybrid Retrieval (ADR-003)"]
@@ -77,6 +78,19 @@ graph LR
 
 - IR‑1: Use LlamaIndex embedding interfaces
 - IR‑2: Persist in Qdrant with hybrid search enabled
+
+## Local‑First & Privacy
+
+- All embedding models (BGE‑M3 for text; SigLIP for images) run locally and are loaded from local caches; set `HF_HUB_OFFLINE=1` and pre‑download model weights to avoid network access.
+- No external APIs or cloud endpoints are required for embedding; the vector store (Qdrant) runs locally on `127.0.0.1`.
+
+Note on model roles: Embeddings = BGE‑M3 (text) and SigLIP (images). Reranking uses BGE v2‑m3 (text cross‑encoder) with SigLIP visual re‑score via normalized cosine; ColPali is optional on capable GPUs.
+
+### Image Backbone Tagging and Imaging Defaults
+
+- Tag page/image vectors with `image_backbone: "siglip"` in metadata for downstream scoring and auditability.
+- Persist canonical de‑dup/trace fields on all nodes: `page_id`, `source_file`, `page_number`.
+- Default PDF imaging targets ~200 DPI via PyMuPDF; store EXIF‑free WebP (JPEG fallback) and maintain perceptual hash (pHash) for stability checks.
 
 ### Performance Requirements
 
@@ -119,30 +133,27 @@ def setup_embeddings(use_gpu: bool):
     )
 ```
 
-Image embedding (CLIP) for multimodal search (optional):
+Image embedding (SigLIP) for multimodal search:
 
 In `src/utils/embeddings.py`:
 
 ```python
-from llama_index.embeddings.clip import ClipEmbedding
+from transformers import AutoModel, AutoProcessor
 
-def get_clip_embedding(device: str = "cpu"):
-    return ClipEmbedding(model_name="openai/clip-vit-base-patch32", device=device)
-```
+SIGLIP_CKPT = "google/siglip-base-patch16-224"
 
-In `src/config/integrations.py` (if image nodes are used):
-
-```python
-from src.utils.embeddings import get_clip_embedding
-
-def setup_image_embeddings(use_gpu: bool):
-    Settings.image_embed_model = get_clip_embedding("cuda" if use_gpu else "cpu")
+def get_siglip(device: str = "cpu"):
+    model = AutoModel.from_pretrained(SIGLIP_CKPT)
+    proc = AutoProcessor.from_pretrained(SIGLIP_CKPT)
+    model = model.to(device)
+    model.eval()
+    return model, proc
 ```
 
 Qdrant collection dimensionality (ensure index schema aligns):
 
 - Text vectors (BGE‑M3): 1024 dimensions
-- Image vectors (CLIP): 512 dimensions
+- Image vectors (SigLIP base): projection_dim (typically 768)
 - Use separate collections or a hybrid schema that matches each embedding’s dimension.
 
 ### Configuration
@@ -176,7 +187,7 @@ def test_bgem3_shape(embed_model):
 ### Dependencies
 
 - Python: `FlagEmbedding>=1.2.0`, `torch>=2.0.0`, `llama-index>=0.10`
-- Models: `BAAI/bge-m3`, `openai/clip-vit-base-patch32`
+- Models: `BAAI/bge-m3`, `google/siglip-base-patch16-224` (default); Optional: OpenCLIP ViT‑L/14 or ViT‑H/14
 
 ### Ongoing Maintenance & Considerations
 
@@ -186,6 +197,8 @@ def test_bgem3_shape(embed_model):
 
 ## Changelog
 
+- 4.3 (2025-09-07): Added image_backbone="siglip" tagging, canonical page metadata, and DPI≈200 imaging defaults aligned with SPEC‑003 and plan 004.
+- 4.2 (2025-09-07): Switch image backbone default from CLIP to SigLIP; update diagrams and implementation details
 - 4.1 (2025-09-02): Replaced ADR-007 with ADR-031; added ADR-034 reference; updated formatting
 - 4.1 (2025-08-26): IMPLEMENTATION COMPLETE — BGE-M3 deployed; integrated with ADR-009
 - 4.0 (2025-08-18): Updated perf targets for RTX 4090 Laptop

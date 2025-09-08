@@ -39,13 +39,13 @@
 
 - **LlamaIndex RAG Pipeline:** QueryPipeline with async/parallel processing, ingestion pipelines, and caching.
 
-- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-M3 unified dense/sparse embeddings for improved recall.
+- **Hybrid Retrieval:** Qdrant Query API server‑side fusion (RRF default, DBSF optional) over named vectors `text-dense` (BGE‑M3; COSINE) and `text-sparse` (FastEmbed BM42/BM25 with IDF). Dense via LlamaIndex; sparse via FastEmbed.
 
 - **Knowledge Graph Integration:** spaCy entity extraction with relationship mapping for complex queries.
 
 - **Multimodal Processing:** Unstructured hi-res parsing for PDFs with text, tables, and images using Jina v4 embeddings.
 
-- **ColBERT Reranking:** Late-interaction reranking for improved context quality.
+- **Always-on Reranking:** Text via BGE Cross-Encoder and visual via SigLIP; optional ColPali on capable GPUs. Deterministic, batch‑wise cancellation; fail‑open; SigLIP loader cached.
 
 - **Offline-First Design:** 100% local processing with no external API dependencies.
 
@@ -60,6 +60,7 @@
 - **Robust Error Handling:** Reliable retry strategies with exponential backoff.
 
 - **Structured Logging:** Contextual logging with automatic rotation and JSON output.
+- **Encrypted Page Images (AES-GCM):** Optional at-rest encryption for rendered PDF page images using AES-GCM with KID as AAD; `.enc` files are decrypted just-in-time for visual scoring and immediately cleaned up.
 
 - **Simple Configuration:** Environment variables and Streamlit native config for easy setup.
 
@@ -562,7 +563,7 @@ graph TD
 
 - **Async Processing:** QueryPipeline with parallel execution and caching
 
-- **Reranking:** ColBERT late-interaction model improves top-5 results from top-20 prefetch
+- **Reranking:** Always‑on BGE Cross‑Encoder (text) + SigLIP (visual) RRF merge; optional ColPali on capable GPUs.
 
 - **Memory Management:** Quantization and model size auto-selection based on available VRAM
 
@@ -670,7 +671,7 @@ maxUploadSize = 200
 
 - **Dense + Sparse RRF**: Improved recall vs single-vector
 
-- **ColBERT Reranking**: Enhanced context quality
+- **Multimodal Reranking**: Enhanced context quality via SigLIP/ColPali
 
 - **Top-K Retrieval**: <2 seconds for 10K document corpus
 
@@ -709,6 +710,21 @@ maxUploadSize = 200
 
 > *Benchmarks performed on RTX 4090 Laptop GPU, 16GB RAM, NVMe SSD*
 
+### Retrieval & Reranking Defaults
+
+- Hybrid retrieval uses Qdrant named vectors `text-dense` (1024D COSINE; BGE‑M3) and `text-sparse` (FastEmbed BM42/BM25 + IDF) with server-side fusion via the Query API (Prefetch + FusionQuery; dense uses VectorInput).
+- Default fusion = RRF; DBSF is available experimentally with `DOCMIND_RETRIEVAL__FUSION_MODE=dbsf`.
+- Prefetch: dense≈200, sparse≈400; fused_top_k=60; page_id de-dup.
+- Reranking is always-on: BGE v2‑m3 (text) + SigLIP (visual) with optional ColPali; SigLIP loader is cached; batch‑wise cancellation only.
+- No UI toggles; ops overrides via env only.
+
+#### Operational Flags (local-first)
+
+- `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` to disable network egress (after predownload).
+- `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to control Qdrant fusion.
+- `DOCMIND_DISABLE_RERANKING=true` to bypass reranking (ops only; not recommended).
+- Qdrant runs bound to `127.0.0.1` by default; remote endpoints are disallowed unless explicitly configured.
+
 ## 🔧 Offline Operation
 
 DocMind AI is designed for complete offline operation:
@@ -735,6 +751,21 @@ DocMind AI is designed for complete offline operation:
    nvidia-smi  # Check GPU availability
    uv run python scripts/test_gpu.py --quick  # Validate CUDA setup
    ```
+
+### Prefetch Model Weights
+
+Run once (online) to predownload required models for offline use:
+
+```bash
+uv run python scripts/predownload_models.py --cache-dir ./models_cache
+```
+
+Set env for offline operation:
+
+```bash
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+```
 
 ### Model Requirements
 

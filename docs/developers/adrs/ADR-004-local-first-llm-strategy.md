@@ -1,7 +1,7 @@
 ---
 ADR: 004
 Title: Local-First LLM with Enforced 128K Context (vLLM + Qwen3‑4B FP8)
-Status: Accepted
+Status: Implemented
 Version: 12.1
 Date: 2025-09-04
 Supersedes:

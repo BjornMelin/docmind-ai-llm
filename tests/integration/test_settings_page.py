@@ -151,7 +151,10 @@ def test_settings_toggle_providers_and_apply(
             self.kind = "embed_dummy"
 
     monkeypatch.setattr(
-        "src.config.integrations.BGEM3Embedding", _DummyEmbed, raising=False
+        # Patch hybrid retriever class to avoid heavy deps during Apply runtime
+        "src.retrieval.query_engine.ServerHybridRetriever",
+        _DummyEmbed,
+        raising=False,
     )
 
     app = settings_app_test.run()

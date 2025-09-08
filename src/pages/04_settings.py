@@ -6,6 +6,8 @@ toggle. Supports applying runtime immediately and saving to .env.
 
 from __future__ import annotations
 
+# Streamlit pages follow a numeric filename pattern; keep filename as-is.
+# pylint: disable=invalid-name
 import os
 from contextlib import suppress
 from pathlib import Path
@@ -13,7 +15,7 @@ from pathlib import Path
 import streamlit as st
 
 from src.config.integrations import initialize_integrations
-from src.config.settings import DocMindSettings, settings
+from src.config.settings import settings
 from src.ui.components.provider_badge import provider_badge
 
 
@@ -25,7 +27,7 @@ def _persist_env(vars_to_set: dict[str, str]) -> None:
     env_path = Path(".env")
     existing: dict[str, str] = {}
     if env_path.exists():
-        for line in env_path.read_text().splitlines():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
             if not line.strip() or line.strip().startswith("#"):
                 continue
             if "=" in line:
@@ -33,10 +35,10 @@ def _persist_env(vars_to_set: dict[str, str]) -> None:
                 existing[k.strip()] = v.strip()
     existing |= vars_to_set
     content = "\n".join(f"{k}={v}" for k, v in existing.items()) + "\n"
-    env_path.write_text(content)
+    env_path.write_text(content, encoding="utf-8")
 
 
-def _apply_runtime(cfg: DocMindSettings) -> None:
+def _apply_runtime() -> None:
     """Apply current runtime by rebinding Settings.llm and context caps."""
     initialize_integrations(force_llm=True, force_embed=False)
     st.success("Runtime applied. Settings.llm rebound.")
@@ -146,7 +148,7 @@ def main() -> None:
                     settings.vllm.llamacpp_model_path = Path(gguf_path)
             settings.allow_remote_endpoints = bool(allow_remote)  # type: ignore[assignment]
 
-            _apply_runtime(settings)
+            _apply_runtime()
 
     with col_b:
         if st.button("Save", use_container_width=True):

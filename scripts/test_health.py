@@ -114,13 +114,13 @@ class TestHealthMonitor:
         Returns:
             Dictionary with flakiness analysis results
         """
-        logger.info(f"Running flakiness analysis with {runs} iterations...")
+        logger.info("Running flakiness analysis with %d iterations...", runs)
 
         test_results: dict[str, list[bool]] = defaultdict(list)
         execution_times: dict[str, list[float]] = defaultdict(list)
 
         for run in range(runs):
-            logger.info(f"Flakiness run {run + 1}/{runs}")
+            logger.info("Flakiness run %d/%d", run + 1, runs)
 
             try:
                 cmd = [
@@ -141,6 +141,7 @@ class TestHealthMonitor:
                     cmd,
                     capture_output=True,
                     text=True,
+                    check=False,
                     timeout=self.config["single_test_timeout"],
                 )
 
@@ -149,7 +150,7 @@ class TestHealthMonitor:
 
             except subprocess.TimeoutExpired:
                 self.warnings.append(f"Test run {run + 1} exceeded timeout")
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 self.warnings.append(f"Error in test run {run + 1}: {e}")
 
         return self._analyze_flakiness(test_results, execution_times, runs)
@@ -357,7 +358,7 @@ class TestHealthMonitor:
                             }
                         )
 
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             self.warnings.append(f"Error analyzing {file_path}: {e}")
 
         return violations
@@ -371,7 +372,7 @@ class TestHealthMonitor:
         Returns:
             Test stability analysis
         """
-        logger.info(f"Checking test stability for last {days_back} days...")
+        logger.info("Checking test stability for last %d days...", days_back)
 
         # This would typically load from historical test data
         # For now, we'll run a stability check based on current execution
@@ -392,6 +393,7 @@ class TestHealthMonitor:
                 cmd,
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=self.config["single_test_timeout"],
             )
 
@@ -434,7 +436,7 @@ class TestHealthMonitor:
         except subprocess.TimeoutExpired:
             self.failures.append("Test stability check timed out")
             return {"status": "timeout", "timestamp": datetime.now().isoformat()}
-        except Exception as e:
+        except (OSError, ValueError) as e:
             self.failures.append(f"Error checking test stability: {e}")
             return {
                 "status": "error",
@@ -664,12 +666,11 @@ class TestHealthMonitor:
         filepath = self.config["reports_storage"] / filename
 
         try:
-            with open(filepath, "w") as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
-            logger.info(f"Health data saved to {filepath}")
-
-        except Exception as e:
+            logger.info("Health data saved to %s", filepath)
+        except (OSError, TypeError) as e:
             self.warnings.append(f"Failed to save health data: {e}")
 
 
@@ -803,7 +804,7 @@ def main() -> int:
                 print(f"  • {failure}")
             exit_code = 1
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during health monitoring")
         print(f"❌ Unexpected error: {e}")
         exit_code = 2

@@ -185,37 +185,24 @@ class ToolFactory:
 
     @classmethod
     def create_hybrid_search_tool(cls, retriever: Any) -> QueryEngineTool:
-        """Create hybrid search tool with RRF fusion.
+        """Create server-side hybrid search tool (Qdrant RRF/DBSF).
 
-        Creates a hybrid search tool using QueryFusionRetriever with
-        RRF (Reciprocal Rank Fusion). Aligns with ADR-002 (BGE-M3 hybrid)
-        where dense and sparse signals are combined; fusion weight typically
-        follows RRF alpha≈0.7 when configured upstream.
+        Wraps a retriever that executes Qdrant Query API fusion (RRF default;
+        DBSF optional). Aligns with SPEC-004 and ADR-024 defaults.
 
         Args:
-            retriever: QueryFusionRetriever with RRF fusion capabilities.
+            retriever: Server-side hybrid retriever (e.g., ServerHybridRetriever).
 
         Returns:
-            QueryEngineTool: Configured hybrid fusion search tool.
-
-        Example:
-            >>> tool = ToolFactory.create_hybrid_search_tool(fusion_retriever)
-            >>> response = tool.call("Complex query requiring hybrid search")
+            QueryEngineTool: Configured hybrid search tool.
         """
-        query_engine = RetrieverQueryEngine(
-            retriever=retriever,
-        )
-
+        query_engine = RetrieverQueryEngine(retriever=retriever)
         return cls.create_query_tool(
             query_engine,
-            "hybrid_fusion_search",
+            "hybrid_search",
             (
-                "Advanced hybrid search with QueryFusionRetriever using RRF "
-                "(Reciprocal Rank Fusion) over BGE-M3 signals (dense+sparse). "
-                "Best for: comprehensive retrieval that benefits from both "
-                "semantic understanding and exact term matching. Uses the "
-                "BGE-M3 model per ADR-002; typical setup applies RRF fusion "
-                "(alpha≈0.7) as configured in retrieval settings."
+                "Hybrid via Qdrant Query API (server-side). RRF default; DBSF "
+                "optional. Prefetch dense+sparse; fused_top_k caps; de-dup by page_id."
             ),
         )
 
@@ -246,7 +233,7 @@ class ToolFactory:
             "hybrid_vector_search",
             (
                 "Hybrid search using BGE-M3 unified dense+sparse embeddings "
-                "(single-index hybrid, e.g., Qdrant). "
+                "(single-index hybrid in Qdrant). "
                 "Best for: semantic search and retrieval where both meaning "
                 "and exact term presence matter. Implements ADR-002 by "
                 "leveraging BGE-M3 for dual dense+sparse signals."
@@ -269,14 +256,14 @@ class ToolFactory:
         Args:
             vector_index: VectorStoreIndex for vector search (required).
             kg_index: KnowledgeGraphIndex for entity queries (optional).
-            retriever: QueryFusionRetriever for hybrid fusion (optional).
+            retriever: Hybrid retriever for server-side fusion (optional).
 
         Returns:
             List[QueryEngineTool]: All available tools in priority order.
 
         Note:
             Tools are created in order of sophistication:
-            1. Hybrid fusion search (if retriever available)
+            1. Hybrid search (if retriever available)
             2. Hybrid vector search (fallback)
             3. Knowledge graph search (if KG index available)
             4. Basic vector search (always available)

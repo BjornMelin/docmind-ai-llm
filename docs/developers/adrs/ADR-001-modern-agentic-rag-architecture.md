@@ -1,7 +1,7 @@
 ---
 ADR: 001
 Title: Modern Agentic RAG Architecture
-Status: Accepted
+Status: Implemented
 Version: 7.0
 Date: 2025-08-19
 Supersedes:

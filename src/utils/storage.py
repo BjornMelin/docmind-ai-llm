@@ -31,6 +31,7 @@ import torch
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
+from qdrant_client import models as qmodels
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 from qdrant_client.http.models import (
     Distance,
@@ -40,6 +41,50 @@ from qdrant_client.http.models import (
 )
 
 from src.config import settings
+
+# Preferred sparse models (logging/telemetry; selection handled by fastembed if present)
+PREFERRED_SPARSE_MODEL = "Qdrant/bm42-all-minilm-l6-v2-attentions"
+FALLBACK_SPARSE_MODEL = "Qdrant/bm25"
+
+
+def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> None:
+    """Ensure the sparse vector config uses IDF modifier for BM42.
+
+    If the collection exists and the sparse vector modifier is not IDF,
+    update the collection configuration in-place to set it to IDF.
+
+    Args:
+        client: QdrantClient instance
+        collection_name: Name of the collection to check/update
+    """
+    try:
+        info = client.get_collection(collection_name)
+        cfg = getattr(info.config.params, "sparse_vectors", None)
+        if isinstance(cfg, dict) and "text-sparse" in cfg:
+            cur = cfg["text-sparse"]
+            # cur is SparseVectorParams; getattr safe for older clients
+            cur_mod = getattr(cur, "modifier", None)
+            if cur_mod is None or cur_mod != qmodels.Modifier.IDF:
+                logger.info(
+                    "Updating sparse modifier to IDF for collection '%s'",
+                    collection_name,
+                )
+                client.update_collection(
+                    collection_name=collection_name,
+                    sparse_vectors_config={
+                        "text-sparse": SparseVectorParams(
+                            index=SparseIndexParams(on_disk=False),
+                            modifier=qmodels.Modifier.IDF,
+                        )
+                    },
+                )
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+    ) as e:  # pragma: no cover - defensive path
+        logger.warning("ensure_sparse_idf_modifier skipped: %s", e)
+
 
 # =============================================================================
 # Database Operations (formerly from database.py)
@@ -152,21 +197,41 @@ async def setup_hybrid_collection_async(
             },
             sparse_vectors_config={
                 "text-sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False)
+                    index=SparseIndexParams(on_disk=False),
+                    modifier=qmodels.Modifier.IDF,
                 )
             },
         )
         logger.success("Created hybrid collection: %s", collection_name)
+        logger.info(
+            "Sparse model preference: %s (fallback %s)",
+            PREFERRED_SPARSE_MODEL,
+            FALLBACK_SPARSE_MODEL,
+        )
+        if settings.retrieval.named_vectors_multi_head_enabled:
+            logger.info("Named-vectors multi-head feature flag is enabled (no-op)")
 
     # Create sync client for QdrantVectorStore compatibility
     sync_client = QdrantClient(url=settings.database.qdrant_url)
 
-    return QdrantVectorStore(
-        client=sync_client,
-        collection_name=collection_name,
-        enable_hybrid=True,
-        batch_size=settings.monitoring.default_batch_size,
-    )
+    try:
+        return QdrantVectorStore(
+            client=sync_client,
+            collection_name=collection_name,
+            enable_hybrid=True,
+            batch_size=settings.monitoring.default_batch_size,
+        )
+    except ImportError as e:  # fastembed optional for hybrid sparse
+        logger.warning(
+            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
+            e,
+        )
+        return QdrantVectorStore(
+            client=sync_client,
+            collection_name=collection_name,
+            enable_hybrid=False,
+            batch_size=settings.monitoring.default_batch_size,
+        )
 
 
 def setup_hybrid_collection(
@@ -204,18 +269,38 @@ def setup_hybrid_collection(
             },
             sparse_vectors_config={
                 "text-sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False)
+                    index=SparseIndexParams(on_disk=False),
+                    modifier=qmodels.Modifier.IDF,
                 )
             },
         )
         logger.success("Created hybrid collection: %s", collection_name)
+        logger.info(
+            "Sparse model preference: %s (fallback %s)",
+            PREFERRED_SPARSE_MODEL,
+            FALLBACK_SPARSE_MODEL,
+        )
+        if settings.retrieval.named_vectors_multi_head_enabled:
+            logger.info("Named-vectors multi-head feature flag is enabled (no-op)")
 
-    return QdrantVectorStore(
-        client=client,
-        collection_name=collection_name,
-        enable_hybrid=True,
-        batch_size=settings.monitoring.default_batch_size,
-    )
+    try:
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=True,
+            batch_size=settings.monitoring.default_batch_size,
+        )
+    except ImportError as e:  # fastembed optional for hybrid sparse
+        logger.warning(
+            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
+            e,
+        )
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=False,
+            batch_size=settings.monitoring.default_batch_size,
+        )
 
 
 def create_vector_store(
@@ -234,13 +319,60 @@ def create_vector_store(
         Configured QdrantVectorStore
     """
     client = QdrantClient(url=settings.database.qdrant_url)
+    # Ensure named vectors schema exists when hybrid is enabled (idempotent)
+    if enable_hybrid:
+        try:
+            setup_hybrid_collection(
+                client,
+                collection_name,
+                dense_embedding_size=_dense_embedding_size,
+                recreate=False,
+            )
+        except Exception:  # pragma: no cover - defensive ensure
+            logger.warning(
+                "setup_hybrid_collection failed; proceeding with store creation"
+            )
 
-    return QdrantVectorStore(
-        client=client,
-        collection_name=collection_name,
-        enable_hybrid=enable_hybrid,
-        batch_size=settings.monitoring.default_batch_size,
-    )
+    try:
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=enable_hybrid,
+            batch_size=settings.monitoring.default_batch_size,
+        )
+    except ImportError as e:  # fastembed optional for hybrid sparse
+        logger.warning(
+            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
+            e,
+        )
+        return QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            enable_hybrid=False,
+            batch_size=settings.monitoring.default_batch_size,
+        )
+
+
+def persist_image_metadata(
+    client: QdrantClient,
+    collection_name: str,
+    point_id: str | int,
+    metadata: dict[str, Any],
+) -> bool:
+    """Persist additional image metadata (e.g., phash) to Qdrant payload.
+
+    Returns True on success, False on error.
+    """
+    try:
+        client.update_payload(
+            collection_name=collection_name,
+            points=[point_id],
+            payload=metadata,
+        )
+        return True
+    except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
+        logger.warning("update_payload failed for %s: %s", point_id, exc)
+        return False
 
 
 def get_collection_info(collection_name: str) -> dict[str, Any]:

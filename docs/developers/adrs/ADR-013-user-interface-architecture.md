@@ -202,7 +202,7 @@ async def test_streaming_generator(mock_llm):
 
 ## Changelog
 
-- **3.1 (2025-09-03)**: DOCS - Added related-decision reference to ADR-036 (Reranker UI controls)
+- **3.1 (2025-09-03)**: DOCS - Added related-decision reference to ADR-036 (now superseded)
 - **3.0 (2025-08-17)**: Accepted version reflecting premium Streamlit multipage UI and modern patterns
 - **2.0 (2025-08-17)**: MAJOR — Complete redesign with modern multipage architecture, component integration, advanced state management, and production-ready performance optimization
 - **1.0 (2025-01-16)**: Initial user interface architecture with basic Streamlit implementation

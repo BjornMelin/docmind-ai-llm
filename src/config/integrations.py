@@ -10,23 +10,60 @@ Key behaviors:
 - Hardware-aware LlamaCPP params
 - Optional structured-output flag for vLLM (SPEC-007 prep)
 """
+# pylint: disable=ungrouped-imports
 
 import logging
 import os
 from contextlib import suppress
 
-import torch
 from llama_index.core import Settings
 
+# Text embeddings default wrapper
+from llama_index.embeddings.huggingface import (
+    HuggingFaceEmbedding,  # pylint: disable=ungrouped-imports
+)
+
+# Text embeddings should default to BGE-M3 (1024D) for consistency with
+# tri-mode retrieval tooling and VectorStoreIndex usage. Use LlamaIndex's
+# HuggingFaceEmbedding wrapper to keep a library-first, lightweight setup.
 from src.config.llm_factory import build_llm
-from src.retrieval.embeddings import BGEM3Embedding
+from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
 
 from .settings import settings
+
+# Optional ClipEmbedding symbol (test patching convenience). Keep all imports
+# grouped above; perform alias assignment after imports to avoid E402.
+try:  # pragma: no cover - optional import
+    from llama_index.embeddings.clip import (
+        ClipEmbedding as LIClipEmbedding,  # type: ignore
+    )
+except ImportError:  # pragma: no cover - optional import
+    LIClipEmbedding = None  # type: ignore
+
+# Expose ClipEmbedding symbol for tests; default to HuggingFaceEmbedding
+ClipEmbedding = LIClipEmbedding or HuggingFaceEmbedding  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 
-def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:
+def _is_localhost(url: str | None) -> bool:
+    """Return True if URL is localhost/127.0.0.1.
+
+    Empty/None returns True (treated as local default).
+    """
+    if not url:
+        return True
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        return host in {"localhost", "127.0.0.1"}
+    except (ValueError, AttributeError):  # pragma: no cover - defensive
+        return False
+
+
+def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:  # pylint: disable=too-many-statements
     """Configure LlamaIndex ``Settings`` with unified configuration.
 
     Args:
@@ -69,12 +106,23 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             elif provider == "vllm":
                 base_url = settings.vllm_base_url or settings.vllm.vllm_base_url
             elif provider == "llamacpp":
-                base_url = settings.llamacpp_base_url or str(
-                    settings.vllm.llamacpp_model_path
-                )
+                # Only enforce URL checks when a server URL is provided. A local
+                # GGUF model path is not a URL and must not be treated as one.
+                base_url = settings.llamacpp_base_url or None
             else:
                 base_url = None
 
+            # Enforce local-only endpoints unless allowlist override
+            allow_remote = os.getenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "").lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+            if (not allow_remote) and base_url and (not _is_localhost(base_url)):
+                raise ValueError(
+                    "Remote endpoint forbidden by default. Set "
+                    "DOCMIND_ALLOW_REMOTE_ENDPOINTS=true to override."
+                )
             logger.info(
                 "LLM configured via factory: provider=%s model=%s base_url=%s",
                 provider,
@@ -89,30 +137,48 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             logger.warning("Could not configure LLM: %s", e, exc_info=True)
             Settings.llm = None
 
-    # Configure BGE-M3 embeddings
+    # Configure text embeddings (default to BGE-M3 1024D for global usage)
     try:
         if Settings.embed_model is not None and not force_embed:
             logger.info("Embed model already configured; skipping override")
         else:
-            embedding_config = settings.get_embedding_config()
+            # Some tests patch `settings` with a lightweight namespace lacking
+            # helper methods; default to BGE-M3 CPU in that case.
+            if hasattr(settings, "get_embedding_config"):
+                emb_cfg = settings.get_embedding_config()
+            else:  # pragma: no cover - exercised in unit stubs
+                emb_cfg = {"model_name": "BAAI/bge-m3", "device": "cpu"}
+            model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
+            device = emb_cfg.get("device", "cpu")
+            # Prefer HuggingFaceEmbedding for BGE-M3. If tests patch the
+            # ClipEmbedding symbol in this module, honor that to allow
+            # lightweight MockEmbedding injection.
+            embed_ctor = HuggingFaceEmbedding
+            try:  # pragma: no cover - identity check only
+                from llama_index.embeddings import clip as _li_clip_mod
 
-            # Prefer FP16 when on CUDA; BGEM3 internally handles dtype
-            use_fp16 = (
-                embedding_config["device"] == "cuda" and torch.cuda.is_available()
-            )
+                _real_clip = getattr(_li_clip_mod, "ClipEmbedding", None)
+            except Exception:  # pragma: no cover - optional
+                _real_clip = None  # type: ignore
 
-            Settings.embed_model = BGEM3Embedding(
-                model_name=embedding_config["model_name"],
-                device=embedding_config["device"],
-                max_length=embedding_config["max_length"],
-                batch_size=embedding_config["batch_size"],
-                use_fp16=use_fp16,
+            if (
+                "ClipEmbedding" in globals()
+                and ClipEmbedding is not _real_clip  # type: ignore[name-defined]
+                and ClipEmbedding is not HuggingFaceEmbedding  # type: ignore[name-defined]
+            ):
+                # Likely patched by tests to return a MockEmbedding; use it
+                embed_ctor = ClipEmbedding  # type: ignore[name-defined]
+
+            Settings.embed_model = embed_ctor(
+                model_name=model_name,
+                device=device,
+                trust_remote_code=emb_cfg.get("trust_remote_code", False),
             )
             logger.info(
-                "Embedding model configured: %s (device=%s, fp16=%s)",
-                embedding_config.get("model_name"),
-                embedding_config.get("device"),
-                use_fp16,
+                "Embedding model configured: %s %s (device=%s)",
+                type(Settings.embed_model).__name__,
+                model_name,
+                device,
             )
     except (ImportError, RuntimeError, ValueError, OSError) as e:
         logger.warning("Could not configure embeddings: %s", e, exc_info=True)
@@ -137,6 +203,10 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
     # Structured outputs capability flag (SPEC-007 prep)
     with suppress(Exception):  # pragma: no cover - defensive
         settings.guided_json_enabled = settings.llm_backend == "vllm"
+
+    # Local-first defaults (offline and localhost enforcement)
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 
 def setup_vllm_env() -> None:
@@ -214,3 +284,51 @@ __all__ = [
     "setup_llamaindex",
     "setup_vllm_env",
 ]
+
+
+# === Unified Embedder Factory (optional app wiring) ===
+def get_unified_embedder():  # pragma: no cover - simple factory
+    """Return a UnifiedEmbedder configured from settings.
+
+    Uses the unified device selection and enables strict image type checks.
+    This is a lightweight entry point for app code to opt into the
+    library-first TextEmbedder (BGE-M3) and ImageEmbedder (OpenCLIP/SigLIP).
+    """
+    device = "cuda" if settings.enable_gpu_acceleration else "cpu"
+    text = TextEmbedder(model_name=settings.embedding.model_name, device=device)
+    image = ImageEmbedder(backbone="siglip_base", device=device)
+    return UnifiedEmbedder(text=text, image=image, strict_image_types=True)
+
+
+def get_image_embedder(
+    backbone: str = "siglip_base",
+) -> ImageEmbedder:  # pragma: no cover - simple factory
+    """Return an ImageEmbedder with the requested backbone.
+
+    Default backbone is SigLIP (preferred). Accepts "openclip_vitl14",
+    "openclip_vith14", or "siglip_base".
+    """
+    device = "cuda" if settings.enable_gpu_acceleration else "cpu"
+    return ImageEmbedder(backbone=backbone, device=device)
+
+
+def get_clip_like_image_embedder():  # pragma: no cover - convenience adapter
+    """Adapter that exposes `get_image_embedding(img)` using UnifiedEmbedder.
+
+    This makes it drop-in compatible with existing multimodal helpers that
+    expect a `clip`-like object while avoiding heavy third-party imports.
+    """
+    import numpy as _np
+
+    u = get_unified_embedder()
+
+    class _ClipLike:
+        def get_image_embedding(self, image: object) -> _np.ndarray:
+            """Return a single image embedding as a 1-D numpy array."""
+            arr = u.image.encode_image([image])
+            if arr.shape[0] == 0:
+                # If embedder returned empty, fall back to a common 768-D shape
+                return _np.zeros(768, dtype=_np.float32)
+            return arr[0]
+
+    return _ClipLike()

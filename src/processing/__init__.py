@@ -1,22 +1,14 @@
-"""DocMind AI Document Processing Module.
+"""DocMind AI Document Processing Package.
 
-This module implements ADR-009 compliant document processing with a unified
-approach that combines unstructured.io parsing with LlamaIndex
-IngestionPipeline orchestration.
+ADR-009 compliant document processing built on Unstructured + LlamaIndex
+IngestionPipeline, with utilities for deterministic IDs and PDF page images.
 
-Components:
-    document_processor: DocumentProcessor (Unstructured-first)
-    chunking: Unstructured chunk_by_title with basic fallback
-    embeddings: BGE-M3 8K context embeddings for document processing
-    models: Processing-specific Pydantic models
-
-Key Features:
-- Unified approach: unstructured.io parsing + LlamaIndex pipeline orchestration
-- Built-in caching, async processing, and transformations via LlamaIndex
-- Strategy mapping (hi_res, fast, ocr_only) based on file type
-- Unstructured-first chunking (by_title -> basic fallback)
-- BGE-M3 unified dense/sparse embeddings support
-- Performance target: >1 page/second with hi_res strategy
+Exports a compact, convenient surface:
+- Core: DocumentProcessor, UnstructuredTransformation, ProcessingError
+- Models: DocumentElement, ProcessingResult, ProcessingStrategy
+- Embedding result models (for convenience): EmbeddingError/Parameters/Result
+- PDF helpers: pdf_pages_to_image_documents, save_pdf_page_images
+- Utils: sha256_id, is_unstructured_like
 """
 
 # Import document processor and factory functions
@@ -27,12 +19,21 @@ from src.models.embeddings import (
 )
 from src.models.processing import (
     DocumentElement,
-    ProcessingError,
     ProcessingResult,
     ProcessingStrategy,
 )
 from src.processing.document_processor import (
     DocumentProcessor,
+    ProcessingError,
+    UnstructuredTransformation,
+)
+from src.processing.pdf_pages import (
+    pdf_pages_to_image_documents,
+    save_pdf_page_images,
+)
+from src.processing.utils import (
+    is_unstructured_like,
+    sha256_id,
 )
 
 __all__ = [
@@ -44,4 +45,9 @@ __all__ = [
     "ProcessingError",
     "ProcessingResult",
     "ProcessingStrategy",
+    "UnstructuredTransformation",
+    "is_unstructured_like",
+    "pdf_pages_to_image_documents",
+    "save_pdf_page_images",
+    "sha256_id",
 ]

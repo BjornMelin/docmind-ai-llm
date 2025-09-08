@@ -37,6 +37,7 @@ def get_gpu_info() -> dict | None:
             ],
             capture_output=True,
             text=True,
+            check=False,
             timeout=10,
         )
 
@@ -75,6 +76,7 @@ def check_cuda_availability() -> bool:
             ],
             capture_output=True,
             text=True,
+            check=False,
             timeout=30,
         )
 
@@ -82,12 +84,11 @@ def check_cuda_availability() -> bool:
             print("✅ CUDA is available and functional")
             print(result.stdout.strip())
             return True
-        else:
-            print("❌ CUDA is not available")
-            if result.stderr:
-                print(f"Error: {result.stderr}")
-            return False
-    except Exception as e:
+        print("❌ CUDA is not available")
+        if result.stderr:
+            print(f"Error: {result.stderr}")
+        return False
+    except (subprocess.TimeoutExpired, OSError, ValueError) as e:
         print(f"❌ Error checking CUDA: {e}")
         return False
 
@@ -108,6 +109,7 @@ def run_command(
             command,
             capture_output=True,
             text=True,
+            check=False,
             timeout=timeout,
         )
 
@@ -126,7 +128,7 @@ def run_command(
         duration = time.time() - start_time
         print(f"⏰ {description} timed out after {duration:.1f}s")
         return -1, "Timeout"
-    except Exception as e:
+    except (OSError, ValueError) as e:
         duration = time.time() - start_time
         print(f"💥 {description} error after {duration:.1f}s: {e}")
         return -1, str(e)
@@ -143,6 +145,7 @@ def monitor_gpu_memory() -> dict:
             ],
             capture_output=True,
             text=True,
+            check=False,
             timeout=5,
         )
 
@@ -154,7 +157,7 @@ def monitor_gpu_memory() -> dict:
                 "free": int(memory_data[1]) - int(memory_data[0]),
                 "utilization": (int(memory_data[0]) / int(memory_data[1])) * 100,
             }
-    except Exception as e:
+    except (OSError, ValueError) as e:
         print(f"Warning: Could not get GPU memory info: {e}")
 
     return {"used": 0, "total": 0, "free": 0, "utilization": 0}

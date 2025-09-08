@@ -480,7 +480,6 @@ class MultiAgentCoordinator:
                     settings.retrieval.reranker_normalize_scores
                 ),
                 "reranking_top_k": settings.retrieval.reranking_top_k,
-                "reranker_mode": settings.retrieval.reranker_mode,
             }
 
             # Merge caller-provided overrides last (they win)

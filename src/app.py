@@ -50,13 +50,13 @@ from src.config.settings import VLLMConfig as _VLLMConfig
 from src.containers import get_multi_agent_coordinator
 from src.processing.pdf_pages import pdf_pages_to_image_documents
 from src.prompts import PREDEFINED_PROMPTS
-from src.retrieval.embeddings import setup_clip_for_llamaindex
 from src.retrieval.graph_config import create_property_graph_index
 from src.retrieval.query_engine import create_adaptive_router_engine
 from src.ui.components.provider_badge import provider_badge
 from src.ui_helpers import build_reranker_controls
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
+from src.utils.siglip_adapter import SiglipEmbedding  # SigLIP visual adapter
 from src.utils.storage import create_vector_store
 
 LLAMACPP_AVAILABLE = False
@@ -207,7 +207,7 @@ def process_query_with_agent_system(
         # Provide router_engine to coordinator via settings_override (only when present)
         try:
             router_engine = getattr(st.session_state, "router_engine", None)
-        except Exception:  # pragma: no cover - UI/session guard
+        except (AttributeError, RuntimeError):  # pragma: no cover - UI/session guard
             router_engine = None
 
         if router_engine is not None:
@@ -293,9 +293,39 @@ st.sidebar.info(
 )
 
 
+# Startup prompt: summarize active defaults for new sessions
+st.markdown(
+    """
+    <details>
+    <summary><b>Start Summarization</b></summary>
+    <ul>
+      <li>Hybrid: Qdrant Query API (RRF; DBSF optional).</li>
+      <li>Prefetch dense≈200, sparse≈400; fused_top_k=60; de-dup by page_id.</li>
+      <li>Reranking: BGE (text) + SigLIP (visual); optional ColPali.</li>
+      <li>Rank-level RRF merge; fail-open on timeouts.</li>
+      <li>Local-first: Qdrant on 127.0.0.1; HF offline; models cached.</li>
+    </ul>
+    </details>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 use_gpu: bool = st.sidebar.checkbox(
     "Use GPU", value=hardware_status.get("cuda_available", False)
 )
+# Device fallback notice
+try:  # pragma: no cover - UI messaging only
+    import torch  # type: ignore
+
+    has_cuda_attr = getattr(torch, "cuda", None)
+    # Short-circuit check without long line or attr ignore
+    is_avail = getattr(getattr(torch, "cuda", object()), "is_available", lambda: False)
+    CUDA_AVAILABLE = bool(has_cuda_attr) and bool(is_avail())
+    if not CUDA_AVAILABLE:
+        st.info("GPU not available. Visual reranking runs on CPU; expect more latency.")
+except (ImportError, AttributeError, RuntimeError):
+    st.warning("PyTorch not installed; text-only/CPU fallback active.")
 # Retrieval & Reranking controls (ADR-036/037)
 try:
     build_reranker_controls(SETTINGS)
@@ -314,11 +344,13 @@ enable_multimodal: bool = st.sidebar.checkbox(
 """Initialize LLM via unified integrations (no network at import time)."""
 try:
     initialize_integrations()
-except Exception as e:  # pragma: no cover - resilience
+except (ValueError, RuntimeError, OSError) as e:  # pragma: no cover - resilience
     logger.warning("Integrations init issue: {}", e)
 
 
 # Async Document Upload Section with Media Parsing and Error Handling
+# Complexity here is intentional due to UI wiring.
+# pylint: disable=too-many-statements, too-many-branches, too-many-nested-blocks
 @st.fragment
 async def upload_section() -> None:
     """Handle document upload, ingestion, and indexing.
@@ -382,7 +414,10 @@ async def upload_section() -> None:
                     # Multimodal index (text + images) controlled by toggle
                     if enable_multimodal:
                         try:
-                            setup_clip_for_llamaindex({})
+                            # Temporarily switch to SigLIP visual embedder only,
+                            # preserving the global text embedder (BGE-M3).
+                            _prev_embed_model = LISettings.embed_model
+                            LISettings.embed_model = SiglipEmbedding()
                             # Emit page-image nodes from uploaded PDFs
                             image_docs: list[Any] = []
                             try:
@@ -398,6 +433,9 @@ async def upload_section() -> None:
                                         img_nodes, _out = pdf_pages_to_image_documents(
                                             Path(str(pd.metadata.get("source")))
                                         )
+                                        # annotate backbone to avoid cross-family fusion
+                                        for nd in img_nodes:
+                                            nd.metadata["image_backbone"] = "clip"
                                         image_docs.extend(img_nodes)
                                     except (
                                         OSError,
@@ -418,6 +456,14 @@ async def upload_section() -> None:
                                     "Multimodal emission scan failed: {}", _e
                                 )
                             if image_docs:
+                                # Preview a few thumbnails
+                                from contextlib import suppress
+
+                                # UI resilience: ignore preview errors in offline/CI
+                                with suppress(Exception):  # pragma: no cover
+                                    thumbs = [d.image_path for d in image_docs[:3]]
+                                    st.caption("Page image previews")
+                                    st.image(thumbs, width=180)
                                 from llama_index.core.indices import (  # pylint: disable=ungrouped-imports
                                     MultiModalVectorStoreIndex,
                                 )
@@ -437,12 +483,19 @@ async def upload_section() -> None:
                                 )
                             else:
                                 st.session_state.multimodal_index = None
+                            # Always restore the previous text embedder
+                            LISettings.embed_model = _prev_embed_model
                         except (
                             ValueError,
                             RuntimeError,
                         ) as mm_e:  # pragma: no cover - optional path
                             logger.warning("Multimodal index setup skipped: {}", mm_e)
                             st.session_state.multimodal_index = None
+                            # Ensure we restore the previous text embedder on error
+                            from contextlib import suppress
+
+                            with suppress(Exception):  # pragma: no cover - defensive
+                                LISettings.embed_model = _prev_embed_model
                     else:
                         st.session_state.multimodal_index = None
 

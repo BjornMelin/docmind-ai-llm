@@ -100,7 +100,7 @@ class TestOptionalDependencyHandling:
         """Verify that ADR-009 compliant modules are available."""
         adr009_modules = [
             "src.processing.document_processor",
-            "src.retrieval.embeddings",
+            "src.retrieval.query_engine",
         ]
 
         for module in adr009_modules:
@@ -137,5 +137,6 @@ class TestGracefulErrorHandling:
             pytest.skip("Core utilities not available")
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+"""
+Note: Removed standalone __main__ launcher to keep tests importable-only.
+"""

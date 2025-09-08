@@ -21,8 +21,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Unified dense/sparse embeddings centered on BGE-M3
 - **[ADR-003 — Adaptive Retrieval Pipeline](ADR-003-adaptive-retrieval-pipeline.md)**  
   Scope: Router/strategy selection and hierarchical retrieval
-- **[ADR-006 — Modern Reranking Architecture (Superseded)](ADR-006-reranking-architecture.md)**  
-  Scope: Historical text-only CrossEncoder reranking; superseded by ADR‑037
+- ADR-006 — Modern Reranking Architecture (Superseded by ADR‑037)  
+  Scope: Historical text-only CrossEncoder reranking; see ADR‑037 for current design
 - **[ADR-037 — Multimodal Reranking with ColPali (visual) and BGE v2‑m3 (text)](ADR-037-multimodal-reranking-architecture.md)**  
   Scope: Modality-aware reranking; ColPali for visuals, BGE v2‑m3 for text
 - **[ADR-019 — Optional GraphRAG Module](ADR-019-optional-graphrag.md)**  
@@ -36,8 +36,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Streamlit multipage architecture and native component usage
 - **[ADR-016 — Streamlit Native State Management](ADR-016-ui-state-management.md)**  
   Scope: Session state and cache primitives without custom layers
-- **[ADR-036 — Reranker UI Controls (normalize_scores and top_n)](ADR-036-reranker-ui-controls-normalize-topn.md)**  
-  Scope: Minimal sidebar controls for CrossEncoder reranker
+- **[ADR-036 — Reranker UI Controls (Superseded)](archived/ADR-036-SUPERSEDED-reranker-ui-controls-normalize-topn.md)**  
+  Scope: Historical UI controls; superseded by always-on rerank + env-only overrides
 
 ## Configuration
 
@@ -115,4 +115,4 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 Latest additions:
 
 - **ADR-035 (Accepted, v1.1.0)** — Application-level semantic cache with GPTCache (SQLite + FAISS)
-- **ADR-036 (Accepted, v1.0.0)** — Streamlit UI controls for reranker (normalize_scores, top_n)
+- **ADR-037 (Accepted, v1.2)** — Multimodal reranking (SigLIP default, optional ColPali)

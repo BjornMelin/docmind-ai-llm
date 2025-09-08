@@ -67,7 +67,7 @@ class TestImportValidation:
         """Test that ADR-009 compliant document processing modules can be imported."""
         adr009_modules = [
             "src.processing.document_processor",
-            "src.retrieval.embeddings",
+            "src.retrieval.query_engine",
         ]
 
         for module_name in adr009_modules:
@@ -78,8 +78,9 @@ class TestImportValidation:
                 # Test that key classes are available
                 if module_name == "src.processing.document_processor":
                     assert hasattr(module, "DocumentProcessor")
-                elif module_name == "src.retrieval.embeddings":
-                    assert hasattr(module, "BGEM3Embedding")
+                elif module_name == "src.retrieval.query_engine":
+                    # Ensure server-side hybrid retriever is available
+                    assert hasattr(module, "ServerHybridRetriever")
 
             except ImportError as e:
                 pytest.fail(f"Failed to import ADR-009 module {module_name}: {e}")
@@ -106,8 +107,6 @@ class TestImportValidation:
     )
     def test_hardware_detection_basic(self):
         """Test basic hardware detection functionality."""
-        from src.utils.core import detect_hardware
-
         with patch("src.utils.core.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = False
             mock_torch.cuda.device_count.return_value = 0
@@ -130,13 +129,12 @@ class TestImportValidation:
             assert "valid" in result
         except (ImportError, AttributeError, TypeError, ValueError) as e:
             pytest.fail(f"validate_startup_configuration failed: {e}")
-        except Exception as e:
+        except (OSError, ConnectionError, RuntimeError) as e:  # type: ignore[name-defined]
             # Handle network-related errors (e.g., Qdrant not running) gracefully
             # This is expected in unit test environments
             if "Connection refused" in str(e) or "qdrant" in str(e).lower():
                 pytest.skip(f"Skipping test due to external dependency: {e}")
-            else:
-                pytest.fail(f"Unexpected error in validate_startup_configuration: {e}")
+            pytest.fail(f"Unexpected error in validate_startup_configuration: {e}")
 
     def test_key_file_structure(self):
         """Test that essential files exist in correct locations."""
@@ -152,7 +150,7 @@ class TestImportValidation:
         # ADR-009 compliant file structure
         adr009_files = [
             "src/processing/document_processor.py",
-            "src/retrieval/embeddings.py",
+            "src/retrieval/query_engine.py",
         ]
 
         for file_path in required_files:

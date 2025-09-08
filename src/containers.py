@@ -28,40 +28,31 @@ from typing import Any
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config import settings
 from src.processing.document_processor import DocumentProcessor
-from src.retrieval.embeddings import create_bgem3_embedding
+from src.retrieval.query_engine import ServerHybridRetriever, _HybridParams
 
 
-def get_embedding_model(
-    *,
-    model_name: str | None = None,
-    device: str | None = None,
-    max_length: int | None = None,
-    use_fp16: bool | None = None,
-) -> Any:
-    """Create and return the embedding model instance.
+def get_embedding_model(*, nodes: list[Any] | None = None) -> Any:
+    """Return the default hybrid retriever (ServerHybridRetriever).
 
-    Constructs a BGE-M3 embedding model using application settings with optional
-    overrides. The returned object implements the LlamaIndex embedding interface.
-
-    Args:
-      model_name: Optional model identifier override (defaults to settings).
-      device: Optional target device (for example, "cuda" or "cpu").
-      max_length: Optional maximum token length for embeddings.
-      use_fp16: Optional FP16 toggle. If None, a device-appropriate default is
-        selected by the factory.
-
-    Returns:
-      Any: A configured BGEM3Embedding instance.
+    Note: The factory name is kept for backwards import compatibility in tests,
+    but this returns the final architecture's hybrid retriever configured from
+    unified settings (Qdrant Query API, named vectors, server-side fusion).
     """
-    cfg = settings.get_embedding_config()
-    resolved: dict[str, Any] = {
-        "model_name": model_name or cfg.get("model_name"),
-        "device": device or cfg.get("device", "cuda"),
-        "max_length": max_length or cfg.get("max_length"),
-    }
-    if use_fp16 is not None:
-        resolved["use_fp16"] = use_fp16
-    return create_bgem3_embedding(**resolved)
+    try:
+        rconf = settings.retrieval
+        params = _HybridParams(
+            collection=settings.database.qdrant_collection,
+            fused_top_k=int(getattr(rconf, "fused_top_k", 60)),
+            prefetch_sparse=400,
+            prefetch_dense=200,
+            fusion_mode=str(getattr(rconf, "fusion_mode", "rrf")),
+            dedup_key=str(getattr(rconf, "dedup_key", "page_id")),
+        )
+    except Exception:  # pragma: no cover - defensive defaults
+        params = _HybridParams(
+            collection=getattr(settings.database, "qdrant_collection", "docmind_docs")
+        )
+    return ServerHybridRetriever(params)
 
 
 def get_document_processor(*, config: Any | None = None) -> DocumentProcessor:

@@ -116,7 +116,7 @@ class CrossEncoderReranker:
 ```env
 DOCMIND_RETRIEVAL__USE_RERANKING=true
 DOCMIND_RETRIEVAL__RERANKING_TOP_K=5
-DOCMIND_RETRIEVAL__RERANKER_MODE=text   # auto|text|multimodal (ADR‑037)
+# Reranker mode removed; single integration path (ADR‑037)
 ```
 
 ## Testing
