@@ -90,3 +90,27 @@ def test_encrypt_file_with_kid_aad(monkeypatch, tmp_path):
     monkeypatch.setenv("DOCMIND_IMG_KID", "other")
     dec2 = decrypt_file(enc)
     assert dec2 == enc
+
+
+def test_encrypt_file_delete_plaintext(monkeypatch, tmp_path):
+    """When DOCMIND_IMG_DELETE_PLAINTEXT=1, original file is removed on success."""
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
+    except Exception:
+        pytest.skip("cryptography not available")
+
+    import base64
+    import os as _os
+
+    key = _os.urandom(32)
+    monkeypatch.setenv(
+        "DOCMIND_IMG_AES_KEY_BASE64", base64.b64encode(key).decode("ascii")
+    )
+    monkeypatch.setenv("DOCMIND_IMG_DELETE_PLAINTEXT", "1")
+
+    p = tmp_path / "img.webp"
+    p.write_bytes(b"imgdata")
+    enc = encrypt_file(str(p))
+    assert enc.endswith(".enc")
+    # Plaintext should be gone
+    assert not p.exists()
