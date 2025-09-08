@@ -28,17 +28,31 @@ from typing import Any
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config import settings
 from src.processing.document_processor import DocumentProcessor
-from src.retrieval.bge_m3_index import build_bge_m3_index, build_bge_m3_retriever
+from src.retrieval.query_engine import ServerHybridRetriever, _HybridParams
 
 
 def get_embedding_model(*, nodes: list[Any] | None = None) -> Any:
-    """Create and return the tri-mode BGEM3 retriever (index + retriever).
+    """Return the default hybrid retriever (ServerHybridRetriever).
 
-    This replaces the legacy embedding-model factory with a library-first
-    index+retriever composition using LlamaIndex BGEM3Index.
+    Note: The factory name is kept for backwards import compatibility in tests,
+    but this returns the final architecture's hybrid retriever configured from
+    unified settings (Qdrant Query API, named vectors, server-side fusion).
     """
-    idx = build_bge_m3_index(nodes or [], model_name=settings.embedding.model_name)
-    return build_bge_m3_retriever(idx, weights_for_different_modes=[0.4, 0.2, 0.4])
+    try:
+        rconf = settings.retrieval
+        params = _HybridParams(
+            collection=settings.database.qdrant_collection,
+            fused_top_k=int(getattr(rconf, "fused_top_k", 60)),
+            prefetch_sparse=400,
+            prefetch_dense=200,
+            fusion_mode=str(getattr(rconf, "fusion_mode", "rrf")),
+            dedup_key=str(getattr(rconf, "dedup_key", "page_id")),
+        )
+    except Exception:  # pragma: no cover - defensive defaults
+        params = _HybridParams(
+            collection=getattr(settings.database, "qdrant_collection", "docmind_docs")
+        )
+    return ServerHybridRetriever(params)
 
 
 def get_document_processor(*, config: Any | None = None) -> DocumentProcessor:

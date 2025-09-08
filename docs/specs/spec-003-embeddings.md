@@ -1,12 +1,12 @@
 ---
 spec: SPEC-003
-title: Unified Embeddings: BGE‑M3 Text (dense+sparse+ColBERT) + Multimodal Images (SigLIP default)
+title: Unified Embeddings: BGE‑M3 Text (dense+sparse) + Multimodal Images (SigLIP default)
 version: 1.2.0
 date: 2025-09-07
 owners: ["ai-arch"]
 status: Final
 related_requirements:
-  - FR-EMB-001: Text embeddings SHALL use BAAI/bge-m3 with dense+sparse (and optional ColBERT).
+  - FR-EMB-001: Text embeddings SHALL use BAAI/bge-m3 with dense+sparse.
   - FR-EMB-002: Image embeddings SHOULD default to SigLIP; OpenCLIP MAY be used when explicitly selected.
   - FR-EMB-003: Batch size and precision SHALL adapt to hardware.
   - NFR-PERF-002: Embed throughput ≥ 200 doc/sec on CPU for short chunks (64 tokens).
@@ -18,15 +18,14 @@ related_adrs: ["ADR-002","ADR-004","ADR-007","ADR-024"]
 
 Deliver a minimal, library‑first embedding stack for text and images, removing duplicate/legacy code while preserving SPEC‑003 capabilities:
 
-- Text: BGE‑M3 dense + sparse + optional ColBERT using FlagEmbedding and LlamaIndex’s native BGE‑M3 index/retriever.
+- Text: BGE‑M3 dense + sparse using FlagEmbedding and LlamaIndex `Settings` for query‑time dense alignment; FastEmbed BM42/BM25 for sparse alignment with Qdrant hybrid.
 - Images: OpenCLIP (ViT‑L/14, ViT‑H/14) and SigLIP via official libraries; prefer LlamaIndex ClipEmbedding where applicable.
 - No custom sparse scoring, no bespoke CLIP wrappers, and no backward‑compat layers.
 
 ## Architecture and Libraries
 
 - Text (primary):
-  - FlagEmbedding BGEM3FlagModel/M3Embedder for unified outputs: `dense_vecs`, `lexical_weights`, `colbert_vecs`.
-  - LlamaIndex BGEM3Index + BGEM3Retriever for tri‑mode retrieval (configurable weights). No custom sparse/ColBERT glue.
+  - BGE‑M3 dense (LlamaIndex embed model) + FastEmbed sparse (BM42/BM25) for hybrid alignment with Qdrant Query API.
 
 - Images:
   - Transformers SigLIP (default) via `SiglipModel` + `SiglipProcessor`, using `get_image_features()` / `get_text_features()`.
@@ -34,14 +33,14 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
   - In LlamaIndex contexts, use a SigLIP adapter or `TextImageReranker` equivalents; avoid legacy CLIP-first wrappers.
   - Metadata: set `image_backbone="siglip"` for image/page nodes; default DPI≈200 for page image renders.
 
-- Hosting note: Hugging Face Text Embeddings Inference (TEI) is dense‑only for BGE‑M3. Do not use TEI when sparse/ColBERT are required.
+- Hosting note: Hugging Face Text Embeddings Inference (TEI) is dense‑only for BGE‑M3. Do not use TEI when sparse is required.
 
 ## Migration and Cleanup Plan (no back‑compat)
 
 1) Text pipeline standardization
 
-   - Adopt LlamaIndex BGEM3Index + BGEM3Retriever as the primary retrieval path for BGE‑M3 tri‑mode.
-   - Remove custom sparse/ColBERT glue and any BGEM3‑specific wrappers beyond a thin adapter (if needed by non‑LI callsites).
+   - Adopt LI Settings for query‑time dense; FastEmbed for sparse queries; Qdrant Query API for server‑side fusion.
+   - Remove custom sparse glue or tri‑mode layerings; keep library‑first wiring only.
 
 2) Image pipeline consolidation
 
@@ -51,13 +50,13 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
 
 3) Code deletions and refactors
 
-   - Remove `BGEM3Embedding` (LI adapter) after migrating tests and callsites to BGEM3Index/BGEM3Retriever.
+   - Remove BGEM3 tri‑mode specific wrappers; avoid duplicative adapters.
    - Remove CLIP VRAM heuristic helpers and any nonessential image preprocess shims.
-   - Keep a single, minimal UnifiedEmbedder only if it provides value beyond LI composition; otherwise remove it and use LI objects directly.
+   - Keep a single, minimal SigLIP adapter for visual similarities only where needed; otherwise use Transformers directly.
 
 4) Tests
 
-   - Update tests to target BGEM3Index/BGEM3Retriever outputs and ClipEmbedding (with stubbed backends). Remove tests that assert previous wrapper‑specific shapes/keys.
+   - Update tests to target LlamaIndex dense query alignment and FastEmbed sparse alignment; verify Qdrant Query API Prefetch typing.
 
 5) Configuration
 
@@ -74,7 +73,7 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
 ```gherkin
 Feature: Embedding stack
   Scenario: Text dense+sparse
-    Given BGEM3Index is configured with FlagEmbedding
+    Given FastEmbed (BM42/BM25) and LlamaIndex Settings are configured
     When I retrieve over a list of texts
     Then I obtain hybrid retrieval using dense 1024‑d vectors and sparse lexical weights
 

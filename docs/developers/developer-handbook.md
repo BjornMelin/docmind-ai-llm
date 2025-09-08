@@ -1293,42 +1293,42 @@ uv update
 
 ## Advanced Implementation Details
 
-### BGE-M3 Unified Embeddings (Library-First)
+### Hybrid Retrieval (Library-First, Server‑Side)
 
-DocMind AI uses LlamaIndex's native BGEM3Index/BGEM3Retriever for unified dense + sparse (+ optional ColBERT) retrieval. Example:
-
-```python
-from llama_index.core.schema import Document as LIDocument
-from src.retrieval.bge_m3_index import build_bge_m3_index, build_bge_m3_retriever
-
-docs = [LIDocument(text="Hello world"), LIDocument(text="DocMind AI")]
-index = build_bge_m3_index(docs, model_name="BAAI/bge-m3")
-retriever = build_bge_m3_retriever(index, weights_for_different_modes=[0.4, 0.2, 0.4])
-
-# Retrieve (tri-mode)
-results = retriever.retrieve("unified embeddings")
-for r in results:
-    print(r.node.get_text(), r.score)
-```
-
-For images in LlamaIndex contexts, prefer ClipEmbedding:
+DocMind AI uses Qdrant's Query API server‑side hybrid search with named vectors:
 
 ```python
-from llama_index.embeddings.clip import ClipEmbedding
-clip = ClipEmbedding(model_name="openai/clip-vit-base-patch32")
-# Derive dims at runtime from model outputs; do not hard-code
+from qdrant_client import QdrantClient, models
+from llama_index.core import Settings
+from src.retrieval.sparse_query import encode_to_qdrant
+
+client = QdrantClient(url="http://localhost:6333")
+
+query = "unified embeddings"
+dense = Settings.embed_model.get_query_embedding(query)  # BGE-M3 via LI
+sparse = encode_to_qdrant(query)  # FastEmbed BM42→BM25
+
+prefetch = [
+    models.Prefetch(query=models.VectorInput(vector=dense), using="text-dense", limit=200),
+]
+if sparse is not None:
+    prefetch.append(models.Prefetch(query=sparse, using="text-sparse", limit=400))
+
+res = client.query_points(
+    collection_name="docmind_docs",
+    prefetch=prefetch,
+    query=models.FusionQuery(fusion=models.Fusion.RRF),
+    limit=10,
+)
 ```
+
         self, 
         texts: List[str]
     ) -> Dict[str, Any]:
         """Generate both dense and sparse embeddings efficiently."""
         
         # Batch processing for efficiency
-        results = {
-            "dense": [],
-            "sparse": [],
-            "colbert": []  # For potential ColBERT usage
-        }
+        results = {"dense": [], "sparse": []}
         
         for i in range(0, len(texts), self._batch_size):
             batch = texts[i:i + self._batch_size]
@@ -1338,7 +1338,7 @@ clip = ClipEmbedding(model_name="openai/clip-vit-base-patch32")
                 batch,
                 return_dense=True,
                 return_sparse=True,
-                return_colbert_vecs=False  # Disabled for memory efficiency
+                # no colbert vectors in final architecture
             )
             
             results["dense"].extend(batch_embeddings["dense_vecs"])
@@ -1361,6 +1361,7 @@ clip = ClipEmbedding(model_name="openai/clip-vit-base-patch32")
             optimized.append(dict(sorted_items))
             
         return optimized
+
 ```
 
 ### Hybrid Search with RRF Fusion
