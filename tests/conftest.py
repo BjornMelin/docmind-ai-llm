@@ -42,6 +42,32 @@ def mock_llamaindex_settings():
     return None
 
 
+@pytest.fixture(scope="session", autouse=True)
+def rng_seed() -> None:
+    """Seed global RNGs for deterministic test runs.
+
+    Applies to Python's random, NumPy, and PyTorch (if available).
+    """
+    import random
+
+    random.seed(1337)
+    try:
+        import numpy as np  # type: ignore
+
+        np.random.seed(1337)
+    except ImportError:
+        # NumPy not installed; ignore
+        ...
+    try:
+        import torch  # type: ignore
+
+        if hasattr(torch, "manual_seed"):
+            torch.manual_seed(1337)
+    except ImportError:
+        # Torch not installed; ignore
+        ...
+
+
 @pytest.fixture
 def chat_message_factory():
     """Factory to create LlamaIndex ChatMessage objects."""
