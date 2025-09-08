@@ -45,7 +45,7 @@
 
 - **Multimodal Processing:** Unstructured hi-res parsing for PDFs with text, tables, and images using Jina v4 embeddings.
 
-- **ColBERT Reranking:** Late-interaction reranking for improved context quality.
+- **Always-on Reranking:** Text via BGE Cross-Encoder and visual via SigLIP; optional ColPali on capable GPUs. Deterministic, cancellable, and fail-open.
 
 - **Offline-First Design:** 100% local processing with no external API dependencies.
 
@@ -60,6 +60,7 @@
 - **Robust Error Handling:** Reliable retry strategies with exponential backoff.
 
 - **Structured Logging:** Contextual logging with automatic rotation and JSON output.
+- **Encrypted Page Images (AES-GCM):** Optional at-rest encryption for rendered PDF page images using AES-GCM with KID as AAD; `.enc` files are decrypted just-in-time for visual scoring and immediately cleaned up.
 
 - **Simple Configuration:** Environment variables and Streamlit native config for easy setup.
 

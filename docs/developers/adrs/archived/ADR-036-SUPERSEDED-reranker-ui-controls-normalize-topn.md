@@ -15,7 +15,7 @@ References:
 
 ## Description
 
-Reranking is now always‑on with internal caps/timeouts and fail‑open behavior. UI controls for `normalize_scores`, `top_n`, and `reranker_mode` have been removed to reduce complexity and prevent footguns. Operators may use ops‑only env overrides when absolutely necessary.
+Reranking is now always‑on with internal caps/timeouts and fail‑open behavior. UI controls for `normalize_scores` and `top_n` remain minimal; legacy `reranker_mode` has been removed to reduce complexity and prevent footguns. Operators may use ops‑only env overrides when absolutely necessary.
 
 ## Context
 
@@ -102,7 +102,7 @@ with st.sidebar:
 
 settings.retrieval.reranker_normalize_scores = bool(norm)
 settings.retrieval.reranking_top_k = int(top_n)
-settings.retrieval.reranker_mode = str(mode)
+# Legacy: settings.retrieval.reranker_mode (removed)
 ```
 
 ### Configuration
