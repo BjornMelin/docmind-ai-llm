@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "**" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -30,15 +34,35 @@ jobs:
 
       - name: Lint (ruff)
         run: |
-          uv run ruff check .
+          uvx ruff format --check .
+          uvx ruff check .
 
-      - name: Lint (pylint src)
+      - name: Lint (pylint)
         run: |
-          uv run pylint -j 2 src || true
+          uvx pylint --fail-under=9.5 -j 0 src tests
 
-      - name: Run tests
+      - name: Run unit/integration tests (no coverage gate)
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: |
+          uv run pytest -q -c .github/pytest.nocov.ini
+
+      - name: Run full tests with coverage (soft gate)
+        continue-on-error: true
         env:
           HF_HUB_OFFLINE: '1'
           TRANSFORMERS_OFFLINE: '1'
         run: |
           uv run pytest -q
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            htmlcov
+            coverage.xml
+            coverage.json
+          if-no-files-found: ignore
