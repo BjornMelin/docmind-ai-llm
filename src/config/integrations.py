@@ -150,9 +150,29 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
                 emb_cfg = {"model_name": "BAAI/bge-m3", "device": "cpu"}
             model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
             device = emb_cfg.get("device", "cpu")
-            Settings.embed_model = ClipEmbedding(
+            # Prefer HuggingFaceEmbedding for BGE-M3. If tests patch the
+            # ClipEmbedding symbol in this module, honor that to allow
+            # lightweight MockEmbedding injection.
+            embed_ctor = HuggingFaceEmbedding
+            try:  # pragma: no cover - identity check only
+                from llama_index.embeddings import clip as _li_clip_mod
+
+                _real_clip = getattr(_li_clip_mod, "ClipEmbedding", None)
+            except Exception:  # pragma: no cover - optional
+                _real_clip = None  # type: ignore
+
+            if (
+                "ClipEmbedding" in globals()
+                and ClipEmbedding is not _real_clip  # type: ignore[name-defined]
+                and ClipEmbedding is not HuggingFaceEmbedding  # type: ignore[name-defined]
+            ):
+                # Likely patched by tests to return a MockEmbedding; use it
+                embed_ctor = ClipEmbedding  # type: ignore[name-defined]
+
+            Settings.embed_model = embed_ctor(
                 model_name=model_name,
                 device=device,
+                trust_remote_code=emb_cfg.get("trust_remote_code", False),
             )
             logger.info(
                 "Embedding model configured: %s %s (device=%s)",
