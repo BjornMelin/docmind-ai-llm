@@ -14,6 +14,7 @@ def test_owner_filter_constructed(monkeypatch):
     # Stub embeddings
     monkeypatch.setenv("DOCMIND_OWNER_ID", "owner-42")
     import numpy as np
+
     monkeypatch.setattr(
         retr, "_embed_query", lambda s: (np.asarray([0.1, 0.2], dtype=np.float32), {})
     )

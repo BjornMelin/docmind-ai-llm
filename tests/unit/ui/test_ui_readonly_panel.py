@@ -1,3 +1,5 @@
+"""UI readonly panel rendering tests (smoke)."""
+
 from types import SimpleNamespace
 
 from src.ui_helpers import build_reranker_controls
@@ -14,8 +16,12 @@ class _SB:
 class _ST:
     sidebar = _SB()
 
+    def info(self, *_args, **_kwargs):  # mimic st.info
+        return None
+
 
 def test_ui_readonly_panel_renders(monkeypatch):
+    """Panel renders without exceptions when Streamlit is stubbed."""
     monkeypatch.setenv("STREAMLIT_SERVER_HEADLESS", "1")
 
     # Mock streamlit
