@@ -25,9 +25,9 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 try:  # Optional torch for normalization and device checks
-    import torch
-except Exception:  # pragma: no cover - torch may be unavailable in CI
-    torch = None  # type: ignore[assignment]
+    import torch as TORCH  # type: ignore  # noqa: N812
+except ImportError:  # pragma: no cover - torch may be unavailable in CI
+    TORCH = None  # type: ignore[assignment]
 
 
 class EmbeddingParameters(BaseModel):
@@ -112,11 +112,11 @@ def _select_device(explicit: str | None = None) -> str:
     """
     if explicit:
         return explicit
-    if torch is not None:
-        if getattr(torch, "cuda", None) and torch.cuda.is_available():
+    if TORCH is not None:
+        if getattr(TORCH, "cuda", None) and TORCH.cuda.is_available():
             return "cuda"
         # Apple Silicon MPS support when available
-        mps = getattr(getattr(torch, "backends", object()), "mps", None)
+        mps = getattr(getattr(TORCH, "backends", object()), "mps", None)
         if mps is not None and getattr(mps, "is_available", lambda: False)():
             return "mps"
     return "cpu"
@@ -171,11 +171,11 @@ class TextEmbedder:
             )
             raise ImportError(msg) from exc
 
-        if torch is not None:
+        if TORCH is not None:
             from contextlib import suppress
 
             with suppress(Exception):  # determinism best-effort
-                torch.manual_seed(self.seed)
+                TORCH.manual_seed(self.seed)
 
         self._backend = BGEM3FlagModel(
             self.model_name, use_fp16=self.use_fp16, devices=[self.device]
@@ -194,7 +194,7 @@ class TextEmbedder:
             if dv is not None:
                 arr = np.asarray(dv, dtype=np.float32)
                 self._dense_dim = int(arr.shape[-1])
-        except Exception:
+        except (RuntimeError, ValueError, TypeError):
             # Keep default
             self._dense_dim = self._dense_dim or 1024
 
@@ -315,11 +315,12 @@ class ImageEmbedder:
 
     # --- Backend loading helpers ---
     def _choose_auto_backbone(self) -> _BackboneName:
-        if self.device == "cpu" or torch is None or not torch.cuda.is_available():
+        if self.device == "cpu" or TORCH is None or not TORCH.cuda.is_available():
             return "openclip_vitl14"
         try:  # Estimate total VRAM
-            total = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover
+            props = TORCH.cuda.get_device_properties(0)  # type: ignore[attr-defined]
+            total = props.total_memory / (1024**3)
+        except (RuntimeError, AttributeError):  # pragma: no cover
             total = 8.0
         if total >= 20.0:
             return "openclip_vith14"
@@ -345,23 +346,21 @@ class ImageEmbedder:
                 dim = int(getattr(visual, "output_dim", 0)) or None
             if dim is None and hasattr(model, "embed_dim"):
                 dim = int(model.embed_dim)  # type: ignore[arg-type]
-        except Exception:  # pragma: no cover - defensive introspection
+        except (AttributeError, ValueError, TypeError):  # pragma: no cover
             dim = None
 
         # Fallback probe: pass a single dummy image through encode_image
-        if dim is None and torch is not None:  # pragma: no cover - heavy path
+        if dim is None and TORCH is not None:  # pragma: no cover - heavy path
             try:
-                import numpy as _np
-
-                dummy = _np.zeros((224, 224, 3), dtype=_np.uint8)
+                dummy = np.zeros((224, 224, 3), dtype=np.uint8)
                 t = self._preprocess(dummy) if callable(self._preprocess) else None
                 if t is not None:
                     if self.device == "cuda":
                         t = t.to("cuda")
-                    with torch.no_grad():
+                    with TORCH.no_grad():
                         f = model.encode_image(t.unsqueeze(0))
                         dim = int(f.shape[-1])
-            except Exception:
+            except (RuntimeError, ValueError, TypeError):
                 dim = None
 
         self._dim = dim or (1024 if ("H-14" in model_name) else 768)
@@ -378,23 +377,22 @@ class ImageEmbedder:
         self._preprocess = processor
         # Prefer config projection dim when available
         try:
-            self._dim = int(getattr(model.config, "projection_dim", 0)) or None  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - defensive
+            proj = getattr(model.config, "projection_dim", 0)
+            self._dim = int(proj) or None
+        except (AttributeError, ValueError, TypeError):  # pragma: no cover - defensive
             self._dim = None
         if self._dim is None:
             # Fallback probe via a tiny batch to determine dim
             try:  # pragma: no cover - heavy path
-                import numpy as _np
-
-                dummy = _np.zeros((224, 224, 3), dtype=_np.uint8)
+                dummy = np.zeros((224, 224, 3), dtype=np.uint8)
                 inputs = processor(images=[dummy], return_tensors="pt")
                 pix = inputs.get("pixel_values")
                 if self.device == "cuda":
                     pix = pix.to("cuda")
-                with torch.no_grad():
+                with TORCH.no_grad():
                     f = model.get_image_features(pixel_values=pix)
                     self._dim = int(f.shape[-1])
-            except Exception:
+            except (RuntimeError, ValueError, TypeError):
                 self._dim = 768
 
     def _load_bge_visualized(self) -> None:
@@ -463,14 +461,14 @@ class ImageEmbedder:
                 batch = images[i : i + bs]
                 tensors = [self._preprocess(img) for img in batch]
                 # Stack to [B, C, H, W]
-                if torch is None:  # pragma: no cover - explicit failure in prod
+                if TORCH is None:  # pragma: no cover - explicit failure in prod
                     raise RuntimeError(
                         "OpenCLIP image feature extraction requires torch."
                     )
-                x = torch.stack(tensors)  # type: ignore[arg-type]
+                x = TORCH.stack(tensors)  # type: ignore[arg-type]
                 if effective_device == "cuda":
                     x = x.to("cuda")
-                with torch.no_grad():
+                with TORCH.no_grad():
                     f = self._backend.encode_image(x)
                     f = f / f.norm(dim=-1, keepdim=True) if normalize else f
                     feats.append(f.detach().cpu().numpy().astype(np.float32))
@@ -488,7 +486,7 @@ class ImageEmbedder:
             out_list: list[np.ndarray] = []
             for i in range(0, len(images), bs):
                 batch = images[i : i + bs]
-                if torch is None:  # pragma: no cover
+                if TORCH is None:  # pragma: no cover
                     raise RuntimeError(
                         "SigLIP image feature extraction requires torch."
                     )
@@ -496,7 +494,7 @@ class ImageEmbedder:
                 pix = inputs.get("pixel_values")
                 if effective_device == "cuda":
                     pix = pix.to("cuda")
-                with torch.no_grad():
+                with TORCH.no_grad():
                     f = self._backend.get_image_features(pixel_values=pix)
                     if normalize:
                         f = f / f.norm(dim=-1, keepdim=True)
@@ -534,15 +532,13 @@ class UnifiedEmbedder:
                         from PIL import Image as _PILImage  # type: ignore
 
                         pil_type = _PILImage.Image
-                    except Exception:  # pragma: no cover - optional
+                    except (ImportError, AttributeError):  # pragma: no cover - optional
                         pil_type = None  # type: ignore[assignment]
 
-                    import numpy as _np
-
-                    supported = (_np.ndarray,) + (
+                    supported = (np.ndarray,) + (
                         (pil_type,) if pil_type is not None else ()
                     )
-                    if not isinstance(it, supported):
+                    if not isinstance(it, supported):  # pylint: disable=isinstance-second-argument-not-valid-type
                         t = type(it)
                         msg = f"Unsupported image type: {t}. Supported: {supported}"
                         raise TypeError(msg)

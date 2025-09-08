@@ -110,8 +110,6 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
 
     return results
 
-    return results
-
 
 @asynccontextmanager
 async def managed_gpu_operation() -> AsyncGenerator[None, None]:

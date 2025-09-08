@@ -20,6 +20,7 @@ def build_reranker_controls(settings: DocMindSettings) -> None:
         f"Reranking: on · TopK: {settings.retrieval.reranking_top_k} · "
         f"Normalize: {settings.retrieval.reranker_normalize_scores}"
     )
+    st.info("Hybrid & Rerank tuning guide: docs/perf/hybrid_tuning.md")
 
 
 __all__ = ["build_reranker_controls"]

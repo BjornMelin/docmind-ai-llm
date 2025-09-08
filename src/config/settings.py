@@ -152,6 +152,8 @@ class RetrievalConfig(BaseModel):
     )
     rrf_k: int = Field(default=60, ge=1, le=256, description="RRF k-constant")
     use_sparse_embeddings: bool = Field(default=True)
+    # Deduplication key used before final fused cut
+    dedup_key: Literal["page_id", "doc_id"] = Field(default="page_id")
     # Feature flag for future named-vectors multi-head support (no-op now)
     named_vectors_multi_head_enabled: bool = Field(default=False)
     # Router and feature toggles (ADR-003)
@@ -409,8 +411,8 @@ class DocMindSettings(BaseSettings):
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
 
-    # Compatibility alias fields mapped to nested configs. These allow
-    # ergonomic top-level overrides via environment variables.
+    # Alias fields mapped to nested configs for ergonomic top-level
+    # environment overrides.
     context_window_size: int | None = Field(default=None)
     chunk_size: int | None = Field(default=None)
     chunk_overlap: int | None = Field(default=None)
@@ -418,6 +420,8 @@ class DocMindSettings(BaseSettings):
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
+    # Pydantic v2 uses a context parameter; pylint's base stub differs.
+    # pylint: disable=arguments-differ
     def model_post_init(self, __context: Any) -> None:
         """Create necessary directories after initialization."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -425,7 +429,7 @@ class DocMindSettings(BaseSettings):
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
         if self.database.sqlite_db_path.parent != self.data_dir:
             self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Apply compatibility alias fields to nested configs if provided
+        # Apply alias fields to nested configs if provided
         # Keep nested vllm.* in sync with top-level overrides when present
         if self.model:
             with suppress(Exception):
@@ -584,7 +588,7 @@ class DocMindSettings(BaseSettings):
 
     def get_graphrag_config(self) -> dict[str, Any]:
         """Get GraphRAG configuration for ADR-019."""
-        # Prefer nested configuration; fallback to legacy top-level fields
+        # Prefer nested configuration; fallback to top-level fields
         if hasattr(self, "graphrag_cfg") and isinstance(
             self.graphrag_cfg, GraphRAGConfig
         ):

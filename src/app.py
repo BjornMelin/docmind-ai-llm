@@ -207,7 +207,7 @@ def process_query_with_agent_system(
         # Provide router_engine to coordinator via settings_override (only when present)
         try:
             router_engine = getattr(st.session_state, "router_engine", None)
-        except Exception:  # pragma: no cover - UI/session guard
+        except (AttributeError, RuntimeError):  # pragma: no cover - UI/session guard
             router_engine = None
 
         if router_engine is not None:
@@ -319,10 +319,12 @@ try:  # pragma: no cover - UI messaging only
     import torch  # type: ignore
 
     has_cuda_attr = getattr(torch, "cuda", None)
-    has_cuda = bool(has_cuda_attr) and bool(torch.cuda.is_available())  # type: ignore[attr-defined]
-    if not has_cuda:
+    # Short-circuit check without long line or attr ignore
+    is_avail = getattr(getattr(torch, "cuda", object()), "is_available", lambda: False)
+    CUDA_AVAILABLE = bool(has_cuda_attr) and bool(is_avail())
+    if not CUDA_AVAILABLE:
         st.info("GPU not available. Visual reranking runs on CPU; expect more latency.")
-except Exception:
+except (ImportError, AttributeError, RuntimeError):
     st.warning("PyTorch not installed; text-only/CPU fallback active.")
 # Retrieval & Reranking controls (ADR-036/037)
 try:
@@ -342,11 +344,13 @@ enable_multimodal: bool = st.sidebar.checkbox(
 """Initialize LLM via unified integrations (no network at import time)."""
 try:
     initialize_integrations()
-except Exception as e:  # pragma: no cover - resilience
+except (ValueError, RuntimeError, OSError) as e:  # pragma: no cover - resilience
     logger.warning("Integrations init issue: {}", e)
 
 
 # Async Document Upload Section with Media Parsing and Error Handling
+# Complexity here is intentional due to UI wiring.
+# pylint: disable=too-many-statements, too-many-branches, too-many-nested-blocks
 @st.fragment
 async def upload_section() -> None:
     """Handle document upload, ingestion, and indexing.

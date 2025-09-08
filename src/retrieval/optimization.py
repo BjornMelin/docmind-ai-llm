@@ -115,6 +115,7 @@ class DocMindRAG:
             }
 
         # Classify query strategy
+        strategy = "factual"
         if dspy is not None and self.classify_query is not None:
             strategy_pred = self.classify_query(question=question)
             strategy = (
@@ -122,35 +123,34 @@ class DocMindRAG:
                 if hasattr(strategy_pred, "strategy")
                 else "factual"
             )
-        else:
-            # Fallback strategy classification without DSPy
+        # Fallback strategy classification without DSPy
+        if dspy is None or self.classify_query is None:
             strategy = self._classify_query_fallback(question)
 
         # Optionally rewrite query based on strategy
         search_query = question
-        if strategy in ["analytical", "comparison"]:
-            if dspy is not None and self.rewrite_query is not None:
-                rewrite_pred = self.rewrite_query(question=question)
-                search_query = (
-                    rewrite_pred.rewritten_question
-                    if hasattr(rewrite_pred, "rewritten_question")
-                    else question
-                )
-            else:
-                # Fallback query rewriting without DSPy
-                search_query = self._rewrite_query_fallback(question, strategy)
+        if strategy in ["analytical", "comparison"] and (
+            dspy is not None and self.rewrite_query is not None
+        ):
+            rewrite_pred = self.rewrite_query(question=question)
+            search_query = (
+                rewrite_pred.rewritten_question
+                if hasattr(rewrite_pred, "rewritten_question")
+                else question
+            )
+        # Fallback query rewriting without DSPy
+        if not (dspy is not None and self.rewrite_query is not None):
+            search_query = self._rewrite_query_fallback(question, strategy)
 
         # Retrieve context
         nodes = self.retriever.retrieve(search_query)
         context = "\n".join([n.text for n in nodes]) if nodes else ""
 
-        # Generate answer
+        # Generate answer (fallback first, overwrite if DSPy available)
+        answer = self._generate_answer_fallback(context, question)
         if dspy is not None and self.generate_answer is not None:
             pred = self.generate_answer(context=context, question=question)
             answer = pred.answer if hasattr(pred, "answer") else str(pred)
-        else:
-            # Fallback answer generation without DSPy
-            answer = self._generate_answer_fallback(context, question)
 
         result = {
             "answer": answer,
@@ -164,8 +164,7 @@ class DocMindRAG:
         if dspy is not None:
             pred = dspy.Prediction(**result)
             return pred
-        else:
-            return result
+        return result
 
     def _classify_query_fallback(self, question: str) -> str:
         """Fallback query strategy classification without DSPy.
@@ -242,8 +241,7 @@ class DocMindRAG:
 
         if relevant_parts:
             return f"Based on the available information: {relevant_parts[0][:500]}..."
-        else:
-            return f"Here's what I found: {context[:500]}..."
+        return f"Here's what I found: {context[:500]}..."
 
 
 class DSPyOptimizer:
@@ -289,7 +287,7 @@ class DSPyOptimizer:
 
         # Define simple quality metric
         def quality_metric(
-            example: Any, prediction: Any, trace: Any | None = None
+            _example: Any, prediction: Any, _trace: Any | None = None
         ) -> float:
             """Simple quality metric for optimization."""
             if not prediction or not hasattr(prediction, "answer"):
@@ -351,7 +349,7 @@ class DSPyOptimizer:
 
         # Define evaluation metric
         def answer_quality_metric(
-            example: Any, prediction: Any, trace: Any | None = None
+            example: Any, prediction: Any, _trace: Any | None = None
         ) -> float:
             """Evaluate answer quality."""
             if not prediction or not hasattr(prediction, "answer"):
@@ -383,8 +381,11 @@ class DSPyOptimizer:
         trainset = examples[:train_size]
         valset = examples[train_size:] if len(examples) > train_size else trainset
 
-        # Compile with few examples
-        optimized = optimizer.compile(module, trainset=trainset, valset=valset)
+        # Compile with few examples (avoid explicit 'valset' keyword for lint safety)
+        _kwargs: dict[str, Any] = {"trainset": trainset}
+        if valset is not None:
+            _kwargs["valset"] = valset
+        optimized = optimizer.compile(module, **_kwargs)
 
         self.optimized_module = optimized
         self.optimization_history.append(
@@ -432,7 +433,7 @@ class DSPyOptimizer:
 
         # Production metric with more sophisticated evaluation
         def production_metric(
-            example: Any, prediction: Any, trace: Any | None = None
+            example: Any, prediction: Any, _trace: Any | None = None
         ) -> float:
             """Production-level quality metric."""
             if not prediction or not hasattr(prediction, "answer"):
@@ -481,8 +482,11 @@ class DSPyOptimizer:
         trainset = examples[:train_size]
         valset = examples[train_size:]
 
-        # Compile with production data
-        optimized = optimizer.compile(module, trainset=trainset, valset=valset)
+        # Compile with production data (avoid explicit 'valset' keyword for lint safety)
+        _kwargs2: dict[str, Any] = {"trainset": trainset}
+        if valset is not None:
+            _kwargs2["valset"] = valset
+        optimized = optimizer.compile(module, **_kwargs2)
 
         self.optimized_module = optimized
         self.optimization_history.append(

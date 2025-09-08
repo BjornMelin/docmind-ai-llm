@@ -67,12 +67,8 @@ class SiglipEmbedding:
         self._proc = proc
         # best-effort dimension
         try:
-            self._dim = (
-                int(
-                    getattr(model.config, "projection_dim", 0)  # type: ignore[attr-defined]
-                )
-                or None
-            )
+            proj = getattr(model.config, "projection_dim", 0)
+            self._dim = int(proj) or None
         except Exception:  # pylint: disable=broad-exception-caught
             self._dim = None
 

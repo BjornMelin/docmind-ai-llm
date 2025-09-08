@@ -39,7 +39,7 @@ def build_bge_m3_index(
         # weights are applied by retriever; kept here for symmetry
         _ = weights_for_different_modes, device
         return index
-    except Exception:  # pragma: no cover - fallback for environments without BGEM3Index
+    except (ImportError, RuntimeError, ValueError):  # pragma: no cover - fallback
         # Fallback to a minimal in-memory index to keep tests offline
         from llama_index.core import Document as LIDocument
         from llama_index.core import VectorStoreIndex
@@ -48,7 +48,7 @@ def build_bge_m3_index(
         for n in nodes:
             try:
                 text = getattr(n, "text", None) or getattr(n, "get_text", lambda: "")()
-            except Exception:
+            except (AttributeError, TypeError):
                 text = str(n)
             if not text:
                 text = ""
@@ -61,6 +61,7 @@ def build_bge_m3_index(
                 self._base = base
 
             def as_retriever(self, **_kwargs: Any) -> Any:
+                """Return retriever from wrapped index."""
                 return self._base.as_retriever()
 
         return _Wrapper(idx)
@@ -95,7 +96,7 @@ def get_default_bge_m3_retriever(
                     getattr(settings.retrieval, "weights_for_different_modes", weights)
                     or weights
                 )
-        except Exception as exc:
+        except (AttributeError, ValueError) as exc:
             _ = exc  # avoid noisy logs in offline CI/tests
 
     index = build_bge_m3_index(list(nodes), model_name=model_name)

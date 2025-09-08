@@ -31,12 +31,13 @@ def _get_key() -> bytes | None:
         return None
     try:
         import base64
+        import binascii
 
         raw = base64.b64decode(b64)
         if len(raw) not in (16, 24, 32):
             return None
         return raw
-    except Exception:
+    except (binascii.Error, ValueError):
         return None
 
 
@@ -67,7 +68,7 @@ def encrypt_file(path: str) -> str:
                 p.unlink()
         # Do not delete plaintext automatically to allow caller control
         return str(out_path)
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         return path
 
 
@@ -93,7 +94,7 @@ def decrypt_file(path: str) -> str:
         tmp = Path(name)
         tmp.write_bytes(pt)
         return str(tmp)
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         return path
 
 

@@ -93,7 +93,6 @@ class ServerHybridRetriever:
         svec = _encode_sparse_query(text)
         return dense_vec, svec
 
-
     def _fusion(self) -> qmodels.FusionQuery:
         """Create fusion query based on configured mode."""
         mode = self.params.fusion_mode
