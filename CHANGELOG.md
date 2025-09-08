@@ -8,11 +8,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Breaking
 
-- Removed all legacy client-side fusion knobs (rrf_alpha, rrf_k_constant, fusion weights) and UI reranker toggles. Server-side Qdrant Query API fusion is authoritative; RRF default, DBSF env-gated via `DOCMIND_RETRIEVAL__FUSION_MODE`.
+- Removed all legacy client-side fusion knobs (rrf_alpha, rrf_k_constant, fusion weights) and UI reranker toggles. Server-side Qdrant Query API fusion is authoritative; RRF default, DBSF env-gated via `DOCMIND_RETRIEVAL__FUSION_MODE`. Also removed the deprecated `retrieval.reranker_mode` setting — reranker implementation is now auto‑detected (FlagEmbedding preferred when available, else LI).
 
 ### Added
 
-- Retrieval telemetry (JSONL) with canonical keys: retrieval.* and dedup.*.
+- Retrieval telemetry (JSONL) with canonical keys: retrieval.*and dedup.*.
 - Rerank telemetry with rerank.*: stage, latency_ms, timeout, delta_changed_count.
 - Enforced BM42 sparse with IDF modifier in Qdrant schema; migration helper for existing collections.
 - SIGLIP model env `DOCMIND_EMBEDDING__SIGLIP_MODEL_ID` and predownload script `scripts/predownload_models.py`.
@@ -21,7 +21,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed
 
-- Reranking is always-on (BGE v2‑m3 text + SigLIP visual) with policy-gated ColPali; removed reranker_mode throughout.
+- Reranking is always-on (BGE v2‑m3 text + SigLIP visual) with policy-gated ColPali; UI no longer exposes reranker knobs. Implementation selection is automatic (no env/config toggles).
+
+### Fixed
+
+- Read-only settings panel simplified; no longer references removed `reranker_mode`.
 - README updated with offline predownload steps and new envs.
 
 ## [1.1.0] - 2025-09-07
