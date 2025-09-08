@@ -95,6 +95,7 @@ test = [
     "pytest-mock>=3.14.0",
     "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
+    "pytest-timeout>=2.3.1",
 ]
 
 # Note: spaCy models are not PyPI packages and must be installed separately:
@@ -270,6 +271,13 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "requires_gpu: marks tests that require GPU",
     "requires_network: marks tests that require network access",
+    "requires_ollama: marks tests that require a local Ollama server",
+    "gpu_required: alias for requires_gpu",
+    "agents: Multi-agent coordination tests",
+    "retrieval: Retrieval/search tests",
+    "embeddings: Embedding model tests",
+    "multimodal: CLIP/multimodal tests",
+    "timeout: Per-test timeout marker",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
