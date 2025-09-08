@@ -185,7 +185,7 @@ def save_pdf_page_images(pdf_path: Path, out_dir: Path, dpi: int = 200) -> list[
     """Render each PDF page to a stable image (WebP/JPEG) and return metadata.
 
     - Stable filename format: ``<stem>__page-<n>.<webp|jpg>``; encrypted outputs
-      end with ``.enc`` when AES‑GCM is enabled.
+      end with ``.enc`` when AES-GCM is enabled.
     - Returns one item per page with page number, image path, bbox, phash, and
       optional encryption metadata (kid).
 

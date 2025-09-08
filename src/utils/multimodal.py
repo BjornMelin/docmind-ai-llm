@@ -198,7 +198,7 @@ def create_image_documents(
     for p in image_paths:
         try:
             docs.append(ImageDocument(image_path=str(p), metadata=meta))
-        except (TypeError, ValueError, OSError) as exc:  # pragma: no cover - exercised via tests
+        except (TypeError, ValueError, OSError) as exc:  # pragma: no cover
             logger.error("Failed creating ImageDocument for %s: %s", p, exc)
     return docs
 

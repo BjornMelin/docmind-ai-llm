@@ -13,6 +13,7 @@ Key features:
 """
 
 import os
+from contextlib import suppress
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
@@ -204,10 +205,8 @@ class ServerHybridRetriever:
 
             # Emit sparse fallback flag when no sparse prefetch was used
             if sparse_vec is None:
-                try:
+                with suppress(Exception):  # pragma: no cover - defensive
                     log_jsonl({"retrieval.sparse_fallback": True})
-                except Exception:  # pragma: no cover - defensive
-                    pass
             log_jsonl(
                 {
                     "retrieval.fusion_mode": self.params.fusion_mode,
