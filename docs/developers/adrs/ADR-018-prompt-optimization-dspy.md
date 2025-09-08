@@ -68,6 +68,7 @@ graph TD
 ### Integration Requirements
 
 - IR‑1: Works with ADR‑003/001 pipelines
+- IR‑2: Compatible with SPEC‑020 file‑based templates (RichPromptTemplate); DSPy may rewrite user queries before templates are rendered or operate on free‑form chat input.
 
 ## Design
 
