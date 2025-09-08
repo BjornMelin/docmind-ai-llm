@@ -35,4 +35,3 @@ def test_final_telemetry_log_error_is_caught(monkeypatch):
     out = rr.MultimodalReranker()._postprocess_nodes(nodes, QueryBundle(query_str="q"))
     # Still returns correct ordering and result despite telemetry failure
     assert [n.node.text for n in out] == ["B", "A"]
-

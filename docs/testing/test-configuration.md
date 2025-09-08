@@ -172,6 +172,59 @@ def test_settings(tmp_path_factory) -> TestDocMindSettings:
     )
 ```
 
+## Test Toggles & Run Profiles
+
+The suite defaults to fast, deterministic unit+integration tests (no network,
+no GPU). Heavier E2E/system tests are opt‑in to avoid flakiness in environments
+without services or UI.
+
+### Environment toggles
+
+- `DOCMIND_RUN_E2E=1`
+  - Enables E2E tests in `tests/e2e/*`. Default: skipped.
+- `DOCMIND_RUN_SYSTEM=1`
+  - Enables system tests in `tests/system/*`. Default: skipped.
+- `DOCMIND_QDRANT_SCHEMA_SMOKE=1`
+  - Enables Qdrant schema smoke in `tests/integration/retrieval/test_qdrant_named_vectors_schema.py`.
+  - Default: skipped (requires a running local Qdrant instance).
+- Telemetry controls (unit tests verify these):
+  - `DOCMIND_TELEMETRY_DISABLED=1` — disable telemetry writes entirely.
+  - `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0` — sample rate for event writes.
+  - `DOCMIND_TELEMETRY_ROTATE_BYTES=<int>` — rotate JSONL file at this size.
+
+### Recommended run profiles
+
+- Unit + Integration (default, offline):
+
+  ```bash
+  uv run pytest -q
+  ```
+
+- With E2E (requires local UI/testable environment):
+
+  ```bash
+  DOCMIND_RUN_E2E=1 uv run pytest -q tests/e2e
+  ```
+
+- With System tests (requires local services/models):
+
+  ```bash
+  DOCMIND_RUN_SYSTEM=1 uv run pytest -q tests/system
+  ```
+
+- Full run including E2E + System (CI stage with services up):
+
+  ```bash
+  DOCMIND_RUN_E2E=1 DOCMIND_RUN_SYSTEM=1 uv run pytest -q
+  ```
+
+### Patterns to avoid (best practices)
+
+- Don’t add test‑only code or flags in production modules.
+- Avoid network/GPU in unit tests; patch boundaries (env, modules, functions).
+- No sleeps or time‑coupled assertions; use monotonic time or monkeypatch.
+- Test behavior and stable invariants, not implementation details.
+
 #### integration_settings (Session-scoped)
 
 For integration tests with realistic configuration:
@@ -550,6 +603,10 @@ def test_debug_settings():
     print(f"Debug: {settings.debug}")  # Should be True
     print(f"GPU: {settings.enable_gpu_acceleration}")  # Should be False
     print(f"Context: {settings.vllm.context_window}")  # Should be 1024
+This guide also documents the environment toggles and run profiles used to keep
+tests fast, deterministic, and offline by default while allowing opt‑in, full
+end‑to‑end (E2E) and system validations when a suitable environment is
+available.
 ```
 
 #### Environment Variable Conflicts

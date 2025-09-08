@@ -43,6 +43,7 @@ def test_siglip_truncates_long_text(monkeypatch):
             return False
 
     import sys
+
     fake_torch = types.SimpleNamespace(no_grad=lambda: _NoGrad())
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
 
