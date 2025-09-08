@@ -1,0 +1,6 @@
+professional:
+  description: Use a professional, objective tone.
+academic:
+  description: Use a scholarly, research-oriented tone.
+informal:
+  description: Use a casual, conversational tone.

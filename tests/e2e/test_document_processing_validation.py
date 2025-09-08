@@ -306,14 +306,16 @@ def test_analysis_output_schema_validation():
 def test_prompts_and_application_structure():
     """Test that application prompts and structure are properly configured."""
     try:
-        from src.prompts import PREDEFINED_PROMPTS
+        from src.prompting import list_templates
 
         # Test prompts structure
-        assert isinstance(PREDEFINED_PROMPTS, dict)
-        assert len(PREDEFINED_PROMPTS) > 0
+        assert isinstance(list_templates(), list)
+        assert len(list_templates()) > 0
 
         # Test that prompts have valid content
-        for prompt_name, prompt_content in PREDEFINED_PROMPTS.items():
+        for t in list_templates():
+            prompt_name = t.name
+            prompt_content = t.description or t.id
             assert isinstance(prompt_name, str)
             assert isinstance(prompt_content, str)
             assert len(prompt_name) > 0
@@ -323,7 +325,7 @@ def test_prompts_and_application_structure():
 
         # Test specific prompt types exist
         expected_prompt_types = ["summarization", "analysis", "extraction"]
-        available_prompts = list(PREDEFINED_PROMPTS.keys())
+        available_prompts = [t.name.lower() for t in list_templates()]
 
         # Check that we have some expected prompt types (flexible check)
         has_expected_prompts = any(
@@ -333,9 +335,9 @@ def test_prompts_and_application_structure():
         )
 
         print("✅ Prompts and application structure validated")
-        print(f"   - Total prompts: {len(PREDEFINED_PROMPTS)}")
+        print(f"   - Total templates: {len(list_templates())}")
         print(
-            f"   - Prompt names: {list(PREDEFINED_PROMPTS.keys())[:3]}..."
+            f"   - Prompt names: {[t.name for t in list_templates()][:3]}..."
         )  # Show first 3
         print(f"   - Has expected prompt types: {has_expected_prompts}")
 

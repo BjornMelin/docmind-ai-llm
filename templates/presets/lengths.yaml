@@ -1,0 +1,6 @@
+concise:
+  description: Keep the response brief and to-the-point.
+detailed:
+  description: Provide a thorough and comprehensive response.
+comprehensive:
+  description: Provide an extensive and in-depth response.

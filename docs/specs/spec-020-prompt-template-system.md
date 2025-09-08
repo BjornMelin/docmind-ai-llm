@@ -35,7 +35,7 @@ This is a breaking change that fully deletes legacy prompt constants and their t
 
 ### Directory Layout (Small, Library-First)
 
-```
+```text
 src/
   prompting/
     __init__.py
@@ -57,7 +57,7 @@ templates/
 
 ### Template Format (Markdown + YAML front matter)
 
-```
+```yaml
 ---
 id: comprehensive-analysis
 name: Comprehensive Document Analysis
@@ -94,7 +94,7 @@ Answer clearly and concisely.
 
 Example `templates/presets/tones.yaml`:
 
-```
+```yaml
 professional:
   description: Use a professional, objective tone.
 academic:
@@ -107,7 +107,7 @@ Similar files for roles (replaces INSTRUCTIONS) and lengths.
 
 ### Public API (Minimal Surface)
 
-```
+```python
 from src.prompting import (
   list_templates,        # -> list[TemplateMeta]
   get_template,          # (id) -> TemplateSpec
@@ -190,35 +190,42 @@ from src.prompting import (
 ## Implementation Plan (Work Breakdown — Minimal Code)
 
 1) Scaffolding (src/prompting)
-- Add `models.py` (TemplateMeta, TemplateSpec) — Pydantic for YAML front matter
-- Add `loader.py` (scan/parse, front matter, minimal validation)
-- Add `renderer.py` (wrap `RichPromptTemplate`; expose render + format_messages)
-- Add `registry.py` (in‑memory dict; list/get APIs; lazy load on first use)
-- Add `validators.py` (optional jinja meta check; size limits)
+
+   - Add `models.py` (TemplateMeta, TemplateSpec) — Pydantic for YAML front matter
+   - Add `loader.py` (scan/parse, front matter, minimal validation)
+   - Add `renderer.py` (wrap `RichPromptTemplate`; expose render + format_messages)
+   - Add `registry.py` (in‑memory dict; list/get APIs; lazy load on first use)
+   - Add `validators.py` (optional jinja meta check; size limits)
 
 2) Default Templates & Presets
-- Create 3 templates: comprehensive‑analysis, key‑insights, summary‑open‑questions
-- Create presets: tones.yaml, roles.yaml, lengths.yaml (direct YAML dicts)
+
+   - Create 3 templates: comprehensive‑analysis, key‑insights, summary‑open‑questions
+   - Create presets: tones.yaml, roles.yaml, lengths.yaml (direct YAML dicts)
 
 3) Public API Surface
-- `src/prompting/__init__.py` re‑exports: list_templates, get_template, render_prompt, format_messages, list_presets
+
+   - `src/prompting/__init__.py` re‑exports: list_templates, get_template, render_prompt, format_messages, list_presets
 
 4) UI Integration
-- Update `src/app.py` to use `list_templates()` and `format_messages()`
-- Replace tone/role/length pickers to pull from presets YAML
+
+   - Update `src/app.py` to use `list_templates()` and `format_messages()`
+   - Replace tone/role/length pickers to pull from presets YAML
 
 5) Tests
-- Add new unit + integration tests for prompting package
-- Update E2E tests to validate template catalog and rendering
+
+   - Add new unit + integration tests for prompting package
+   - Update E2E tests to validate template catalog and rendering
 
 6) Delete Legacy
-- Remove `src/prompts.py`
-- Delete `tests/unit/prompts/test_prompts.py`
-- Remove E2E test assertions referencing PREDEFINED_PROMPTS; replace with template registry assertions
+
+   - Remove `src/prompts.py`
+   - Delete `tests/unit/prompts/test_prompts.py`
+   - Remove E2E test assertions referencing PREDEFINED_PROMPTS; replace with template registry assertions
 
 7) Docs
-- Update README “Choosing Prompts” to reference templates and presets
-- Cross‑link ADR‑020 and this spec; add developer guide: how to add a template
+
+   - Update README “Choosing Prompts” to reference templates and presets
+   - Cross‑link ADR‑020 and this spec; add developer guide: how to add a template
 
 ## Acceptance Criteria
 

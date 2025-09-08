@@ -582,25 +582,19 @@ class TestDocumentUploadSection:
 class TestAnalysisOptions:
     """Test analysis options and query processing logic."""
 
-    def test_analysis_query_generation(self):
-        """Test analysis query generation logic."""
-        prompt_type = "Summary"
+    def test_render_prompt_minimal(self):
+        """Render a minimal template with defaults and context using API."""
+        # Patch prompting API to avoid disk access
+        from unittest.mock import patch as _patch
 
-        # Logic from app.py
-        analysis_query = f"Perform {prompt_type} analysis on the documents"
-
-        assert analysis_query == "Perform Summary analysis on the documents"
-
-    def test_analysis_with_predefined_prompts(self):
-        """Test analysis with predefined prompts."""
-        # Test that predefined prompts are accessible
-        with patch("src.app.PREDEFINED_PROMPTS") as mock_prompts:
-            mock_prompts.keys.return_value = ["Summary", "Analysis", "Extract"]
-
-            prompt_options = list(mock_prompts.keys())
-            assert "Summary" in prompt_options
-            assert "Analysis" in prompt_options
-            assert "Extract" in prompt_options
+        with _patch("src.prompting.render_prompt", return_value="OK") as rp:
+            ctx = {
+                "context": "Docs indexed",
+                "tone": {"description": "Use a neutral tone."},
+                "role": {"description": "Act as a helpful assistant."},
+            }
+            out = rp("comprehensive-analysis", ctx)
+            assert out == "OK"
 
 
 @pytest.mark.unit

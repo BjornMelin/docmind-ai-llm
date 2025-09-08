@@ -49,7 +49,7 @@ from src.config.settings import UIConfig as _UIConfig
 from src.config.settings import VLLMConfig as _VLLMConfig
 from src.containers import get_multi_agent_coordinator
 from src.processing.pdf_pages import pdf_pages_to_image_documents
-from src.prompts import PREDEFINED_PROMPTS
+from src.prompting import list_presets, list_templates, render_prompt
 from src.retrieval.graph_config import create_property_graph_index
 from src.retrieval.query_engine import create_adaptive_router_engine
 from src.ui.components.provider_badge import provider_badge
@@ -537,7 +537,18 @@ async def upload_section() -> None:
 
 # Analysis Options and Agentic Analysis with Error Handling
 st.header("Analysis Options")
-prompt_type: str = st.selectbox("Prompt", list(PREDEFINED_PROMPTS.keys()))
+# Load templates and presets
+_templates = list_templates()
+_template_name_to_id = {t.name: t.id for t in _templates}
+_template_names = list(_template_name_to_id.keys()) or ["Comprehensive Document Analysis"]
+prompt_name: str = st.selectbox("Prompt", _template_names)
+selected_template_id = _template_name_to_id.get(prompt_name, "comprehensive-analysis")
+
+# Optional presets (tones/roles)
+_tones = list_presets("tones")
+_roles = list_presets("roles")
+tone_key = st.selectbox("Tone", list(_tones.keys()) or ["professional"]) if _tones else "professional"
+role_key = st.selectbox("Role", list(_roles.keys()) or ["assistant"]) if _roles else "assistant
 # Other selects for tone, instructions, etc. (assuming they exist in full code)
 
 
@@ -550,7 +561,13 @@ async def run_analysis() -> None:
     if st.session_state.index:
         with st.spinner("Running analysis..."):
             try:
-                analysis_query_text = f"Perform {prompt_type} analysis on the documents"
+                # Build a minimal context for the prompt template
+ctx = {
+    "context": "Documents have been processed and indexed.",
+    "tone": _tones.get(tone_key, {"description": "Use a neutral tone."}),
+    "role": _roles.get(role_key, {"description": "Act as a helpful assistant."}),
+}
+analysis_query_text = render_prompt(selected_template_id, ctx)
 
                 # Prefer RouterQueryEngine when available
                 if st.session_state.get("router_engine") is not None:
@@ -595,7 +612,12 @@ def _render_analyze_button() -> None:
         # Use sync analysis to avoid asyncio event loop conflicts
         with st.spinner("Running analysis..."):
             try:
-                sync_query = f"Perform {prompt_type} analysis on the documents"
+                ctx = {
+    "context": "Documents have been processed and indexed.",
+    "tone": _tones.get(tone_key, {"description": "Use a neutral tone."}),
+    "role": _roles.get(role_key, {"description": "Act as a helpful assistant."}),
+}
+sync_query = render_prompt(selected_template_id, ctx)
 
                 # Prefer RouterQueryEngine when available (synchronous call)
                 if st.session_state.get("router_engine") is not None:
