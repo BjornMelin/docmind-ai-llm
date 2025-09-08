@@ -52,8 +52,8 @@ def test_save_with_format_jpeg_fallback_and_encryption(monkeypatch, tmp_path):
             raise OSError("webp not supported")
         if str(path).endswith(".jpg"):
             calls["jpeg"] += 1
-            return original_save(self, path, format="JPEG", **kwargs)
-        return original_save(self, path, format=fmt, **kwargs)
+            return original_save(self, path)
+        return original_save(self, path)
 
     monkeypatch.setattr(PIL.Image.Image, "save", _save, raising=False)
 

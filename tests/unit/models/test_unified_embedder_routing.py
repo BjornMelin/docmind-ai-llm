@@ -16,8 +16,8 @@ def test_unified_embedder_routes_text_and_images(monkeypatch):
             return {"dense": arr}
 
     class _I:
-        def get_image_embedding(self, _img):
-            return np.asarray([0.0, 2.0], dtype=np.float32)
+        def encode_image(self, images, **_):
+            return np.asarray([[0.0, 2.0] for _ in images], dtype=np.float32)
 
     ue = UnifiedEmbedder(text=_T(), image=_I())
     res = ue.encode(["hello", {"image": "x"}])
