@@ -137,10 +137,17 @@ class ServerHybridRetriever:
                 )
             )
         d_list = dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
-        # Qdrant client models define VectorInput as a Union[...] alias; pass the list directly
+        # Prefer typed VectorInput when available as a real class; otherwise pass list
+        vi_query: Any = d_list
+        VI = getattr(qmodels, "VectorInput", None)
+        if VI is not None:
+            try:  # support older client versions where VectorInput was a model
+                vi_query = VI(vector=d_list)
+            except TypeError:  # new clients expose it as typing.Union and cannot be instantiated
+                vi_query = d_list
         prefetch.append(
             qmodels.Prefetch(
-                query=d_list,  # type: ignore[arg-type]
+                query=vi_query,  # type: ignore[arg-type]
                 using="text-dense",
                 limit=self.params.prefetch_dense,
             )
