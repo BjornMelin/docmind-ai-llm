@@ -1,7 +1,7 @@
 ---
 ADR: 012
 Title: Evaluation with DeepEval
-Status: Accepted
+Status: Implemented
 Version: 4.0
 Date: 2025-08-19
 Supersedes:

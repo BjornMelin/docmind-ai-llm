@@ -1,7 +1,7 @@
 ---
 ADR: 009
 Title: Document Processing Pipeline (Multimodal)
-Status: Accepted
+Status: Implemented
 Version: 2.4
 Date: 2025-09-04
 Supersedes:

@@ -1,7 +1,7 @@
 ---
 ADR: 003
 Title: Adaptive Retrieval Pipeline (RAPTOR‑Lite + Router)
-Status: Accepted
+Status: Implemented
 Version: 3.4
 Date: 2025-09-04
 Supersedes:

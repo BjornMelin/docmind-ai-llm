@@ -1,7 +1,7 @@
 ---
 ADR: 024
 Title: Unified Settings Architecture (Always‑On Hybrid/Rerank + 128K Cap)
-Status: Accepted
+Status: Implemented
 Version: 2.8
 Date: 2025-09-04
 Supersedes:

@@ -4,7 +4,7 @@ title: Document Ingestion with Unstructured + LlamaIndex IngestionPipeline and P
 version: 1.0.0
 date: 2025-09-05
 owners: ["ai-arch"]
-status: Final
+status: Completed
 related_requirements:
   - FR-ING-001: The system SHALL parse PDFs, Office docs, images using Unstructured.
   - FR-ING-002: The system SHALL emit canonical nodes with deterministic IDs and lineage.

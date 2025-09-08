@@ -1,7 +1,7 @@
 ---
 ADR: 002
 Title: Unified Embedding Strategy with BGE‑M3
-Status: Accepted
+Status: Implemented
 Version: 4.3
 Date: 2025-09-02
 Supersedes:

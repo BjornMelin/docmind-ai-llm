@@ -4,7 +4,7 @@ title: Hybrid Retrieval: Qdrant Named Vectors (dense+sparse) with Server‑Side 
 version: 1.1.0
 date: 2025-09-05
 owners: ["ai-arch"]
-status: Final
+status: Completed
 related_requirements:
   - FR-RET-001: Use Qdrant named vectors dense/sparse with server‑side hybrid fusion via Query API.
   - FR-RET-002: Deterministic point IDs and idempotent upserts.

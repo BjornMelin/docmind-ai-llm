@@ -4,7 +4,7 @@ title: Multi-provider LLM Runtime with UI Selection and Hardware-Aware Paths
 version: 1.0.0
 date: 2025-09-05
 owners: ["ai-arch"]
-status: Final
+status: Completed
 related_requirements:
   - FR-LLM-001: Users SHALL select provider and model at runtime via UI.
   - FR-LLM-002: The app SHALL support llama.cpp, vLLM, Ollama, and LM Studio.

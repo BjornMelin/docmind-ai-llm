@@ -4,7 +4,7 @@ title: Reranking: BGE Cross-Encoder for Text + SigLIP Visual Re‑score (ColPali
 version: 1.1.0
 date: 2025-09-05
 owners: ["ai-arch"]
-status: Final
+status: Completed
 related_requirements:
   - FR-RER-001: Text rerank SHALL use BAAI/bge-reranker-v2-m3.
   - FR-RER-002: Visual rerank SHOULD default to SigLIP text–image similarity; ColPali MAY be enabled optionally on capable GPUs.

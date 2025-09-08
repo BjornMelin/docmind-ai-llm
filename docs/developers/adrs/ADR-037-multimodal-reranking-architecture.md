@@ -1,7 +1,7 @@
 ---
 ADR: 037
 Title: Multimodal Reranking with SigLIP Visual Re‑score (default) and ColPali (optional) + BGE v2‑m3 (text)
-Status: Accepted
+Status: Implemented
 Version: 1.2
 Date: 2025-09-03
 Supersedes: 006

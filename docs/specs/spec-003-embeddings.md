@@ -4,7 +4,7 @@ title: Unified Embeddings: BGE‑M3 Text (dense+sparse) + Multimodal Images (Sig
 version: 1.2.0
 date: 2025-09-07
 owners: ["ai-arch"]
-status: Final
+status: Completed
 related_requirements:
   - FR-EMB-001: Text embeddings SHALL use BAAI/bge-m3 with dense+sparse.
   - FR-EMB-002: Image embeddings SHOULD default to SigLIP; OpenCLIP MAY be used when explicitly selected.
