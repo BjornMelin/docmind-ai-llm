@@ -94,7 +94,7 @@ def decrypt_file(path: str) -> str:
         tmp = Path(name)
         tmp.write_bytes(pt)
         return str(tmp)
-    except (OSError, ValueError, RuntimeError):
+    except Exception:
         return path
 
 
