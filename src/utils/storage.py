@@ -78,7 +78,11 @@ def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> No
                         )
                     },
                 )
-    except Exception as e:  # pragma: no cover - defensive path
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+    ) as e:  # pragma: no cover - defensive path
         logger.warning("ensure_sparse_idf_modifier skipped: %s", e)
 
 
@@ -315,6 +319,19 @@ def create_vector_store(
         Configured QdrantVectorStore
     """
     client = QdrantClient(url=settings.database.qdrant_url)
+    # Ensure named vectors schema exists when hybrid is enabled (idempotent)
+    if enable_hybrid:
+        try:
+            setup_hybrid_collection(
+                client,
+                collection_name,
+                dense_embedding_size=_dense_embedding_size,
+                recreate=False,
+            )
+        except Exception:  # pragma: no cover - defensive ensure
+            logger.warning(
+                "setup_hybrid_collection failed; proceeding with store creation"
+            )
 
     try:
         return QdrantVectorStore(
@@ -353,7 +370,7 @@ def persist_image_metadata(
             payload=metadata,
         )
         return True
-    except Exception as exc:  # pragma: no cover - defensive
+    except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
         logger.warning("update_payload failed for %s: %s", point_id, exc)
         return False
 
