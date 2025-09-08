@@ -47,6 +47,10 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions. Default hybrid fusion is server‑side RRF in Qdrant; DBSF is optional and gated by env/version support. Prefer BM42 sparse (FastEmbed) with IDF modifier.
 
+Explicit clarifications:
+- No UI toggles for hybrid or reranking; operators MAY use ops‑only env overrides (per ADR‑024 scope). Reranking remains a single integration path (auto‑detect direct FlagEmbedding else LlamaIndex wrapper).
+- For Qdrant hybrid retrieval, the collection schema SHALL be enforced idempotently with named vectors `text-dense` and `text-sparse` to align with Query API `using` fields; query‑time sparse vectors SHALL be produced by the same family (FastEmbed BM42/BM25) used at index time.
+
 ## High-Level Architecture
 
 ```mermaid
@@ -443,6 +447,7 @@ def test_env_mapping(monkeypatch):
 
 ## Changelog
 
+- 2.9 (2025-09-08): Clarified always-on (no UI toggles), single reranker path; enforced Qdrant named-vector schema and sparse alignment.
 - 2.8 (2025-09-07): Removed client-side fusion knobs; added server-side fusion envs (fusion_mode/fused_top_k/rrf_k), BM42(IDF) preference, and DBSF env-gating. Clarified env-only overrides and offline defaults.
 
 - 2.7 (2025-09-07): Always‑on hybrid/rerank (no UI toggles); embed default BGE‑M3; updated examples and requirements

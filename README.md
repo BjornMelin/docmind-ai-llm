@@ -39,13 +39,13 @@
 
 - **LlamaIndex RAG Pipeline:** QueryPipeline with async/parallel processing, ingestion pipelines, and caching.
 
-- **Hybrid Retrieval:** RRF fusion (α=0.7) combining BGE-M3 unified dense/sparse embeddings for improved recall.
+- **Hybrid Retrieval:** Qdrant Query API server‑side fusion (RRF default, DBSF optional) over named vectors `text-dense` (BGE‑M3; COSINE) and `text-sparse` (FastEmbed BM42/BM25 with IDF). Dense via LlamaIndex; sparse via FastEmbed.
 
 - **Knowledge Graph Integration:** spaCy entity extraction with relationship mapping for complex queries.
 
 - **Multimodal Processing:** Unstructured hi-res parsing for PDFs with text, tables, and images using Jina v4 embeddings.
 
-- **Always-on Reranking:** Text via BGE Cross-Encoder and visual via SigLIP; optional ColPali on capable GPUs. Deterministic, cancellable, and fail-open.
+- **Always-on Reranking:** Text via BGE Cross-Encoder and visual via SigLIP; optional ColPali on capable GPUs. Deterministic, batch‑wise cancellation; fail‑open; SigLIP loader cached.
 
 - **Offline-First Design:** 100% local processing with no external API dependencies.
 
@@ -563,7 +563,7 @@ graph TD
 
 - **Async Processing:** QueryPipeline with parallel execution and caching
 
-- **Reranking:** ColBERT late-interaction model improves top-5 results from top-20 prefetch
+- **Reranking:** Always‑on BGE Cross‑Encoder (text) + SigLIP (visual) RRF merge; optional ColPali on capable GPUs.
 
 - **Memory Management:** Quantization and model size auto-selection based on available VRAM
 
@@ -671,7 +671,7 @@ maxUploadSize = 200
 
 - **Dense + Sparse RRF**: Improved recall vs single-vector
 
-- **ColBERT Reranking**: Enhanced context quality
+- **Multimodal Reranking**: Enhanced context quality via SigLIP/ColPali
 
 - **Top-K Retrieval**: <2 seconds for 10K document corpus
 
@@ -712,10 +712,10 @@ maxUploadSize = 200
 
 ### Retrieval & Reranking Defaults
 
-- Hybrid retrieval uses Qdrant named vectors `text-dense` (1024D COSINE) and `text-sparse` (SparseIndexParams) with server-side fusion via the Query API.
+- Hybrid retrieval uses Qdrant named vectors `text-dense` (1024D COSINE; BGE‑M3) and `text-sparse` (FastEmbed BM42/BM25 + IDF) with server-side fusion via the Query API (Prefetch + FusionQuery; dense uses VectorInput).
 - Default fusion = RRF; DBSF is available experimentally with `DOCMIND_RETRIEVAL__FUSION_MODE=dbsf`.
 - Prefetch: dense≈200, sparse≈400; fused_top_k=60; page_id de-dup.
-- Reranking is always-on: BGE v2‑m3 (text) + SigLIP (visual) with optional ColPali when thresholds are met.
+- Reranking is always-on: BGE v2‑m3 (text) + SigLIP (visual) with optional ColPali; SigLIP loader is cached; batch‑wise cancellation only.
 - No UI toggles; ops overrides via env only.
 
 #### Operational Flags (local-first)
