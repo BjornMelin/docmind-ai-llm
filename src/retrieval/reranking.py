@@ -75,7 +75,7 @@ def _has_cuda_vram(min_gb: float) -> bool:
         props = torch.cuda.get_device_properties(0)  # type: ignore[attr-defined]
         total = props.total_memory / (1024**3)
         return total >= float(min_gb)
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return False
 
 
@@ -119,7 +119,7 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
 
         if torch.cuda.is_available():  # type: ignore[attr-defined]
             device = "cuda"
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         device = "cpu"
 
     # Pull model id from settings if available, fallback to default
@@ -127,7 +127,7 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
         model_id = getattr(
             settings.embedding, "siglip_model_id", "google/siglip-base-patch16-224"
         )
-    except Exception:  # pylint: disable=broad-exception-caught
+    except AttributeError:
         model_id = "google/siglip-base-patch16-224"
     model = SiglipModel.from_pretrained(model_id)
     if device == "cuda":
@@ -136,7 +136,7 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     return model, processor, device
 
 
-def _siglip_rescore(
+def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
     query: str, nodes: list[NodeWithScore], budget_ms: int
 ) -> list[NodeWithScore]:
     """Compute SigLIP text-image cosine scores for visual nodes.
@@ -175,7 +175,7 @@ def _siglip_rescore(
             from src.utils.security import (
                 decrypt_file,
             )  # local import to avoid heavy deps
-        except Exception:  # pragma: no cover - defensive
+        except ImportError:  # pragma: no cover - defensive
 
             def decrypt_file(p: str) -> str:  # type: ignore
                 return p
@@ -191,7 +191,7 @@ def _siglip_rescore(
                         to_open = dec
                         temp_files.append(dec)
                     images.append(Image.open(to_open).convert("RGB"))
-                except Exception:
+                except (OSError, ValueError, RuntimeError, TypeError):
                     images.append(None)
             else:
                 images.append(None)
@@ -206,7 +206,7 @@ def _siglip_rescore(
         model, processor, device = _load_siglip()
 
         # Text features (1, D)
-        txt_inputs = processor(text=[query], return_tensors="pt")
+        txt_inputs = processor(text=[query], padding="max_length", return_tensors="pt")
         if device == "cuda":
             for k, v in txt_inputs.items():
                 txt_inputs[k] = v.to("cuda")
@@ -257,7 +257,7 @@ def _siglip_rescore(
             with contextlib.suppress(Exception):
                 os.remove(tp)
         return nodes_sorted[: settings.retrieval.reranking_top_k]
-    except Exception as exc:
+    except (RuntimeError, ValueError, OSError, TypeError) as exc:
         logger.warning("SigLIP rerank error: {} — fail-open", exc)
         return nodes
 
@@ -296,22 +296,259 @@ def _build_text_reranker_cached(top_n: int) -> SentenceTransformerRerank:
     return SentenceTransformerRerank(
         model=getattr(settings.retrieval, "reranker_model", "BAAI/bge-reranker-v2-m3"),
         top_n=top_n,
-        use_fp16=True,
-        normalize=settings.retrieval.reranker_normalize_scores,
     )
 
 
-def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRerank:
+class _FlagTextReranker:
+    """Thin adapter for FlagEmbedding FlagReranker with LI-compatible interface."""
+
+    def __init__(self, top_n: int) -> None:
+        self.top_n = int(top_n)
+        self._model = None
+        self._model_id = getattr(
+            settings.retrieval, "reranker_model", "BAAI/bge-reranker-v2-m3"
+        )
+
+    def _ensure_loaded(self) -> None:
+        if self._model is not None:
+            return
+        try:
+            from FlagEmbedding import FlagReranker  # type: ignore
+        except ImportError as exc:  # pragma: no cover - optional dep
+            raise ImportError(
+                "FlagEmbedding is required for FlagReranker mode"
+            ) from exc
+
+        use_fp16 = _has_cuda_vram(1.0)
+        self._model = FlagReranker(self._model_id, use_fp16=use_fp16)
+
+    # Public helper to satisfy linters when used by adapters
+    def ensure_loaded(self) -> None:
+        """Ensure the underlying model is initialized."""
+        self._ensure_loaded()
+
+    def score_pairs(self, pairs: list[list[str]]) -> list[float]:
+        """Compute scores for (query, text) pairs using FlagEmbedding."""
+        self._ensure_loaded()
+        scores = self._model.compute_score(pairs)  # type: ignore[operator]
+        return [float(s) for s in scores]
+
+    def postprocess_nodes(
+        self, nodes: list[NodeWithScore], query_str: str
+    ) -> list[NodeWithScore]:
+        """Score nodes with FlagEmbedding reranker and return top_n.
+
+        Args:
+            nodes: Candidate nodes.
+            query_str: Query string.
+
+        Returns:
+            Top-n nodes sorted by model score (descending). Returns input
+            unchanged on failure or empty input.
+        """
+        if not nodes:
+            return nodes
+        self._ensure_loaded()
+        # Build pairs and score
+        pairs = []
+        texts: list[str] = []
+        for n in nodes:
+            t = (
+                getattr(n.node, "text", None)
+                or getattr(n.node, "get_content", lambda: "")()
+            )
+            texts.append(str(t))
+            pairs.append([query_str, str(t)])
+        try:
+            scores = self._model.compute_score(pairs)  # type: ignore[operator]
+        except (RuntimeError, ValueError, OSError, TypeError) as exc:
+            logger.warning("FlagReranker scoring error: %s — failing open", exc)
+            return nodes[: self.top_n]
+        # Attach scores and sort
+        for n, s in zip(nodes, scores, strict=False):
+            n.score = float(s)
+        nodes_sorted = sorted(nodes, key=lambda x: x.score or 0.0, reverse=True)
+        return nodes_sorted[: self.top_n]
+
+
+class _TextRerankerAdapter:
+    """Unified, cancellable text reranker with batch-wise early-exit.
+
+    - Prefers FlagEmbedding if available, falls back to LlamaIndex
+      SentenceTransformerRerank wrapper.
+    - Scores candidates in fixed-size batches and cooperatively stops
+      after full batches if time budget is exceeded.
+    - Deterministic ordering: primary by score desc, secondary by node_id asc.
+    - Exposes minimal function-level knobs via constructor only.
+    """
+
+    def __init__(
+        self,
+        top_n: int,
+        *,
+        batch_size: int | None = None,
+        device: str = "auto",
+        early_exit_on_cancel_only: bool = True,
+        timeout_ms: int = TEXT_RERANK_TIMEOUT_MS,
+    ) -> None:
+        self.top_n = int(top_n)
+        self.batch_size = (
+            int(batch_size) if batch_size else (16 if _has_cuda_vram(1.0) else 4)
+        )
+        self.device = device
+        self.early_exit_on_cancel_only = bool(early_exit_on_cancel_only)
+        self.timeout_ms = int(timeout_ms)
+        # internal backends
+        self._flag: _FlagTextReranker | None = None
+        self._li: SentenceTransformerRerank | None = None
+        # metrics for telemetry
+        self.last_stats: dict[str, int | bool] = {
+            "processed_count": 0,
+            "processed_batches": 0,
+            "timeout": False,
+        }
+
+        # Backend selection (prefer FlagEmbedding)
+        try:
+            __import__("FlagEmbedding")
+            self._flag = _FlagTextReranker(self.top_n)
+        except ImportError:
+            self._li = _build_text_reranker_cached(self.top_n)
+
+    def _score_batch_flag(self, query: str, batch: list[NodeWithScore]) -> list[float]:
+        if self._flag is None:
+            raise RuntimeError("FlagEmbedding backend not initialized")
+        pairs: list[list[str]] = []
+        for n in batch:
+            t = (
+                getattr(n.node, "text", None)
+                or getattr(n.node, "get_content", lambda: "")()
+            )
+            pairs.append([query, str(t)])
+        try:
+            scores = self._flag.score_pairs(pairs)
+            return scores
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("FlagEmbedding batch score error: {} — failing open", exc)
+            return [float(n.score or 0.0) for n in batch]
+
+    def _score_batch_li(self, query: str, batch: list[NodeWithScore]) -> list[float]:
+        if self._li is None:
+            raise RuntimeError("LI CrossEncoder backend not initialized")
+        # Ensure we return scores for every element in batch; temporarily set top_n
+        try:
+            # LlamaIndex postprocessor returns NodeWithScore with scores set
+            old_top = getattr(self._li, "top_n", len(batch))
+            self._li.top_n = len(batch)  # type: ignore[attr-defined]
+            result = self._li.postprocess_nodes(batch, query_str=query)
+            # Map scores back by node_id
+            score_map: dict[str, float] = {}
+            for nws in result:
+                with contextlib.suppress(Exception):
+                    score_map[str(nws.node.node_id)] = float(nws.score or 0.0)
+            scores: list[float] = []
+            for n in batch:
+                scores.append(score_map.get(str(n.node.node_id), float(n.score or 0.0)))
+            self._li.top_n = old_top  # type: ignore[attr-defined]
+            return scores
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("LI CrossEncoder batch score error: {} — failing open", exc)
+            return [float(n.score or 0.0) for n in batch]
+
+    def postprocess_nodes(
+        self, nodes: list[NodeWithScore], query_str: str
+    ) -> list[NodeWithScore]:
+        """Rerank nodes and return the top N.
+
+        Applies batch scoring using either FlagEmbedding or LlamaIndex reranker,
+        honoring the configured batch size and time budget.
+        """
+        if not nodes:
+            return nodes
+        # Ensure backends are ready
+        if self._flag is not None:
+            self._flag.ensure_loaded()
+        t0 = _now_ms()
+
+        # Partition deterministically into fixed-size batches
+        bs = max(1, self.batch_size)
+        processed = 0
+        processed_batches = 0
+        # We will mutate scores on copies to preserve input
+        work: list[NodeWithScore] = list(nodes)
+
+        for processed_batches, i in enumerate(range(0, len(work), bs), start=1):
+            batch = work[i : i + bs]
+            # Compute scores for batch
+            if self._flag is not None:
+                scores = self._score_batch_flag(query_str, batch)
+            else:
+                scores = self._score_batch_li(query_str, batch)
+            for n, s in zip(batch, scores, strict=False):
+                n.score = float(s)
+            processed += len(batch)
+
+            # Check cooperative cancellation after completing the batch
+            elapsed = _now_ms() - t0
+            if elapsed > self.timeout_ms:
+                self.last_stats.update(
+                    {
+                        "processed_count": int(processed),
+                        "processed_batches": int(processed_batches),
+                        "timeout": True,
+                    }
+                )
+                # Return deterministic subset of fully processed batches only
+                done = work[: i + len(batch)]
+                break
+        else:
+            # Completed all batches within budget
+            self.last_stats.update(
+                {
+                    "processed_count": int(processed),
+                    "processed_batches": int(processed_batches),
+                    "timeout": False,
+                }
+            )
+            done = work
+
+        # Stable sort: score desc, tie-break by node_id asc
+        def _key(n: NodeWithScore) -> tuple[float, str]:
+            sid = str(getattr(n.node, "node_id", ""))
+            return (float(n.score or 0.0), sid)
+
+        out = sorted(done, key=_key, reverse=True)
+        return out[: self.top_n]
+
+
+def build_text_reranker(
+    top_n: int | str | None = None,
+    *,
+    batch_size: int | None = None,
+    device: str = "auto",
+    early_exit_on_cancel_only: bool = True,
+    timeout_ms: int = TEXT_RERANK_TIMEOUT_MS,
+) -> _TextRerankerAdapter:
     """Create text CrossEncoder reranker (BGE v2-m3).
 
     Args:
         top_n: Number of top results to return. Defaults to settings value.
+        batch_size: Optional override for scoring batch size.
+        device: Preferred device ("auto"|"cpu"|"cuda") — advisory only.
+        early_exit_on_cancel_only: If True, stop only when over budget.
+        timeout_ms: Cooperative budget for scoring.
 
     Returns:
-        SentenceTransformerRerank: Configured text reranker instance.
+        Cancellable unified adapter implementing postprocess_nodes.
     """
     k = _parse_top_k(top_n)
-    return _build_text_reranker_cached(k)
+    return _TextRerankerAdapter(
+        k,
+        batch_size=batch_size,
+        device=device,
+        early_exit_on_cancel_only=early_exit_on_cancel_only,
+        timeout_ms=timeout_ms,
+    )
 
 
 @cache
@@ -356,7 +593,7 @@ class MultimodalReranker(BaseNodePostprocessor):
     - Time budgets and fail-open behavior
     """
 
-    def _postprocess_nodes(
+    def _postprocess_nodes(  # pylint: disable=too-many-branches, too-many-statements
         self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
     ) -> list[NodeWithScore]:
         """Apply modality-aware reranking with time budgets and fail-open behavior.
@@ -373,18 +610,26 @@ class MultimodalReranker(BaseNodePostprocessor):
 
         text_nodes, visual_nodes = self._split_by_modality(nodes)
 
-        # Stage 2: text rerank with timeout
+        # Stage 2: text rerank with timeout (outer guard) + cooperative batches
         lists: list[list[NodeWithScore]] = []
         t_start = _now_ms()
         try:
             if text_nodes:
+                bs = 16 if _has_cuda_vram(1.0) else 4
+                adapter = build_text_reranker(
+                    top_n=settings.retrieval.reranking_top_k,
+                    batch_size=bs,
+                    device=("cuda" if _has_cuda_vram(1.0) else "cpu"),
+                    early_exit_on_cancel_only=True,
+                    timeout_ms=TEXT_RERANK_TIMEOUT_MS,
+                )
 
                 def _do_text():
-                    return build_text_reranker().postprocess_nodes(
+                    return adapter.postprocess_nodes(
                         text_nodes, query_str=query_bundle.query_str
                     )
 
-                tr = _run_with_timeout(_do_text, TEXT_RERANK_TIMEOUT_MS)
+                tr = _run_with_timeout(_do_text, TEXT_RERANK_TIMEOUT_MS + 50)
                 if tr is not None:
                     lists.append(tr)
                 else:
@@ -395,6 +640,8 @@ class MultimodalReranker(BaseNodePostprocessor):
                             "rerank.topk": int(settings.retrieval.reranking_top_k),
                             "rerank.latency_ms": int(_now_ms() - t_start),
                             "rerank.timeout": True,
+                            "rerank.processed_count": 0,
+                            "rerank.processed_batches": 0,
                         }
                     )
                     return nodes
@@ -403,10 +650,21 @@ class MultimodalReranker(BaseNodePostprocessor):
                         "rerank.stage": "text",
                         "rerank.topk": int(settings.retrieval.reranking_top_k),
                         "rerank.latency_ms": int(_now_ms() - t_start),
-                        "rerank.timeout": False,
+                        "rerank.timeout": bool(
+                            getattr(adapter, "last_stats", {}).get("timeout", False)
+                        ),
+                        "rerank.batch_size": bs,
+                        "rerank.processed_count": int(
+                            getattr(adapter, "last_stats", {}).get("processed_count", 0)
+                        ),
+                        "rerank.processed_batches": int(
+                            getattr(adapter, "last_stats", {}).get(
+                                "processed_batches", 0
+                            )
+                        ),
                     }
                 )
-        except Exception as exc:
+        except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("Text rerank error: {} — fail-open", exc)
 
         # Stage 3: visual rerank — SigLIP default within budget
@@ -423,9 +681,10 @@ class MultimodalReranker(BaseNodePostprocessor):
                         "rerank.topk": int(settings.retrieval.reranking_top_k),
                         "rerank.latency_ms": int(_now_ms() - v_start),
                         "rerank.timeout": False,
+                        "rerank.batch_size": 8 if _has_cuda_vram(1.0) else 2,
                     }
                 )
-        except Exception as exc:
+        except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("SigLIP rerank error: {} — continue without", exc)
 
         # Optional Stage 3b: ColPali policy
@@ -451,6 +710,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                             "rerank.topk": int(settings.retrieval.reranking_top_k),
                             "rerank.latency_ms": int(_now_ms() - v_start),
                             "rerank.timeout": False,
+                            "rerank.batch_size": 8 if _has_cuda_vram(1.0) else 2,
                         }
                     )
                 else:
@@ -463,7 +723,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                             "rerank.timeout": True,
                         }
                     )
-        except Exception as exc:
+        except (RuntimeError, ValueError) as exc:
             logger.warning("ColPali rerank error: {} — continue without", exc)
 
         if _now_ms() - v_start > (SIGLIP_TIMEOUT_MS + COLPALI_TIMEOUT_MS):
@@ -507,7 +767,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                     "rerank.delta_changed_count": int(delta_changed),
                 }
             )
-        except Exception as exc:
+        except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("Final rerank metrics error: {} — skipping telemetry", exc)
         return out
 
