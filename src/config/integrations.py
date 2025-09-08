@@ -10,6 +10,7 @@ Key behaviors:
 - Hardware-aware LlamaCPP params
 - Optional structured-output flag for vLLM (SPEC-007 prep)
 """
+# pylint: disable=ungrouped-imports
 
 import logging
 import os
@@ -17,23 +18,30 @@ from contextlib import suppress
 
 from llama_index.core import Settings
 
+# Text embeddings default wrapper
+from llama_index.embeddings.huggingface import (
+    HuggingFaceEmbedding,  # pylint: disable=ungrouped-imports
+)
+
 # Text embeddings should default to BGE-M3 (1024D) for consistency with
 # tri-mode retrieval tooling and VectorStoreIndex usage. Use LlamaIndex's
 # HuggingFaceEmbedding wrapper to keep a library-first, lightweight setup.
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-try:  # Optional, used only for test patching and compatibility
-    # Prefer ClipEmbedding symbol if present; otherwise alias to HF embedding
-    from llama_index.embeddings.clip import ClipEmbedding as _ClipEmbedding  # type: ignore
-except Exception:  # pragma: no cover - optional import
-    _ClipEmbedding = None  # type: ignore
-
-# Expose ClipEmbedding symbol for tests; default to HuggingFaceEmbedding
-ClipEmbedding = _ClipEmbedding or HuggingFaceEmbedding  # type: ignore
-
 from src.config.llm_factory import build_llm
 from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
 
 from .settings import settings
+
+# Optional ClipEmbedding symbol (test patching convenience). Keep all imports
+# grouped above; perform alias assignment after imports to avoid E402.
+try:  # pragma: no cover - optional import
+    from llama_index.embeddings.clip import (
+        ClipEmbedding as LIClipEmbedding,  # type: ignore
+    )
+except ImportError:  # pragma: no cover - optional import
+    LIClipEmbedding = None  # type: ignore
+
+# Expose ClipEmbedding symbol for tests; default to HuggingFaceEmbedding
+ClipEmbedding = LIClipEmbedding or HuggingFaceEmbedding  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +59,11 @@ def _is_localhost(url: str | None) -> bool:
         parsed = urlparse(url)
         host = (parsed.hostname or "").lower()
         return host in {"localhost", "127.0.0.1"}
-    except Exception:  # pragma: no cover - defensive
+    except (ValueError, AttributeError):  # pragma: no cover - defensive
         return False
 
 
-def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:
+def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:  # pylint: disable=too-many-statements
     """Configure LlamaIndex ``Settings`` with unified configuration.
 
     Args:
@@ -98,9 +106,9 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             elif provider == "vllm":
                 base_url = settings.vllm_base_url or settings.vllm.vllm_base_url
             elif provider == "llamacpp":
-                base_url = settings.llamacpp_base_url or str(
-                    settings.vllm.llamacpp_model_path
-                )
+                # Only enforce URL checks when a server URL is provided. A local
+                # GGUF model path is not a URL and must not be treated as one.
+                base_url = settings.llamacpp_base_url or None
             else:
                 base_url = None
 
@@ -110,7 +118,7 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
                 "true",
                 "yes",
             }
-            if (not allow_remote) and (not _is_localhost(base_url)):
+            if (not allow_remote) and base_url and (not _is_localhost(base_url)):
                 raise ValueError(
                     "Remote endpoint forbidden by default. Set "
                     "DOCMIND_ALLOW_REMOTE_ENDPOINTS=true to override."
@@ -142,7 +150,8 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
                 device=device,
             )
             logger.info(
-                "Embedding model configured: HuggingFaceEmbedding %s (device=%s)",
+                "Embedding model configured: %s %s (device=%s)",
+                type(Settings.embed_model).__name__,
                 model_name,
                 device,
             )
@@ -290,10 +299,11 @@ def get_clip_like_image_embedder():  # pragma: no cover - convenience adapter
 
     class _ClipLike:
         def get_image_embedding(self, image: object) -> _np.ndarray:
+            """Return a single image embedding as a 1-D numpy array."""
             arr = u.image.encode_image([image])
             if arr.shape[0] == 0:
-                dim = int(u.image._dim or 768)  # best-effort dimension
-                return _np.zeros(dim, dtype=_np.float32)
+                # If embedder returned empty, fall back to a common 768-D shape
+                return _np.zeros(768, dtype=_np.float32)
             return arr[0]
 
     return _ClipLike()
