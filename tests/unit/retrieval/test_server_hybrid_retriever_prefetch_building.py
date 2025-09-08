@@ -32,6 +32,7 @@ def test_prefetch_and_fusion_mode(monkeypatch):
     class _MockEmbed:
         def get_query_embedding(self, _t: str):
             return np.array([0.1, 0.2, 0.3], dtype=np.float32)
+
     monkeypatch.setattr(qe, "Settings", SimpleNamespace(embed_model=_MockEmbed()))
 
     # Sparse encoder returns indices/values
