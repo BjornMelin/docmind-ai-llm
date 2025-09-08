@@ -20,7 +20,8 @@ from typing import Any
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
-from llama_index.postprocessor.colpali_rerank import ColPaliRerank
+
+# ColPali import is optional; import inside builder to avoid hard dependency
 from loguru import logger
 
 from src.config import settings
@@ -105,6 +106,7 @@ def _rrf_merge(
     return [n for _score, n in fused]
 
 
+@cache
 def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     """Lazy-load SigLIP model+processor and choose device.
 
@@ -552,7 +554,7 @@ def build_text_reranker(
 
 
 @cache
-def _build_visual_reranker_cached(top_n: int) -> ColPaliRerank:
+def _build_visual_reranker_cached(top_n: int) -> Any:
     """Create cached ColPali reranker for visual content.
 
     Args:
@@ -561,10 +563,16 @@ def _build_visual_reranker_cached(top_n: int) -> ColPaliRerank:
     Returns:
         ColPaliRerank: Configured visual reranker instance.
     """
+    try:
+        from llama_index.postprocessor.colpali_rerank import (
+            ColPaliRerank,  # type: ignore
+        )
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise ValueError("ColPaliRerank not available") from exc
     return ColPaliRerank(model="vidore/colpali-v1.2", top_n=top_n)
 
 
-def build_visual_reranker(top_n: int | str | None = None) -> ColPaliRerank:
+def build_visual_reranker(top_n: int | str | None = None) -> Any:
     """Create visual reranker (ColPali).
 
     Args:
