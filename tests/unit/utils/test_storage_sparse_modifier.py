@@ -1,9 +1,4 @@
-"""Tests for sparse IDF modifier enforcement in storage utilities.
-
-Google-Style Docstrings:
-    Verifies that when the sparse vector modifier is not IDF, the function
-    updates the collection configuration accordingly.
-"""
+"""Tests for sparse IDF modifier enforcement in storage utilities."""
 
 import pytest
 

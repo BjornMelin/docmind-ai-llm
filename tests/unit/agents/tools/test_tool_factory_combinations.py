@@ -1,9 +1,4 @@
-"""Tests for ToolFactory combinations and ordering.
-
-Google-Style Docstrings:
-    Verifies that ToolFactory creates tools with the expected ordering and
-    includes optional keyword tool when enabled.
-"""
+"""Tests for ToolFactory combinations and ordering."""
 
 import pytest
 

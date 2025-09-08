@@ -1,9 +1,4 @@
-"""Tests for hybrid collection setup (sync path) in storage utilities.
-
-Google-Style Docstrings:
-    Ensures that when `recreate=True` and the collection exists, the setup
-    deletes and re-creates the collection and returns a vector store instance.
-"""
+"""Tests for hybrid collection setup (sync path) in storage utilities."""
 
 import pytest
 
@@ -26,7 +21,8 @@ def test_setup_hybrid_collection_recreate(monkeypatch):
             self.created = False
 
         def collection_exists(self, _):
-            return True
+            # After deletion, behave as non-existent to trigger create
+            return not self.deleted
 
         def delete_collection(self, _):
             self.deleted = True

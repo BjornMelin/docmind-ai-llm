@@ -1,9 +1,4 @@
-"""Tests for telemetry file rotation behavior.
-
-Google-Style Docstrings:
-    Verifies that when the telemetry file exceeds the configured size, the
-    module rotates the file on the next write.
-"""
+"""Tests for telemetry file rotation behavior."""
 
 from pathlib import Path
 

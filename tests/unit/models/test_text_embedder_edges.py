@@ -1,8 +1,4 @@
-"""Tests for TextEmbedder edge cases.
-
-Google-Style Docstrings:
-    Covers empty input shape behavior and per-call device override errors.
-"""
+"""Tests for TextEmbedder edge cases."""
 
 import numpy as np
 import pytest

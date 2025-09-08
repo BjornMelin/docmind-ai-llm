@@ -1,9 +1,4 @@
-"""Tests for sparse query encoding via FastEmbed wrapper.
-
-Google-Style Docstrings:
-    Ensures that when FastEmbed is available, the function returns a
-    `SparseVector`, and when unavailable, returns ``None``.
-"""
+"""Tests for sparse query encoding via FastEmbed wrapper."""
 
 import pytest
 

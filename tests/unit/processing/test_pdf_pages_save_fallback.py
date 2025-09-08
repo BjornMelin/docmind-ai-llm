@@ -1,10 +1,4 @@
-"""Tests for image save fallback and encryption metadata in pdf_pages helpers.
-
-Google-Style Docstrings:
-    Exercises the `_save_with_format` helper by forcing a WebP save failure
-    and ensuring JPEG fallback occurs. Also validates that when encryption is
-    enabled, returned path ends with `.enc`.
-"""
+"""Tests for image save fallback and encryption metadata in pdf_pages helpers."""
 
 import types
 
