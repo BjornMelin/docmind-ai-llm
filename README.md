@@ -282,15 +282,43 @@ Upload one or more documents via the **"Browse files"** button. Supported format
 
 ### ✍️ Choosing Prompts
 
-Select a pre-defined prompt or create a custom one:
+DocMind uses a file-based prompt template system (SPEC‑020) powered by LlamaIndex’s `RichPromptTemplate` (Jinja under the hood).
 
-- **Comprehensive Document Analysis:** Summary, key insights, action items, and open questions.
+- The app lists templates from `templates/prompts/*.prompt.md` (YAML front matter + Jinja body).
+- Presets for tone/role/length live in `templates/presets/*.yaml` and are exposed in the UI selectors.
 
-- **Extract Key Insights and Action Items:** Focus on insights and actionable outcomes.
+Add or edit a template by creating a new `*.prompt.md` file; restart the app to pick it up. Example:
 
-- **Summarize and Identify Open Questions:** Generate summaries and highlight unresolved questions.
+```
+---
+id: comprehensive-analysis
+name: Comprehensive Document Analysis
+description: Summary, key insights, action items, open questions
+required: [context]
+defaults:
+  tone: { description: "Use a professional, objective tone." }
+version: 1
+---
+{% chat role="system" %}
+{{ tone.description }}
+{% endchat %}
 
-- **Custom Prompt:** Define your own analysis prompt.
+{% chat role="user" %}
+Context:
+{{ context }}
+Tasks: summarize, extract insights, list actions, raise open questions
+{% endchat %}
+```
+
+You can also use the prompting API programmatically:
+
+```
+from src.prompting import list_templates, render_prompt
+
+tpl = next(t for t in list_templates() if t.id == "comprehensive-analysis")
+ctx = {"context": "…", "tone": {"description": "Use a neutral tone."}}
+prompt = render_prompt(tpl.id, ctx)
+```
 
 ### 😃 Selecting Tone
 
