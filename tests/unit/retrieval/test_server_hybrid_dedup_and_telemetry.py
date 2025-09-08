@@ -44,9 +44,7 @@ def test_dedup_keeps_highest_and_logs_sparse_fallback(monkeypatch):
             query=query, using=using, limit=limit
         ),
     )
-    monkeypatch.setattr(
-        qe.qmodels, "VectorInput", lambda **kw: SimpleNamespace(**kw)
-    )
+    monkeypatch.setattr(qe.qmodels, "VectorInput", lambda **kw: SimpleNamespace(**kw))
 
     class _StubClient:
         def query_points(self, **_k):
