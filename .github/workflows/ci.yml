@@ -21,10 +21,12 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
-      - name: Install deps
+      - name: Install deps (app + test extras)
         run: |
-          uv pip install --system -e .
-          uv pip install --system pytest ruff pylint cryptography pymupdf
+          # Install project with test extras so pytest-asyncio and friends are available
+          uv pip install --system -e '.[test]'
+          # Tools for linting
+          uv pip install --system ruff pylint
 
       - name: Lint (ruff)
         run: |
@@ -40,4 +42,3 @@ jobs:
           TRANSFORMERS_OFFLINE: '1'
         run: |
           pytest -q
-
