@@ -115,17 +115,32 @@ class ServerHybridRetriever:
 
         prefetch: list[qmodels.Prefetch] = []
         if sparse_vec is not None:
+            # Accept dict-based sparse {index: weight} and convert to typed model
+            try:
+                if isinstance(sparse_vec, dict):
+                    # Deterministic ordering by index
+                    idxs, vals = zip(*sorted(sparse_vec.items())) if sparse_vec else ([], [])
+                    sv = qmodels.SparseVector(indices=list(idxs), values=list(vals))  # type: ignore[arg-type]
+                else:
+                    sv = sparse_vec  # already typed or supported format
+            except Exception:
+                # Last-resort fallback: attempt to wrap values as needed
+                if isinstance(sparse_vec, dict):
+                    sv = qmodels.SparseVector(indices=list(sparse_vec.keys()), values=list(sparse_vec.values()))  # type: ignore[arg-type]
+                else:
+                    sv = sparse_vec
             prefetch.append(
                 qmodels.Prefetch(
-                    query=sparse_vec,
+                    query=sv,
                     using="text-sparse",
                     limit=self.params.prefetch_sparse,
                 )
             )
         d_list = dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
+        # Qdrant client models define VectorInput as a Union[...] alias; pass the list directly
         prefetch.append(
             qmodels.Prefetch(
-                query=qmodels.VectorInput(vector=d_list),
+                query=d_list,  # type: ignore[arg-type]
                 using="text-dense",
                 limit=self.params.prefetch_dense,
             )
