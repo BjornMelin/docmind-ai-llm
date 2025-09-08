@@ -226,8 +226,6 @@ class TextEmbedder:
                 out["sparse"] = []
             return out
 
-        self._ensure_loaded()
-
         bs = int(batch_size or self.default_batch_size)
         # Do not mutate instance device during encode; per-call overrides are not
         # supported because the BGEM3 backend binds to the device at load time.
@@ -236,6 +234,10 @@ class TextEmbedder:
                 "Per-call device override is not supported; "
                 "instantiate TextEmbedder(device=...) instead."
             )
+
+        # Load backend only after validating per-call arguments to avoid
+        # unnecessary downloads or heavy imports in offline/unit environments.
+        self._ensure_loaded()
 
         outputs = self._backend.encode(  # type: ignore[call-arg]
             texts,
