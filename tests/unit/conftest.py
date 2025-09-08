@@ -171,7 +171,13 @@ def mock_uploaded_file() -> Mock:
 
 @pytest.fixture(autouse=True)
 def no_sleep(request):
-    """Avoid real delays: patch sleeps globally, except for timeout tests."""
+    """Avoid real delays: patch sleeps globally, but not for timeout tests.
+
+    Some tests rely on real timeouts (e.g., thread-pool futures with a timeout
+    argument). For those, we must not patch time.sleep or asyncio.sleep, or the
+    timeout logic will not trigger correctly. We detect these by function name
+    containing "timeout" and skip patching in that case.
+    """
 
     def _sleep_noop(_secs: float = 0.0):
         return None
@@ -181,9 +187,8 @@ def no_sleep(request):
 
     name = getattr(request.node, "name", "").lower()
     if "timeout" in name:
-        # Allow asyncio.sleep for timeout tests; still patch time.sleep
-        with patch.object(_time, "sleep", _sleep_noop):
-            yield
+        # Do not patch sleeps for timeout-specific tests
+        yield
     else:
         with (
             patch.object(_time, "sleep", _sleep_noop),

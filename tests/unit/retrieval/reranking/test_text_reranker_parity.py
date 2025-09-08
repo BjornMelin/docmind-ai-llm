@@ -37,6 +37,7 @@ def test_parity_across_runs_with_ample_budget(monkeypatch):
     b = rr.build_text_reranker(top_n=12, batch_size=5, timeout_ms=10_000)
     out2 = b.postprocess_nodes(nodes2, query_str="q")
 
-    ids1 = [n.node.node_id for n in out1]
-    ids2 = [n.node.node_id for n in out2]
-    assert ids1 == ids2
+    # Compare by text content to avoid Node ID variability across LI versions
+    texts1 = [getattr(n.node, "text", "") for n in out1]
+    texts2 = [getattr(n.node, "text", "") for n in out2]
+    assert texts1 == texts2
