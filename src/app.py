@@ -540,15 +540,28 @@ st.header("Analysis Options")
 # Load templates and presets
 _templates = list_templates()
 _template_name_to_id = {t.name: t.id for t in _templates}
-_template_names = list(_template_name_to_id.keys()) or ["Comprehensive Document Analysis"]
+_template_names = list(_template_name_to_id.keys()) or [
+    "Comprehensive Document Analysis"
+]
 prompt_name: str = st.selectbox("Prompt", _template_names)
 selected_template_id = _template_name_to_id.get(prompt_name, "comprehensive-analysis")
 
 # Optional presets (tones/roles)
 _tones = list_presets("tones")
 _roles = list_presets("roles")
-tone_key = st.selectbox("Tone", list(_tones.keys()) or ["professional"]) if _tones else "professional"
-role_key = st.selectbox("Role", list(_roles.keys()) or ["assistant"]) if _roles else "assistant
+# Allow non-constant-style variable names for Streamlit UI values
+# pylint: disable=invalid-name
+tone_key = (
+    st.selectbox("Tone", list(_tones.keys()) or ["professional"])
+    if _tones
+    else "professional"
+)
+role_key = (
+    st.selectbox("Role", list(_roles.keys()) or ["assistant"])
+    if _roles
+    else "assistant"
+)
+# pylint: enable=invalid-name
 # Other selects for tone, instructions, etc. (assuming they exist in full code)
 
 
@@ -562,12 +575,16 @@ async def run_analysis() -> None:
         with st.spinner("Running analysis..."):
             try:
                 # Build a minimal context for the prompt template
-ctx = {
-    "context": "Documents have been processed and indexed.",
-    "tone": _tones.get(tone_key, {"description": "Use a neutral tone."}),
-    "role": _roles.get(role_key, {"description": "Act as a helpful assistant."}),
-}
-analysis_query_text = render_prompt(selected_template_id, ctx)
+                ctx = {
+                    "context": "Documents have been processed and indexed.",
+                    "tone": _tones.get(
+                        tone_key, {"description": "Use a neutral tone."}
+                    ),
+                    "role": _roles.get(
+                        role_key, {"description": "Act as a helpful assistant."}
+                    ),
+                }
+                analysis_query_text = render_prompt(selected_template_id, ctx)
 
                 # Prefer RouterQueryEngine when available
                 if st.session_state.get("router_engine") is not None:
@@ -613,11 +630,15 @@ def _render_analyze_button() -> None:
         with st.spinner("Running analysis..."):
             try:
                 ctx = {
-    "context": "Documents have been processed and indexed.",
-    "tone": _tones.get(tone_key, {"description": "Use a neutral tone."}),
-    "role": _roles.get(role_key, {"description": "Act as a helpful assistant."}),
-}
-sync_query = render_prompt(selected_template_id, ctx)
+                    "context": "Documents have been processed and indexed.",
+                    "tone": _tones.get(
+                        tone_key, {"description": "Use a neutral tone."}
+                    ),
+                    "role": _roles.get(
+                        role_key, {"description": "Act as a helpful assistant."}
+                    ),
+                }
+                sync_query = render_prompt(selected_template_id, ctx)
 
                 # Prefer RouterQueryEngine when available (synchronous call)
                 if st.session_state.get("router_engine") is not None:

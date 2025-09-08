@@ -61,10 +61,8 @@ def load_templates() -> list[TemplateSpec]:
             version=int(fm.get("version") or 1),
         )
         # Basic body sanity
-        if len(body.strip()) < 40:
-            # Keep tiny templates but mark description if missing
-            if not meta.description:
-                meta.description = "Short template"
+        if len(body.strip()) < 40 and not meta.description:
+            meta.description = "Short template"
         specs.append(TemplateSpec(meta=meta, body=body))
     return specs
 

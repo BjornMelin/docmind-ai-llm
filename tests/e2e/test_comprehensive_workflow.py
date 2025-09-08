@@ -555,7 +555,8 @@ def test_application_structure_and_markers():
         assert isinstance(list_templates(), list)
         assert len(list_templates()) > 0
 
-        tpls=list_templates(); first_prompt = tpls[0].name if tpls else ""
+        tpls = list_templates()
+        first_prompt = tpls[0].name if tpls else ""
         assert isinstance(first_prompt, str)
         assert len(first_prompt) > 0
 

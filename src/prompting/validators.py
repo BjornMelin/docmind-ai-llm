@@ -33,6 +33,6 @@ def check_undeclared_variables(spec: TemplateSpec) -> set[str]:
     Useful for early detection of missing variables. This is an optional
     static check; rendering still enforces required variables at runtime.
     """
-    env = Environment()
+    env = Environment(autoescape=True)
     ast = env.parse(spec.body)
     return set(jinja_meta.find_undeclared_variables(ast))
