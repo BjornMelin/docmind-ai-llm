@@ -37,7 +37,6 @@ from llama_index.core import Settings as LISettings
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.core.llms import ChatMessage
 from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.embeddings.clip import ClipEmbedding
 from loguru import logger
 from streamlit.errors import StreamlitAPIException
 
@@ -57,6 +56,7 @@ from src.ui.components.provider_badge import provider_badge
 from src.ui_helpers import build_reranker_controls
 from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
+from src.utils.siglip_adapter import SiglipEmbedding  # SigLIP visual adapter
 from src.utils.storage import create_vector_store
 
 LLAMACPP_AVAILABLE = False
@@ -318,12 +318,12 @@ use_gpu: bool = st.sidebar.checkbox(
 try:  # pragma: no cover - UI messaging only
     import torch  # type: ignore
 
-    if not getattr(torch, "cuda", None) or not torch.cuda.is_available():  # type: ignore[attr-defined]
-        st.info(
-            "GPU not available. Visual reranking runs on CPU; expect higher latency."
-        )
+    has_cuda_attr = getattr(torch, "cuda", None)
+    has_cuda = bool(has_cuda_attr) and bool(torch.cuda.is_available())  # type: ignore[attr-defined]
+    if not has_cuda:
+        st.info("GPU not available. Visual reranking runs on CPU; expect more latency.")
 except Exception:
-    st.warning("PyTorch not installed. Running in text-only or CPU fallback modes.")
+    st.warning("PyTorch not installed; text-only/CPU fallback active.")
 # Retrieval & Reranking controls (ADR-036/037)
 try:
     build_reranker_controls(SETTINGS)
@@ -410,12 +410,10 @@ async def upload_section() -> None:
                     # Multimodal index (text + images) controlled by toggle
                     if enable_multimodal:
                         try:
-                            # Temporarily switch to CLIP for image embeddings only,
+                            # Temporarily switch to SigLIP visual embedder only,
                             # preserving the global text embedder (BGE-M3).
                             _prev_embed_model = LISettings.embed_model
-                            LISettings.embed_model = ClipEmbedding(
-                                model_name="openai/clip-vit-base-patch32"
-                            )
+                            LISettings.embed_model = SiglipEmbedding()
                             # Emit page-image nodes from uploaded PDFs
                             image_docs: list[Any] = []
                             try:

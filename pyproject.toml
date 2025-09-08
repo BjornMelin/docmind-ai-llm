@@ -177,6 +177,7 @@ extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
     "N802",    # test AST visitors use conventional names
     "ANN001", "ANN002", "ANN003",  # pilot annotations off in tests
     "ANN201", "ANN202", "ANN204",
+    "D100", "D103",  # don’t require docstrings in tests
 ]
 "scripts/check_coverage.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/run_quality_gates.py" = ["RUF013"]

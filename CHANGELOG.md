@@ -4,13 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.2.0] - 2025-09-08
+
+### Breaking
+
+- Removed all legacy client-side fusion knobs (rrf_alpha, rrf_k_constant, fusion weights) and UI reranker toggles. Server-side Qdrant Query API fusion is authoritative; RRF default, DBSF env-gated via `DOCMIND_RETRIEVAL__FUSION_MODE`.
+
+### Added
+
+- Retrieval telemetry (JSONL) with canonical keys: retrieval.* and dedup.*.
+- Rerank telemetry with rerank.*: stage, latency_ms, timeout, delta_changed_count.
+- Enforced BM42 sparse with IDF modifier in Qdrant schema; migration helper for existing collections.
+- SIGLIP model env `DOCMIND_EMBEDDING__SIGLIP_MODEL_ID` and predownload script `scripts/predownload_models.py`.
+- Imaging: DPI≈200 via PyMuPDF, EXIF-free WebP/JPEG, optional AES‑GCM at-rest encryption.
+- Tests: unit tests for Query API fusion (RRF/DBSF), rerank timeout fail-open, SigLIP rescore mock, encrypted imaging round-trip, retrieval env mapping.
+
+### Changed
+
+- Reranking is always-on (BGE v2‑m3 text + SigLIP visual) with policy-gated ColPali; removed reranker_mode throughout.
+- README updated with offline predownload steps and new envs.
+
 ## [1.1.0] - 2025-09-07
 
 ### Added
 
 - Hybrid retrieval (SPEC‑004): Qdrant server‑side fusion via Query API
   - Named vectors `text-dense` (BGE‑M3 1024D) and `text-sparse` (sparse index)
-  - Prefetch dense≈200 / sparse≈400; default fusion RRF; DBSF experimental via env `DOCMIND_FUSION`
+  - Prefetch dense≈200 / sparse≈400; default fusion RRF; DBSF experimental via env `DOCMIND_RETRIEVAL__FUSION_MODE`
   - De‑dup by `page_id` before fused cut; fused_top_k≈60; telemetry
 
 - Reranking (SPEC‑005; ADR‑037):
@@ -24,7 +44,6 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Changed
 
 - ADR/specs alignment: ADR‑036 marked Superseded by ADR‑024 v2.7 and SPEC‑005; ADR‑002 reflects SigLIP default; SPEC‑004/005 cross‑refs updated.
-
 
 ## [1.0.0] - 2025-09-02
 
@@ -81,7 +100,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - Multimodal reranking (ADR‑037): ColPali (visual) + BGE v2‑m3 (text), auto‑gated per node modality with fusion and top‑K truncation; builders for text/visual rerankers; integration test added.
 - UI controls (ADR‑036): Sidebar Reranker Mode (`auto|text|multimodal`), Normalize scores, Top N.
-- Configuration (ADR‑024): `retrieval.reranker_mode` and global `llm_context_window_max=131072`.
+- Configuration (ADR‑024): global `llm_context_window_max=131072`.
 - Ingestion (ADR‑009): PDF page image emission via `pdf_pages_to_image_documents()` tagging `metadata.modality="pdf_page_image"`.
 
 - Integration test for reranker toggle parity (Quick vs Agentic): `tests/integration/test_reranker_parity.py`.
@@ -101,6 +120,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - UI/runtime (SPEC‑001): removed legacy in‑app backend selection and ad‑hoc LLM construction; centralized provider selection and LLM creation via Settings page + unified factory with strict endpoint validation.
 
 ### Fixed
+
 - Stabilized supervisor shims in integration tests (compile/stream signatures) and ensured InjectedState overrides visibility.
 - Addressed flaky/residual lint warnings across test suites; ensured ruff clean and pylint tests ≥ 9.8.
 

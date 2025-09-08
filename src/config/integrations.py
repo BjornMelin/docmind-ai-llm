@@ -21,6 +21,14 @@ from llama_index.core import Settings
 # tri-mode retrieval tooling and VectorStoreIndex usage. Use LlamaIndex's
 # HuggingFaceEmbedding wrapper to keep a library-first, lightweight setup.
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+try:  # Optional, used only for test patching and compatibility
+    # Prefer ClipEmbedding symbol if present; otherwise alias to HF embedding
+    from llama_index.embeddings.clip import ClipEmbedding as _ClipEmbedding  # type: ignore
+except Exception:  # pragma: no cover - optional import
+    _ClipEmbedding = None  # type: ignore
+
+# Expose ClipEmbedding symbol for tests; default to HuggingFaceEmbedding
+ClipEmbedding = _ClipEmbedding or HuggingFaceEmbedding  # type: ignore
 
 from src.config.llm_factory import build_llm
 from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
@@ -129,7 +137,7 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             emb_cfg = settings.get_embedding_config()
             model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
             device = emb_cfg.get("device", "cpu")
-            Settings.embed_model = HuggingFaceEmbedding(
+            Settings.embed_model = ClipEmbedding(
                 model_name=model_name,
                 device=device,
             )

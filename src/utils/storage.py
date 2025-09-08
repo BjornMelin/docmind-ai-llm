@@ -31,6 +31,7 @@ import torch
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
+from qdrant_client import models as qmodels
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 from qdrant_client.http.models import (
     Distance,
@@ -44,6 +45,42 @@ from src.config import settings
 # Preferred sparse models (logging/telemetry; selection handled by fastembed if present)
 PREFERRED_SPARSE_MODEL = "Qdrant/bm42-all-minilm-l6-v2-attentions"
 FALLBACK_SPARSE_MODEL = "Qdrant/bm25"
+
+
+def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> None:
+    """Ensure the sparse vector config uses IDF modifier for BM42.
+
+    If the collection exists and the sparse vector modifier is not IDF,
+    update the collection configuration in-place to set it to IDF.
+
+    Args:
+        client: QdrantClient instance
+        collection_name: Name of the collection to check/update
+    """
+    try:
+        info = client.get_collection(collection_name)
+        cfg = getattr(info.config.params, "sparse_vectors", None)
+        if isinstance(cfg, dict) and "text-sparse" in cfg:
+            cur = cfg["text-sparse"]
+            # cur is SparseVectorParams; getattr safe for older clients
+            cur_mod = getattr(cur, "modifier", None)
+            if cur_mod != qmodels.Modifier.IDF:
+                logger.info(
+                    "Updating sparse modifier to IDF for collection '%s'",
+                    collection_name,
+                )
+                client.update_collection(
+                    collection_name=collection_name,
+                    sparse_vectors_config={
+                        "text-sparse": SparseVectorParams(
+                            index=SparseIndexParams(on_disk=False),
+                            modifier=qmodels.Modifier.IDF,
+                        )
+                    },
+                )
+    except Exception as e:  # pragma: no cover - defensive path
+        logger.warning("ensure_sparse_idf_modifier skipped: %s", e)
+
 
 # =============================================================================
 # Database Operations (formerly from database.py)
@@ -156,7 +193,8 @@ async def setup_hybrid_collection_async(
             },
             sparse_vectors_config={
                 "text-sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False)
+                    index=SparseIndexParams(on_disk=False),
+                    modifier=qmodels.Modifier.IDF,
                 )
             },
         )
@@ -227,7 +265,8 @@ def setup_hybrid_collection(
             },
             sparse_vectors_config={
                 "text-sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False)
+                    index=SparseIndexParams(on_disk=False),
+                    modifier=qmodels.Modifier.IDF,
                 )
             },
         )

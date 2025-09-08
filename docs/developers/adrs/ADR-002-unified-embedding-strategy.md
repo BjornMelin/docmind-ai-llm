@@ -2,7 +2,7 @@
 ADR: 002
 Title: Unified Embedding Strategy with BGE‑M3
 Status: Accepted
-Version: 4.2
+Version: 4.3
 Date: 2025-09-02
 Supersedes:
 Superseded-by:
@@ -85,6 +85,12 @@ graph LR
 - No external APIs or cloud endpoints are required for embedding; the vector store (Qdrant) runs locally on `127.0.0.1`.
 
 Note on model roles: Embeddings = BGE‑M3 (text) and SigLIP (images). Reranking uses BGE v2‑m3 (text cross‑encoder) with SigLIP visual re‑score via normalized cosine; ColPali is optional on capable GPUs.
+
+### Image Backbone Tagging and Imaging Defaults
+
+- Tag page/image vectors with `image_backbone: "siglip"` in metadata for downstream scoring and auditability.
+- Persist canonical de‑dup/trace fields on all nodes: `page_id`, `source_file`, `page_number`.
+- Default PDF imaging targets ~200 DPI via PyMuPDF; store EXIF‑free WebP (JPEG fallback) and maintain perceptual hash (pHash) for stability checks.
 
 ### Performance Requirements
 
@@ -191,6 +197,7 @@ def test_bgem3_shape(embed_model):
 
 ## Changelog
 
+- 4.3 (2025-09-07): Added image_backbone="siglip" tagging, canonical page metadata, and DPI≈200 imaging defaults aligned with SPEC‑003 and plan 004.
 - 4.2 (2025-09-07): Switch image backbone default from CLIP to SigLIP; update diagrams and implementation details
 - 4.1 (2025-09-02): Replaced ADR-007 with ADR-031; added ADR-034 reference; updated formatting
 - 4.1 (2025-08-26): IMPLEMENTATION COMPLETE — BGE-M3 deployed; integrated with ADR-009

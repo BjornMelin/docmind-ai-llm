@@ -17,7 +17,6 @@ from .core import (
     managed_async_qdrant_client,
     managed_gpu_operation,
     validate_startup_configuration,
-    verify_rrf_configuration,
 )
 
 # Document operations
@@ -100,5 +99,4 @@ __all__ = [
     "sync_model_context",
     "test_connection",
     "validate_startup_configuration",
-    "verify_rrf_configuration",
 ]

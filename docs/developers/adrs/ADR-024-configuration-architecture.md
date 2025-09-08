@@ -2,7 +2,7 @@
 ADR: 024
 Title: Unified Settings Architecture (Always‑On Hybrid/Rerank + 128K Cap)
 Status: Accepted
-Version: 2.7
+Version: 2.8
 Date: 2025-09-04
 Supersedes:
 Superseded-by:
@@ -45,7 +45,7 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 ## Decision
 
-Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions.
+Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions. Default hybrid fusion is server‑side RRF in Qdrant; DBSF is optional and gated by env/version support. Prefer BM42 sparse (FastEmbed) with IDF modifier.
 
 ## High-Level Architecture
 
@@ -341,15 +341,17 @@ DOCMIND_PROCESSING__NEW_AFTER_N_CHARS=1200
 DOCMIND_PROCESSING__COMBINE_TEXT_UNDER_N_CHARS=500
 DOCMIND_PROCESSING__MULTIPAGE_SECTIONS=true
 
-# Retrieval (ADR-003/036/037)
+# Retrieval (ADR-003/037)
 DOCMIND_RETRIEVAL__STRATEGY=hybrid
 DOCMIND_RETRIEVAL__TOP_K=10
-DOCMIND_RETRIEVAL__USE_RERANKING=true
 DOCMIND_RETRIEVAL__RERANKING_TOP_K=5
 DOCMIND_RETRIEVAL__RERANKER_NORMALIZE_SCORES=true
-DOCMIND_RETRIEVAL__RERANKER_MODE=auto
-DOCMIND_RETRIEVAL__RRF_ALPHA=60
-DOCMIND_RETRIEVAL__RRF_K_CONSTANT=60
+# Server-side hybrid fusion (Qdrant Query API)
+DOCMIND_RETRIEVAL__FUSION_MODE=rrf
+DOCMIND_RETRIEVAL__FUSED_TOP_K=60
+DOCMIND_RETRIEVAL__RRF_K=60
+DOCMIND_RETRIEVAL__USE_SPARSE_EMBEDDINGS=true
+DOCMIND_RETRIEVAL__ENABLE_COLPALI=false
 
 # Cache toggles (ADR-030)
 DOCMIND_CACHE__ENABLE_DOCUMENT_CACHING=true
@@ -440,6 +442,8 @@ def test_env_mapping(monkeypatch):
 - Python: `pydantic-settings>=2.0`, `llama-index>=0.12`
 
 ## Changelog
+
+- 2.8 (2025-09-07): Removed client-side fusion knobs; added server-side fusion envs (fusion_mode/fused_top_k/rrf_k), BM42(IDF) preference, and DBSF env-gating. Clarified env-only overrides and offline defaults.
 
 - 2.7 (2025-09-07): Always‑on hybrid/rerank (no UI toggles); embed default BGE‑M3; updated examples and requirements
 

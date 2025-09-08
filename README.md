@@ -712,15 +712,15 @@ maxUploadSize = 200
 ### Retrieval & Reranking Defaults
 
 - Hybrid retrieval uses Qdrant named vectors `text-dense` (1024D COSINE) and `text-sparse` (SparseIndexParams) with server-side fusion via the Query API.
-- Default fusion = RRF; DBSF is available experimentally with `DOCMIND_FUSION=dbsf`.
+- Default fusion = RRF; DBSF is available experimentally with `DOCMIND_RETRIEVAL__FUSION_MODE=dbsf`.
 - Prefetch: dense≈200, sparse≈400; fused_top_k=60; page_id de-dup.
 - Reranking is always-on: BGE v2‑m3 (text) + SigLIP (visual) with optional ColPali when thresholds are met.
 - No UI toggles; ops overrides via env only.
 
 #### Operational Flags (local-first)
 
-- `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` to disable network egress.
-- `DOCMIND_FUSION=rrf|dbsf` to control Qdrant fusion.
+- `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` to disable network egress (after predownload).
+- `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to control Qdrant fusion.
 - `DOCMIND_DISABLE_RERANKING=true` to bypass reranking (ops only; not recommended).
 - Qdrant runs bound to `127.0.0.1` by default; remote endpoints are disallowed unless explicitly configured.
 
@@ -750,6 +750,21 @@ DocMind AI is designed for complete offline operation:
    nvidia-smi  # Check GPU availability
    uv run python scripts/test_gpu.py --quick  # Validate CUDA setup
    ```
+
+### Prefetch Model Weights
+
+Run once (online) to predownload required models for offline use:
+
+```bash
+uv run python scripts/predownload_models.py --cache-dir ./models_cache
+```
+
+Set env for offline operation:
+
+```bash
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+```
 
 ### Model Requirements
 

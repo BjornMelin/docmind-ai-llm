@@ -2,7 +2,7 @@
 ADR: 037
 Title: Multimodal Reranking with SigLIP Visual Re‑score (default) and ColPali (optional) + BGE v2‑m3 (text)
 Status: Accepted
-Version: 1.1
+Version: 1.2
 Date: 2025-09-03
 Supersedes: 006
 Superseded-by:
@@ -159,6 +159,15 @@ DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS=400
 DOCMIND_RETRIEVAL__VISUAL_FRACTION_THRESHOLD=0.35
 DOCMIND_RETRIEVAL__MIN_VRAM_GB=8
 DOCMIND_RETRIEVAL__ADDITIONAL_LATENCY_BUDGET_MS=30
+
+### Telemetry (Required)
+
+Emit per‑stage metrics in JSONL with canonical keys:
+
+- `rerank.stage` = `text` | `visual` | `colpali`
+- `rerank.topk` (int), `rerank.latency_ms` (int), `rerank.timeout` (bool)
+- `retrieval.fusion_mode` and `retrieval.latency_ms` for surrounding stages
+- `dedup.before`/`dedup.after`/`dedup.dropped` for pre‑merge de‑duplication
 ```
 
 ### Activation Policy (Heuristic)
@@ -206,5 +215,6 @@ async def test_auto_gating_text_and_image_nodes(sample_nodes):
 
 ## Changelog
 
+- **1.2 (2025-09-07):** Clarified required telemetry keys and fail‑open behavior; no UI toggles, env‑only overrides.
 - **1.1 (2025-09-07):** Set SigLIP as default visual re‑score; ColPali optional via policy; added decision framework and guardrails; aligned with SPEC‑005
 - **1.0 (2025-09-03):** Initial accepted version; supersedes ADR‑006

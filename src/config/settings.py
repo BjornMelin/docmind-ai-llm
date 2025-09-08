@@ -68,6 +68,7 @@ class ProcessingConfig(BaseModel):
     chunk_overlap: int = Field(default=50, ge=0, le=200)
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     debug_chunk_flow: bool = Field(default=False)
+    encrypt_page_images: bool = Field(default=False)
 
 
 class ChatConfig(BaseModel):
@@ -125,6 +126,7 @@ class EmbeddingConfig(BaseModel):
         "siglip_base",
         "bge_visualized",
     ] = Field(default="auto")
+    siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)
 
@@ -140,15 +142,15 @@ class RetrievalConfig(BaseModel):
     use_reranking: bool = Field(default=True)
     reranking_top_k: int = Field(default=5, ge=1, le=20)
     reranker_normalize_scores: bool = Field(default=True)
-    # ADR-024/036/037: explicit reranker mode selection
-    # auto: modality-aware (visual+text); text: text-only; multimodal: force both
-    reranker_mode: Literal["auto", "text", "multimodal"] = Field(default="auto")
 
-    # RRF Fusion Settings
-    rrf_alpha: int = Field(default=60, ge=10, le=100)
-    rrf_k_constant: int = Field(default=60, ge=10, le=100)
-    rrf_fusion_weight_dense: float = Field(default=0.7, ge=0, le=1)
-    rrf_fusion_weight_sparse: float = Field(default=0.3, ge=0, le=1)
+    # Server-side fusion settings (ADR-024 v2.8)
+    fusion_mode: Literal["rrf", "dbsf"] = Field(
+        default="rrf", description="Server-side fusion mode (RRF default)"
+    )
+    fused_top_k: int = Field(
+        default=60, ge=10, le=1000, description="Prefetch/fused candidate cap"
+    )
+    rrf_k: int = Field(default=60, ge=1, le=256, description="RRF k-constant")
     use_sparse_embeddings: bool = Field(default=True)
     # Feature flag for future named-vectors multi-head support (no-op now)
     named_vectors_multi_head_enabled: bool = Field(default=False)

@@ -18,6 +18,9 @@ import numpy as np
 from llama_index.core.schema import ImageDocument
 from PIL import Image  # type: ignore
 
+from src.config import settings
+from src.utils.security import decrypt_file, encrypt_file
+
 
 def _phash(img: Image.Image, hash_size: int = 8) -> str:
     """Compute a simple perceptual hash (average hash) for dedup hints.
@@ -37,7 +40,10 @@ def _phash(img: Image.Image, hash_size: int = 8) -> str:
 
 
 def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
-    """Save pixmap as WebP (preferred) or JPEG fallback. Returns (path, phash)."""
+    """Save pixmap as WebP (preferred) or JPEG fallback. Returns (path, phash).
+
+    When encryption is enabled, returns the .enc path.
+    """
     # Convert to PIL Image from raw samples
     mode = "RGB" if pix.n < 4 else "RGBA"
     img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
@@ -56,12 +62,18 @@ def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
     webp_path = target_stem.with_suffix(".webp")
     try:
         img.save(webp_path, format="WEBP", quality=70, method=6)
-        return webp_path, _phash(img)
+        out = str(webp_path)
+        if getattr(settings.processing, "encrypt_page_images", False):
+            out = encrypt_file(out)
+        return Path(out), _phash(img)
     except Exception:
         # Fallback to JPEG
         jpg_path = target_stem.with_suffix(".jpg")
         img.save(jpg_path, format="JPEG", quality=75)
-        return jpg_path, _phash(img)
+        out = str(jpg_path)
+        if getattr(settings.processing, "encrypt_page_images", False):
+            out = encrypt_file(out)
+        return Path(out), _phash(img)
 
 
 def _render_pdf_pages(
@@ -107,12 +119,23 @@ def _render_pdf_pages(
                     os.utime(img_path, (pdf_mtime, pdf_mtime))
                 results.append((idx, img_path, page.rect, phash))
             else:
-                # If not re-rendered, recompute phash on the fly for metadata
+                # If not re-rendered, recompute phash on the fly for metadata.
+                # Handle encrypted images by decrypting to a temporary file.
+                ph = ""
+                tmp: str | None = None
                 try:
-                    with Image.open(img_path) as im:
+                    to_open = str(img_path)
+                    if to_open.endswith(".enc"):
+                        tmp = decrypt_file(to_open)
+                        to_open = tmp
+                    with Image.open(to_open) as im:
                         ph = _phash(im)
                 except Exception:
                     ph = ""
+                finally:
+                    if tmp:
+                        with contextlib.suppress(Exception):
+                            os.remove(tmp)
                 results.append((idx, img_path, page.rect, ph))
 
     return results
@@ -143,6 +166,13 @@ def pdf_pages_to_image_documents(
             "source": str(pdf_path),
             "phash": phash,
         }
+        if str(path).endswith(".enc"):
+            meta.update(
+                {
+                    "encrypted": True,
+                    "kid": os.getenv("DOCMIND_IMG_KID", "") or None,
+                }
+            )
         docs.append(ImageDocument(image_path=str(path), metadata=meta))
 
     return docs, out_dir
@@ -171,6 +201,11 @@ def save_pdf_page_images(pdf_path: Path, out_dir: Path, dpi: int = 200) -> list[
             "image_path": str(path),
             "bbox": [float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)],
             "phash": phash,
+            **(
+                {"encrypted": True, "kid": os.getenv("DOCMIND_IMG_KID", "") or None}
+                if str(path).endswith(".enc")
+                else {}
+            ),
         }
         for idx, path, rect, phash in entries
     ]

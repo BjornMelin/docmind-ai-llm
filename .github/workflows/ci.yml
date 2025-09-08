@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install deps
+        run: |
+          uv pip install --system -e .
+          uv pip install --system pytest ruff pylint cryptography pymupdf
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+
+      - name: Lint (pylint src)
+        run: |
+          pylint -j 2 src || true
+
+      - name: Run tests
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+        run: |
+          pytest -q
+

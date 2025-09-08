@@ -21,11 +21,6 @@ from loguru import logger
 from src.config import settings
 from src.config.settings import DocMindSettings
 
-# Constants for validation
-WEIGHT_TOLERANCE = 0.05
-RRF_ALPHA_MIN = 10
-RRF_ALPHA_MAX = 100
-
 # Compatibility alias so tests can patch src.utils.core.AsyncQdrantClient
 AsyncQdrantClient = qdrant_client.AsyncQdrantClient
 
@@ -109,73 +104,13 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
 
     # Configuration validation complete
 
-    # Check RRF configuration if hybrid strategy enabled (implies sparse embeddings)
-    if app_settings.retrieval.strategy == "hybrid" and not (
-        RRF_ALPHA_MIN <= app_settings.retrieval.rrf_alpha <= RRF_ALPHA_MAX
-    ):
-        results["warnings"].append(
-            f"RRF alpha {app_settings.retrieval.rrf_alpha} outside optimal range "
-            f"[{RRF_ALPHA_MIN}, {RRF_ALPHA_MAX}]"
-        )
-
     if not results["valid"]:
         error_msg = "Critical configuration errors:\n" + "\n".join(results["errors"])
         raise RuntimeError(error_msg)
 
     return results
 
-
-def verify_rrf_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
-    """Verify RRF configuration against research recommendations.
-
-    Args:
-        app_settings: Application settings containing RRF configuration
-
-    Returns:
-        Dictionary with verification results and recommendations
-    """
-    verification = {
-        "weights_correct": False,
-        "alpha_in_range": False,
-        "computed_hybrid_alpha": 0.0,
-        "issues": [],
-        "recommendations": [],
-    }
-
-    # Check research-backed weights (0.7 dense, 0.3 sparse)
-    expected_dense = 0.7  # Research-backed constant
-    expected_sparse = 0.3  # Research-backed constant
-
-    if (
-        abs(0.7 - expected_dense) < WEIGHT_TOLERANCE
-        and abs(0.3 - expected_sparse) < WEIGHT_TOLERANCE
-    ):
-        verification["weights_correct"] = True
-    else:
-        verification["issues"].append(
-            f"Weights not research-backed: dense={0.7}, sparse={0.3} (expected 0.7/0.3)"
-        )
-        verification["recommendations"].append(
-            "Update weights to research-backed values: dense=0.7, sparse=0.3"
-        )
-
-    # Check RRF alpha parameter
-    if RRF_ALPHA_MIN <= app_settings.retrieval.rrf_alpha <= RRF_ALPHA_MAX:
-        verification["alpha_in_range"] = True
-    else:
-        verification["issues"].append(
-            f"RRF alpha ({app_settings.retrieval.rrf_alpha}) outside research "
-            f"range (10-100)"
-        )
-        verification["recommendations"].append(
-            f"Set RRF alpha between {RRF_ALPHA_MIN}-{RRF_ALPHA_MAX}, "
-            f"with {app_settings.retrieval.rrf_k_constant} as optimal"
-        )
-
-    # Calculate hybrid alpha for LlamaIndex
-    verification["computed_hybrid_alpha"] = 0.7 / (0.7 + 0.3)
-
-    return verification
+    return results
 
 
 @asynccontextmanager

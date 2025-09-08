@@ -33,7 +33,8 @@ from qdrant_client import models as qmodels
 
 from src.models.embeddings import TextEmbedder
 from src.processing.utils import sha256_id
-from src.retrieval.reranking import MultimodalReranker, build_text_reranker
+from src.retrieval.reranking import MultimodalReranker
+from src.utils.security import build_owner_filter
 from src.utils.storage import get_client_config
 
 # Router Engine Configuration Constants
@@ -54,7 +55,7 @@ class _HybridParams:
     fused_top_k: int = FUSED_TOP_K_DEFAULT
     prefetch_sparse: int = SPARSE_PREFETCH_DEFAULT
     prefetch_dense: int = DENSE_PREFETCH_DEFAULT
-    fusion_mode: str = os.getenv("DOCMIND_FUSION", "rrf").lower()
+    fusion_mode: str = "rrf"
 
 
 class ServerHybridRetriever:
@@ -77,6 +78,7 @@ class ServerHybridRetriever:
         self._embedder = TextEmbedder(device=None)
 
     def _embed_query(self, text: str) -> tuple[np.ndarray, dict[int, float]]:
+        """Encode query text into dense and sparse vectors."""
         out = self._embedder.encode_text([text], return_dense=True, return_sparse=True)
         dense = out.get("dense")
         sparse = out.get("sparse")
@@ -92,6 +94,7 @@ class ServerHybridRetriever:
     def _sparse_to_qdrant(
         self, sp_map: dict[int, float]
     ) -> qmodels.SparseVector | None:
+        """Convert sparse map to Qdrant sparse vector format."""
         if not sp_map:
             return None
         # stable index order
@@ -100,13 +103,21 @@ class ServerHybridRetriever:
         return qmodels.SparseVector(indices=idxs, values=vals)
 
     def _fusion(self) -> qmodels.FusionQuery:
+        """Create fusion query based on configured mode."""
         mode = self.params.fusion_mode
         if mode == "dbsf":
             return qmodels.FusionQuery(fusion=qmodels.Fusion.DBSF)
         return qmodels.FusionQuery(fusion=qmodels.Fusion.RRF)
 
     def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
-        """Execute a server-side hybrid query (RRF/DBSF) and de-dup by page_id."""
+        """Execute a server-side hybrid query (RRF/DBSF) and de-dup by page_id.
+
+        Args:
+            query: Query string or QueryBundle to execute.
+
+        Returns:
+            list[NodeWithScore]: Retrieved nodes with scores, deduplicated by page_id.
+        """
         qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
         t0 = perf_counter()
         dense_vec, sp_map = self._embed_query(qtext)
@@ -121,19 +132,36 @@ class ServerHybridRetriever:
                     limit=self.params.prefetch_sparse,
                 )
             )
+        d_list = dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
         prefetch.append(
             qmodels.Prefetch(
-                query=qmodels.VectorInput(vector=dense_vec.tolist()),
+                query=d_list,  # plain vector for dense prefetch
                 using="text-dense",
                 limit=self.params.prefetch_dense,
             )
         )
+
+        # Optional RBAC-style filter via env (owner scoping)
+        owner = os.getenv("DOCMIND_OWNER_ID", "").strip()
+        qfilter = None
+        if owner:
+            # Build typed filter to avoid schema drift across client versions
+            try:
+                cond = qmodels.FieldCondition(
+                    key="owner_id", match=qmodels.MatchValue(value=owner)
+                )
+                qfilter = qmodels.Filter(must=[cond])
+            except Exception:
+                # Fallback to dict-based helper if client types mismatch
+                fdict = build_owner_filter(owner)
+                qfilter = qmodels.Filter(**fdict)  # type: ignore[arg-type]
 
         result = self._client.query_points(
             collection_name=self.params.collection,
             prefetch=prefetch,
             query=self._fusion(),
             limit=self.params.fused_top_k,
+            query_filter=qfilter,
             with_payload=[
                 "doc_id",
                 "page_id",
@@ -146,6 +174,7 @@ class ServerHybridRetriever:
 
         # De-dup by page_id before final cut
         best: dict[str, tuple[float, Any]] = {}
+        orig = len(result.points)
         for p in result.points:
             payload = p.payload or {}
             key = str(payload.get("page_id") or p.id)
@@ -168,14 +197,37 @@ class ServerHybridRetriever:
 
         t1 = perf_counter()
         latency_ms = (t1 - t0) * 1000.0
-        logger.info(
-            "Qdrant hybrid: top_k=%d dense=%d sparse=%d fusion=%s latency=%.1fms",
-            self.params.fused_top_k,
-            self.params.prefetch_dense,
-            self.params.prefetch_sparse,
-            self.params.fusion_mode,
-            latency_ms,
-        )
+        dedup_filtered = max(0, orig - len(best))
+        try:
+            from src.utils.telemetry import log_jsonl
+
+            log_jsonl(
+                {
+                    "retrieval.fusion_mode": self.params.fusion_mode,
+                    "retrieval.prefetch_dense_limit": int(self.params.prefetch_dense),
+                    "retrieval.prefetch_sparse_limit": int(self.params.prefetch_sparse),
+                    "retrieval.fused_limit": int(self.params.fused_top_k),
+                    "retrieval.return_count": len(nodes),
+                    "retrieval.latency_ms": int(latency_ms),
+                    "dedup.before": int(orig),
+                    "dedup.after": len(best),
+                    "dedup.dropped": int(dedup_filtered),
+                    "dedup.key": "page_id",
+                }
+            )
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.info(
+                (
+                    "Qdrant hybrid: top_k=%d dense=%d "
+                    "sparse=%d fusion=%s latency=%.1fms dedup=%d"
+                ),
+                self.params.fused_top_k,
+                self.params.prefetch_dense,
+                self.params.prefetch_sparse,
+                self.params.fusion_mode,
+                latency_ms,
+                dedup_filtered,
+            )
         return nodes
 
 
@@ -235,7 +287,8 @@ class AdaptiveRouterQueryEngine:
         descriptions for the LLM selector to make optimal routing decisions.
 
         Returns:
-            List of QueryEngineTool instances for RouterQueryEngine
+            list[QueryEngineTool]: List of QueryEngineTool instances for
+                                   RouterQueryEngine.
         """
         tools: list[QueryEngineTool] = []
         hybrid_tool: QueryEngineTool | None = None
@@ -274,7 +327,20 @@ class AdaptiveRouterQueryEngine:
                 from src.config import settings as app_settings
 
                 collection = app_settings.database.qdrant_collection
-                params = _HybridParams(collection=collection)
+                # Derive params from settings with sane defaults
+                fused_top = int(
+                    getattr(app_settings.retrieval, "fused_top_k", FUSED_TOP_K_DEFAULT)
+                )
+                fusion_mode = str(
+                    getattr(app_settings.retrieval, "fusion_mode", "rrf")
+                ).lower()
+                params = _HybridParams(
+                    collection=collection,
+                    fused_top_k=fused_top,
+                    prefetch_sparse=SPARSE_PREFETCH_DEFAULT,
+                    prefetch_dense=DENSE_PREFETCH_DEFAULT,
+                    fusion_mode=fusion_mode,
+                )
                 retriever = ServerHybridRetriever(params)
                 hybrid_engine = RetrieverQueryEngine.from_args(
                     retriever=retriever,
@@ -296,7 +362,8 @@ class AdaptiveRouterQueryEngine:
                         ),
                     )
                 )
-            except Exception as e:  # pragma: no cover - fails open to dense
+            # If hybrid construction fails, warn and continue with dense-only
+            except Exception as e:  # pragma: no cover - broad except by design
                 logger.warning("Server hybrid unavailable: %s", e)
 
         # 2. Dense Semantic Search Tool (BGE-M3 Dense Only)
@@ -434,10 +501,10 @@ class AdaptiveRouterQueryEngine:
         """Detect if a query involves multimodal/image content.
 
         Args:
-            query_str: User query string
+            query_str: User query string.
 
         Returns:
-            True if query likely involves images/visual content
+            bool: True if query likely involves images/visual content.
         """
         # Pattern-based detection for image-related queries
         image_keywords = [
@@ -497,7 +564,7 @@ class AdaptiveRouterQueryEngine:
         query analysis. Provides fallback mechanisms for robustness.
 
         Returns:
-            Configured RouterQueryEngine with adaptive routing
+            RouterQueryEngine: Configured RouterQueryEngine with adaptive routing.
         """
         query_engine_tools = self._query_engine_tools
 
@@ -526,11 +593,11 @@ class AdaptiveRouterQueryEngine:
         the optimal retrieval strategy based on query characteristics.
 
         Args:
-            query_str: User query text
-            **kwargs: Additional query parameters
+            query_str: User query text.
+            **kwargs: Additional query parameters.
 
         Returns:
-            Query response with metadata about selected strategy
+            Any: Query response with metadata about selected strategy.
         """
         try:
             logger.info(
@@ -562,11 +629,11 @@ class AdaptiveRouterQueryEngine:
         """Async query execution through adaptive routing.
 
         Args:
-            query_str: User query text
-            **kwargs: Additional query parameters
+            query_str: User query text.
+            **kwargs: Additional query parameters.
 
         Returns:
-            Query response with metadata about selected strategy
+            Any: Query response with metadata about selected strategy.
         """
         try:
             logger.info(
@@ -593,12 +660,12 @@ class AdaptiveRouterQueryEngine:
         """Get list of available retrieval strategies.
 
         Returns:
-            List of strategy names available for routing
+            list[str]: List of strategy names available for routing.
         """
         return [tool.metadata.name for tool in self._query_engine_tools]
 
 
-def create_adaptive_router_engine(
+def create_adaptive_router_engine(  # pylint: disable=too-many-positional-arguments
     vector_index: Any,
     kg_index: Any | None = None,
     hybrid_retriever: Any | None = None,
@@ -612,27 +679,23 @@ def create_adaptive_router_engine(
     with comprehensive strategy support including multimodal CLIP search.
 
     Args:
-        vector_index: Primary vector index for semantic search
-        kg_index: Optional knowledge graph index for relationships
-        hybrid_retriever: Optional hybrid retriever for dense+sparse search
-        multimodal_index: Optional multimodal index for CLIP image-text search
-        reranker: Optional reranker for result quality improvement
-        llm: Optional LLM for strategy selection (defaults to Settings.llm)
+        vector_index: Primary vector index for semantic search.
+        kg_index: Optional knowledge graph index for relationships.
+        hybrid_retriever: Optional hybrid retriever for dense+sparse search.
+        multimodal_index: Optional multimodal index for CLIP image-text search.
+        reranker: Optional reranker for result quality improvement.
+        llm: Optional LLM for strategy selection (defaults to Settings.llm).
 
     Returns:
-        Configured AdaptiveRouterQueryEngine for FEAT-002.1
+        AdaptiveRouterQueryEngine: Configured AdaptiveRouterQueryEngine.
     """
     # Build reranker if not provided
     # Import settings lazily to avoid any potential test-time import shadowing
     from src.config import settings as app_settings  # local import by design
 
     if reranker is None and getattr(app_settings.retrieval, "use_reranking", True):
-        mode = getattr(app_settings.retrieval, "reranker_mode", "auto")
-        reranker = (
-            MultimodalReranker()
-            if mode in {"auto", "multimodal"}
-            else build_text_reranker()
-        )
+        # Always-on modality-aware reranking (text + visual policy)
+        reranker = MultimodalReranker()
 
     return AdaptiveRouterQueryEngine(
         vector_index=vector_index,
@@ -651,7 +714,7 @@ def configure_router_settings(_router_engine: AdaptiveRouterQueryEngine) -> None
     as the primary query interface.
 
     Args:
-        router_engine: Configured AdaptiveRouterQueryEngine instance
+        _router_engine: Configured AdaptiveRouterQueryEngine instance.
     """
     try:
         # Note: Settings doesn't have a direct query_engine property

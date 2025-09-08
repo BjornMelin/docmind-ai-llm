@@ -2,14 +2,18 @@
 
 Changes in this patch:
 - Default visual rerank uses SigLIP text-image cosine.
-- Optional ColPali auto-enables via policy thresholds (VRAM/budget/K/visual
-  fraction).
+- Optional ColPali auto-enables via policy thresholds (VRAM/budget/K/visual fraction).
 - Rank-level RRF merge across modalities; fail-open on timeout.
 """
 
 from __future__ import annotations
 
+import contextlib
+import os
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FTimeoutError
 from functools import cache
 from typing import Any
 
@@ -21,6 +25,7 @@ from loguru import logger
 
 from src.config import settings
 from src.utils.multimodal import TEXT_TRUNCATION_LIMIT
+from src.utils.telemetry import log_jsonl
 
 # Time budgets (ms)
 TEXT_RERANK_TIMEOUT_MS = 250
@@ -35,16 +40,40 @@ COLPALI_FINAL_M = 16
 
 
 def _now_ms() -> float:
+    """Get current time in milliseconds."""
     return time.perf_counter() * 1000.0
 
 
+def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
+    """Execute a callable with a hard timeout.
+
+    Returns None when the timeout elapses; otherwise returns the callable's result.
+    """
+    # Small executor per call keeps code simple and avoids shared state complexity
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(fn)
+        try:
+            return fut.result(timeout=max(0.0, timeout_ms) / 1000.0)
+        except FTimeoutError:
+            return None
+
+
 def _has_cuda_vram(min_gb: float) -> bool:
+    """Check if CUDA GPU has sufficient VRAM.
+
+    Args:
+        min_gb: Minimum VRAM required in gigabytes.
+
+    Returns:
+        bool: True if CUDA is available and has sufficient VRAM, False otherwise.
+    """
     try:
         import torch
 
         if not torch.cuda.is_available():  # type: ignore[attr-defined]
             return False
-        total = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # type: ignore[attr-defined]
+        props = torch.cuda.get_device_properties(0)  # type: ignore[attr-defined]
+        total = props.total_memory / (1024**3)
         return total >= float(min_gb)
     except Exception:
         return False
@@ -53,7 +82,15 @@ def _has_cuda_vram(min_gb: float) -> bool:
 def _rrf_merge(
     lists: list[list[NodeWithScore]], k_constant: int
 ) -> list[NodeWithScore]:
-    """Rank-level Reciprocal Rank Fusion over multiple reranked lists."""
+    """Rank-level Reciprocal Rank Fusion over multiple reranked lists.
+
+    Args:
+        lists: List of ranked lists to merge.
+        k_constant: RRF k-constant for score calculation.
+
+    Returns:
+        list[NodeWithScore]: Fused list sorted by RRF scores.
+    """
     scores: dict[str, tuple[float, NodeWithScore]] = {}
     for ranked in lists:
         for rank, nws in enumerate(ranked, start=1):
@@ -71,7 +108,8 @@ def _rrf_merge(
 def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     """Lazy-load SigLIP model+processor and choose device.
 
-    Returns: (model, processor, device_str)
+    Returns:
+        tuple[Any, Any, str]: Tuple of (model, processor, device_str).
     """
     from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
@@ -84,7 +122,13 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     except Exception:
         device = "cpu"
 
-    model_id = "google/siglip-base-patch16-224"
+    # Pull model id from settings if available, fallback to default
+    try:
+        model_id = getattr(
+            settings.embedding, "siglip_model_id", "google/siglip-base-patch16-224"
+        )
+    except Exception:  # pylint: disable=broad-exception-caught
+        model_id = "google/siglip-base-patch16-224"
     model = SiglipModel.from_pretrained(model_id)
     if device == "cuda":
         model = model.to("cuda")
@@ -97,8 +141,14 @@ def _siglip_rescore(
 ) -> list[NodeWithScore]:
     """Compute SigLIP text-image cosine scores for visual nodes.
 
-    Returns nodes with updated ``score`` sorted desc, within time budget.
-    Fails open (returns input order) on errors.
+    Args:
+        query: Text query string.
+        nodes: List of nodes with potential image metadata.
+        budget_ms: Time budget in milliseconds.
+
+    Returns:
+        list[NodeWithScore]: Nodes with updated scores sorted descending.
+            Fails open (returns input order) on errors.
     """
     if not nodes:
         return nodes
@@ -120,17 +170,37 @@ def _siglip_rescore(
         # Load images lazily; stop if time runs out
         from PIL import Image  # type: ignore
 
+        # Support encrypted images written as .enc — decrypt to a temporary file first
+        try:
+            from src.utils.security import (
+                decrypt_file,
+            )  # local import to avoid heavy deps
+        except Exception:  # pragma: no cover - defensive
+
+            def decrypt_file(p: str) -> str:  # type: ignore
+                return p
+
         images: list[Any] = []
+        temp_files: list[str] = []
         for p in paths:
             if p:
                 try:
-                    images.append(Image.open(p).convert("RGB"))
+                    to_open = p
+                    if str(p).endswith(".enc"):
+                        dec = decrypt_file(p)
+                        to_open = dec
+                        temp_files.append(dec)
+                    images.append(Image.open(to_open).convert("RGB"))
                 except Exception:
                     images.append(None)
             else:
                 images.append(None)
             if _now_ms() - t0 > budget_ms:
                 logger.warning("SigLIP load images timeout; fail-open")
+                # Cleanup temp files on early exit
+                for tp in temp_files:
+                    with contextlib.suppress(Exception):
+                        os.remove(tp)
                 return nodes
 
         model, processor, device = _load_siglip()
@@ -148,6 +218,10 @@ def _siglip_rescore(
         for img in images:
             if _now_ms() - t0 > budget_ms:
                 logger.warning("SigLIP compute timeout; fail-open")
+                # Cleanup temp files on early exit
+                for tp in temp_files:
+                    with contextlib.suppress(Exception):
+                        os.remove(tp)
                 return nodes
             if img is None:
                 feats.append(float("-inf"))
@@ -178,6 +252,10 @@ def _siglip_rescore(
             ):
                 n.node.text = n.node.text[:TEXT_TRUNCATION_LIMIT]
         nodes_sorted = sorted(nodes, key=lambda x: x.score or 0.0, reverse=True)
+        # Cleanup temp files
+        for tp in temp_files:
+            with contextlib.suppress(Exception):
+                os.remove(tp)
         return nodes_sorted[: settings.retrieval.reranking_top_k]
     except Exception as exc:
         logger.warning("SigLIP rerank error: {} — fail-open", exc)
@@ -185,7 +263,17 @@ def _siglip_rescore(
 
 
 def _parse_top_k(value: int | str | None) -> int:
-    """Validate and convert ``top_n`` values to ``int``."""
+    """Validate and convert top_n values to int.
+
+    Args:
+        value: Value to convert, can be int, str, or None.
+
+    Returns:
+        int: Parsed integer value, or default from settings.
+
+    Raises:
+        ValueError: If value cannot be converted to int.
+    """
     if value is None:
         return settings.retrieval.reranking_top_k
     try:
@@ -196,8 +284,17 @@ def _parse_top_k(value: int | str | None) -> int:
 
 @cache
 def _build_text_reranker_cached(top_n: int) -> SentenceTransformerRerank:
+    """Create cached SentenceTransformer reranker for text.
+
+    Args:
+        top_n: Number of top results to return.
+
+    Returns:
+        SentenceTransformerRerank: Configured text reranker instance.
+    """
+    # Respect configured model id to keep settings authoritative
     return SentenceTransformerRerank(
-        model="BAAI/bge-reranker-v2-m3",
+        model=getattr(settings.retrieval, "reranker_model", "BAAI/bge-reranker-v2-m3"),
         top_n=top_n,
         use_fp16=True,
         normalize=settings.retrieval.reranker_normalize_scores,
@@ -205,18 +302,43 @@ def _build_text_reranker_cached(top_n: int) -> SentenceTransformerRerank:
 
 
 def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRerank:
-    """Create text CrossEncoder reranker (BGE v2-m3)."""
+    """Create text CrossEncoder reranker (BGE v2-m3).
+
+    Args:
+        top_n: Number of top results to return. Defaults to settings value.
+
+    Returns:
+        SentenceTransformerRerank: Configured text reranker instance.
+    """
     k = _parse_top_k(top_n)
     return _build_text_reranker_cached(k)
 
 
 @cache
 def _build_visual_reranker_cached(top_n: int) -> ColPaliRerank:
+    """Create cached ColPali reranker for visual content.
+
+    Args:
+        top_n: Number of top results to return.
+
+    Returns:
+        ColPaliRerank: Configured visual reranker instance.
+    """
     return ColPaliRerank(model="vidore/colpali-v1.2", top_n=top_n)
 
 
 def build_visual_reranker(top_n: int | str | None = None) -> ColPaliRerank:
-    """Create visual reranker (ColPali)."""
+    """Create visual reranker (ColPali).
+
+    Args:
+        top_n: Number of top results to return. Defaults to settings value.
+
+    Returns:
+        ColPaliRerank: Configured visual reranker instance.
+
+    Raises:
+        ValueError: If ColPaliRerank initialization fails.
+    """
     k = _parse_top_k(top_n)
     try:
         return _build_visual_reranker_cached(k)
@@ -225,11 +347,27 @@ def build_visual_reranker(top_n: int | str | None = None) -> ColPaliRerank:
 
 
 class MultimodalReranker(BaseNodePostprocessor):
-    """Postprocessor that applies text and visual rerankers per node modality."""
+    """Postprocessor that applies text and visual rerankers per node modality.
+
+    This reranker uses modality-aware processing with:
+    - Text reranking via BGE CrossEncoder
+    - Visual reranking via SigLIP (default) or ColPali (optional)
+    - RRF fusion for multi-modality results
+    - Time budgets and fail-open behavior
+    """
 
     def _postprocess_nodes(
         self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
     ) -> list[NodeWithScore]:
+        """Apply modality-aware reranking with time budgets and fail-open behavior.
+
+        Args:
+            nodes: List of nodes to rerank.
+            query_bundle: Query bundle containing the search query.
+
+        Returns:
+            list[NodeWithScore]: Reranked nodes sorted by relevance scores.
+        """
         if not nodes or not query_bundle:
             return nodes
 
@@ -240,16 +378,36 @@ class MultimodalReranker(BaseNodePostprocessor):
         t_start = _now_ms()
         try:
             if text_nodes:
-                tr = build_text_reranker().postprocess_nodes(
-                    text_nodes, query_str=query_bundle.query_str
+
+                def _do_text():
+                    return build_text_reranker().postprocess_nodes(
+                        text_nodes, query_str=query_bundle.query_str
+                    )
+
+                tr = _run_with_timeout(_do_text, TEXT_RERANK_TIMEOUT_MS)
+                if tr is not None:
+                    lists.append(tr)
+                else:
+                    logger.warning("Text rerank timeout; fail-open")
+                    log_jsonl(
+                        {
+                            "rerank.stage": "text",
+                            "rerank.topk": int(settings.retrieval.reranking_top_k),
+                            "rerank.latency_ms": int(_now_ms() - t_start),
+                            "rerank.timeout": True,
+                        }
+                    )
+                    return nodes
+                log_jsonl(
+                    {
+                        "rerank.stage": "text",
+                        "rerank.topk": int(settings.retrieval.reranking_top_k),
+                        "rerank.latency_ms": int(_now_ms() - t_start),
+                        "rerank.timeout": False,
+                    }
                 )
-                lists.append(tr)
         except Exception as exc:
             logger.warning("Text rerank error: {} — fail-open", exc)
-
-        if _now_ms() - t_start > TEXT_RERANK_TIMEOUT_MS:
-            logger.warning("Text rerank timeout; fail-open")
-            return nodes
 
         # Stage 3: visual rerank — SigLIP default within budget
         v_start = _now_ms()
@@ -259,31 +417,70 @@ class MultimodalReranker(BaseNodePostprocessor):
                     query_bundle.query_str, visual_nodes, SIGLIP_TIMEOUT_MS
                 )
                 lists.append(sr)
+                log_jsonl(
+                    {
+                        "rerank.stage": "visual",
+                        "rerank.topk": int(settings.retrieval.reranking_top_k),
+                        "rerank.latency_ms": int(_now_ms() - v_start),
+                        "rerank.timeout": False,
+                    }
+                )
         except Exception as exc:
             logger.warning("SigLIP rerank error: {} — continue without", exc)
 
         # Optional Stage 3b: ColPali policy
         try:
             if self._should_enable_colpali(visual_nodes, lists):
-                # Cascade: SigLIP prune to m → ColPali final on m'
                 base = lists[-1] if lists else visual_nodes
                 pruned = base[:SIGLIP_PRUNE_M]
-                cr = build_visual_reranker(
-                    top_n=min(COLPALI_FINAL_M, settings.retrieval.reranking_top_k)
-                ).postprocess_nodes(pruned, query_str=query_bundle.query_str)
-                lists.append(cr)
+
+                def _do_colpali():
+                    return build_visual_reranker(
+                        top_n=min(COLPALI_FINAL_M, settings.retrieval.reranking_top_k)
+                    ).postprocess_nodes(pruned, query_str=query_bundle.query_str)
+
+                remaining = max(
+                    0, SIGLIP_TIMEOUT_MS + COLPALI_TIMEOUT_MS - int(_now_ms() - v_start)
+                )
+                cr = _run_with_timeout(_do_colpali, remaining)
+                if cr is not None:
+                    lists.append(cr)
+                    log_jsonl(
+                        {
+                            "rerank.stage": "colpali",
+                            "rerank.topk": int(settings.retrieval.reranking_top_k),
+                            "rerank.latency_ms": int(_now_ms() - v_start),
+                            "rerank.timeout": False,
+                        }
+                    )
+                else:
+                    logger.warning("ColPali rerank timeout; continue without")
+                    log_jsonl(
+                        {
+                            "rerank.stage": "colpali",
+                            "rerank.topk": int(settings.retrieval.reranking_top_k),
+                            "rerank.latency_ms": int(_now_ms() - v_start),
+                            "rerank.timeout": True,
+                        }
+                    )
         except Exception as exc:
             logger.warning("ColPali rerank error: {} — continue without", exc)
 
         if _now_ms() - v_start > (SIGLIP_TIMEOUT_MS + COLPALI_TIMEOUT_MS):
             logger.warning("Visual rerank timeout; fail-open")
+            log_jsonl(
+                {
+                    "rerank.stage": "visual",
+                    "rerank.topk": int(settings.retrieval.reranking_top_k),
+                    "rerank.latency_ms": int(_now_ms() - v_start),
+                    "rerank.timeout": True,
+                }
+            )
             return nodes
 
         if not lists:
             return nodes[: settings.retrieval.reranking_top_k]
-        fused = _rrf_merge(
-            lists, k_constant=int(getattr(settings.retrieval, "rrf_k_constant", 60))
-        )
+        fused = _rrf_merge(lists, k_constant=int(settings.retrieval.rrf_k))
         # De-dup and cap
         seen: set[str] = set()
         out: list[NodeWithScore] = []
@@ -294,12 +491,39 @@ class MultimodalReranker(BaseNodePostprocessor):
             out.append(n)
             if len(out) >= settings.retrieval.reranking_top_k:
                 break
+        # Emit final delta metric: simple change count in top-k ids
+        try:
+            before_ids = [
+                n.node.node_id for n in nodes[: settings.retrieval.reranking_top_k]
+            ]
+            after_ids = [n.node.node_id for n in out]
+            delta_changed = len(set(after_ids) - set(before_ids))
+            log_jsonl(
+                {
+                    "rerank.stage": "final",
+                    "rerank.topk": int(settings.retrieval.reranking_top_k),
+                    "rerank.latency_ms": 0,
+                    "rerank.timeout": False,
+                    "rerank.delta_changed_count": int(delta_changed),
+                }
+            )
+        except Exception as exc:
+            logger.warning("Final rerank metrics error: {} — skipping telemetry", exc)
         return out
 
     @staticmethod
     def _split_by_modality(
         nodes: list[NodeWithScore],
     ) -> tuple[list[NodeWithScore], list[NodeWithScore]]:
+        """Split nodes into text and visual modalities based on metadata.
+
+        Args:
+            nodes: List of nodes to split by modality.
+
+        Returns:
+            tuple[list[NodeWithScore], list[NodeWithScore]]: Tuple of
+            (text_nodes, visual_nodes).
+        """
         text = [n for n in nodes if n.node.metadata.get("modality", "text") == "text"]
         visual = [
             n
@@ -320,6 +544,13 @@ class MultimodalReranker(BaseNodePostprocessor):
         - reranking_top_k ≤ 10-16,
         - GPU VRAM ≥ 8-12 GB,
         - extra latency budget available (~30ms).
+
+        Args:
+            visual_nodes: List of visual nodes being processed.
+            lists: Current list of reranked result lists.
+
+        Returns:
+            bool: True if ColPali should be enabled, False otherwise.
         """
         # Visual fraction proxy from candidate set
         total = max(1, sum(len(lst) for lst in lists) if lists else len(visual_nodes))
@@ -329,8 +560,6 @@ class MultimodalReranker(BaseNodePostprocessor):
         # Allow ops override via env/setting (optional); default False
         ops_force = bool(getattr(settings.retrieval, "enable_colpali", False))
         return ops_force or (visual_frac >= 0.4 and topk_ok and vram_ok)
-
-    # RRF merge handles fusion+dedupe; helper removed
 
 
 __all__ = [
