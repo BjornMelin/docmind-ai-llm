@@ -18,18 +18,7 @@ from .graph_config import (
     traverse_graph,
 )
 
-# DSPy query optimization
-from .optimization import (
-    DocMindRAG,
-    DSPyABTest,
-    DSPyConfig,
-    DSPyOptimizer,
-    OptimizationMode,
-    QueryStrategy,
-    classify_query_strategy,
-    measure_quality_improvement,
-    progressive_optimization_pipeline,
-)
+# DSPy query optimization removed in favor of server-side hybrid + reranking
 
 # Adaptive router query engine
 from .query_engine import (
@@ -49,18 +38,11 @@ from .reranking import (
 
 __all__ = [
     "AdaptiveRouterQueryEngine",
-    "DSPyABTest",
-    "DSPyConfig",
-    "DSPyOptimizer",
-    "DocMindRAG",
     "MultimodalReranker",
-    "OptimizationMode",
     "PropertyGraphConfig",
-    "QueryStrategy",
     "build_text_reranker",
     "build_visual_reranker",
     "calculate_entity_confidence",
-    "classify_query_strategy",
     "configure_router_settings",
     "create_adaptive_router_engine",
     "create_property_graph_index",
@@ -69,7 +51,5 @@ __all__ = [
     "extend_property_graph_index",
     "extract_entities",
     "extract_relationships",
-    "measure_quality_improvement",
-    "progressive_optimization_pipeline",
     "traverse_graph",
 ]
