@@ -41,7 +41,8 @@ def test_siglip_decrypts_and_cleans_temp(monkeypatch, tmp_path):
             f.write(b"img")
         return name
 
-    monkeypatch.setattr(rr, "decrypt_file", fake_decrypt)
+    # Patch decrypt function where it resides
+    monkeypatch.setattr("src.utils.security.decrypt_file", fake_decrypt)
 
     # Patch PIL.Image.open used in module to avoid real image parsing
     class _Img:
@@ -52,7 +53,8 @@ def test_siglip_decrypts_and_cleans_temp(monkeypatch, tmp_path):
         calls["open"].append(path)
         return _Img()
 
-    monkeypatch.setattr(rr, "Image", type("_I", (), {"open": staticmethod(fake_open)}))
+    # Patch PIL.Image.open used by reranking
+    monkeypatch.setattr("PIL.Image.open", staticmethod(fake_open))
 
     # Patch os.remove to observe cleanup
     def fake_remove(path: str):

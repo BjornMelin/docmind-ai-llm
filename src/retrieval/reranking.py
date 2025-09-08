@@ -25,16 +25,6 @@ from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 
 from src.config import settings
-
-# Placeholder to allow test-time monkeypatching of PIL.Image
-Image = None  # type: ignore[assignment]
-
-# Provide a module-level decrypt hook that tests can monkeypatch.
-try:  # pragma: no cover - import path exercised indirectly
-    from src.utils.security import decrypt_file as decrypt_file  # type: ignore
-except Exception:  # pragma: no cover - defensive default
-    def decrypt_file(p: str) -> str:  # type: ignore
-        return p
 from src.utils.multimodal import TEXT_TRUNCATION_LIMIT
 from src.utils.telemetry import log_jsonl
 
@@ -116,35 +106,22 @@ def _rrf_merge(
     return [n for _score, n in fused]
 
 
-# Local cache keyed by (class ids, model id) to be robust to test-time injection
 _SIGLIP_CACHE: dict[tuple[int, int, str], tuple[Any, Any, str]] = {}
 
 def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     """Lazy-load SigLIP model+processor and choose device.
 
-    This loader supports test-time injection via module globals:
-    - If ``SiglipModel``/``SiglipProcessor`` are present in globals(), they are
-      used instead of importing from ``transformers``.
-    - If ``TORCH`` is present in globals(), it is used as the torch module.
-
     Returns:
         tuple[Any, Any, str]: Tuple of (model, processor, device_str).
     """
-    SiglipModel = globals().get("SiglipModel")  # type: ignore[assignment]
-    SiglipProcessor = globals().get("SiglipProcessor")  # type: ignore[assignment]
-    if SiglipModel is None or SiglipProcessor is None:  # pragma: no cover - import path
-        from transformers import SiglipModel as _TSiglipModel, SiglipProcessor as _TSiglipProcessor  # type: ignore
+    from transformers import SiglipModel as _TSiglipModel, SiglipProcessor as _TSiglipProcessor  # type: ignore
 
-        SiglipModel = SiglipModel or _TSiglipModel
-        SiglipProcessor = SiglipProcessor or _TSiglipProcessor
-
-    # Device selection with optional injected torch
+    # Device selection
     device = "cpu"
-    torch_mod = globals().get("TORCH")
     try:
-        if torch_mod is None:
-            import torch as torch_mod  # type: ignore
-        if getattr(torch_mod.cuda, "is_available", lambda: False)():  # type: ignore[attr-defined]
+        import torch
+
+        if torch.cuda.is_available():  # type: ignore[attr-defined]
             device = "cuda"
     except Exception:  # pragma: no cover - defensive fallback
         device = "cpu"
@@ -157,14 +134,14 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     except AttributeError:
         model_id = "google/siglip-base-patch16-224"
     # Resolve cache key from class identities + model id
-    key = (id(SiglipModel), id(SiglipProcessor), str(model_id))
+    key = (id(_TSiglipModel), id(_TSiglipProcessor), str(model_id))
     if key in _SIGLIP_CACHE:
         return _SIGLIP_CACHE[key]
 
-    model = SiglipModel.from_pretrained(model_id)  # type: ignore[operator]
+    model = _TSiglipModel.from_pretrained(model_id)  # type: ignore[operator]
     if device == "cuda" and hasattr(model, "to"):
         model = model.to("cuda")  # type: ignore[assignment]
-    processor = SiglipProcessor.from_pretrained(model_id)  # type: ignore[operator]
+    processor = _TSiglipProcessor.from_pretrained(model_id)  # type: ignore[operator]
     _SIGLIP_CACHE[key] = (model, processor, device)
     return _SIGLIP_CACHE[key]
 
@@ -207,22 +184,14 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
                 paths.append(str(p))
 
         # Load images lazily; stop if time runs out
-        # Allow tests to inject a lightweight Image opener
-        Image = globals().get("Image")
-        if Image is None:  # pragma: no cover - import path
-            from PIL import Image  # type: ignore
+        from PIL import Image  # type: ignore
 
         # Support encrypted images written as .enc — decrypt to a temporary file first
-        # Prefer injected decrypt_file if present (unit tests), otherwise import
-        decrypt_file = globals().get("decrypt_file")
-        if decrypt_file is None:  # pragma: no cover - import path
-            try:
-                from src.utils.security import decrypt_file as _dec  # type: ignore
-
-                decrypt_file = _dec
-            except Exception:  # pragma: no cover - defensive
-                def decrypt_file(p: str) -> str:  # type: ignore
-                    return p
+        try:
+            from src.utils.security import decrypt_file  # type: ignore
+        except Exception:  # pragma: no cover - defensive
+            def decrypt_file(p: str) -> str:  # type: ignore
+                return p
 
         images: list[Any] = []
         temp_files: list[str] = []

@@ -1,8 +1,13 @@
-"""Test that SigLIP model/processor loader is cached (single initialization)."""
+"""Test SigLIP loader caching without production hooks.
+
+We inject a fake ``transformers`` module via ``sys.modules`` so the loader
+imports our stubs, exercising the cache without modifying production code.
+"""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 
 
 def test_siglip_loader_cached(monkeypatch):
@@ -10,15 +15,16 @@ def test_siglip_loader_cached(monkeypatch):
 
     calls = {"model": 0, "proc": 0}
 
-    class _M:
+    class _FakeModel:
         @staticmethod
         def from_pretrained(_id):  # type: ignore[no-untyped-def]
             calls["model"] += 1
             return SimpleNamespace(
-                get_text_features=lambda **_: 0, get_image_features=lambda **_: 0
+                get_text_features=lambda **_: 0,
+                get_image_features=lambda **_: 0,
             )
 
-    class _P:
+    class _FakeProcessor:
         @staticmethod
         def from_pretrained(_id):  # type: ignore[no-untyped-def]
             calls["proc"] += 1
@@ -35,15 +41,14 @@ def test_siglip_loader_cached(monkeypatch):
         ),
     )
 
-    monkeypatch.setitem(
-        rr.__dict__, "TORCH", None
-    )  # avoid actual torch usage in loader
-
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")
     monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
 
-    monkeypatch.setitem(rr.__dict__, "SiglipModel", _M)
-    monkeypatch.setitem(rr.__dict__, "SiglipProcessor", _P)
+    # Inject fake transformers module used by the loader
+    fake_tf = ModuleType("transformers")
+    fake_tf.SiglipModel = _FakeModel
+    fake_tf.SiglipProcessor = _FakeProcessor
+    monkeypatch.setitem(sys.modules, "transformers", fake_tf)
 
     # First load
     _ = rr._load_siglip()
