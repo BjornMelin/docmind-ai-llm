@@ -32,12 +32,12 @@ jobs:
           # Create project venv and install dependencies from lockfile, including tests
           uv sync --extra test --frozen
 
-      - name: Lint (ruff)
+      - name: Quality Gate: Ruff (format+lint)
         run: |
           uvx ruff format --check .
           uvx ruff check .
 
-      - name: Lint (pylint)
+      - name: Quality Gate: Pylint (fail-under=9.5)
         run: |
           uvx pylint --fail-under=9.5 -j 0 src tests
 
