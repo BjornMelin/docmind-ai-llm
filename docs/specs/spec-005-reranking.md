@@ -31,12 +31,13 @@ Improve retrieval quality by applying **BGE Cross-Encoder** for text nodes and *
   - Cascade option: SigLIP prune to m (e.g., 64) → ColPali final on m' (e.g., 16).
 
 - Telemetry
-  - Log per-stage latency, device, top_n, and activation decisions; count timeouts and fail-open events.
+  - Log per-stage latency, device, top_n, and activation decisions; count timeouts and fail-open events; include `rerank.batch_size`, `rerank.processed_count`, and `rerank.processed_batches` for text stage; cache SigLIP loader to reduce latency.
 
 ## Development Notes
 
 - Keep UI free of reranker toggles; provide ops env overrides only.
 - Early-exit: if there are no image/page nodes, skip visual rerank stage entirely.
+ - Cancellation semantics: batch-wise early-exit only (deterministic subsets), no mid-batch truncation; single reranker integration path with auto-detect (prefer direct FlagEmbedding; else LI wrapper).
 
 ## Libraries and Imports
 

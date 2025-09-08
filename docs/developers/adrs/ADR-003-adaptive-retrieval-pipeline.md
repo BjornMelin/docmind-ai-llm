@@ -170,7 +170,7 @@ DOCMIND_RETRIEVAL__HIERARCHY=true              # RAPTOR‑Lite signals only
 DOCMIND_RETRIEVAL__GRAPH=false                 # PropertyGraphIndex routing (ADR‑019)
 
 # Reranking (ADR‑037)
-DOCMIND_RETRIEVAL__RERANKING_TOP_K=5           # always-on; single integration path
+DOCMIND_RETRIEVAL__RERANKING_TOP_K=5           # always-on; single integration path (no mode toggle)
 ```
 
 ### Using MetadataFilters for Advanced Retrieval

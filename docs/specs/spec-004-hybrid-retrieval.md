@@ -23,10 +23,10 @@ Implement hybrid retrieval with **Qdrant** named vectors `text-dense` and `text-
 - Collection Schema
   - `text-dense`: VectorParams(size=1024, distance=COSINE) for BGE‑M3.
   - `text-sparse`: SparseVectorParams(index=SparseIndexParams(), modifier=models.Modifier.IDF) for FastEmbed BM42/BM25.
-  - Precreate collections with these exact names if managing schema outside LlamaIndex.
+  - Ensure collections are created with these exact names; code idempotently enforces schema before using the store.
 
 - Query API (server‑side fusion)
-  - Use `prefetch` for sparse and dense, then set `fusion` to `rrf` (default) or `dbsf` (experimental; env‑gated). Example:
+  - Use `prefetch` for sparse and dense, then set `fusion` to `rrf` (default) or `dbsf` (experimental; env‑gated). Dense queries use `VectorInput`; sparse queries use `SparseVector` built via FastEmbed BM42/BM25 to align with index‑time sparse. Example:
 
 ```python
 from qdrant_client import QdrantClient, models
@@ -62,9 +62,10 @@ result = client.query_points(
 
 ## Development Notes
 
-- De‑duplication: Collapse by `page_id` before the final fused cut (`limit`) to prevent over‑representing a single page. Use a fused candidate buffer (e.g., fused_top_k=60), dedup, then slice to top_k.
+- De‑duplication: Collapse by `page_id` (default) or `doc_id` (configurable) before the final fused cut (`limit`) to prevent over‑representing a single page/document. Use a fused candidate buffer (e.g., fused_top_k=60), dedup, then slice to top_k.
+- Settings: `retrieval.dedup_key=page_id|doc_id` selects the dedup key; server `group_by` MAY be enabled in a future version (kept off by default for KISS).
 - Latency targets: p50 120–200 ms for fused_top_k=60 on typical local setup; tune prefetch limits to stay within SLOs.
-- Telemetry: log prefetch sizes, fusion mode, fused_top_k, and query latency.
+- Telemetry: log prefetch sizes, fusion mode, fused_top_k, query latency, and `retrieval.sparse_fallback=true` when sparse prefetch is skipped.
 
 ## Libraries and Imports
 
