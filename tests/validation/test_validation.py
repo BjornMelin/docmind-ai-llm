@@ -107,8 +107,6 @@ class TestImportValidation:
     )
     def test_hardware_detection_basic(self):
         """Test basic hardware detection functionality."""
-        from src.utils.core import detect_hardware
-
         with patch("src.utils.core.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = False
             mock_torch.cuda.device_count.return_value = 0
@@ -131,13 +129,12 @@ class TestImportValidation:
             assert "valid" in result
         except (ImportError, AttributeError, TypeError, ValueError) as e:
             pytest.fail(f"validate_startup_configuration failed: {e}")
-        except Exception as e:
+        except (OSError, ConnectionError, RuntimeError) as e:  # type: ignore[name-defined]
             # Handle network-related errors (e.g., Qdrant not running) gracefully
             # This is expected in unit test environments
             if "Connection refused" in str(e) or "qdrant" in str(e).lower():
                 pytest.skip(f"Skipping test due to external dependency: {e}")
-            else:
-                pytest.fail(f"Unexpected error in validate_startup_configuration: {e}")
+            pytest.fail(f"Unexpected error in validate_startup_configuration: {e}")
 
     def test_key_file_structure(self):
         """Test that essential files exist in correct locations."""

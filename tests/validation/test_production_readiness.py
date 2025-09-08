@@ -25,6 +25,10 @@ from llama_index.core import Document
 from src.config.settings import DocMindSettings
 from src.utils.core import detect_hardware
 
+# Pytest patterns intentionally redefine fixtures and catch broad exceptions
+# in order to produce comprehensive validation reports. Adjust checks here.
+# pylint: disable=redefined-outer-name,broad-exception-caught
+
 
 class ProductionValidationResult:
     """Container for production validation results."""
