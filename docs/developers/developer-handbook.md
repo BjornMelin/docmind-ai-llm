@@ -46,7 +46,6 @@ ignore = ["D203", "D213", "S301", "S603", "S607", "S108"]
 
 ```python
 # Good: Clear function with type hints and docstring
-```python
 def process_documents(files: List[Path], chunk_size: int = 1000) -> List[Document]:
     """Process uploaded documents into chunks for analysis.
     
@@ -1323,46 +1322,47 @@ res = client.query_points(
 )
 ```
 
-        self, 
-        texts: List[str]
-    ) -> Dict[str, Any]:
-        """Generate both dense and sparse embeddings efficiently."""
-        
-        # Batch processing for efficiency
-        results = {"dense": [], "sparse": []}
-        
-        for i in range(0, len(texts), self._batch_size):
-            batch = texts[i:i + self._batch_size]
-            
-            # Generate all embedding types in one call
-            batch_embeddings = self.model.encode(
-                batch,
-                return_dense=True,
-                return_sparse=True,
-                # no colbert vectors in final architecture
-            )
-            
-            results["dense"].extend(batch_embeddings["dense_vecs"])
-            results["sparse"].extend(batch_embeddings["lexical_weights"])
-            
-        return results
+```python
+def get_unified_embeddings(
+    self,
+    texts: List[str]
+) -> Dict[str, Any]:
+    """Generate both dense and sparse embeddings efficiently."""
     
-    def _optimize_sparse_embeddings(self, sparse_embeddings: List[Dict]) -> List[Dict]:
-        """Optimize sparse embeddings for storage efficiency."""
-        optimized = []
+    # Batch processing for efficiency
+    results = {"dense": [], "sparse": []}
+    
+    for i in range(0, len(texts), self._batch_size):
+        batch = texts[i:i + self._batch_size]
         
-        for embedding in sparse_embeddings:
-            # Keep only top-k sparse dimensions
-            sorted_items = sorted(
-                embedding.items(), 
-                key=lambda x: x[1], 
-                reverse=True
-            )[:100]  # Top 100 dimensions
-            
-            optimized.append(dict(sorted_items))
-            
-        return optimized
+        # Generate all embedding types in one call
+        batch_embeddings = self.model.encode(
+            batch,
+            return_dense=True,
+            return_sparse=True,
+            # no colbert vectors in final architecture
+        )
+        
+        results["dense"].extend(batch_embeddings["dense_vecs"])
+        results["sparse"].extend(batch_embeddings["lexical_weights"])
+        
+    return results
 
+def _optimize_sparse_embeddings(self, sparse_embeddings: List[Dict]) -> List[Dict]:
+    """Optimize sparse embeddings for storage efficiency."""
+    optimized = []
+
+    for embedding in sparse_embeddings:
+        # Keep only top-k sparse dimensions
+        sorted_items = sorted(
+            embedding.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:100]  # Top 100 dimensions
+
+        optimized.append(dict(sorted_items))
+
+    return optimized
 ```
 
 ### Hybrid Search with RRF Fusion
