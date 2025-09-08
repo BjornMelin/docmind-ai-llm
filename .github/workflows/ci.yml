@@ -21,24 +21,22 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
-      - name: Install deps (app + test extras)
+      - name: Sync environment (app + test extras)
         run: |
-          # Install project with test extras so pytest-asyncio and friends are available
-          uv pip install --system -e '.[test]'
-          # Tools for linting
-          uv pip install --system ruff pylint
+          # Create project venv and install dependencies from lockfile, including tests
+          uv sync --extra test --frozen
 
       - name: Lint (ruff)
         run: |
-          ruff check .
+          uv run ruff check .
 
       - name: Lint (pylint src)
         run: |
-          pylint -j 2 src || true
+          uv run pylint -j 2 src || true
 
       - name: Run tests
         env:
           HF_HUB_OFFLINE: '1'
           TRANSFORMERS_OFFLINE: '1'
         run: |
-          pytest -q
+          uv run pytest -q
