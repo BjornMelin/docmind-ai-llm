@@ -46,7 +46,10 @@ jobs:
           HF_HUB_OFFLINE: '1'
           TRANSFORMERS_OFFLINE: '1'
         run: |
-          uv run pytest -q -c .github/pytest.nocov.ini -m "unit or integration" -k "not requires_gpu and not gpu_required and not performance"
+          uv run pytest -q \
+            -o addopts="--strict-markers --tb=short -ra -v --import-mode=importlib --maxfail=10" \
+            -m "unit or integration" \
+            -k "not requires_gpu and not gpu_required and not performance"
 
       - name: Run unit/integration with coverage (soft gate)
         continue-on-error: true
