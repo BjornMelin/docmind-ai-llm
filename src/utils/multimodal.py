@@ -17,11 +17,6 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
-try:  # Optional torch for VRAM accounting
-    import torch
-except Exception:  # pragma: no cover - optional
-    torch = None  # type: ignore[assignment]
-
 # Public constants (validated by unit tests)
 EMBEDDING_DIMENSIONS = 512
 MAX_TEST_IMAGES = 10
@@ -61,27 +56,29 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
 
     When CUDA is unavailable or any CUDA call fails, returns 0.0.
     """
-    if torch is None:
-        return 0.0
     try:
-        if not torch.cuda.is_available():  # type: ignore[attr-defined]
+        import torch  # type: ignore
+    except ImportError:
+        return 0.0
+
+    try:
+        cuda_mod = getattr(torch, "cuda", None)
+        if not cuda_mod or not torch.cuda.is_available():  # type: ignore[attr-defined]
             return 0.0
+
         before = float(torch.cuda.memory_allocated())  # type: ignore[attr-defined]
-        # Run a minimal workload
         if images:
             for img in images[:MAX_TEST_IMAGES]:
                 try:
-                    _ = clip.get_image_embedding(img)
-                except Exception as exc:  # pragma: no cover - exercised via tests
-                    logger.error("Image embedding error during VRAM check: %s", exc)
+                    clip.get_image_embedding(img)
+                except (RuntimeError, ValueError, TypeError):  # pragma: no cover
                     break
-        # else: no images provided; baseline probe only
+
         after = float(torch.cuda.memory_allocated())  # type: ignore[attr-defined]
-        # Encourage memory release
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(RuntimeError, AttributeError):
             torch.cuda.empty_cache()  # type: ignore[attr-defined]
         return max(0.0, (after - before) / (1024**3))
-    except Exception:
+    except (AttributeError, RuntimeError):
         return 0.0
 
 
@@ -123,7 +120,8 @@ def batch_process_images(
                         f"Model output dimension {arr.shape} != expected ({dim},)"
                     )
                 out.append(arr)
-            except Exception as exc:  # pragma: no cover - exercised via tests
+            # Per-image error handling converts failures to zero-vectors
+            except (RuntimeError, ValueError, TypeError) as exc:  # pragma: no cover
                 logger.error("Image embedding failed: %s", exc)
                 out.append(zero)
 
@@ -200,7 +198,7 @@ def create_image_documents(
     for p in image_paths:
         try:
             docs.append(ImageDocument(image_path=str(p), metadata=meta))
-        except Exception as exc:  # pragma: no cover - exercised via tests
+        except (TypeError, ValueError, OSError) as exc:  # pragma: no cover - exercised via tests
             logger.error("Failed creating ImageDocument for %s: %s", p, exc)
     return docs
 
