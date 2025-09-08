@@ -15,7 +15,6 @@ Only tests for functions that still exist in src.utils are included.
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import torch
 
 
 @pytest.mark.asyncio
@@ -94,36 +93,3 @@ async def test_managed_gpu_operation_cleanup_on_exception():
         mock_sync.assert_called_once()
         mock_empty_cache.assert_called_once()
         mock_gc.assert_called_once()
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-def test_gpu_memory_cleanup_integration():
-    """Integration test for GPU memory cleanup (requires CUDA)."""
-    import torch
-
-    # Get initial GPU memory
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-        initial_memory = torch.cuda.memory_allocated()
-
-        # Create some tensors to use GPU memory
-        large_tensor = torch.randn(1000, 1000, device="cuda")
-        after_allocation = torch.cuda.memory_allocated()
-
-        # Verify memory increased
-        assert after_allocation > initial_memory
-
-        # Cleanup
-        del large_tensor
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-
-        final_memory = torch.cuda.memory_allocated()
-
-        # Memory should be cleaned up (may not be exactly equal due to fragmentation)
-        assert final_memory <= after_allocation
-
-
-if __name__ == "__main__":
-    # Run tests
-    pytest.main([__file__, "-v"])

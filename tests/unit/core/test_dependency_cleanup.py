@@ -137,5 +137,6 @@ class TestGracefulErrorHandling:
             pytest.skip("Core utilities not available")
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+"""
+Note: Removed standalone __main__ launcher to keep tests importable-only.
+"""
