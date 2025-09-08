@@ -114,13 +114,13 @@ class TestHealthMonitor:
         Returns:
             Dictionary with flakiness analysis results
         """
-        logger.info(f"Running flakiness analysis with {runs} iterations...")
+        logger.info("Running flakiness analysis with %d iterations...", runs)
 
         test_results: dict[str, list[bool]] = defaultdict(list)
         execution_times: dict[str, list[float]] = defaultdict(list)
 
         for run in range(runs):
-            logger.info(f"Flakiness run {run + 1}/{runs}")
+            logger.info("Flakiness run %d/%d", run + 1, runs)
 
             try:
                 cmd = [
@@ -141,6 +141,7 @@ class TestHealthMonitor:
                     cmd,
                     capture_output=True,
                     text=True,
+                    check=False,
                     timeout=self.config["single_test_timeout"],
                 )
 
@@ -371,7 +372,7 @@ class TestHealthMonitor:
         Returns:
             Test stability analysis
         """
-        logger.info(f"Checking test stability for last {days_back} days...")
+        logger.info("Checking test stability for last %d days...", days_back)
 
         # This would typically load from historical test data
         # For now, we'll run a stability check based on current execution
@@ -392,6 +393,7 @@ class TestHealthMonitor:
                 cmd,
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=self.config["single_test_timeout"],
             )
 
@@ -667,7 +669,7 @@ class TestHealthMonitor:
             with open(filepath, "w") as f:
                 json.dump(data, f, indent=2)
 
-            logger.info(f"Health data saved to {filepath}")
+            logger.info("Health data saved to %s", filepath)
 
         except Exception as e:
             self.warnings.append(f"Failed to save health data: {e}")

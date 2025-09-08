@@ -37,6 +37,7 @@ def get_gpu_info() -> dict | None:
             ],
             capture_output=True,
             text=True,
+            check=False,
             timeout=10,
         )
 
@@ -75,6 +76,7 @@ def check_cuda_availability() -> bool:
             ],
             capture_output=True,
             text=True,
+            check=False,
             timeout=30,
         )
 
@@ -108,6 +110,7 @@ def run_command(
             command,
             capture_output=True,
             text=True,
+            check=False,
             timeout=timeout,
         )
 
@@ -143,6 +146,7 @@ def monitor_gpu_memory() -> dict:
             ],
             capture_output=True,
             text=True,
+            check=False,
             timeout=5,
         )
 

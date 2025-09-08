@@ -108,6 +108,7 @@ class TestRunner:
                     ["find", ".", "-name", pattern, "-delete"],
                     cwd=self.project_root,
                     capture_output=True,
+                    check=False,
                 )
             else:
                 # Remove directories
@@ -116,7 +117,11 @@ class TestRunner:
                     if path.is_file():
                         path.unlink()
                     else:
-                        subprocess.run(["rm", "-rf", str(path)], cwd=self.project_root)
+                        subprocess.run(
+                            ["rm", "-rf", str(path)],
+                            cwd=self.project_root,
+                            check=False,
+                        )
 
         print("✅ Artifacts cleaned")
 
@@ -138,6 +143,7 @@ class TestRunner:
                 cwd=self.project_root,
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=1800,  # 30 minutes timeout
             )
 
