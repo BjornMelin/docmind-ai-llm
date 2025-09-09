@@ -7,11 +7,21 @@ import pytest
 from src.prompting import format_messages, list_templates, render_prompt
 
 
+def _get_test_template():
+    """Helper function to get a test template, preferring comprehensive-analysis."""
+    templates = list_templates()
+    if not templates:
+        pytest.fail("No templates available for testing")
+
+    # Try to find the comprehensive-analysis template, fallback to first available
+    return next(
+        (t for t in templates if t.id == "comprehensive-analysis"), templates[0]
+    )
+
+
 def test_render_prompt_and_messages() -> None:
     # Pick a known template id/name
-    templates = list_templates()
-    assert templates
-    tpl = next((t for t in templates if t.id == "comprehensive-analysis"), templates[0])
+    tpl = _get_test_template()
 
     ctx = {
         "context": "Example context",
@@ -29,9 +39,7 @@ def test_render_prompt_and_messages() -> None:
 
 
 def test_render_raises_on_missing_required_vars() -> None:
-    templates = list_templates()
-    assert templates
-    tpl = next((t for t in templates if t.id == "comprehensive-analysis"), templates[0])
+    tpl = _get_test_template()
     # Do not provide required context
     ctx = {"tone": {"description": "Neutral"}, "role": {"description": "Assistant"}}
     with pytest.raises(KeyError, match="Missing required variables"):

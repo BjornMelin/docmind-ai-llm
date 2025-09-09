@@ -323,6 +323,22 @@ def test_prompts_and_application_structure():
             if prompt_name.lower() != "custom prompt":
                 assert len(prompt_content) > 0
 
+            # Check that each template has a version and tags field
+            assert hasattr(t, "version"), f"Template {prompt_name} missing 'version'"
+            assert isinstance(t.version, int), (
+                f"Template {prompt_name} 'version' should be int"
+            )
+            assert t.version >= 1, f"Template {prompt_name} version should be >= 1"
+
+            assert hasattr(t, "tags"), f"Template {prompt_name} missing 'tags'"
+            assert isinstance(t.tags, list), (
+                f"Template {prompt_name} 'tags' should be list"
+            )
+            for tag in t.tags:
+                assert isinstance(tag, str), (
+                    f"Tag in template {prompt_name} should be str"
+                )
+
         # Test specific prompt types exist
         expected_prompt_types = ["summarization", "analysis", "extraction"]
         available_prompts = [t.name.lower() for t in list_templates()]

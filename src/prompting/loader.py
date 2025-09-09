@@ -18,6 +18,9 @@ _ROOT = Path(__file__).resolve().parents[2]
 _TPL_DIR = _ROOT / "templates" / "prompts"
 _PRESETS_DIR = _ROOT / "templates" / "presets"
 
+# Template body length threshold for auto-generating description
+_MIN_BODY_LENGTH_FOR_DESCRIPTION = 40
+
 
 def _split_front_matter(text: str) -> tuple[dict[str, Any], str]:
     """Split YAML front matter from a template body.
@@ -61,7 +64,10 @@ def load_templates() -> list[TemplateSpec]:
             version=int(fm.get("version") or 1),
         )
         # Basic body sanity
-        if len(body.strip()) < 40 and not meta.description:
+        if (
+            len(body.strip()) < _MIN_BODY_LENGTH_FOR_DESCRIPTION
+            and not meta.description
+        ):
             meta.description = "Short template"
         specs.append(TemplateSpec(meta=meta, body=body))
     return specs

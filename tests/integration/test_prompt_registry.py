@@ -13,3 +13,11 @@ def test_prompt_registry_render_smoke():
     text = render_prompt(tpl.id, ctx)
     assert isinstance(text, str)
     assert text.strip()
+
+
+def test_prompt_registry_render_invalid_template_id():
+    """Test that rendering with invalid template id raises KeyError."""
+    import pytest
+
+    with pytest.raises(KeyError):
+        render_prompt("non-existent-template-id", {})

@@ -45,8 +45,7 @@ def render_prompt(template_id: str, context: dict[str, Any]) -> str:
     # Merge defaults with provided context
     ctx = {**spec.meta.defaults, **context}
     # Optionally check required
-    missing = [v for v in spec.meta.required if v not in ctx]
-    if missing:
+    if missing := [v for v in spec.meta.required if v not in ctx]:
         raise KeyError(f"Missing required variables: {missing}")
     return _render_text(spec, ctx)
 
@@ -55,8 +54,7 @@ def format_messages(template_id: str, context: dict[str, Any]) -> list[Any]:
     """Render chat messages for a given template id and context."""
     spec = get_template(template_id)
     ctx = {**spec.meta.defaults, **context}
-    missing = [v for v in spec.meta.required if v not in ctx]
-    if missing:
+    if missing := [v for v in spec.meta.required if v not in ctx]:
         raise KeyError(f"Missing required variables: {missing}")
     return _format_msgs(spec, ctx)
 
