@@ -112,6 +112,8 @@ DOCMIND_PROMPT__DEFAULT_ROLE=researcher
 
 ## Testing
 
+- Developer Guide: see [/docs/developers/guides/adding-prompt-template.md](../guides/adding-prompt-template.md) for adding a new template.
+
 - Unit + integration tests validate loader, registry, and render/format_messages; E2E validates UI selection and rendering.
 
 ## Consequences

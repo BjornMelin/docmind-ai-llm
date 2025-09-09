@@ -310,7 +310,7 @@ Tasks: summarize, extract insights, list actions, raise open questions
 {% endchat %}
 ```
 
-You can also use the prompting API programmatically:
+You can also use the prompting API programmatically (see developer guide: [Adding a Prompt Template](docs/developers/guides/adding-prompt-template.md)):
 
 ```
 from src.prompting import list_templates, render_prompt
