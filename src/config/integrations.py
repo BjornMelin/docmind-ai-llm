@@ -63,7 +63,7 @@ def _is_localhost(url: str | None) -> bool:
         return False
 
 
-def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:  # pylint: disable=too-many-statements
+def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:  # pylint: disable=too-many-statements, too-many-branches
     """Configure LlamaIndex ``Settings`` with unified configuration.
 
     Args:

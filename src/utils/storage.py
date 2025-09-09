@@ -328,7 +328,14 @@ def create_vector_store(
                 dense_embedding_size=_dense_embedding_size,
                 recreate=False,
             )
-        except Exception:  # pragma: no cover - defensive ensure
+        except (
+            ResponseHandlingException,
+            UnexpectedResponse,
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+        ):  # pragma: no cover - defensive ensure
             logger.warning(
                 "setup_hybrid_collection failed; proceeding with store creation"
             )

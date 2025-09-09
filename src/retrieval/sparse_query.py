@@ -36,9 +36,14 @@ def _get_sparse_encoder() -> Any | None:
 
         try:
             return SparseTextEmbedding(PREFERRED_SPARSE_MODEL)
-        except Exception:  # pragma: no cover - fallback path
+        except (
+            RuntimeError,
+            ValueError,
+            OSError,
+            TypeError,
+        ):  # pragma: no cover - fallback path
             return SparseTextEmbedding(FALLBACK_SPARSE_MODEL)
-    except Exception:  # pragma: no cover - optional dependency
+    except ImportError:  # pragma: no cover - optional dependency
         return None
 
 
@@ -63,7 +68,12 @@ def encode_to_qdrant(text: str) -> qmodels.SparseVector | None:
         if not indices or not values:
             return None
         return qmodels.SparseVector(indices=indices, values=values)
-    except Exception:  # pragma: no cover - defensive
+    except (
+        StopIteration,
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):  # pragma: no cover - defensive
         return None
 
 

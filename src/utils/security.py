@@ -68,7 +68,7 @@ def encrypt_file(path: str) -> str:
                 p.unlink()
         # Do not delete plaintext automatically to allow caller control
         return str(out_path)
-    except Exception:
+    except (OSError, ValueError, RuntimeError, ImportError):
         return path
 
 
@@ -94,7 +94,7 @@ def decrypt_file(path: str) -> str:
         tmp = Path(name)
         tmp.write_bytes(pt)
         return str(tmp)
-    except Exception:
+    except (OSError, ValueError, RuntimeError, ImportError):
         return path
 
 
