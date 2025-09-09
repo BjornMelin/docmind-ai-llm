@@ -72,9 +72,14 @@ dependencies = [
     "pyyaml>=6.0",                       # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
     "duckdb>=0.10.0",                    # DuckDB engine
+    # Analytics & Visualization
+    "pandas>=2.2,<3.0",                 # DataFrames (required by DuckDB .df())
+    "plotly>=5.22,<6.0",                # Streamlit charts (px/go)
     # Testing Support (runtime-level perf/property tests if invoked)
     "pytest-benchmark>=5.1.0",           # Benchmark harness
     "hypothesis>=6.137.2",               # Property-based tests
+    # Transitive dep override: 3.14.0 was yanked for debugpy crash
+    "rapidfuzz>=3.14.1",                 # Avoid yanked 3.14.0
 ]
 
 [project.optional-dependencies]
@@ -97,6 +102,10 @@ test = [
     "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
     "pytest-timeout>=2.3.1",
+]
+eval = [
+    "ragas>=0.2.10,<0.4.0",              # RAG evaluation toolkit (Pydantic v2 compatible)
+    "beir>=2.0.0,<3.0.0",                # IR benchmark datasets + evaluation
 ]
 
 # Note: spaCy models are not PyPI packages and must be installed separately:
