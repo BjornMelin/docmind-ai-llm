@@ -21,7 +21,7 @@ A template file contains a YAML front matter header followed by a Jinja body. Fr
 
 Example:
 
-```
+```yaml
 ---
 id: summary-open-questions
 name: Summarize and Identify Open Questions
@@ -48,7 +48,7 @@ Summarize the content and list any open questions.
 
 Presets provide named options for tone, role, and length. They’re simple YAML dictionaries under `templates/presets/`:
 
-```
+```yaml
 # templates/presets/tones.yaml
 professional:
   description: Use a professional, objective tone.
@@ -58,7 +58,7 @@ You can reference presets in your template context from the UI or programmatical
 
 ## Programmatic usage
 
-```
+```python
 from src.prompting import list_templates, render_prompt, format_messages
 
 # Select a template
