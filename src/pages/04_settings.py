@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name, C0103
 """Settings page for LLM runtime (SPEC-001).
 
 Provides provider selection, URLs, model, context window, timeout, and GPU
@@ -6,8 +7,6 @@ toggle. Supports applying runtime immediately and saving to .env.
 
 from __future__ import annotations
 
-# Streamlit pages follow a numeric filename pattern; keep filename as-is.
-# pylint: disable=invalid-name
 import os
 from contextlib import suppress
 from pathlib import Path
@@ -55,7 +54,7 @@ def main() -> None:
     provider = st.selectbox(
         "LLM Provider",
         options=["ollama", "vllm", "lmstudio", "llamacpp"],
-        index=["ollama", "vllm", "lmstudio", "llamacpp"].index(settings.llm_backend),
+        index=(["ollama", "vllm", "lmstudio", "llamacpp"].index(settings.llm_backend)),
         help="Select the active LLM backend",
     )
 
@@ -63,7 +62,7 @@ def main() -> None:
     model = st.text_input(
         "Model (id or GGUF path)",
         value=(settings.model or settings.vllm.model),
-        help="Model identifier (Ollama/vLLM/LM Studio) or GGUF path (LlamaCPP)",
+        help=("Model identifier (Ollama/vLLM/LM Studio) or GGUF path (LlamaCPP)"),
     )
     context_window = st.number_input(
         "Context window",
@@ -134,19 +133,19 @@ def main() -> None:
             # Update in-memory settings first
             settings.llm_backend = provider  # type: ignore[assignment]
             settings.model = model  # type: ignore[assignment]
-            settings.context_window = int(context_window)  # type: ignore[assignment]
-            settings.llm_request_timeout_seconds = int(timeout_s)  # type: ignore[assignment]
-            settings.enable_gpu_acceleration = bool(use_gpu)  # type: ignore[assignment]
+            settings.context_window = int(context_window)
+            settings.llm_request_timeout_seconds = int(timeout_s)
+            settings.enable_gpu_acceleration = bool(use_gpu)
             settings.ollama_base_url = ollama_url  # type: ignore[assignment]
             settings.vllm_base_url = vllm_url  # type: ignore[assignment]
             settings.lmstudio_base_url = lmstudio_url  # type: ignore[assignment]
-            settings.llamacpp_base_url = llamacpp_url or None  # type: ignore[assignment]
+            settings.llamacpp_base_url = llamacpp_url or None
             # nested path
             # Update GGUF path only when valid
             if gguf_valid and gguf_path:
                 with suppress(Exception):  # pragma: no cover - UI guard
                     settings.vllm.llamacpp_model_path = Path(gguf_path)
-            settings.allow_remote_endpoints = bool(allow_remote)  # type: ignore[assignment]
+            settings.allow_remote_endpoints = bool(allow_remote)
 
             _apply_runtime()
 
@@ -157,14 +156,14 @@ def main() -> None:
                 "DOCMIND_MODEL": model,
                 "DOCMIND_CONTEXT_WINDOW": str(int(context_window)),
                 "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(int(timeout_s)),
-                "DOCMIND_ENABLE_GPU_ACCELERATION": "true" if use_gpu else "false",
+                "DOCMIND_ENABLE_GPU_ACCELERATION": ("true" if use_gpu else "false"),
                 "DOCMIND_OLLAMA_BASE_URL": ollama_url,
                 "DOCMIND_VLLM_BASE_URL": vllm_url,
                 "DOCMIND_LMSTUDIO_BASE_URL": lmstudio_url,
                 "DOCMIND_LLAMACPP_BASE_URL": llamacpp_url or "",
                 # nested path override
                 "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": gguf_path,
-                "DOCMIND_ALLOW_REMOTE_ENDPOINTS": "true" if allow_remote else "false",
+                "DOCMIND_ALLOW_REMOTE_ENDPOINTS": ("true" if allow_remote else "false"),
             }
             _persist_env(env_map)
             st.success("Saved to .env")
