@@ -13,7 +13,7 @@
 | FR-018 | Telemetry rotation & sampling toggles | ADR‑032 | 032 | src/utils/telemetry.py | tests/unit/telemetry/test_rotation_sampling.py | test | Completed |
 | FR-019 | Configurable dedup key (page_id/doc_id) | ADR‑005/006 | 005,006 | src/retrieval/query_engine.py; src/config/settings.py | tests/unit/retrieval/qdrant/test_qdrant_dedup_docid.py; tests/unit/retrieval/qdrant/test_qdrant_dedup_before_limit.py | test | Completed |
 | FR‑SEC‑IMG‑ENC | AES‑GCM encryption‑at‑rest for page images | ADR‑024 | 011,024 | src/utils/security.py; src/processing/pdf_pages.py | tests/unit/utils/security/test_encrypt_file.py; tests/integration/imaging/test_pdf_images_encrypt.py | test | Completed |
-| FR-009 | GraphRAG PropertyGraphIndex | ADR-008 | 008 | src/retrieval/graph_config.py | tests_graph/* | test | Planned |
+| FR-009 | GraphRAG PropertyGraphIndex | ADR-019 | 019 | src/retrieval/graph_config.py | tests/integration/test_graphrag_exports.py | test | Planned |
 | FR-010 | Streamlit multipage | ADR-012 | 012 | src/app.py; src/pages/04_settings.py | tests/unit/config/test_integrations_runtime.py; tests/integration/test_settings_page.py | inspection | Completed |
 | FR-012 | Multi-provider UI | ADR-009 | 009 | src/config/llm_factory.py; src/pages/04_settings.py | tests/unit/config/test_llm_factory.py; tests/unit/config/test_llm_factory_empty_model_defaulting.py; tests/unit/config/test_integrations_runtime.py; tests/integration/test_settings_page.py | test | Completed |
 | FR-014 | LangGraph supervisor | ADR-001 | 001 | src/agents/* | tests_agents/* | test | In repo |
