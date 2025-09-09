@@ -1,12 +1,12 @@
 ---
 ADR: 003
 Title: Adaptive Retrieval Pipeline (RAPTOR‑Lite + Router)
-Status: Implemented
-Version: 3.4
-Date: 2025-09-04
+Status: Implemented (Amended)
+Version: 3.5
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 002, 004, 024, 031, 037
+Related: 001, 002, 004, 019, 024, 031, 037, 038
 Tags: retrieval, routing, hybrid, raptor-lite, reranking
 References:
 - [LlamaIndex RouterQueryEngine](https://docs.llamaindex.ai/en/stable/api_reference/query_engine/router_query_engine/)
@@ -48,6 +48,10 @@ Flat vector search underperforms on complex queries, lacks hierarchical awarenes
 ## Decision
 
 Adopt **LlamaIndex RouterQueryEngine** with built‑in **HybridRetriever** (dense+sparse, RRF), **MultiQueryRetriever** (decomposition), and **MetadataFilters**. Optionally enable **PropertyGraphIndex** for relationship queries (ADR‑019). Reranking remains modality‑aware per ADR‑037. All components respect the **128K context cap** from ADR‑004.
+
+### GraphRAG Router Composition (Amendment)
+
+When a property graph is present and healthy, compose tools `[vector_query_engine, graph_query_engine(include_text=true, path_depth=1)]` with selector `PydanticSingleSelector` (OpenAI) else `LLMSingleSelector`. If the graph is absent/unhealthy, route to vector only. This approach aligns with ADR‑038 and ensures graceful degradation.
 
 ## High-Level Architecture
 
@@ -256,6 +260,7 @@ async def test_latency_budget(async_adaptive_engine):
 
 ## Changelog
 
+- 3.5 (2025-09-09): Added GraphRAG router composition details and cross‑links to ADR‑038/019
 - 3.4 (2025-09-04): Standardized to ADR template; added weighted decision matrix, high‑level architecture section, explicit PR/IR requirements, testing skeletons; moved dependencies under Consequences.
 - 3.2 (2025-09-02): Standardized to 128K context (ADR‑004/010), updated cache refs (ADR‑030).
 - 3.1 (2025-08-21): IMPLEMENTATION COMPLETE — RouterQueryEngine deployed with adaptive strategies.

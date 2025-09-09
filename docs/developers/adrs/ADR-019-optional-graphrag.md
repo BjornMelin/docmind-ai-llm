@@ -1,15 +1,16 @@
 ---
 ADR: 019
 Title: Optional GraphRAG Module
-Status: Accepted
-Version: 3.2
-Date: 2025-08-19
+Status: Accepted (Amended)
+Version: 3.3
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 003, 009, 031
+Related: 001, 003, 009, 031, 038
 Tags: graphrag, property-graph, retrieval
 References:
 - [LlamaIndex — PropertyGraphIndex](https://docs.llamaindex.ai/)
+ - [ADR-038 GraphRAG Persistence and Router Integration](./ADR-038-graphrag-persistence-and-router.md)
 ---
 
 ## Description
@@ -44,6 +45,8 @@ Vector‑only RAG struggles with multi‑hop and relationship queries. PropertyG
 ## Decision
 
 Provide a feature‑flagged PropertyGraphIndex path using in‑memory store and Qdrant vectors. Keep code minimal and library‑first. Use only documented LlamaIndex APIs (e.g., `PropertyGraphIndex.from_documents`, `as_retriever`, `as_query_engine`, `SimplePropertyGraphStore.get` / `get_rel_map`) and avoid mutating index instances.
+
+Amendment: Align with ADR‑038 by composing GraphRAG through a RouterQueryEngine toolset (vector + graph), and persisting via SnapshotManager with atomic snapshot directories and a manifest for staleness detection. Exports use `get_rel_map` to JSONL baseline and Parquet optionally (pyarrow).
 
 ## High-Level Architecture
 
@@ -121,7 +124,8 @@ def test_graph_build_smoke():
 
 ## Changelog
 
-- 3.2 (2025-09-09): Library-first API policy; no index mutation; exports via get_rel_map JSONL/Parquet; updated tests
+- 3.3 (2025-09-09): Amended by ADR‑038 — router composition (vector+graph), SnapshotManager persistence, staleness badge, exports clarified
+- 3.2 (2025-09-08): Library-first API policy; no index mutation; exports via get_rel_map JSONL/Parquet; updated tests
 - 3.1 (2025-08-22): Implementation complete
 - 3.0 (2025-08-19): FP8 optimization context for extraction
 - 1.0 (2025-08-17): Initial optional GraphRAG design

@@ -37,7 +37,7 @@ FR-005 The system **shall** persist vectors in Qdrant with named vectors `text-d
 FR-006 The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. Source: SPEC‑004; Accept: AC‑FR‑006.  
 FR-007 The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). Source: SPEC‑005/ADR‑037; Accept: AC‑FR‑007.  
 FR-008 The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables. Source: ADR‑024; Accept: AC‑FR‑008.  
-FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. No custom synonym retriever. Graph exports SHALL be produced from `get_rel_map` to JSONL and Parquet (when PyArrow is available). Source: ADR‑019/SPEC‑006; Accept: AC‑FR‑009.  
+FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. No custom synonym retriever. Compose RouterQueryEngine with vector+graph tools (fallback to vector when graph missing). Persist via SnapshotManager with manifest hashing and a lock. Graph exports SHALL be produced from `get_rel_map` to JSONL and Parquet (when PyArrow is available). Source: ADR‑019/ADR‑038/SPEC‑006/SPEC‑014; Accept: AC‑FR‑009. (Status: Planned – Phase‑2)  
 FR-010 The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. Source: ADR‑012; Accept: AC‑FR‑010.  
 FR-011 The system **shall** implement native chat streaming via `st.chat_message` + `st.chat_input` + `st.write_stream`. Source: ADR‑012; Accept: AC‑FR‑011.  
 FR-012 The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. Source: ADR‑009; Accept: AC‑FR‑012.  
@@ -163,5 +163,27 @@ Scenario: Template catalog and rendering
   When the UI lists templates and a user selects one
   And the system renders with default context
   Then a non‑empty prompt/message is produced without errors
-  And no references to src/prompts.py remain in the repository
+And no references to src/prompts.py remain in the repository
+```
+
+### AC‑FR‑009
+
+```gherkin
+Scenario: Router composition and fallback
+  Given GraphRAG is enabled and a graph exists
+  When I query
+  Then RouterQueryEngine SHALL include vector and graph tools
+  And route to vector only if the graph is missing or unhealthy
+
+Scenario: Snapshot manifest and staleness
+  Given SnapshotManager created storage/<timestamp> with manifest.json
+  And current corpus/config hashes differ
+  When I open Chat
+  Then a staleness badge SHALL be visible
+
+Scenario: Exports
+  Given a graph store and seeds
+  When I export
+  Then JSONL SHALL be written (one relation per line)
+  And Parquet SHALL be written when pyarrow is available
 ```

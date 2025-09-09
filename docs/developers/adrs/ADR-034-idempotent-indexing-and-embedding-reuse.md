@@ -1,12 +1,12 @@
 ---
 ADR: 034
 Title: Idempotent Indexing & Embedding Reuse
-Status: Proposed
-Version: 1.0
-Date: 2025-09-02
+Status: Proposed (Amended)
+Version: 1.1
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 002, 009, 030, 031
+Related: 002, 009, 030, 031, 038
 Tags: indexing, idempotency, embeddings, qdrant
 References:
 - [hashlib — SHA-256](https://docs.python.org/3/library/hashlib.html)
@@ -45,6 +45,15 @@ Re-indexing unchanged content wastes compute and I/O. Prior ADRs unified process
 ## Decision
 
 Compute content hashes (document- and node-level) and use deterministic node IDs. Store hashes in node metadata and Qdrant payloads. On re-index, skip embedding and upsert when hashes are unchanged; otherwise, re-embed and upsert using the same stable ID.
+
+### Staleness & Snapshot Manifest (Amendment)
+
+Define and use:
+
+- `corpus_hash`: SHA‑256 of sorted `(relative_path, size, mtime_ns)` for all ingested files
+- `config_hash`: SHA‑256 of canonical JSON with retrieval/chunking/embedding settings
+
+Persist both in `manifest.json` within each snapshot (ADR‑038; SPEC‑014) and surface a staleness badge in Chat when they mismatch current environment.
 
 ## High-Level Architecture
 
@@ -137,5 +146,7 @@ def test_reuse_policy(indexer, tmp_docs):
 - Python: `hashlib`; existing LlamaIndex + Qdrant stack
 
 ## Changelog
+
+- 1.1 (2025-09-09): Added corpus/config hash definitions for snapshot manifests; linked ADR‑038/SPEC‑014
 
 - **v1.0 (2025-09-02)**: Initial proposal for idempotent indexing and reuse policy.

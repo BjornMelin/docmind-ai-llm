@@ -1,12 +1,12 @@
 ---
 ADR: 013
 Title: User Interface Architecture (Streamlit Multipage)
-Status: Accepted
-Version: 3.1
-Date: 2025-09-03
+Status: Accepted (Amended)
+Version: 3.2
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 003, 004, 009, 016, 021, 032, 036
+Related: 001, 003, 004, 009, 016, 019, 021, 032, 036, 038
 Tags: streamlit, ui, navigation, state, analytics, chat
 References:
 - [Streamlit — Docs](https://docs.streamlit.io/)
@@ -51,6 +51,12 @@ The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), 
 ## Decision
 
 We adopt Streamlit’s programmatic multipage pattern with native components and caching. Pages: Chat (native streaming), Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only when necessary), Analytics (Plotly charts), and Settings (forms). Sidebar exposes reranker controls `normalize_scores` and `top_n` (ADR‑036). State uses `st.session_state`; caching uses `st.cache_data` and `st.cache_resource`.
+
+### GraphRAG UI Controls (Amendment)
+
+- Documents page: add toggle “Build GraphRAG (beta)” to optionally construct `PropertyGraphIndex` post‑ingestion and expose export buttons (JSONL baseline; Parquet optional with pyarrow).
+- Chat page: when a snapshot exists, default strategy to Router (vector+graph); display a staleness badge when `corpus_hash`/`config_hash` from the latest manifest differ from the current environment; provide an action to rebuild.
+- Session state entries: `vector_index`, `pg_index`, `router_engine`, `snapshot_manifest` (see ADR‑016 and ADR‑038).
 
 ## High-Level Architecture
 
@@ -202,6 +208,7 @@ async def test_streaming_generator(mock_llm):
 
 ## Changelog
 
+- **3.2 (2025-09-09)**: Added GraphRAG toggle, exports, and staleness badge integration; linked to ADR‑038/019
 - **3.1 (2025-09-03)**: DOCS - Added related-decision reference to ADR-036 (now superseded)
 - **3.0 (2025-08-17)**: Accepted version reflecting premium Streamlit multipage UI and modern patterns
 - **2.0 (2025-08-17)**: MAJOR — Complete redesign with modern multipage architecture, component integration, advanced state management, and production-ready performance optimization

@@ -1,10 +1,10 @@
 ---
 spec: SPEC-004
 title: Hybrid Retrieval: Qdrant Named Vectors (dense+sparse) with Server‑Side Fusion (RRF default)
-version: 1.1.0
-date: 2025-09-05
+version: 1.1.1
+date: 2025-09-09
 owners: ["ai-arch"]
-status: Completed
+status: Revised
 related_requirements:
   - FR-RET-001: Use Qdrant named vectors dense/sparse with server‑side hybrid fusion via Query API.
   - FR-RET-002: Deterministic point IDs and idempotent upserts.
@@ -67,6 +67,10 @@ result = client.query_points(
 - Latency targets: p50 120–200 ms for fused_top_k=60 on typical local setup; tune prefetch limits to stay within SLOs.
 - Telemetry: log prefetch sizes, fusion mode, fused_top_k, query latency, and `retrieval.sparse_fallback=true` when sparse prefetch is skipped.
 
+### Router Interop (Note)
+
+- A router MAY compose an additional Graph tool (PropertyGraphIndex) behind a feature flag; default remains vector/hybrid only. See ADR‑038 and SPEC‑006.
+
 ## Libraries and Imports
 
 ```python
@@ -107,3 +111,7 @@ Feature: Hybrid retrieval (server‑side fusion)
 ## References
 
 - Qdrant hybrid queries; LlamaIndex hybrid examples; LanceDB hybrid docs.
+
+## Changelog
+
+- 1.1.1 (2025-09-09): Added Router interop note and cross‑link to GraphRAG spec/ADR
