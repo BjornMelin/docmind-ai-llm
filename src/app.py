@@ -566,6 +566,63 @@ role_key = (
 # Other selects for tone, instructions, etc. (assuming they exist in full code)
 
 
+def _build_prompt_context_and_log_telemetry(
+    template_id: str,
+    tone_selection: str,
+    role_selection: str,
+    resources: dict,
+) -> str:
+    """Build context for prompt template, render prompt, and log telemetry.
+
+    Args:
+        template_id: ID of the template to render
+        tone_selection: Selected tone key
+        role_selection: Selected role key
+        resources: Dict containing keys 'tones', 'roles', and 'templates'
+
+    Returns:
+        Rendered prompt text
+
+    Raises:
+        st.error: On template rendering failures (user-friendly UI error)
+    """
+    try:
+        # Build a minimal context for the prompt template
+        ctx = {
+            "context": "Documents have been processed and indexed.",
+            "tone": resources.get("tones", {}).get(
+                tone_selection, {"description": "Use a neutral tone."}
+            ),
+            "role": resources.get("roles", {}).get(
+                role_selection, {"description": "Act as a helpful assistant."}
+            ),
+        }
+        rendered_prompt = render_prompt(template_id, ctx)
+
+        # Log telemetry
+        templates_list = resources.get("templates", [])
+        if meta := next((t for t in templates_list if t.id == template_id), None):
+            log_jsonl(
+                {
+                    "prompt.template_id": meta.id,
+                    "prompt.version": int(getattr(meta, "version", 1)),
+                    "prompt.name": meta.name,
+                }
+            )
+
+        return rendered_prompt
+
+    except KeyError as e:
+        error_msg = f"Template rendering failed: {e}"
+        st.error(error_msg)
+        # Re-raise to prevent further processing
+        raise RuntimeError(error_msg) from e
+    except Exception as e:
+        error_msg = f"Unexpected error during prompt rendering: {e}"
+        st.error(error_msg)
+        raise RuntimeError(error_msg) from e
+
+
 async def run_analysis() -> None:
     """Execute predefined analysis against the current index.
 
@@ -575,28 +632,12 @@ async def run_analysis() -> None:
     if st.session_state.index:
         with st.spinner("Running analysis..."):
             try:
-                # Build a minimal context for the prompt template
-                ctx = {
-                    "context": "Documents have been processed and indexed.",
-                    "tone": _tones.get(
-                        tone_key, {"description": "Use a neutral tone."}
-                    ),
-                    "role": _roles.get(
-                        role_key, {"description": "Act as a helpful assistant."}
-                    ),
-                }
-                analysis_query_text = render_prompt(selected_template_id, ctx)
-                meta = next(
-                    (t for t in _templates if t.id == selected_template_id), None
+                analysis_query_text = _build_prompt_context_and_log_telemetry(
+                    selected_template_id,
+                    tone_key,
+                    role_key,
+                    {"tones": _tones, "roles": _roles, "templates": _templates},
                 )
-                if meta is not None:
-                    log_jsonl(
-                        {
-                            "prompt.template_id": meta.id,
-                            "prompt.version": int(getattr(meta, "version", 1)),
-                            "prompt.name": meta.name,
-                        }
-                    )
 
                 # Prefer RouterQueryEngine when available
                 if st.session_state.get("router_engine") is not None:
@@ -641,27 +682,12 @@ def _render_analyze_button() -> None:
         # Use sync analysis to avoid asyncio event loop conflicts
         with st.spinner("Running analysis..."):
             try:
-                ctx = {
-                    "context": "Documents have been processed and indexed.",
-                    "tone": _tones.get(
-                        tone_key, {"description": "Use a neutral tone."}
-                    ),
-                    "role": _roles.get(
-                        role_key, {"description": "Act as a helpful assistant."}
-                    ),
-                }
-                sync_query = render_prompt(selected_template_id, ctx)
-                meta = next(
-                    (t for t in _templates if t.id == selected_template_id), None
+                sync_query = _build_prompt_context_and_log_telemetry(
+                    selected_template_id,
+                    tone_key,
+                    role_key,
+                    {"tones": _tones, "roles": _roles, "templates": _templates},
                 )
-                if meta is not None:
-                    log_jsonl(
-                        {
-                            "prompt.template_id": meta.id,
-                            "prompt.version": int(getattr(meta, "version", 1)),
-                            "prompt.name": meta.name,
-                        }
-                    )
 
                 # Prefer RouterQueryEngine when available (synchronous call)
                 if st.session_state.get("router_engine") is not None:
