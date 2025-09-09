@@ -190,6 +190,9 @@ ai-research/
 agent-logs/
 docs/specs/.workflow/
 docs/specs/.archived/
+docs/specs/prompts/
+all-specs-adrs.xml
+.cursorignore
 
 # Performance test artifacts
 tests/performance/reports/

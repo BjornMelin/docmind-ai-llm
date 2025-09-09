@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.3.0] - 2025-09-08
+
+### Breaking
+
+- Removed legacy prompts module (`src/prompts.py`) and all usages/tests. Migrate to the new file‑based prompt template system (SPEC‑020) via `src.prompting` APIs (`list_templates`, `render_prompt`, `format_messages`, `list_presets`).
+- Removed deprecated retrieval modules no longer used after the factory refactor:
+  - `src/retrieval/bge_m3_index.py`
+  - `src/retrieval/optimization.py`
+
+### Added
+
+- SPEC‑020: Prompt Template System (RichPromptTemplate, file‑based)
+  - New `src/prompting/` package: models, loader, registry, renderer, validators
+  - Templates under `templates/prompts/*.prompt.md` (YAML front matter + Jinja body)
+  - Presets under `templates/presets/{tones,roles,lengths}.yaml`
+  - Public API: `list_templates`, `get_template`, `render_prompt`, `format_messages`, `list_presets`
+  - Streamlit UI integration (replaces PREDEFINED_PROMPTS)
+  - Developer Guide: `docs/developers/guides/adding-prompt-template.md`
+- Prompt telemetry logging in app: logs `prompt.template_id`, `prompt.version`, `prompt.name` to local JSONL after render (async + sync paths); sampling/rotation controlled via existing telemetry envs.
+
+### Changed
+
+- Standardized SPEC‑020 document to match repository SPEC format (YAML header, related requirements/ADRs, file operations, checklist).
+- ADR‑018 (DSPy Prompt Optimization): marked Implemented; added note on compatibility with SPEC‑020 (rewriter can run before template rendering or on free‑form input).
+- RTM updated: FR‑020 marked Completed with code/test references; README “Choosing Prompts” updated to document templates/presets and API usage.
+
+### Removed
+
+- Legacy prompt constants and associated tests; replaced by file‑based templates with RichPromptTemplate.
+- Deprecated retrieval modules left from pre‑factory architecture (`bge_m3_index.py`, `optimization.py`).
+
+### Tests
+
+- New unit/integration/E2E smokes for prompting:
+  - Unit: loader, registry/renderer, validators
+  - Integration: registry list + render smoke
+  - E2E: prompt catalog presence
+- Updated existing tests to use `src.prompting` instead of legacy prompts.
+
 ## [1.2.0] - 2025-09-08
 
 ### Breaking
