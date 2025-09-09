@@ -590,11 +590,13 @@ async def run_analysis() -> None:
                     (t for t in _templates if t.id == selected_template_id), None
                 )
                 if meta is not None:
-                    log_jsonl({
-                        'prompt.template_id': meta.id,
-                        'prompt.version': int(getattr(meta, 'version', 1)),
-                        'prompt.name': meta.name,
-                    })
+                    log_jsonl(
+                        {
+                            "prompt.template_id": meta.id,
+                            "prompt.version": int(getattr(meta, "version", 1)),
+                            "prompt.name": meta.name,
+                        }
+                    )
 
                 # Prefer RouterQueryEngine when available
                 if st.session_state.get("router_engine") is not None:
@@ -653,11 +655,13 @@ def _render_analyze_button() -> None:
                     (t for t in _templates if t.id == selected_template_id), None
                 )
                 if meta is not None:
-                    log_jsonl({
-                        'prompt.template_id': meta.id,
-                        'prompt.version': int(getattr(meta, 'version', 1)),
-                        'prompt.name': meta.name,
-                    })
+                    log_jsonl(
+                        {
+                            "prompt.template_id": meta.id,
+                            "prompt.version": int(getattr(meta, "version", 1)),
+                            "prompt.name": meta.name,
+                        }
+                    )
 
                 # Prefer RouterQueryEngine when available (synchronous call)
                 if st.session_state.get("router_engine") is not None:
