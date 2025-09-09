@@ -58,6 +58,7 @@ from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
 from src.utils.siglip_adapter import SiglipEmbedding  # SigLIP visual adapter
 from src.utils.storage import create_vector_store
+from src.utils.telemetry import log_jsonl
 
 LLAMACPP_AVAILABLE = False
 # Test-patching placeholders for unit tests (avoid import-time heavy deps)
@@ -585,6 +586,15 @@ async def run_analysis() -> None:
                     ),
                 }
                 analysis_query_text = render_prompt(selected_template_id, ctx)
+                meta = next(
+                    (t for t in _templates if t.id == selected_template_id), None
+                )
+                if meta is not None:
+                    log_jsonl({
+                        'prompt.template_id': meta.id,
+                        'prompt.version': int(getattr(meta, 'version', 1)),
+                        'prompt.name': meta.name,
+                    })
 
                 # Prefer RouterQueryEngine when available
                 if st.session_state.get("router_engine") is not None:
@@ -639,6 +649,15 @@ def _render_analyze_button() -> None:
                     ),
                 }
                 sync_query = render_prompt(selected_template_id, ctx)
+                meta = next(
+                    (t for t in _templates if t.id == selected_template_id), None
+                )
+                if meta is not None:
+                    log_jsonl({
+                        'prompt.template_id': meta.id,
+                        'prompt.version': int(getattr(meta, 'version', 1)),
+                        'prompt.name': meta.name,
+                    })
 
                 # Prefer RouterQueryEngine when available (synchronous call)
                 if st.session_state.get("router_engine") is not None:

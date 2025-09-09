@@ -24,3 +24,7 @@ def test_load_presets_have_expected_keys() -> None:
     # Check a couple of defaults
     assert "professional" in tones
     assert "assistant" in roles
+
+
+def test_load_unknown_preset_returns_empty() -> None:
+    assert load_preset("does-not-exist") == {}

@@ -1,7 +1,7 @@
 ---
 ADR: 018
 Title: Automatic Prompt Optimization with DSPy
-Status: Accepted
+Status: Implemented
 Version: 2.0
 Date: 2025-08-19
 Supersedes:

@@ -1,12 +1,16 @@
-# SPEC-020 — Prompt Template System (Full Replacement)
+---
+spec: SPEC-020
+title: Prompt Template System (RichPromptTemplate, File-Based)
+version: 1.0.0
+date: 2025-09-08
+owners: ["ai-arch"]
+status: Completed
+related_requirements:
+  - FR-020: File-based prompt templates with RichPromptTemplate and presets
+related_adrs: ["ADR-020","ADR-003","ADR-004","ADR-024"]
+---
 
-Status: Completed
-
-Owners: Retrieval/UX Core
-
-Related: ADR-020 (Prompt Template System), ADR-003 (Adaptive Retrieval), ADR-004 (Local-First LLM), ADR-024 (Always-On Hybrid + Rerank)
-
-## Summary
+## Objective
 
 Replace the current hard-coded prompt constants (`src/prompts.py`) with a file-based prompt template system built on LlamaIndex’s `RichPromptTemplate` (Jinja under the hood). The new system provides:
 
@@ -115,6 +119,12 @@ from src.prompting import (
   format_messages,       # (id, context: dict) -> list[BaseMessage]
   list_presets,          # (kind: Literal["tones","roles","lengths"]) -> dict
 )
+```
+
+### Libraries and Imports
+
+```python
+from llama_index.core.prompts import RichPromptTemplate
 ```
 
 ### Rendering Pipeline (Leverage LlamaIndex)
@@ -242,7 +252,6 @@ from src.prompting import (
 - Risk: Over‑templating reduces flexibility → Keep simple presets and a small curated catalog
 - Risk: Developer friction editing templates → Provide guidelines, examples, and lint
 
-
 ## Implementation Checklist
 
 - [x] Scaffolding (models, loader, registry, renderer, validators)
@@ -253,3 +262,23 @@ from src.prompting import (
 - [x] Legacy code/tests removed (src/prompts.py)
 - [x] Docs updated (ADR/README/Developer Guide)
 - [x] RTM updated (FR‑020 Completed)
+
+## File Operations
+
+### CREATE
+
+- `src/prompting/` package: `models.py`, `loader.py`, `registry.py`, `renderer.py`, `validators.py`, `__init__.py`
+- `templates/prompts/`: `comprehensive-analysis.prompt.md`, `key-insights.prompt.md`, `summary-open-questions.prompt.md`
+- `templates/presets/`: `tones.yaml`, `roles.yaml`, `lengths.yaml`
+- Tests: `tests/unit/prompting/*`, `tests/integration/test_prompt_registry.py`, `tests/e2e/test_prompt_system.py`
+- Docs: `docs/developers/guides/adding-prompt-template.md`
+
+### UPDATE
+
+- `src/app.py`: replace legacy prompt constants with new prompting API
+- README.md: “Choosing Prompts” section
+- ADR‑018/ADR‑020 cross‑links
+
+### DELETE
+
+- `src/prompts.py` and tests referencing it
