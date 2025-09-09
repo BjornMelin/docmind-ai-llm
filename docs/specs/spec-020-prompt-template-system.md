@@ -241,3 +241,15 @@ from src.prompting import (
 - Risk: Template variable drift between UI and templates → Strong validation, tests
 - Risk: Over‑templating reduces flexibility → Keep simple presets and a small curated catalog
 - Risk: Developer friction editing templates → Provide guidelines, examples, and lint
+
+
+## Implementation Checklist
+
+- [x] Scaffolding (models, loader, registry, renderer, validators)
+- [x] Default templates & presets on disk
+- [x] Public API (list/get/render/format_messages/list_presets)
+- [x] UI integration (Streamlit app)
+- [x] Unit/integration/e2e smoke tests
+- [x] Legacy code/tests removed (src/prompts.py)
+- [x] Docs updated (ADR/README/Developer Guide)
+- [x] RTM updated (FR‑020 Completed)
