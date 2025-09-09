@@ -63,7 +63,7 @@ def _is_localhost(url: str | None) -> bool:
         return False
 
 
-def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:  # pylint: disable=too-many-statements
+def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:  # pylint: disable=too-many-statements, too-many-branches
     """Configure LlamaIndex ``Settings`` with unified configuration.
 
     Args:
@@ -158,16 +158,16 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
                 from llama_index.embeddings import clip as _li_clip_mod
 
                 _real_clip = getattr(_li_clip_mod, "ClipEmbedding", None)
-            except Exception:  # pragma: no cover - optional
+            except (ImportError, AttributeError):  # pragma: no cover - optional
                 _real_clip = None  # type: ignore
 
             if (
                 "ClipEmbedding" in globals()
-                and ClipEmbedding is not _real_clip  # type: ignore[name-defined]
-                and ClipEmbedding is not HuggingFaceEmbedding  # type: ignore[name-defined]
+                and ClipEmbedding is not _real_clip
+                and ClipEmbedding is not HuggingFaceEmbedding
             ):
                 # Likely patched by tests to return a MockEmbedding; use it
-                embed_ctor = ClipEmbedding  # type: ignore[name-defined]
+                embed_ctor = ClipEmbedding
 
             Settings.embed_model = embed_ctor(
                 model_name=model_name,

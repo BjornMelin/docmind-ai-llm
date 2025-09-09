@@ -31,7 +31,7 @@ from src.processing.document_processor import DocumentProcessor
 from src.retrieval.query_engine import ServerHybridRetriever, _HybridParams
 
 
-def get_embedding_model(*, nodes: list[Any] | None = None) -> Any:
+def get_embedding_model(*, _nodes: list[Any] | None = None) -> Any:
     """Return the default hybrid retriever (ServerHybridRetriever).
 
     Note: The factory name is kept for backwards import compatibility in tests,
@@ -48,7 +48,11 @@ def get_embedding_model(*, nodes: list[Any] | None = None) -> Any:
             fusion_mode=str(getattr(rconf, "fusion_mode", "rrf")),
             dedup_key=str(getattr(rconf, "dedup_key", "page_id")),
         )
-    except Exception:  # pragma: no cover - defensive defaults
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):  # pragma: no cover - defensive defaults
         params = _HybridParams(
             collection=getattr(settings.database, "qdrant_collection", "docmind_docs")
         )

@@ -86,7 +86,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
     except OSError as e:
         results["errors"].append(f"Qdrant network error: {e}")
         results["valid"] = False
-    except Exception as e:  # pragma: no cover - catch transport-specific exceptions
+    except (RuntimeError, ValueError) as e:  # pragma: no cover - transport-specific
         results["errors"].append(f"Qdrant error: {e}")
         results["valid"] = False
 

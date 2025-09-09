@@ -49,7 +49,7 @@ from src.config.settings import UIConfig as _UIConfig
 from src.config.settings import VLLMConfig as _VLLMConfig
 from src.containers import get_multi_agent_coordinator
 from src.processing.pdf_pages import pdf_pages_to_image_documents
-from src.prompts import PREDEFINED_PROMPTS
+from src.prompting import list_presets, list_templates, render_prompt
 from src.retrieval.graph_config import create_property_graph_index
 from src.retrieval.query_engine import create_adaptive_router_engine
 from src.ui.components.provider_badge import provider_badge
@@ -58,6 +58,7 @@ from src.utils.core import detect_hardware, validate_startup_configuration
 from src.utils.document import load_documents_unstructured
 from src.utils.siglip_adapter import SiglipEmbedding  # SigLIP visual adapter
 from src.utils.storage import create_vector_store
+from src.utils.telemetry import log_jsonl
 
 LLAMACPP_AVAILABLE = False
 # Test-patching placeholders for unit tests (avoid import-time heavy deps)
@@ -537,8 +538,89 @@ async def upload_section() -> None:
 
 # Analysis Options and Agentic Analysis with Error Handling
 st.header("Analysis Options")
-prompt_type: str = st.selectbox("Prompt", list(PREDEFINED_PROMPTS.keys()))
+# Load templates and presets
+_templates = list_templates()
+_template_name_to_id = {t.name: t.id for t in _templates}
+_template_names = list(_template_name_to_id.keys()) or [
+    "Comprehensive Document Analysis"
+]
+prompt_name: str = st.selectbox("Prompt", _template_names)
+selected_template_id = _template_name_to_id.get(prompt_name, "comprehensive-analysis")
+
+# Optional presets (tones/roles)
+_tones = list_presets("tones")
+_roles = list_presets("roles")
+# Allow non-constant-style variable names for Streamlit UI values
+# pylint: disable=invalid-name
+tone_key = (
+    st.selectbox("Tone", list(_tones.keys()) or ["professional"])
+    if _tones
+    else "professional"
+)
+role_key = (
+    st.selectbox("Role", list(_roles.keys()) or ["assistant"])
+    if _roles
+    else "assistant"
+)
+# pylint: enable=invalid-name
 # Other selects for tone, instructions, etc. (assuming they exist in full code)
+
+
+def _build_prompt_context_and_log_telemetry(
+    template_id: str,
+    tone_selection: str,
+    role_selection: str,
+    resources: dict,
+) -> str:
+    """Build context for prompt template, render prompt, and log telemetry.
+
+    Args:
+        template_id: ID of the template to render
+        tone_selection: Selected tone key
+        role_selection: Selected role key
+        resources: Dict containing keys 'tones', 'roles', and 'templates'
+
+    Returns:
+        Rendered prompt text
+
+    Raises:
+        st.error: On template rendering failures (user-friendly UI error)
+    """
+    try:
+        # Build a minimal context for the prompt template
+        ctx = {
+            "context": "Documents have been processed and indexed.",
+            "tone": resources.get("tones", {}).get(
+                tone_selection, {"description": "Use a neutral tone."}
+            ),
+            "role": resources.get("roles", {}).get(
+                role_selection, {"description": "Act as a helpful assistant."}
+            ),
+        }
+        rendered_prompt = render_prompt(template_id, ctx)
+
+        # Log telemetry
+        templates_list = resources.get("templates", [])
+        if meta := next((t for t in templates_list if t.id == template_id), None):
+            log_jsonl(
+                {
+                    "prompt.template_id": meta.id,
+                    "prompt.version": int(getattr(meta, "version", 1)),
+                    "prompt.name": meta.name,
+                }
+            )
+
+        return rendered_prompt
+
+    except KeyError as e:
+        error_msg = f"Template rendering failed: {e}"
+        st.error(error_msg)
+        # Re-raise to prevent further processing
+        raise RuntimeError(error_msg) from e
+    except Exception as e:
+        error_msg = f"Unexpected error during prompt rendering: {e}"
+        st.error(error_msg)
+        raise RuntimeError(error_msg) from e
 
 
 async def run_analysis() -> None:
@@ -550,7 +632,12 @@ async def run_analysis() -> None:
     if st.session_state.index:
         with st.spinner("Running analysis..."):
             try:
-                analysis_query_text = f"Perform {prompt_type} analysis on the documents"
+                analysis_query_text = _build_prompt_context_and_log_telemetry(
+                    selected_template_id,
+                    tone_key,
+                    role_key,
+                    {"tones": _tones, "roles": _roles, "templates": _templates},
+                )
 
                 # Prefer RouterQueryEngine when available
                 if st.session_state.get("router_engine") is not None:
@@ -595,7 +682,12 @@ def _render_analyze_button() -> None:
         # Use sync analysis to avoid asyncio event loop conflicts
         with st.spinner("Running analysis..."):
             try:
-                sync_query = f"Perform {prompt_type} analysis on the documents"
+                sync_query = _build_prompt_context_and_log_telemetry(
+                    selected_template_id,
+                    tone_key,
+                    role_key,
+                    {"tones": _tones, "roles": _roles, "templates": _templates},
+                )
 
                 # Prefer RouterQueryEngine when available (synchronous call)
                 if st.session_state.get("router_engine") is not None:

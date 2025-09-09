@@ -129,7 +129,7 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
 
         if torch.cuda.is_available():  # type: ignore[attr-defined]
             device = "cuda"
-    except Exception:  # pragma: no cover - defensive fallback
+    except (ImportError, AttributeError, RuntimeError):  # pragma: no cover - defensive
         device = "cpu"
 
     # Pull model id from settings if available, fallback to default
@@ -195,7 +195,7 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
         # Support encrypted images written as .enc — decrypt to a temporary file first
         try:
             from src.utils.security import decrypt_file  # type: ignore
-        except Exception:  # pragma: no cover - defensive
+        except ImportError:  # pragma: no cover - defensive
 
             def decrypt_file(p: str) -> str:  # type: ignore
                 return p
@@ -448,7 +448,7 @@ class _TextRerankerAdapter:
         try:
             scores = self._flag.score_pairs(pairs)
             return scores
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("FlagEmbedding batch score error: {} — failing open", exc)
             return [float(n.score or 0.0) for n in batch]
 
@@ -475,7 +475,7 @@ class _TextRerankerAdapter:
                 scores.append(score_map.get(str(n.node.node_id), float(n.score or 0.0)))
             self._li.top_n = old_top  # type: ignore[attr-defined]
             return scores
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("LI CrossEncoder batch score error: {} — failing open", exc)
             return [float(n.score or 0.0) for n in batch]
 

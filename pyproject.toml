@@ -69,6 +69,7 @@ dependencies = [
     "sentence-transformers>=5.1.0",      # CrossEncoder reranking
     # Prompt Optimization
     "dspy-ai>=2.5.0",                    # DSPy optimizer
+    "pyyaml>=6.0",                       # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
     "duckdb>=0.10.0",                    # DuckDB engine
     # Testing Support (runtime-level perf/property tests if invoked)

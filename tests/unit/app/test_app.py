@@ -582,25 +582,84 @@ class TestDocumentUploadSection:
 class TestAnalysisOptions:
     """Test analysis options and query processing logic."""
 
-    def test_analysis_query_generation(self):
-        """Test analysis query generation logic."""
-        prompt_type = "Summary"
+    def test_render_prompt_minimal(self):
+        """Render a minimal template with defaults and context using API."""
+        # Patch prompting API to avoid disk access
+        from unittest.mock import patch as _patch
 
-        # Logic from app.py
-        analysis_query = f"Perform {prompt_type} analysis on the documents"
+        with _patch("src.prompting.render_prompt", return_value="OK") as rp:
+            ctx = {
+                "context": "Docs indexed",
+                "tone": {"description": "Use a neutral tone."},
+                "role": {"description": "Act as a helpful assistant."},
+            }
+            out = rp("comprehensive-analysis", ctx)
+            assert out == "OK"
 
-        assert analysis_query == "Perform Summary analysis on the documents"
+    def test_build_prompt_context_and_log_telemetry_success(self, monkeypatch):
+        """Helper builds context, renders prompt, and logs telemetry."""
+        from types import SimpleNamespace
 
-    def test_analysis_with_predefined_prompts(self):
-        """Test analysis with predefined prompts."""
-        # Test that predefined prompts are accessible
-        with patch("src.app.PREDEFINED_PROMPTS") as mock_prompts:
-            mock_prompts.keys.return_value = ["Summary", "Analysis", "Extract"]
+        # Arrange resources
+        tones = {"professional": {"description": "Use a neutral tone."}}
+        roles = {"assistant": {"description": "Act as a helpful assistant."}}
+        templates = [
+            SimpleNamespace(
+                id="comprehensive-analysis", name="Comprehensive", version=2
+            )
+        ]
 
-            prompt_options = list(mock_prompts.keys())
-            assert "Summary" in prompt_options
-            assert "Analysis" in prompt_options
-            assert "Extract" in prompt_options
+        # Patch render_prompt and log_jsonl
+        with (
+            patch("src.app.render_prompt", return_value="PROMPT") as mock_render,
+            patch("src.app.log_jsonl") as mock_log,
+        ):
+            from src.app import _build_prompt_context_and_log_telemetry
+
+            # Act
+            result = _build_prompt_context_and_log_telemetry(
+                template_id="comprehensive-analysis",
+                tone_selection="professional",
+                role_selection="assistant",
+                resources={"tones": tones, "roles": roles, "templates": templates},
+            )
+
+            # Assert
+            assert result == "PROMPT"
+            mock_render.assert_called_once()
+            # Verify telemetry log structure
+            args, _ = mock_log.call_args
+            payload = args[0]
+            assert payload["prompt.template_id"] == "comprehensive-analysis"
+            assert payload["prompt.version"] == 2
+            assert payload["prompt.name"] == "Comprehensive"
+
+    def test_build_prompt_context_and_log_telemetry_keyerror(self):
+        """Raises RuntimeError and surfaces st.error on KeyError."""
+        from types import SimpleNamespace
+
+        # Force render_prompt to KeyError by omitting required keys
+        with (
+            patch("src.app.render_prompt", side_effect=KeyError("missing")),
+            patch("streamlit.error") as mock_st_error,
+        ):
+            from src.app import _build_prompt_context_and_log_telemetry
+
+            with pytest.raises(RuntimeError, match="Template rendering failed: "):
+                _build_prompt_context_and_log_telemetry(
+                    template_id="comprehensive-analysis",
+                    tone_selection="professional",
+                    role_selection="assistant",
+                    resources={
+                        "tones": {},
+                        "roles": {},
+                        "templates": [
+                            SimpleNamespace(id="comprehensive-analysis", name="X")
+                        ],
+                    },
+                )
+
+            mock_st_error.assert_called()
 
 
 @pytest.mark.unit

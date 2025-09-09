@@ -1,6 +1,6 @@
 # DocMind AI — Software Requirements Specification (SRS)
 
-Version: 1.1.0 • Date: 2025-09-07 • Owner: Eng/Arch
+Version: 1.2.0 • Date: 2025-09-07 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter

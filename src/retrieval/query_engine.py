@@ -86,7 +86,9 @@ class ServerHybridRetriever:
         Qdrant hybrid sparse indexing; returns empty mapping when unavailable.
         """
         # Dense via LI Settings for alignment
-        dvec = Settings.embed_model.get_query_embedding(text)  # type: ignore[attr-defined]
+        dvec = Settings.embed_model.get_query_embedding(  # type: ignore[attr-defined]
+            text
+        )
         dense_vec = np.asarray(dvec, dtype=np.float32)
 
         # Sparse via FastEmbed for alignment with Qdrant hybrid sparse
@@ -100,7 +102,7 @@ class ServerHybridRetriever:
             return qmodels.FusionQuery(fusion=qmodels.Fusion.DBSF)
         return qmodels.FusionQuery(fusion=qmodels.Fusion.RRF)
 
-    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:  # pylint: disable=too-many-statements
         """Execute a server-side hybrid query (RRF/DBSF) and de-dup by page_id.
 
         Args:
@@ -124,10 +126,13 @@ class ServerHybridRetriever:
                         if sparse_vec
                         else ([], [])
                     )
-                    sv = qmodels.SparseVector(indices=list(idxs), values=list(vals))  # type: ignore[arg-type]
+                    sv = qmodels.SparseVector(  # type: ignore[arg-type]
+                        indices=list(idxs),
+                        values=list(vals),
+                    )
                 else:
                     sv = sparse_vec  # already typed or supported format
-            except Exception:
+            except (TypeError, ValueError, AttributeError):
                 # Last-resort fallback: attempt to wrap values as needed
                 if isinstance(sparse_vec, dict):
                     sv = qmodels.SparseVector(
@@ -241,7 +246,7 @@ class ServerHybridRetriever:
                     "dedup.key": (self.params.dedup_key or "page_id"),
                 }
             )
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (ImportError, AttributeError, OSError, ValueError, TypeError):
             logger.info(
                 (
                     "Qdrant hybrid: top_k=%d dense=%d "

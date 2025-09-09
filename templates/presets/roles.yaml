@@ -1,0 +1,6 @@
+assistant:
+  description: Act as a helpful assistant.
+researcher:
+  description: Provide in-depth research and analysis.
+engineer:
+  description: Focus on technical details and code.

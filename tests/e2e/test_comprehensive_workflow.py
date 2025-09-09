@@ -549,13 +549,14 @@ def test_application_structure_and_markers():
         from llama_index.core.memory import ChatMemoryBuffer
 
         from src.config.settings import DocMindSettings
-        from src.prompts import PREDEFINED_PROMPTS
+        from src.prompting import list_templates
 
         # Test prompts structure
-        assert isinstance(PREDEFINED_PROMPTS, dict)
-        assert len(PREDEFINED_PROMPTS) > 0
+        assert isinstance(list_templates(), list)
+        assert len(list_templates()) > 0
 
-        first_prompt = next(iter(PREDEFINED_PROMPTS.values()))
+        tpls = list_templates()
+        first_prompt = tpls[0].name if tpls else ""
         assert isinstance(first_prompt, str)
         assert len(first_prompt) > 0
 
@@ -574,7 +575,7 @@ def test_application_structure_and_markers():
         assert message.content == "Test message for E2E validation"
 
         print("✅ Application structure and markers validated")
-        print(f"   - Available prompts: {len(PREDEFINED_PROMPTS)}")
+        print(f"   - Available templates: {len(list_templates())}")
         print(f"   - Configuration loaded: {settings.vllm.model}")
         print("   - Memory system: Operational")
 
