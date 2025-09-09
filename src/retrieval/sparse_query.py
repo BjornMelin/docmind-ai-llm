@@ -34,15 +34,16 @@ def _get_sparse_encoder() -> Any | None:
     try:
         from fastembed import SparseTextEmbedding  # type: ignore
 
+        # Try preferred model first; on error, try fallback model.
         try:
             return SparseTextEmbedding(PREFERRED_SPARSE_MODEL)
-        except (
-            RuntimeError,
-            ValueError,
-            OSError,
-            TypeError,
-        ):  # pragma: no cover - fallback path
-            return SparseTextEmbedding(FALLBACK_SPARSE_MODEL)
+        except (RuntimeError, ValueError, OSError, TypeError):  # offline/invalid
+            try:
+                return SparseTextEmbedding(FALLBACK_SPARSE_MODEL)
+            except (RuntimeError, ValueError, OSError, TypeError):
+                # When both attempts fail (e.g., HF offline with no cache),
+                # return None so callers can gracefully skip sparse.
+                return None
     except ImportError:  # pragma: no cover - optional dependency
         return None
 
