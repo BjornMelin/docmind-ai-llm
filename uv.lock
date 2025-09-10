@@ -960,6 +960,7 @@ dev = [
     { name = "hypothesis" },
     { name = "mypy" },
     { name = "pylint" },
+    { name = "pylint-pytest" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-benchmark" },
@@ -1063,6 +1064,7 @@ dev = [
     { name = "hypothesis", specifier = ">=6.137.1" },
     { name = "mypy", specifier = ">=1.17.1" },
     { name = "pylint", specifier = ">=3.2.5" },
+    { name = "pylint-pytest", specifier = ">=1.1.7" },
     { name = "pytest", specifier = ">=8.3.1" },
     { name = "pytest-asyncio", specifier = ">=1.1.0" },
     { name = "pytest-benchmark", specifier = ">=5.0.0" },
@@ -4420,6 +4422,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9d/58/1f614a84d3295c542e9f6e2c764533eea3f318f4592dc1ea06c797114767/pylint-3.3.8.tar.gz", hash = "sha256:26698de19941363037e2937d3db9ed94fb3303fdadf7d98847875345a8bb6b05", size = 1523947, upload-time = "2025-08-09T09:12:57.234Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2d/1a/711e93a7ab6c392e349428ea56e794a3902bb4e0284c1997cff2d7efdbc1/pylint-3.3.8-py3-none-any.whl", hash = "sha256:7ef94aa692a600e82fabdd17102b73fc226758218c97473c7ad67bd4cb905d83", size = 523153, upload-time = "2025-08-09T09:12:54.836Z" },
+]
+
+[[package]]
+name = "pylint-pytest"
+version = "1.1.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pylint" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/aa/6e/36a916bfd251d4901ef9f5ddfece3b0e113f9109de29d962c6ea6b53cc17/pylint-pytest-1.1.7.tar.gz", hash = "sha256:7a38be02c014eb6d98791eb978e79ed292f1904d3a518289c6d7ac4fb4122e98", size = 12768, upload-time = "2023-12-04T07:29:49.797Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/98/1a/549ecc83f626f1b99b31c7123523555c262c8678260336b0a6eb6382732e/pylint_pytest-1.1.7-py3-none-any.whl", hash = "sha256:5d687a2f4b17e85654fc2a8f04944761efb11cb15dc46d008f420c377b149151", size = 10750, upload-time = "2023-12-04T07:29:48.749Z" },
 ]
 
 [[package]]

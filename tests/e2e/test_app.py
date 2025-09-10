@@ -390,7 +390,7 @@ def fixture_app_test(tmp_path, monkeypatch):
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-def test_app_hardware_detection(_mock_pull, app_test):
+def test_app_hardware_detection(_mock_pull, app_test):  # noqa: PT019
     """Test hardware detection display and model suggestions in the application.
 
     Validates that hardware detection works correctly and appropriate model
@@ -401,6 +401,8 @@ def test_app_hardware_detection(_mock_pull, app_test):
         mock_pull: Mock ollama.pull function.
         app_test: Streamlit app test fixture.
     """
+    # Mark patched object as used to satisfy lint rules
+    assert _mock_pull is not None
     app = app_test.run()
 
     # Verify no critical exceptions occurred
@@ -410,8 +412,9 @@ def test_app_hardware_detection(_mock_pull, app_test):
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-def test_app_renders_and_shows_chat(_mock_pull, app_test):
+def test_app_renders_and_shows_chat(_mock_pull, app_test):  # noqa: PT019
     """Verify app renders and the chat section is present."""
+    assert _mock_pull is not None
     app = app_test.run()
     assert not app.exception, f"App failed with exception: {app.exception}"
     app_str = str(app)
@@ -420,7 +423,7 @@ def test_app_renders_and_shows_chat(_mock_pull, app_test):
 
 @patch("ollama.pull", return_value={"status": "success"})
 @patch("src.utils.core.load_documents_unstructured")
-def test_app_document_upload_workflow(mock_load_docs, _mock_pull, app_test, tmp_path):
+def test_app_document_upload_workflow(mock_load_docs, _mock_pull, app_test, tmp_path):  # noqa: PT019
     """Validate upload and processing pipeline with boundary mocks."""
 
     # Mock successful document loading
@@ -437,6 +440,7 @@ def test_app_document_upload_workflow(mock_load_docs, _mock_pull, app_test, tmp_
     ]
     mock_load_docs.return_value = mock_documents
 
+    assert _mock_pull is not None
     app = app_test.run()
 
     # Verify app loaded successfully
@@ -486,7 +490,9 @@ def test_app_multi_agent_chat_functionality(app_test):
 @patch("ollama.pull", return_value={"status": "success"})
 @patch("src.utils.core.validate_startup_configuration", return_value=True)
 def test_app_session_persistence_and_memory_management(
-    _mock_validate, _mock_pull, app_test
+    _mock_validate,
+    _mock_pull,
+    app_test,
 ):
     """Test session save/load functionality and memory management.
 
@@ -498,6 +504,9 @@ def test_app_session_persistence_and_memory_management(
         mock_pull: Mock ollama.pull function.
         app_test: Streamlit app test fixture.
     """
+    # Mark patched objects as used to satisfy lint rules
+    assert _mock_validate is not None
+    assert _mock_pull is not None
     app = app_test.run()
 
     # Verify app loaded successfully
