@@ -18,10 +18,7 @@ from qdrant_client import QdrantClient
 from qdrant_client import models as qm
 
 from src.config import settings
-from src.retrieval.query_engine import (
-    ServerHybridRetriever,
-    _HybridParams,
-)
+from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 
 
 def ensure_collection(client: QdrantClient, name: str) -> None:
