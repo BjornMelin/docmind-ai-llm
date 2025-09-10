@@ -33,6 +33,8 @@ from .reranking import (
     build_text_reranker,
     build_visual_reranker,
 )
+
+# Router factory
 from .router_factory import build_router_engine
 
 # Unified Qdrant vector store
