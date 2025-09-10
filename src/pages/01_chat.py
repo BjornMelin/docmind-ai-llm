@@ -8,6 +8,7 @@ writing the response in small chunks to the UI for better perceived latency.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Iterable
 from collections.abc import Iterable as _Iterable
 from pathlib import Path
@@ -17,8 +18,17 @@ import streamlit as st
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config.settings import settings
-from src.persistence.snapshot import compute_config_hash, compute_corpus_hash
+from src.persistence.snapshot import (
+    compute_config_hash,
+    compute_corpus_hash,
+    latest_snapshot_dir,
+    load_manifest,
+    load_property_graph_index,
+    load_vector_index,
+)
+from src.retrieval.router_factory import build_router_engine
 from src.ui.components.provider_badge import provider_badge
+from src.utils.telemetry import log_jsonl
 
 
 def _chunked_stream(text: str, chunk_size: int = 48) -> Iterable[str]:
@@ -64,6 +74,12 @@ def main() -> None:  # pragma: no cover - Streamlit page
     st.title("Chat")
     provider_badge(settings)
 
+    # Autoload router from latest snapshot per policy
+    try:
+        _load_latest_snapshot_into_session()
+    except Exception as exc:  # pragma: no cover - UX best effort
+        st.caption(f"Autoload skipped: {exc}")
+
     # Staleness badge: compare current hashes to latest snapshot manifest
     try:
         storage_dir = settings.data_dir / "storage"
@@ -92,6 +108,16 @@ def main() -> None:  # pragma: no cover - Streamlit page
                             "Snapshot is stale (content/config changed). "
                             "Open Documents -> 'Rebuild GraphRAG Snapshot' to refresh."
                         )
+                        with st.sidebar:
+                            st.caption("Snapshot stale: content or config changed.")
+                        with contextlib.suppress(Exception):
+                            log_jsonl(
+                                {
+                                    "snapshot_stale_detected": True,
+                                    "snapshot_id": latest.name,
+                                    "reason": "digest_mismatch",
+                                }
+                            )
                     else:
                         st.caption(f"Snapshot up-to-date: {latest.name}")
     except Exception as exc:  # pragma: no cover - UX best effort
@@ -153,9 +179,88 @@ def _current_config_dict() -> dict[str, Any]:
 def compute_staleness(
     manifest: dict[str, Any], corpus_paths: _Iterable[Path], cfg: dict[str, Any]
 ) -> bool:
-    """Return True when corpus/config hashes differ from manifest values."""
-    chash = compute_corpus_hash(list(corpus_paths))
+    """Return True when corpus/config hashes differ from manifest values.
+
+    Args:
+        manifest: Snapshot manifest mapping containing ``corpus_hash`` and
+            ``config_hash``.
+        corpus_paths: Iterable of file paths representing current corpus.
+        cfg: Configuration mapping to hash for comparison.
+
+    Returns:
+        True if staleness is detected, False otherwise.
+    """
+    # Normalize with POSIX relpaths under uploads
+    uploads_dir = settings.data_dir / "uploads"
+    chash = compute_corpus_hash(list(corpus_paths), base_dir=uploads_dir)
     cfg_hash = compute_config_hash(cfg)
     return (
         manifest.get("corpus_hash") != chash or manifest.get("config_hash") != cfg_hash
     )
+
+
+def _load_latest_snapshot_into_session() -> None:
+    """Autoload the latest snapshot into session_state per policy.
+
+    Policies:
+    - latest_non_stale (default): Load when manifest not stale.
+    - pinned: Load pinned snapshot id when configured.
+    - ignore: Do nothing.
+    """
+    policy = getattr(settings.graphrag_cfg, "autoload_policy", "latest_non_stale")
+    if policy == "ignore":
+        return
+
+    snap_dir: Path | None = None
+    if policy == "pinned":
+        sid = getattr(settings.graphrag_cfg, "pinned_snapshot_id", None)
+        if sid:
+            candidate = (settings.data_dir / "storage" / sid).resolve()
+            if candidate.exists():
+                snap_dir = candidate
+    else:  # latest_non_stale
+        snap_dir = latest_snapshot_dir()
+
+    if not snap_dir:
+        return
+
+    man = load_manifest(snap_dir)
+    if policy == "latest_non_stale":
+        # Only autoload when non-stale
+        try:
+            # Build corpus paths and cfg for staleness check
+            uploads_dir = settings.data_dir / "uploads"
+            corpus_paths = _collect_corpus_paths(uploads_dir)
+            cfg = _current_config_dict()
+            if man and not compute_staleness(man, corpus_paths, cfg):
+                _hydrate_router_from_snapshot(snap_dir)
+        except Exception:  # pragma: no cover - defensive
+            return
+    else:  # pinned (skip staleness)
+        _hydrate_router_from_snapshot(snap_dir)
+
+
+def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
+    vec = load_vector_index(snap_dir)
+    kg = load_property_graph_index(snap_dir)
+    if vec is None:
+        return
+    # Store in session for downstream tools
+    st.session_state["vector_index"] = vec
+    if kg is not None:
+        st.session_state["graphrag_index"] = kg
+    # Build router with fail-open to vector-only
+    try:
+        router = build_router_engine(vec, kg, settings)
+        st.session_state["router_engine"] = router
+        st.caption(
+            f"Autoloaded snapshot: {snap_dir.name} (graph={'yes' if kg else 'no'})"
+        )
+    except Exception:  # pragma: no cover - defensive
+        # No router created; keep vector/graph in session for manual wiring
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "Failed to build router from snapshot; continuing without wiring",
+            exc_info=True,
+        )
