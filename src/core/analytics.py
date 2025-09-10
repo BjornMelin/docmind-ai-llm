@@ -204,9 +204,9 @@ class AnalyticsManager:
         """
         if not self.cfg.enabled:
             return
-        self._start_worker()
-        self._q.put(
-            (
+        # Synchronous, best-effort write for determinism in tests and simplicity
+        with self._conn() as con:
+            con.execute(
                 "INSERT INTO query_metrics VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     datetime.now(UTC),
@@ -217,7 +217,6 @@ class AnalyticsManager:
                     success,
                 ),
             )
-        )
 
     def log_embedding(self, *, model: str, items: int, latency_ms: float) -> None:
         """Log embedding operation performance metrics.
@@ -229,13 +228,11 @@ class AnalyticsManager:
         """
         if not self.cfg.enabled:
             return
-        self._start_worker()
-        self._q.put(
-            (
+        with self._conn() as con:
+            con.execute(
                 "INSERT INTO embedding_metrics VALUES (?, ?, ?, ?)",
                 (datetime.now(UTC), model, items, latency_ms),
             )
-        )
 
     def log_reranking(self, *, model: str, items: int, latency_ms: float) -> None:
         """Log reranking operation performance metrics.
@@ -247,13 +244,11 @@ class AnalyticsManager:
         """
         if not self.cfg.enabled:
             return
-        self._start_worker()
-        self._q.put(
-            (
+        with self._conn() as con:
+            con.execute(
                 "INSERT INTO reranking_metrics VALUES (?, ?, ?, ?)",
                 (datetime.now(UTC), model, items, latency_ms),
             )
-        )
 
     def prune_old_records(self) -> None:
         """Remove analytics records older than the retention period.
@@ -275,7 +270,8 @@ class AnalyticsManager:
                 "reranking_metrics",
                 "system_metrics",
             ):
-                con.execute("DELETE FROM ? WHERE ts < ?", (table, cutoff))
+                # Table names are constant; only bind the cutoff parameter
+                con.execute(f"DELETE FROM {table} WHERE ts < ?", (cutoff,))
 
 
 __all__ = ["AnalyticsConfig", "AnalyticsManager"]

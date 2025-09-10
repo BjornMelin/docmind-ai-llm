@@ -318,6 +318,7 @@ class MultiAgentCoordinator:
         return (
             "You are a supervisor managing a team of specialized document analysis\n"
             "agents with parallel execution capabilities.\n\n"
+            "Performance target: keep coordination overhead under 200ms per turn.\n\n"
             "Team composition:\n"
             "- router_agent: Query analysis and strategy determination\n"
             "- planner_agent: Complex query decomposition\n"
@@ -755,7 +756,7 @@ class MultiAgentCoordinator:
             else 0.0
         )
 
-        return {
+        stats = {
             # Basic metrics
             "total_queries": self.total_queries,
             "successful_queries": self.successful_queries,
@@ -763,9 +764,7 @@ class MultiAgentCoordinator:
             "success_rate": round(success_rate, 3),
             "fallback_rate": round(fallback_rate, 3),
             "avg_processing_time": round(self.avg_processing_time, 3),
-            "avg_coordination_overhead_ms": round(
-                self.avg_coordination_overhead * 1000, 2
-            ),
+            "avg_coordination_overhead": round(self.avg_coordination_overhead, 3),
             "meets_target": self.avg_coordination_overhead
             < COORDINATION_OVERHEAD_THRESHOLD,
             "agent_timeout": self.max_agent_timeout,
@@ -776,6 +775,9 @@ class MultiAgentCoordinator:
                 "backend": self.backend,
             },
         }
+        # Include ADR compliance snapshot for observability
+        stats["adr_compliance"] = self.validate_adr_compliance()
+        return stats
 
     def validate_system_status(self) -> dict[str, bool]:
         """Validate system components and performance."""
@@ -797,6 +799,27 @@ class MultiAgentCoordinator:
         self.avg_processing_time = 0.0
         self.avg_coordination_overhead = 0.0
         logger.info("Performance statistics reset")
+
+    def validate_adr_compliance(self) -> dict[str, bool]:
+        """Validate a subset of ADR requirements at runtime for visibility.
+
+        Returns a small dictionary with pass/fail flags used by tests and the UI.
+        """
+        return {
+            # ADR-001: Supervisor pattern compiled and ready
+            "adr_001_supervisor_pattern": bool(
+                self._setup_complete and self.compiled_graph is not None
+            ),
+            # ADR-004: FP8 model variant used by default (suffix-based)
+            "adr_004_fp8_model": self.model_path.upper()
+            .split("/")[-1]
+            .endswith("-FP8"),
+            # Coordination under 200ms per turn
+            "coordination_under_200ms": self.avg_coordination_overhead
+            < COORDINATION_OVERHEAD_THRESHOLD,
+            # Context support for 128k tokens
+            "context_128k_support": self.max_context_length >= 131072,
+        }
 
 
 # Factory function for coordinator

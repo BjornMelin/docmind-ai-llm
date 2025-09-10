@@ -20,14 +20,13 @@ Submodules import these from this package to keep patch paths stable.
 from __future__ import annotations
 
 # pylint: disable=cyclic-import
-# pylint: disable=useless-import-alias
 # Bind patchable dependencies at package level
-import time as time  # re-exported for tests to patch perf_counter
+import time  # re-exported for tests to patch perf_counter
 
-from llama_index.core.memory import ChatMemoryBuffer as ChatMemoryBuffer
-from loguru import logger as logger  # logging handle
+from llama_index.core.memory import ChatMemoryBuffer
+from loguru import logger  # logging handle
 
-from src.agents.tool_factory import ToolFactory as ToolFactory
+from src.agents.tool_factory import ToolFactory
 
 from .planning import plan_query, route_query
 from .retrieval import retrieve_documents

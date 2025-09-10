@@ -27,6 +27,8 @@ def build_router_engine(
     pg_index: Any | None = None,
     settings: Any | None = None,
     llm: Any | None = None,
+    *,
+    enable_hybrid: bool | None = None,
 ) -> RouterQueryEngine:
     """Create a router engine with vector and optional KG tools.
 
@@ -61,31 +63,37 @@ def build_router_engine(
     )
     tools = [vector_tool]
 
-    # Hybrid search tool via Qdrant Query API
+    # Hybrid search tool via Qdrant Query API (behind flag)
     try:
-        params = _HybridParams(
-            collection=cfg.database.qdrant_collection,
-            fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
-            prefetch_sparse=400,
-            prefetch_dense=200,
-            fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
-            dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
+        hybrid_ok = (
+            enable_hybrid
+            if enable_hybrid is not None
+            else bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
         )
-        retr = ServerHybridRetriever(params)
-        h_engine = RetrieverQueryEngine.from_args(
-            retriever=retr, llm=the_llm, response_mode="compact", verbose=False
-        )
-        tools.append(
-            QueryEngineTool(
-                query_engine=h_engine,
-                metadata=ToolMetadata(
-                    name="hybrid_search",
-                    description=(
-                        "Hybrid search via Qdrant Query API (dense+sparse fusion)"
-                    ),
-                ),
+        if hybrid_ok:
+            params = _HybridParams(
+                collection=cfg.database.qdrant_collection,
+                fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
+                prefetch_sparse=400,
+                prefetch_dense=200,
+                fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
+                dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
             )
-        )
+            retr = ServerHybridRetriever(params)
+            h_engine = RetrieverQueryEngine.from_args(
+                retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+            )
+            tools.append(
+                QueryEngineTool(
+                    query_engine=h_engine,
+                    metadata=ToolMetadata(
+                        name="hybrid_search",
+                        description=(
+                            "Hybrid search via Qdrant Query API (dense+sparse fusion)"
+                        ),
+                    ),
+                )
+            )
     except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
@@ -100,10 +108,18 @@ def build_router_engine(
                 if cfg is not None
                 else 1
             )
-            retr = pg_index.as_retriever(include_text=True, path_depth=default_depth)
-            g_engine = RetrieverQueryEngine.from_args(
-                retriever=retr, llm=the_llm, response_mode="compact", verbose=False
-            )
+            g_engine = None
+            # Prefer retriever path when supported
+            if hasattr(pg_index, "as_retriever"):
+                retr = pg_index.as_retriever(
+                    include_text=True, path_depth=default_depth
+                )
+                g_engine = RetrieverQueryEngine.from_args(
+                    retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+                )
+            elif hasattr(pg_index, "as_query_engine"):
+                # Fallback to direct query engine for older/limited implementations
+                g_engine = pg_index.as_query_engine(include_text=True)
             tools.append(
                 QueryEngineTool(
                     query_engine=g_engine,
@@ -129,6 +145,12 @@ def build_router_engine(
     router = RouterQueryEngine(
         selector=selector, query_engine_tools=tools, verbose=False
     )
+    # Provide stable attribute for tests/introspection across versions
+    try:
+        router.query_engine_tools = tools
+        router._query_engine_tools = tools
+    except Exception:  # pragma: no cover - defensive
+        pass
     logger.info(
         "Router engine built (kg_present=%s)",
         any(t.metadata.name == "knowledge_graph" for t in tools),
