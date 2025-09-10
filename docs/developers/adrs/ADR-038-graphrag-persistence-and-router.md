@@ -18,6 +18,12 @@ References:
 
 Adopt a library‑first GraphRAG strategy and wire it via a RouterQueryEngine toolset (vector + graph). Add SnapshotManager to provide atomic, versioned snapshots with a manifest for staleness detection and single‑writer safety. Provide UI defaults (GraphRAG toggle, staleness badge) and portable exports (JSONL baseline; Parquet optional).
 
+Update (Phase‑2):
+
+- Unify on `router_factory` and remove legacy/custom router code. Compose tools [semantic_search, hybrid_search, knowledge_graph].
+- Provide a dedicated `ServerHybridRetriever` using Qdrant Query API (RRF default, DBSF optional) as a standalone module; no legacy router paths retained.
+- Enrich snapshot manifest with versions, schema/persist versions; use relpath hashing under uploads.
+
 ## Context
 
 GraphRAG was accepted (ADR‑019) as an optional enhancement, but lacked standardized router composition, robust persistence, and export guidance. We now have finalized best practices and must codify them to ensure reliability and maintainability.

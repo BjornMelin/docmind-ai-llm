@@ -26,7 +26,7 @@ Add minimal structured logging and metrics across retrieval/rerank/compose steps
 
 - retrieval.fusion_mode: rrf|dbsf (string)
 - retrieval.prefetch_dense_limit, retrieval.prefetch_sparse_limit, retrieval.fused_limit (int)
-- retrieval.rrf_k (int)
+- retrieval.fused_top_k (int)
 - retrieval.latency_ms (int)
 - dedup.before, dedup.after, dedup.dropped (int)
 - dedup.key (string)

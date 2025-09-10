@@ -1753,6 +1753,18 @@ def production_configuration_health_check() -> Dict[str, Any]:
 
 ## Operational Runbooks
 
+### Hybrid Retrieval (Server‑Side) Operations
+
+- Ensure Qdrant collections are created with named vectors `text-dense` (COSINE; BGE‑M3 1024D) and `text-sparse` (BM42/BM25 with IDF). Validate schema before load.
+- Fusion is executed server‑side via the Query API (Prefetch + FusionQuery). Use env `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to toggle; RRF is default.
+- Dedup key configured via `DOCMIND_RETRIEVAL__DEDUP_KEY` (page_id default). Monitor `dedup.*` telemetry metrics.
+
+### GraphRAG Snapshot Lifecycle
+
+- Snapshots persist vector/graph artifacts atomically under `storage/<timestamp>`, with `manifest.json` including schema/persist versions, versions map (app, llama_index, qdrant_client, embed_model), and hashes.
+- Chat auto‑loads the latest non‑stale snapshot; if hashes mismatch, a staleness badge appears and users should trigger a rebuild from the Documents page.
+- Periodically prune old snapshots and keep the latest healthy snapshot for restore.
+
 ### Incident Response Procedures
 
 #### High CPU/GPU Usage

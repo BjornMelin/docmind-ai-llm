@@ -36,9 +36,14 @@ storage/
   "corpus_hash": "sha256:...",
   "config_hash": "sha256:...",
   "created_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "schema_version": "1",
+  "persist_format_version": "1",
+  "complete": true,
   "versions": {
+    "app": "x.y.z",
     "llama_index": "x.y.z",
-    "app": "x.y.z"
+    "qdrant_client": "x.y.z",
+    "embed_model": "<model-id>"
   }
 }
 ```
@@ -78,6 +83,15 @@ Feature: Atomic snapshots with manifest
 ## References
 
 - ADR‑038 GraphRAG Persistence and Router Integration
+
+Manifest Enrichment
+
+- Include fields: `schema_version`, `persist_format_version`, and `versions` (keys: `app`, `llama_index`, `qdrant_client`, `embed_model`).
+- Set `complete=true` after all files are written; use atomic tmp→rename to publish.
+
+Relpath Hashing
+
+- Compute `corpus_hash` using POSIX relpaths relative to `uploads/` for OS-agnostic stability.
 - ADR‑031 Local‑first Persistence Architecture
 - ADR‑034 Idempotent Indexing and Embedding Reuse
 

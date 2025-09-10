@@ -53,7 +53,7 @@ We adopt Unstructured for parsing and multimodal extraction, orchestrated by Lla
 ```mermaid
 graph TD
   U["Upload"] --> P["unstructured.partition"]
-  P --> S["Semantic / Title Split"]
+  P --> S["Title-based Chunking (Unstructured)"]
   S --> N["Nodes + Metadata"]
   N --> C["IngestionCache (DuckDBKVStore)"]
   N --> E["Embeddings (ADR-002)"]
@@ -101,7 +101,6 @@ In `src/processing/document_processor.py`:
 
 ```python
 from unstructured.partition.auto import partition
-from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
@@ -110,13 +109,9 @@ def build_pipeline(settings):
         cache=DuckDBKVStore(db_path=str(settings.cache_path)),
         collection="docmind_processing",
     )
-    splitter = SentenceSplitter(
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap,
-        include_metadata=True,
-        include_prev_next_rel=True,
-    )
-    return IngestionPipeline(transformations=[UnstructuredTransformation(settings), splitter], cache=cache)
+    # Title-based chunking is handled inside the Unstructured transformation; LlamaIndex
+    # IngestionPipeline orchestrates transformations and caching (no explicit SentenceSplitter).
+    return IngestionPipeline(transformations=[UnstructuredTransformation(settings)], cache=cache)
 
 class UnstructuredTransformation:
     def __init__(self, settings):

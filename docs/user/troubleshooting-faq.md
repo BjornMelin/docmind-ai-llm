@@ -60,6 +60,16 @@ ollama list || ollama pull qwen3-4b-instruct-2507
 
 See also: ../developers/cache.md (Implementation Guide).
 
+### Staleness badge shown in Chat
+
+- The Chat page compares the current corpus/config hashes to the latest snapshot manifest. If they differ, a staleness badge appears.
+- Fix: Open the Documents page and rebuild snapshots. After the rebuild, Chat will auto‑load the latest non‑stale snapshot.
+
+### Hybrid retrieval results look odd
+
+- Ensure Qdrant is reachable and collections have named vectors `text-dense` and `text-sparse` (sparse index with IDF modifier).
+- Fusion is performed server‑side via the Qdrant Query API (RRF default; DBSF optional). There are no client‑side fusion knobs.
+
 ## FAQs
 
 ### Do I need internet?

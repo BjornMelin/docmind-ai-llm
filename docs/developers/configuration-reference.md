@@ -1462,3 +1462,30 @@ This configuration reference provides comprehensive guidance for optimizing DocM
 For implementation details, see [Developer Handbook](developer-handbook.md).
 For operational procedures, see [Operations Guide](operations-guide.md).
 For system understanding, see [System Architecture](system-architecture.md).
+
+## Retrieval & GraphRAG Feature Flags
+
+```bash
+# Hybrid fusion mode (server-side only): rrf (default) or dbsf (experimental)
+DOCMIND_RETRIEVAL__FUSION_MODE=rrf
+
+# De-duplication key for final fused cut: page_id (default) or doc_id
+DOCMIND_RETRIEVAL__DEDUP_KEY=page_id
+
+# GraphRAG toggle (current default: ON). Disable to run vector/hybrid only
+DOCMIND_ENABLE_GRAPHRAG=true
+
+# DSPy optimization (optional, agents layer)
+DOCMIND_ENABLE_DSPY_OPTIMIZATION=false
+DOCMIND_DSPY_OPTIMIZATION_ITERATIONS=10
+DOCMIND_DSPY_OPTIMIZATION_SAMPLES=20
+DOCMIND_DSPY_MAX_RETRIES=3
+DOCMIND_DSPY_TEMPERATURE=0.1
+DOCMIND_DSPY_METRIC_THRESHOLD=0.8
+DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
+```
+
+Notes:
+
+- Fusion is executed server‑side via Qdrant Query API (Prefetch + FusionQuery). There are no client‑side knobs.
+- GraphRAG tool is activated only when a PropertyGraphIndex is present and healthy; default traversal depth is `path_depth=1`.

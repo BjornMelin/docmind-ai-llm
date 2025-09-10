@@ -23,7 +23,7 @@ Restore and integrate your **langgraph-supervisor-py** multi-agent system with t
 from langgraph_supervisor import create_supervisor
 from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import tool
-from src.retrieval.query_engine import build_hybrid_retriever
+from src.retrieval.router_factory import build_router_engine
 ```
 
 ## File Operations

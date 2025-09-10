@@ -37,13 +37,13 @@
 
 - **Multi-Agent Coordination:** LangGraph supervisor coordinating 5 specialized agents: query router, query planner, retrieval expert, result synthesizer, and response validator.
 
-- **LlamaIndex RAG Pipeline:** QueryPipeline with async/parallel processing, ingestion pipelines, and caching.
+- **Retrieval/Router:** RouterQueryEngine composed via `router_factory` with tools `semantic_search`, `hybrid_search` (Qdrant server‑side fusion), and optional `knowledge_graph`; uses async/batching where appropriate.
 
 - **Hybrid Retrieval:** Qdrant Query API server‑side fusion (RRF default, DBSF optional) over named vectors `text-dense` (BGE‑M3; COSINE) and `text-sparse` (FastEmbed BM42/BM25 with IDF). Dense via LlamaIndex; sparse via FastEmbed.
 
-- **Knowledge Graph Integration:** spaCy entity extraction with relationship mapping for complex queries.
+- **Knowledge Graph (optional):** Adds a `knowledge_graph` router tool when a PropertyGraphIndex is present and healthy; uses spaCy entity extraction; selector prefers `PydanticSingleSelector` then `LLMSingleSelector`; falls back to vector/hybrid when absent.
 
-- **Multimodal Processing:** Unstructured hi-res parsing for PDFs with text, tables, and images using Jina v4 embeddings.
+- **Multimodal Processing:** Unstructured hi‑res parsing for PDFs with text, tables, and images; visual features scored with SigLIP by default (CLIP optional).
 
 - **Always-on Reranking:** Text via BGE Cross-Encoder and visual via SigLIP; optional ColPali on capable GPUs. Deterministic, batch‑wise cancellation; fail‑open; SigLIP loader cached.
 
@@ -96,6 +96,7 @@
   - [⚙️ Configuration](#️-configuration)
     - [Configuration Philosophy](#configuration-philosophy)
     - [Environment Variables](#environment-variables)
+    - [Enable DSPy Optimization (optional)](#enable-dspy-optimization-optional)
     - [Additional Configuration](#additional-configuration)
   - [📊 Performance Benchmarks](#-performance-benchmarks)
     - [Performance Metrics](#performance-metrics)
@@ -103,8 +104,13 @@
     - [Hybrid Search Performance](#hybrid-search-performance)
     - [System Resource Usage](#system-resource-usage)
     - [Scalability Benchmarks](#scalability-benchmarks)
+    - [Retrieval \& Reranking Defaults](#retrieval--reranking-defaults)
+      - [Operational Flags (local-first)](#operational-flags-local-first)
   - [🔧 Offline Operation](#-offline-operation)
     - [Prerequisites for Offline Use](#prerequisites-for-offline-use)
+    - [Prefetch Model Weights](#prefetch-model-weights)
+    - [Snapshots \& Staleness](#snapshots--staleness)
+    - [GraphRAG Exports \& Seeds](#graphrag-exports--seeds)
     - [Model Requirements](#model-requirements)
   - [🛠️ Troubleshooting](#️-troubleshooting)
     - [Common Issues](#common-issues)
@@ -122,6 +128,7 @@
   - [📖 How to Cite](#-how-to-cite)
   - [🙌 Contributing](#-contributing)
     - [Development Guidelines](#development-guidelines)
+      - [🧪 Tests and CI](#-tests-and-ci)
   - [📃 License](#-license)
 
 ## 🚀 Getting Started with DocMind AI
@@ -152,7 +159,7 @@
    ```
 
    **Key Dependencies Included:**
-   - **LlamaIndex Core**: RAG framework with QueryPipeline patterns
+   - **LlamaIndex Core**: Retrieval, RouterQueryEngine, IngestionPipeline, PropertyGraphIndex
    - **LangGraph (0.5.4)**: 5-agent supervisor orchestration with langgraph-supervisor library
    - **Streamlit (1.48.0)**: Web interface framework
    - **Ollama (0.5.1)**: Local LLM integration
@@ -289,7 +296,7 @@ DocMind uses a file-based prompt template system (SPEC‑020) powered by LlamaIn
 
 Add or edit a template by creating a new `*.prompt.md` file; restart the app to pick it up. Example:
 
-```
+```yaml
 ---
 id: comprehensive-analysis
 name: Comprehensive Document Analysis
@@ -312,7 +319,7 @@ Tasks: summarize, extract insights, list actions, raise open questions
 
 You can also use the prompting API programmatically (see developer guide: [Adding a Prompt Template](docs/developers/guides/adding-prompt-template.md)):
 
-```
+```python
 from src.prompting import list_templates, render_prompt
 
 tpl = next(t for t in list_templates() if t.id == "comprehensive-analysis")
@@ -401,7 +408,7 @@ Results include summaries, insights, action items, and open questions, exportabl
 
 ### 💬 Interacting with the LLM
 
-Use the chat interface to ask follow-up questions. The LLM leverages hybrid search (BGE-M3 unified dense + sparse embeddings) with BGE-reranker-v2-m3 ColBERT reranking for context-aware, high-quality responses.
+Use the chat interface to ask follow-up questions. The LLM leverages hybrid search (BGE‑M3 unified dense + sparse embeddings) with multimodal reranking (BGE text + SigLIP visual; ColPali optional) for context‑aware, high‑quality responses.
 
 ## 🔧 API Usage Examples
 
@@ -501,24 +508,24 @@ graph TD
     B --> C[Text + Images + Tables<br/>Multimodal Content]
     C --> D[LlamaIndex Ingestion Pipeline<br/>Document Processing]
     
-    D --> E[SentenceSplitter<br/>1024 tokens / 200 overlap]
+    D --> E[Unstructured Title-Based Chunking<br/>IngestionPipeline]
     D --> F[spaCy NLP Pipeline<br/>Entity Recognition]
     
     E --> G[Multi-Modal Embeddings]
     F --> H[Knowledge Graph Builder<br/>Entity Relations]
     
-    G --> I[BGE-M3 Unified: Dense + Sparse 1024D<br/>Multimodal: CLIP ViT-B/32 512D]
-    I --> J[Qdrant Vector Store<br/>RRF Fusion α=0.7]
+    G --> I[BGE‑M3 Unified (dense+sparse)<br/>Multimodal: SigLIP (default) or CLIP]
+    I --> J[Qdrant Vector Store<br/>Server-side Fusion (RRF default; DBSF optional)]
     
-    H --> K[Knowledge Graph Index<br/>NetworkX Relations]
+    H --> K[Knowledge Graph Index<br/>PropertyGraphIndex (path_depth=1)]
     
-    J --> L[LlamaIndex QueryPipeline<br/>Multi-Stage Processing]
+    J --> L[LlamaIndex Retrieval/Router<br/>Multi-Strategy Composition]
     K --> L
     
     L --> M[LangGraph Supervisor System<br/>5-Agent Coordination]
     M --> N[5 Specialized Agents:<br/>• Query Router<br/>• Query Planner<br/>• Retrieval Expert<br/>• Result Synthesizer<br/>• Response Validator]
     
-    N --> O[ColBERT Reranker<br/>Late Interaction top-5]
+    N --> O[Multimodal Reranking<br/>BGE + SigLIP (ColPali optional)]
     O --> P[Local LLM Backend<br/>Ollama/LM Studio/LlamaCpp]
     P --> Q[Supervisor Coordination<br/>Agent-to-Agent Handoffs]
     Q --> R[Response Synthesis<br/>Quality Validation]
@@ -526,7 +533,7 @@ graph TD
     
     T[SQLite WAL Database<br/>Session Persistence] <--> M
     T <--> L
-    U[DiskCache<br/>Document Processing] <--> D
+    U[Ingestion Cache<br/>Document Processing] <--> D
     V[GPU Acceleration<br/>CUDA + Mixed Precision] <--> I
     V <--> O
     W[Human-in-the-Loop<br/>Agent Interrupts] <--> M
@@ -552,7 +559,7 @@ graph TD
 
 - **Parsing:** Unstructured hi-res strategy extracts text, tables, and images from PDFs/Office docs with OCR support
 
-- **Chunking:** LlamaIndex SentenceSplitter with 1024-token chunks and 200-token overlap for optimal context
+- **Chunking:** Unstructured title‑based chunking via LlamaIndex IngestionPipeline; preserves tables, page images, and rich metadata
 
 - **Metadata:** spaCy en_core_web_sm for entity extraction and relationship mapping
 
@@ -560,9 +567,11 @@ graph TD
 
 - **Unified Text Embeddings:** BGE-M3 (BAAI/bge-m3) provides both dense (1024D) and sparse embeddings in a single model for semantic similarity and neural lexical matching
 
-- **Multimodal:** CLIP ViT-B/32 (512D) embeddings for images and mixed content with FP16 acceleration
+- **Multimodal:** SigLIP (default) visual scoring (CLIP optional) with FP16 acceleration
 
-- **Fusion:** RRF (Reciprocal Rank Fusion) with α=0.7 weighting for optimal dense/sparse balance
+- **Fusion:** Server‑side RRF via Qdrant Query API (DBSF optional via env); no client‑side fusion knobs
+- **De‑duplication:** Configurable key via `DOCMIND_RETRIEVAL__DEDUP_KEY` (page_id|doc_id); default = `page_id`.
+- **Router composition:** See `src/retrieval/router_factory.py` (tools: `semantic_search`, `hybrid_search`, `knowledge_graph`). Selector preference: `PydanticSingleSelector` (preferred) → `LLMSingleSelector` fallback. The `knowledge_graph` tool is activated only when a PropertyGraphIndex is present and healthy; otherwise the router uses vector/hybrid only.
 
 - **Storage:** Qdrant vector database with metadata filtering and concurrent access
 
@@ -573,11 +582,11 @@ graph TD
 - **5 Specialized Agents:**
   - **Query Router:** Analyzes query complexity and determines optimal retrieval strategy
   - **Query Planner:** Decomposes complex queries into manageable sub-tasks for better processing
-  - **Retrieval Expert:** Executes optimized retrieval with DSPy query optimization and optional GraphRAG for relationships
+  - **Retrieval Expert:** Executes optimized retrieval with server‑side hybrid (Qdrant) and optional GraphRAG; supports optional DSPy query optimization when enabled
   - **Result Synthesizer:** Combines and reconciles results from multiple retrieval passes with deduplication
   - **Response Validator:** Validates response quality, accuracy, and completeness before final output
 
-- **Enhanced Capabilities:** DSPy automatic query optimization and optional GraphRAG for multi-hop reasoning
+- **Enhanced Capabilities:** Optional GraphRAG for multi‑hop reasoning and optional DSPy query optimization for query rewriting
 
 - **Workflow Coordination:** Supervisor automatically routes between agents based on query complexity with <300ms coordination overhead
 
@@ -589,7 +598,7 @@ graph TD
 
 - **GPU Acceleration:** CUDA support with FP8 quantization via vLLM FlashInfer backend and torch.compile optimization
 
-- **Async Processing:** QueryPipeline with parallel execution and caching
+- **Async processing:** Concurrent ingestion and retrieval with built‑in caching and bounded timeouts; no client‑side fusion.
 
 - **Reranking:** Always‑on BGE Cross‑Encoder (text) + SigLIP (visual) RRF merge; optional ColPali on capable GPUs.
 
@@ -643,6 +652,33 @@ DOCMIND_CACHE_SIZE_LIMIT=1073741824  # 1GB
 
 See the complete [.env.example](.env.example) file for all available configuration options.
 
+### Enable DSPy Optimization (optional)
+
+To turn on query optimization via DSPy:
+
+- Install DSPy: `pip install dspy-ai`
+- Enable the feature flag in your `.env`:
+
+```bash
+DOCMIND_ENABLE_DSPY_OPTIMIZATION=true
+```
+
+Optional tuning (defaults are sensible):
+
+```bash
+DOCMIND_DSPY_OPTIMIZATION_ITERATIONS=10
+DOCMIND_DSPY_OPTIMIZATION_SAMPLES=20
+DOCMIND_DSPY_MAX_RETRIES=3
+DOCMIND_DSPY_TEMPERATURE=0.1
+DOCMIND_DSPY_METRIC_THRESHOLD=0.8
+DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
+```
+
+Notes:
+
+- DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library‑first (server‑side hybrid via Qdrant + reranking).
+- If DSPy is not installed or the flag is false, the system falls back gracefully to standard retrieval.
+
 ### Additional Configuration
 
 **Streamlit UI Configuration** (`.streamlit/config.toml`):
@@ -672,12 +708,14 @@ maxUploadSize = 200
 |-----------|-------------|--------|
 | **Document Processing (Cold)** | ~15-30 seconds | 50-page PDF with GPU acceleration |
 | **Document Processing (Warm)** | ~2-5 seconds | DiskCache + index caching |
-| **Query Response** | 1-3 seconds | Hybrid retrieval + ColBERT reranking |
+| **Query Response** | 1-3 seconds | Hybrid retrieval + multimodal reranking |
 | **5-Agent System Response** | 3-8 seconds | LangGraph supervisor coordination with <200ms overhead |
 | **128K Context Processing** | 1.5-3 seconds | 128K context with FP8 KV cache |
 | **Vector Search** | <500ms | Qdrant in-memory with GPU embeddings |
 | **Test Suite (2,263 tests)** | Varies by tier | Unit/integration/system testing - 3.51% measured coverage |
 | **Memory Usage (Idle)** | 400-500MB | Base application |
+
+Note: Realized latency is hardware‑dependent. Reranking uses bounded timeouts (text ≈ 250ms, visual ≈ 150ms) and fails open.
 | **Memory Usage (Processing)** | 1.2-2.1GB | During document analysis |
 | **GPU Memory Usage** | ~12-14GB | Model + 128K context + embedding cache |
 
@@ -788,6 +826,17 @@ Run once (online) to predownload required models for offline use:
 uv run python scripts/predownload_models.py --cache-dir ./models_cache
 ```
 
+### Snapshots & Staleness
+
+DocMind snapshots persist indices atomically for reproducible retrieval.
+
+- Manifest fields: `schema_version`, `persist_format_version`, `complete=true`, `created_at`, and `versions` (`app`, `llama_index`, `qdrant_client`, `embed_model`), along with `corpus_hash` and `config_hash`.
+- Hashing: `corpus_hash` computed with POSIX relpaths relative to `uploads/` for OS‑agnostic stability.
+- Chat autoload: the Chat page loads the latest non‑stale snapshot when available; otherwise it shows a staleness badge and offers to rebuild.
+
+### GraphRAG Exports & Seeds
+
+- Graph exports preserve relation labels when provided by `get_rel_map` (fallback label `related`). Exports: JSONL baseline (portable) and Parquet (optional, requires PyArrow). Export seeding follows a retriever‑first policy: graph → vector → deterministic fallback with dedup and stable tie‑break.
 Set env for offline operation:
 
 ```bash

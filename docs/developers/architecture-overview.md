@@ -101,9 +101,9 @@ unstructured = "^0.16.0"         # Document processing
    - Coordinates multi-step reasoning
 
 3. **Retrieval Agent**: Document search with optimization
-   - Executes RAPTOR-Lite hierarchical search
-   - Applies DSPy query optimization
-   - Manages hybrid dense+sparse retrieval
+   - Executes multi‑strategy retrieval (vector + hybrid; optional GraphRAG)
+   - Optional DSPy query optimization for query rewriting (when enabled)
+   - Manages server‑side dense+sparse fusion via Qdrant Query API
 
 4. **Synthesis Agent**: Multi-source combination
    - Combines results from multiple retrieval passes
@@ -142,6 +142,24 @@ unstructured = "^0.16.0"         # Document processing
 - Multi-strategy routing based on query complexity
 - Local optimization for consumer hardware
 - 15%+ improvement on complex queries
+
+Server-side Hybrid Fusion:
+
+- Hybrid dense+sparse fusion is performed server-side via the Qdrant Query API (Prefetch + FusionQuery). Default fusion is RRF; DBSF can be enabled via environment where supported. There are no client-side fusion knobs.
+
+Router Composition (router_factory):
+
+- The RouterQueryEngine is composed via `src/retrieval/router_factory.py` with tools `semantic_search`, `hybrid_search` (Qdrant server-side fusion), and `knowledge_graph` (when a PropertyGraphIndex is present and healthy). The selector prefers `PydanticSingleSelector` and falls back to `LLMSingleSelector`. Graph traversal is bounded by `path_depth=1` by default.
+
+Example (pseudo):
+
+```python
+from src.retrieval.router_factory import build_router_engine
+
+router = build_router_engine(vector_index, graph_index, settings)
+result = router.query("Find relationships between X and Y")
+print(result)
+```
 
 ### Modern Reranking (ADR-006)
 

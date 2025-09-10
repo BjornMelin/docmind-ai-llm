@@ -1,81 +1,42 @@
-# CI/CD Pipeline (Concise)
+# CI/CD Pipeline (Overview)
 
-## Overview
+This page outlines CI/CD practices for DocMind AI.
 
-A simple GitHub Actions workflow runs linting and a stable smoke test suite using uv and pytest. The pipeline targets Python 3.11 by default and also validates on 3.10. Python 3.12 is not supported.
+## Targets
 
-## Supported Python Versions
+- Python 3.10 and 3.11
+- Offline‑deterministic unit/integration tests (no network)
+- Lint and format: ruff (format + check), pylint (focused modules)
 
-- Default: 3.11
-- Also tested: 3.10
-- Not supported: 3.12
+## Suggested Steps
 
-## GitHub Actions Workflow
+1) Lint and format
 
-Reference implementation: `.github/workflows/pr-validation.yml`
+    ```bash
+    ruff format
+    ruff check --fix
+    pylint src/ docs/ -j 0
+    ```
 
-```yaml
-name: CI
+2) Run tests (fast subsets on CI)
 
-on:
-  pull_request:
-  push:
-    branches: [ main ]
+    ```bash
+    uv run python -m pytest tests/unit -q
+    uv run python -m pytest tests/integration -q
+    ```
 
-jobs:
-  unit:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.10"]
+3) Coverage (scoped to changed subsystems)
 
-    steps:
-      - name: Check out
-        uses: actions/checkout@v4
+    ```bash
+    uv run python -m pytest --cov=src --cov-report=term-missing tests/unit -q
+    ```
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+4) Docs validation (optional)
 
-      - name: Install uv (with cache)
-        id: setup-uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
+   - Grep for legacy terms: QueryPipeline (retrieval), alpha, rrf_k, LanceDB, SPLADE++, KGIndex
+   - Ensure router_factory and server‑side fusion terminology present in updated docs
 
-      - name: Install dependencies
-        run: uv sync --group test --group dev
+## Notes
 
-      - name: Ruff format (check only)
-        run: uv run ruff format --check .
-
-      - name: Ruff lint
-        run: uv run ruff check .
-
-      - name: Pylint (src + unit tests)
-        run: uv run pylint -j 0 -sn --rcfile=pyproject.toml src tests/unit
-
-      - name: Run unit tests with coverage
-        run: |
-          uv run pytest tests/unit -m unit --cov=src --cov-report=xml:coverage.xml --cov-report=term -q
-```
-
-Notes
-
-- Use ruff in non-fixing mode in CI to avoid write diffs.
-- Keep CI fast by running a stable smoke suite; expand as reliability improves.
-- For nightly jobs, you may run broader unit/integration tests and collect coverage.
-
-## Local Pre-commit (Recommended)
-
-```bash
-ruff format . && ruff check . --fix
-uv run pytest tests/unit/config/test_settings.py -v
-```
-
-## Rationale
-
-- Aligns with uv-only package management and boundary-first testing.
-- Keeps the pipeline simple and maintainable.
+- Tests should stub heavy integrations (Qdrant, LlamaIndex, Ollama) and enforce offline determinism.
+- Avoid brittle string assertions in UI tests; prefer structural/behavioral assertions.

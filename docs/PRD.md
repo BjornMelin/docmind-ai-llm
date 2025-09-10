@@ -10,7 +10,7 @@
 > - **128K Context Support**: Full 131,072 token context window with FP8 KV cache optimization
 > - **VRAM Optimization**: Validated 12-14GB VRAM usage on RTX 4090 Laptop hardware
 > - **Token Efficiency**: Achieved 50-87% token reduction through parallel tool execution
-> - **GPU Stack**: Complete CUDA 12.8+, PyTorch 2.7.0, vLLM 0.9.x + FlashInfer
+> - **GPU Stack**: Complete CUDA 12.8+, PyTorch 2.7.1, vLLM >=0.10.1 (+ FlashInfer)
 >
 > **Final Architecture Update (2025-08-20):** This PRD now documents the final, validated 5-agent LangGraph supervisor system with complete technical specifications and performance validation results.
 
@@ -54,8 +54,8 @@ The following requirements are derived directly from the architectural decisions
 - **FR-2: Semantic Text Chunking**: Text extracted from documents must be split into semantic chunks (e.g., by sentence) with configurable size and overlap to preserve context for embedding. **(ADR-005)**
 - **FR-3: Hybrid Search Retrieval**: The system must perform hybrid search by combining results from dense (semantic) and sparse (keyword) vector searches to improve retrieval quality. **(ADR-013)**
 - **FR-4: Dense Embeddings**: The system must generate dense embeddings for text chunks using BGE-M3 (1024 dimensions) for semantic search. **(ADR-002)**
-- **FR-5: Sparse Embeddings**: The system must generate sparse embeddings (SPLADE++) for keyword-based retrieval and term expansion. **(ADR-002)**
-- **FR-6: Multimodal Embeddings**: The system must generate distinct embeddings for images (e.g., using CLIP ViT-B/32) to enable multimodal search capabilities. **(ADR-016)**
+- **FR-5: Sparse Embeddings**: The system must generate sparse embeddings using FastEmbed BM42 (preferred) with BM25 + IDF fallback for keyword/lexical retrieval. **(ADR-002, SPEC-004)**
+- **FR-6: Multimodal Embeddings**: The system must generate distinct embeddings for images (SigLIP default; CLIP ViT‑B/32 optional) to enable multimodal search capabilities. **(ADR-016)**
 - **FR-7: High-Relevance Reranking**: The system must include a post-retrieval reranking step to refine the order of retrieved documents and improve the final context quality. **(ADR-014)**
 - **FR-8: Multi-Agent Coordination**: All user queries and interactions must be handled by a LangGraph supervisor system coordinating 5 specialized agents (query router, query planner, retrieval expert, result synthesizer, response validator) for enhanced quality and reliability. **(ADR-011)**
 - **FR-9: Multi-Backend LLM Support**: The system must be capable of using multiple local LLM backends (Ollama, LlamaCPP, vLLM) interchangeably. **(ADR-019)**
@@ -66,12 +66,12 @@ The following requirements are derived directly from the architectural decisions
 ### Non-Functional Requirements (How the System Performs)
 
 - **NFR-1: Performance - High Throughput**: The system must be optimized to achieve 100-160 tokens/second decode and 800-1300 tokens/second prefill (with FP8 optimization) for LLM inference on RTX 4090 Laptop hardware with 128K context capability. **(ADR-004, ADR-010)**
-- **NFR-2: Performance - Reranking Latency**: The reranking model (`BGE-reranker-v2-m3`) must add <50ms latency to the query pipeline. **(ADR-014)**
-- **NFR-3: Performance - Asynchronous Processing**: The system must leverage asynchronous and parallel processing patterns (`QueryPipeline.parallel_run`) for all I/O-bound and compute-intensive tasks to ensure a non-blocking UI and maximum throughput. **(ADR-012)**
+- **NFR-2: Performance - Reranking Latency**: Reranking uses bounded timeouts (text ≈ 250ms, visual ≈ 150ms) with fail‑open behavior. Practical latency varies by hardware. Target end‑to‑end retrieval + rerank P95 < 2s on reference hardware. **(ADR-014)**
+- **NFR-3: Performance - Asynchronous Processing**: The system should leverage asynchronous and parallel processing patterns where appropriate to ensure a responsive UI and throughput, without coupling to specific pipeline abstractions. **(ADR-012)**
 - **NFR-4: Privacy - Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
 - **NFR-5: Resilience - Error Handling**: The system must handle transient failures (network hiccups, file errors) using exponential backoff retry strategies (3 attempts, 2s base delay) for infrastructure operations. **(ADR-022)**
 - **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with vLLM FlashInfer backend. **(ADR-004, ADR-010)**
-- **NFR-7: Memory Efficiency - Multimodal VRAM**: The multimodal embedding model (CLIP ViT-B/32) must be selected for its low VRAM usage (~1.4GB) to ensure efficiency. **(ADR-016)**
+- **NFR-7: Memory Efficiency - Multimodal VRAM**: The multimodal embedding model (SigLIP base, or CLIP ViT‑B/32) should be selected for low VRAM usage (≈1.4GB) to ensure efficiency. **(ADR-016)**
 - **NFR-8: Scalability - Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
 - **NFR-9: Hardware Adaptability**: The system must detect GPU availability (CUDA 12.8+) and select appropriate models: Qwen3-4B-FP8 for RTX 4090, CPU fallback for systems without GPUs. **(ADR-017)**
 
@@ -99,6 +99,10 @@ To ensure a focused and timely initial release, the following features and funct
 
 The system is built on a pure LlamaIndex stack, emphasizing native component integration, performance, and simplicity. The architecture leverages a proven LangGraph supervisor pattern to coordinate 5 specialized agents, providing enhanced query processing quality, better error recovery, and improved reliability through agent specialization while maintaining streamlined performance.
 
+Retrieval is composed via a Router/Query Engine built by `router_factory`, registering tools `semantic_search`, `hybrid_search`, and (when present and healthy) `knowledge_graph`. The selector prefers `PydanticSingleSelector` when available and falls back to `LLMSingleSelector`. The graph retriever/query engine uses a default `path_depth=1` to bound traversal.
+
+Hybrid retrieval uses Qdrant's Query API server‑side fusion with named vectors (`text-dense`, `text-sparse`). Default fusion is RRF; DBSF may be enabled via environment where supported. There are no client‑side fusion knobs.
+
 ```mermaid
 graph TD
     subgraph "User Interface"
@@ -108,21 +112,21 @@ graph TD
     subgraph "Data Ingestion & Processing (Native LlamaIndex Pipeline)"
         B["Upload<br/>Async Processing"] --> C["Parse<br/>UnstructuredReader (hi_res)"]
         C --> D["IngestionPipeline<br/>w/ Native IngestionCache"]
-        D --> E["Chunk: SentenceSplitter<br/>Extract: MetadataExtractor"]
+        D --> E["Chunk: Unstructured Title-Based<br/>Extract: MetadataExtractor"]
     end
 
     subgraph "Data Indexing & Storage"
-        E --> F["Embeddings<br/>Dense: BGE-Large<br/>Sparse: SPLADE++<br/>Multimodal: CLIP ViT-B/32"]
+        E --> F["Embeddings<br/>Dense: BGE‑M3<br/>Sparse: FastEmbed BM42/BM25 + IDF<br/>Multimodal: SigLIP (default) or CLIP"]
         F --> G["Vector Store<br/>Qdrant"]
-        E --> H["Knowledge Graph<br/>KGIndex (spaCy)"]
+        E --> H["Knowledge Graph<br/>PropertyGraphIndex (spaCy; path_depth=1)"]
     end
 
     subgraph "Query & Multi-Agent System"
         I["User Query"] --> J["LangGraph Supervisor<br/>Agent Coordination"]
         J --> K["5 Specialized Agents:<br/>Router → Planner → Retrieval → Synthesizer → Validator"]
-        K --> L["QueryPipeline<br/>Async & Parallel Execution"]
-        L --> M["1. Retrieve<br/>HybridFusionRetriever"]
-        M --> N["2. Rerank<br/>BGE-reranker-v2-m3"]
+        K --> L["Router/Query Engine<br/>Multi-Strategy Composition"]
+        L --> M["1. Retrieve<br/>ServerHybridRetriever (Qdrant)"]
+        M --> N["2. Rerank<br/>BGE Cross-Encoder (text) + SigLIP (visual)"]
         N --> O["3. Synthesize<br/>Response Generation"]
         O --> P["Final Response<br/>w/ Sources & Validation"]
     end
@@ -175,8 +179,8 @@ graph TD
 ### Model Dependencies
 
 - **Default LLM**: Qwen/Qwen3-4B-Instruct-2507-FP8 (128K context, FP8 quantization)
-- **Unified Embeddings**: BAAI/bge-m3 (1024D dense + sparse unified)
-- **Multimodal**: openai/clip-vit-base-patch32 (ViT-B/32)
+- **Unified Embeddings**: BAAI/bge‑m3 (1024D dense + sparse unified)
+- **Multimodal**: SigLIP (default) or CLIP ViT‑B/32
 - **Reranking**: BAAI/bge-reranker-v2-m3
 - **NER Model**: en_core_web_sm (spaCy)
 
@@ -187,7 +191,13 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 - **Environment Variables** (`.env`): Runtime settings, model paths, feature flags
 - **Streamlit Native Config** (`.streamlit/config.toml`): UI theme, upload limits
 - **Library Defaults**: Components use sensible library defaults (LlamaIndex, Qdrant)
-- **Feature Flags**: Boolean environment variables for experimental features (DSPy, GraphRAG)
+- **Feature Flags**: Boolean environment variables for experimental features (GraphRAG, DSPy optimization). GraphRAG is currently default ON; disable via `DOCMIND_ENABLE_GRAPHRAG=false`.
+
+### Snapshots & Staleness
+
+- Snapshot manifest includes `schema_version`, `persist_format_version`, `complete=true`, `created_at`, and `versions` (`app`, `llama_index`, `qdrant_client`, `embed_model`), plus `corpus_hash` and `config_hash`.
+- `corpus_hash` uses POSIX relpaths relative to `uploads/` for OS‑agnostic stability.
+- Chat auto‑loads the latest non‑stale snapshot; when hashes mismatch, a staleness badge is shown with a rebuild action. See SPEC‑014 for details.
 
 ## 8. Success Criteria
 
@@ -247,7 +257,7 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
   - >4.2 average user satisfaction rating
   - <3% user churn rate during beta period
   - 90%+ feature adoption for the core multi-agent coordination system
-- **Key Features**: Full 5-agent supervisor system with DSPy optimization, GPU acceleration, optional GraphRAG
+- **Key Features**: Full 5-agent supervisor system, GPU acceleration, optional GraphRAG, optional DSPy optimization
 
 #### Phase 3: Public Launch (Week 13+)
 
@@ -435,14 +445,13 @@ This section details how the Success Metrics will be tracked. As a privacy-first
 
 ### Retrieval & Search
 
-- **ADR-002-NEW**: Unified embedding strategy with BGE-M3, SPLADE++, and multimodal support.
+- **ADR-002-NEW**: Unified embedding strategy with BGE‑M3 (dense), FastEmbed BM42/BM25 + IDF (sparse), and multimodal support (SigLIP default).
 - **ADR-003-NEW**: Adaptive retrieval pipeline with hybrid search and RRF fusion.
 - **ADR-006-NEW**: Reranking architecture using BGE-reranker-v2-m3 for quality optimization.
 
 ### Document Processing
 
-- **ADR-009-NEW**: Document processing pipeline with Unstructured integration and sentence-based chunking (512 tokens, 50% overlap).
-- **ADR-018-NEW**: DSPy prompt optimization for automatic query rewriting and quality improvement.
+- **ADR-009-NEW**: Document processing pipeline with Unstructured integration and title‑based chunking via LlamaIndex IngestionPipeline (preserves tables and page images).
 - **ADR-019-NEW**: Optional GraphRAG integration for relationship-based queries and multi-hop reasoning.
 
 ### Infrastructure & Performance

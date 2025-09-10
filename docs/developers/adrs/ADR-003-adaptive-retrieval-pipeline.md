@@ -109,58 +109,23 @@ graph TD
 ### Implementation Details
 
 ```python
-# src/retrieval/query_engine.py (skeleton)
-from llama_index.core.query_engine import RouterQueryEngine
-from llama_index.core.selectors import LLMSingleSelector
-from llama_index.core.retrievers import HybridRetriever, MultiQueryRetriever
-from llama_index.core.tools import QueryEngineTool
-from llama_index.core import Settings
+# src/retrieval/router_factory.py (skeleton)
+from llama_index.core.indices import VectorStoreIndex
+from llama_index.core import PropertyGraphIndex
+from src.retrieval.router_factory import build_router_engine
 
-def build_adaptive_query_engine(index, llm, *, enable_graphrag: bool = False):
-    # Base retrievers
-    vector_retriever = index.as_retriever(similarity_top_k=10)
-    hybrid_retriever = HybridRetriever(
-        vector_retriever=index.as_retriever(similarity_top_k=5),
-        keyword_retriever=index.as_retriever(mode="keyword", top_k=5),
-        fusion_mode="reciprocal_rank",
-    )
-    multi_retriever = MultiQueryRetriever.from_defaults(
-        retriever=hybrid_retriever, llm=llm, num_queries=3
-    )
+def build_adaptive_query_engine(
+    vector_index: VectorStoreIndex,
+    graph_index: PropertyGraphIndex | None,
+    settings,
+):
+    """Compose RouterQueryEngine with semantic + hybrid (+ graph) tools.
 
-    tools = [
-        QueryEngineTool.from_defaults(
-            query_engine=vector_retriever.as_query_engine(),
-            name="vector_search",
-            description="Semantic similarity for simple factual queries",
-        ),
-        QueryEngineTool.from_defaults(
-            query_engine=hybrid_retriever.as_query_engine(),
-            name="hybrid_search",
-            description="Dense+sparse for keyword + semantic needs",
-        ),
-        QueryEngineTool.from_defaults(
-            query_engine=multi_retriever.as_query_engine(),
-            name="multi_query",
-            description="Decompose complex questions into subqueries",
-        ),
-    ]
-
-    if enable_graphrag:
-        from src.retrieval.graph_config import build_graph_query_engine
-        tools.append(
-            QueryEngineTool.from_defaults(
-                query_engine=build_graph_query_engine(index),
-                name="graph_search",
-                description="Relationship/multi‑hop retrieval",
-            )
-        )
-
-    return RouterQueryEngine(
-        selector=LLMSingleSelector.from_defaults(llm=llm),
-        query_engine_tools=tools,
-        verbose=True,
-    )
+    - `semantic_search`: vector_index.as_query_engine()
+    - `hybrid_search`: ServerHybridRetriever wrapped via RetrieverQueryEngine
+    - `knowledge_graph`: graph_index.as_retriever(path_depth=1).as_query_engine(include_text=True)
+    """
+    return build_router_engine(vector_index, graph_index, settings)
 ```
 
 ### Configuration

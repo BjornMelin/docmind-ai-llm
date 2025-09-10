@@ -15,9 +15,21 @@ related_adrs: ["ADR-008","ADR-019","ADR-038"]
 
 ## Objective
 
-Add optional GraphRAG using LlamaIndex PropertyGraphIndex. Compose via a RouterQueryEngine toolset (vector + graph) with safe fallbacks. Provide a UI toggle to enable graph build and routing; default remains off.
+Add optional GraphRAG using LlamaIndex PropertyGraphIndex. Compose via a RouterQueryEngine toolset (vector + graph) with safe fallbacks. Provide a UI toggle to enable graph build and routing; current default is ON (disable via `DOCMIND_ENABLE_GRAPHRAG=false`).
 
 Update: Align with library-first, documented APIs only. Use `PropertyGraphIndex.as_retriever/as_query_engine` and export graph relations using `property_graph_store.get_rel_map(...)`. Compose router tools `[vector_query_engine, graph_query_engine(include_text=true, path_depth=1)]` with PydanticSingleSelector (OpenAI) else LLMSingleSelector. Persist via SnapshotManager (SPEC‑014) and show a staleness badge in Chat.
+
+Seed Policy
+
+- Prefer retriever-based seeds:
+  - Graph: `PropertyGraphIndex.as_retriever(similarity_top_k=cap, path_depth=1)`
+  - Else Vector: `VectorStoreIndex.as_retriever(similarity_top_k=cap)`
+  - Else deterministic fallback
+- Cap=32, deduplicate, stable tie-break (id asc). Seeds used in exports and can be surfaced in UI.
+
+Relation Labels in Exports
+
+- When the backend returns typed relations via `get_rel_map`, preserve the label in `relation`; otherwise fallback to `related`.
 
 ## Libraries and Imports
 

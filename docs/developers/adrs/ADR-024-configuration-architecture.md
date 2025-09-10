@@ -163,7 +163,6 @@ class RetrievalConfig(BaseModel):
     reranker_normalize_scores: bool = True
     # server-side fusion controls
     fused_top_k: int = 60
-    rrf_k: int = 60
     fusion_mode: Literal["rrf","dbsf"] = "rrf"  # env-gated; dbsf only if supported
     use_sparse_embeddings: bool = True
 
