@@ -108,3 +108,31 @@ def build_owner_filter(owner_id: str) -> dict[str, Any]:
             }
         ]
     }
+
+
+def validate_export_path(base_dir: Path, dest_rel: str) -> Path:
+    r"""Validate and sanitize an export destination path (non-egress, no symlink).
+
+    - Allows only [A-Za-z0-9._\-/] characters in `dest_rel`.
+    - Resolves against `base_dir` and ensures the result stays within it.
+    - Blocks existing symlink targets.
+    - Creates parent directories.
+    """
+    safe = "".join(c for c in dest_rel if c.isalnum() or c in ("-", "_", ".", "/"))
+    dest = (base_dir / safe).resolve()
+    base = base_dir.resolve()
+    if not str(dest).startswith(str(base)):
+        raise ValueError("Non-egress export path blocked")
+    if dest.exists() and dest.is_symlink():
+        raise ValueError("Symlink export target blocked")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    return dest
+
+
+__all__ = [
+    "build_owner_filter",
+    "decrypt_file",
+    "encrypt_file",
+    "redact_pii",
+    "validate_export_path",
+]

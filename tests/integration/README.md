@@ -19,8 +19,9 @@
    - Use provided fixtures: `mock_llm_for_routing`, `mock_vector_index`, `mock_hybrid_retriever`, `mock_property_graph`, `mock_memory_monitor`, etc.
 
 2) **Use public APIs**
-   - Prefer high‑level entry points (e.g., create_adaptive_router_engine, AdaptiveRouterQueryEngine.query/aquery, BGECrossEncoderRerank.postprocess_nodes).
-   - Avoid private/underscored internals in production code.
+
+   - Prefer high‑level entry points (e.g., build_router_engine via router_factory, RouterQueryEngine.query/aquery, BGECrossEncoderRerank.postprocess_nodes).
+     - Avoid private/underscored internals in production code.
 
 3) **Routing with LLMSingleSelector**
    - The selector reads `Settings.llm` (MockLLM). For deterministic routing, set the response text on the test LLM via `mock_llm_for_routing.response_text = "semantic_search"` (or `"hybrid_search"`, etc.).
@@ -46,7 +47,7 @@
 ```python
 def test_selects_hybrid(mock_vector_index, mock_hybrid_retriever, mock_llm_for_routing):
     mock_llm_for_routing.response_text = "hybrid_search"
-    engine = create_adaptive_router_engine(
+    engine = build_router_engine(
         vector_index=mock_vector_index,
         hybrid_retriever=mock_hybrid_retriever,
         llm=mock_llm_for_routing,

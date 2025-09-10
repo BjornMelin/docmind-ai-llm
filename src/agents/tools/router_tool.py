@@ -10,6 +10,7 @@ from langgraph.prebuilt import InjectedState
 
 # Import patch points from package aggregator so tests can monkeypatch
 from src.agents import tools as tools_mod
+from src.utils.telemetry import log_jsonl
 
 
 @tool
@@ -90,6 +91,13 @@ def router_tool(
                 "router_tool completed: strategy=%s, timing_ms=%.2f",
                 selected_strategy,
                 out["timing_ms"],
+            )
+            log_jsonl(
+                {
+                    "router_selected": True,
+                    "route": selected_strategy or "unknown",
+                    "timing_ms": out["timing_ms"],
+                }
             )
 
         return json.dumps(out)

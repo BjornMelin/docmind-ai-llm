@@ -18,6 +18,15 @@ from src.config.settings import settings
 from src.ui.components.provider_badge import provider_badge
 
 
+def _is_localhost(url: str) -> bool:
+    return (
+        url.startswith("http://localhost")
+        or url.startswith("https://localhost")
+        or url.startswith("http://127.0.0.1")
+        or url.startswith("https://127.0.0.1")
+    )
+
+
 def _persist_env(vars_to_set: dict[str, str]) -> None:
     """Persist key=value pairs into the project's .env file.
 
@@ -125,6 +134,21 @@ def main() -> None:
         value=bool(settings.allow_remote_endpoints),
         help="When off, only localhost URLs are accepted",
     )
+
+    # Basic validation rules
+    if lmstudio_url and not lmstudio_url.rstrip("/").endswith("/v1"):
+        st.error("LM Studio URL must end with /v1")
+    if not allow_remote:
+        for name, url in (
+            ("Ollama", ollama_url),
+            ("vLLM", vllm_url),
+            ("LM Studio", lmstudio_url),
+            ("llama.cpp", llamacpp_url or ""),
+        ):
+            if url and not _is_localhost(url):
+                st.error(
+                    f"{name} URL must be localhost when remote endpoints are disabled"
+                )
 
     # Actions
     col_a, col_b = st.columns(2)
