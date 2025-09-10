@@ -24,7 +24,7 @@ Key features:
 import asyncio
 import gc
 from collections.abc import AsyncGenerator, Callable, Generator
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from typing import Any
 
 import torch
@@ -341,12 +341,16 @@ def create_vector_store(
             )
 
     try:
-        return QdrantVectorStore(
+        store = QdrantVectorStore(
             client=client,
             collection_name=collection_name,
             enable_hybrid=enable_hybrid,
             batch_size=settings.monitoring.default_batch_size,
         )
+        # Ensure sparse IDF modifier on existing collections where supported
+        with suppress(Exception):
+            ensure_sparse_idf_modifier(client, collection_name)
+        return store
     except ImportError as e:  # fastembed optional for hybrid sparse
         logger.warning(
             "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",

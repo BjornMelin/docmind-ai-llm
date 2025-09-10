@@ -18,15 +18,11 @@ from .graph_config import (
     extract_relationships,
     traverse_graph,
 )
+from .hybrid import ServerHybridRetriever
 
-# DSPy query optimization removed in favor of server-side hybrid + reranking
-# Adaptive router query engine
-from .query_engine import (
-    AdaptiveRouterQueryEngine,
-    configure_router_settings,
-    create_adaptive_router_engine,
-)
-
+# Note: DSPy query optimization is handled in the agents layer
+# (see src/dspy_integration.py). The retrieval package stays
+# library-first (server-side hybrid + reranking) without direct DSPy deps.
 # Modality-aware reranking
 from .reranking import (
     MultimodalReranker,
@@ -40,14 +36,12 @@ from .router_factory import build_router_engine
 # Unified Qdrant vector store
 
 __all__ = [
-    "AdaptiveRouterQueryEngine",
     "MultimodalReranker",
     "PropertyGraphConfig",
+    "ServerHybridRetriever",
     "build_router_engine",
     "build_text_reranker",
     "build_visual_reranker",
-    "configure_router_settings",
-    "create_adaptive_router_engine",
     "create_graph_rag_components",
     "create_property_graph_index",
     "create_property_graph_index_async",

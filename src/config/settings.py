@@ -202,6 +202,19 @@ class GraphRAGConfig(BaseModel):
     max_hops: int = Field(default=2, ge=1, le=5)
     max_triplets: int = Field(default=1000, ge=100, le=10000)
     chunk_size: int = Field(default=1024, ge=128, le=8192)
+    autoload_policy: Literal["latest_non_stale", "pinned", "ignore"] = Field(
+        default="latest_non_stale",
+        description="Chat autoload snapshot policy",
+    )
+    default_path_depth: int = Field(
+        default=1, ge=1, le=5, description="Default graph retrieval path depth"
+    )
+    export_seed_cap: int = Field(
+        default=32, ge=1, le=1000, description="Default seed cap for exports"
+    )
+    pinned_snapshot_id: str | None = Field(
+        default=None, description="Pinned snapshot directory name for autoload"
+    )
 
 
 class UIConfig(BaseModel):

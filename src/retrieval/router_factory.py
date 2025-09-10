@@ -1,12 +1,11 @@
-"""Router factory for GraphRAG composition (SPEC-006, ADR-038).
+"""Router factory for composing RouterQueryEngine (library-first).
 
-Builds a RouterQueryEngine with vector and graph tools when a healthy
-PropertyGraphIndex is provided; otherwise, returns a vector-only router.
-
-Selector choice:
-- Prefer PydanticSingleSelector when OpenAI LLM is available (function calling
-  offers better routing for tool selection).
-- Fallback to LLMSingleSelector otherwise.
+Builds a RouterQueryEngine with vector semantic search and optional
+``knowledge_graph`` tool (GraphRAG). The graph tool is wrapped via
+RetrieverQueryEngine with a retriever enforcing default path depth.
+Selector policy uses PydanticSingleSelector when available, otherwise
+falls back to LLMSingleSelector. Fail-open to vector-only when graph
+is missing or unhealthy.
 """
 
 from __future__ import annotations
@@ -14,91 +13,126 @@ from __future__ import annotations
 from typing import Any
 
 from llama_index.core import Settings
-from llama_index.core.query_engine import RouterQueryEngine
+from llama_index.core.query_engine import RetrieverQueryEngine, RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
-
-def _has_openai_llm() -> bool:
-    """Heuristic check whether Settings.llm is an OpenAI-backed model."""
-    llm = getattr(Settings, "llm", None)
-    if llm is None:
-        return False
-    cls = type(llm).__name__.lower()
-    return "openai" in cls or "gpt" in getattr(llm, "model", "").lower()
-
-
-def _choose_selector() -> Any:
-    """Choose selector with preference for PydanticSingleSelector when available."""
-    if _has_openai_llm():
-        try:
-            # Available in LlamaIndex when OpenAI installed
-            from llama_index.core.selectors import PydanticSingleSelector
-
-            return PydanticSingleSelector.from_defaults()
-        except Exception as exc:  # pragma: no cover - optional
-            logger.debug("PydanticSingleSelector unavailable, falling back: %s", exc)
-    return LLMSingleSelector.from_defaults()
-
-
-def _graph_healthy(pg_index: Any) -> bool:
-    store = getattr(pg_index, "property_graph_store", None)
-    if store is None:
-        return False
-    try:
-        # Ensure basic access works; avoid expensive calls
-        _ = next(iter(store.get_nodes()))  # type: ignore[attr-defined]
-        return True
-    except Exception:  # pragma: no cover - best-effort
-        return False
+from src.config.settings import settings as default_settings
+from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 
 
 def build_router_engine(
-    vector_index: Any, pg_index: Any | None, settings: Any
+    vector_index: Any,
+    pg_index: Any | None = None,
+    settings: Any | None = None,
+    llm: Any | None = None,
 ) -> RouterQueryEngine:
-    """Build a RouterQueryEngine composed of vector and graph tools.
+    """Create a router engine with vector and optional KG tools.
 
     Args:
-        vector_index: LlamaIndex VectorStoreIndex or compatible with as_query_engine.
-        pg_index: LlamaIndex PropertyGraphIndex or None.
-        settings: App settings (unused except for future flags; kept for parity).
+        vector_index: Vector index (semantic search) instance.
+        pg_index: Optional PropertyGraphIndex for the knowledge_graph tool.
+        settings: Optional settings object; defaults to module settings.
+        llm: Optional LLM override for the router.
 
     Returns:
-        RouterQueryEngine: Configured router.
+        RouterQueryEngine: Configured router engine.
     """
-    del settings
-    tools: list[QueryEngineTool] = []
+    cfg = settings or default_settings
+    the_llm = llm or Settings.llm
 
-    vector_qe = vector_index.as_query_engine()
-    tools.append(
-        QueryEngineTool(
-            query_engine=vector_qe,
-            metadata=ToolMetadata(
-                name="vector",
-                description="Vector search over ingested documents",
+    # Vector semantic tool
+    try:
+        v_engine = vector_index.as_query_engine(similarity_top_k=cfg.retrieval.top_k)
+    except (TypeError, AttributeError, ValueError):
+        # Last-resort default
+        v_engine = vector_index.as_query_engine()
+
+    vector_tool = QueryEngineTool(
+        query_engine=v_engine,
+        metadata=ToolMetadata(
+            name="semantic_search",
+            description=(
+                "Semantic vector search over the document corpus. Best for general "
+                "questions and content lookup."
             ),
-        )
+        ),
     )
+    tools = [vector_tool]
 
-    if pg_index is not None and _graph_healthy(pg_index):
-        graph_qe = pg_index.as_query_engine(include_text=True)
+    # Hybrid search tool via Qdrant Query API
+    try:
+        params = _HybridParams(
+            collection=cfg.database.qdrant_collection,
+            fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
+            prefetch_sparse=400,
+            prefetch_dense=200,
+            fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
+            dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
+        )
+        retr = ServerHybridRetriever(params)
+        h_engine = RetrieverQueryEngine.from_args(
+            retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+        )
         tools.append(
             QueryEngineTool(
-                query_engine=graph_qe,
+                query_engine=h_engine,
                 metadata=ToolMetadata(
-                    name="graph",
+                    name="hybrid_search",
                     description=(
-                        "PropertyGraphIndex query engine for entity relations (depth=1)"
+                        "Hybrid search via Qdrant Query API (dense+sparse fusion)"
                     ),
                 ),
             )
         )
-    else:
-        logger.info("Graph index missing or unhealthy; using vector-only router")
+    except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
+        logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    selector = _choose_selector()
-    router = RouterQueryEngine(selector=selector, query_engine_tools=tools)
+    # Optional graph tool with bounded health check
+    try:
+        if (
+            pg_index is not None
+            and getattr(pg_index, "property_graph_store", None) is not None
+        ):
+            default_depth = (
+                int(getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1))
+                if cfg is not None
+                else 1
+            )
+            retr = pg_index.as_retriever(include_text=True, path_depth=default_depth)
+            g_engine = RetrieverQueryEngine.from_args(
+                retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+            )
+            tools.append(
+                QueryEngineTool(
+                    query_engine=g_engine,
+                    metadata=ToolMetadata(
+                        name="knowledge_graph",
+                        description=(
+                            "Knowledge graph traversal for relationship-centric queries"
+                        ),
+                    ),
+                )
+            )
+    except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
+        logger.debug(f"Graph tool construction skipped: {e}")
+
+    # Selector: prefer PydanticSingleSelector when available
+    try:
+        from llama_index.core.selectors import PydanticSingleSelector
+
+        selector = PydanticSingleSelector.from_defaults(llm=the_llm)
+    except (ImportError, AttributeError):
+        selector = LLMSingleSelector.from_defaults(llm=the_llm)
+
+    router = RouterQueryEngine(
+        selector=selector, query_engine_tools=tools, verbose=False
+    )
+    logger.info(
+        "Router engine built (kg_present=%s)",
+        any(t.metadata.name == "knowledge_graph" for t in tools),
+    )
     return router
 
 
