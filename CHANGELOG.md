@@ -64,7 +64,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Coordinator: best‑effort analytics logging added after processing each query.
  - Router toolset unified: `router_factory.build_router_engine(...)` composes `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; selector policy prefers `PydanticSingleSelector` then falls back to `LLMSingleSelector`.
  - GraphRAG helpers (`graph_config.py`) now emit label‑preserving exports and provide `get_export_seed_ids()` for deterministic seeding.
- - Snapshot manifest enriched and corpus hashing normalized to relpaths; Chat autoload/staleness detection wired to these fields.
+- Snapshot manifest enriched and corpus hashing normalized to relpaths; Chat autoload/staleness detection wired to these fields.
+ - Docs: aligned developer and API docs to new router/hybrid/GraphRAG/snapshots; added `docs/api/api.md` and `docs/developers/ci-cd-pipeline.md`.
 
 ### Removed
 
