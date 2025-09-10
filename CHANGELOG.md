@@ -27,6 +27,17 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
  - Router factory for GraphRAG: `src/retrieval/router_factory.py` builds a `RouterQueryEngine` with vector+graph tools and safe fallback to vector-only.
  - Export helpers: JSONL baseline (subject, relation, object, depth, path_id, source_ids) and Parquet (optional, guarded when `pyarrow` missing).
  - UI: Documents page toggle "Build GraphRAG (beta)", snapshot creation notice, and export buttons; Chat staleness badge when manifest hashes mismatch.
+ 
+ - Server-side hybrid retriever module: `src/retrieval/hybrid.py` exposing `ServerHybridRetriever` and `_HybridParams` (Qdrant Query API Prefetch + FusionQuery; RRF default, DBSF optional). Deterministic de‑duplication and dense‑only fallback when sparse unavailable.
+ - Router composition unification via `src/retrieval/router_factory.py`:
+   - Tools: `semantic_search` (vector.as_query_engine), `hybrid_search` (RetrieverQueryEngine wrapping `ServerHybridRetriever`), `knowledge_graph` (PropertyGraphIndex retriever/query engine with `path_depth=1`).
+   - Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`; fail‑open to vector‑only when graph is absent/unhealthy.
+ - GraphRAG exports now preserve relation labels when provided by `get_rel_map`; fallback label is `related`. JSONL baseline retained; Parquet optional (guarded when PyArrow missing).
+ - Retriever‑first seed policy helper `get_export_seed_ids()` in `src/retrieval/graph_config.py` used by `src/ui/ingest_adapter.py` for deterministic export seeding (graph → vector → stable fallback; dedup + stable tie‑break).
+ - Snapshot manifest enrichment in `src/persistence/snapshot.py`:
+   - Added `schema_version`, `persist_format_version`, `complete`, and enriched `versions` (`app`, `llama_index`, `qdrant_client`, `embed_model`).
+   - Normalized `compute_corpus_hash(paths, base_dir=uploads/)` to use POSIX relpaths for cross‑platform stability.
+ - Chat autoload/staleness UX: Chat/Documents pages compute corpus hash with relpaths and surface staleness badge based on manifest.
   
 ### Tests
 - Added unit tests for analytics manager insert/prune.
@@ -36,18 +47,30 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Added unit tests: GraphRAG factory (`tests/unit/retrieval/test_graph_rag_factory.py`), graph helpers (`tests/unit/retrieval/test_graph_config_utils.py`), and portable exports (`tests/integration/test_graphrag_exports.py`).
  - Added unit tests for SnapshotManager (`tests/unit/persistence/test_snapshot_manager.py`) and router factory (`tests/unit/retrieval/test_router_factory.py`).
  - Added integration tests for router composition (`tests/integration/test_ingest_router_flow.py`) and exports (`tests/integration/test_graphrag_exports.py`).
- - Added E2E smoke test for Chat via router override (`tests/e2e/test_chat_graphrag_smoke.py`).
+- Added E2E smoke test for Chat via router override (`tests/e2e/test_chat_graphrag_smoke.py`).
 - Updated Chat router override test to allow additional forwarded components when present.
+ 
+ - New hybrid/router/graph tests:
+   - `tests/unit/retrieval/test_hybrid_retriever_basic.py` (dedup determinism; sparse‑unavailable dense fallback)
+   - `tests/unit/retrieval/test_router_factory_hybrid.py` (vector + hybrid + knowledge_graph tools)
+   - `tests/unit/retrieval/test_seed_policy.py` (retriever‑first seed policy and fallbacks)
+   - `tests/unit/retrieval/test_graph_helpers.py` (label preservation + `related` fallback)
+   - `tests/unit/persistence/test_corpus_hash_relpaths.py` (relpath hashing determinism)
+   - Updated/removed legacy integration tests; examples now use `router_factory`
 
 ### Changed
 
 - UI refactor: `src/app.py` now only defines pages and runs navigation; all monolithic UI logic moved to `src/pages/*`.
 - Coordinator: best‑effort analytics logging added after processing each query.
+ - Router toolset unified: `router_factory.build_router_engine(...)` composes `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; selector policy prefers `PydanticSingleSelector` then falls back to `LLMSingleSelector`.
+ - GraphRAG helpers (`graph_config.py`) now emit label‑preserving exports and provide `get_export_seed_ids()` for deterministic seeding.
+ - Snapshot manifest enriched and corpus hashing normalized to relpaths; Chat autoload/staleness detection wired to these fields.
 
 ### Removed
 
 - Deleted legacy model predownload script: `scripts/model_prep/predownload_models.py`.
 - Removed monolithic UI blocks from `src/app.py` (chat/ingestion/analytics).
+ - Removed legacy/custom router code and tests; all retrieval routes via `router_factory`. No backwards compatibility retained.
 
 ## [1.3.0] - 2025-09-08
 

@@ -208,10 +208,15 @@ py-version = "3.11"
 jobs = 0
 limit-inference-results = 100
 extension-pkg-allow-list = ["llama_index", "torch"]
+load-plugins = ["pylint_pytest"]
 source-roots = ["."]
 disable = [
   # Pydantic model attributes are resolved at runtime; avoid false positives
   "no-member",
+]
+ignore-patterns = [
+  # Ignore helper/CLI scripts from pylint; tests remain linted
+  "scripts/.*",
 ]
 
 # Keep pylint messages strict; use targeted per-file disables in tests when needed.
@@ -295,6 +300,7 @@ asyncio_default_fixture_loop_scope = "function"
 [dependency-groups]
 dev = [
     "ruff==0.12.8",
+    "pylint-pytest>=1.1.7",
     "pytest>=8.3.1",
     "pytest-cov>=6.2.1",
     "pytest-asyncio>=1.1.0",

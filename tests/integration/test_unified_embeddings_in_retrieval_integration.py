@@ -13,14 +13,17 @@ def test_unified_embedder_integration_dense_and_sparse_text():
 
     # Patch text backend to avoid external downloads
     class _Stub:
-        def encode(self, texts, **kwargs):
+        """Minimal stub for text embedding backend used in tests."""
+
+        def encode(self, texts, **_):
+            """Return fixed dense+lexical outputs sized to inputs."""
             n = len(texts)
             return {
                 "dense_vecs": np.ones((n, 1024), dtype=np.float32),
                 "lexical_weights": [{0: 1.0} for _ in range(n)],
             }
 
-    u.text._backend = _Stub()  # type: ignore[attr-defined]
+    u.text._backend = _Stub()  # type: ignore[attr-defined]  # pylint: disable=protected-access
     out = u.text.encode_text(["x", "y"], return_dense=True, return_sparse=True)
     assert out["dense"].shape == (2, 1024)
     assert len(out["sparse"]) == 2

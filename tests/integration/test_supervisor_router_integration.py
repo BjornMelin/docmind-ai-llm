@@ -60,7 +60,7 @@ def test_supervisor_injected_state_router_engine_visible(supervisor_stream_shim)
                 optimization_metrics={},
             )
 
-        def _workflow_passthrough(initial_state, thread_id):
+        def _workflow_passthrough(initial_state, _thread_id):
             # Return a dict final state that preserves tools_data
             return {"messages": [], "tools_data": dict(initial_state.tools_data)}
 
@@ -77,6 +77,7 @@ def test_supervisor_injected_state_router_engine_visible(supervisor_stream_shim)
             # Supply a stub router_engine via settings_override
             class _StubRouter:
                 def query(self, q):  # pragma: no cover - not executed by shim
+                    """Return query unchanged to validate wiring path."""
                     return q
 
             overrides = {"router_engine": _StubRouter()}
