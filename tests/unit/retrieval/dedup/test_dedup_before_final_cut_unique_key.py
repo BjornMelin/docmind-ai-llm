@@ -11,6 +11,17 @@ from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 
 
 def _mk_point(pid: str, did: str, score: float, payload: dict | None = None):
+    """Create a mock point object for testing purposes.
+
+    Args:
+        pid: Page ID string identifier.
+        did: Document ID string identifier.
+        score: Relevance score for the point.
+        payload: Optional additional payload data to merge with base payload.
+
+    Returns:
+        SimpleNamespace object with id, score, and payload attributes.
+    """
     p = SimpleNamespace()
     p.id = pid
     p.score = score
@@ -21,6 +32,15 @@ def _mk_point(pid: str, did: str, score: float, payload: dict | None = None):
 
 
 def test_dedup_unique_by_doc_id(monkeypatch):
+    """Test that deduplication works correctly using custom dedup_key.
+
+    This test verifies that when dedup_key is set to "doc_id", points with
+    duplicate document IDs are deduplicated, keeping only the highest scoring
+    point for each unique document ID.
+
+    Args:
+        monkeypatch: pytest fixture for mocking object attributes.
+    """
     params = _HybridParams(
         collection="c", fused_top_k=10, fusion_mode="rrf", dedup_key="doc_id"
     )

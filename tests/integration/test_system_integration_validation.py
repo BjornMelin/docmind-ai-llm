@@ -157,8 +157,10 @@ class TestSystemIntegrationValidation:
         # Build in-memory index for retrieval tests
         from llama_index.core import (
             Document as LIDocument,
+        )
+        from llama_index.core import (
             VectorStoreIndex,
-        )  # noqa: I001
+        )
 
         lidocs = [LIDocument(text=c.text, metadata=c.metadata) for c in all_chunks]
         index = VectorStoreIndex.from_documents(lidocs)
@@ -402,8 +404,10 @@ class TestSystemIntegrationValidation:
         # Stage 3: Retrieval (timed) using in-memory index
         from llama_index.core import (
             Document as LIDocument,
+        )
+        from llama_index.core import (
             VectorStoreIndex,
-        )  # noqa: I001
+        )
 
         idx = VectorStoreIndex.from_documents(
             [
@@ -532,8 +536,10 @@ class TestSystemValidationReporting:
         # Build a small index to simulate storage/retrieval
         from llama_index.core import (
             Document as LIDocument,
+        )
+        from llama_index.core import (
             VectorStoreIndex,
-        )  # noqa: I001
+        )
 
         _index = VectorStoreIndex.from_documents(
             [

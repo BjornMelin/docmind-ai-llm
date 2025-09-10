@@ -152,7 +152,6 @@ def setup_comprehensive_dependencies(monkeypatch):
 @pytest.mark.asyncio
 async def test_complete_application_workflow():
     """End-to-end application workflow covering major components."""
-
     # Prepare isolated 'src' hierarchy to avoid importing heavy modules
     _src_pkg = types_.ModuleType("src")
     _agents_pkg = types_.ModuleType("src.agents")

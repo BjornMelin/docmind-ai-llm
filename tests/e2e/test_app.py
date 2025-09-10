@@ -412,7 +412,6 @@ def test_app_hardware_detection(_mock_pull, app_test):
 @patch("ollama.pull", return_value={"status": "success"})
 def test_app_renders_and_shows_chat(_mock_pull, app_test):
     """Verify app renders and the chat section is present."""
-
     app = app_test.run()
     assert not app.exception, f"App failed with exception: {app.exception}"
     app_str = str(app)
@@ -449,7 +448,6 @@ def test_app_document_upload_workflow(mock_load_docs, _mock_pull, app_test, tmp_
 
 def test_app_multi_agent_chat_functionality(app_test):
     """Ensure multi-agent chat flow returns a response string."""
-
     with (
         patch("ollama.pull", return_value={"status": "success"}),
         patch(
@@ -672,7 +670,6 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
 @pytest.mark.asyncio
 async def test_async_workflow_validation(app_test):
     """Validate async flow for processing and coordination paths."""
-
     with (
         patch("ollama.pull", return_value={"status": "success"}),
         patch(
@@ -709,7 +706,6 @@ async def test_async_workflow_validation(app_test):
 
 def test_unified_configuration_architecture_integration(app_test):
     """Check app uses centralized settings with expected UI markers."""
-
     with (
         patch("ollama.pull", return_value={"status": "success"}),
         patch(
@@ -741,7 +737,6 @@ def test_unified_configuration_architecture_integration(app_test):
 
 def test_streamlit_app_markers_and_structure(app_test):
     """Confirm core Streamlit UI components are present in the app."""
-
     app = app_test.run()
 
     # Verify app structure and key components
