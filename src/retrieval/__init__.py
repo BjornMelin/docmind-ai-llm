@@ -8,11 +8,12 @@ server-side hybrid retrieval (Qdrant Query API) and modality-aware reranking
 # Property graph configuration
 from .graph_config import (
     PropertyGraphConfig,
-    calculate_entity_confidence,
+    create_graph_rag_components,
     create_property_graph_index,
     create_property_graph_index_async,
     create_tech_schema,
-    extend_property_graph_index,
+    export_graph_jsonl,
+    export_graph_parquet,
     extract_entities,
     extract_relationships,
     traverse_graph,
@@ -32,6 +33,7 @@ from .reranking import (
     build_text_reranker,
     build_visual_reranker,
 )
+from .router_factory import build_router_engine
 
 # Unified Qdrant vector store
 
@@ -39,15 +41,17 @@ __all__ = [
     "AdaptiveRouterQueryEngine",
     "MultimodalReranker",
     "PropertyGraphConfig",
+    "build_router_engine",
     "build_text_reranker",
     "build_visual_reranker",
-    "calculate_entity_confidence",
     "configure_router_settings",
     "create_adaptive_router_engine",
+    "create_graph_rag_components",
     "create_property_graph_index",
     "create_property_graph_index_async",
     "create_tech_schema",
-    "extend_property_graph_index",
+    "export_graph_jsonl",
+    "export_graph_parquet",
     "extract_entities",
     "extract_relationships",
     "traverse_graph",

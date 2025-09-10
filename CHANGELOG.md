@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+
+- SPEC‑008: Programmatic Streamlit UI with `st.Page` + `st.navigation`.
+  - New pages: `src/pages/01_chat.py`, `src/pages/02_documents.py`, `src/pages/03_analytics.py`.
+  - New adapter: `src/ui/ingest_adapter.py` for form-based ingestion.
+- ADR‑032: Local analytics manager (`src/core/analytics.py`) with DuckDB and best‑effort background writes; coordinator logs query metrics.
+- SPEC‑013 (ADR‑040): Model pre‑download CLI `tools/models/pull.py` using `huggingface_hub`.
+- SPEC‑010 (ADR‑039): Offline evaluation CLIs:
+  - `tools/eval/run_beir.py` (NDCG@10, Recall@10, MRR@10)
+  - `tools/eval/run_ragas.py` (faithfulness, answer_relevancy, context_recall, context_precision)
+  - `data/eval/README.md` with usage instructions.
+  
+- Post‑ingest Qdrant indexing (hybrid) wired into ingestion adapter; Documents page builds a router engine for Chat.
+- SPEC‑006: GraphRAG exports (Parquet + JSONL) triggered by Documents page checkbox.
+- GraphRAG (Phase 1): Library‑first refactor of `src/retrieval/graph_config.py` to use only documented LlamaIndex APIs (`as_retriever`, `as_query_engine`, `get`, `get_rel_map`); removed legacy/dead code and index mutation; added portable JSONL/Parquet exports via `get_rel_map`.
+- GraphRAG (Phase 2): Added `create_graph_rag_components()` factory to return (`graph_store`, `query_engine`, `retriever`) from a `PropertyGraphIndex`.
+- UI wiring: Documents page stores `vector_index`, `hybrid_retriever`, and optional `graphrag_index` in `st.session_state`; Chat page forwards these in `settings_override` (`vector`, `retriever`, `kg`) for coordinator/tools.
+ - GraphRAG (Phase 2): SnapshotManager for atomic snapshots with `manifest.json` (corpus/config hashes, versions, lock) under `src/persistence/snapshot.py`.
+ - Router factory for GraphRAG: `src/retrieval/router_factory.py` builds a `RouterQueryEngine` with vector+graph tools and safe fallback to vector-only.
+ - Export helpers: JSONL baseline (subject, relation, object, depth, path_id, source_ids) and Parquet (optional, guarded when `pyarrow` missing).
+ - UI: Documents page toggle "Build GraphRAG (beta)", snapshot creation notice, and export buttons; Chat staleness badge when manifest hashes mismatch.
+  
+### Tests
+- Added unit tests for analytics manager insert/prune.
+- Added CLI smoke tests for model pull and RAGAS/BEIR harnesses.
+- Added page import smoke tests for new Streamlit pages.
+- Added unit test for Chat router override mapping.
+- Added unit tests: GraphRAG factory (`tests/unit/retrieval/test_graph_rag_factory.py`), graph helpers (`tests/unit/retrieval/test_graph_config_utils.py`), and portable exports (`tests/integration/test_graphrag_exports.py`).
+ - Added unit tests for SnapshotManager (`tests/unit/persistence/test_snapshot_manager.py`) and router factory (`tests/unit/retrieval/test_router_factory.py`).
+ - Added integration tests for router composition (`tests/integration/test_ingest_router_flow.py`) and exports (`tests/integration/test_graphrag_exports.py`).
+ - Added E2E smoke test for Chat via router override (`tests/e2e/test_chat_graphrag_smoke.py`).
+- Updated Chat router override test to allow additional forwarded components when present.
+
+### Changed
+
+- UI refactor: `src/app.py` now only defines pages and runs navigation; all monolithic UI logic moved to `src/pages/*`.
+- Coordinator: best‑effort analytics logging added after processing each query.
+
+### Removed
+
+- Deleted legacy model predownload script: `scripts/model_prep/predownload_models.py`.
+- Removed monolithic UI blocks from `src/app.py` (chat/ingestion/analytics).
+
 ## [1.3.0] - 2025-09-08
 
 ### Breaking
