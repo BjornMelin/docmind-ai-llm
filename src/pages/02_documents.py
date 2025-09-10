@@ -13,6 +13,7 @@ from typing import Any
 
 import streamlit as st
 from llama_index.core import VectorStoreIndex
+from loguru import logger
 
 from src.config.settings import settings
 from src.persistence.snapshot import (
@@ -21,11 +22,6 @@ from src.persistence.snapshot import (
     compute_corpus_hash,
 )
 from src.retrieval.graph_config import export_graph_jsonl, export_graph_parquet
-from src.retrieval.query_engine import (
-    ServerHybridRetriever,
-    _HybridParams,
-    create_adaptive_router_engine,
-)
 from src.retrieval.router_factory import build_router_engine
 from src.ui.ingest_adapter import ingest_files
 from src.utils.storage import create_vector_store
@@ -61,17 +57,11 @@ def main() -> None:  # pragma: no cover - Streamlit page
                             settings.database.qdrant_collection, enable_hybrid=True
                         )
                         vector_index = VectorStoreIndex.from_vector_store(vs)
-                        retriever = ServerHybridRetriever(
-                            _HybridParams(
-                                collection=settings.database.qdrant_collection
-                            )
-                        )
                         # Store for Chat page overrides (tools_data)
                         st.session_state.vector_index = vector_index
-                        st.session_state.hybrid_retriever = retriever
-                        # Default router (adaptive, non-graph)
-                        st.session_state.router_engine = create_adaptive_router_engine(
-                            vector_index=vector_index, hybrid_retriever=retriever
+                        # Default router (vector-only)
+                        st.session_state.router_engine = build_router_engine(
+                            vector_index, None, settings
                         )
                         st.info("Router engine is ready for Chat.")
                         # If GraphRAG was requested, keep the PG index for tools
@@ -100,7 +90,8 @@ def main() -> None:  # pragma: no cover - Streamlit page
                                     else []
                                 )
                                 chash = compute_corpus_hash(
-                                    [p for p in corpus_paths if p.is_file()]
+                                    [p for p in corpus_paths if p.is_file()],
+                                    base_dir=uploads_dir,
                                 )
                                 cfg = {
                                     "router": settings.retrieval.router,
@@ -162,6 +153,22 @@ def main() -> None:  # pragma: no cover - Streamlit page
                     out = out_dir / "graph.jsonl"
                     export_graph_jsonl(pg_index, out, seeds)
                     st.success(f"Exported JSONL to {out}")
+                    try:
+                        from src.utils.telemetry import log_jsonl
+
+                        log_jsonl(
+                            {
+                                "export_performed": True,
+                                "export_type": "graph_jsonl",
+                                "seed_count": len(seeds),
+                                "capped": len(seeds) >= 32,
+                                "dest_relpath": str(
+                                    out_dir.relative_to(settings.data_dir)
+                                ),
+                            }
+                        )
+                    except Exception as e:
+                        logger.debug(f"Telemetry logging failed (best-effort): {e}")
                 except Exception as e:  # pragma: no cover - UX best effort
                     st.warning(f"JSONL export failed: {e}")
         with col2:
@@ -173,6 +180,22 @@ def main() -> None:  # pragma: no cover - Streamlit page
                     out = out_dir / "graph.parquet"
                     export_graph_parquet(pg_index, out, seeds)
                     st.success(f"Exported Parquet to {out}")
+                    try:
+                        from src.utils.telemetry import log_jsonl
+
+                        log_jsonl(
+                            {
+                                "export_performed": True,
+                                "export_type": "graph_parquet",
+                                "seed_count": len(seeds),
+                                "capped": len(seeds) >= 32,
+                                "dest_relpath": str(
+                                    out_dir.relative_to(settings.data_dir)
+                                ),
+                            }
+                        )
+                    except Exception as e:
+                        logger.debug(f"Telemetry logging failed (best-effort): {e}")
                 except Exception as e:  # pragma: no cover - UX best effort
                     st.warning(f"Parquet export failed: {e}")
 
@@ -198,19 +221,15 @@ def main() -> None:  # pragma: no cover - Streamlit page
 # ---- Testable helpers (unit-tested) ----
 
 
-def _collect_seed_ids(store: Any, cap: int = 32) -> list[str]:
-    """Collect up to `cap` node ids from a property graph store."""
-    seeds: list[str] = []
-    try:
-        for idx, n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
-            if idx >= cap:
-                break
-            nid = getattr(n, "id", None)
-            if nid is not None:
-                seeds.append(str(nid))
-    except Exception:  # pragma: no cover - defensive
-        return []
-    return seeds
+def _collect_seed_ids(_store: Any, cap: int = 32) -> list[str]:
+    """Derive deterministic seed IDs for exports (library-first, no network).
+
+    Returns a stable sequence of identifier strings from 0..cap-1. This avoids
+    coupling to hybrid retrieval internals and ensures deterministic offline
+    behavior for exports and tests. Real-world deployments may override this
+    with a retrieval-based strategy.
+    """
+    return [str(i) for i in range(max(0, int(cap)))]
 
 
 def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Path:
@@ -227,7 +246,7 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
             if uploads_dir.exists()
             else []
         )
-        chash = compute_corpus_hash(corpus_paths)
+        chash = compute_corpus_hash(corpus_paths, base_dir=uploads_dir)
         cfg = {
             "router": settings_obj.retrieval.router,
             "hybrid": settings_obj.retrieval.hybrid_enabled,

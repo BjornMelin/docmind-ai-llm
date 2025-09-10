@@ -347,32 +347,77 @@ async def traverse_graph(
         return []
 
 
-async def _pg_find_entity(
-    index: PropertyGraphIndex, entity_name: str
-) -> list[dict[str, Any]]:
-    if not hasattr(index, "property_graph_store"):
-        raise NotImplementedError(
-            "Entity search requires access to property_graph_store"
+# Note: Legacy helpers relying on undocumented graph store internals were removed
+# to ensure portability and API hygiene. Avoid usage of `get_nodes`/`get_edges`
+# in production code; rely on `get`/`get_rel_map` documented APIs instead.
+
+
+def get_export_seed_ids(
+    pg_index: Any | None,
+    vector_index: Any | None,
+    *,
+    cap: int = 32,
+) -> list[str]:
+    """Derive export seed IDs using retrievers with deterministic fallback.
+
+    Order of preference:
+    1) PropertyGraphIndex.as_retriever(similarity_top_k=cap, path_depth=1)
+    2) VectorStoreIndex.as_retriever(similarity_top_k=cap)
+    3) Deterministic fallback: ["0", "1", ..., str(cap-1)]
+    """
+    try:
+        if pg_index is not None:
+            retr = pg_index.as_retriever(
+                include_text=False, path_depth=1, similarity_top_k=cap
+            )
+            nodes = retr.retrieve("seed")
+            out: list[str] = []
+            seen: set[str] = set()
+            for nws in nodes:
+                nid = str(
+                    getattr(getattr(nws, "node", object()), "id_", None)
+                    or getattr(getattr(nws, "node", object()), "id", "")
+                )
+                if nid and nid not in seen:
+                    out.append(nid)
+                    seen.add(nid)
+                if len(out) >= cap:
+                    return out
+            if out:
+                return out
+    except (RuntimeError, ValueError, TypeError, AttributeError):  # pragma: no cover
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "Failed deriving seed IDs from property graph", exc_info=True
         )
-    store = index.property_graph_store
-    all_nodes = await asyncio.to_thread(lambda: list(store.get_nodes()))
-    matching: list[dict[str, Any]] = []
-    for node in all_nodes:
-        node_name = getattr(node, "name", str(node.id))
-        if entity_name.lower() in node_name.lower():
-            # Count edges without defining a closure inside the loop
-            connections = await asyncio.to_thread(
-                lambda nid=node.id: len(list(store.get_edges(source_ids=[nid])))
-            )
-            matching.append(
-                {
-                    "entity": node_name,
-                    "id": str(node.id),
-                    "connections": connections,
-                    "type": getattr(node, "properties", {}).get("type", "UNKNOWN"),
-                }
-            )
-    return matching
+
+    try:
+        if vector_index is not None:
+            retr = vector_index.as_retriever(similarity_top_k=cap)
+            nodes = retr.retrieve("seed")
+            out = []
+            seen: set[str] = set()
+            for nws in nodes:
+                nid = str(
+                    getattr(getattr(nws, "node", object()), "id_", None)
+                    or getattr(getattr(nws, "node", object()), "id", "")
+                )
+                if nid and nid not in seen:
+                    out.append(nid)
+                    seen.add(nid)
+                if len(out) >= cap:
+                    return out
+            if out:
+                return out
+    except (RuntimeError, ValueError, TypeError, AttributeError):  # pragma: no cover
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "Failed deriving seed IDs from vector index", exc_info=True
+        )
+
+    return [str(i) for i in range(max(0, int(cap)))]
 
 
 def export_graph_jsonl(
@@ -421,30 +466,59 @@ def export_graph_jsonl(
                 return [str(props[key])]
         return []
 
+    def _relation_label(_a: Any, b: Any) -> str:
+        # Best-effort: some stores return triplets or edges with a label
+        # Attempt to read 'label' or 'type' on intermediate relation if present
+        # Fallback to 'related'.
+        for key in ("label", "type"):
+            val = getattr(b, key, None)
+            if val:
+                return str(val)
+        return "related"
+
     with out.open("w", encoding="utf-8") as f:
         for path_idx, path_nodes in enumerate(rel_paths):
             try:
                 items = list(path_nodes)
             except TypeError:
                 continue
-            for i in range(len(items) - 1):
-                subj = str(getattr(items[i], "id", getattr(items[i], "name", items[i])))
-                obj = str(
-                    getattr(
-                        items[i + 1], "id", getattr(items[i + 1], "name", items[i + 1])
-                    )
-                )
-                row = {
-                    "subject": subj,
-                    "relation": "related",
-                    "object": obj,
-                    "depth": min(depth, len(items) - 1),
-                    "path_id": path_idx,
-                    "source_ids": list(
-                        {*(_sources_for(items[i]) + _sources_for(items[i + 1]))}
-                    ),
-                }
-                f.write(json.dumps(row) + "\n")
+            j = 0
+            while j < len(items) - 1:
+                a = items[j]
+                # Triplet pattern: [node, relation, node]
+                if j + 2 < len(items) and any(
+                    hasattr(items[j + 1], k) for k in ("label", "type")
+                ):
+                    b_rel = items[j + 1]
+                    c = items[j + 2]
+                    subj = str(getattr(a, "id", getattr(a, "name", a)))
+                    obj = str(getattr(c, "id", getattr(c, "name", c)))
+                    rel = _relation_label(a, b_rel)
+                    row = {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                        "source_ids": list({*(_sources_for(a) + _sources_for(c))}),
+                    }
+                    f.write(json.dumps(row) + "\n")
+                    j += 2
+                else:
+                    b = items[j + 1]
+                    subj = str(getattr(a, "id", getattr(a, "name", a)))
+                    obj = str(getattr(b, "id", getattr(b, "name", b)))
+                    rel = _relation_label(a, b)
+                    row = {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                        "source_ids": list({*(_sources_for(a) + _sources_for(b))}),
+                    }
+                    f.write(json.dumps(row) + "\n")
+                    j += 1
 
 
 def export_graph_parquet(
@@ -483,26 +557,56 @@ def export_graph_parquet(
     ) as exc:  # pragma: no cover - defensive
         logger.warning("Parquet export failed to build rel_map: %s", exc)
         return
+
+    def _relation_label(_a: Any, b: Any) -> str:
+        for key in ("label", "type"):
+            val = getattr(b, key, None)
+            if val:
+                return str(val)
+        return "related"
+
     rows: list[dict[str, Any]] = []
     for path_idx, path_nodes in enumerate(rel_paths):
         try:
             items = list(path_nodes)
         except TypeError:
             continue
-        for i in range(len(items) - 1):
-            subj = str(getattr(items[i], "id", getattr(items[i], "name", items[i])))
-            obj = str(
-                getattr(items[i + 1], "id", getattr(items[i + 1], "name", items[i + 1]))
-            )
-            rows.append(
-                {
-                    "subject": subj,
-                    "relation": "related",
-                    "object": obj,
-                    "depth": min(depth, len(items) - 1),
-                    "path_id": path_idx,
-                }
-            )
+        j = 0
+        while j < len(items) - 1:
+            a = items[j]
+            if j + 2 < len(items) and any(
+                hasattr(items[j + 1], k) for k in ("label", "type")
+            ):
+                b_rel = items[j + 1]
+                c = items[j + 2]
+                subj = str(getattr(a, "id", getattr(a, "name", a)))
+                obj = str(getattr(c, "id", getattr(c, "name", c)))
+                rel = _relation_label(a, b_rel)
+                rows.append(
+                    {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                    }
+                )
+                j += 2
+            else:
+                b = items[j + 1]
+                subj = str(getattr(a, "id", getattr(a, "name", a)))
+                obj = str(getattr(b, "id", getattr(b, "name", b)))
+                rel = _relation_label(a, b)
+                rows.append(
+                    {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                    }
+                )
+                j += 1
 
     if not rows:
         logger.warning("No edges to export; Parquet file will not be created")
