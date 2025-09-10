@@ -37,6 +37,12 @@ def main() -> None:  # pragma: no cover - Streamlit page
     with st.form("ingest_form", clear_on_submit=False):
         files = st.file_uploader("Add files", type=None, accept_multiple_files=True)
         use_graphrag = st.checkbox("Build GraphRAG (beta)", value=False)
+        with st.expander("About snapshots", expanded=False):
+            st.markdown(
+                "- Snapshots are created atomically in data/storage/<timestamp>.\n"
+                "- manifest.json stores corpus/config hashes for staleness detection.\n"
+                "- Rebuild a snapshot anytime; for new content, re-ingest first."
+            )
         submitted = st.form_submit_button("Ingest")
 
     if submitted:
@@ -120,10 +126,10 @@ def main() -> None:  # pragma: no cover - Streamlit page
                             # Export helpers with simple seeds
                             try:
                                 store = pg_index.property_graph_store
-                                # Seed with up to 50 nodes from store
+                                # Seed with up to 32 nodes from store
                                 seeds = []
                                 for idx, n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
-                                    if idx >= 50:
+                                    if idx >= 32:
                                         break
                                     node_id = getattr(n, "id", None)
                                     if node_id is not None:
@@ -160,7 +166,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                     store = pg_index.property_graph_store
                     seeds: list[str] = []
                     for idx, n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
-                        if idx >= 50:
+                        if idx >= 32:
                             break
                         nid = getattr(n, "id", None)
                         if nid is not None:
@@ -176,17 +182,68 @@ def main() -> None:  # pragma: no cover - Streamlit page
                     pg_index = st.session_state["graphrag_index"]
                     store = pg_index.property_graph_store
                     seeds = []
-                    for idx, n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
-                        if idx >= 50:
+                    for idx, _n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
+                        if idx >= 32:
                             break
-                        nid = getattr(n, "id", None)
-                        if nid is not None:
-                            seeds.append(str(nid))
+                    nid = getattr(_n, "id", None)
+                    if nid is not None:
+                        seeds.append(str(nid))
                     out = out_dir / "graph.parquet"
                     export_graph_parquet(pg_index, out, seeds)
                     st.success(f"Exported Parquet to {out}")
                 except Exception as e:  # pragma: no cover - UX best effort
                     st.warning(f"Parquet export failed: {e}")
+
+        st.subheader("Snapshot Utilities")
+        st.caption(
+            "Rebuild persisted files and manifest for the current graph/vector"
+            " indices. If your documents changed, re-ingest first to rebuild"
+            " the graph."
+        )
+        if st.button("Rebuild GraphRAG Snapshot"):
+            try:
+                pg_index = st.session_state["graphrag_index"]
+                vector_index = st.session_state.get("vector_index")
+                if vector_index is None:
+                    st.warning("Vector index missing; ingest documents first.")
+                else:
+                    storage_dir = settings.data_dir / "storage"
+                    mgr = SnapshotManager(storage_dir)
+                    paths = mgr.begin_snapshot()
+                    try:
+                        mgr.persist_vector_index(vector_index, paths)
+                        mgr.persist_graph_store(pg_index.property_graph_store, paths)
+                        uploads_dir = settings.data_dir / "uploads"
+                        corpus_paths = (
+                            [p for p in uploads_dir.glob("**/*") if p.is_file()]
+                            if uploads_dir.exists()
+                            else []
+                        )
+                        chash = compute_corpus_hash(corpus_paths)
+                        cfg = {
+                            "router": settings.retrieval.router,
+                            "hybrid": settings.retrieval.hybrid_enabled,
+                            "graph_enabled": True,
+                            "chunk_size": settings.processing.chunk_size,
+                            "chunk_overlap": settings.processing.chunk_overlap,
+                        }
+                        cfg_hash = compute_config_hash(cfg)
+                        mgr.write_manifest(
+                            paths,
+                            index_id="docmind",
+                            graph_store_type="property_graph",
+                            vector_store_type=settings.database.vector_store_type,
+                            corpus_hash=chash,
+                            config_hash=cfg_hash,
+                            versions={"app": settings.app_version},
+                        )
+                        final = mgr.finalize_snapshot(paths)
+                        st.success(f"Snapshot rebuilt: {final.name}")
+                    except Exception as e:  # pragma: no cover - UX best effort
+                        mgr.cleanup_tmp(paths)
+                        st.warning(f"Snapshot rebuild failed: {e}")
+            except Exception as e:  # pragma: no cover - UX best effort
+                st.error(f"Snapshot manager error: {e}")
 
 
 if __name__ == "__main__":  # pragma: no cover

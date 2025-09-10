@@ -102,7 +102,8 @@ def main() -> None:  # pragma: no cover - Streamlit page
                         or data.get("config_hash") != cfg_hash
                     ):
                         st.warning(
-                            "Index snapshot is stale; consider rebuilding GraphRAG."
+                            "Snapshot is stale (content/config changed). "
+                            "Open Documents -> 'Rebuild GraphRAG Snapshot' to refresh."
                         )
                     else:
                         st.caption(f"Snapshot up-to-date: {latest.name}")
