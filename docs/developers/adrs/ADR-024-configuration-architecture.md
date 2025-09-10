@@ -459,7 +459,7 @@ def test_env_mapping(monkeypatch):
 
 - 2.9 (2025-09-09): Added GraphRAG configuration flags and UI exposure; linked ADR‑038
 - 2.9 (2025-09-08): Clarified always-on (no UI toggles), single reranker path; enforced Qdrant named-vector schema and sparse alignment.
-- 2.8 (2025-09-07): Removed client-side fusion knobs; added server-side fusion envs (fusion_mode/fused_top_k/rrf_k), BM42(IDF) preference, and DBSF env-gating. Clarified env-only overrides and offline defaults.
+- 2.8 (2025-09-07): Removed client-side fusion knobs; added server-side fusion envs (fusion_mode/fused_top_k), BM42(IDF) preference, and DBSF env-gating. Clarified env-only overrides and offline defaults.
 
 - 2.7 (2025-09-07): Always‑on hybrid/rerank (no UI toggles); embed default BGE‑M3; updated examples and requirements
 
