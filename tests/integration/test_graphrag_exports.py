@@ -20,16 +20,19 @@ class _Node:
 
 class _Store:
     def get(self, ids=None, properties=None):
+        """Return nodes by ids, ignoring requested properties in tests."""
         del properties
         return [_Node(str(i), source_id=f"src-{i}") for i in ids or []]
 
     def get_nodes(self):
+        """Yield a small set of nodes for export tests."""
         yield from [
             _Node("A", source_id="a"),
             _Node("B", source_id="b"),
         ]
 
     def get_rel_map(self, nodes, depth=1):
+        """Return a minimal relation path from the given nodes."""
         del depth
         items = list(nodes)
         if len(items) < 2:
@@ -44,6 +47,7 @@ class _PgIndex:
 
 @pytest.mark.integration
 def test_jsonl_export(tmp_path: Path) -> None:
+    """Export minimal relation path to JSONL and validate schema."""
     idx = _PgIndex()
     out = tmp_path / "graph.jsonl"
     export_graph_jsonl(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
@@ -56,9 +60,12 @@ def test_jsonl_export(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_parquet_export_conditional(tmp_path: Path) -> None:
+    """Export minimal relation path to Parquet when PyArrow is available."""
     idx = _PgIndex()
     out = tmp_path / "graph.parquet"
-    export_graph_parquet(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_parquet(  # type: ignore[arg-type]
+        idx, out, seed_ids=["A", "B"], depth=1
+    )
     # Parquet may or may not be present; assert no exception and best-effort file
     # When pyarrow exists, file should exist
     if _has_pyarrow():
@@ -66,9 +73,11 @@ def test_parquet_export_conditional(tmp_path: Path) -> None:
 
 
 def _has_pyarrow() -> bool:
-    try:
-        import pyarrow  # noqa: F401
+    """Return whether pyarrow can be imported in the environment."""
+    import importlib
 
+    try:
+        importlib.import_module("pyarrow")
         return True
-    except Exception:
+    except ImportError:
         return False
