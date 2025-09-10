@@ -9,6 +9,8 @@ writing the response in small chunks to the UI for better perceived latency.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from collections.abc import Iterable as _Iterable
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -81,26 +83,11 @@ def main() -> None:  # pragma: no cover - Streamlit page
                     import json as _json
 
                     data = _json.loads(manifest)
-                    # Compute current hashes
+                    # Compute staleness and render message
                     uploads_dir = settings.data_dir / "uploads"
-                    corpus_paths = (
-                        [p for p in uploads_dir.glob("**/*") if p.is_file()]
-                        if uploads_dir.exists()
-                        else []
-                    )
-                    chash = compute_corpus_hash(corpus_paths)
-                    cfg = {
-                        "router": settings.retrieval.router,
-                        "hybrid": settings.retrieval.hybrid_enabled,
-                        "graph_enabled": settings.enable_graphrag,
-                        "chunk_size": settings.processing.chunk_size,
-                        "chunk_overlap": settings.processing.chunk_overlap,
-                    }
-                    cfg_hash = compute_config_hash(cfg)
-                    if (
-                        data.get("corpus_hash") != chash
-                        or data.get("config_hash") != cfg_hash
-                    ):
+                    corpus_paths = _collect_corpus_paths(uploads_dir)
+                    cfg = _current_config_dict()
+                    if compute_staleness(data, corpus_paths, cfg):
                         st.warning(
                             "Snapshot is stale (content/config changed). "
                             "Open Documents -> 'Rebuild GraphRAG Snapshot' to refresh."
@@ -140,3 +127,35 @@ def main() -> None:  # pragma: no cover - Streamlit page
 
 if __name__ == "__main__":  # pragma: no cover
     main()
+
+
+# ---- Testable helpers (unit-tested) ----
+
+
+def _collect_corpus_paths(base: Path) -> list[Path]:
+    """Collect files under uploads directory for hashing."""
+    if not base.exists():
+        return []
+    return [p for p in base.glob("**/*") if p.is_file()]
+
+
+def _current_config_dict() -> dict[str, Any]:
+    """Build current retrieval/config dict used in config_hash."""
+    return {
+        "router": settings.retrieval.router,
+        "hybrid": settings.retrieval.hybrid_enabled,
+        "graph_enabled": settings.enable_graphrag,
+        "chunk_size": settings.processing.chunk_size,
+        "chunk_overlap": settings.processing.chunk_overlap,
+    }
+
+
+def compute_staleness(
+    manifest: dict[str, Any], corpus_paths: _Iterable[Path], cfg: dict[str, Any]
+) -> bool:
+    """Return True when corpus/config hashes differ from manifest values."""
+    chash = compute_corpus_hash(list(corpus_paths))
+    cfg_hash = compute_config_hash(cfg)
+    return (
+        manifest.get("corpus_hash") != chash or manifest.get("config_hash") != cfg_hash
+    )

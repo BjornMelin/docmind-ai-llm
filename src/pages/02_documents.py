@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 from llama_index.core import VectorStoreIndex
@@ -126,14 +127,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                             # Export helpers with simple seeds
                             try:
                                 store = pg_index.property_graph_store
-                                # Seed with up to 32 nodes from store
-                                seeds = []
-                                for idx, n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
-                                    if idx >= 32:
-                                        break
-                                    node_id = getattr(n, "id", None)
-                                    if node_id is not None:
-                                        seeds.append(str(node_id))
+                                seeds = _collect_seed_ids(store, cap=32)
                                 out_dir = settings.data_dir / "graph"
                                 export_graph_jsonl(
                                     pg_index, out_dir / "graph.jsonl", seeds
@@ -164,13 +158,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                 try:
                     pg_index = st.session_state["graphrag_index"]
                     store = pg_index.property_graph_store
-                    seeds: list[str] = []
-                    for idx, n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
-                        if idx >= 32:
-                            break
-                        nid = getattr(n, "id", None)
-                        if nid is not None:
-                            seeds.append(str(nid))
+                    seeds: list[str] = _collect_seed_ids(store, cap=32)
                     out = out_dir / "graph.jsonl"
                     export_graph_jsonl(pg_index, out, seeds)
                     st.success(f"Exported JSONL to {out}")
@@ -181,13 +169,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                 try:
                     pg_index = st.session_state["graphrag_index"]
                     store = pg_index.property_graph_store
-                    seeds = []
-                    for idx, _n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
-                        if idx >= 32:
-                            break
-                    nid = getattr(_n, "id", None)
-                    if nid is not None:
-                        seeds.append(str(nid))
+                    seeds = _collect_seed_ids(store, cap=32)
                     out = out_dir / "graph.parquet"
                     export_graph_parquet(pg_index, out, seeds)
                     st.success(f"Exported Parquet to {out}")
@@ -207,43 +189,67 @@ def main() -> None:  # pragma: no cover - Streamlit page
                 if vector_index is None:
                     st.warning("Vector index missing; ingest documents first.")
                 else:
-                    storage_dir = settings.data_dir / "storage"
-                    mgr = SnapshotManager(storage_dir)
-                    paths = mgr.begin_snapshot()
-                    try:
-                        mgr.persist_vector_index(vector_index, paths)
-                        mgr.persist_graph_store(pg_index.property_graph_store, paths)
-                        uploads_dir = settings.data_dir / "uploads"
-                        corpus_paths = (
-                            [p for p in uploads_dir.glob("**/*") if p.is_file()]
-                            if uploads_dir.exists()
-                            else []
-                        )
-                        chash = compute_corpus_hash(corpus_paths)
-                        cfg = {
-                            "router": settings.retrieval.router,
-                            "hybrid": settings.retrieval.hybrid_enabled,
-                            "graph_enabled": True,
-                            "chunk_size": settings.processing.chunk_size,
-                            "chunk_overlap": settings.processing.chunk_overlap,
-                        }
-                        cfg_hash = compute_config_hash(cfg)
-                        mgr.write_manifest(
-                            paths,
-                            index_id="docmind",
-                            graph_store_type="property_graph",
-                            vector_store_type=settings.database.vector_store_type,
-                            corpus_hash=chash,
-                            config_hash=cfg_hash,
-                            versions={"app": settings.app_version},
-                        )
-                        final = mgr.finalize_snapshot(paths)
-                        st.success(f"Snapshot rebuilt: {final.name}")
-                    except Exception as e:  # pragma: no cover - UX best effort
-                        mgr.cleanup_tmp(paths)
-                        st.warning(f"Snapshot rebuild failed: {e}")
+                    final = rebuild_snapshot(vector_index, pg_index, settings)
+                    st.success(f"Snapshot rebuilt: {final.name}")
             except Exception as e:  # pragma: no cover - UX best effort
                 st.error(f"Snapshot manager error: {e}")
+
+
+# ---- Testable helpers (unit-tested) ----
+
+
+def _collect_seed_ids(store: Any, cap: int = 32) -> list[str]:
+    """Collect up to `cap` node ids from a property graph store."""
+    seeds: list[str] = []
+    try:
+        for idx, n in enumerate(store.get_nodes()):  # type: ignore[attr-defined]
+            if idx >= cap:
+                break
+            nid = getattr(n, "id", None)
+            if nid is not None:
+                seeds.append(str(nid))
+    except Exception:  # pragma: no cover - defensive
+        return []
+    return seeds
+
+
+def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Path:
+    """Rebuild snapshot for current indices and return final path."""
+    storage_dir = settings_obj.data_dir / "storage"
+    mgr = SnapshotManager(storage_dir)
+    paths = mgr.begin_snapshot()
+    try:
+        mgr.persist_vector_index(vector_index, paths)
+        mgr.persist_graph_store(pg_index.property_graph_store, paths)
+        uploads_dir = settings_obj.data_dir / "uploads"
+        corpus_paths = (
+            [p for p in uploads_dir.glob("**/*") if p.is_file()]
+            if uploads_dir.exists()
+            else []
+        )
+        chash = compute_corpus_hash(corpus_paths)
+        cfg = {
+            "router": settings_obj.retrieval.router,
+            "hybrid": settings_obj.retrieval.hybrid_enabled,
+            "graph_enabled": True,
+            "chunk_size": settings_obj.processing.chunk_size,
+            "chunk_overlap": settings_obj.processing.chunk_overlap,
+        }
+        cfg_hash = compute_config_hash(cfg)
+        mgr.write_manifest(
+            paths,
+            index_id="docmind",
+            graph_store_type="property_graph",
+            vector_store_type=settings_obj.database.vector_store_type,
+            corpus_hash=chash,
+            config_hash=cfg_hash,
+            versions={"app": settings_obj.app_version},
+        )
+        final = mgr.finalize_snapshot(paths)
+        return final
+    except Exception:
+        mgr.cleanup_tmp(paths)
+        raise
 
 
 if __name__ == "__main__":  # pragma: no cover
