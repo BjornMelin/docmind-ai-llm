@@ -490,8 +490,8 @@ def test_app_multi_agent_chat_functionality(app_test):
 @patch("ollama.pull", return_value={"status": "success"})
 @patch("src.utils.core.validate_startup_configuration", return_value=True)
 def test_app_session_persistence_and_memory_management(
-    _mock_validate,
-    _mock_pull,
+    mock_validate,
+    mock_pull,
     app_test,
 ):
     """Test session save/load functionality and memory management.
@@ -505,8 +505,8 @@ def test_app_session_persistence_and_memory_management(
         app_test: Streamlit app test fixture.
     """
     # Mark patched objects as used to satisfy lint rules
-    assert _mock_validate is not None
-    assert _mock_pull is not None
+    assert mock_validate is not None
+    assert mock_pull is not None
     app = app_test.run()
 
     # Verify app loaded successfully
