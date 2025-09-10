@@ -166,7 +166,7 @@ class TestAgentCoordinationBoundaryIntegration:
 class TestDocumentProcessingBoundaryIntegration:
     """Test document processing integration with external service boundaries."""
 
-    @patch("src.retrieval.query_engine.ServerHybridRetriever")
+    @patch("src.retrieval.hybrid.ServerHybridRetriever")
     @patch("src.processing.document_processor.DocumentProcessor")
     def test_document_embedder_boundary_integration(
         self, mock_processor, mock_embedder
@@ -363,7 +363,7 @@ class TestErrorHandlingBoundaryIntegration:
         with pytest.raises(RuntimeError, match="Supervisor failed"):
             coord._setup_agent_graph()  # pylint: disable=protected-access
 
-    @patch("src.retrieval.query_engine.ServerHybridRetriever")
+    @patch("src.retrieval.hybrid.ServerHybridRetriever")
     def test_embedder_error_boundary_handling(self, mock_embedder):
         """Test error handling at embedder boundaries."""
         # Mock embedder with initialization error

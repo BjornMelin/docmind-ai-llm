@@ -100,7 +100,7 @@ class TestOptionalDependencyHandling:
         """Verify that ADR-009 compliant modules are available."""
         adr009_modules = [
             "src.processing.document_processor",
-            "src.retrieval.query_engine",
+            "src.retrieval.router_factory",
         ]
 
         for module in adr009_modules:

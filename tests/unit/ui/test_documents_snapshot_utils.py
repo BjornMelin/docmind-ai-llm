@@ -47,8 +47,10 @@ class _VecIndex:
 
 
 class _GraphStore:
-    def persist(self, path: str) -> None:
-        Path(path).write_text("{}", encoding="utf-8")
+    def persist(self, persist_dir: str) -> None:
+        p = Path(persist_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "ok").write_text("1", encoding="utf-8")
 
 
 class _PgIndex:

@@ -40,24 +40,7 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     router_fac_mod.build_router_engine = lambda *_, **__: object()
     monkeypatch.setitem(sys.modules, "src.retrieval.router_factory", router_fac_mod)
 
-    # Stub query_engine submodule to avoid heavy imports
-    qe_mod = ModuleType("src.retrieval.query_engine")
-
-    class _DummyRetriever:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-    class _HybridParams:
-        def __init__(self, *_args, **_kwargs) -> None:
-            pass
-
-    def _create_engine(*_args, **_kwargs):
-        return object()
-
-    qe_mod.ServerHybridRetriever = _DummyRetriever
-    qe_mod._HybridParams = _HybridParams  # type: ignore[attr-defined]
-    qe_mod.create_adaptive_router_engine = _create_engine
-    monkeypatch.setitem(sys.modules, "src.retrieval.query_engine", qe_mod)
+    # Legacy query_engine no longer used; no need to stub
 
     # Stub ingest adapter and storage helpers to avoid heavy imports
     ingest_mod = ModuleType("src.ui.ingest_adapter")
@@ -90,8 +73,10 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
             self.storage_context = _DummyStorage()
 
     class _GraphStore:
-        def persist(self, path: str) -> None:
-            Path(path).write_text("{}", encoding="utf-8")
+        def persist(self, persist_dir: str) -> None:
+            p = Path(persist_dir)
+            p.mkdir(parents=True, exist_ok=True)
+            (p / "ok").write_text("1", encoding="utf-8")
 
         def get_nodes(self):  # keep exports safe if rendered
             yield from []
