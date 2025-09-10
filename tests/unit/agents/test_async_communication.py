@@ -334,10 +334,13 @@ class TestAsyncAgentCommunication:
                 self._state = None
 
             def put(self, _config, state, *_args, **_kwargs):  # modern API tolerated
+                """Store provided state and return a checkpoint id stub."""
                 self._state = state
                 return {"checkpoint_id": "test"}
 
             def get(self, _config):
+                """Return an object with a `values` attribute for stored state."""
+
                 class _Result:
                     def __init__(self, values):
                         self.values = values

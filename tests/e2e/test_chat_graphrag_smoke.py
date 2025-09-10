@@ -1,5 +1,7 @@
 """E2E smoke: chat via router with GraphRAG present (offline, deterministic)."""
 
+# pylint: disable=protected-access
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -11,11 +13,13 @@ from src.agents.coordinator import MultiAgentCoordinator
 
 class _Router:
     def query(self, q):
+        """Return a simple namespaced response for provided query string."""
         return SimpleNamespace(response=f"ok:{q}")
 
 
 @pytest.mark.e2e
 def test_chat_smoke_router_override() -> None:
+    """Smoke test chat flow using an injected router engine."""
     coord = MultiAgentCoordinator()
     # Avoid heavy setup
     coord._ensure_setup = lambda: True  # type: ignore[assignment]
@@ -32,7 +36,9 @@ def test_chat_smoke_router_override() -> None:
         }
 
     coord._run_agent_workflow = fake_run  # type: ignore[assignment]
-    coord._extract_response = lambda _s, _q, _t, _c: SimpleNamespace(content="ok:hello")  # type: ignore[assignment]
+    coord._extract_response = (  # type: ignore[assignment]
+        lambda _s, _q, _t, _c: SimpleNamespace(content="ok:hello")
+    )
 
     resp = coord.process_query("hello", settings_override={"router_engine": _Router()})
     assert getattr(resp, "content", "").startswith("ok:")

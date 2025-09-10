@@ -66,11 +66,14 @@ async def test_by_title_section_boundaries(tmp_path):
     class _FakePipeline:
         """Mock pipeline class for testing document processing."""
 
-        def __init__(self, transformations=None, cache=None, docstore=None):
+        def __init__(self, transformations=None, _cache=None, _docstore=None):
+            """Initialize fake pipeline; cache/docstore parameters are unused."""
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
         def run(self, documents=None, show_progress=False):
+            """Apply transformations, ignoring progress display in tests."""
+            del show_progress
             nodes = documents or []
             for t in self.transformations:
                 nodes = t(nodes)
@@ -123,11 +126,14 @@ async def test_basic_fallback_heading_sparse(tmp_path):
     class _FakePipeline:
         """Mock pipeline class for testing document processing."""
 
-        def __init__(self, transformations=None, cache=None, docstore=None):
+        def __init__(self, transformations=None, _cache=None, _docstore=None):
+            """Initialize fake pipeline; cache/docstore parameters are unused."""
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
         def run(self, documents=None, show_progress=False):
+            """Apply transformations, ignoring progress display in tests."""
+            del show_progress
             nodes = documents or []
             for t in self.transformations:
                 nodes = t(nodes)
@@ -179,11 +185,14 @@ async def test_table_isolation(tmp_path):
     class _FakePipeline:
         """Mock pipeline class for testing document processing."""
 
-        def __init__(self, transformations=None, cache=None, docstore=None):
+        def __init__(self, transformations=None, _cache=None, _docstore=None):
+            """Initialize fake pipeline; cache/docstore parameters are unused."""
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
         def run(self, documents=None, show_progress=False):
+            """Apply transformations, ignoring progress display in tests."""
+            del show_progress
             nodes = documents or []
             for t in self.transformations:
                 nodes = t(nodes)
@@ -232,11 +241,14 @@ async def test_clustered_titles_form_separate_sections(tmp_path):
     ]
 
     class _FakePipeline:
-        def __init__(self, transformations=None, cache=None, docstore=None):
+        def __init__(self, transformations=None, _cache=None, _docstore=None):
+            """Initialize fake pipeline; cache/docstore parameters are unused."""
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
         def run(self, documents=None, show_progress=False):
+            """Apply transformations, ignoring progress display in tests."""
+            del show_progress
             nodes = documents or []
             for t in self.transformations:
                 nodes = t(nodes)
@@ -279,11 +291,14 @@ async def test_frequent_small_headings_fallbacks_to_basic(tmp_path):
     ]
 
     class _FakePipeline:
-        def __init__(self, transformations=None, cache=None, docstore=None):
+        def __init__(self, transformations=None, _cache=None, _docstore=None):
+            """Initialize fake pipeline; cache/docstore parameters are unused."""
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
         def run(self, documents=None, show_progress=False):
+            """Apply transformations, ignoring progress display in tests."""
+            del show_progress
             nodes = documents or []
             for t in self.transformations:
                 nodes = t(nodes)
@@ -324,11 +339,16 @@ async def test_multipage_sections_propagation(tmp_path, multipage):
     ]
 
     class _FakePipeline:
-        def __init__(self, transformations=None, cache=None, docstore=None):
+        """Mock pipeline used to pass through transformations in tests."""
+
+        def __init__(self, transformations=None, _cache=None, _docstore=None):
+            """Initialize pipeline; cache/docstore are unused in tests."""
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
         def run(self, documents=None, show_progress=False):
+            """Apply transformations, ignoring progress display in tests."""
+            del show_progress
             nodes = documents or []
             for t in self.transformations:
                 nodes = t(nodes)
@@ -377,11 +397,13 @@ async def test_combine_text_under_n_chars_forwarded(tmp_path, combine_under):
     ]
 
     class _FakePipeline:
-        def __init__(self, transformations=None, cache=None, docstore=None):
+        def __init__(self, transformations=None, _cache=None, _docstore=None):
             self.transformations = transformations or []
             self.cache = type("C", (), {"hits": 0, "misses": 0})()
 
         def run(self, documents=None, show_progress=False):
+            """Apply transformations, ignoring progress display in tests."""
+            del show_progress
             nodes = documents or []
             for t in self.transformations:
                 nodes = t(nodes)

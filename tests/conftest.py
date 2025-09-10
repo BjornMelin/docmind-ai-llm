@@ -3,6 +3,9 @@
 Configures LlamaIndex mocks, provides ChatMessage factory, LangGraph in-memory
 checkpointer, and a deterministic LangChain LLM for agent tests.
 """
+# pylint: disable=missing-function-docstring,redefined-outer-name,reimported,
+# pylint: disable=useless-return,pointless-string-statement,broad-exception-caught,
+# pylint: disable=unused-argument,line-too-long
 
 import os
 import sys

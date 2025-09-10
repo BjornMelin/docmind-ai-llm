@@ -137,7 +137,9 @@ async def test_document_loading_functionality():
         try:
             # Test document loading via patched function
             file_paths = ["test_document.pdf"]
-            loaded_documents = await mock_load_docs(file_paths)  # type: ignore[func-returns-value]
+            loaded_documents = await mock_load_docs(  # type: ignore[func-returns-value]
+                file_paths
+            )
 
             # Validate document loading results
             assert len(loaded_documents) == 2
@@ -444,7 +446,9 @@ async def test_integrated_document_processing_workflow():
             assert is_valid is True
 
             # 3. Document processing (async mock)
-            documents = await mock_load(["workflow_test.pdf"])  # type: ignore[func-returns-value]
+            documents = await mock_load(  # type: ignore[func-returns-value]
+                ["workflow_test.pdf"]
+            )
             assert len(documents) == 1
             assert "workflow validation" in documents[0].text
 

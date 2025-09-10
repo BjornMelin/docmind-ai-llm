@@ -1,9 +1,20 @@
+"""System test collection tweaks.
+
+Skips system tests unless `DOCMIND_RUN_SYSTEM=1` is set to keep CI fast.
+"""
+
 import os
 
 import pytest
 
 
-def pytest_collection_modifyitems(config, items):
+def pytest_collection_modifyitems(_config, items):
+    """Skip system tests unless explicitly enabled via environment.
+
+    Args:
+        config: Pytest config object.
+        items: Collected test items.
+    """
     if os.getenv("DOCMIND_RUN_SYSTEM") in {"1", "true", "TRUE", "yes"}:
         return
     skip_sys = pytest.mark.skip(

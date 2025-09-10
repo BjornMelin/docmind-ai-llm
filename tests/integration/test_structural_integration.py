@@ -113,13 +113,13 @@ class TestVectorStoreIntegration:
 class TestRouterEngineIntegration:
     """Integration tests for router query engine wiring."""
 
-    def test_adaptive_router_engine_wiring(self):
+    def test_router_engine_wiring(self):
         """Ensure router engine composes with minimal vector index and reranker."""
         # Ensure LLM selector uses MockLLM (avoid external backends)
         from llama_index.core import Settings
         from llama_index.core.llms.mock import MockLLM
 
-        from src.retrieval.query_engine import AdaptiveRouterQueryEngine
+        from src.retrieval.router_factory import build_router_engine
 
         Settings.llm = MockLLM()
 
@@ -128,14 +128,12 @@ class TestRouterEngineIntegration:
         vector_index.as_query_engine.return_value = MagicMock()
 
         # Provide a mock reranker (avoid model loading)
-        reranker = MagicMock()
+        # Note: not used directly here; vector engine suffices for wiring
 
         # Ensure no accidental network calls if any LLM backend is constructed
         with patch("llama_index.llms.ollama.Ollama"):
-            engine = AdaptiveRouterQueryEngine(
-                vector_index=vector_index, reranker=reranker
-            )
-        assert engine.router_engine is not None
+            engine = build_router_engine(vector_index, None)
+        assert engine is not None
 
 
 @pytest.mark.integration

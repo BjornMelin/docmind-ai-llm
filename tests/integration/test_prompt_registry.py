@@ -6,6 +6,7 @@ from src.prompting import list_templates, render_prompt
 
 
 def test_prompt_registry_render_smoke():
+    """Render a prompt from the first available template (smoke)."""
     templates = list_templates()
     assert templates
     tpl = templates[0]

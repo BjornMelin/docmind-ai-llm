@@ -191,8 +191,6 @@ def test_conftest_hierarchy():
 @pytest.mark.unit
 def test_pytest_markers_configured():
     """Test that pytest markers are properly configured."""
-    import pytest
-
     # Test that our custom markers exist
     pytest.Config(pluginmanager=pytest.PytestPluginManager())
 

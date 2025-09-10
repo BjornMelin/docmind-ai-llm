@@ -2,6 +2,7 @@
 
 Covers configuration, state management, workflow setup, and error handling.
 """
+# pylint: disable=too-many-public-methods
 
 # NOTE: We intentionally exercise a few hook helpers via private methods
 # (e.g., _create_post_model_hook) because no equivalent public seam exists.
