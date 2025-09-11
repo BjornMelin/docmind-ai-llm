@@ -49,7 +49,7 @@ Analyzes incoming queries and determines optimal processing strategies.
 **Python Interface:**
 
 ```python
-from src.agents.tools import route_query
+from src.agents.tools.planning import route_query
 
 # Basic routing
 routing_decision = await route_query(
@@ -181,7 +181,7 @@ Decomposes complex queries into manageable sub-tasks with execution strategies.
 **Python Interface:**
 
 ```python
-from src.agents.tools import plan_query
+from src.agents.tools.planning import plan_query
 
 # Complex query planning
 query_plan = await plan_query(
@@ -339,7 +339,7 @@ Performs intelligent document search with hybrid strategies and reranking.
 **Python Interface:**
 
 ```python
-from src.agents.tools import retrieve_documents
+from src.agents.tools.retrieval import retrieve_documents
 
 # Execute specialized retrieval
 retrieval_results = await retrieve_documents(
@@ -535,7 +535,7 @@ Combines multiple sources into coherent, cited responses with conflict resolutio
 **Python Interface:**
 
 ```python
-from src.agents.tools import synthesize_results
+from src.agents.tools.synthesis import synthesize_results
 
 # Synthesize multiple retrieval results
 synthesis_result = await synthesize_results(
@@ -746,7 +746,7 @@ Performs quality assurance, fact checking, and confidence assessment.
 **Python Interface:**
 
 ```python
-from src.agents.tools import validate_response
+from src.agents.tools.validation import validate_response
 
 # Validate synthesis results
 validation_result = await validate_response(

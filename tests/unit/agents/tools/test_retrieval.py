@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.agents.tools import retrieve_documents
+from src.agents.tools.retrieval import retrieve_documents
 
 pytestmark = pytest.mark.unit
 
@@ -43,7 +43,7 @@ class TestRetrieveDocuments:
         }
         mock_state = {"tools_data": {"vector": MagicMock(), "retriever": None}}
 
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_tool = MagicMock()
             mock_tool.call.return_value = [{"content": "test doc", "score": 0.9}]
             mock_factory.create_vector_search_tool.return_value = mock_tool
@@ -78,7 +78,7 @@ class TestRetrieveDocuments:
 
         with (
             patch.object(_builtins, "__import__", side_effect=_fake_import),
-            patch("src.agents.tools.ToolFactory") as mock_factory,
+            patch("src.agents.tool_factory.ToolFactory") as mock_factory,
         ):
             mock_tool = MagicMock()
             mock_tool.call.return_value = [{"content": "test doc"}]
@@ -105,7 +105,7 @@ class TestRetrieveDocuments:
             {"content": "Different content", "score": 0.7},
         ]
 
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_tool = MagicMock()
             mock_tool.call.return_value = duplicate_docs
             mock_factory.create_vector_search_tool.return_value = mock_tool
@@ -129,10 +129,10 @@ class TestRetrieveDocuments:
 
         with (
             patch(
-                "src.agents.tools.ToolFactory.create_tools_from_indexes",
+                "src.agents.tool_factory.ToolFactory.create_tools_from_indexes",
                 side_effect=MemoryError("no mem"),
             ),
-            patch("src.agents.tools.ToolFactory") as mock_factory,
+            patch("src.agents.tool_factory.ToolFactory") as mock_factory,
         ):
             mock_tool = MagicMock()
             mock_tool.call.return_value = []
@@ -151,7 +151,7 @@ class TestParsingBoundaries:
     def test_retrieve_parsing_string_result(self):
         """Test parsing of simple string responses into document format."""
         mock_state = {"tools_data": {"vector": Mock()}}
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_tool = Mock()
             mock_tool.call.return_value = "Simple string response"
             mock_factory.create_vector_search_tool.return_value = mock_tool
@@ -173,7 +173,7 @@ class TestParsingBoundaries:
     def test_retrieve_parsing_llamaindex_like_object(self):
         """Test parsing of LlamaIndex-like objects with response and metadata."""
         mock_state = {"tools_data": {"vector": Mock()}}
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_result = Mock()
             mock_result.response = "LlamaIndex response"
             mock_result.metadata = {"source": "test"}
@@ -206,7 +206,7 @@ class TestParsingBoundaries:
         ]
 
         mock_state = {"tools_data": {"vector": Mock()}}
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_tool = Mock()
             mock_tool.call.return_value = docs
             mock_factory.create_vector_search_tool.return_value = mock_tool
@@ -233,7 +233,7 @@ class TestParsingBoundaries:
         ]
 
         mock_state = {"tools_data": {"vector": Mock()}}
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_tool = Mock()
             mock_tool.call.return_value = inputs
             mock_factory.create_vector_search_tool.return_value = mock_tool
@@ -254,7 +254,7 @@ class TestParsingBoundaries:
     def test_retrieve_parsing_fallback_conversion(self):
         """Test fallback conversion for unexpected result formats."""
         mock_state = {"tools_data": {"vector": Mock()}}
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_tool = Mock()
             mock_tool.call.return_value = {"unexpected": "format", "data": 123}
             mock_factory.create_vector_search_tool.return_value = mock_tool

@@ -15,7 +15,7 @@ Features:
 Example:
     Using the multi-agent coordinator:
 
-        from agents.coordinator import MultiAgentCoordinator
+        from src.agents.coordinator import MultiAgentCoordinator
         from llama_index.core.memory import ChatMemoryBuffer
 
         coordinator = MultiAgentCoordinator()
@@ -42,13 +42,9 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
 
-from src.agents.tools import (
-    plan_query,
-    route_query,
-    router_tool,
-    synthesize_results,
-    validate_response,
-)
+# Note: tool imports are performed lazily inside _setup_agent_graph to avoid
+# importing heavy dependencies at module import time (improves Streamlit tests
+# that stub LlamaIndex modules).
 from src.config import settings
 from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
@@ -101,7 +97,6 @@ class ContextManager:
 
 
 # Constants
-
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
@@ -230,6 +225,12 @@ class MultiAgentCoordinator:
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with agent orchestration."""
         try:
+            # Lazy import tool functions from explicit submodules (no re-exports)
+            from src.agents.tools.planning import plan_query, route_query
+            from src.agents.tools.router_tool import router_tool
+            from src.agents.tools.synthesis import synthesize_results
+            from src.agents.tools.validation import validate_response
+
             # Create individual agents with proper naming and tools
             router_agent = create_react_agent(
                 self.llm,
@@ -372,6 +373,10 @@ class MultiAgentCoordinator:
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
                 logger.warning("Pre-model hook failed: %s", e)
+                # Non-fatal: annotate state for observability only if dict
+                if isinstance(state, dict):
+                    state["hook_error"] = True
+                    state["hook_name"] = "pre_model_hook"
                 return state
 
         return pre_model_hook
@@ -409,6 +414,10 @@ class MultiAgentCoordinator:
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
                 logger.warning("Post-model hook failed: %s", e)
+                # Non-fatal: annotate state for observability only if dict
+                if isinstance(state, dict):
+                    state["hook_error"] = True
+                    state["hook_name"] = "post_model_hook"
                 return state
 
         return post_model_hook

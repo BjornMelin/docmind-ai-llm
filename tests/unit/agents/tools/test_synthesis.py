@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from src.agents.tools import synthesize_results
+from src.agents.tools.synthesis import synthesize_results
 
 pytestmark = pytest.mark.unit
 

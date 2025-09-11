@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from src.agents.tools import router_tool
+from src.agents.tools.router_tool import router_tool
 
 
 class _FakeResponse:

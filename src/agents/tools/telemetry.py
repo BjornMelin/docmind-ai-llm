@@ -8,7 +8,7 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import Any
 
-from src.agents.tools import logger
+from loguru import logger
 
 
 def log_event(event: str, **kwargs: Any) -> None:

@@ -29,11 +29,9 @@ import pytest
 from langchain_core.messages import HumanMessage
 from llama_index.core.memory import ChatMemoryBuffer
 
-from src.agents.tools import (
-    retrieve_documents,
-    route_query,
-    validate_response,
-)
+from src.agents.tools.retrieval import retrieve_documents
+from src.agents.tools.planning import route_query
+from src.agents.tools.validation import validate_response
 
 
 @pytest.mark.unit
@@ -65,7 +63,7 @@ class TestAgentErrorRecovery:
         mock_hybrid_tool.invoke.return_value = "Hybrid search successful"
 
         # When: Executing tools with one failure
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_factory.create_tools_from_indexes.return_value = [
                 mock_vector_tool,
                 mock_kg_tool,
@@ -73,7 +71,7 @@ class TestAgentErrorRecovery:
             ]
 
             # Should isolate vector tool failure
-            with patch("src.agents.tools.logger") as mock_logger:
+            with patch("src.agents.tools.telemetry.logger") as mock_logger:
                 result = retrieve_documents.invoke(
                     {"query": "Multi-tool test query", "state": mock_state}
                 )
@@ -109,11 +107,11 @@ class TestAgentErrorRecovery:
         }
 
         # When: Tool execution encounters corrupted context
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
             # Mock context validation that detects corruption
-            with patch("src.agents.tools.ChatMemoryBuffer") as mock_context_class:
+            with patch("src.agents.tools.planning.ChatMemoryBuffer") as mock_context_class:
                 mock_fresh_context = Mock()
                 mock_context_class.from_defaults.return_value = mock_fresh_context
 
@@ -155,7 +153,7 @@ class TestAgentErrorRecovery:
         )
 
         # When: Executing with partial failures
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
 
             def create_mixed_tools(*args, **kwargs):  # pylint: disable=unused-argument
                 # Only return tools that are available
@@ -168,7 +166,7 @@ class TestAgentErrorRecovery:
 
             mock_factory.create_tools_from_indexes.side_effect = create_mixed_tools
 
-            with patch("src.agents.tools.logger") as mock_logger:
+            with patch("src.agents.tools.telemetry.logger") as mock_logger:
                 result = retrieve_documents.invoke(
                     {"query": "Partial failure test", "state": mock_state}
                 )
@@ -241,7 +239,7 @@ class TestAgentErrorRecovery:
             call_count["create_tools"] += 1
             raise MemoryError("Insufficient memory for tool execution")
 
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_factory.create_tools_from_indexes.side_effect = (
                 memory_exhaustion_simulation
             )
@@ -284,11 +282,11 @@ class TestAgentErrorRecovery:
 
         with (
             patch(
-                "src.agents.tools.ToolFactory.create_vector_search_tool",
+                "src.agents.tool_factory.ToolFactory.create_vector_search_tool",
                 return_value=mock_tool,
             ),
             patch(
-                "src.agents.tools.ToolFactory.create_hybrid_vector_tool",
+                "src.agents.tool_factory.ToolFactory.create_hybrid_vector_tool",
                 return_value=mock_tool,
             ),
         ):
