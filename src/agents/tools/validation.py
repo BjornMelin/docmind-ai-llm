@@ -8,7 +8,7 @@ from typing import Annotated
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
-from src.agents import tools as tools_mod
+import src.agents.tools as tools_mod
 
 from .constants import (
     ACCEPT_CONFIDENCE_THRESHOLD,

@@ -9,7 +9,8 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 # Import patch points from package aggregator so tests can monkeypatch
-from src.agents import tools as tools_mod
+import src.agents.tools as tools_mod
+from src.config.settings import settings
 from src.utils.telemetry import log_jsonl
 
 
@@ -92,13 +93,16 @@ def router_tool(
                 selected_strategy,
                 out["timing_ms"],
             )
-            log_jsonl(
-                {
-                    "router_selected": True,
-                    "route": selected_strategy or "unknown",
-                    "timing_ms": out["timing_ms"],
-                }
-            )
+            evt = {
+                "router_selected": True,
+                "route": selected_strategy or "unknown",
+                "timing_ms": out["timing_ms"],
+            }
+            # Include traversal_depth when knowledge_graph route is taken
+            if selected_strategy == "knowledge_graph":
+                with suppress(Exception):  # pragma: no cover - belt and suspenders
+                    evt["traversal_depth"] = settings.graphrag_cfg.default_path_depth
+            log_jsonl(evt)
 
         return json.dumps(out)
 

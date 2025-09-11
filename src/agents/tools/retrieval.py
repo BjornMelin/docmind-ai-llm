@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from llama_index.core import Document
 
-from src.agents import tools as tools_mod
+import src.agents.tools as tools_mod
 
 from .constants import (
     CONTENT_KEY_LENGTH,
