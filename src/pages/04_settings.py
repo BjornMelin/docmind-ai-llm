@@ -1,4 +1,4 @@
-# pylint: disable=invalid-name, C0103
+# pylint: disable=invalid-name, C0103, too-many-statements
 """Settings page for LLM runtime (SPEC-001).
 
 Provides provider selection, URLs, model, context window, timeout, and GPU
@@ -135,6 +135,17 @@ def main() -> None:
         help="When off, only localhost URLs are accepted",
     )
 
+    # Retrieval settings
+    st.subheader("Retrieval")
+    enable_server_hybrid = st.checkbox(
+        "Enable server-side hybrid retrieval (Qdrant fusion)",
+        value=bool(getattr(settings.retrieval, "enable_server_hybrid", False)),
+        help=(
+            "Registers a server-side hybrid search tool that leverages Qdrant's "
+            "Query API with prefetch + RRF/DBSF fusion. Default is off."
+        ),
+    )
+
     # Basic validation rules
     if lmstudio_url and not lmstudio_url.rstrip("/").endswith("/v1"):
         st.error("LM Studio URL must end with /v1")
@@ -170,6 +181,9 @@ def main() -> None:
                 with suppress(Exception):  # pragma: no cover - UI guard
                     settings.vllm.llamacpp_model_path = Path(gguf_path)
             settings.allow_remote_endpoints = bool(allow_remote)
+            # Retrieval toggles
+            with suppress(Exception):
+                settings.retrieval.enable_server_hybrid = bool(enable_server_hybrid)
 
             _apply_runtime()
 
@@ -188,9 +202,27 @@ def main() -> None:
                 # nested path override
                 "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": gguf_path,
                 "DOCMIND_ALLOW_REMOTE_ENDPOINTS": ("true" if allow_remote else "false"),
+                # Retrieval flag persisted via nested env mapping
+                "DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID": (
+                    "true" if enable_server_hybrid else "false"
+                ),
             }
             _persist_env(env_map)
             st.success("Saved to .env")
+
+    st.subheader("Cache Utilities")
+    st.caption(
+        "Bump the global cache version and clear Streamlit caches. "
+        "Use this if results seem stale after changing settings or content."
+    )
+    if st.button("Clear caches", use_container_width=True):
+        try:
+            from src.ui.cache import clear_caches
+
+            new_v = clear_caches(settings)
+            st.success(f"Caches cleared. Cache version bumped to {new_v}.")
+        except Exception as e:  # pragma: no cover - defensive  # pylint: disable=broad-exception-caught
+            st.error(f"Failed to clear caches: {e}")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual launch
