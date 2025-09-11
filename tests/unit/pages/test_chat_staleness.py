@@ -5,10 +5,10 @@ Covers staleness computation from manifest vs current corpus and config.
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
-chat_mod = importlib.import_module("src.pages.01_chat")
+from src.persistence.snapshot import compute_config_hash, compute_corpus_hash
+from src.persistence.snapshot_utils import compute_staleness
 
 
 def test_compute_staleness_true(tmp_path: Path) -> None:
@@ -30,10 +30,10 @@ def test_compute_staleness_true(tmp_path: Path) -> None:
         "chunk_size": 256,
         "chunk_overlap": 32,
     }
-    chash = chat_mod.compute_corpus_hash(corpus)
-    cfg_hash = chat_mod.compute_config_hash(cfg)
+    chash = compute_corpus_hash(corpus)
+    cfg_hash = compute_config_hash(cfg)
     manifest = {"corpus_hash": chash, "config_hash": cfg_hash + "diff"}
-    assert chat_mod.compute_staleness(manifest, corpus, cfg) is True
+    assert compute_staleness(manifest, corpus, cfg) is True
 
 
 def test_compute_staleness_false(tmp_path: Path) -> None:
@@ -52,7 +52,7 @@ def test_compute_staleness_false(tmp_path: Path) -> None:
         "chunk_size": 128,
         "chunk_overlap": 16,
     }
-    chash = chat_mod.compute_corpus_hash(corpus)
-    cfg_hash = chat_mod.compute_config_hash(cfg)
+    chash = compute_corpus_hash(corpus)
+    cfg_hash = compute_config_hash(cfg)
     manifest = {"corpus_hash": chash, "config_hash": cfg_hash}
-    assert chat_mod.compute_staleness(manifest, corpus, cfg) is False
+    assert compute_staleness(manifest, corpus, cfg) is False

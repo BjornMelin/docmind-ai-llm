@@ -148,7 +148,7 @@ async def cross_modal_search(
             return []
         response = await asyncio.to_thread(index.as_query_engine().query, query)
         nodes = getattr(response, "source_nodes", [])
-        if not isinstance(nodes, (list, tuple)):  # noqa: UP038 (3.11 compat)
+        if not isinstance(nodes, list | tuple):
             return []
         for rank, node in enumerate(nodes[:top_k], start=1):
             text = getattr(getattr(node, "node", {}), "text", "")

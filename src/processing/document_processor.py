@@ -316,9 +316,9 @@ class UnstructuredTransformation(TransformComponent):
 
             Note: avoid ``isinstance(x, A | B)`` which is invalid at runtime.
             """
-            if isinstance(val, (str, int, float, bool)) or val is None:  # noqa: UP038
+            if isinstance(val, str | int | float | bool) or val is None:
                 return val
-            if isinstance(val, (list, tuple)):  # noqa: UP038
+            if isinstance(val, list | tuple):
                 return [_safe_json_value(v) for v in val]
             if isinstance(val, dict):
                 return {k: _safe_json_value(v) for k, v in val.items()}
@@ -494,12 +494,12 @@ class DocumentProcessor:
 
         with suppress(Exception):
             val = self.settings.processing.max_document_size_mb
-            if isinstance(val, (int, float)) and val > 0:  # noqa: UP038
+            if isinstance(val, int | float) and val > 0:
                 return int(val)
         # Top-level (fallback for older tests/mocks)
         with suppress(Exception):
             val = self.settings.max_document_size_mb
-            if isinstance(val, (int, float)) and val > 0:  # noqa: UP038
+            if isinstance(val, int | float) and val > 0:
                 return int(val)
         return 100
 

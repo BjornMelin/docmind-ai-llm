@@ -123,8 +123,9 @@ def main() -> None:  # pragma: no cover - Streamlit page
                                 st.warning(f"Snapshot failed: {e}")
                             # Export helpers with simple seeds
                             try:
-                                store = pg_index.property_graph_store
-                                seeds = _collect_seed_ids(store, cap=32)
+                                seeds: list[str] = get_export_seed_ids(
+                                    pg_index, vector_index, cap=32
+                                )
                                 out_dir = settings.data_dir / "graph"
                                 export_graph_jsonl(
                                     pg_index, out_dir / "graph.jsonl", seeds
@@ -227,7 +228,8 @@ def main() -> None:  # pragma: no cover - Streamlit page
             except Exception as e:  # pragma: no cover - UX best effort
                 st.error(f"Snapshot manager error: {e}")
 
-# ---- Testable helpers (unit-tested) ----
+
+# ---- Page helpers ----
 
 
 def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Path:

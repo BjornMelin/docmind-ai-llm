@@ -20,12 +20,19 @@ from loguru import logger
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config.settings import settings
 from src.persistence.snapshot import (
-    compute_config_hash,
-    compute_corpus_hash,
     latest_snapshot_dir,
     load_manifest,
     load_property_graph_index,
     load_vector_index,
+)
+from src.persistence.snapshot_utils import (
+    collect_corpus_paths as _collect_corpus_paths,
+)
+from src.persistence.snapshot_utils import (
+    compute_staleness,
+)
+from src.persistence.snapshot_utils import (
+    current_config_dict as _current_config_dict,
 )
 from src.retrieval.router_factory import build_router_engine
 from src.ui.components.provider_badge import provider_badge
@@ -170,53 +177,7 @@ if __name__ == "__main__":  # pragma: no cover
     main()
 
 
-# ---- Testable helpers (unit-tested) ----
-
-
-def _collect_corpus_paths(base: Path) -> list[Path]:
-    """Collect files under uploads directory for hashing."""
-    if not base.exists():
-        return []
-    return [p for p in base.glob("**/*") if p.is_file()]
-
-
-def _current_config_dict() -> dict[str, Any]:
-    """Build current retrieval/config dict used in config_hash."""
-    return {
-        "router": settings.retrieval.router,
-        "hybrid": settings.retrieval.hybrid_enabled,
-        "graph_enabled": settings.enable_graphrag,
-        "chunk_size": settings.processing.chunk_size,
-        "chunk_overlap": settings.processing.chunk_overlap,
-    }
-
-
-def compute_staleness(
-    manifest: dict[str, Any], corpus_paths: Iterable[Path], cfg: dict[str, Any]
-) -> bool:
-    """Return True when corpus/config hashes differ from manifest values.
-
-    Args:
-        manifest: Snapshot manifest mapping containing ``corpus_hash`` and
-            ``config_hash``.
-        corpus_paths: Iterable of file paths representing current corpus.
-        cfg: Configuration mapping to hash for comparison.
-
-    Returns:
-        True if staleness is detected, False otherwise.
-    """
-    # Normalize with POSIX relpaths under uploads
-    uploads_dir = settings.data_dir / "uploads"
-    # Prefer base_dir-normalized hashing (POSIX relpaths); if it doesn't match
-    # manifest (e.g., older snapshots), fall back to absolute-path hashing.
-    chash_norm = compute_corpus_hash(list(corpus_paths), base_dir=uploads_dir)
-    cfg_hash = compute_config_hash(cfg)
-    if manifest.get("config_hash") != cfg_hash:
-        return True
-    if manifest.get("corpus_hash") == chash_norm:
-        return False
-    chash_abs = compute_corpus_hash(list(corpus_paths))
-    return manifest.get("corpus_hash") != chash_abs
+# ---- Page helpers ----
 
 
 def _load_latest_snapshot_into_session() -> None:
