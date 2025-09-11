@@ -52,7 +52,7 @@ def synthesize_results(
                     total_processing_time += result["processing_time_ms"]
 
         logger.info(
-            "Synthesizing %d documents from %d sources",
+            "Synthesizing {} documents from {} sources",
             len(all_documents),
             len(results_list),
         )
@@ -111,11 +111,11 @@ def synthesize_results(
             "original_query": original_query,
         }
 
-        logger.info("Synthesis complete: %d final documents", len(final_documents))
+        logger.info("Synthesis complete: {} final documents", len(final_documents))
         return json.dumps(result_data, default=str)
 
     except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Result synthesis failed: %s", e)
+        logger.error("Result synthesis failed: {}", e)
         return json.dumps({"documents": [], "error": str(e), "synthesis_metadata": {}})
 
 

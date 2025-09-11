@@ -70,11 +70,11 @@ def route_query(
             "context_dependent": bool(previous_queries),
         }
 
-        logger.info("Query routed: %s complexity, %s strategy", complexity, strategy)
+        logger.info("Query routed: {} complexity, {} strategy", complexity, strategy)
         return json.dumps(decision)
 
     except Exception as e:
-        logger.error("Query routing failed: %s", e)
+        logger.error("Query routing failed: {}", e)
         raise
 
 
@@ -262,12 +262,12 @@ def plan_query(
         }
 
         logger.info(
-            "Query planned: %d sub-tasks, %s execution", len(sub_tasks), execution_order
+            "Query planned: {} sub-tasks, {} execution", len(sub_tasks), execution_order
         )
         return json.dumps(plan)
 
     except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Query planning failed: %s", e)
+        logger.error("Query planning failed: {}", e)
         # Fallback plan
         fallback = {
             "original_query": query,

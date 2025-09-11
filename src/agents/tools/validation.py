@@ -96,14 +96,14 @@ def validate_response(
         }
 
         logger.info(
-            "Response validation: %.2f confidence, %s action",
+            "Response validation: {:.2f} confidence, {} action",
             confidence,
             suggested_action,
         )
         return json.dumps(validation_result)
 
     except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Response validation failed: %s", e)
+        logger.error("Response validation failed: {}", e)
         return json.dumps(
             {
                 "valid": False,
