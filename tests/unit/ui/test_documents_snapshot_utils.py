@@ -2,25 +2,13 @@
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-
-def _load_page_module(filename: str):
-    base = Path(__file__).resolve().parents[3]  # project root
-    path = base / "src" / "pages" / filename
-    spec = importlib.util.spec_from_file_location(f"page_{filename}", path)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[assignment]
-    return mod
-
-
-docs_page = _load_page_module("02_documents.py")
+docs_page = importlib.import_module("src.pages.02_documents")
 
 
 class _Node:

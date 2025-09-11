@@ -19,8 +19,8 @@ from __future__ import annotations
 import json
 import os
 import posixpath
+import shutil
 import time
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -125,7 +125,12 @@ def _fsync_dir(path: Path) -> None:
 
 
 def finalize_snapshot(tmp_dir: Path) -> Path:
-    """Atomically rename tmp_dir to timestamped snapshot and release lock."""
+    """Atomically finalize snapshot and always release the lock.
+
+    - Ensures a unique final directory name by appending a numeric suffix if a
+      timestamp collision occurs (e.g., 20250101T000000-1).
+    - Calls ``_release_lock()`` even if rename fails to avoid lock leaks.
+    """
     paths = _snapshot_paths()
     if not tmp_dir.exists():  # pragma: no cover
         _release_lock()
@@ -133,25 +138,29 @@ def finalize_snapshot(tmp_dir: Path) -> Path:
     # ensure metadata is flushed
     _fsync_dir(tmp_dir)
     ts_final = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    final_dir = paths.base_dir / ts_final
-    tmp_dir.rename(final_dir)
-    _fsync_dir(paths.base_dir)
-    _release_lock()
-    logger.info("Snapshot finalized at %s", final_dir)
-    return final_dir
+    # Find a unique final directory name
+    candidate = paths.base_dir / ts_final
+    if candidate.exists():
+        suffix = 1
+        while True:
+            alt = paths.base_dir / f"{ts_final}-{suffix}"
+            if not alt.exists():
+                candidate = alt
+                break
+            suffix += 1
+    try:
+        tmp_dir.rename(candidate)
+        _fsync_dir(paths.base_dir)
+        logger.info("Snapshot finalized at %s", candidate)
+        return candidate
+    finally:
+        _release_lock()
 
 
 def cleanup_tmp(tmp_dir: Path) -> None:
-    """Remove a temporary snapshot dir and release lock."""
+    """Remove a temporary snapshot dir and release lock (best-effort)."""
     try:
-        for p in sorted(tmp_dir.rglob("*"), reverse=True):
-            with suppress(OSError):
-                p.unlink() if p.is_file() else p.rmdir()
-        with Path(tmp_dir).open("a"):
-            pass
-        tmp_dir.rmdir()
-    except OSError:  # pragma: no cover - best-effort
-        pass
+        shutil.rmtree(tmp_dir, ignore_errors=True)
     finally:
         _release_lock()
 
@@ -334,7 +343,7 @@ def compute_config_hash(cfg: dict[str, Any] | None = None) -> str:
     """
     if cfg is None:
         cfg = {
-            "embedding_model": getattr(settings.embedding, "model", None),
+            "embedding_model": getattr(settings.embedding, "model_name", None),
             "embedding_dim": getattr(settings.embedding, "dimension", None),
             "retrieval": {
                 "fusion_mode": getattr(settings.retrieval, "fusion_mode", None),

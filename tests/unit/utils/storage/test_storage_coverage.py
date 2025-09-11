@@ -12,11 +12,20 @@ def _ns(**kw):
 
 def test_create_vector_store_returns_store(monkeypatch):
     """Test vector store creation returns proper store instance."""
-    # Avoid real network: stub QdrantClient constructor
+    # Avoid real network: stub QdrantClient and QdrantVectorStore
     monkeypatch.setattr(storage_mod, "QdrantClient", MagicMock())
 
+    class _DummyStore:
+        def __init__(self, client, collection_name, enable_hybrid, batch_size):
+            self.client = client
+            self.collection_name = collection_name
+            self.enable_hybrid = enable_hybrid
+            self.batch_size = batch_size
+
+    monkeypatch.setattr(storage_mod, "QdrantVectorStore", _DummyStore)
+
     store = storage_mod.create_vector_store("test_collection", enable_hybrid=True)
-    assert getattr(store, "collection_name", "test_collection")
+    assert store.collection_name == "test_collection"
 
 
 def test_get_collection_info_exists(monkeypatch):

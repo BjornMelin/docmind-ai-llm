@@ -18,6 +18,12 @@ def test_selector_fallback_to_llm(monkeypatch):  # type: ignore[no-untyped-def]
     fake_sel.LLMSingleSelector = _LLMSingleSelector
     monkeypatch.setitem(sys.modules, "llama_index.core.selectors", fake_sel)
 
+    # Also patch already-imported symbols in router_factory
+    # to avoid import-order coupling
+    import src.retrieval.router_factory as rf
+
+    monkeypatch.setattr(rf, "LLMSingleSelector", _LLMSingleSelector, raising=False)
+
     # Stub query engines and tools
     qe_mod = ModuleType("llama_index.core.query_engine")
     tools_mod = ModuleType("llama_index.core.tools")
@@ -49,6 +55,10 @@ def test_selector_fallback_to_llm(monkeypatch):  # type: ignore[no-untyped-def]
 
     monkeypatch.setitem(sys.modules, "llama_index.core.query_engine", qe_mod)
     monkeypatch.setitem(sys.modules, "llama_index.core.tools", tools_mod)
+    # Patch router_factory imports if already loaded
+    monkeypatch.setattr(rf, "RouterQueryEngine", _RouterQueryEngine, raising=False)
+    monkeypatch.setattr(rf, "QueryEngineTool", _QueryEngineTool, raising=False)
+    monkeypatch.setattr(rf, "ToolMetadata", _ToolMetadata, raising=False)
 
     # Stub hybrid retriever import
     hyr_mod = ModuleType("src.retrieval.hybrid")
