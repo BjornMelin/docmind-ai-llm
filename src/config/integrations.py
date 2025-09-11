@@ -14,6 +14,7 @@ Key behaviors:
 
 import logging
 import os
+import threading
 from contextlib import suppress
 
 from llama_index.core import Settings
@@ -28,6 +29,7 @@ from .settings import settings
 # symbol is bound lazily inside setup_llamaindex(). Tests may patch the module
 # attribute HuggingFaceEmbedding; we preserve a module-level name for this.
 HuggingFaceEmbedding = None  # type: ignore  # pylint: disable=invalid-name
+_HF_EMBED_LOCK = threading.Lock()
 
 # Keep text embeddings defaulting to HuggingFaceEmbedding (BGE-M3) for
 # consistency with tri-mode retrieval and VectorStoreIndex usage.
@@ -143,9 +145,17 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             # this constructor directly when needed). Import lazily when needed.
             global HuggingFaceEmbedding
             if HuggingFaceEmbedding is None:  # type: ignore
-                from llama_index.embeddings import huggingface as _hf  # local import
+                # Double-checked locking to avoid repeated imports under concurrency
+                with _HF_EMBED_LOCK:
+                    if HuggingFaceEmbedding is None:  # type: ignore
+                        from llama_index.embeddings import (
+                            huggingface as _hf,  # local import
+                        )
 
-                HuggingFaceEmbedding = _hf.HuggingFaceEmbedding  # type: ignore[attr-defined]
+                        # Bind constructor once; tests may monkeypatch this symbol
+                        HuggingFaceEmbedding = (
+                            _hf.HuggingFaceEmbedding  # type: ignore[attr-defined]
+                        )
             Settings.embed_model = HuggingFaceEmbedding(
                 model_name=model_name,
                 device=device,
