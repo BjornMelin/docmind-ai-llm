@@ -58,7 +58,7 @@ def route_query(
         ):
             strategy = "graphrag"
 
-        processing_time = tools_mod.time.perf_counter() - start_time
+        processing_time = time.perf_counter() - start_time
 
         decision = {
             "strategy": strategy,
@@ -168,7 +168,7 @@ def plan_query(
 ) -> str:
     """Decompose complex queries into structured sub-tasks."""
     try:
-        start_time = tools_mod.time.perf_counter()
+        start_time = time.perf_counter()
 
         if complexity == "simple":
             # Simple queries don't need decomposition
