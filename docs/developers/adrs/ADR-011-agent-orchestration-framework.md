@@ -187,3 +187,18 @@ def test_supervisor_boots_with_agents(supervisor_app):
 - 6.2 (2025‑09‑04): Restored explicit agent role list and supervisor configuration details (parallel_tool_calls, output_mode, create_forward_message_tool, add_handoff_back_messages) with hook notes and prompt
 - 6.1 (2025‑09‑04): Standardized to template; added diagram, PR/IR, config/tests
 - 6.0 (2025‑08‑19): Accepted Supervisor implementation; integrates ADR‑003/004/010
+
+## Supervisor Configuration Updates
+
+- Supervisor `output_mode` MUST be one of `last_message` (default) or `full_history`. A custom `structured` output mode is NOT supported; structured metadata SHOULD be carried in state/response models.
+- Rename legacy `add_handoff_back_messages` to `add_handoff_messages`.
+- Prefer `create_forward_message_tool("supervisor")` when summarization is unnecessary.
+
+## Performance & Timeouts
+
+- Coordinators SHOULD enforce elapsed‑time guards around streaming and tool execution; publish sane defaults and document override points.
+
+## Streaming Fallback & Analytics
+
+- The Chat UI MUST implement streaming fallback using chunked `write_stream`.
+- Analytics MUST be best‑effort and non‑blocking; failures MUST NOT impact the user experience.

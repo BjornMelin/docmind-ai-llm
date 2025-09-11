@@ -77,3 +77,10 @@ Feature: GraphRAG with Router and Persistence
 ## Changelog
 
 - 1.1.0 (2025-09-09): Added router composition, SnapshotManager integration, staleness badge and acceptance criteria; library‑first update
+
+## Exports & Seeds
+
+- JSONL export is REQUIRED as the baseline; Parquet export is OPTIONAL and only available when `pyarrow` is installed.
+- Seed selection MUST be deterministic, de‑duplicated, and capped at 32 items.
+  - Seeds MAY be derived from ingested documents (e.g., unique `page_id`s) or from a top‑K pass via the retriever.
+- Export file naming MUST be stable and include a timestamp and format suffix (e.g., `graph_export-YYYYMMDD-HHMMSS.jsonl`).

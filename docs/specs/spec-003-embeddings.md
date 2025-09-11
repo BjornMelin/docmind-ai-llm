@@ -113,3 +113,9 @@ Feature: Embedding stack
 - LlamaIndex Settings for dense query alignment; Qdrant Query API hybrid
 - Transformers SigLIP docs; OpenCLIP model zoo and transforms
 - TEI (HF) limitations for BGE‑M3 sparse (dense-only)
+
+## Routing & Dimensions
+
+- Text embeddings SHOULD use BGE‑M3 (dimension 1024). Implement checks to assert dimension alignment across indexing/retrieval.
+- Image/text similarity SHOULD use SigLIP for image embeddings; route accordingly based on modality.
+- Embedding routers MUST produce clear errors when a model ID/dimension mismatch is detected.

@@ -469,3 +469,9 @@ def test_env_mapping(monkeypatch):
 - v2.2 (2025-08-27): Restored user flexibility across CPU/GPU/backends; validated five user scenarios
 - v2.1 (2025-08-25): Unified architecture implemented; major complexity reduction; tests pass
 - v2.0 (2025-08-24): Complete replacement with unified architecture; library‑first pattern
+
+## Offline Defaults & Allowlist
+
+- The application MUST default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted.
+- LM Studio endpoints MUST terminate with `/v1` and be validated in Settings.
+- Provide a centralized allowlist mechanism in configuration; tests MUST cover rejection of non‑allowlisted URLs when policy is strict.

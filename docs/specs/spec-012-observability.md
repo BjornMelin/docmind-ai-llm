@@ -51,3 +51,16 @@ Feature: Telemetry schema
     When a hybrid query and rerank execute
     Then logs SHALL include keys under retrieval.*, dedup.*, rerank.* as defined above
 ```
+
+## Telemetry Events (Canonical)
+
+- `router_selected`: { route, selector_type, pg_index_present (bool), traversal_depth (int, optional) }
+- `snapshot_stale_detected`: { reason, manifest_version, current_config_hash }
+- `export_performed`: { kind (jsonl|parquet), seed_count, capped (bool), dest_relpath }
+
+All telemetry MUST be PII‑safe; hash queries where necessary; avoid logging raw user text.
+
+## DuckDB Analytics Queries (Guidance)
+
+- Keep queries simple (counts, time series aggregates); prefer indexed time columns.
+- Example dashboards: route distribution over time, staleness counts/time‑to‑rebuild, export volumes and cap‑rate.

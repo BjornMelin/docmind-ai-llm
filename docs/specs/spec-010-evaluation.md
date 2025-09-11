@@ -43,3 +43,11 @@ Feature: IR metrics
 ## References
 
 - BEIR repo; RAGAS docs.
+
+## CLI Outputs & Offline Requirements
+
+- IR (BEIR) CLI MUST write a `leaderboard.csv` containing columns including (but not limited to): `NDCG@10`, `Recall@10`, `MRR@10`.
+- E2E (RAGAS) CLI MUST write a `leaderboard.csv` containing columns including (but not limited to): `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`.
+- Tests MUST be deterministic and offline:
+  - Heavy network/dataset downloads are NOT allowed in CI; use strict mocks or tiny local datasets.
+  - Coordinator/retriever interactions MUST be stubbed.

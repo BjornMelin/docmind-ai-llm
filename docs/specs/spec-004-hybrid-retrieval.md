@@ -116,3 +116,16 @@ Feature: Hybrid retrieval (server‑side fusion)
 ## Changelog
 
 - 1.1.1 (2025-09-09): Added Router interop note and cross‑link to GraphRAG spec/ADR
+
+## Server‑Side Hybrid Only (Qdrant Query API)
+
+- All hybrid queries MUST be executed server‑side via Qdrant Query API using `Prefetch` (sparse+dense) and `FusionQuery`.
+- Default fusion mode: RRF; DBSF MAY be exposed behind an environment flag. No UI toggles for fusion modes.
+- Named vectors MUST exist: `text-dense` and `text-sparse`; the sparse vector SHOULD use IDF modifier when supported.
+- Deduplication MUST occur by a configured key (default `page_id`) before the final fused cut.
+- Telemetry MUST include: `retrieval.fusion_mode`, `retrieval.prefetch_*`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
+
+### Prohibited
+
+- Client‑side fusion or weight mixing is NOT allowed in production paths.
+- UI toggles for retrieval fusion/reranking are NOT allowed; retrieval knobs remain environment‑only for testing.

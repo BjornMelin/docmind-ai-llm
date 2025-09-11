@@ -98,3 +98,32 @@ Relpath Hashing
 ## Changelog
 
 - 1.0.0 (2025-09-09): Initial draft spec
+
+## UI Staleness Badge
+
+- The Chat page MUST show a visible staleness badge when the current manifest differs from the latest content/config hashes.
+- Tooltip copy MUST be exactly:
+  - “Snapshot is stale (content/config changed). Rebuild in Documents → Rebuild GraphRAG Snapshot.”
+- The badge MUST be computed from local state (manifest vs current hashes) and MUST NOT trigger any network calls.
+
+## Lock Semantics (Single‑Writer)
+
+- SnapshotManager MUST implement a single‑writer lock with a bounded timeout and clear user feedback on lock contention.
+- While rebuilding, UI controls in Documents → Snapshot MUST reflect a locked state and prevent concurrent rebuilds.
+
+## Manifest Fields
+
+- Manifest MUST include at minimum: `corpus_hash`, `config_hash`, `created_at`, `version` (semantic), and optional `notes`.
+- Hashes MUST be deterministic and computed from stable inputs (e.g., file list + normalized config serialization).
+
+## Atomic Rename
+
+- Writes MUST occur to a temporary directory name with `_tmp-<uuid>` suffix and be atomically renamed to a timestamped final directory on success.
+- On failure, incomplete `_tmp-*` directories MUST be cleaned up on next run.
+
+## Acceptance & UX Mapping
+
+- Documents page MUST provide:
+  - Rebuild button (lock‑aware) and current snapshot path display.
+  - Exports section (JSONL baseline; Parquet optional with `pyarrow`) and seed cap display.
+- Chat page MUST show the staleness badge and tooltip per UI Staleness Badge above.

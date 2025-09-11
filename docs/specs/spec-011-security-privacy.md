@@ -50,3 +50,19 @@ The system MAY encrypt page images at rest using AES‑GCM when enabled.
 - AAD: SHOULD include non‑sensitive context (e.g., page_id) to bind ciphertext to metadata.
 - Rotation: Keys SHOULD support rotation; new ingests use the new kid; old objects remain decryptable while key material exists.
 - Consumption: Consumers (e.g., SigLIP/ColPali visual rerank) SHALL decrypt to a temporary file for processing and MUST clean up the temp file on success or timeout.
+
+## Offline‑First & Allowlist
+
+- Default posture MUST be offline‑first; remote endpoints disabled unless explicitly allowlisted.
+- LM Studio endpoints MUST end with `/v1`.
+- Add tests to reject non‑allowlisted URLs when policy is strict.
+
+## Secrets Redaction & Telemetry
+
+- Secrets MUST NEVER be logged. Use Pydantic v2 secrets and ensure redaction in any structured logs.
+- Telemetry MUST be minimal and PII‑safe; avoid logging raw prompts unless explicitly enabled for development.
+
+## Local‑Only Staleness & Safe Exports
+
+- Staleness computation MUST be local; the UI MUST NOT trigger network calls for staleness checks.
+- Export paths MUST be non‑egress; sanitize file names and block symlink traversal; enforce base path resolution.

@@ -83,3 +83,11 @@ Feature: Reranking modes
 ## References
 
 - BGE reranker; LlamaIndex node postprocessors; ColPali rerank example.
+
+## Always‑On Policy
+
+- Reranking MUST be enabled by default with a modality‑aware policy:
+  - Text reranking via BGE reranker v2‑m3.
+  - Visual reranking via SigLIP scoring when relevant.
+- ColPali MAY be enabled behind a gate only when thresholds are met (image‑heavy corpora, GPU available). It MUST NOT be the default.
+- UI MUST NOT expose reranking toggles; policy is set in configuration.

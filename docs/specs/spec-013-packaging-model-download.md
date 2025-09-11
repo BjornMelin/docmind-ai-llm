@@ -49,3 +49,8 @@ Feature: Pre-download
 ## References
 
 - huggingface_hub file_download docs.
+
+## Offline Mode & Extras
+
+- The CLI MUST support offline operation via `HF_HUB_OFFLINE=1` and deterministic tests with strict mocks.
+- Optional extras MAY provide Parquet support (e.g., `[parquet]`); when Parquet is requested without `pyarrow`, the CLI MUST issue a clear warning and fall back to JSONL.

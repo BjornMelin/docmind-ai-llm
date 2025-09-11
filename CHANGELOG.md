@@ -23,55 +23,56 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - GraphRAG (Phase 1): Library‑first refactor of `src/retrieval/graph_config.py` to use only documented LlamaIndex APIs (`as_retriever`, `as_query_engine`, `get`, `get_rel_map`); removed legacy/dead code and index mutation; added portable JSONL/Parquet exports via `get_rel_map`.
 - GraphRAG (Phase 2): Added `create_graph_rag_components()` factory to return (`graph_store`, `query_engine`, `retriever`) from a `PropertyGraphIndex`.
 - UI wiring: Documents page stores `vector_index`, `hybrid_retriever`, and optional `graphrag_index` in `st.session_state`; Chat page forwards these in `settings_override` (`vector`, `retriever`, `kg`) for coordinator/tools.
- - GraphRAG (Phase 2): SnapshotManager for atomic snapshots with `manifest.json` (corpus/config hashes, versions, lock) under `src/persistence/snapshot.py`.
- - Router factory for GraphRAG: `src/retrieval/router_factory.py` builds a `RouterQueryEngine` with vector+graph tools and safe fallback to vector-only.
- - Export helpers: JSONL baseline (subject, relation, object, depth, path_id, source_ids) and Parquet (optional, guarded when `pyarrow` missing).
- - UI: Documents page toggle "Build GraphRAG (beta)", snapshot creation notice, and export buttons; Chat staleness badge when manifest hashes mismatch.
- 
- - Server-side hybrid retriever module: `src/retrieval/hybrid.py` exposing `ServerHybridRetriever` and `_HybridParams` (Qdrant Query API Prefetch + FusionQuery; RRF default, DBSF optional). Deterministic de‑duplication and dense‑only fallback when sparse unavailable.
- - Router composition unification via `src/retrieval/router_factory.py`:
-   - Tools: `semantic_search` (vector.as_query_engine), `hybrid_search` (RetrieverQueryEngine wrapping `ServerHybridRetriever`), `knowledge_graph` (PropertyGraphIndex retriever/query engine with `path_depth=1`).
-   - Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`; fail‑open to vector‑only when graph is absent/unhealthy.
- - GraphRAG exports now preserve relation labels when provided by `get_rel_map`; fallback label is `related`. JSONL baseline retained; Parquet optional (guarded when PyArrow missing).
- - Retriever‑first seed policy helper `get_export_seed_ids()` in `src/retrieval/graph_config.py` used by `src/ui/ingest_adapter.py` for deterministic export seeding (graph → vector → stable fallback; dedup + stable tie‑break).
- - Snapshot manifest enrichment in `src/persistence/snapshot.py`:
-   - Added `schema_version`, `persist_format_version`, `complete`, and enriched `versions` (`app`, `llama_index`, `qdrant_client`, `embed_model`).
-   - Normalized `compute_corpus_hash(paths, base_dir=uploads/)` to use POSIX relpaths for cross‑platform stability.
- - Chat autoload/staleness UX: Chat/Documents pages compute corpus hash with relpaths and surface staleness badge based on manifest.
+- GraphRAG (Phase 2): SnapshotManager for atomic snapshots with `manifest.json` (corpus/config hashes, versions, lock) under `src/persistence/snapshot.py`.
+- Router factory for GraphRAG: `src/retrieval/router_factory.py` builds a `RouterQueryEngine` with vector+graph tools and safe fallback to vector-only.
+- Export helpers: JSONL baseline (subject, relation, object, depth, path_id, source_ids) and Parquet (optional, guarded when `pyarrow` missing).
+- UI: Documents page toggle "Build GraphRAG (beta)", snapshot creation notice, and export buttons; Chat staleness badge when manifest hashes mismatch.
+
+- Server-side hybrid retriever module: `src/retrieval/hybrid.py` exposing `ServerHybridRetriever` and `_HybridParams` (Qdrant Query API Prefetch + FusionQuery; RRF default, DBSF optional). Deterministic de‑duplication and dense‑only fallback when sparse unavailable.
+- Router composition unification via `src/retrieval/router_factory.py`:
+  - Tools: `semantic_search` (vector.as_query_engine), `hybrid_search` (RetrieverQueryEngine wrapping `ServerHybridRetriever`), `knowledge_graph` (PropertyGraphIndex retriever/query engine with `path_depth=1`).
+  - Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`; fail‑open to vector‑only when graph is absent/unhealthy.
+- GraphRAG exports now preserve relation labels when provided by `get_rel_map`; fallback label is `related`. JSONL baseline retained; Parquet optional (guarded when PyArrow missing).
+- Retriever‑first seed policy helper `get_export_seed_ids()` in `src/retrieval/graph_config.py` used by `src/ui/ingest_adapter.py` for deterministic export seeding (graph → vector → stable fallback; dedup + stable tie‑break).
+- Snapshot manifest enrichment in `src/persistence/snapshot.py`:
+  - Added `schema_version`, `persist_format_version`, `complete`, and enriched `versions` (`app`, `llama_index`, `qdrant_client`, `embed_model`).
+  - Normalized `compute_corpus_hash(paths, base_dir=uploads/)` to use POSIX relpaths for cross‑platform stability.
+- Chat autoload/staleness UX: Chat/Documents pages compute corpus hash with relpaths and surface staleness badge based on manifest.
   
 ### Tests
+
 - Added unit tests for analytics manager insert/prune.
 - Added CLI smoke tests for model pull and RAGAS/BEIR harnesses.
 - Added page import smoke tests for new Streamlit pages.
 - Added unit test for Chat router override mapping.
 - Added unit tests: GraphRAG factory (`tests/unit/retrieval/test_graph_rag_factory.py`), graph helpers (`tests/unit/retrieval/test_graph_config_utils.py`), and portable exports (`tests/integration/test_graphrag_exports.py`).
- - Added unit tests for SnapshotManager (`tests/unit/persistence/test_snapshot_manager.py`) and router factory (`tests/unit/retrieval/test_router_factory.py`).
- - Added integration tests for router composition (`tests/integration/test_ingest_router_flow.py`) and exports (`tests/integration/test_graphrag_exports.py`).
+- Added unit tests for SnapshotManager (`tests/unit/persistence/test_snapshot_manager.py`) and router factory (`tests/unit/retrieval/test_router_factory.py`).
+- Added integration tests for router composition (`tests/integration/test_ingest_router_flow.py`) and exports (`tests/integration/test_graphrag_exports.py`).
 - Added E2E smoke test for Chat via router override (`tests/e2e/test_chat_graphrag_smoke.py`).
 - Updated Chat router override test to allow additional forwarded components when present.
- 
- - New hybrid/router/graph tests:
-   - `tests/unit/retrieval/test_hybrid_retriever_basic.py` (dedup determinism; sparse‑unavailable dense fallback)
-   - `tests/unit/retrieval/test_router_factory_hybrid.py` (vector + hybrid + knowledge_graph tools)
-   - `tests/unit/retrieval/test_seed_policy.py` (retriever‑first seed policy and fallbacks)
-   - `tests/unit/retrieval/test_graph_helpers.py` (label preservation + `related` fallback)
-   - `tests/unit/persistence/test_corpus_hash_relpaths.py` (relpath hashing determinism)
-   - Updated/removed legacy integration tests; examples now use `router_factory`
+
+- New hybrid/router/graph tests:
+  - `tests/unit/retrieval/test_hybrid_retriever_basic.py` (dedup determinism; sparse‑unavailable dense fallback)
+  - `tests/unit/retrieval/test_router_factory_hybrid.py` (vector + hybrid + knowledge_graph tools)
+  - `tests/unit/retrieval/test_seed_policy.py` (retriever‑first seed policy and fallbacks)
+  - `tests/unit/retrieval/test_graph_helpers.py` (label preservation + `related` fallback)
+  - `tests/unit/persistence/test_corpus_hash_relpaths.py` (relpath hashing determinism)
+  - Updated/removed legacy integration tests; examples now use `router_factory`
 
 ### Changed
 
 - UI refactor: `src/app.py` now only defines pages and runs navigation; all monolithic UI logic moved to `src/pages/*`.
 - Coordinator: best‑effort analytics logging added after processing each query.
- - Router toolset unified: `router_factory.build_router_engine(...)` composes `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; selector policy prefers `PydanticSingleSelector` then falls back to `LLMSingleSelector`.
- - GraphRAG helpers (`graph_config.py`) now emit label‑preserving exports and provide `get_export_seed_ids()` for deterministic seeding.
+- Router toolset unified: `router_factory.build_router_engine(...)` composes `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; selector policy prefers `PydanticSingleSelector` then falls back to `LLMSingleSelector`.
+- GraphRAG helpers (`graph_config.py`) now emit label‑preserving exports and provide `get_export_seed_ids()` for deterministic seeding.
 - Snapshot manifest enriched and corpus hashing normalized to relpaths; Chat autoload/staleness detection wired to these fields.
- - Docs: aligned developer and API docs to new router/hybrid/GraphRAG/snapshots; added `docs/api/api.md` and `docs/developers/ci-cd-pipeline.md`.
+- Docs: aligned developer and API docs to new router/hybrid/GraphRAG/snapshots; added `docs/api/api.md` and `docs/developers/ci-cd-pipeline.md`.
 
 ### Removed
 
 - Deleted legacy model predownload script: `scripts/model_prep/predownload_models.py`.
 - Removed monolithic UI blocks from `src/app.py` (chat/ingestion/analytics).
- - Removed legacy/custom router code and tests; all retrieval routes via `router_factory`. No backwards compatibility retained.
+- Removed legacy/custom router code and tests; all retrieval routes via `router_factory`. No backwards compatibility retained.
 
 ## [1.3.0] - 2025-09-08
 
@@ -131,10 +132,17 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - Reranking is always-on (BGE v2‑m3 text + SigLIP visual) with policy-gated ColPali; UI no longer exposes reranker knobs. Implementation selection is automatic (no env/config toggles).
 
+- Test stability and design-for-testability:
+  - Removed the last test-only seam from production code: integrations no longer expose a `ClipEmbedding` alias or accept test-only injection. Embedding setup always uses `HuggingFaceEmbedding`; tests patch the constructor via `monkeypatch` when needed.
+  - Reverted/avoided test shims in `src/app.py`, `src/retrieval/router_factory.py`, and page modules; imports are production-only.
+  - Stabilized import-order–sensitive UI and persistence tests by patching the consumer seams directly and, where necessary, clearing only the specific modules in test-local `conftest.py` (no global module cache hacks). AppTest-based UI tests patch the page module’s attributes (`build_router_engine`, export helpers) instead of relying on import order.
+  - Snapshot roundtrip tests stub `llama_index` loaders deterministically by overriding `sys.modules` for the exact import points used by the helpers.
+
 ### Fixed
 
 - Read-only settings panel simplified; no longer references removed `reranker_mode`.
 - README updated with offline predownload steps and new envs.
+- `validate_startup_configuration` handles Qdrant `ResponseHandlingException`/`UnexpectedResponse` as connectivity failures with structured results (production-safe, test-friendly behavior).
 
 ## [1.1.0] - 2025-09-07
 
@@ -230,6 +238,25 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Test runner `scripts/run_tests.py` updated to ASCII‑only output and corrected import validation list.
 
 - UI/runtime (SPEC‑001): removed legacy in‑app backend selection and ad‑hoc LLM construction; centralized provider selection and LLM creation via Settings page + unified factory with strict endpoint validation.
+
+### Docs/Specs/RTM
+
+- Specs updated:
+  - spec‑014: Added UI staleness badge exact tooltip, single‑writer lock semantics with timeout, manifest fields, atomic rename guidance, and acceptance/UX mapping.
+  - spec‑004: Clarified server‑side‑only hybrid via Qdrant Query API (Prefetch + FusionQuery), named vectors + IDF, dedup, and telemetry; prohibited client‑side fusion and UI fusion toggles.
+  - spec‑006: Defined GraphRAG exports and seeds policy (JSONL required; Parquet optional; deterministic deduped seeds capped at 32).
+  - spec‑002/spec‑003/spec‑005: Clarified ingestion OCR fallback; embedding routing/dimensions (BGE‑M3 1024; SigLIP); always‑on reranking and ColPali gating.
+  - spec‑010: Documented offline evaluation CLIs and CSV schema expectations; strict mocks/no heavy downloads in CI.
+  - spec‑012: Added canonical telemetry events (router_selected, snapshot_stale_detected, export_performed, traversal_depth) and DuckDB analytics guidance.
+  - spec‑013: Documented offline mode (HF_HUB_OFFLINE) and Parquet extras; JSONL fallback when pyarrow missing.
+  - spec‑001/spec‑011: Settings scope & validation; offline‑first allowlist; LM Studio /v1 rule; selector policy; secrets redaction and non‑egress export requirements.
+  - ADR‑011: Supervisor output_mode (last_message/full_history), add_handoff_messages rename, streaming fallback, and best‑effort analytics guidance.
+  - ADR‑024: Offline defaults and endpoint allowlist policy.
+
+- Requirements/RTM:
+  - requirements.md: Added FR‑009.1–009.6 (staleness badge; SnapshotManager lock/rename; exports JSONL/Parquet; deterministic seed policy; export path security; telemetry events) and FR‑SEC‑NET‑001 (offline‑first allowlist; LM Studio /v1).
+  - traceability.md: Mapped new FRs to code/tests and marked them Implemented.
+
 
 ### Fixed
 
@@ -343,3 +370,27 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Models: `ErrorResponse` enriched with optional `traceback` and `suggestion`; `PdfPageImageNode` no longer carries error fields
 - Tests: PDF rendering patched/stubbed in unit/integration paths to avoid heavy I/O while preserving behavior under test
 - Docs: SPEC‑002 updated to reflect actual implementation (Unstructured chunking, IngestionPipeline transform, caching, page‑image emission, validation commands)
+- Server-side hybrid toggle and UI
+  - Added `retrieval.enable_server_hybrid` in `src/config/settings.py` (default off) and wired precedence in `src/retrieval/router_factory.py` (explicit param > settings > default).
+  - Added Settings UI toggle in `src/pages/04_settings.py` with `.env` persistence via `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID`.
+- Ingestion analytics
+  - Added best-effort analytics logging inside `src/processing/document_processor.py` using `AnalyticsManager` (DuckDB prepared statements). Logs ingest latency and element counts behind `analytics_enabled`.
+- Telemetry/security completeness
+  - Enriched reranker telemetry with `rerank.path` and `rerank.total_timeout_budget_ms` in `src/retrieval/reranking.py`.
+  - Added endpoint allowlist tests under `tests/unit/config/test_endpoint_allowlist.py`.
+- Hook robustness
+  - Hardened LangGraph pre/post hooks in `src/agents/coordinator.py` to annotate state on failures (`hook_error`, `hook_name`) without crashing.
+- Micro-tests for stability/coverage
+  - Added tests: router settings fallback, hooks resilience, security utils, sparse query encoding, and settings round‑trip.
+
+### Changed
+
+- Minor router_factory docs/comments; no behavior change beyond settings fallback tests.
+
+### Tests
+
+- `tests/unit/retrieval/test_router_factory_settings_fallback.py` to validate settings‑driven hybrid tool registration.
+- `tests/unit/agents/test_hooks_resilience.py` to ensure hook exceptions are non‑fatal.
+- `tests/unit/utils/test_security.py` for PII redaction/egress checks.
+- `tests/unit/retrieval/test_sparse_query_encode.py` for sparse query encoding path.
+- `tests/unit/config/test_settings_roundtrip.py` for retrieval flag presence.

@@ -120,3 +120,9 @@ Feature: Ingestion pipeline
 - Unstructured partition strategies (auto/hi_res/fast) and OCR fallback
 - LlamaIndex IngestionPipeline + IngestionCache + DuckDBKVStore
 - PyMuPDF page rendering best practices (idempotent writes, bbox capture)
+
+## Unstructured Strategy & OCR Fallback
+
+- The default parsing strategy SHOULD be `strategy=auto` with automatic OCR fallback for scanned PDFs.
+- Emitted nodes MUST include deterministic IDs and complete metadata where applicable (e.g., `doc_id`, `page_id`, `chunk_id`, `modality`).
+- PDF page image artifacts MAY be emitted for downstream visual pipelines.
