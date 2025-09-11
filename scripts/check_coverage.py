@@ -629,9 +629,7 @@ def main() -> int:
             if COVERAGE_HTML_DIR.exists():
                 print(f"📊 HTML coverage report: {COVERAGE_HTML_DIR}/index.html")
             else:
-                print(
-                    "⚠️  HTML coverage report not found. Run with --collect to generate."
-                )
+                print("HTML coverage report not found. Run --collect to generate.")
 
         # Print any failures or warnings
         if analyzer.failures:
