@@ -16,7 +16,7 @@ def test_endpoint_allowlist_blocks_remote_urls() -> None:
     cfg = DocMindSettings()
     cfg.allow_remote_endpoints = False
     cfg.vllm_base_url = "https://api.example.com/v1"
-    with pytest.raises(ValueError, match=".*"):
+    with pytest.raises(ValueError, match=r".*"):
         cfg._validate_endpoints_security()  # pylint: disable=protected-access
 
 

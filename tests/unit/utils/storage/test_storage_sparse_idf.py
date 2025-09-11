@@ -23,7 +23,7 @@ def test_ensure_sparse_idf_modifier_updates_when_not_idf(monkeypatch):
     ensure_sparse_idf_modifier(client, "col")
 
     assert client.update_collection.called
-    args, kwargs = client.update_collection.call_args
+    _, kwargs = client.update_collection.call_args
     assert kwargs["collection_name"] == "col"
     assert "sparse_vectors_config" in kwargs
     assert "text-sparse" in kwargs["sparse_vectors_config"]

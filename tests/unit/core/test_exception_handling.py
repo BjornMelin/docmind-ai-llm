@@ -169,7 +169,7 @@ class TestEmbeddingError:
 
         # Test model unavailable
         with pytest.raises(
-            EmbeddingError, match="model not found|not downloaded"
+            EmbeddingError, match=r"model not found|not downloaded"
         ) as exc_info:
             mock_embedding_function(model_available=False, memory_sufficient=True)
         assert "BGE-M3 model not found" in str(exc_info.value)

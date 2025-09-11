@@ -25,7 +25,7 @@ def test_validate_export_path_local(tmp_path: Path) -> None:
     assert out.endswith("file.txt")
 
 
-def test_validate_export_path_blocks_egress(tmp_path: Path) -> None:
+def test_validate_export_path_blocks_egress() -> None:
     """validate_export_path must block absolute paths outside the project root."""
     # Force a path that looks like an egress to root
     with pytest.raises(ValueError, match="outside the project root"):
