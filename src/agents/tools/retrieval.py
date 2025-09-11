@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import time
 from typing import Annotated, Any
@@ -10,8 +11,6 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from llama_index.core import Document
 from loguru import logger
-
-from src.agents.tool_factory import ToolFactory
 
 from .constants import (
     CONTENT_KEY_LENGTH,
@@ -123,7 +122,7 @@ def retrieve_documents(
         return json.dumps(result_data, default=str)
 
     except (OSError, RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Document retrieval failed: %s", e)
+        logger.error("Document retrieval failed: {}", e)
         return json.dumps(
             {
                 "documents": [],
@@ -178,7 +177,7 @@ def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
     documents: list[dict] = []
     fallback = False
     for q in queries:
-        search_tool = ToolFactory.create_kg_search_tool(kg_index)
+        search_tool = _get_tool_factory().create_kg_search_tool(kg_index)
         if not search_tool:
             continue
         try:
@@ -186,10 +185,10 @@ def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
             logger.debug(
-                "GraphRAG retrieved %d documents for query: %s", len(new_docs), q
+                "GraphRAG retrieved {} documents for query: {}", len(new_docs), q
             )
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            logger.warning("GraphRAG failed for query '%s': %s", q, e)
+            logger.warning("GraphRAG failed for query '{}': {}", q, e)
             fallback = True
             break
     return documents, fallback
@@ -206,14 +205,18 @@ def _run_vector_hybrid(
     strategy_used: str | None = None
     for q in queries:
         if strategy == "hybrid" and retriever:
-            search_tool = ToolFactory.create_hybrid_search_tool(retriever)
+            search_tool = _get_tool_factory().create_hybrid_search_tool(retriever)
             strategy_used = "hybrid_fusion"
         elif vector_index:
             if strategy == "hybrid":
-                search_tool = ToolFactory.create_hybrid_vector_tool(vector_index)
+                search_tool = _get_tool_factory().create_hybrid_vector_tool(
+                    vector_index
+                )
                 strategy_used = "hybrid_vector"
             else:
-                search_tool = ToolFactory.create_vector_search_tool(vector_index)
+                search_tool = _get_tool_factory().create_vector_search_tool(
+                    vector_index
+                )
                 strategy_used = "vector"
         else:
             logger.error("No vector index available for retrieval")
@@ -235,13 +238,13 @@ def _run_vector_hybrid(
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
             logger.debug(
-                "%s retrieved %d documents for query: %s",
+                "{} retrieved {} documents for query: {}",
                 strategy_used,
                 len(new_docs),
                 q,
             )
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Retrieval failed for query '%s': %s", q, e)
+            logger.error("Retrieval failed for query '{}': {}", q, e)
     return documents, strategy_used, None
 
 
@@ -297,7 +300,7 @@ def _collect_via_tool_factory(
     query: str, vector_index: Any, kg_index: Any, retriever: Any
 ) -> list[dict]:
     try:
-        tool_list = ToolFactory.create_tools_from_indexes(
+        tool_list = _get_tool_factory().create_tools_from_indexes(
             vector_index=vector_index, kg_index=kg_index, retriever=retriever
         )
         collected: list[dict] = []
@@ -306,10 +309,19 @@ def _collect_via_tool_factory(
                 res = t.invoke(query) if hasattr(t, "invoke") else t.call(query)
                 collected.extend(_parse_tool_result(res))
             except Exception as te:  # pylint: disable=broad-exception-caught
-                logger.error("Tool execution failed: %s", te)
+                logger.error("Tool execution failed: {}", te)
                 logger.warning("Partial failure: continuing with other tools")
                 continue
         return collected
     except Exception:  # pylint: disable=broad-exception-caught
         logger.debug("Tool collection path failed; using detailed path", exc_info=True)
         return []
+
+
+def _get_tool_factory():
+    """Return the canonical ToolFactory class.
+
+    Production-only resolution: always import from src.agents.tool_factory.
+    Tests should patch `src.agents.tool_factory.ToolFactory` directly.
+    """
+    return importlib.import_module("src.agents.tool_factory").ToolFactory

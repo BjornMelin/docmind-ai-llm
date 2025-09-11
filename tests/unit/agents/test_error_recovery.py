@@ -71,7 +71,7 @@ class TestAgentErrorRecovery:
             ]
 
             # Should isolate vector tool failure
-            with patch("src.agents.tools.telemetry.logger") as mock_logger:
+            with patch("src.agents.tools.retrieval.logger") as mock_logger:
                 result = retrieve_documents.invoke(
                     {"query": "Multi-tool test query", "state": mock_state}
                 )
@@ -168,7 +168,7 @@ class TestAgentErrorRecovery:
 
             mock_factory.create_tools_from_indexes.side_effect = create_mixed_tools
 
-            with patch("src.agents.tools.telemetry.logger") as mock_logger:
+            with patch("src.agents.tools.retrieval.logger") as mock_logger:
                 result = retrieve_documents.invoke(
                     {"query": "Partial failure test", "state": mock_state}
                 )
