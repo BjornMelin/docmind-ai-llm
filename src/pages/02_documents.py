@@ -22,7 +22,11 @@ from src.persistence.snapshot import (
     compute_config_hash,
     compute_corpus_hash,
 )
-from src.retrieval.graph_config import export_graph_jsonl, export_graph_parquet
+from src.retrieval.graph_config import (
+    export_graph_jsonl,
+    export_graph_parquet,
+    get_export_seed_ids,
+)
 from src.retrieval.router_factory import build_router_engine
 from src.ui.ingest_adapter import ingest_files
 from src.utils.storage import create_vector_store
@@ -150,8 +154,11 @@ def main() -> None:  # pragma: no cover - Streamlit page
             if st.button("Export JSONL"):
                 try:
                     pg_index = st.session_state["graphrag_index"]
-                    store = pg_index.property_graph_store
-                    seeds: list[str] = _collect_seed_ids(store, cap=32)
+                    vector_index = st.session_state.get("vector_index")
+                    cap = int(getattr(settings.graphrag_cfg, "export_seed_cap", 32))
+                    seeds: list[str] = get_export_seed_ids(
+                        pg_index, vector_index, cap=cap
+                    )
                     out = out_dir / "graph.jsonl"
                     export_graph_jsonl(pg_index, out, seeds)
                     st.success(f"Exported JSONL to {out}")
@@ -177,8 +184,9 @@ def main() -> None:  # pragma: no cover - Streamlit page
             if st.button("Export Parquet"):
                 try:
                     pg_index = st.session_state["graphrag_index"]
-                    store = pg_index.property_graph_store
-                    seeds = _collect_seed_ids(store, cap=32)
+                    vector_index = st.session_state.get("vector_index")
+                    cap = int(getattr(settings.graphrag_cfg, "export_seed_cap", 32))
+                    seeds = get_export_seed_ids(pg_index, vector_index, cap=cap)
                     out = out_dir / "graph.parquet"
                     export_graph_parquet(pg_index, out, seeds)
                     st.success(f"Exported Parquet to {out}")
@@ -219,19 +227,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
             except Exception as e:  # pragma: no cover - UX best effort
                 st.error(f"Snapshot manager error: {e}")
 
-
 # ---- Testable helpers (unit-tested) ----
-
-
-def _collect_seed_ids(_store: Any, cap: int = 32) -> list[str]:
-    """Derive deterministic seed IDs for exports (library-first, no network).
-
-    Returns a stable sequence of identifier strings from 0..cap-1. This avoids
-    coupling to hybrid retrieval internals and ensures deterministic offline
-    behavior for exports and tests. Real-world deployments may override this
-    with a retrieval-based strategy.
-    """
-    return [str(i) for i in range(max(0, int(cap)))]
 
 
 def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Path:

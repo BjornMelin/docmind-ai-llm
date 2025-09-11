@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 docs_page = importlib.import_module("src.pages.02_documents")
+from src.retrieval.graph_config import get_export_seed_ids
 
 
 class _Node:
@@ -48,7 +49,8 @@ class _PgIndex:
 
 @pytest.mark.unit
 def test_collect_seed_ids_caps_to_32() -> None:
-    seeds = docs_page._collect_seed_ids(_Store(), cap=32)
+    # Using fallback path (no indices), cap enforcement still holds
+    seeds = get_export_seed_ids(None, None, cap=32)
     assert len(seeds) == 32
     assert seeds[0] == "0"
     assert seeds[-1] == "31"
