@@ -8,6 +8,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Added
 
+- Clear caches feature: Settings page button and `src/ui/cache.py` helper (bumps `settings.cache_version` and clears Streamlit caches).
+- Pure prompting helper: `src/prompting/helpers.py` with `build_prompt_context` (pure; no UI/telemetry) and unit tests.
 - SPEC‑008: Programmatic Streamlit UI with `st.Page` + `st.navigation`.
   - New pages: `src/pages/01_chat.py`, `src/pages/02_documents.py`, `src/pages/03_analytics.py`.
   - New adapter: `src/ui/ingest_adapter.py` for form-based ingestion.
@@ -41,6 +43,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   
 ### Tests
 
+- New unit tests: allowlist validation (`tests/unit/config/test_settings_allowlist.py`), prompt helper (`tests/unit/prompting/test_helpers.py`), clear caches helper (`tests/unit/ui/test_cache_clear.py`).
+- Removed dependency on deleted app helpers: `tests/unit/app/test_app.py` removed.
 - Added unit tests for analytics manager insert/prune.
 - Added CLI smoke tests for model pull and RAGAS/BEIR harnesses.
 - Added page import smoke tests for new Streamlit pages.
@@ -61,6 +65,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed
 
+- Page hygiene: `src/pages/01_chat.py` removes duplicate import and uses `None` sentinel; `src/pages/02_documents.py` switches to mapping-style session_state.
+- Docs updated: README and system-architecture examples use `MultiAgentCoordinator` directly instead of removed helpers.
 - UI refactor: `src/app.py` now only defines pages and runs navigation; all monolithic UI logic moved to `src/pages/*`.
   - Tests now patch real library seams (LlamaIndex, utils) instead of `src.app` re‑exports.
   - Removed short‑lived re‑exports from `src/app.py` (e.g., LlamaIndex classes, loader helpers) to maintain strict production/test separation.
@@ -72,8 +78,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Removed
 
+- Removed legacy helpers from `src/app.py`; app remains a thin multipage shell.
 ### Fixed
 
+### Security
+
+- Hardened endpoint allowlist validation in `src/config/settings.py` to validate parsed hostnames/IPs and block spoofed `localhost` and malformed URLs.
 - Router telemetry test stability: patch `log_jsonl` on the module object via `importlib` to account for LangChain `StructuredTool` wrapper.
 - Security: `validate_export_path` error messages aligned with tests and documentation (egress/traversal vs. outside project root).
 
@@ -400,3 +410,6 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - `tests/unit/utils/test_security.py` for PII redaction/egress checks.
 - `tests/unit/retrieval/test_sparse_query_encode.py` for sparse query encoding path.
 - `tests/unit/config/test_settings_roundtrip.py` for retrieval flag presence.
+- BREAKING: Removed `src/agents` public re-exports. All imports must use explicit module paths, e.g. `from src.agents.coordinator import MultiAgentCoordinator` and `from src.agents.tool_factory import ToolFactory`.
+- Docs updated to reflect explicit import guidance and to avoid aggregator/app re-exports in tests.
+- Deprecated/legacy aggregator import examples were removed from documentation.
