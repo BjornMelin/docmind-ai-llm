@@ -148,6 +148,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Changed
 
 - Reranking is always-on (BGE v2‑m3 text + SigLIP visual) with policy-gated ColPali; UI no longer exposes reranker knobs. Implementation selection is automatic (no env/config toggles).
+- Canonical env override: `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (no UI toggle).
+- Deprecated: `DOCMIND_DISABLE_RERANKING` (use `DOCMIND_RETRIEVAL__USE_RERANKING`).
 
 - Test stability and design-for-testability:
   - Removed the last test-only seam from production code: integrations no longer expose a `ClipEmbedding` alias or accept test-only injection. Embedding setup always uses `HuggingFaceEmbedding`; tests patch the constructor via `monkeypatch` when needed.

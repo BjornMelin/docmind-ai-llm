@@ -86,6 +86,7 @@ Feature: Reranking modes
 
 ## Always‑On Policy
 
+- Env override (ops only): `DOCMIND_RETRIEVAL__USE_RERANKING` (maps to `settings.retrieval.use_reranking`).
 - Reranking MUST be enabled by default with a modality‑aware policy:
   - Text reranking via BGE reranker v2‑m3.
   - Visual reranking via SigLIP scoring when relevant.

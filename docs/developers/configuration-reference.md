@@ -1483,6 +1483,9 @@ DOCMIND_DSPY_MAX_RETRIES=3
 DOCMIND_DSPY_TEMPERATURE=0.1
 DOCMIND_DSPY_METRIC_THRESHOLD=0.8
 DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
+
+# Reranking (always-on by default; no UI toggle). Canonical env override maps to settings.retrieval.use_reranking
+DOCMIND_RETRIEVAL__USE_RERANKING=true
 ```
 
 Notes:

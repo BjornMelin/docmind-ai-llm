@@ -59,7 +59,7 @@ Expose these in UI with safe defaults (toggle; read‑only path depth 1 unless a
 
 Explicit clarifications:
 
-- No UI toggles for hybrid or reranking; operators MAY use ops‑only env overrides (per ADR‑024 scope). Reranking remains a single integration path (auto‑detect direct FlagEmbedding else LlamaIndex wrapper).
+- No UI toggles for hybrid or reranking; operators MAY use ops‑only env overrides (per ADR‑024 scope). Reranking remains a single integration path (auto‑detect direct FlagEmbedding else LlamaIndex wrapper). Canonical env override for reranking: `DOCMIND_RETRIEVAL__USE_RERANKING` (maps to `settings.retrieval.use_reranking`).
 - For Qdrant hybrid retrieval, the collection schema SHALL be enforced idempotently with named vectors `text-dense` and `text-sparse` to align with Query API `using` fields; query‑time sparse vectors SHALL be produced by the same family (FastEmbed BM42/BM25) used at index time.
 
 ## High-Level Architecture

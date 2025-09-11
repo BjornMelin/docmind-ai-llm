@@ -216,5 +216,6 @@ async def test_auto_gating_text_and_image_nodes(sample_nodes):
 ## Changelog
 
 - **1.2 (2025-09-07):** Clarified required telemetry keys and fail‑open behavior; no UI toggles, env‑only overrides.
+  - Canonical env override: `DOCMIND_RETRIEVAL__USE_RERANKING` (maps to `settings.retrieval.use_reranking`).
 - **1.1 (2025-09-07):** Set SigLIP as default visual re‑score; ColPali optional via policy; added decision framework and guardrails; aligned with SPEC‑005
 - **1.0 (2025-09-03):** Initial accepted version; supersedes ADR‑006

@@ -786,7 +786,8 @@ Note: Realized latency is hardware‑dependent. Reranking uses bounded timeouts 
 
 - `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` to disable network egress (after predownload).
 - `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to control Qdrant fusion.
-- `DOCMIND_DISABLE_RERANKING=true` to bypass reranking (ops only; not recommended).
+- `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (canonical env override; no UI toggle)
+- `DOCMIND_DISABLE_RERANKING` (deprecated; use `DOCMIND_RETRIEVAL__USE_RERANKING`)
 - Qdrant runs bound to `127.0.0.1` by default; remote endpoints are disallowed unless explicitly configured.
 
 ## 🔧 Offline Operation
