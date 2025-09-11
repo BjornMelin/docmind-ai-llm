@@ -315,7 +315,7 @@ class TestConfigurationValidation:
 
     def test_validate_startup_configuration_success(self):
         """Test successful startup configuration validation."""
-        with patch("src.app.validate_startup_configuration") as mock_validate:
+        with patch("src.utils.core.validate_startup_configuration") as mock_validate:
             mock_validate.return_value = {"status": "valid"}
 
             # Simulate calling the validator utility
@@ -325,7 +325,7 @@ class TestConfigurationValidation:
     def test_validate_startup_configuration_failure(self):
         """Test startup configuration validation failure handling."""
         with (
-            patch("src.app.validate_startup_configuration") as mock_validate,
+            patch("src.utils.core.validate_startup_configuration") as mock_validate,
             patch("streamlit.error"),
             patch("streamlit.stop"),
         ):
@@ -419,7 +419,7 @@ class TestModelInitialization:
         model_name = "llama2:latest"
         request_timeout = 120.0
 
-        with patch("src.app.Ollama") as mock_ollama_class:
+        with patch("llama_index.llms.ollama.Ollama") as mock_ollama_class:
             mock_llm = MagicMock()
             mock_ollama_class.return_value = mock_llm
 
@@ -445,7 +445,7 @@ class TestModelInitialization:
         use_gpu = True
 
         with (
-            patch("src.app.LlamaCPP") as mock_llamacpp_class,
+            patch("llama_index.llms.llama_cpp.LlamaCPP") as mock_llamacpp_class,
             patch("src.app.is_llamacpp_available", return_value=True),
         ):
             mock_llm = MagicMock()
@@ -473,7 +473,7 @@ class TestModelInitialization:
         model_name = "custom-model"
         context_size = 4096
 
-        with patch("src.app.OpenAILike") as mock_openailike_class:
+        with patch("llama_index.llms.openai_like.OpenAILike") as mock_openailike_class:
             mock_llm = MagicMock()
             mock_openailike_class.return_value = mock_llm
 
@@ -499,8 +499,11 @@ class TestModelInitialization:
 
     def test_model_initialization_error_handling(self):
         """Test model initialization error handling."""
-        with patch("src.app.Ollama", side_effect=ConnectionError("Connection failed")):
-            from src.app import Ollama
+        with patch(
+            "llama_index.llms.ollama.Ollama",
+            side_effect=ConnectionError("Connection failed"),
+        ):
+            from llama_index.llms.ollama import Ollama
 
             with pytest.raises(ConnectionError, match="Connection failed"):
                 Ollama(
@@ -527,14 +530,14 @@ class TestDocumentUploadSection:
         ]
 
         # Mock the document processing function
-        with patch("src.app.load_documents_unstructured") as mock_load_docs:
+        with patch("src.utils.document.load_documents_unstructured") as mock_load_docs:
             mock_docs = [
                 MagicMock(text="Document 1 content"),
                 MagicMock(text="Document 2 content"),
             ]
             mock_load_docs.return_value = mock_docs
 
-            with patch("src.app.VectorStoreIndex") as mock_index_class:
+            with patch("llama_index.core.VectorStoreIndex") as mock_index_class:
                 mock_index = MagicMock()
                 mock_index_class.from_documents.return_value = mock_index
 
@@ -545,7 +548,9 @@ class TestDocumentUploadSection:
 
                     # Create index
 
-                    with patch("src.app.SimpleVectorStore") as mock_vector_store_class:
+                    with patch(
+                        "llama_index.core.vector_stores.SimpleVectorStore"
+                    ) as mock_vector_store_class:
                         mock_vector_store = MagicMock()
                         mock_vector_store_class.return_value = mock_vector_store
 
@@ -566,7 +571,7 @@ class TestDocumentUploadSection:
         [MagicMock(name="corrupted.pdf")]
 
         with patch(
-            "src.app.load_documents_unstructured",
+            "src.utils.document.load_documents_unstructured",
             side_effect=ValueError("Invalid document"),
         ):
             # Test error handling logic
@@ -812,7 +817,7 @@ class TestAppIntegration:
         # Mock the document processing pipeline
         mock_files = [MagicMock(name="test.pdf")]
 
-        with patch("src.app.load_documents_unstructured") as mock_load:
+        with patch("src.utils.document.load_documents_unstructured") as mock_load:
             mock_docs = [MagicMock(text="Test document content")]
             mock_load.return_value = mock_docs
 

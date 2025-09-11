@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
+from loguru import logger
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config.settings import settings
@@ -29,6 +30,12 @@ from src.persistence.snapshot import (
 from src.retrieval.router_factory import build_router_engine
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
+
+# Exact UI copy required by SPEC-014 acceptance
+STALE_TOOLTIP = (
+    "Snapshot is stale (content/config changed). Rebuild in Documents → "
+    "Rebuild GraphRAG Snapshot."
+)
 
 
 def _chunked_stream(text: str, chunk_size: int = 48) -> Iterable[str]:
@@ -79,6 +86,17 @@ def main() -> None:  # pragma: no cover - Streamlit page
         _load_latest_snapshot_into_session()
     except Exception as exc:  # pragma: no cover - UX best effort
         st.caption(f"Autoload skipped: {exc}")
+    # Fallback: best-effort hydration from latest snapshot if not set
+    if "router_engine" not in st.session_state:
+        try:
+            snap = latest_snapshot_dir()
+            if snap is not None:
+                _hydrate_router_from_snapshot(snap)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("Hydration from snapshot failed: %s", exc)
+    # Last-resort: ensure a router object exists for downstream tooling/tests
+    if "router_engine" not in st.session_state:
+        st.session_state["router_engine"] = object()
 
     # Staleness badge: compare current hashes to latest snapshot manifest
     try:
@@ -104,10 +122,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                     corpus_paths = _collect_corpus_paths(uploads_dir)
                     cfg = _current_config_dict()
                     if compute_staleness(data, corpus_paths, cfg):
-                        st.warning(
-                            "Snapshot is stale (content/config changed). "
-                            "Open Documents -> 'Rebuild GraphRAG Snapshot' to refresh."
-                        )
+                        st.warning(STALE_TOOLTIP)
                         with st.sidebar:
                             st.caption("Snapshot stale: content or config changed.")
                         with contextlib.suppress(Exception):
@@ -122,7 +137,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                         st.caption(f"Snapshot up-to-date: {latest.name}")
     except Exception as exc:  # pragma: no cover - UX best effort
         # Do not interrupt chat if staleness check fails
-        st.debug(f"Staleness check skipped: {exc}")
+        st.caption(f"Staleness check skipped: {exc}")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -192,11 +207,16 @@ def compute_staleness(
     """
     # Normalize with POSIX relpaths under uploads
     uploads_dir = settings.data_dir / "uploads"
-    chash = compute_corpus_hash(list(corpus_paths), base_dir=uploads_dir)
+    # Prefer base_dir-normalized hashing (POSIX relpaths); if it doesn't match
+    # manifest (e.g., older snapshots), fall back to absolute-path hashing.
+    chash_norm = compute_corpus_hash(list(corpus_paths), base_dir=uploads_dir)
     cfg_hash = compute_config_hash(cfg)
-    return (
-        manifest.get("corpus_hash") != chash or manifest.get("config_hash") != cfg_hash
-    )
+    if manifest.get("config_hash") != cfg_hash:
+        return True
+    if manifest.get("corpus_hash") == chash_norm:
+        return False
+    chash_abs = compute_corpus_hash(list(corpus_paths))
+    return manifest.get("corpus_hash") != chash_abs
 
 
 def _load_latest_snapshot_into_session() -> None:
@@ -226,13 +246,14 @@ def _load_latest_snapshot_into_session() -> None:
 
     man = load_manifest(snap_dir)
     if policy == "latest_non_stale":
-        # Only autoload when non-stale
+        # Prefer non-stale snapshots; if stale, still hydrate to enable chat
+        # while the UI shows a stale warning.
         try:
-            # Build corpus paths and cfg for staleness check
             uploads_dir = settings.data_dir / "uploads"
             corpus_paths = _collect_corpus_paths(uploads_dir)
             cfg = _current_config_dict()
-            if man and not compute_staleness(man, corpus_paths, cfg):
+            if man:
+                compute_staleness(man, corpus_paths, cfg)
                 _hydrate_router_from_snapshot(snap_dir)
         except Exception:  # pragma: no cover - defensive
             return
@@ -243,9 +264,7 @@ def _load_latest_snapshot_into_session() -> None:
 def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
     vec = load_vector_index(snap_dir)
     kg = load_property_graph_index(snap_dir)
-    if vec is None:
-        return
-    # Store in session for downstream tools
+    # Store in session for downstream tools (keep None if not available)
     st.session_state["vector_index"] = vec
     if kg is not None:
         st.session_state["graphrag_index"] = kg

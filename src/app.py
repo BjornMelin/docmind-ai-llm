@@ -95,9 +95,9 @@ def get_multi_agent_coordinator():
 
 
 def get_agent_system(
-    tools: list[Any] | None,
-    llm: Any | None,
-    memory: ChatMemoryBuffer | None,
+    _tools: list[Any] | None,
+    _llm: Any | None,
+    _memory: ChatMemoryBuffer | None,
     *,
     multi_agent_coordinator: Any | None = None,
 ) -> tuple[Any, str]:

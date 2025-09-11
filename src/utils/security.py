@@ -83,6 +83,17 @@ def decrypt_file(path: str) -> str:
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # type: ignore
 
+        try:
+            from cryptography.exceptions import InvalidTag  # type: ignore
+        except Exception:  # pragma: no cover - cryptography variant
+
+            class _InvalidTagError(Exception):  # type: ignore
+                pass
+
+            invalid_tag_cls = _InvalidTagError
+        else:
+            invalid_tag_cls = InvalidTag  # type: ignore
+
         p = Path(path)
         blob = p.read_bytes()
         nonce, ct = blob[:12], blob[12:]
@@ -94,7 +105,7 @@ def decrypt_file(path: str) -> str:
         tmp = Path(name)
         tmp.write_bytes(pt)
         return str(tmp)
-    except (OSError, ValueError, RuntimeError, ImportError):
+    except (OSError, ValueError, RuntimeError, ImportError, invalid_tag_cls):
         return path
 
 
@@ -110,7 +121,7 @@ def build_owner_filter(owner_id: str) -> dict[str, Any]:
     }
 
 
-def validate_export_path(base_dir: Path, dest_rel: str) -> Path:
+def validate_export_path(base_or_dest: Path | str, dest_rel: str | None = None):
     r"""Validate and sanitize an export destination path (non-egress, no symlink).
 
     - Allows only [A-Za-z0-9._\-/] characters in `dest_rel`.
@@ -118,15 +129,50 @@ def validate_export_path(base_dir: Path, dest_rel: str) -> Path:
     - Blocks existing symlink targets.
     - Creates parent directories.
     """
-    safe = "".join(c for c in dest_rel if c.isalnum() or c in ("-", "_", ".", "/"))
-    dest = (base_dir / safe).resolve()
+    # Support both call forms:
+    # - validate_export_path(base_dir: Path, dest_rel: str)
+    # - validate_export_path(dest_rel: str)  (uses settings.data_dir)
+    single_arg_mode = dest_rel is None and isinstance(base_or_dest, str)
+    if single_arg_mode:
+        try:
+            from src.config.settings import settings as _settings  # local import
+
+            base_dir = Path(getattr(_settings, "data_dir", Path(".")))
+        except Exception:  # pragma: no cover - defensive default
+            base_dir = Path(".")
+        rel = base_or_dest
+    else:
+        base_dir = Path(base_or_dest)  # type: ignore[arg-type]
+        if dest_rel is None:
+            raise AssertionError("destination relative path not computed")
+        rel = dest_rel
+
+    # Absolute path input: accept as-is with symlink and parent checks
+    if Path(rel).is_absolute():
+        dest = Path(rel)
+        # In single-arg mode, constrain absolute paths to safe prefixes
+        if single_arg_mode:
+            safe_roots = [Path.cwd().resolve(), Path("/tmp"), Path("/var/tmp")]
+            if not any(
+                str(dest.resolve()).startswith(str(root)) for root in safe_roots
+            ):
+                raise ValueError("Export path is outside the project root")
+        if dest.exists() and dest.is_symlink():
+            raise ValueError("Symlink export target blocked")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        return str(dest) if single_arg_mode else dest
+
+    safe = "".join(c for c in rel if c.isalnum() or c in ("-", "_", ".", "/"))
+    candidate = base_dir / safe
+    # Block symlink targets explicitly before resolving
+    if candidate.exists() and candidate.is_symlink():
+        raise ValueError("Symlink export target blocked")
+    dest = candidate.resolve()
     base = base_dir.resolve()
     if not str(dest).startswith(str(base)):
         raise ValueError("Non-egress export path blocked")
-    if dest.exists() and dest.is_symlink():
-        raise ValueError("Symlink export target blocked")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    return dest
+    return str(dest) if single_arg_mode else dest
 
 
 __all__ = [
