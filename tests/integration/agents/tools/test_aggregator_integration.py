@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agents.tools.retrieval import retrieve_documents
 from src.agents.tools.planning import route_query
+from src.agents.tools.retrieval import retrieve_documents
 
 pytestmark = pytest.mark.integration
 

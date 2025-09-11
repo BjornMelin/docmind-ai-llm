@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import pytest
+import time
 
-from src.agents.tools.router_tool import router_tool
-from src.agents.tools.planning import route_query, plan_query, ChatMemoryBuffer
+import pytest
+from loguru import logger
+
+from src.agents.tool_factory import ToolFactory
+from src.agents.tools.planning import ChatMemoryBuffer, plan_query, route_query
 from src.agents.tools.retrieval import retrieve_documents
+from src.agents.tools.router_tool import router_tool
 from src.agents.tools.synthesis import synthesize_results
 from src.agents.tools.validation import validate_response
-from src.agents.tool_factory import ToolFactory
-from loguru import logger
-import time
 
 pytestmark = pytest.mark.unit
 

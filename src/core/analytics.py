@@ -264,14 +264,14 @@ class AnalyticsManager:
             return
         cutoff = datetime.now(UTC) - timedelta(days=self.cfg.retention_days)
         with self._conn() as con:
-            for table in (
-                "query_metrics",
-                "embedding_metrics",
-                "reranking_metrics",
-                "system_metrics",
-            ):
-                # Table names are constant; only bind the cutoff parameter
-                con.execute(f"DELETE FROM {table} WHERE ts < ?", (cutoff,))
+            sql_by_table = {
+                "query_metrics": "DELETE FROM query_metrics WHERE ts < ?",
+                "embedding_metrics": "DELETE FROM embedding_metrics WHERE ts < ?",
+                "reranking_metrics": "DELETE FROM reranking_metrics WHERE ts < ?",
+                "system_metrics": "DELETE FROM system_metrics WHERE ts < ?",
+            }
+            for sql in sql_by_table.values():
+                con.execute(sql, (cutoff,))
 
 
 __all__ = ["AnalyticsConfig", "AnalyticsManager"]

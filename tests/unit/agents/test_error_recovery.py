@@ -29,8 +29,8 @@ import pytest
 from langchain_core.messages import HumanMessage
 from llama_index.core.memory import ChatMemoryBuffer
 
-from src.agents.tools.retrieval import retrieve_documents
 from src.agents.tools.planning import route_query
+from src.agents.tools.retrieval import retrieve_documents
 from src.agents.tools.validation import validate_response
 
 
@@ -111,7 +111,9 @@ class TestAgentErrorRecovery:
             mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
             # Mock context validation that detects corruption
-            with patch("src.agents.tools.planning.ChatMemoryBuffer") as mock_context_class:
+            with patch(
+                "src.agents.tools.planning.ChatMemoryBuffer"
+            ) as mock_context_class:
                 mock_fresh_context = Mock()
                 mock_context_class.from_defaults.return_value = mock_fresh_context
 

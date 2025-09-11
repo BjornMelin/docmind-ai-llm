@@ -86,7 +86,10 @@ def test_router_includes_hybrid_tool(monkeypatch: pytest.MonkeyPatch) -> None:
 
     router = build_router_engine(_VecIdx(), _PgIdx(), _settings)
     # Ensure three tools present: semantic_search, hybrid_search, knowledge_graph
-    names = [t.metadata.name for t in router.tools]
+    tools_attr = getattr(router, "query_engine_tools", None) or getattr(
+        router, "_query_engine_tools", []
+    )
+    names = [t.metadata.name for t in tools_attr]
     assert "semantic_search" in names
     assert "hybrid_search" in names
     assert "knowledge_graph" in names

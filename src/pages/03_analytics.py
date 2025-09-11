@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name,too-many-statements
 """Streamlit Analytics page.
 
 Reads metrics from the local DuckDB analytics database and renders a few

@@ -17,6 +17,10 @@ from typing import Any
 import qdrant_client
 import torch
 from loguru import logger
+from qdrant_client.http.exceptions import (
+    ResponseHandlingException,
+    UnexpectedResponse,
+)
 
 from src.config import settings
 from src.config.settings import DocMindSettings
@@ -80,7 +84,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
             f"Qdrant connection successful: {app_settings.database.qdrant_url}"
         )
         client.close()
-    except ConnectionError as e:
+    except (ConnectionError, ResponseHandlingException, UnexpectedResponse) as e:
         results["errors"].append(f"Qdrant connection failed: {e}")
         results["valid"] = False
     except OSError as e:

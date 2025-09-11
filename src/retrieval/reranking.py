@@ -799,6 +799,15 @@ class MultimodalReranker(BaseNodePostprocessor):
             ]
             after_ids = [n.node.node_id for n in out]
             delta_changed = len(set(after_ids) - set(before_ids))
+            path = (
+                "both"
+                if (bool(text_nodes) and bool(visual_nodes))
+                else (
+                    "text"
+                    if bool(text_nodes)
+                    else ("visual" if bool(visual_nodes) else "none")
+                )
+            )
             log_jsonl(
                 {
                     "rerank.stage": "final",
@@ -806,6 +815,10 @@ class MultimodalReranker(BaseNodePostprocessor):
                     "rerank.latency_ms": 0,
                     "rerank.timeout": False,
                     "rerank.delta_changed_count": int(delta_changed),
+                    "rerank.path": path,
+                    "rerank.total_timeout_budget_ms": int(
+                        TEXT_RERANK_TIMEOUT_MS + SIGLIP_TIMEOUT_MS + COLPALI_TIMEOUT_MS
+                    ),
                 }
             )
         except (RuntimeError, ValueError, OSError, TypeError) as exc:

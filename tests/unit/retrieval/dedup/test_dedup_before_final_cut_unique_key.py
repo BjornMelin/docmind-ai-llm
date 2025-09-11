@@ -46,7 +46,9 @@ def test_dedup_unique_by_doc_id(monkeypatch):
     )
     retr = ServerHybridRetriever(params)
 
-    monkeypatch.setattr(retr, "_embed_query", lambda s: ([0.1, 0.2], {1: 0.5}))
+    # Patch dense/sparse encoders instead of test-only hooks in production code
+    monkeypatch.setattr(retr, "_embed_dense", lambda s: [0.1, 0.2])
+    monkeypatch.setattr(retr, "_encode_sparse", lambda s: {1: 0.5})
 
     # Points with duplicate doc_id "D1"; keep highest score only
     pts = [

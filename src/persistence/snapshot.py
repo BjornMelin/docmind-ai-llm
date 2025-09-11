@@ -1,4 +1,4 @@
-"""SnapshotManager for index and property graph persistence (SPEC-014).
+"""SnapshotManager for index and property graph persistence.
 
 Implements atomic, versioned snapshots with a manifest and single-writer lock.
 The manifest carries corpus/config hashes for staleness detection.

@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name
 """Streamlit Chat page.
 
 This page renders a simple chat UI backed by the multi-agent coordinator.
@@ -191,7 +192,7 @@ def _current_config_dict() -> dict[str, Any]:
 
 
 def compute_staleness(
-    manifest: dict[str, Any], corpus_paths: _Iterable[Path], cfg: dict[str, Any]
+    manifest: dict[str, Any], corpus_paths: Iterable[Path], cfg: dict[str, Any]
 ) -> bool:
     """Return True when corpus/config hashes differ from manifest values.
 

@@ -57,7 +57,9 @@ def _select_export_seeds(k: int = 32) -> list[str]:
             settings.database.qdrant_collection, enable_hybrid=True
         )
         vector_index = VectorStoreIndex.from_vector_store(vs)
-    except Exception:  # pragma: no cover - best-effort
+    except (
+        Exception
+    ):  # pragma: no cover - best-effort  # pylint: disable=broad-exception-caught
         vector_index = None
     pg_index = None
     return get_export_seed_ids(pg_index, vector_index, cap=int(k))

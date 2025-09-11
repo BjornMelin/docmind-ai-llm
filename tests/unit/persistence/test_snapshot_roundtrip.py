@@ -76,9 +76,13 @@ def test_snapshot_roundtrip_with_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         mgr.cleanup_tmp(tmp)
         raise
 
-    # Create stub modules for llama_index loaders
+    # Create stub modules for llama_index loaders and force-register them in
+    # sys.modules so subsequent imports within snapshot helpers resolve to these
+    # stubs regardless of prior imports elsewhere in the suite.
     core_mod = ModuleType("llama_index.core")
     graph_mod = ModuleType("llama_index.core.graph_stores")
+    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
+    monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
 
     class _StorageContext:
         def __init__(self, persist_dir: str) -> None:
@@ -89,7 +93,6 @@ def test_snapshot_roundtrip_with_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             return cls(persist_dir)
 
     def _load_index_from_storage(storage: _StorageContext):  # type: ignore[override]
-        # Validate that the vector dir exists and contains the sentinel
         p = Path(storage.persist_dir) / "ok"
         assert p.exists()
         return SimpleNamespace(storage_dir=storage.persist_dir)
@@ -102,18 +105,20 @@ def test_snapshot_roundtrip_with_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     class _SimplePropertyGraphStore:
         @staticmethod
         def from_persist_dir(persist_dir: str):  # type: ignore[override]
-            # Validate sentinel exists
             p = Path(persist_dir) / "ok"
             assert p.exists()
             return SimpleNamespace(persist_dir=persist_dir)
 
-    core_mod.StorageContext = _StorageContext
-    core_mod.load_index_from_storage = _load_index_from_storage
-    core_mod.PropertyGraphIndex = _PropertyGraphIndex
-    graph_mod.SimplePropertyGraphStore = _SimplePropertyGraphStore
-
-    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
-    monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
+    monkeypatch.setattr(core_mod, "StorageContext", _StorageContext, raising=False)
+    monkeypatch.setattr(
+        core_mod, "load_index_from_storage", _load_index_from_storage, raising=False
+    )
+    monkeypatch.setattr(
+        core_mod, "PropertyGraphIndex", _PropertyGraphIndex, raising=False
+    )
+    monkeypatch.setattr(
+        graph_mod, "SimplePropertyGraphStore", _SimplePropertyGraphStore, raising=False
+    )
 
     # Load via helpers and assert non-null
     vec = load_vector_index(final)

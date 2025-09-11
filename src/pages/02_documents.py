@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name,broad-exception-caught
 """Streamlit Documents page.
 
 Allows users to upload and ingest files into the system. The function delegates
@@ -101,11 +102,12 @@ def main() -> None:  # pragma: no cover - Streamlit page
                                     "chunk_overlap": settings.processing.chunk_overlap,
                                 }
                                 cfg_hash = compute_config_hash(cfg)
+                                vtype = settings.database.vector_store_type
                                 mgr.write_manifest(
                                     paths,
                                     index_id="docmind",
                                     graph_store_type="property_graph",
-                                    vector_store_type=settings.database.vector_store_type,
+                                    vector_store_type=vtype,
                                     corpus_hash=chash,
                                     config_hash=cfg_hash,
                                     versions={"app": settings.app_version},

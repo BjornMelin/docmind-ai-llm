@@ -7,11 +7,12 @@ from src.ui.cache import clear_caches
 
 class _DummyClear:
     """Minimal object exposing a clear() method to record calls."""
+
     def __init__(self):
         self.cleared = False
 
     def clear(self):
-        """Record the invocation of clear()."""
+        """Record the invocation of clear."""
         self.cleared = True
 
 
