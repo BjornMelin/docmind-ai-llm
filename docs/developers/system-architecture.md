@@ -474,15 +474,15 @@ sequenceDiagram
 ```python
 # Core integration pattern
 from src.config import settings
-from src.agents.coordinator import get_agent_system
+from src.agents.coordinator import MultiAgentCoordinator
 from src.utils.document import load_documents_unstructured
 from src.utils.embedding import create_index_async
 
 # Usage example
 documents = await load_documents_unstructured(file_paths, settings)
 index = await create_index_async(documents, settings)
-agent_system = get_agent_system(index, settings)
-response = await agent_system.arun(query)
+coordinator = MultiAgentCoordinator()
+response = coordinator.process_query(query)
 ```
 
 ### Directory Structure Integration

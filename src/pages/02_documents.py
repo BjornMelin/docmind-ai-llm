@@ -58,19 +58,19 @@ def main() -> None:  # pragma: no cover - Streamlit page
                         )
                         vector_index = VectorStoreIndex.from_vector_store(vs)
                         # Store for Chat page overrides (tools_data)
-                        st.session_state.vector_index = vector_index
+                        st.session_state["vector_index"] = vector_index
                         # Default router (vector-only)
-                        st.session_state.router_engine = build_router_engine(
+                        st.session_state["router_engine"] = build_router_engine(
                             vector_index, None, settings
                         )
                         st.info("Router engine is ready for Chat.")
                         # If GraphRAG was requested, keep the PG index for tools
                         if use_graphrag and result.get("pg_index") is not None:
                             pg_index = result["pg_index"]
-                            st.session_state.graphrag_index = pg_index
+                            st.session_state["graphrag_index"] = pg_index
                             st.info("GraphRAG index is available.")
                             # Build GraphRAG router (vector + graph tools)
-                            st.session_state.router_engine = build_router_engine(
+                            st.session_state["router_engine"] = build_router_engine(
                                 vector_index, pg_index, settings
                             )
                             # Persist snapshot (vector + graph)

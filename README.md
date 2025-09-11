@@ -420,7 +420,7 @@ from pathlib import Path
 from src.config import settings
 from src.utils.document import load_documents_unstructured
 from src.utils.embedding import create_index_async
-from src.agents.coordinator import get_agent_system
+from src.agents.coordinator import MultiAgentCoordinator
 
 async def analyze_document(file_path: str, query: str):
     """Example: Analyze a document programmatically."""
@@ -429,11 +429,9 @@ async def analyze_document(file_path: str, query: str):
     documents = await load_documents_unstructured([Path(file_path)], settings)
     index = await create_index_async(documents, settings)
     
-    # Create agent system
-    agent_system = get_agent_system(index, settings)
-    
-    # Run analysis
-    response = await agent_system.arun(query)
+    # Create coordinator and run analysis
+    coordinator = MultiAgentCoordinator()
+    response = coordinator.process_query(query, context=None)
     return response
 
 # Usage

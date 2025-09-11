@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Iterable
-from collections.abc import Iterable as _Iterable
 from pathlib import Path
 from typing import Any
 
@@ -96,7 +95,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
             logger.debug("Hydration from snapshot failed: %s", exc)
     # Last-resort: ensure a router object exists for downstream tooling/tests
     if "router_engine" not in st.session_state:
-        st.session_state["router_engine"] = object()
+        st.session_state["router_engine"] = None
 
     # Staleness badge: compare current hashes to latest snapshot manifest
     try:
