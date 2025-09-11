@@ -19,12 +19,18 @@ DOCMIND_RETRIEVAL__DEDUP_KEY=page_id  # or doc_id
 
 # GraphRAG toggle (default ON)
 DOCMIND_ENABLE_GRAPHRAG=true          # set false to disable
+
+# Enable server-side hybrid tool (default OFF)
+DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=false
 ```
 
 Notes:
 
 - Fusion is performed server‑side via the Qdrant Query API; there are no client‑side fusion knobs.
 - The knowledge_graph router tool is activated only when a PropertyGraphIndex is present and healthy; traversal depth defaults to path_depth=1.
+- When `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`, the router factory registers a
+  server-side hybrid tool that executes Qdrant Query API `prefetch` + `Fusion.RRF` (DBSF optional).
+  Precedence: an explicit function argument to the router factory always overrides the setting.
 
 ## DSPy Optimization (Optional)
 

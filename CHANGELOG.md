@@ -62,6 +62,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Changed
 
 - UI refactor: `src/app.py` now only defines pages and runs navigation; all monolithic UI logic moved to `src/pages/*`.
+  - Tests now patch real library seams (LlamaIndex, utils) instead of `src.app` re‑exports.
+  - Removed short‑lived re‑exports from `src/app.py` (e.g., LlamaIndex classes, loader helpers) to maintain strict production/test separation.
 - Coordinator: best‑effort analytics logging added after processing each query.
 - Router toolset unified: `router_factory.build_router_engine(...)` composes `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; selector policy prefers `PydanticSingleSelector` then falls back to `LLMSingleSelector`.
 - GraphRAG helpers (`graph_config.py`) now emit label‑preserving exports and provide `get_export_seed_ids()` for deterministic seeding.
@@ -69,6 +71,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Docs: aligned developer and API docs to new router/hybrid/GraphRAG/snapshots; added `docs/api/api.md` and `docs/developers/ci-cd-pipeline.md`.
 
 ### Removed
+
+### Fixed
+
+- Router telemetry test stability: patch `log_jsonl` on the module object via `importlib` to account for LangChain `StructuredTool` wrapper.
+- Security: `validate_export_path` error messages aligned with tests and documentation (egress/traversal vs. outside project root).
 
 - Deleted legacy model predownload script: `scripts/model_prep/predownload_models.py`.
 - Removed monolithic UI blocks from `src/app.py` (chat/ingestion/analytics).
@@ -256,7 +263,6 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Requirements/RTM:
   - requirements.md: Added FR‑009.1–009.6 (staleness badge; SnapshotManager lock/rename; exports JSONL/Parquet; deterministic seed policy; export path security; telemetry events) and FR‑SEC‑NET‑001 (offline‑first allowlist; LM Studio /v1).
   - traceability.md: Mapped new FRs to code/tests and marked them Implemented.
-
 
 ### Fixed
 

@@ -297,3 +297,24 @@ experiment_*.py
 # Local GitHub metadata
 .gh/
 .gh_*
+
+# DocMind project data and logs (QA additions)
+# Document processing caches
+cache/
+cache/**/*.duckdb
+cache/**/*.sqlite
+
+# Local analytics and telemetry artifacts
+logs/
+!logs/.keep
+logs/**/*.jsonl
+
+# Application data directory — ignore generated snapshots and local DBs
+data/storage/
+data/**/*.duckdb
+data/**/*.sqlite
+data/**/*.db
+
+# Keep evaluation datasets and docs under data/eval
+!data/eval/
+!data/eval/**
