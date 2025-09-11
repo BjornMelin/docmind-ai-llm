@@ -21,15 +21,39 @@ class _Resp:
 
 @pytest.fixture(autouse=True)
 def _stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Stub Settings.embed_model.get_query_embedding to return deterministic vector
+    """Install a minimal BaseEmbedding-compatible stub on Settings.embed_model."""
     from llama_index.core import Settings  # type: ignore
 
-    class _Embed:
-        def get_query_embedding(self, text: str):  # type: ignore[no-untyped-def]
-            del text
-            return [0.1, 0.2, 0.3]
+    try:
+        # Prefer real base class when available to satisfy strict setters
+        from llama_index.core.base.embeddings.base import (  # type: ignore
+            BaseEmbedding,
+        )
 
-    Settings.embed_model = _Embed()  # type: ignore[attr-defined]
+        class _Embed(BaseEmbedding):  # type: ignore[misc]
+            def _get_text_embedding(self, text: str):  # type: ignore[no-untyped-def]
+                del text
+                return [0.1, 0.2, 0.3]
+
+            def _get_query_embedding(self, text: str):  # type: ignore[no-untyped-def]
+                del text
+                return [0.1, 0.2, 0.3]
+
+            async def _aget_text_embedding(self, text: str):  # pragma: no cover
+                return self._get_text_embedding(text)
+
+            async def _aget_query_embedding(self, text: str):  # pragma: no cover
+                return self._get_query_embedding(text)
+
+        Settings.embed_model = _Embed()  # type: ignore[attr-defined]
+    except Exception:
+        # Fallback: non-strict environments accept plain stubs
+        class _Embed:  # type: ignore[too-many-instance-attributes]
+            def get_query_embedding(self, text: str):  # type: ignore[no-untyped-def]
+                del text
+                return [0.1, 0.2, 0.3]
+
+        Settings.embed_model = _Embed()  # type: ignore[attr-defined]
 
 
 def test_hybrid_retriever_dedup_and_order(monkeypatch: pytest.MonkeyPatch) -> None:
