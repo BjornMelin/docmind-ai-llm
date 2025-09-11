@@ -342,7 +342,7 @@ class MultiAgentCoordinator:
         def pre_model_hook(state: dict) -> dict:
             """Trim context before model processing."""
             try:
-                # Import here so tests patching the function can intercept calls
+                # Defer import to allow runtime patching and reduce import-time deps
                 from langchain_core.messages.utils import trim_messages
 
                 messages = state.get("messages", [])

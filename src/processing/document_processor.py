@@ -43,11 +43,11 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     pass
 
 
-def _document():  # pragma: no cover - lazy import for tests
-    """Return LlamaIndex Document class via lazy import.
+def _document():  # pragma: no cover - lazy import to reduce import-time coupling
+    """Return LlamaIndex Document class via deferred import.
 
-    Avoids importing llama_index.core at module import time to reduce coupling
-    in tests that stub LlamaIndex modules.
+    Avoids importing llama_index.core at module import time to limit coupling
+    and improve startup in environments that stub or delay heavy dependencies.
     """
     from llama_index.core import Document as _Doc  # type: ignore
 

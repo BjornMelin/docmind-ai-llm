@@ -133,7 +133,7 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
         if Settings.embed_model is not None and not force_embed:
             logger.info("Embed model already configured; skipping override")
         else:
-            # Some tests patch `settings` with a lightweight namespace lacking
+            # Some environments may pass a lightweight settings namespace lacking
             # helper methods; default to BGE-M3 CPU in that case.
             if hasattr(settings, "get_embedding_config"):
                 emb_cfg = settings.get_embedding_config()
@@ -141,7 +141,7 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
                 emb_cfg = {"model_name": "BAAI/bge-m3", "device": "cpu"}
             model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
             device = emb_cfg.get("device", "cpu")
-            # Prefer HuggingFaceEmbedding for BGE-M3 (tests may monkeypatch
+            # Prefer HuggingFaceEmbedding for BGE-M3 (callers may monkeypatch
             # this constructor directly when needed). Import lazily when needed.
             global HuggingFaceEmbedding
             if HuggingFaceEmbedding is None:  # type: ignore
@@ -152,7 +152,7 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
                             huggingface as _hf,  # local import
                         )
 
-                        # Bind constructor once; tests may monkeypatch this symbol
+                        # Bind constructor once; callers may monkeypatch this symbol
                         HuggingFaceEmbedding = (
                             _hf.HuggingFaceEmbedding  # type: ignore[attr-defined]
                         )

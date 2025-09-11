@@ -140,7 +140,7 @@ async def cross_modal_search(
 ) -> list[dict[str, Any]]:
     """Tiny facade around common index interfaces used in tests.
 
-    Returns a list of result dicts with stable keys for tests.
+    Returns a list of result dicts with stable keys for downstream consumers.
     """
     results: list[dict[str, Any]] = []
     if search_type == "text_to_image" and query is not None:
@@ -210,7 +210,7 @@ async def validate_end_to_end_pipeline(
     property_graph: Any,
     llm: Any,
 ) -> dict[str, Any]:
-    """Lightweight end-to-end validation used by tests.
+    """Lightweight end-to-end validation used by validation flows.
 
     This stitches together image embedding, a toy entity relationship summary,
     and a final response string that references key components.
