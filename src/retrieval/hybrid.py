@@ -91,13 +91,11 @@ class ServerHybridRetriever:
                 )
             )
 
-        d_query: Any = dense_vec.tolist()
-        vi = getattr(qmodels, "VectorInput", None)
-        if vi is not None:
-            try:
-                d_query = vi(vector=d_query)
-            except TypeError:
-                d_query = dense_vec.tolist()
+        # Support ndarray or python list (monkeypatched in tests)
+        d_query: Any = (
+            dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
+        )
+        # Use raw list for dense query input to maximize compatibility
 
         prefetch.append(
             qmodels.Prefetch(

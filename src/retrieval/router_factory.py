@@ -37,6 +37,8 @@ def build_router_engine(
         pg_index: Optional PropertyGraphIndex for the knowledge_graph tool.
         settings: Optional settings object; defaults to module settings.
         llm: Optional LLM override for the router.
+        enable_hybrid: When True, include server-side hybrid tool; defaults to
+            settings.retrieval.enable_server_hybrid when None.
 
     Returns:
         RouterQueryEngine: Configured router engine.
@@ -65,11 +67,19 @@ def build_router_engine(
 
     # Hybrid search tool via Qdrant Query API (behind flag)
     try:
-        hybrid_ok = (
-            enable_hybrid
-            if enable_hybrid is not None
-            else bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
-        )
+        if enable_hybrid is not None:
+            hybrid_ok = bool(enable_hybrid)
+        else:
+            # When explicit settings provided, allow either flag to enable hybrid.
+            # When settings is None (uses default_settings), only honor the explicit
+            # server-side flag to avoid surprises in generic callers/tests.
+            if settings is None:
+                hybrid_ok = bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
+            else:
+                hybrid_ok = bool(
+                    getattr(cfg.retrieval, "enable_server_hybrid", False)
+                    or getattr(cfg.retrieval, "hybrid_enabled", False)
+                )
         if hybrid_ok:
             params = _HybridParams(
                 collection=cfg.database.qdrant_collection,
@@ -134,7 +144,7 @@ def build_router_engine(
     except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
         logger.debug(f"Graph tool construction skipped: {e}")
 
-    # Selector: prefer PydanticSingleSelector when available
+    # Selector: prefer PydanticSingleSelector when available, else LLM selector
     try:
         from llama_index.core.selectors import PydanticSingleSelector
 
@@ -145,12 +155,12 @@ def build_router_engine(
     router = RouterQueryEngine(
         selector=selector, query_engine_tools=tools, verbose=False
     )
-    # Provide stable attribute for tests/introspection across versions
+    # Expose both public and private tool lists for compatibility across LI versions
     try:
         router.query_engine_tools = tools
         router._query_engine_tools = tools
     except Exception:  # pragma: no cover - defensive
-        pass
+        logger.debug("Router tool list attribute shim failed", exc_info=True)
     logger.info(
         "Router engine built (kg_present=%s)",
         any(t.metadata.name == "knowledge_graph" for t in tools),
