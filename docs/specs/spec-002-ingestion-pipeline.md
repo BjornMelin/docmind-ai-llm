@@ -1,10 +1,10 @@
 ---
 spec: SPEC-002
 title: Document Ingestion with Unstructured + LlamaIndex IngestionPipeline and Page Images
-version: 1.0.0
-date: 2025-09-05
+version: 1.0.1
+date: 2025-09-09
 owners: ["ai-arch"]
-status: Completed
+status: Revised
 related_requirements:
   - FR-ING-001: The system SHALL parse PDFs, Office docs, images using Unstructured.
   - FR-ING-002: The system SHALL emit canonical nodes with deterministic IDs and lineage.
@@ -17,6 +17,14 @@ related_adrs: ["ADR-002","ADR-003","ADR-010"]
 ## Objective
 
 Standardize ingestion using **Unstructured** (`partition(auto)`) with strategy mapping (`hi_res` / `fast` / `ocr_only`), plus OCR fallback. Integrate with **LlamaIndex IngestionPipeline** using a custom `UnstructuredTransformation` and a DuckDBKV‑backed `IngestionCache`. Emit `pdf_page_image` nodes and maintain deterministic IDs for all emitted nodes.
+
+### Optional GraphRAG Build (Note)
+
+After core ingestion completes, an optional GraphRAG build MAY be invoked (feature‑flagged) to construct a `PropertyGraphIndex` for the current corpus. See SPEC‑006 and ADR‑038 for UI toggle, persistence (SnapshotManager), and routing.
+
+## Changelog
+
+- 1.0.1 (2025-09-09): Added optional GraphRAG build note and cross‑links
 
 ## Architecture
 
@@ -112,3 +120,9 @@ Feature: Ingestion pipeline
 - Unstructured partition strategies (auto/hi_res/fast) and OCR fallback
 - LlamaIndex IngestionPipeline + IngestionCache + DuckDBKVStore
 - PyMuPDF page rendering best practices (idempotent writes, bbox capture)
+
+## Unstructured Strategy & OCR Fallback
+
+- The default parsing strategy SHOULD be `strategy=auto` with automatic OCR fallback for scanned PDFs.
+- Emitted nodes MUST include deterministic IDs and complete metadata where applicable (e.g., `doc_id`, `page_id`, `chunk_id`, `modality`).
+- PDF page image artifacts MAY be emitted for downstream visual pipelines.

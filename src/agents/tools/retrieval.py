@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import time
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from llama_index.core import Document
-
-from src.agents import tools as tools_mod
+from loguru import logger
 
 from .constants import (
     CONTENT_KEY_LENGTH,
@@ -28,7 +29,7 @@ def retrieve_documents(
 ) -> str:
     """Execute document retrieval using specified strategy and optimizations."""
     try:
-        start_time = tools_mod.time.perf_counter()
+        start_time = time.perf_counter()
 
         vector_index, kg_index, retriever = _extract_indexes(state)
         if vector_index is None and retriever is None and kg_index is None:
@@ -70,7 +71,7 @@ def retrieve_documents(
                         "query_optimized": query,
                         "document_count": len(collected),
                         "processing_time_ms": round(
-                            (tools_mod.time.perf_counter() - start_time) * 1000, 2
+                            (time.perf_counter() - start_time) * 1000, 2
                         ),
                         "partial_results": True,
                     },
@@ -107,7 +108,7 @@ def retrieve_documents(
         # Deduplicate
         documents = _deduplicate_documents(documents)
 
-        processing_time = tools_mod.time.perf_counter() - start_time
+        processing_time = time.perf_counter() - start_time
         result_data = {
             "documents": documents,
             "strategy_used": strategy_used,
@@ -121,7 +122,7 @@ def retrieve_documents(
         return json.dumps(result_data, default=str)
 
     except (OSError, RuntimeError, ValueError, AttributeError) as e:
-        tools_mod.logger.error("Document retrieval failed: %s", e)
+        logger.error("Document retrieval failed: {}", e)
         return json.dumps(
             {
                 "documents": [],
@@ -136,7 +137,7 @@ def retrieve_documents(
 def _extract_indexes(state: dict | None):
     tools_data = state.get("tools_data") if state else None
     if not tools_data:
-        tools_mod.logger.warning("No tools data available in state, using fallback")
+        logger.warning("No tools data available in state, using fallback")
         return None, None, None
     return tools_data.get("vector"), tools_data.get("kg"), tools_data.get("retriever")
 
@@ -152,11 +153,9 @@ def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
             from src.dspy_integration import DSPyLlamaIndexRetriever
 
             optimized = DSPyLlamaIndexRetriever.optimize_query(query)
-            tools_mod.logger.debug(
-                "DSPy optimization: '%s' -> '%s'", query, optimized["refined"]
-            )
+            logger.debug("DSPy optimization: '%s' -> '%s'", query, optimized["refined"])
         except ImportError:
-            tools_mod.logger.warning(
+            logger.warning(
                 "DSPy integration not available - using fallback optimization"
             )
             if len(query.split()) < 3:
@@ -178,18 +177,18 @@ def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
     documents: list[dict] = []
     fallback = False
     for q in queries:
-        search_tool = tools_mod.ToolFactory.create_kg_search_tool(kg_index)
+        search_tool = _get_tool_factory().create_kg_search_tool(kg_index)
         if not search_tool:
             continue
         try:
             result = search_tool.call(q)
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
-            tools_mod.logger.debug(
-                "GraphRAG retrieved %d documents for query: %s", len(new_docs), q
+            logger.debug(
+                "GraphRAG retrieved {} documents for query: {}", len(new_docs), q
             )
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            tools_mod.logger.warning("GraphRAG failed for query '%s': %s", q, e)
+            logger.warning("GraphRAG failed for query '{}': {}", q, e)
             fallback = True
             break
     return documents, fallback
@@ -206,21 +205,21 @@ def _run_vector_hybrid(
     strategy_used: str | None = None
     for q in queries:
         if strategy == "hybrid" and retriever:
-            search_tool = tools_mod.ToolFactory.create_hybrid_search_tool(retriever)
+            search_tool = _get_tool_factory().create_hybrid_search_tool(retriever)
             strategy_used = "hybrid_fusion"
         elif vector_index:
             if strategy == "hybrid":
-                search_tool = tools_mod.ToolFactory.create_hybrid_vector_tool(
+                search_tool = _get_tool_factory().create_hybrid_vector_tool(
                     vector_index
                 )
                 strategy_used = "hybrid_vector"
             else:
-                search_tool = tools_mod.ToolFactory.create_vector_search_tool(
+                search_tool = _get_tool_factory().create_vector_search_tool(
                     vector_index
                 )
                 strategy_used = "vector"
         else:
-            tools_mod.logger.error("No vector index available for retrieval")
+            logger.error("No vector index available for retrieval")
             return (
                 [],
                 None,
@@ -238,14 +237,14 @@ def _run_vector_hybrid(
             result = search_tool.call(q)
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
-            tools_mod.logger.debug(
-                "%s retrieved %d documents for query: %s",
+            logger.debug(
+                "{} retrieved {} documents for query: {}",
                 strategy_used,
                 len(new_docs),
                 q,
             )
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            tools_mod.logger.error("Retrieval failed for query '%s': %s", q, e)
+            logger.error("Retrieval failed for query '{}': {}", q, e)
     return documents, strategy_used, None
 
 
@@ -301,7 +300,7 @@ def _collect_via_tool_factory(
     query: str, vector_index: Any, kg_index: Any, retriever: Any
 ) -> list[dict]:
     try:
-        tool_list = tools_mod.ToolFactory.create_tools_from_indexes(
+        tool_list = _get_tool_factory().create_tools_from_indexes(
             vector_index=vector_index, kg_index=kg_index, retriever=retriever
         )
         collected: list[dict] = []
@@ -310,12 +309,19 @@ def _collect_via_tool_factory(
                 res = t.invoke(query) if hasattr(t, "invoke") else t.call(query)
                 collected.extend(_parse_tool_result(res))
             except Exception as te:  # pylint: disable=broad-exception-caught
-                tools_mod.logger.error("Tool execution failed: %s", te)
-                tools_mod.logger.warning("Partial failure: continuing with other tools")
+                logger.error("Tool execution failed: {}", te)
+                logger.warning("Partial failure: continuing with other tools")
                 continue
         return collected
     except Exception:  # pylint: disable=broad-exception-caught
-        tools_mod.logger.debug(
-            "Tool collection path failed; using detailed path", exc_info=True
-        )
+        logger.debug("Tool collection path failed; using detailed path", exc_info=True)
         return []
+
+
+def _get_tool_factory():
+    """Return the canonical ToolFactory class.
+
+    Production-only resolution: always import from src.agents.tool_factory.
+    Tests should patch `src.agents.tool_factory.ToolFactory` directly.
+    """
+    return importlib.import_module("src.agents.tool_factory").ToolFactory

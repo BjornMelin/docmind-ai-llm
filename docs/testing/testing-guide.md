@@ -835,3 +835,9 @@ The successful 77.8% mock reduction demonstrates that systematic improvement is 
 2. Expand coverage targeting critical business logic modules
 3. Implement property-based testing for edge case discovery
 4. Enhance performance benchmarking and regression detection
+
+### Snapshot & Router Tests (Recommendations)
+
+- SnapshotManager: add unit tests for manifest contents (schema/persist versions, versions map, hashes), atomic rename, and lock behavior.
+- Staleness: simulate corpus/config hash mismatches and assert Chat displays the staleness badge with rebuild guidance.
+- Router: when a PropertyGraphIndex is present and healthy, assert the router contains `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; otherwise assert vector/hybrid only. Stub selector for deterministic tests.

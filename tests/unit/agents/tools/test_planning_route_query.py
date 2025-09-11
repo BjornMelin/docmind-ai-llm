@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agents.tools import route_query
+from src.agents.tools.planning import route_query
 
 pytestmark = pytest.mark.unit
 
@@ -103,7 +103,7 @@ class TestRouteQuery:
         # route_query should propagate internal errors
         with (
             patch(
-                "src.agents.tools.time.perf_counter",
+                "src.agents.tools.planning.time.perf_counter",
                 side_effect=RuntimeError("Timer error"),
             ),
             pytest.raises(RuntimeError),

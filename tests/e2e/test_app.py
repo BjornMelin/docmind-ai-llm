@@ -19,6 +19,9 @@ Tests use proper boundary mocking to avoid external dependencies while validatin
 complete user workflows and application integration.
 """
 
+# pylint: disable=redefined-outer-name,unused-argument,too-many-statements,
+# pylint: disable=broad-exception-caught,reimported,unnecessary-pass
+
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -132,17 +135,23 @@ def setup_external_dependencies(monkeypatch):
 
     # Provide minimal StorageContext shim used by app/index creation
     class _DummyStorageContext:
+        """Minimal storage context shim used in tests."""
+
         def __init__(self, *, vector_store=None, image_store=None):
+            """Initialize with optional vector and image stores."""
             self.vector_store = vector_store
             self.image_store = image_store
 
         @classmethod
         def from_defaults(cls, *, vector_store=None, image_store=None):
+            """Construct a new instance using provided stores."""
             return cls(vector_store=vector_store, image_store=image_store)
 
     li_core.StorageContext = _DummyStorageContext
 
     class _DummyPGI:  # PropertyGraphIndex placeholder
+        """Placeholder for PropertyGraphIndex import compatibility in tests."""
+
         pass
 
     li_core.PropertyGraphIndex = _DummyPGI
@@ -150,7 +159,10 @@ def setup_external_dependencies(monkeypatch):
     li_llms = _types.ModuleType("llama_index.core.llms")
 
     class _ChatMessage:
+        """Chat message shim exposing role and content fields."""
+
         def __init__(self, role: str, content: str):
+            """Create a chat message with a role and content."""
             self.role = role
             self.content = content
 
@@ -159,8 +171,11 @@ def setup_external_dependencies(monkeypatch):
     li_indices = _types.ModuleType("llama_index.core.indices")
 
     class _DummyMMIndex:
+        """Minimal multi-modal index shim with factory constructor."""
+
         @classmethod
         def from_documents(cls, *_args, **_kwargs):
+            """Return a trivial index instance for tests."""
             return cls()
 
     li_indices.MultiModalVectorStoreIndex = _DummyMMIndex
@@ -283,8 +298,8 @@ def setup_external_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "src.containers", mock_containers)
 
 
-@pytest.fixture
-def app_test(tmp_path, monkeypatch):
+@pytest.fixture(name="app_test")
+def fixture_app_test(tmp_path, monkeypatch):
     """Create an AppTest instance for testing the main application.
 
     Uses real Pydantic settings instead of mock objects.
@@ -317,10 +332,14 @@ def app_test(tmp_path, monkeypatch):
     agents_coord = ModuleType("src.agents.coordinator")
 
     class _MC:
+        """Stub multi-agent coordinator for tests."""
+
         def __init__(self, *_, **__):
+            """Construct the stub without heavy initialization."""
             pass
 
         def process_query(self, *_a, **_kw):
+            """Return a stub response namespace."""
             from types import SimpleNamespace
 
             return SimpleNamespace(content="stub")
@@ -329,8 +348,11 @@ def app_test(tmp_path, monkeypatch):
     agents_factory = ModuleType("src.agents.tool_factory")
 
     class _TF:
+        """Stubbed ToolFactory with no-op tool creation."""
+
         @staticmethod
         def create_basic_tools(_):
+            """Return an empty tool list for router wiring tests."""
             return []
 
     agents_factory.ToolFactory = _TF
@@ -341,7 +363,7 @@ def app_test(tmp_path, monkeypatch):
     from contextlib import suppress
 
     with suppress(Exception):
-        import src.utils.core  # noqa: F401
+        __import__("src.utils.core")
 
     with (
         # Boundary mocking: external service calls only
@@ -368,7 +390,7 @@ def app_test(tmp_path, monkeypatch):
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-def test_app_hardware_detection(mock_pull, app_test):
+def test_app_hardware_detection(_mock_pull, app_test):  # noqa: PT019
     """Test hardware detection display and model suggestions in the application.
 
     Validates that hardware detection works correctly and appropriate model
@@ -379,6 +401,8 @@ def test_app_hardware_detection(mock_pull, app_test):
         mock_pull: Mock ollama.pull function.
         app_test: Streamlit app test fixture.
     """
+    # Mark patched object as used to satisfy lint rules
+    assert _mock_pull is not None
     app = app_test.run()
 
     # Verify no critical exceptions occurred
@@ -388,13 +412,9 @@ def test_app_hardware_detection(mock_pull, app_test):
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-def test_app_renders_and_shows_chat(mock_pull, app_test):
-    """App renders successfully and chat section is present.
-
-    Settings are managed on Settings page in the new UI, so backend selection
-    is no longer in the main app sidebar. This test verifies the app renders
-    without exceptions and the chat section exists.
-    """
+def test_app_renders_and_shows_chat(_mock_pull, app_test):  # noqa: PT019
+    """Verify app renders and the chat section is present."""
+    assert _mock_pull is not None
     app = app_test.run()
     assert not app.exception, f"App failed with exception: {app.exception}"
     app_str = str(app)
@@ -403,25 +423,15 @@ def test_app_renders_and_shows_chat(mock_pull, app_test):
 
 @patch("ollama.pull", return_value={"status": "success"})
 @patch("src.utils.core.load_documents_unstructured")
-def test_app_document_upload_workflow(mock_load_docs, mock_pull, app_test, tmp_path):
-    """Test document upload and processing workflow with unified architecture.
-
-    Validates the complete document processing pipeline including:
-    - File upload interface
-    - Document processing with unstructured
-    - Index creation and storage
-    - Performance metrics display
-
-    Args:
-        mock_load_docs: Mock document loading function.
-        mock_pull: Mock ollama.pull function.
-        app_test: Streamlit app test fixture.
-        tmp_path: Temporary directory for test files.
-    """
+def test_app_document_upload_workflow(mock_load_docs, _mock_pull, app_test, tmp_path):  # noqa: PT019
+    """Validate upload and processing pipeline with boundary mocks."""
 
     # Mock successful document loading
     class Doc:
+        """Tiny document helper used for upload workflow tests."""
+
         def __init__(self, text, metadata=None):
+            """Create a document with text and optional metadata."""
             self.text = text
             self.metadata = metadata or {}
 
@@ -430,6 +440,7 @@ def test_app_document_upload_workflow(mock_load_docs, mock_pull, app_test, tmp_p
     ]
     mock_load_docs.return_value = mock_documents
 
+    assert _mock_pull is not None
     app = app_test.run()
 
     # Verify app loaded successfully
@@ -440,16 +451,7 @@ def test_app_document_upload_workflow(mock_load_docs, mock_pull, app_test, tmp_p
 
 
 def test_app_multi_agent_chat_functionality(app_test):
-    """Test chat functionality with the multi-agent coordination system.
-
-    Validates that the chat interface works correctly with the multi-agent
-    coordinator and handles user queries through the agent system.
-
-    Args:
-        mock_coordinator_class: Mock MultiAgentCoordinator class.
-        mock_pull: Mock ollama.pull function.
-        app_test: Streamlit app test fixture.
-    """
+    """Ensure multi-agent chat flow returns a response string."""
     with (
         patch("ollama.pull", return_value={"status": "success"}),
         patch(
@@ -488,7 +490,9 @@ def test_app_multi_agent_chat_functionality(app_test):
 @patch("ollama.pull", return_value={"status": "success"})
 @patch("src.utils.core.validate_startup_configuration", return_value=True)
 def test_app_session_persistence_and_memory_management(
-    mock_validate, mock_pull, app_test
+    mock_validate,
+    mock_pull,
+    app_test,
 ):
     """Test session save/load functionality and memory management.
 
@@ -500,6 +504,9 @@ def test_app_session_persistence_and_memory_management(
         mock_pull: Mock ollama.pull function.
         app_test: Streamlit app test fixture.
     """
+    # Mark patched objects as used to satisfy lint rules
+    assert mock_validate is not None
+    assert mock_pull is not None
     app = app_test.run()
 
     # Verify app loaded successfully
@@ -671,17 +678,7 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
 
 @pytest.mark.asyncio
 async def test_async_workflow_validation(app_test):
-    """Test async workflow components and validation.
-
-    Validates that the application properly handles async operations
-    including document processing and agent coordination.
-
-    Args:
-        mock_validate: Mock startup configuration validation.
-        mock_coordinator_class: Mock MultiAgentCoordinator class.
-        mock_pull: Mock ollama.pull function.
-        app_test: Streamlit app test fixture.
-    """
+    """Validate async flow for processing and coordination paths."""
     with (
         patch("ollama.pull", return_value={"status": "success"}),
         patch(
@@ -707,7 +704,7 @@ async def test_async_workflow_validation(app_test):
 
     # Verify that async-capable components are present
     app_str = str(app)
-    (
+    assert (
         "upload" in app_str.lower()
         or "process" in app_str.lower()
         or "analyze" in app_str.lower()
@@ -717,16 +714,7 @@ async def test_async_workflow_validation(app_test):
 
 
 def test_unified_configuration_architecture_integration(app_test):
-    """Test integration with the unified configuration architecture.
-
-    Validates that the application properly uses the centralized settings
-    system and configuration management.
-
-    Args:
-        mock_validate: Mock startup configuration validation.
-        mock_pull: Mock ollama.pull function.
-        app_test: Streamlit app test fixture.
-    """
+    """Check app uses centralized settings with expected UI markers."""
     with (
         patch("ollama.pull", return_value={"status": "success"}),
         patch(
@@ -757,14 +745,7 @@ def test_unified_configuration_architecture_integration(app_test):
 
 
 def test_streamlit_app_markers_and_structure(app_test):
-    """Test that the Streamlit app has proper structure and markers for E2E testing.
-
-    This test validates the application structure without running full workflows,
-    ensuring that key UI components and markers are properly placed for testing.
-
-    Args:
-        app_test: Streamlit app test fixture.
-    """
+    """Confirm core Streamlit UI components are present in the app."""
     app = app_test.run()
 
     # Verify app structure and key components

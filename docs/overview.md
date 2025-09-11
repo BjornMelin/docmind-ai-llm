@@ -6,6 +6,28 @@ Welcome to the documentation for **DocMind AI**, a local-first document analysis
 
 DocMind AI is an offline-first document analysis system featuring a 5-agent LangGraph supervisor coordination system, hybrid retrieval, and local processing for privacy.
 
+Retrieval/Router overview: Queries are routed through a RouterQueryEngine composed via `router_factory` with tools `semantic_search`, `hybrid_search` (Qdrant server‑side fusion), and (optionally) `knowledge_graph` when a PropertyGraphIndex is present and healthy. The selector prefers `PydanticSingleSelector` and falls back to `LLMSingleSelector`.
+
+Snapshots & Staleness: Index snapshots persist vector and graph stores with an enriched manifest (schema/persist versions, versions map, hashes). Chat auto‑loads the latest non‑stale snapshot and surfaces a staleness badge if current corpus/config differ.
+
+GraphRAG Exports: Graph exports preserve relation labels from `get_rel_map` (fallback `related`) and are available as JSONL (baseline) and Parquet (optional). Export seeding follows a retriever‑first policy (graph → vector → deterministic fallback).
+
+## Quick Router Example
+
+```python
+from src.retrieval.router_factory import build_router_engine
+
+# Assume vector_index is available; graph_index may be None when GraphRAG is disabled
+router = build_router_engine(vector_index, graph_index, settings)
+response = router.query("What connects topic X and entity Y?")
+print(response)
+```
+
+Notes:
+
+- The router registers tools `semantic_search`, `hybrid_search` (Qdrant server‑side fusion), and (optionally) `knowledge_graph` when a PropertyGraphIndex is present and healthy.
+- Selector preference: `PydanticSingleSelector` when available; otherwise `LLMSingleSelector`.
+
 ## Documentation Structure
 
 - **[Product Requirements Document (PRD)](PRD.md)**: Complete system requirements with validated performance specifications

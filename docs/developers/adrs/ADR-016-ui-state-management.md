@@ -1,12 +1,12 @@
 ---
 ADR: 016
 Title: Streamlit Native State Management
-Status: Accepted
-Version: 4.2
-Date: 2025-08-18
+Status: Accepted (Amended)
+Version: 4.3
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 011, 013, 021, 036
+Related: 001, 011, 013, 021, 036, 038
 Tags: ui, state, streamlit
 References:
 - [Streamlit — State & Caching](https://docs.streamlit.io/develop/api-reference/caching-and-state)
@@ -41,6 +41,8 @@ Earlier versions introduced custom SessionState/Cache managers. Streamlit provid
 ## Decision
 
 Adopt Streamlit native state and caching. For conversational memory, integrate with ChatMemoryBuffer/ChatStore (ADR‑021) without adding new state layers.
+
+Amendment (GraphRAG): add state entries `vector_index`, `pg_index`, `router_engine`, and `snapshot_manifest`. On Chat initialization, attempt to load the latest snapshot manifest to compute staleness and default the chat strategy to Router when `pg_index` is present (see ADR‑038).
 
 ## High-Level Architecture
 
@@ -78,6 +80,13 @@ graph TD
 
 - Pages and components read/write `st.session_state` for cross‑page state.
 - `st.cache_data` caches small/fast results; `st.cache_resource` caches heavy resources.
+
+### Session Keys (Amended)
+
+- `vector_index`: active VectorStoreIndex wrapper
+- `pg_index`: active PropertyGraphIndex wrapper (optional)
+- `router_engine`: active RouterQueryEngine instance (optional)
+- `snapshot_manifest`: latest manifest loaded from snapshot (optional)
 - Conversational persistence integrates with ADR‑021 (ChatMemory) when needed.
 
 ### Implementation Details
@@ -132,6 +141,7 @@ def test_session_state_defaults():
 
 ## Changelog
 
+- 4.3 (2025-09-09): Added GraphRAG session keys and staleness handling; linked to ADR‑038
 - 4.2 (2025-08-18): Corrected model naming; minor state improvements
 - 4.1 (2025-08-18): Enhanced state for 5‑agent workflows; DSPy/GraphRAG support
 - 4.0 (2025-08-17): [Missing note]

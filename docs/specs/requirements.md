@@ -37,7 +37,13 @@ FR-005 The system **shall** persist vectors in Qdrant with named vectors `text-d
 FR-006 The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. Source: SPEC‑004; Accept: AC‑FR‑006.  
 FR-007 The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). Source: SPEC‑005/ADR‑037; Accept: AC‑FR‑007.  
 FR-008 The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables. Source: ADR‑024; Accept: AC‑FR‑008.  
-FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex with default LLMSynonymRetriever and a UI toggle. Source: ADR‑008; Accept: AC‑FR‑009.  
+FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. No custom synonym retriever. Compose RouterQueryEngine with vector+graph tools (fallback to vector when graph missing). Persist via SnapshotManager with manifest hashing and a lock. Graph exports SHALL be produced from `get_rel_map` to JSONL and Parquet (when PyArrow is available). Source: ADR‑019/ADR‑038/SPEC‑006/SPEC‑014; Accept: AC‑FR‑009. (Status: Implemented)  
+FR-009.1 The system **shall** display a staleness badge in Chat when manifest hashes differ, with tooltip copy exactly: “Snapshot is stale (content/config changed). Rebuild in Documents → Rebuild GraphRAG Snapshot.” The check MUST be local‑only (no network). Source: SPEC‑014; Accept: AC‑FR‑009.  
+FR-009.2 The system **shall** implement SnapshotManager single‑writer lock semantics with bounded timeout and atomic `_tmp → <timestamp>` rename, and include required manifest fields. Source: SPEC‑014; Accept: AC‑FR‑009‑LOCK.  
+FR-009.3 The system **shall** provide exports with JSONL required and Parquet optional (guarded by pyarrow). Source: SPEC‑006; Accept: AC‑FR‑009.  
+FR-009.4 The system **shall** select export seeds deterministically, de‑duplicate, and cap at 32 items. Source: SPEC‑006; Accept: AC‑FR‑009‑SEEDS.  
+FR-009.5 The system **shall** validate export paths as non‑egress, sanitize file names, and block symlink targets. Source: SPEC‑011; Accept: AC‑FR‑009‑SEC.  
+FR-009.6 The system **shall** emit telemetry events for router selection, staleness detection, export actions, and traversal depth (where applicable). Source: SPEC‑012; Accept: AC‑FR‑OBS‑001.  
 FR-010 The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. Source: ADR‑012; Accept: AC‑FR‑010.  
 FR-011 The system **shall** implement native chat streaming via `st.chat_message` + `st.chat_input` + `st.write_stream`. Source: ADR‑012; Accept: AC‑FR‑011.  
 FR-012 The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. Source: ADR‑009; Accept: AC‑FR‑012.  
@@ -163,5 +169,74 @@ Scenario: Template catalog and rendering
   When the UI lists templates and a user selects one
   And the system renders with default context
   Then a non‑empty prompt/message is produced without errors
-  And no references to src/prompts.py remain in the repository
+And no references to src/prompts.py remain in the repository
+```
+
+### AC‑FR‑009
+
+```gherkin
+Scenario: Router composition and fallback
+  Given GraphRAG is enabled and a graph exists
+  When I query
+  Then RouterQueryEngine SHALL include vector and graph tools
+  And route to vector only if the graph is missing or unhealthy
+
+Scenario: Snapshot manifest and staleness
+  Given SnapshotManager created storage/<timestamp> with manifest.json
+  And current corpus/config hashes differ
+  When I open Chat
+  Then a staleness badge SHALL be visible
+
+Scenario: Exports
+  Given a graph store and seeds
+  When I export
+  Then JSONL SHALL be written (one relation per line)
+  And Parquet SHALL be written when pyarrow is available
+```
+
+FR‑SEC‑NET‑001 The system **shall** default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted. LM Studio endpoints MUST end with `/v1`. Source: SPEC‑011/ADR‑024; Accept: AC‑FR‑SEC‑NET‑001.  
+
+### AC‑FR‑009‑LOCK
+
+```gherkin
+Scenario: Single‑writer snapshot rebuild with timeout
+  Given a running rebuild task holds the SnapshotManager lock
+  When I attempt a second rebuild within the lock timeout
+  Then the UI SHALL present a locked state and the second rebuild SHALL not start
+```
+
+### AC‑FR‑009‑SEEDS
+
+```gherkin
+Scenario: Deterministic seed selection with cap
+  Given a set of candidate seeds derived from ingested documents or retriever top‑K
+  When I compute export seeds
+  Then the resulting list SHALL be deterministic, de‑duplicated, and contain at most 32 items
+```
+
+### AC‑FR‑009‑SEC
+
+```gherkin
+Scenario: Non‑egress export path validation
+  Given a base data directory
+  When I attempt to export to a path outside the base or to a symlink
+  Then the export SHALL be blocked with a clear error
+```
+
+### AC‑FR‑OBS‑001
+
+```gherkin
+Scenario: Telemetry events emitted
+  When a query is processed and/or a snapshot/export action occurs
+  Then the system SHALL emit events: router_selected, snapshot_stale_detected, export_performed
+  And traversal_depth SHALL be recorded when a knowledge_graph route is taken
+```
+
+### AC‑FR‑SEC‑NET‑001
+
+```gherkin
+Scenario: Reject non‑allowlisted remote endpoint
+  Given offline‑first defaults and a strict allowlist
+  When I configure a remote LLM URL that is not allowlisted
+  Then the Settings page SHALL reject the value with a helpful error
 ```

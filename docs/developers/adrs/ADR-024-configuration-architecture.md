@@ -1,12 +1,12 @@
 ---
 ADR: 024
 Title: Unified Settings Architecture (Always‑On Hybrid/Rerank + 128K Cap)
-Status: Implemented
-Version: 2.8
-Date: 2025-09-04
+Status: Implemented (Amended)
+Version: 2.9
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 003, 004, 016, 022, 032, 033, 035, 037
+Related: 001, 003, 004, 016, 022, 032, 033, 035, 037, 038
 Tags: configuration, settings, llamaindex, pydantic
 References:
 - [LlamaIndex — Settings](https://docs.llamaindex.ai/en/stable/module_guides/supporting_modules/settings/)
@@ -46,6 +46,16 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 ## Decision
 
 Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions. Default hybrid fusion is server‑side RRF in Qdrant; DBSF is optional and gated by env/version support. Prefer BM42 sparse (FastEmbed) with IDF modifier.
+
+Amendment (GraphRAG flags):
+
+```env
+DOCMIND_GRAPHRAG__ENABLED=false
+DOCMIND_GRAPHRAG__SUBRETRIEVERS=false
+DOCMIND_GRAPHRAG__DEFAULT_PATH_DEPTH=1
+```
+
+Expose these in UI with safe defaults (toggle; read‑only path depth 1 unless advanced settings enabled). See ADR‑038.
 
 Explicit clarifications:
 
@@ -153,7 +163,6 @@ class RetrievalConfig(BaseModel):
     reranker_normalize_scores: bool = True
     # server-side fusion controls
     fused_top_k: int = 60
-    rrf_k: int = 60
     fusion_mode: Literal["rrf","dbsf"] = "rrf"  # env-gated; dbsf only if supported
     use_sparse_embeddings: bool = True
 
@@ -448,8 +457,9 @@ def test_env_mapping(monkeypatch):
 
 ## Changelog
 
+- 2.9 (2025-09-09): Added GraphRAG configuration flags and UI exposure; linked ADR‑038
 - 2.9 (2025-09-08): Clarified always-on (no UI toggles), single reranker path; enforced Qdrant named-vector schema and sparse alignment.
-- 2.8 (2025-09-07): Removed client-side fusion knobs; added server-side fusion envs (fusion_mode/fused_top_k/rrf_k), BM42(IDF) preference, and DBSF env-gating. Clarified env-only overrides and offline defaults.
+- 2.8 (2025-09-07): Removed client-side fusion knobs; added server-side fusion envs (fusion_mode/fused_top_k), BM42(IDF) preference, and DBSF env-gating. Clarified env-only overrides and offline defaults.
 
 - 2.7 (2025-09-07): Always‑on hybrid/rerank (no UI toggles); embed default BGE‑M3; updated examples and requirements
 
@@ -459,3 +469,9 @@ def test_env_mapping(monkeypatch):
 - v2.2 (2025-08-27): Restored user flexibility across CPU/GPU/backends; validated five user scenarios
 - v2.1 (2025-08-25): Unified architecture implemented; major complexity reduction; tests pass
 - v2.0 (2025-08-24): Complete replacement with unified architecture; library‑first pattern
+
+## Offline Defaults & Allowlist
+
+- The application MUST default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted.
+- LM Studio endpoints MUST terminate with `/v1` and be validated in Settings.
+- Provide a centralized allowlist mechanism in configuration; tests MUST cover rejection of non‑allowlisted URLs when policy is strict.

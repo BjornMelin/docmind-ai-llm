@@ -4,12 +4,13 @@ from __future__ import annotations
 
 # pylint: disable=cyclic-import
 import json
+import time
 from typing import Annotated
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-
-from src.agents import tools as tools_mod
+from llama_index.core.memory import ChatMemoryBuffer
+from loguru import logger
 
 from .constants import (
     COMPLEX_CONFIDENCE,
@@ -29,7 +30,7 @@ def route_query(
 ) -> str:
     """Analyze query and determine optimal processing strategy."""
     try:
-        start_time = tools_mod.time.perf_counter()
+        start_time = time.perf_counter()
 
         previous_queries = _extract_previous_queries_from_state(state)
 
@@ -57,7 +58,7 @@ def route_query(
         ):
             strategy = "graphrag"
 
-        processing_time = tools_mod.time.perf_counter() - start_time
+        processing_time = time.perf_counter() - start_time
 
         decision = {
             "strategy": strategy,
@@ -69,13 +70,11 @@ def route_query(
             "context_dependent": bool(previous_queries),
         }
 
-        tools_mod.logger.info(
-            "Query routed: %s complexity, %s strategy", complexity, strategy
-        )
+        logger.info("Query routed: {} complexity, {} strategy", complexity, strategy)
         return json.dumps(decision)
 
     except Exception as e:
-        tools_mod.logger.error("Query routing failed: %s", e)
+        logger.error("Query routing failed: {}", e)
         raise
 
 
@@ -88,13 +87,13 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
         and context is not None
     ):
         try:
-            context = tools_mod.ChatMemoryBuffer.from_defaults()
+            context = ChatMemoryBuffer.from_defaults()
             state["context"] = context
         except Exception:  # pylint: disable=broad-exception-caught
-            context = tools_mod.ChatMemoryBuffer.from_defaults()
+            context = ChatMemoryBuffer.from_defaults()
             state["context"] = context
     if isinstance(state, dict) and state.get("reset_context_on_error"):
-        state["context"] = tools_mod.ChatMemoryBuffer.from_defaults()
+        state["context"] = ChatMemoryBuffer.from_defaults()
 
     if (
         context
@@ -169,7 +168,7 @@ def plan_query(
 ) -> str:
     """Decompose complex queries into structured sub-tasks."""
     try:
-        start_time = tools_mod.time.perf_counter()
+        start_time = time.perf_counter()
 
         if complexity == "simple":
             # Simple queries don't need decomposition
@@ -251,7 +250,7 @@ def plan_query(
         else:
             execution_order = "sequential"
 
-        processing_time = tools_mod.time.perf_counter() - start_time
+        processing_time = time.perf_counter() - start_time
 
         plan = {
             "original_query": query,
@@ -262,13 +261,13 @@ def plan_query(
             "processing_time_ms": round(processing_time * 1000, 2),
         }
 
-        tools_mod.logger.info(
-            "Query planned: %d sub-tasks, %s execution", len(sub_tasks), execution_order
+        logger.info(
+            "Query planned: {} sub-tasks, {} execution", len(sub_tasks), execution_order
         )
         return json.dumps(plan)
 
     except (RuntimeError, ValueError, AttributeError) as e:
-        tools_mod.logger.error("Query planning failed: %s", e)
+        logger.error("Query planning failed: {}", e)
         # Fallback plan
         fallback = {
             "original_query": query,

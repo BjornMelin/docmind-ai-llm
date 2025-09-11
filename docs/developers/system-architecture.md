@@ -230,7 +230,7 @@ graph TD
 |-------|------|-------------------|--------------|
 | **Router Agent** | Query classification and strategy selection | <50ms | Pattern-based routing, complexity analysis |
 | **Planner Agent** | Query decomposition into sub-tasks | <100ms | Multi-strategy planning, execution ordering |
-| **Retrieval Agent** | Multi-strategy document retrieval | <150ms | Vector/Hybrid/GraphRAG, DSPy optimization |
+| **Retrieval Agent** | Multi-strategy document retrieval | <150ms | Vector/Hybrid/GraphRAG, optional DSPy optimization |
 | **Synthesis Agent** | Multi-source result combination | <100ms | Deduplication, relevance ranking |
 | **Validator Agent** | Response quality assessment | <75ms | Hallucination detection, source verification |
 
@@ -359,38 +359,11 @@ DocMind AI implements advanced hybrid search with RRF fusion:
 class QdrantVectorStore:
     """Qdrant vector storage with hybrid search capabilities."""
     
-    async def hybrid_search(
-        self, 
-        query: str, 
-        top_k: int = 10,
-        alpha: float = 0.7
-    ) -> List[Document]:
-        """Execute hybrid dense + sparse search with RRF fusion."""
-        
-        # Generate embeddings
-        dense_embedding = await self.embedder.get_dense_embedding(query)
-        sparse_embedding = await self.embedder.get_sparse_embedding(query)
-        
-        # Parallel dense and sparse search
-        dense_results = await self.dense_search(dense_embedding, top_k * 2)
-        sparse_results = await self.sparse_search(sparse_embedding, top_k * 2)
-        
-        # RRF fusion with configurable alpha
-        fused_results = self.rrf_fusion(dense_results, sparse_results, alpha)
-        
-        return fused_results[:top_k]
-    
-    def rrf_fusion(self, dense_results, sparse_results, alpha=0.7):
-        """Reciprocal Rank Fusion for hybrid search results."""
-        scores = defaultdict(float)
-        
-        for rank, result in enumerate(dense_results):
-            scores[result.id] += 1 / (alpha + rank + 1)
-            
-        for rank, result in enumerate(sparse_results):
-            scores[result.id] += 1 / ((1 - alpha) + rank + 1)
-            
-        return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    async def hybrid_search(self, query: str, top_k: int = 10) -> List[Document]:
+        """Execute hybrid dense + sparse search using server-side fusion (Qdrant)."""
+        # In production, hybrid fusion is executed server-side via Qdrant Query API
+        # (Prefetch + FusionQuery, RRF default; DBSF optional). No client-side alpha/rrf_k knobs.
+        return await self.server_side_hybrid(query, top_k)
 ```
 
 ### Performance Optimization Layer
@@ -501,15 +474,15 @@ sequenceDiagram
 ```python
 # Core integration pattern
 from src.config import settings
-from src.agents.coordinator import get_agent_system
+from src.agents.coordinator import MultiAgentCoordinator
 from src.utils.document import load_documents_unstructured
 from src.utils.embedding import create_index_async
 
 # Usage example
 documents = await load_documents_unstructured(file_paths, settings)
 index = await create_index_async(documents, settings)
-agent_system = get_agent_system(index, settings)
-response = await agent_system.arun(query)
+coordinator = MultiAgentCoordinator()
+response = coordinator.process_query(query)
 ```
 
 ### Directory Structure Integration
@@ -532,9 +505,9 @@ src/
 ├── processing/               # Document processing pipeline
 │   └── document_processor.py # Unstructured partition + LlamaIndex pipeline
 ├── retrieval/                # Retrieval system components
-│   ├── embeddings.py        # BGEM3 + CLIP embedding utilities
-│   ├── reranking.py         # BGE-reranker-v2-m3 implementation
-│   └── query_engine.py      # RouterQueryEngine orchestration
+│   ├── embeddings.py        # BGE‑M3 + SigLIP (CLIP optional) embedding utilities
+│   ├── reranking.py         # Multimodal reranking (BGE text + SigLIP visual)
+│   └── router_factory.py    # RouterQueryEngine composition (tools + selector)
 ├── storage/                  # Persistence models (see src.utils.storage for helpers)
 ├── utils/                    # Utility modules
 │   ├── core.py              # Core utilities

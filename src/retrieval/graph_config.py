@@ -1,12 +1,25 @@
-"""PropertyGraphIndex configuration for REQ-0049.
+"""Property graph configuration and utilities.
 
-This module provides LlamaIndex PropertyGraphIndex configuration with
-domain-specific extractors for technical documentation.
+This module exposes portable, library-first helpers for constructing and
+querying LlamaIndex ``PropertyGraphIndex`` and exporting relations. It relies
+exclusively on documented LlamaIndex APIs (e.g., ``as_retriever``,
+``as_query_engine``, and ``SimplePropertyGraphStore.get`` / ``get_rel_map``)
+to ensure compatibility across graph store backends.
 
-Library-first implementation using native LlamaIndex features.
+No mutation of ``PropertyGraphIndex`` instances is performed; helper functions
+and small wrappers are provided instead. All functions include Google-style
+docstrings and type hints.
+
+Changelog:
+- 2025-09-09:
+    * Legacy confidence scoring removed — consumers should rely on extractor
+      confidence metadata where available or downstream validation logic.
+    * Legacy count/find helpers removed to ensure portability and API hygiene.
+    * Legacy relationship traversal and count helpers removed.
 """
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from llama_index.core import PropertyGraphIndex, Settings
@@ -22,24 +35,23 @@ from pydantic import BaseModel, Field
 # Property Graph Configuration Constants
 DEFAULT_MAX_PATHS_PER_CHUNK = 20
 DEFAULT_NUM_WORKERS = 4
-DEFAULT_PATH_DEPTH = 2
+DEFAULT_PATH_DEPTH = 1
 DEFAULT_MAX_TRIPLETS_PER_CHUNK = 10
-DEFAULT_ENTITY_CONFIDENCE = 0.8
-DEFAULT_RELATIONSHIP_CONFIDENCE = 0.8
 DEFAULT_TRAVERSAL_TIMEOUT = 3.0
 DEFAULT_MAX_HOPS = 2
-DEFAULT_TOP_K = 5
-BASE_CONFIDENCE_SCORE = 0.5
-SCHEMA_MATCH_BONUS = 0.2
-SCHEMA_EXTRACTOR_BONUS = 0.2
-SIMPLE_EXTRACTOR_BONUS = 0.1
-CONTEXT_LENGTH_THRESHOLD = 50
-CONTEXT_BONUS = 0.1
-MAX_CONFIDENCE_SCORE = 1.0
 
 
 class PropertyGraphConfig(BaseModel):
-    """Configuration for PropertyGraphIndex with domain settings."""
+    """Configuration for PropertyGraphIndex with domain settings.
+
+    Attributes:
+        entities: Allowed entity types for extraction.
+        relations: Allowed relation types for extraction.
+        max_paths_per_chunk: Maximum paths to extract per chunk.
+        num_workers: Number of workers for parallel extraction.
+        path_depth: Maximum traversal depth for multi-hop queries.
+        strict_schema: Whether to enforce strict schema validation.
+    """
 
     entities: list[str] = Field(
         default_factory=lambda: [
@@ -81,10 +93,10 @@ class PropertyGraphConfig(BaseModel):
 
 
 def create_tech_schema() -> dict[str, list[str]]:
-    """Create domain-specific schema for technical documentation.
+    """Create a domain schema for technical documentation.
 
     Returns:
-        Dictionary with entity and relation types
+        dict[str, list[str]]: Dictionary with keys ``entities`` and ``relations``.
     """
     return {
         "entities": ["FRAMEWORK", "LIBRARY", "MODEL", "HARDWARE", "PERSON", "ORG"],
@@ -99,20 +111,27 @@ def create_property_graph_index(
     llm: Any | None = None,
     **kwargs: Any,
 ) -> PropertyGraphIndex:
-    """Create PropertyGraphIndex with domain-specific extractors.
+    """Create a PropertyGraphIndex with domain-specific extractors.
+
+    This function configures extractors using documented LlamaIndex features and
+    avoids mutating the returned index instance. All optional parameters should
+    be passed explicitly.
 
     Args:
-        documents: Documents to build graph from
-        schema: Domain-specific schema for entities/relations
-        llm: Language model for extraction
-        **kwargs: Additional keyword arguments:
-            - vector_store: Optional vector store for hybrid retrieval
-            - max_paths_per_chunk: Max paths per chunk (default: 20)
-            - num_workers: Parallel workers (default: 4)
-            - path_depth: Multi-hop traversal depth (default: 2)
+        documents: Documents or nodes to build the graph from.
+        schema: Domain-specific schema for entities/relations. Defaults to
+            ``create_tech_schema()`` when not provided.
+        llm: Language model instance for path extraction. Defaults to
+            ``Settings.llm`` when not provided.
+        **kwargs: Optional parameters:
+            vector_store: Optional vector store for hybrid retrieval.
+            max_paths_per_chunk: Maximum paths per chunk (default: 20).
+            num_workers: Number of parallel workers (default: 4).
+            path_depth: Maximum traversal depth for multi-hop queries
+                (default: 2).
 
     Returns:
-        Configured PropertyGraphIndex
+        PropertyGraphIndex: Configured index instance.
     """
     if schema is None:
         schema = create_tech_schema()
@@ -128,7 +147,7 @@ def create_property_graph_index(
         kwargs.get("max_paths_per_chunk", DEFAULT_MAX_PATHS_PER_CHUNK)
     )
     num_workers = int(kwargs.get("num_workers", DEFAULT_NUM_WORKERS))
-    path_depth = int(kwargs.get("path_depth", DEFAULT_PATH_DEPTH))
+    # Note: path_depth is controlled at retrieval-time via retriever
 
     # Configure extractors - all native LlamaIndex
     kg_extractors = [
@@ -139,17 +158,13 @@ def create_property_graph_index(
             num_workers=num_workers,
         ),
         # Schema-guided extraction for consistent entity types
-        SchemaLLMPathExtractor(
-            llm=llm,
-        ),
+        SchemaLLMPathExtractor(llm=llm),
         # Implicit relationship extraction from structure
         ImplicitPathExtractor(),
     ]
 
-    # Create property graph store
+    # Create property graph store and index
     property_graph_store = SimplePropertyGraphStore()
-
-    # Create index with existing infrastructure
     index = PropertyGraphIndex.from_documents(
         documents,
         kg_extractors=kg_extractors,
@@ -158,11 +173,6 @@ def create_property_graph_index(
         show_progress=True,
         max_triplets_per_chunk=DEFAULT_MAX_TRIPLETS_PER_CHUNK,
     )
-
-    # Store configuration
-    index.schema = schema
-    index.kg_extractors = kg_extractors
-    index.path_depth = path_depth
 
     logger.info("PropertyGraphIndex created with %d documents", len(documents))
     return index
@@ -175,146 +185,135 @@ async def create_property_graph_index_async(
     llm: Any | None = None,
     **kwargs: Any,
 ) -> PropertyGraphIndex:
-    """Async wrapper for creating PropertyGraphIndex.
+    """Create a PropertyGraphIndex asynchronously.
+
+    Offloads the synchronous constructor via ``asyncio.to_thread`` to avoid
+    blocking the event loop.
 
     Args:
-        documents: Documents to build graph from
-        schema: Domain-specific schema for entities/relations
-        llm: Language model for extraction
-        **kwargs: Additional keyword arguments passed to synchronous version:
-            - vector_store: Optional vector store for hybrid retrieval
-            - max_paths_per_chunk: Max paths per chunk
-            - num_workers: Parallel workers
-            - path_depth: Multi-hop traversal depth
+        documents: Documents or nodes to build the graph from.
+        schema: Optional domain schema.
+        llm: Optional LLM for extraction.
+        **kwargs: Same as :func:`create_property_graph_index`.
 
     Returns:
-        Configured PropertyGraphIndex
+        PropertyGraphIndex: Configured index instance.
     """
-    # Run synchronous version in thread executor to avoid event loop conflicts
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None,
-        lambda: create_property_graph_index(
-            documents, schema=schema, llm=llm, **kwargs
-        ),
+    return await asyncio.to_thread(
+        create_property_graph_index, documents, schema=schema, llm=llm, **kwargs
     )
 
 
-async def extract_entities(index: PropertyGraphIndex, _document: Any) -> list[dict]:
-    """Extract entities from a document using configured extractors.
+def create_graph_rag_components(
+    index: PropertyGraphIndex,
+    *,
+    llm: Any | None = None,
+    include_text: bool = True,
+    similarity_top_k: int = 10,
+    path_depth: int = DEFAULT_PATH_DEPTH,
+) -> dict[str, Any]:
+    """Create GraphRAG components from an existing ``PropertyGraphIndex``.
+
+    This factory returns a minimal set of components using documented LlamaIndex
+    APIs only. It exposes the underlying property graph store, a query engine
+    derived from the index, and a retriever configured for graph-aware queries.
 
     Args:
-        index: PropertyGraphIndex instance
-        document: Document to extract entities from
+        index: A configured ``PropertyGraphIndex``.
+        llm: Optional LLM override for the query engine; when omitted, index
+            defaults are used.
+        include_text: Whether to include source text in query engine responses.
+        similarity_top_k: Top-K nodes for retriever.
+        path_depth: Maximum path depth for graph-aware retrieval.
 
     Returns:
-        List of entities with types and confidence
+        dict[str, Any]: A mapping with keys ``graph_store``, ``query_engine``,
+        and ``retriever``.
+
+    Raises:
+        ValueError: If the index has no ``property_graph_store``.
     """
-    if not hasattr(index, "kg_extractors") or not index.kg_extractors:
-        raise NotImplementedError(
-            "Entity extraction requires configured extractors. "
-            "Ensure the PropertyGraphIndex has kg_extractors configured."
-        )
+    store = getattr(index, "property_graph_store", None)
+    if store is None:
+        raise ValueError("PropertyGraphIndex has no property_graph_store")
 
-    entities = []
+    query_engine = index.as_query_engine(include_text=include_text, llm=llm)
+    retriever = index.as_retriever(
+        include_text=False, similarity_top_k=similarity_top_k, path_depth=path_depth
+    )
+    return {"graph_store": store, "query_engine": query_engine, "retriever": retriever}
 
-    # Extract entities using the graph store's internal representation
-    # LlamaIndex extractors work internally during index construction
-    # For post-construction entity access, query the graph store directly
-    if hasattr(index, "property_graph_store"):
-        try:
-            # Get all nodes (entities) from the graph store
-            all_nodes = await asyncio.to_thread(
-                lambda: list(index.property_graph_store.get_nodes())
-            )
 
-            for node in all_nodes:
-                if hasattr(node, "properties"):
-                    entity_data = {
-                        "text": getattr(node, "name", str(node.id)),
-                        "type": node.properties.get("type", "UNKNOWN"),
-                        "confidence": node.properties.get(
-                            "confidence", DEFAULT_ENTITY_CONFIDENCE
-                        ),
-                        "id": str(node.id),
-                    }
-                    entities.append(entity_data)
+async def extract_entities(
+    index: PropertyGraphIndex, seed_ids: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """Extract entities reachable from seeds using documented store APIs.
 
-        except (KeyError, AttributeError, RuntimeError) as e:
-            logger.warning("Could not extract entities from graph store: %s", e)
-            raise NotImplementedError(
-                "Entity extraction from existing graph not yet implemented. "
-                "Entities are extracted during index construction."
-            ) from e
-    else:
-        raise NotImplementedError(
-            "Entity extraction requires access to the underlying graph store. "
-            "Ensure PropertyGraphIndex has a property_graph_store configured."
-        )
+    This function derives entities via the graph store using `get` and
+    `get_rel_map`. When no seeds are provided, it returns an empty list. To
+    obtain seeds, call ``index.as_retriever(...).retrieve(query)`` and derive
+    node identifiers from the result nodes.
 
+    Args:
+        index: PropertyGraphIndex instance.
+        seed_ids: Optional list of node identifiers to seed traversal.
+
+    Returns:
+        list[dict[str, Any]]: List of entity dicts with `id` and `name` keys.
+    """
+    store = getattr(index, "property_graph_store", None)
+    if store is None or not seed_ids:
+        return []
+    # Fetch nodes by id using documented API
+    nodes = await asyncio.to_thread(lambda: list(store.get(ids=seed_ids)))
+    entities: list[dict[str, Any]] = []
+    for node in nodes:
+        name = getattr(node, "name", str(getattr(node, "id", "")))
+        entities.append({"id": str(getattr(node, "id", name)), "name": str(name)})
     return entities
 
 
 async def extract_relationships(
-    index: PropertyGraphIndex, _document: Any
-) -> list[dict]:
-    """Extract relationships from a document using configured extractors.
+    index: PropertyGraphIndex,
+    seed_ids: list[str] | None = None,
+    max_hops: int = DEFAULT_MAX_HOPS,
+) -> list[dict[str, str]]:
+    """Extract relationships as edges from the relation map.
+
+    Uses `property_graph_store.get_rel_map` to construct a list of edges
+    (``head``, ``relation``, ``tail``). If relation labels are not available,
+    the placeholder ``related`` is used.
 
     Args:
-        index: PropertyGraphIndex instance
-        document: Document to extract relationships from
+        index: PropertyGraphIndex instance.
+        seed_ids: Optional list of seed node ids; when omitted returns empty list.
+        max_hops: Maximum traversal depth.
 
     Returns:
-        List of relationships with types and confidence
+        list[dict[str, str]]: Edges with keys `head`, `relation`, `tail`.
     """
-    if not hasattr(index, "kg_extractors") or not index.kg_extractors:
-        raise NotImplementedError(
-            "Relationship extraction requires configured extractors. "
-            "Ensure the PropertyGraphIndex has kg_extractors configured."
-        )
-
-    relationships = []
-
-    # Extract relationships using the graph store's internal representation
-    # LlamaIndex extractors work internally during index construction
-    # For post-construction relationship access, query the graph store directly
-    if hasattr(index, "property_graph_store"):
+    store = getattr(index, "property_graph_store", None)
+    if store is None or not seed_ids:
+        return []
+    # Fetch seed nodes and build relation map
+    nodes = await asyncio.to_thread(lambda: list(store.get(ids=seed_ids)))
+    rel_paths = await asyncio.to_thread(
+        lambda: list(store.get_rel_map(nodes, depth=max_hops))
+    )
+    edges: list[dict[str, str]] = []
+    for path in rel_paths:
+        # Interpret each path as a sequence of nodes; derive pairwise edges
         try:
-            # Get all edges (relationships) from the graph store
-            all_edges = await asyncio.to_thread(
-                lambda: list(index.property_graph_store.get_edges())
+            items = list(path)
+        except TypeError:
+            continue
+        for i in range(len(items) - 1):
+            head = str(getattr(items[i], "id", getattr(items[i], "name", items[i])))
+            tail = str(
+                getattr(items[i + 1], "id", getattr(items[i + 1], "name", items[i + 1]))
             )
-
-            for edge in all_edges:
-                if hasattr(edge, "properties"):
-                    relationship_data = {
-                        "source": str(edge.source_id),
-                        "target": str(edge.target_id),
-                        "type": edge.properties.get(
-                            "type", getattr(edge, "label", "UNKNOWN")
-                        ),
-                        "confidence": edge.properties.get(
-                            "confidence", DEFAULT_RELATIONSHIP_CONFIDENCE
-                        ),
-                        "id": str(
-                            getattr(edge, "id", f"{edge.source_id}-{edge.target_id}")
-                        ),
-                    }
-                    relationships.append(relationship_data)
-
-        except (KeyError, AttributeError, RuntimeError) as e:
-            logger.warning("Could not extract relationships from graph store: %s", e)
-            raise NotImplementedError(
-                "Relationship extraction from existing graph not yet implemented. "
-                "Relationships are extracted during index construction."
-            ) from e
-    else:
-        raise NotImplementedError(
-            "Relationship extraction requires access to the underlying graph store. "
-            "Ensure PropertyGraphIndex has a property_graph_store configured."
-        )
-
-    return relationships
+            edges.append({"head": head, "relation": "related", "tail": tail})
+    return edges
 
 
 async def traverse_graph(
@@ -323,240 +322,296 @@ async def traverse_graph(
     max_depth: int = DEFAULT_PATH_DEPTH,
     timeout: float = DEFAULT_TRAVERSAL_TIMEOUT,
 ) -> list[Any]:
-    """Traverse graph with multi-hop queries.
+    """Retrieve graph-aware nodes for a query.
+
+    Thin wrapper over `index.as_retriever(...).retrieve(query)` executed in a
+    thread to avoid blocking the event loop. Returns the retriever's node list
+    or an empty list on timeout.
 
     Args:
-        index: PropertyGraphIndex instance
-        query: Query string
-        max_depth: Maximum traversal depth
-        timeout: Timeout in seconds
+        index: PropertyGraphIndex instance.
+        query: Natural language query string.
+        max_depth: Maximum path depth for retrieval.
+        timeout: Timeout in seconds for the retrieval.
 
     Returns:
-        List of traversal paths
+        list[Any]: Retrieved nodes (implementation-specific node types).
     """
-    # Use the index's built-in retrieval
-    retriever = index.as_retriever(
-        include_text=False,  # Graph-only
-        path_depth=max_depth,
-    )
-
-    # Perform retrieval
+    retriever = index.as_retriever(include_text=False, path_depth=max_depth)
     try:
-        nodes = await asyncio.wait_for(
-            asyncio.to_thread(retriever.retrieve, query),
-            timeout=timeout,
+        return await asyncio.wait_for(
+            asyncio.to_thread(retriever.retrieve, query), timeout=timeout
         )
-        return nodes
     except TimeoutError:
         logger.warning("Graph traversal timed out after %.1fs", timeout)
         return []
 
 
-def calculate_entity_confidence(
-    entity: dict[str, Any], schema: dict[str, list[str]]
-) -> float:
-    """Calculate confidence score for extracted entity.
+# Note: Legacy helpers relying on undocumented graph store internals were removed
+# to ensure portability and API hygiene. Avoid usage of `get_nodes`/`get_edges`
+# in production code; rely on `get`/`get_rel_map` documented APIs instead.
 
-    Args:
-        entity: Entity dictionary
-        schema: Schema for validation
 
-    Returns:
-        Confidence score between 0 and 1
+def get_export_seed_ids(
+    pg_index: Any | None,
+    vector_index: Any | None,
+    *,
+    cap: int = 32,
+) -> list[str]:
+    """Derive export seed IDs using retrievers with deterministic fallback.
+
+    Order of preference:
+    1) PropertyGraphIndex.as_retriever(similarity_top_k=cap, path_depth=1)
+    2) VectorStoreIndex.as_retriever(similarity_top_k=cap)
+    3) Deterministic fallback: ["0", "1", ..., str(cap-1)]
     """
-    confidence = BASE_CONFIDENCE_SCORE  # Base confidence
+    try:
+        if pg_index is not None:
+            retr = pg_index.as_retriever(
+                include_text=False, path_depth=1, similarity_top_k=cap
+            )
+            nodes = retr.retrieve("seed")
+            out: list[str] = []
+            seen: set[str] = set()
+            for nws in nodes:
+                nid = str(
+                    getattr(getattr(nws, "node", object()), "id_", None)
+                    or getattr(getattr(nws, "node", object()), "id", "")
+                )
+                if nid and nid not in seen:
+                    out.append(nid)
+                    seen.add(nid)
+                if len(out) >= cap:
+                    return out
+            if out:
+                return out
+    except (RuntimeError, ValueError, TypeError, AttributeError):  # pragma: no cover
+        import logging
 
-    # Check if entity type is in schema
-    if entity.get("type") in schema.get("entities", []):
-        confidence += SCHEMA_MATCH_BONUS
-
-    # Check extractor type
-    if entity.get("extractor") == "SchemaLLMPathExtractor":
-        confidence += SCHEMA_EXTRACTOR_BONUS
-    elif entity.get("extractor") == "SimpleLLMPathExtractor":
-        confidence += SIMPLE_EXTRACTOR_BONUS
-
-    # Check context quality
-    context = entity.get("context", "")
-    if len(context) > CONTEXT_LENGTH_THRESHOLD:
-        confidence += CONTEXT_BONUS
-
-    return min(confidence, MAX_CONFIDENCE_SCORE)
-
-
-# Extension methods for PropertyGraphIndex
-async def _pg_get_entity_count(index: PropertyGraphIndex) -> int:
-    if hasattr(index, "property_graph_store"):
-        store = index.property_graph_store
-        nodes = await asyncio.to_thread(lambda: list(store.get_nodes()))
-        return len(nodes)
-    raise NotImplementedError("Entity count requires access to property_graph_store")
-
-
-async def _pg_get_relationship_count(index: PropertyGraphIndex) -> int:
-    if hasattr(index, "property_graph_store"):
-        store = index.property_graph_store
-        edges = await asyncio.to_thread(lambda: list(store.get_edges()))
-        return len(edges)
-    raise NotImplementedError(
-        "Relationship count requires access to property_graph_store"
-    )
-
-
-async def _pg_find_entity(
-    index: PropertyGraphIndex, entity_name: str
-) -> list[dict[str, Any]]:
-    if not hasattr(index, "property_graph_store"):
-        raise NotImplementedError(
-            "Entity search requires access to property_graph_store"
+        logging.getLogger(__name__).debug(
+            "Failed deriving seed IDs from property graph", exc_info=True
         )
-    store = index.property_graph_store
-    all_nodes = await asyncio.to_thread(lambda: list(store.get_nodes()))
-    matching: list[dict[str, Any]] = []
-    for node in all_nodes:
-        node_name = getattr(node, "name", str(node.id))
-        if entity_name.lower() in node_name.lower():
-            # Count edges without defining a closure inside the loop
-            connections = await asyncio.to_thread(
-                lambda nid=node.id: len(list(store.get_edges(source_ids=[nid])))
-            )
-            matching.append(
-                {
-                    "entity": node_name,
-                    "id": str(node.id),
-                    "connections": connections,
-                    "type": getattr(node, "properties", {}).get("type", "UNKNOWN"),
-                }
-            )
-    return matching
 
+    try:
+        if vector_index is not None:
+            retr = vector_index.as_retriever(similarity_top_k=cap)
+            nodes = retr.retrieve("seed")
+            out = []
+            seen: set[str] = set()
+            for nws in nodes:
+                nid = str(
+                    getattr(getattr(nws, "node", object()), "id_", None)
+                    or getattr(getattr(nws, "node", object()), "id", "")
+                )
+                if nid and nid not in seen:
+                    out.append(nid)
+                    seen.add(nid)
+                if len(out) >= cap:
+                    return out
+            if out:
+                return out
+    except (RuntimeError, ValueError, TypeError, AttributeError):  # pragma: no cover
+        import logging
 
-async def _pg_find_relationships(
-    index: PropertyGraphIndex, entity: str, max_hops: int = DEFAULT_MAX_HOPS
-) -> list[dict[str, Any]]:
-    if not hasattr(index, "property_graph_store"):
-        raise NotImplementedError(
-            "Relationship traversal requires access to property_graph_store"
+        logging.getLogger(__name__).debug(
+            "Failed deriving seed IDs from vector index", exc_info=True
         )
-    store = index.property_graph_store
-    all_nodes = await asyncio.to_thread(lambda: list(store.get_nodes()))
-    entity_node = None
-    for node in all_nodes:
-        node_name = getattr(node, "name", str(node.id))
-        if entity.lower() in node_name.lower():
-            entity_node = node
-            break
-    if not entity_node:
-        return []
-    relationships: list[dict[str, Any]] = []
-    visited = {str(entity_node.id)}
-    current = [entity_node.id]
-    for hop in range(max_hops):
-        next_nodes = []
-        hop_edges = []
-        for current_node_id in current:
-            # Fetch edges without defining a closure inside the loop
-            node_edges = await asyncio.to_thread(
-                lambda nid=current_node_id: list(store.get_edges(source_ids=[nid]))
-            )
-            for edge in node_edges:
-                if str(edge.target_id) not in visited:
-                    hop_edges.append(
-                        {
-                            "source": str(edge.source_id),
-                            "target": str(edge.target_id),
-                            "type": edge.properties.get(
-                                "type", getattr(edge, "label", "UNKNOWN")
-                            ),
-                            "hop": hop + 1,
-                        }
-                    )
-                    next_nodes.append(edge.target_id)
-                    visited.add(str(edge.target_id))
-        if hop_edges:
-            relationships.append(
-                {"nodes": list(visited), "edges": hop_edges, "hop_level": hop + 1}
-            )
-        current = next_nodes
-        if not current:
-            break
-    return relationships
+
+    return [str(i) for i in range(max(0, int(cap)))]
 
 
-def extend_property_graph_index(
+def export_graph_jsonl(
     index: PropertyGraphIndex,
-) -> PropertyGraphIndex:
-    """Add helper methods to PropertyGraphIndex instance.
+    path: Path,
+    seed_ids: list[str] | None = None,
+    depth: int = DEFAULT_PATH_DEPTH,
+) -> None:
+    """Export relation edges to JSONL using `get_rel_map`.
 
     Args:
-        index: PropertyGraphIndex to extend
-
-    Returns:
-        Enhanced PropertyGraphIndex with additional methods
+        index: PropertyGraphIndex to export from.
+        path: Output JSONL file path.
+        seed_ids: Optional list of seed node ids. When omitted, no export occurs.
+        depth: Maximum traversal depth for relation map.
     """
-    # Add async wrappers
-    index.extract_entities = lambda doc: extract_entities(index, doc)
-    index.extract_relationships = lambda doc: extract_relationships(index, doc)
-    index.traverse_graph = (
-        lambda q, d=DEFAULT_PATH_DEPTH, t=DEFAULT_TRAVERSAL_TIMEOUT: traverse_graph(
-            index, q, d, t
-        )
-    )
+    import json
 
-    # Graph statistics and search wrappers
-    async def get_entity_count() -> int:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    store = getattr(index, "property_graph_store", None)
+    if store is None or not seed_ids:
+        logger.warning("JSONL export skipped: missing store or seeds")
+        return
+    try:
+        nodes = list(store.get(ids=seed_ids))
+        rel_paths = list(store.get_rel_map(nodes, depth=depth))
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+    ) as exc:  # pragma: no cover - defensive
+        logger.warning("JSONL export failed to build rel_map: %s", exc)
+        return
+
+    def _sources_for(node: Any) -> list[str]:
+        # Attempt to derive source ids from common fields
+        for key in ("source_id", "doc_id", "page_id", "ref_doc_id"):
+            val = getattr(node, key, None)
+            if val:
+                return [str(val)]
+        props = getattr(node, "properties", {}) or {}
+        for key in ("source_id", "doc_id", "page_id", "ref_doc_id"):
+            if key in props:
+                return [str(props[key])]
+        return []
+
+    def _relation_label(_a: Any, b: Any) -> str:
+        # Best-effort: some stores return triplets or edges with a label
+        # Attempt to read 'label' or 'type' on intermediate relation if present
+        # Fallback to 'related'.
+        for key in ("label", "type"):
+            val = getattr(b, key, None)
+            if val:
+                return str(val)
+        return "related"
+
+    with out.open("w", encoding="utf-8") as f:
+        for path_idx, path_nodes in enumerate(rel_paths):
+            try:
+                items = list(path_nodes)
+            except TypeError:
+                continue
+            j = 0
+            while j < len(items) - 1:
+                a = items[j]
+                # Triplet pattern: [node, relation, node]
+                if j + 2 < len(items) and any(
+                    hasattr(items[j + 1], k) for k in ("label", "type")
+                ):
+                    b_rel = items[j + 1]
+                    c = items[j + 2]
+                    subj = str(getattr(a, "id", getattr(a, "name", a)))
+                    obj = str(getattr(c, "id", getattr(c, "name", c)))
+                    rel = _relation_label(a, b_rel)
+                    row = {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                        "source_ids": list({*(_sources_for(a) + _sources_for(c))}),
+                    }
+                    f.write(json.dumps(row) + "\n")
+                    j += 2
+                else:
+                    b = items[j + 1]
+                    subj = str(getattr(a, "id", getattr(a, "name", a)))
+                    obj = str(getattr(b, "id", getattr(b, "name", b)))
+                    rel = _relation_label(a, b)
+                    row = {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                        "source_ids": list({*(_sources_for(a) + _sources_for(b))}),
+                    }
+                    f.write(json.dumps(row) + "\n")
+                    j += 1
+
+
+def export_graph_parquet(
+    index: PropertyGraphIndex,
+    path: Path,
+    seed_ids: list[str] | None = None,
+    depth: int = DEFAULT_PATH_DEPTH,
+) -> None:
+    """Export relation edges to Parquet using `get_rel_map`.
+
+    Args:
+        index: PropertyGraphIndex to export from.
+        path: Output Parquet file path.
+        seed_ids: Optional list of seed node ids. When omitted, no export occurs.
+        depth: Maximum traversal depth for relation map.
+    """
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError as exc:  # pragma: no cover - optional
+        logger.warning("PyArrow not available, skipping Parquet export: %s", exc)
+        return
+
+    store = getattr(index, "property_graph_store", None)
+    if store is None or not seed_ids:
+        logger.warning("Parquet export skipped: missing store or seeds")
+        return
+    try:
+        nodes = list(store.get(ids=seed_ids))
+        rel_paths = list(store.get_rel_map(nodes, depth=depth))
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+    ) as exc:  # pragma: no cover - defensive
+        logger.warning("Parquet export failed to build rel_map: %s", exc)
+        return
+
+    def _relation_label(_a: Any, b: Any) -> str:
+        for key in ("label", "type"):
+            val = getattr(b, key, None)
+            if val:
+                return str(val)
+        return "related"
+
+    rows: list[dict[str, Any]] = []
+    for path_idx, path_nodes in enumerate(rel_paths):
         try:
-            return await _pg_get_entity_count(index)
-        except (KeyError, AttributeError, RuntimeError) as e:
-            logger.warning("Could not get entity count: %s", e)
-            raise
+            items = list(path_nodes)
+        except TypeError:
+            continue
+        j = 0
+        while j < len(items) - 1:
+            a = items[j]
+            if j + 2 < len(items) and any(
+                hasattr(items[j + 1], k) for k in ("label", "type")
+            ):
+                b_rel = items[j + 1]
+                c = items[j + 2]
+                subj = str(getattr(a, "id", getattr(a, "name", a)))
+                obj = str(getattr(c, "id", getattr(c, "name", c)))
+                rel = _relation_label(a, b_rel)
+                rows.append(
+                    {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                    }
+                )
+                j += 2
+            else:
+                b = items[j + 1]
+                subj = str(getattr(a, "id", getattr(a, "name", a)))
+                obj = str(getattr(b, "id", getattr(b, "name", b)))
+                rel = _relation_label(a, b)
+                rows.append(
+                    {
+                        "subject": subj,
+                        "relation": rel,
+                        "object": obj,
+                        "depth": min(depth, len(items) - 1),
+                        "path_id": path_idx,
+                    }
+                )
+                j += 1
 
-    async def get_relationship_count() -> int:
-        try:
-            return await _pg_get_relationship_count(index)
-        except (KeyError, AttributeError, RuntimeError) as e:
-            logger.warning("Could not get relationship count: %s", e)
-            raise
-
-    async def find_entity(entity_name: str) -> list[dict[str, Any]]:
-        try:
-            return await _pg_find_entity(index, entity_name)
-        except (KeyError, AttributeError, RuntimeError) as e:
-            logger.warning("Could not find entity %s: %s", entity_name, e)
-            raise
-
-    async def find_relationships(
-        entity: str, max_hops: int = DEFAULT_MAX_HOPS
-    ) -> list[dict[str, Any]]:
-        try:
-            return await _pg_find_relationships(index, entity, max_hops)
-        except (KeyError, AttributeError, RuntimeError) as e:
-            logger.warning("Could not find relationships for %s: %s", entity, e)
-            raise
-
-    async def add_document(document: Any) -> None:
-        """Add new document to existing graph."""
-        # The index handles this internally
-        index.insert(document)
-
-    async def build_graph(documents: list[Any]) -> None:
-        """Build graph from documents."""
-        # The index handles this internally
-        for doc in documents:
-            index.insert(doc)
-
-    async def query(query_str: str, top_k: int = DEFAULT_TOP_K) -> list[Any]:
-        """Query the property graph."""
-        retriever = index.as_retriever(similarity_top_k=top_k)
-        return await asyncio.to_thread(retriever.retrieve, query_str)
-
-    # Attach methods
-    index.get_entity_count = get_entity_count
-    index.get_relationship_count = get_relationship_count
-    index.find_entity = find_entity
-    index.find_relationships = find_relationships
-    index.add_document = add_document
-    index.build_graph = build_graph
-    index.query = query
-
-    return index
+    if not rows:
+        logger.warning("No edges to export; Parquet file will not be created")
+        return
+    table = pa.Table.from_pylist(rows)
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(table, str(out))

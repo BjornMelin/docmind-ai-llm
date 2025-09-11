@@ -1,12 +1,12 @@
 ---
 ADR: 031
 Title: Local-First Persistence Architecture (Vectors, Cache, Operational Data)
-Status: Accepted
-Version: 1.1
-Date: 2025-09-03
+Status: Accepted (Amended)
+Version: 1.2
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 026, 030, 033, 035
+Related: 026, 030, 033, 035, 038
 Tags: persistence, storage, qdrant, duckdb, sqlite, cache
 References:
 - [Qdrant — Documentation](https://qdrant.tech/documentation/)
@@ -46,6 +46,15 @@ Earlier designs mixed concerns and introduced multiple storage backends. To redu
 ## Decision
 
 Adopt Qdrant for vectors, LlamaIndex IngestionCache with DuckDBKVStore for processing cache (single file at `settings.cache_dir/docmind.duckdb`), and optionally SQLite for operational metadata. No test-only hooks in src; rely on library clients.
+
+### SnapshotManager (Amendment — GraphRAG)
+
+For GraphRAG and indices requiring consistent reloads, adopt a SnapshotManager:
+
+- Write under `storage/_tmp-<uuid>`; `fsync` and atomically rename to `storage/<timestamp>`
+- Persist vector index via `StorageContext.persist`; persist property graph via `SimpleGraphStore.persist`
+- Write `manifest.json` with `corpus_hash` and `config_hash` for staleness detection; use a lockfile to ensure a single writer
+- Load latest snapshot in Chat and show staleness badge (ADR‑038; SPEC‑014)
 
 ## High-Level Architecture
 
@@ -142,5 +151,6 @@ def test_cache_roundtrip(cache):
 
 ## Changelog
 
+- 1.2 (2025-09-09): Added SnapshotManager and manifest hashing for GraphRAG; linked ADR‑038/SPEC‑014
 - **1.1 (2025-09-03)**: DOCS - Added Related Decisions note referencing ADR-035 (application-level semantic cache)
 - **1.0 (2025-09-02)**: Initial accepted version.

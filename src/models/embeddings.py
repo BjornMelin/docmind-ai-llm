@@ -1,7 +1,8 @@
 """Unified embedding models and light-weight embedders.
 
 This module provides small, library-first helpers for the SPEC-003 embedding
-stack while keeping imports lazy to preserve offline determinism for tests.
+stack while keeping imports lazy to preserve offline determinism and clean
+startup semantics.
 
 Contents:
 - Pydantic models describing parameters/results for text embeddings.
@@ -12,8 +13,8 @@ Contents:
 
 Notes:
 - No downloads or heavy imports occur at import time. Backends are loaded on
-  first use. Tests can monkeypatch the private ``_backend`` or the protected
-  ``_encode_*`` methods to avoid any network / GPU usage.
+  first use. Private/protected seams may be patched at runtime where needed to
+  avoid external dependencies.
 """
 
 from __future__ import annotations

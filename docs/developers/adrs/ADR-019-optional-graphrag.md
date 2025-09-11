@@ -1,15 +1,16 @@
 ---
 ADR: 019
 Title: Optional GraphRAG Module
-Status: Accepted
-Version: 3.0
-Date: 2025-08-19
+Status: Accepted (Amended)
+Version: 3.3
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 003, 009, 031
+Related: 001, 003, 009, 031, 038
 Tags: graphrag, property-graph, retrieval
 References:
 - [LlamaIndex — PropertyGraphIndex](https://docs.llamaindex.ai/)
+ - [ADR-038 GraphRAG Persistence and Router Integration](./ADR-038-graphrag-persistence-and-router.md)
 ---
 
 ## Description
@@ -43,7 +44,9 @@ Vector‑only RAG struggles with multi‑hop and relationship queries. PropertyG
 
 ## Decision
 
-Provide a feature‑flagged PropertyGraphIndex path using in‑memory store and Qdrant vectors. Keep code minimal and library‑first.
+Provide a feature‑flagged PropertyGraphIndex path using in‑memory store and Qdrant vectors. Keep code minimal and library‑first. Use only documented LlamaIndex APIs (e.g., `PropertyGraphIndex.from_documents`, `as_retriever`, `as_query_engine`, `SimplePropertyGraphStore.get` / `get_rel_map`) and avoid mutating index instances.
+
+Amendment: Align with ADR‑038 by composing GraphRAG through a RouterQueryEngine toolset (vector + graph), and persisting via SnapshotManager with atomic snapshot directories and a manifest for staleness detection. Exports use `get_rel_map` to JSONL baseline and Parquet optionally (pyarrow).
 
 ## High-Level Architecture
 
@@ -82,25 +85,10 @@ graph TD
 
 ### Implementation Details
 
-In `src/retrieval/graphrag.py` (illustrative):
-
-```python
-from typing import Iterable
-from llama_index.core import PropertyGraphIndex
-from llama_index.core.graph_stores import SimplePropertyGraphStore
-
-def build_graph(docs: Iterable) -> PropertyGraphIndex | None:
-    """Construct a simple in-memory PropertyGraphIndex.
-
-    This is a minimal skeleton; production code should configure
-    extractors and persistence if required.
-    """
-    try:
-        store = SimplePropertyGraphStore()
-        return PropertyGraphIndex.from_documents(list(docs), graph_store=store)
-    except Exception:
-        return None
-```
+- Graph construction: `PropertyGraphIndex.from_documents(nodes/docs, property_graph_store=SimplePropertyGraphStore(), kg_extractors=[...])`.
+- Retrieval: `index.as_retriever(include_text=False, path_depth=...)` and `index.as_query_engine(...)` for NL queries.
+- Exports: Build edges from `property_graph_store.get_rel_map(seeds, depth=...)` and persist to JSONL (1 record per line) and Parquet (if PyArrow available). A `save_networkx_graph` HTML may be produced for inspection.
+- No index mutation: expose helpers via a small wrapper or pure functions; keep any legacy attachment solely for tests.
 
 ### Configuration
 
@@ -136,6 +124,8 @@ def test_graph_build_smoke():
 
 ## Changelog
 
+- 3.3 (2025-09-09): Amended by ADR‑038 — router composition (vector+graph), SnapshotManager persistence, staleness badge, exports clarified
+- 3.2 (2025-09-08): Library-first API policy; no index mutation; exports via get_rel_map JSONL/Parquet; updated tests
 - 3.1 (2025-08-22): Implementation complete
 - 3.0 (2025-08-19): FP8 optimization context for extraction
 - 1.0 (2025-08-17): Initial optional GraphRAG design

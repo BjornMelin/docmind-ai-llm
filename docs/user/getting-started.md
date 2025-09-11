@@ -120,6 +120,51 @@ echo 'DOCMIND_CONTEXT_WINDOW_SIZE=131072' >> .env
 echo 'VLLM_ATTENTION_BACKEND=FLASHINFER' >> .env
 ```
 
+### Enable DSPy Optimization (Optional)
+
+DSPy can refine queries before retrieval to improve result quality.
+
+1) Install DSPy:
+
+    ```bash
+    uv pip install dspy-ai
+    ```
+
+2) Enable the feature flag in your `.env`:
+
+    ```bash
+    echo 'DOCMIND_ENABLE_DSPY_OPTIMIZATION=true' >> .env
+    ```
+
+#### Optional tuning
+
+```bash
+echo 'DOCMIND_DSPY_OPTIMIZATION_ITERATIONS=10' >> .env
+echo 'DOCMIND_DSPY_OPTIMIZATION_SAMPLES=20' >> .env
+echo 'DOCMIND_DSPY_MAX_RETRIES=3' >> .env
+echo 'DOCMIND_DSPY_TEMPERATURE=0.1' >> .env
+echo 'DOCMIND_DSPY_METRIC_THRESHOLD=0.8' >> .env
+echo 'DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true' >> .env
+```
+
+#### Notes
+
+- DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library‑first (server‑side hybrid via Qdrant + reranking).
+- If DSPy isn’t installed or the flag is false, the system falls back to standard retrieval automatically.
+
+### Knowledge Graph (Optional)
+
+- When enabled and built, DocMind adds a `knowledge_graph` tool to the Router. Selection prefers `PydanticSingleSelector` then `LLMSingleSelector` and falls back to vector/hybrid when graph is absent or unhealthy.
+- Disable GraphRAG with:
+
+```bash
+echo 'DOCMIND_ENABLE_GRAPHRAG=false' >> .env
+```
+
+### Snapshots & Staleness (Quick Note)
+
+- The app persists vector and graph indices with a manifest (schema/persist versions, versions map, hashes). Chat auto‑loads the latest non‑stale snapshot and shows a staleness badge when current corpus/config differ; rebuild from the Documents page.
+
 ### Enable Multi-Agent System
 
 ```bash

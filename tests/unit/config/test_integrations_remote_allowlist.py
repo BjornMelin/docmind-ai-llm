@@ -17,7 +17,9 @@ def test_remote_forbidden_without_allow_env(monkeypatch):
 
     monkeypatch.setitem(integ.__dict__, "Settings", _S)
     monkeypatch.setitem(integ.__dict__, "build_llm", lambda _s: object())
-    monkeypatch.setitem(integ.__dict__, "ClipEmbedding", lambda *a, **k: object())
+    monkeypatch.setitem(
+        integ.__dict__, "HuggingFaceEmbedding", lambda *a, **k: object()
+    )
 
     # Remote URL for vLLM
     s = integ.settings
@@ -41,7 +43,9 @@ def test_remote_allowed_with_env(monkeypatch):
 
     monkeypatch.setitem(integ.__dict__, "Settings", _S)
     monkeypatch.setitem(integ.__dict__, "build_llm", lambda _s: object())
-    monkeypatch.setitem(integ.__dict__, "ClipEmbedding", lambda *a, **k: object())
+    monkeypatch.setitem(
+        integ.__dict__, "HuggingFaceEmbedding", lambda *a, **k: object()
+    )
 
     s = integ.settings
     # Allow remote explicitly

@@ -36,7 +36,7 @@ from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from src.agents.tools import retrieve_documents
+from src.agents.tools.retrieval import retrieve_documents
 
 # Constants
 RECURSION_LIMIT = 3

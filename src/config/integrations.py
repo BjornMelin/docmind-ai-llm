@@ -14,34 +14,25 @@ Key behaviors:
 
 import logging
 import os
+import threading
 from contextlib import suppress
 
 from llama_index.core import Settings
 
-# Text embeddings default wrapper
-from llama_index.embeddings.huggingface import (
-    HuggingFaceEmbedding,  # pylint: disable=ungrouped-imports
-)
-
-# Text embeddings should default to BGE-M3 (1024D) for consistency with
-# tri-mode retrieval tooling and VectorStoreIndex usage. Use LlamaIndex's
-# HuggingFaceEmbedding wrapper to keep a library-first, lightweight setup.
 from src.config.llm_factory import build_llm
 from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
 
 from .settings import settings
 
-# Optional ClipEmbedding symbol (test patching convenience). Keep all imports
-# grouped above; perform alias assignment after imports to avoid E402.
-try:  # pragma: no cover - optional import
-    from llama_index.embeddings.clip import (
-        ClipEmbedding as LIClipEmbedding,  # type: ignore
-    )
-except ImportError:  # pragma: no cover - optional import
-    LIClipEmbedding = None  # type: ignore
+# Text embeddings default wrapper
+# NOTE: Avoid heavy imports at module import-time. The embedding constructor
+# symbol is bound lazily inside setup_llamaindex(). Tests may patch the module
+# attribute HuggingFaceEmbedding; we preserve a module-level name for this.
+HuggingFaceEmbedding = None  # type: ignore  # pylint: disable=invalid-name
+_HF_EMBED_LOCK = threading.Lock()
 
-# Expose ClipEmbedding symbol for tests; default to HuggingFaceEmbedding
-ClipEmbedding = LIClipEmbedding or HuggingFaceEmbedding  # type: ignore
+# Keep text embeddings defaulting to HuggingFaceEmbedding (BGE-M3) for
+# consistency with tri-mode retrieval and VectorStoreIndex usage.
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +133,7 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
         if Settings.embed_model is not None and not force_embed:
             logger.info("Embed model already configured; skipping override")
         else:
-            # Some tests patch `settings` with a lightweight namespace lacking
+            # Some environments may pass a lightweight settings namespace lacking
             # helper methods; default to BGE-M3 CPU in that case.
             if hasattr(settings, "get_embedding_config"):
                 emb_cfg = settings.get_embedding_config()
@@ -150,26 +141,22 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
                 emb_cfg = {"model_name": "BAAI/bge-m3", "device": "cpu"}
             model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
             device = emb_cfg.get("device", "cpu")
-            # Prefer HuggingFaceEmbedding for BGE-M3. If tests patch the
-            # ClipEmbedding symbol in this module, honor that to allow
-            # lightweight MockEmbedding injection.
-            embed_ctor = HuggingFaceEmbedding
-            try:  # pragma: no cover - identity check only
-                from llama_index.embeddings import clip as _li_clip_mod
+            # Prefer HuggingFaceEmbedding for BGE-M3 (callers may monkeypatch
+            # this constructor directly when needed). Import lazily when needed.
+            global HuggingFaceEmbedding
+            if HuggingFaceEmbedding is None:  # type: ignore
+                # Double-checked locking to avoid repeated imports under concurrency
+                with _HF_EMBED_LOCK:
+                    if HuggingFaceEmbedding is None:  # type: ignore
+                        from llama_index.embeddings import (
+                            huggingface as _hf,  # local import
+                        )
 
-                _real_clip = getattr(_li_clip_mod, "ClipEmbedding", None)
-            except (ImportError, AttributeError):  # pragma: no cover - optional
-                _real_clip = None  # type: ignore
-
-            if (
-                "ClipEmbedding" in globals()
-                and ClipEmbedding is not _real_clip
-                and ClipEmbedding is not HuggingFaceEmbedding
-            ):
-                # Likely patched by tests to return a MockEmbedding; use it
-                embed_ctor = ClipEmbedding
-
-            Settings.embed_model = embed_ctor(
+                        # Bind constructor once; callers may monkeypatch this symbol
+                        HuggingFaceEmbedding = (
+                            _hf.HuggingFaceEmbedding  # type: ignore[attr-defined]
+                        )
+            Settings.embed_model = HuggingFaceEmbedding(
                 model_name=model_name,
                 device=device,
                 trust_remote_code=emb_cfg.get("trust_remote_code", False),

@@ -6,8 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agents.tools import logger
-from src.agents.tools.telemetry import log_event
+from src.agents.tools.telemetry import log_event, logger
 
 pytestmark = pytest.mark.unit
 

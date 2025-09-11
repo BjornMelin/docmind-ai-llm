@@ -2,7 +2,7 @@
 
 Focus:
 - Ensure legacy module is gone (no back-compat).
-- Validate ClipEmbedding usage via integrations without loading heavy backends.
+- Validate integrations configure embed model without loading heavy backends.
 """
 
 from __future__ import annotations
@@ -18,13 +18,13 @@ def test_legacy_module_removed():
         __import__("src.retrieval.embeddings")
 
 
-def test_clip_embedding_config_via_integrations():
-    """Patch ClipEmbedding to return LI MockEmbedding; ensure Settings receives it."""
+def test_embedder_config_via_integrations_honors_patch():
+    """Patch HuggingFaceEmbedding -> MockEmbedding; ensure Settings receives it."""
     from llama_index.core import Settings
     from llama_index.core.embeddings import MockEmbedding
 
     with patch(
-        "src.config.integrations.ClipEmbedding",
+        "src.config.integrations.HuggingFaceEmbedding",
         return_value=MockEmbedding(embed_dim=1024),
     ):
         from src.config.integrations import setup_llamaindex
@@ -33,7 +33,4 @@ def test_clip_embedding_config_via_integrations():
         setup_llamaindex(force_embed=True)
 
         assert Settings.embed_model is not None
-        assert Settings.embed_model.__class__.__name__ in {
-            "MockEmbedding",
-            "ClipEmbedding",
-        }
+        assert Settings.embed_model.__class__.__name__ == "MockEmbedding"

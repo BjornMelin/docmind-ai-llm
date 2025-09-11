@@ -1,12 +1,12 @@
 ---
 ADR: 022
 Title: Export & Structured Output System
-Status: Accepted
-Version: 1.0
-Date: 2025-08-18
+Status: Accepted (Amended)
+Version: 1.1
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 016, 020, 021, 024
+Related: 001, 016, 020, 021, 024, 038
 Tags: export, json, markdown, templates
 References:
 - [Pydantic](https://docs.pydantic.dev/)
@@ -45,6 +45,15 @@ Users need portable results (JSON) and readable docs (Markdown). We can leverage
 ## Decision
 
 Build a small Export Manager that renders JSON (model_dump) and Markdown (Jinja2). Keep template registry simple.
+
+### Graph Exports (Amendment)
+
+Provide portable graph exports derived from `property_graph_store.get_rel_map(...)`:
+
+- JSONL baseline (1 relation per line): `{subject, relation, object, depth, path_id, source_ids}`
+- Parquet optional (requires `pyarrow`) with matching schema.
+
+See ADR‑038/SPEC‑006 for traversal rules and limits.
 
 ## High-Level Architecture
 
@@ -159,4 +168,5 @@ def test_json_roundtrip(example_model):
 
 ## Changelog
 
+- 1.1 (2025-09-09): Added GraphRAG rel_map exports (JSONL baseline, Parquet optional); linked ADR‑038
 - 1.0 (2025-08-18): Initial export system and formats

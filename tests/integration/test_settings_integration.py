@@ -42,8 +42,8 @@ else:
     IMPORT_ERROR = ""
 
 
-@pytest.fixture
-def settings_env(tmp_path):
+@pytest.fixture(name="settings_env")
+def fixture_settings_env(tmp_path):
     """Create temporary environment for settings testing."""
     test_data_dir = tmp_path / "data"
     test_cache_dir = tmp_path / "cache"

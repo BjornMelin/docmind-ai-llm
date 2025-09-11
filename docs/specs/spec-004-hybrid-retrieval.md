@@ -1,10 +1,10 @@
 ---
 spec: SPEC-004
 title: Hybrid Retrieval: Qdrant Named Vectors (dense+sparse) with Server‑Side Fusion (RRF default)
-version: 1.1.0
-date: 2025-09-05
+version: 1.1.1
+date: 2025-09-09
 owners: ["ai-arch"]
-status: Completed
+status: Revised
 related_requirements:
   - FR-RET-001: Use Qdrant named vectors dense/sparse with server‑side hybrid fusion via Query API.
   - FR-RET-002: Deterministic point IDs and idempotent upserts.
@@ -67,6 +67,10 @@ result = client.query_points(
 - Latency targets: p50 120–200 ms for fused_top_k=60 on typical local setup; tune prefetch limits to stay within SLOs.
 - Telemetry: log prefetch sizes, fusion mode, fused_top_k, query latency, and `retrieval.sparse_fallback=true` when sparse prefetch is skipped.
 
+### Router Interop (Note)
+
+- Compose router tools `[semantic_search, hybrid_search, knowledge_graph]` when a graph is present and healthy; otherwise `[semantic_search, hybrid_search]`. Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`. See ADR‑038 and SPEC‑006.
+
 ## Libraries and Imports
 
 ```python
@@ -78,9 +82,10 @@ from llama_index.core import StorageContext
 
 ## File Operations
 
-### UPDATE
+### UPDATE / CREATE
 
-- `src/retrieval/query_engine.py`: implement server‑side hybrid queries using qdrant_client Query API with `prefetch` on `text-dense` and `text-sparse`, `fusion=Fusion.rrf`, `limit=fused_top_k`.
+- `src/retrieval/hybrid.py`: implement `ServerHybridRetriever` using qdrant_client Query API with `prefetch` on `text-dense` and `text-sparse`, `fusion=Fusion.RRF` (DBSF optional), and `limit=fused_top_k` with deterministic de‑dup before final cut.
+- `src/retrieval/router_factory.py`: register a `hybrid_search` tool by wrapping `ServerHybridRetriever` in `RetrieverQueryEngine`; compose with `semantic_search` and optional `knowledge_graph` tool.
 - `src/utils/storage.py`: precreate collections with named vectors `text-dense` (COSINE, BGE‑M3 1024D) and `text-sparse` (SparseIndexParams); prefer `fastembed_sparse_model="Qdrant/bm42-all-minilm-l6-v2-attentions"` else `"Qdrant/bm25"`.
 - `src/models/storage.py`: deterministic ID helpers `sha256_id(text)`; idempotent upserts.
 
@@ -106,4 +111,21 @@ Feature: Hybrid retrieval (server‑side fusion)
 
 ## References
 
-- Qdrant hybrid queries; LlamaIndex hybrid examples; LanceDB hybrid docs.
+- Qdrant hybrid queries; LlamaIndex hybrid examples.
+
+## Changelog
+
+- 1.1.1 (2025-09-09): Added Router interop note and cross‑link to GraphRAG spec/ADR
+
+## Server‑Side Hybrid Only (Qdrant Query API)
+
+- All hybrid queries MUST be executed server‑side via Qdrant Query API using `Prefetch` (sparse+dense) and `FusionQuery`.
+- Default fusion mode: RRF; DBSF MAY be exposed behind an environment flag. No UI toggles for fusion modes.
+- Named vectors MUST exist: `text-dense` and `text-sparse`; the sparse vector SHOULD use IDF modifier when supported.
+- Deduplication MUST occur by a configured key (default `page_id`) before the final fused cut.
+- Telemetry MUST include: `retrieval.fusion_mode`, `retrieval.prefetch_*`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
+
+### Prohibited
+
+- Client‑side fusion or weight mixing is NOT allowed in production paths.
+- UI toggles for retrieval fusion/reranking are NOT allowed; retrieval knobs remain environment‑only for testing.

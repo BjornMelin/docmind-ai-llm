@@ -1,12 +1,12 @@
 ---
 ADR: 033
 Title: Local Backup & Retention
-Status: Proposed
-Version: 1.0
-Date: 2025-09-02
+Status: Proposed (Amended)
+Version: 1.1
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 030, 031, 032
+Related: 030, 031, 032, 038
 Tags: backup, retention, local-first, offline
 References:
 - [Python shutil — File Operations](https://docs.python.org/3/library/shutil.html)
@@ -45,6 +45,14 @@ Earlier designs discussed background services; the local-first architecture (ADR
 ## Decision
 
 Ship a CLI/script that creates a timestamped backup directory and prunes older backups beyond a configured limit. Include the cache DB, Qdrant local data, and optionally analytics DB and documents directory.
+
+### Snapshot Retention (Amendment)
+
+Include snapshot directories (`storage/<timestamp>`) in retention rules:
+
+- Retain N latest snapshots (configurable) or apply TTL
+- `manifest.json` includes `created_at` and `versions` to aid audit/rotation
+- Provide a safe non‑destructive cleanup that prunes only fully finalized snapshot directories
 
 ## High-Level Architecture
 
@@ -145,5 +153,7 @@ def test_rotation(tmp_path):
 - System/Python: stdlib (`pathlib`, `shutil`, `time`)
 
 ## Changelog
+
+- 1.1 (2025-09-09): Added snapshot retention guidance and ADR‑038 cross‑link
 
 - **v1.0 (2025-09-02)**: Initial proposal for manual backups with simple rotation.

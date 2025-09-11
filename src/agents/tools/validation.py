@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Annotated
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-
-from src.agents import tools as tools_mod
+from loguru import logger
 
 from .constants import (
     ACCEPT_CONFIDENCE_THRESHOLD,
@@ -38,7 +38,7 @@ def validate_response(
 ) -> str:
     """Validate generated response quality and integrity."""
     try:
-        start_time = tools_mod.time.perf_counter()
+        start_time = time.perf_counter()
 
         source_docs = _parse_sources(sources)
 
@@ -82,7 +82,7 @@ def validate_response(
         else:
             suggested_action = "regenerate"
 
-        processing_time = tools_mod.time.perf_counter() - start_time
+        processing_time = time.perf_counter() - start_time
 
         validation_result = {
             "valid": confidence >= VALIDATION_CONFIDENCE_THRESHOLD,
@@ -95,15 +95,15 @@ def validate_response(
             "issue_count": len(issues),
         }
 
-        tools_mod.logger.info(
-            "Response validation: %.2f confidence, %s action",
+        logger.info(
+            "Response validation: {:.2f} confidence, {} action",
             confidence,
             suggested_action,
         )
         return json.dumps(validation_result)
 
     except (RuntimeError, ValueError, AttributeError) as e:
-        tools_mod.logger.error("Response validation failed: %s", e)
+        logger.error("Response validation failed: {}", e)
         return json.dumps(
             {
                 "valid": False,

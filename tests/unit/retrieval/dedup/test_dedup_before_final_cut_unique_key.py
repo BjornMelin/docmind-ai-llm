@@ -7,10 +7,21 @@ from types import SimpleNamespace
 
 from qdrant_client import models as qmodels
 
-from src.retrieval.query_engine import ServerHybridRetriever, _HybridParams
+from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 
 
 def _mk_point(pid: str, did: str, score: float, payload: dict | None = None):
+    """Create a mock point object for testing purposes.
+
+    Args:
+        pid: Page ID string identifier.
+        did: Document ID string identifier.
+        score: Relevance score for the point.
+        payload: Optional additional payload data to merge with base payload.
+
+    Returns:
+        SimpleNamespace object with id, score, and payload attributes.
+    """
     p = SimpleNamespace()
     p.id = pid
     p.score = score
@@ -21,12 +32,23 @@ def _mk_point(pid: str, did: str, score: float, payload: dict | None = None):
 
 
 def test_dedup_unique_by_doc_id(monkeypatch):
+    """Test that deduplication works correctly using custom dedup_key.
+
+    This test verifies that when dedup_key is set to "doc_id", points with
+    duplicate document IDs are deduplicated, keeping only the highest scoring
+    point for each unique document ID.
+
+    Args:
+        monkeypatch: pytest fixture for mocking object attributes.
+    """
     params = _HybridParams(
         collection="c", fused_top_k=10, fusion_mode="rrf", dedup_key="doc_id"
     )
     retr = ServerHybridRetriever(params)
 
-    monkeypatch.setattr(retr, "_embed_query", lambda s: ([0.1, 0.2], {1: 0.5}))
+    # Patch dense/sparse encoders instead of test-only hooks in production code
+    monkeypatch.setattr(retr, "_embed_dense", lambda s: [0.1, 0.2])
+    monkeypatch.setattr(retr, "_encode_sparse", lambda s: {1: 0.5})
 
     # Points with duplicate doc_id "D1"; keep highest score only
     pts = [

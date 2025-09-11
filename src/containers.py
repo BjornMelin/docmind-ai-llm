@@ -28,35 +28,15 @@ from typing import Any
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config import settings
 from src.processing.document_processor import DocumentProcessor
-from src.retrieval.query_engine import ServerHybridRetriever, _HybridParams
 
 
 def get_embedding_model(*, _nodes: list[Any] | None = None) -> Any:
-    """Return the default hybrid retriever (ServerHybridRetriever).
+    """Return an embedding model configuration object.
 
-    Note: The factory name is kept for backwards import compatibility in tests,
-    but this returns the final architecture's hybrid retriever configured from
-    unified settings (Qdrant Query API, named vectors, server-side fusion).
+    This factory reflects the library-first architecture and returns a simple
+    configuration mapping for embedding setups. Tests validate non-None.
     """
-    try:
-        rconf = settings.retrieval
-        params = _HybridParams(
-            collection=settings.database.qdrant_collection,
-            fused_top_k=int(getattr(rconf, "fused_top_k", 60)),
-            prefetch_sparse=400,
-            prefetch_dense=200,
-            fusion_mode=str(getattr(rconf, "fusion_mode", "rrf")),
-            dedup_key=str(getattr(rconf, "dedup_key", "page_id")),
-        )
-    except (
-        AttributeError,
-        TypeError,
-        ValueError,
-    ):  # pragma: no cover - defensive defaults
-        params = _HybridParams(
-            collection=getattr(settings.database, "qdrant_collection", "docmind_docs")
-        )
-    return ServerHybridRetriever(params)
+    return settings.get_embedding_config()
 
 
 def get_document_processor(*, config: Any | None = None) -> DocumentProcessor:

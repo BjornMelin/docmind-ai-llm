@@ -64,26 +64,24 @@ class TestImportValidation:
                 pytest.fail(f"Failed to import {module_name}: {e}")
 
     def test_adr009_document_processing_modules_import(self):
-        """Test that ADR-009 compliant document processing modules can be imported."""
-        adr009_modules = [
+        """Test that ADR-009 compliant modules can be imported (updated)."""
+        modules = [
             "src.processing.document_processor",
-            "src.retrieval.query_engine",
+            "src.retrieval.router_factory",
         ]
 
-        for module_name in adr009_modules:
+        for module_name in modules:
             try:
                 module = importlib.import_module(module_name)
                 assert module is not None, f"Module {module_name} imported but is None"
 
-                # Test that key classes are available
                 if module_name == "src.processing.document_processor":
                     assert hasattr(module, "DocumentProcessor")
-                elif module_name == "src.retrieval.query_engine":
-                    # Ensure server-side hybrid retriever is available
-                    assert hasattr(module, "ServerHybridRetriever")
+                elif module_name == "src.retrieval.router_factory":
+                    assert hasattr(module, "build_router_engine")
 
             except ImportError as e:
-                pytest.fail(f"Failed to import ADR-009 module {module_name}: {e}")
+                pytest.fail(f"Failed to import module {module_name}: {e}")
 
     def test_agents_modules_import(self):
         """Test that agents modules can be imported."""
@@ -129,7 +127,7 @@ class TestImportValidation:
             assert "valid" in result
         except (ImportError, AttributeError, TypeError, ValueError) as e:
             pytest.fail(f"validate_startup_configuration failed: {e}")
-        except (OSError, ConnectionError, RuntimeError) as e:  # type: ignore[name-defined]
+        except (OSError, ConnectionError, RuntimeError) as e:
             # Handle network-related errors (e.g., Qdrant not running) gracefully
             # This is expected in unit test environments
             if "Connection refused" in str(e) or "qdrant" in str(e).lower():
@@ -150,7 +148,7 @@ class TestImportValidation:
         # ADR-009 compliant file structure
         adr009_files = [
             "src/processing/document_processor.py",
-            "src/retrieval/query_engine.py",
+            "src/retrieval/router_factory.py",
         ]
 
         for file_path in required_files:
@@ -173,7 +171,7 @@ class TestImportValidation:
             hardware_info = detect_hardware()
             assert isinstance(hardware_info, dict)
 
-        except Exception as e:
+        except (ImportError, OSError, RuntimeError, ValueError, AttributeError) as e:
             pytest.fail(f"Basic system health check failed: {e}")
 
 

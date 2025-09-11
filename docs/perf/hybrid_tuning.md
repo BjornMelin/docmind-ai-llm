@@ -9,7 +9,8 @@ The recommended starting points for hybrid retrieval.
 - dense prefetch: 200
 - sparse prefetch: 400
 - fused_top_k: 60
-- rrf_k: 60
+  
+Note: Fusion is performed server‑side via Qdrant Query API (Prefetch + FusionQuery). There are no client‑side fusion knobs (no alpha/rrf_k). DBSF may be enabled via environment when supported.
 
 ## Tune by Observing
 

@@ -27,6 +27,8 @@ class TestUISmoke:
                     "src.utils.core.validate_startup_configuration", return_value=None
                 ),
             ):
-                import src.app as app  # noqa: F401
-        except Exception as e:  # pragma: no cover
+                import importlib
+
+                importlib.import_module("src.app")
+        except (ImportError, RuntimeError) as e:  # pragma: no cover
             pytest.skip(f"UI import unavailable: {e}")

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Annotated, Any, cast
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
+from loguru import logger
 
-# Import patch points from package aggregator so tests can monkeypatch
-from src.agents import tools as tools_mod
+from src.config.settings import settings
+from src.utils.telemetry import log_jsonl
 
 
 @tool
@@ -34,7 +36,7 @@ def router_tool(
       If unavailable, `selected_strategy` may be omitted.
     - Output JSON on error: {"error": str}
     """
-    start = tools_mod.time.perf_counter()
+    start = time.perf_counter()
     try:
         st = state if isinstance(state, dict) else {}
         tools_data = cast(dict, st.get("tools_data", {})) if st else {}
@@ -47,7 +49,7 @@ def router_tool(
         try:
             resp = router_engine.query(query)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            tools_mod.logger.error("router_tool query failed: {}", exc)
+            logger.error("router_tool query failed: {}", exc)
             return json.dumps({"error": str(exc)})
 
         # Extract response text with robust fallbacks
@@ -67,7 +69,7 @@ def router_tool(
         except Exception:  # pylint: disable=broad-exception-caught  # pragma: no cover - metadata shape variance
             selected_strategy = None
 
-        timing_ms = (tools_mod.time.perf_counter() - start) * 1000.0
+        timing_ms = (time.perf_counter() - start) * 1000.0
 
         # Booleans for quick telemetry
         multimodal_used = selected_strategy == "multimodal_search"
@@ -86,14 +88,24 @@ def router_tool(
         from contextlib import suppress
 
         with suppress(Exception):  # pragma: no cover - logging resilience
-            tools_mod.logger.info(
+            logger.info(
                 "router_tool completed: strategy=%s, timing_ms=%.2f",
                 selected_strategy,
                 out["timing_ms"],
             )
+            evt = {
+                "router_selected": True,
+                "route": selected_strategy or "unknown",
+                "timing_ms": out["timing_ms"],
+            }
+            # Include traversal_depth when knowledge_graph route is taken
+            if selected_strategy == "knowledge_graph":
+                with suppress(Exception):  # pragma: no cover - belt and suspenders
+                    evt["traversal_depth"] = settings.graphrag_cfg.default_path_depth
+            log_jsonl(evt)
 
         return json.dumps(out)
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        tools_mod.logger.error("router_tool failed: {}", e)
+        logger.error("router_tool failed: {}", e)
         return json.dumps({"error": str(e)})

@@ -18,15 +18,21 @@ from src.agents.models import AgentResponse
 from src.models.processing import ProcessingResult
 from src.processing.document_processor import DocumentProcessor
 
-# pylint: disable=redefined-outer-name
-# Rationale: pytest fixture names intentionally shadow same-named objects when
-# injected into tests; keeping names aligns with pytest patterns and readability.
+# Rationale: pytest fixture names may shadow outer names; acceptable in tests.
 from tests.fixtures.sample_documents import create_sample_documents
 from tests.fixtures.test_settings import IntegrationTestSettings
 
 
 def _fake_supervisor_graph(final_text: str):
-    """Return a fake supervisor object compatible with compile().stream."""
+    """Create a fake supervisor graph for testing query workflows.
+
+    Args:
+        final_text: The text content to return in the final supervisor response.
+
+    Returns:
+        A mock supervisor object that implements compile().stream() interface
+        for testing purposes, avoiding external service dependencies.
+    """
 
     class _Compiled:
         def __init__(self, text: str, supervisor_ref: Mock) -> None:
@@ -35,6 +41,7 @@ def _fake_supervisor_graph(final_text: str):
 
         def stream(self, initial_state=None, config=None, stream_mode: str = "values"):
             """Yield a single final state with the provided text."""
+            del initial_state, config, stream_mode
             # Mark ainvoke as called for legacy assertions
             with contextlib.suppress(Exception):
                 self._supervisor_ref.ainvoke()
@@ -56,8 +63,8 @@ def _fake_supervisor_graph(final_text: str):
     return _Supervisor(final_text)
 
 
-@pytest.fixture
-def integration_settings():
+@pytest.fixture(name="integration_settings")
+def fixture_integration_settings():
     """Provide integration settings for workflow tests."""
     return IntegrationTestSettings(
         data_dir=Path("./query_workflow_data"),
@@ -67,8 +74,8 @@ def integration_settings():
     )
 
 
-@pytest.fixture
-async def docs_on_disk(tmp_path):
+@pytest.fixture(name="docs_on_disk")
+async def fixture_docs_on_disk(tmp_path):
     """Create sample document files on disk for testing."""
     return create_sample_documents(tmp_path)
 
@@ -152,6 +159,7 @@ class TestCompleteQueryWorkflow:
 
                 def stream(self, initial_state=None, config=None, stream_mode="values"):
                     """Yield once; raise on first call for failure simulation."""
+                    del initial_state, config, stream_mode
                     self.count += 1
                     if self.count == 1:
                         raise RuntimeError("Simulated coordination failure")
@@ -165,6 +173,10 @@ class TestCompleteQueryWorkflow:
                     self.ainvoke = Mock()
 
                 def compile(self, checkpointer=None):  # pylint: disable=unused-argument
+                    """Return a flaky compiled graph.
+
+                    Simulates failure on first stream call, then recovery.
+                    """
                     return _FlakyCompiled()
 
             mock_supervisor.return_value = _FlakySupervisor()

@@ -1,10 +1,8 @@
-"""Unit tests for lightweight utilities in graph_config.
+"""Unit tests for portable utilities in graph_config.
 
-Focus on pure functions and attachment helpers to increase coverage without
+Focus on pure helpers and documented store APIs (`get`, `get_rel_map`) without
 requiring real LlamaIndex graph construction.
 """
-
-from types import SimpleNamespace
 
 import pytest
 
@@ -23,49 +21,61 @@ def test_create_tech_schema_contains_expected_entities_relations():
 
 
 @pytest.mark.unit
-def test_calculate_entity_confidence_branches():
-    """Test entity confidence calculation with different scenarios."""
+@pytest.mark.asyncio
+async def test_portable_helpers_minimal_behaviors(monkeypatch):
+    """Test portable helpers that use get/get_rel_map and retriever.
+
+    Builds a small stub index and store to validate helper behavior without
+    constructing a real PropertyGraphIndex.
+    """
     from src.retrieval.graph_config import (
-        CONTEXT_LENGTH_THRESHOLD,
-        MAX_CONFIDENCE_SCORE,
-        calculate_entity_confidence,
+        extract_entities,
+        extract_relationships,
+        traverse_graph,
     )
 
-    schema = {"entities": ["MODEL", "HARDWARE"]}
+    class _Node:
+        def __init__(self, node_id: str) -> None:
+            self.id = node_id
+            self.name = node_id
 
-    base_entity = {
-        "type": "MODEL",
-        "extractor": "SchemaLLMPathExtractor",
-        "context": "x" * (CONTEXT_LENGTH_THRESHOLD + 5),
-    }
-    score = calculate_entity_confidence(base_entity, schema)
-    assert 0.0 < score <= MAX_CONFIDENCE_SCORE
+    class _Store:
+        def get(self, ids=None, properties=None):
+            del properties
+            return [_Node(str(i)) for i in ids or []]
 
-    # Different extractor path
-    simple_entity = {
-        "type": "HARDWARE",
-        "extractor": "SimpleLLMPathExtractor",
-        "context": "short",
-    }
-    score2 = calculate_entity_confidence(simple_entity, schema)
-    assert score2 < score  # less context bonus
+        def get_rel_map(self, nodes, depth=1):
+            del depth
+            items = list(nodes)
+            if len(items) < 2:
+                return []
+            return [[items[0], items[1]]]
 
-    # Unknown type should not error and remain within [0,1]
-    unknown = {"type": "PERSON", "extractor": "Other", "context": ""}
-    score3 = calculate_entity_confidence(unknown, schema)
-    assert 0.0 <= score3 <= 1.0
+    class _Retriever:
+        def __init__(self, result):
+            self._result = result
 
+        def retrieve(self, query: str):
+            del query
+            return self._result
 
-@pytest.mark.unit
-def test_extend_property_graph_index_attaches_helpers():
-    """Test that property graph index extension attaches helper methods."""
-    from src.retrieval.graph_config import extend_property_graph_index
+    class _Index:
+        def __init__(self):
+            self.property_graph_store = _Store()
 
-    dummy_index = SimpleNamespace()
-    extended = extend_property_graph_index(dummy_index)
+        def as_retriever(self, include_text=False, path_depth=1):
+            del include_text, path_depth
+            return _Retriever(result=[{"text": "ok"}])
 
-    # Helpers are attached as callables
-    assert callable(extended.extract_entities)
-    assert callable(extended.extract_relationships)
-    assert callable(extended.traverse_graph)
-    assert callable(extended.query)
+    idx = _Index()
+
+    entities = await extract_entities(idx, seed_ids=["A"])  # type: ignore[arg-type]
+    assert isinstance(entities, list)
+
+    rels = await extract_relationships(idx, seed_ids=["A", "B"])  # type: ignore[arg-type]
+    assert rels
+    assert {"head", "relation", "tail"}.issubset(rels[0].keys())
+
+    nodes = await traverse_graph(idx, "query")  # type: ignore[arg-type]
+    assert nodes
+    assert isinstance(nodes, list)

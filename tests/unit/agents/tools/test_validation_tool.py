@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agents.tools import validate_response
+from src.agents.tools.validation import validate_response
 
 pytestmark = pytest.mark.unit
 
@@ -167,7 +167,7 @@ class TestValidateResponse:
     def test_validate_response_error_handling(self):
         """Test error handling when validation process encounters exceptions."""
         with patch(
-            "src.agents.tools.time.perf_counter",
+            "src.agents.tools.validation.time.perf_counter",
             side_effect=RuntimeError("Timer error"),
         ):
             result_json = validate_response.invoke(

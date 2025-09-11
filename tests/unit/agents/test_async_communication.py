@@ -30,12 +30,9 @@ from llama_index.core.memory import ChatMemoryBuffer
 
 from src.agents.coordinator import ContextManager
 from src.agents.models import AgentResponse, MultiAgentState
-from src.agents.tools import (
-    plan_query,
-    retrieve_documents,
-    route_query,
-    validate_response,
-)
+from src.agents.tools.planning import plan_query, route_query
+from src.agents.tools.retrieval import retrieve_documents
+from src.agents.tools.validation import validate_response
 
 # pylint: disable=protected-access
 # Rationale: tests exercise minimal private hooks where no public seam exists.
@@ -58,7 +55,7 @@ class TestAsyncAgentCommunication:
         }
 
         # When: Executing route_query tool async
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
             result = route_query.invoke(
@@ -95,7 +92,7 @@ class TestAsyncAgentCommunication:
         }
 
         # When: Executing sequential tool chain
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
             # Simulate async tool chain
@@ -143,7 +140,7 @@ class TestAsyncAgentCommunication:
             """Simulate routing and retrieval timings end-to-end."""
             # Simulate router agent timing
             router_start = time.perf_counter()
-            with patch("src.agents.tools.ToolFactory"):
+            with patch("src.agents.tool_factory.ToolFactory"):
                 route_result = route_query.invoke(
                     {"query": "Performance test query", "state": mock_state}
                 )
@@ -152,7 +149,7 @@ class TestAsyncAgentCommunication:
 
             # Simulate retrieval agent timing
             retrieval_start = time.perf_counter()
-            with patch("src.agents.tools.ToolFactory"):
+            with patch("src.agents.tool_factory.ToolFactory"):
                 retrieval_result = retrieve_documents.invoke(
                     {"query": "Performance test query", "state": mock_state}
                 )
@@ -197,7 +194,7 @@ class TestAsyncAgentCommunication:
             return [Mock()]
 
         # When: Tool execution encounters error
-        with patch("src.agents.tools.ToolFactory") as mock_factory:
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
             mock_factory.create_tools_from_indexes.side_effect = mock_create_tools
 
             # First call triggers failure in aggregation path but should not raise
@@ -229,7 +226,7 @@ class TestAsyncAgentCommunication:
         # When: Executing tools in parallel
         async def parallel_tool_execution():
             """Run three tool calls in parallel threads."""
-            with patch("src.agents.tools.ToolFactory") as mock_factory:
+            with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
                 mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
                 # Simulate parallel tool calls
@@ -306,7 +303,7 @@ class TestAsyncAgentCommunication:
 
             processed_state = pre(mock_state.copy())
 
-            with patch("src.agents.tools.ToolFactory"):
+            with patch("src.agents.tool_factory.ToolFactory"):
                 result = route_query.invoke(
                     {"query": "Context test query", "state": processed_state}
                 )
@@ -334,10 +331,13 @@ class TestAsyncAgentCommunication:
                 self._state = None
 
             def put(self, _config, state, *_args, **_kwargs):  # modern API tolerated
+                """Store provided state and return a checkpoint id stub."""
                 self._state = state
                 return {"checkpoint_id": "test"}
 
             def get(self, _config):
+                """Return an object with a `values` attribute for stored state."""
+
                 class _Result:
                     def __init__(self, values):
                         self.values = values

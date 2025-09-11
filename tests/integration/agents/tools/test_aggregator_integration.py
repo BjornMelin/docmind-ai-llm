@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agents.tools import retrieve_documents, route_query
+from src.agents.tools.planning import route_query
+from src.agents.tools.retrieval import retrieve_documents
 
 pytestmark = pytest.mark.integration
 
@@ -40,7 +41,7 @@ def test_retrieve_documents_error_json_when_missing_tools():
 def test_retrieve_documents_with_patched_factory():
     """Patched factory returns mocked documents through vector path."""
     mock_state = {"tools_data": {"vector": MagicMock(), "retriever": None}}
-    with patch("src.agents.tools.ToolFactory") as mock_factory:
+    with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
         mock_tool = MagicMock()
         mock_tool.call.return_value = [{"content": "ok"}]
         mock_factory.create_vector_search_tool.return_value = mock_tool

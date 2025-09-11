@@ -121,3 +121,17 @@ Feature: LLM provider selection
 - vLLM structured outputs and AMD ROCm.  
 - llama.cpp repo features.  
 - LM Studio OpenAI API compat; Ollama OpenAI compat.
+
+## Settings Scope & Validation
+
+- The Settings page MUST include: provider selection (Ollama, vLLM, LM Studio, llama.cpp), model ID/path, context window, timeout, and GPU toggle.
+- Retrieval/reranking/hybrid toggles MUST NOT appear in Settings; these remain environment‑only.
+- URL validation/allowlist:
+  - LM Studio endpoints MUST end with `/v1`.
+  - Remote endpoints MUST be disabled by default and only allowed via explicit allowlist policy.
+
+## Selector Policy
+
+- Preferred selector: `PydanticSingleSelector`.
+- Fallback: `LLMSingleSelector` based on provider/model capability.
+- Selector choice impacts routing only (not answer generation) and MUST be covered by unit tests.

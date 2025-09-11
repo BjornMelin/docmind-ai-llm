@@ -161,6 +161,16 @@ class RetrievalConfig(BaseModel):
     hybrid_enabled: bool = Field(default=True)
     hierarchy_enabled: bool = Field(default=True)
     graph_enabled: bool = Field(default=False)
+    # Server-side hybrid via Qdrant Query API fusion (prefetch + RRF/DBSF).
+    # This specifically controls registration of a server-side hybrid tool in
+    # router_factory (distinct from any internal client-side hybrid behavior).
+    enable_server_hybrid: bool = Field(
+        default=False,
+        description=(
+            "Enable server-side hybrid retrieval (Qdrant Query API fusion). "
+            "Default is False to avoid surprises."
+        ),
+    )
     # Reranker model
     # (text-only CrossEncoder; ADR-006 legacy, ADR-037 multimodal supersedes)
     reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
@@ -202,6 +212,19 @@ class GraphRAGConfig(BaseModel):
     max_hops: int = Field(default=2, ge=1, le=5)
     max_triplets: int = Field(default=1000, ge=100, le=10000)
     chunk_size: int = Field(default=1024, ge=128, le=8192)
+    autoload_policy: Literal["latest_non_stale", "pinned", "ignore"] = Field(
+        default="latest_non_stale",
+        description="Chat autoload snapshot policy",
+    )
+    default_path_depth: int = Field(
+        default=1, ge=1, le=5, description="Default graph retrieval path depth"
+    )
+    export_seed_cap: int = Field(
+        default=32, ge=1, le=1000, description="Default seed cap for exports"
+    )
+    pinned_snapshot_id: str | None = Field(
+        default=None, description="Pinned snapshot directory name for autoload"
+    )
 
 
 class UIConfig(BaseModel):
@@ -251,14 +274,7 @@ class MonitoringConfig(BaseModel):
 
 
 class DocMindSettings(BaseSettings):
-    """Unified DocMind AI configuration with Pydantic Settings V2.
-
-    Implements Task 2.2.1 unified configuration architecture with:
-    - Environment variable mapping with DOCMIND_ prefix
-    - Nested configuration models for complex areas
-    - ADR-compliant settings preservation
-    - 76% complexity reduction from previous architecture
-    """
+    """Unified DocMind AI configuration with Pydantic Settings V2."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -273,6 +289,13 @@ class DocMindSettings(BaseSettings):
     app_version: str = Field(default="2.0.0")
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
+    # Global cache salt for Streamlit caches; bump to invalidate
+    cache_version: int = Field(
+        default=0,
+        description=(
+            "Global Streamlit cache salt. Increment to clear cached data/resources."
+        ),
+    )
 
     # File System Paths
     data_dir: Path = Field(default=Path("./data"))
@@ -660,14 +683,29 @@ class DocMindSettings(BaseSettings):
                 return True
             try:
                 parsed = urlparse(url)
+                # If malformed, treat as not allowed (defensive)
                 if not parsed.scheme or not parsed.netloc:
-                    return True  # empty or malformed handled elsewhere
-                for prefix in self.endpoint_allowlist:
-                    if url.startswith(prefix):
-                        return True
-                # Also accept explicit localhost with ports
-                host = parsed.hostname or ""
-                return host in {"localhost", "127.0.0.1"}
+                    return False
+
+                host = (parsed.hostname or "").lower()
+                # Always accept explicit loopback hosts
+                if host in {"localhost", "127.0.0.1", "::1"}:
+                    return True
+
+                # Build a set of allowed hostnames from the allowlist entries
+                allowed_hosts: set[str] = set()
+                for entry in self.endpoint_allowlist:
+                    e = (entry or "").strip()
+                    if not e:
+                        continue
+                    ep = urlparse(e)
+                    if ep.hostname:
+                        allowed_hosts.add(ep.hostname.lower())
+                    else:
+                        # Fallback: if an entry is just a hostname
+                        allowed_hosts.add(e.split("/")[0].lower())
+
+                return host in allowed_hosts
             except (ValueError, TypeError):  # pragma: no cover - defensive
                 return False
 

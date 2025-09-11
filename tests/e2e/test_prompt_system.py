@@ -9,6 +9,7 @@ from src.prompting import list_templates
 
 @pytest.mark.e2e
 def test_prompt_catalog_present():
+    """Ensure prompt catalog loads with at least one template."""
     templates = list_templates()
     assert isinstance(templates, list)
     assert templates

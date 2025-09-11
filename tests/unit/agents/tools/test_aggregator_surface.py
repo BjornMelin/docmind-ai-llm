@@ -1,27 +1,24 @@
-"""Aggregator surface tests for src.agents.tools re-exports and patch points."""
+"""Submodule surface tests for src.agents.tools.* functions (no re-exports)."""
 
 from __future__ import annotations
 
-import pytest
+import time
 
-from src.agents.tools import (
-    ChatMemoryBuffer,
-    ToolFactory,
-    logger,
-    plan_query,
-    retrieve_documents,
-    route_query,
-    router_tool,
-    synthesize_results,
-    time,
-    validate_response,
-)
+import pytest
+from loguru import logger
+
+from src.agents.tool_factory import ToolFactory
+from src.agents.tools.planning import ChatMemoryBuffer, plan_query, route_query
+from src.agents.tools.retrieval import retrieve_documents
+from src.agents.tools.router_tool import router_tool
+from src.agents.tools.synthesis import synthesize_results
+from src.agents.tools.validation import validate_response
 
 pytestmark = pytest.mark.unit
 
 
-def test_reexports_present() -> None:
-    """Smoke check that tool functions are re-exported by aggregator."""
+def test_submodules_importable() -> None:
+    """Smoke check that tool functions are importable from submodules."""
     assert callable(router_tool)
     assert callable(route_query)
     assert callable(plan_query)
@@ -31,7 +28,7 @@ def test_reexports_present() -> None:
 
 
 def test_patch_points_present() -> None:
-    """Patch points exposed for tests to monkeypatch in aggregator namespace."""
+    """Patch points available at concrete seams (no aggregator)."""
     assert ToolFactory is not None
     assert logger is not None
     assert ChatMemoryBuffer is not None

@@ -13,8 +13,10 @@ def test_initialize_integrations_rebinds_settings_llm() -> None:
     try:
         # Point to a deterministic backend
         global_settings.llm_backend = "lmstudio"  # type: ignore[assignment]
-        global_settings.lmstudio_base_url = "http://localhost:1234/v1"  # type: ignore[assignment]
-        global_settings.model = "Hermes-2-Pro-Llama-3-8B"  # type: ignore[assignment]
+        # type: ignore[assignment]
+        global_settings.lmstudio_base_url = "http://localhost:1234/v1"
+        # type: ignore[assignment]
+        global_settings.model = "Hermes-2-Pro-Llama-3-8B"
 
         Settings.llm = None
         initialize_integrations(force_llm=True, force_embed=False)

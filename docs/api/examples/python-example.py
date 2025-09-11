@@ -143,7 +143,16 @@ async def document_search_example():
     print("- Hybrid search (dense + sparse embeddings)")
     print("- BGE-M3 unified embeddings")
     print("- Reranking with BGE-reranker-v2-m3")
-    print("- RRF fusion with α=0.7")
+    print("- Server-side fusion (RRF default; DBSF optional)")
+    print(
+        "- Router/Query Engine via router_factory "
+        "(semantic + hybrid + optional knowledge_graph)"
+    )
+
+    # Example (pseudo): build router with vector + optional graph
+    # from src.retrieval.router_factory import build_router_engine
+    # router = build_router_engine(vector_index, graph_index, settings)
+    # response = router.query("Find relationships between X and Y")
     print("- Semantic filtering and relevance scoring")
 
 

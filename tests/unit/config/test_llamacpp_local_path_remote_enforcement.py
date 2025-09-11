@@ -22,11 +22,11 @@ def test_llamacpp_local_path_skips_remote_enforcement(monkeypatch):
     # Patch build_llm to return a dummy llm object
     monkeypatch.setitem(integ.__dict__, "build_llm", lambda _s: object())
 
-    # Patch ClipEmbedding to avoid heavy imports during embed model init
+    # Patch HuggingFaceEmbedding to avoid heavy imports during embed model init
     class _DummyEmb:
         def __init__(self, *a, **k): ...
 
-    monkeypatch.setitem(integ.__dict__, "ClipEmbedding", _DummyEmb)
+    monkeypatch.setitem(integ.__dict__, "HuggingFaceEmbedding", _DummyEmb)
 
     # Compose a minimal settings namespace
     fake_settings = SimpleNamespace(

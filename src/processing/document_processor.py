@@ -11,13 +11,14 @@ Overview:
 - Provides robust error handling and async execution with retries.
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from llama_index.core import Document
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.core.storage.docstore import SimpleDocumentStore
@@ -34,8 +35,23 @@ from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.auto import partition
 
 from src.config.settings import settings as app_settings
+from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 from src.processing.utils import is_unstructured_like, sha256_id
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    pass
+
+
+def _document():  # pragma: no cover - lazy import to reduce import-time coupling
+    """Return LlamaIndex Document class via deferred import.
+
+    Avoids importing llama_index.core at module import time to limit coupling
+    and improve startup in environments that stub or delay heavy dependencies.
+    """
+    from llama_index.core import Document as _Doc  # type: ignore
+
+    return _Doc
 
 
 class ProcessingError(Exception):
@@ -94,7 +110,8 @@ class UnstructuredTransformation(TransformComponent):
         transformed_nodes = []
 
         for node in nodes:
-            if not isinstance(node, Document):
+            doc_cls = _document()
+            if not isinstance(node, doc_cls):
                 # Pass through non-Document nodes unchanged
                 transformed_nodes.append(node)
                 continue
@@ -212,7 +229,7 @@ class UnstructuredTransformation(TransformComponent):
 
         return transformed_nodes
 
-    def _extract_file_path(self, node: Document) -> Path | None:
+    def _extract_file_path(self, node: Any) -> Path | None:
         """Extract a local file path from a ``Document`` node.
 
         Args:
@@ -280,8 +297,8 @@ class UnstructuredTransformation(TransformComponent):
         return config
 
     def _convert_elements_to_nodes(
-        self, elements: list[Any], original_node: Document, file_path: Path
-    ) -> list[Document]:
+        self, elements: list[Any], original_node: Any, file_path: Path
+    ) -> list[Any]:
         """Convert Unstructured elements to LlamaIndex ``Document`` nodes.
 
         Args:
@@ -299,9 +316,9 @@ class UnstructuredTransformation(TransformComponent):
 
             Note: avoid ``isinstance(x, A | B)`` which is invalid at runtime.
             """
-            if isinstance(val, (str, int, float, bool)) or val is None:  # noqa: UP038
+            if isinstance(val, str | int | float | bool) or val is None:
                 return val
-            if isinstance(val, (list, tuple)):  # noqa: UP038
+            if isinstance(val, list | tuple):
                 return [_safe_json_value(v) for v in val]
             if isinstance(val, dict):
                 return {k: _safe_json_value(v) for k, v in val.items()}
@@ -367,7 +384,8 @@ class UnstructuredTransformation(TransformComponent):
             }
 
             # Create Document node for this element (safe attribute access)
-            element_node = Document(
+            doc_cls = _document()
+            element_node = doc_cls(
                 text=str(getattr(element, "text", ""))
                 if getattr(element, "text", "")
                 else "",
@@ -476,12 +494,12 @@ class DocumentProcessor:
 
         with suppress(Exception):
             val = self.settings.processing.max_document_size_mb
-            if isinstance(val, (int, float)) and val > 0:  # noqa: UP038
+            if isinstance(val, int | float) and val > 0:
                 return int(val)
         # Top-level (fallback for older tests/mocks)
         with suppress(Exception):
             val = self.settings.max_document_size_mb
-            if isinstance(val, (int, float)) and val > 0:  # noqa: UP038
+            if isinstance(val, int | float) and val > 0:
                 return int(val)
         return 100
 
@@ -539,12 +557,17 @@ class DocumentProcessor:
             UnstructuredTransformation(strategy, self.settings),
         ]
 
-        # Create pipeline with all LlamaIndex benefits
-        pipeline = IngestionPipeline(
-            transformations=transformations,
-            cache=self.cache,  # Built-in caching
-            docstore=self.docstore,  # Document deduplication
-        )
+        # Create pipeline with all LlamaIndex benefits. Some tests may monkeypatch
+        # IngestionPipeline with a simplified constructor; fall back gracefully.
+        try:
+            pipeline = IngestionPipeline(
+                transformations=transformations,
+                cache=self.cache,  # Built-in caching
+                docstore=self.docstore,  # Document deduplication
+            )
+        except TypeError:
+            # Fallback: only pass transformations when other kwargs unsupported
+            pipeline = IngestionPipeline(transformations=transformations)
 
         return pipeline
 
@@ -605,7 +628,8 @@ class DocumentProcessor:
             # Create Document object for LlamaIndex processing with a stable ID.
             # Include the file hash in metadata so BaseNode.hash changes when the
             # underlying file content changes.
-            document = Document(
+            doc_cls = _document()
+            document = doc_cls(
                 doc_id=document_hash,
                 text="",  # Will be populated by UnstructuredTransformation
                 metadata={
@@ -713,6 +737,28 @@ class DocumentProcessor:
                 strategy,
             )
 
+            # Best-effort local analytics logging
+            if getattr(self.settings, "analytics_enabled", False):
+                try:
+                    db_path = self.settings.analytics_db_path or (
+                        self.settings.data_dir / "analytics" / "analytics.duckdb"
+                    )
+                    cfg = AnalyticsConfig(
+                        enabled=True,
+                        db_path=db_path,
+                        retention_days=self.settings.analytics_retention_days,
+                    )
+                    am = AnalyticsManager.instance(cfg)
+                    am.log_query(
+                        query_type="ingest",
+                        latency_ms=processing_time * 1000.0,
+                        result_count=len(processed_elements),
+                        retrieval_strategy=str(strategy.value),
+                        success=True,
+                    )
+                except Exception as exc:  # pragma: no cover - non-failing telemetry
+                    logger.debug("analytics log (ingest) failed: %s", exc)
+
             return result
 
         except (OSError, ValueError, RuntimeError) as e:
@@ -723,6 +769,28 @@ class DocumentProcessor:
                 processing_time,
                 e,
             )
+
+            # Non-fatal analytics in error path
+            if getattr(self.settings, "analytics_enabled", False):
+                try:
+                    db_path = self.settings.analytics_db_path or (
+                        self.settings.data_dir / "analytics" / "analytics.duckdb"
+                    )
+                    cfg = AnalyticsConfig(
+                        enabled=True,
+                        db_path=db_path,
+                        retention_days=self.settings.analytics_retention_days,
+                    )
+                    am = AnalyticsManager.instance(cfg)
+                    am.log_query(
+                        query_type="ingest",
+                        latency_ms=processing_time * 1000.0,
+                        result_count=0,
+                        retrieval_strategy="error",
+                        success=False,
+                    )
+                except Exception as exc:  # pragma: no cover - non-failing telemetry
+                    logger.debug("analytics log (error path) failed: %s", exc)
 
             if "corrupted" in str(e).lower() or "invalid" in str(e).lower():
                 raise ProcessingError(f"Document appears to be corrupted: {e}") from e

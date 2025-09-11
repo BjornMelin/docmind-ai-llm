@@ -83,11 +83,11 @@ def mock_cache():
 def mock_unstructured_partition():
     """Patch unstructured partition to return deterministic chunks."""
 
-    def create_mock_elements(file_path: Path | str, *args, **kwargs) -> list[Mock]:
+    def create_mock_elements(file_path: Path | str, *_args, **_kwargs) -> list[Mock]:
         file_path = Path(file_path)
         try:
             content = file_path.read_text(encoding="utf-8")
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             content = "Mock content"
         chunks = [chunk.strip() for chunk in content.split("\n\n") if chunk.strip()]
         elements: list[Mock] = []

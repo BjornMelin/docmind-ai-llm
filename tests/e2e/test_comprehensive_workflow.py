@@ -9,10 +9,13 @@ MOCK CLEANUP COMPLETE:
 - ELIMINATED sys.modules anti-pattern (was 3, now 0)
 - Converted to proper pytest fixtures with monkeypatch
 - Removed module-level setup function
-- Implemented boundary-only mocking strategy
+    - Implemented boundary-only mocking strategy
 """
 
+# pylint: disable=missing-function-docstring,missing-class-docstring,too-many-statements
+
 import sys
+import types as types_
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -68,9 +71,8 @@ def setup_comprehensive_dependencies(monkeypatch):
             monkeypatch.setitem(sys.modules, module, MagicMock())
 
     # Mock LlamaIndex core retrievers package
-    import types as _types
 
-    li_core = _types.ModuleType("llama_index.core")
+    li_core = types_.ModuleType("llama_index.core")
     li_core.__path__ = []
 
     class _DummySettings:
@@ -97,7 +99,7 @@ def setup_comprehensive_dependencies(monkeypatch):
         pass
 
     li_core.VectorStoreIndex = _DummyVSI
-    li_retrievers = _types.ModuleType("llama_index.core.retrievers")
+    li_retrievers = types_.ModuleType("llama_index.core.retrievers")
 
     class _DummyBaseRetriever:
         pass
@@ -116,25 +118,30 @@ def setup_comprehensive_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "ollama", mock_ollama)
 
     # Provide lightweight stubs for src.agents to avoid heavy imports
-    import types as _types
 
-    agents_coord = _types.ModuleType("src.agents.coordinator")
+    agents_coord = types_.ModuleType("src.agents.coordinator")
 
     class _MC:
+        """Lightweight stub coordinator used for isolation in tests."""
+
         def __init__(self, *_, **__):
-            pass
+            """Construct the stub without heavy initialization."""
 
         def process_query(self, *_a, **_kw):
+            """Return a static response namespace to mimic real behavior."""
             from types import SimpleNamespace
 
             return SimpleNamespace(content="stub")
 
     agents_coord.MultiAgentCoordinator = _MC
-    agents_factory = _types.ModuleType("src.agents.tool_factory")
+    agents_factory = types_.ModuleType("src.agents.tool_factory")
 
     class _TF:
+        """Stubbed ToolFactory with no-op tool creation."""
+
         @staticmethod
         def create_basic_tools(_):
+            """Return an empty tool list for router wiring tests."""
             return []
 
     agents_factory.ToolFactory = _TF
@@ -144,39 +151,34 @@ def setup_comprehensive_dependencies(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_complete_application_workflow():
-    """Test complete end-to-end application workflow including all major components.
-
-    This test validates the entire user journey through the application:
-    1. Configuration system initialization
-    2. Hardware detection and model suggestions
-    3. Document upload and processing
-    4. Multi-agent analysis coordination
-    5. Chat functionality
-    6. Session persistence
-    """
-    from types import ModuleType
-
+    """End-to-end application workflow covering major components."""
     # Prepare isolated 'src' hierarchy to avoid importing heavy modules
-    _src_pkg = ModuleType("src")
-    _agents_pkg = ModuleType("src.agents")
-    _utils_pkg = ModuleType("src.utils")
-    _coord_mod = ModuleType("src.agents.coordinator")
+    _src_pkg = types_.ModuleType("src")
+    _agents_pkg = types_.ModuleType("src.agents")
+    _utils_pkg = types_.ModuleType("src.utils")
+    _coord_mod = types_.ModuleType("src.agents.coordinator")
 
     class _MC:
+        """Isolated coordinator stub for the E2E workflow test."""
+
         def __init__(self, *_, **__):
-            pass
+            """Construct the stub without heavy initialization."""
 
         def process_query(self, *_a, **_kw):
+            """Return a static response namespace to mimic real behavior."""
             from types import SimpleNamespace
 
             return SimpleNamespace(content="stub")
 
     _coord_mod.MultiAgentCoordinator = _MC
-    _tf_mod = ModuleType("src.agents.tool_factory")
+    _tf_mod = types_.ModuleType("src.agents.tool_factory")
 
     class _TF:
+        """Stubbed ToolFactory with no-op tool creation."""
+
         @staticmethod
         def create_basic_tools(_):
+            """Return an empty tool list for router wiring tests."""
             return []
 
     _tf_mod.ToolFactory = _TF
@@ -190,8 +192,8 @@ async def test_complete_application_workflow():
                 "src": _src_pkg,
                 "src.agents": _agents_pkg,
                 "src.utils": _utils_pkg,
-                "src.utils.core": ModuleType("src.utils.core"),
-                "src.utils.document": ModuleType("src.utils.document"),
+                "src.utils.core": types_.ModuleType("src.utils.core"),
+                "src.utils.document": types_.ModuleType("src.utils.document"),
                 "src.agents.coordinator": _coord_mod,
                 "src.agents.tool_factory": _tf_mod,
             },
@@ -451,7 +453,9 @@ async def test_document_processing_pipeline():
 
             # Test document loading
             file_paths = ["test_document.pdf", "test_document2.pdf"]
-            documents = await mock_load_docs(file_paths)  # type: ignore[func-returns-value]
+            documents = await mock_load_docs(  # type: ignore[func-returns-value]
+                file_paths
+            )
 
             assert len(documents) == 3
             assert all(isinstance(doc, Document) for doc in documents)

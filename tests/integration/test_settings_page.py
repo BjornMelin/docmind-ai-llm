@@ -6,6 +6,7 @@ Relies on Streamlit AppTest to run src/pages/04_settings.py in a temp cwd.
 
 from __future__ import annotations
 
+# pylint: disable=too-many-statements  # UI scenario flows are intentionally linear
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -13,8 +14,8 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 
-@pytest.fixture
-def settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
+@pytest.fixture(name="settings_app_test")
+def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     """Create an AppTest instance for the Settings page with temp cwd.
 
     - Runs page in a temporary working directory so Save writes to a temp .env.
@@ -134,6 +135,7 @@ def test_settings_toggle_providers_and_apply(
     def _setup_llamaindex(
         *, force_llm: bool = False, force_embed: bool = False
     ) -> None:
+        del force_llm, force_embed
         from src.config.settings import settings as _settings  # local import
 
         LISettings.llm = _mk_llm(_settings)
@@ -152,7 +154,7 @@ def test_settings_toggle_providers_and_apply(
 
     monkeypatch.setattr(
         # Patch hybrid retriever class to avoid heavy deps during Apply runtime
-        "src.retrieval.query_engine.ServerHybridRetriever",
+        "src.retrieval.hybrid.ServerHybridRetriever",
         _DummyEmbed,
         raising=False,
     )

@@ -31,8 +31,8 @@ from tests.fixtures.sample_documents import create_sample_documents
 from tests.fixtures.test_settings import IntegrationTestSettings
 
 
-@pytest.fixture
-def integration_settings():
+@pytest.fixture(name="integration_settings")
+def fixture_integration_settings():
     """Create integration test settings for system validation."""
     return IntegrationTestSettings(
         data_dir=Path("./system_test_data"),
@@ -42,14 +42,14 @@ def integration_settings():
     )
 
 
-@pytest.fixture
-async def sample_documents(tmp_path):
+@pytest.fixture(name="sample_documents")
+async def fixture_sample_documents(tmp_path):
     """Create sample documents for system integration testing."""
     return create_sample_documents(tmp_path)
 
 
-@pytest.fixture
-def mock_all_external_services():
+@pytest.fixture(name="mock_all_external_services")
+def fixture_mock_all_external_services():
     """Mock all external services comprehensively for system testing.
 
     Provides a supervisor shim compatible with compile().stream and a mocked
@@ -80,6 +80,7 @@ def mock_all_external_services():
                     self, initial_state, config=None, stream_mode: str | None = None
                 ):
                     """Yield a final state with a standard AI message."""
+                    del config, stream_mode
                     messages = list(initial_state.get("messages", []))
                     messages.append(
                         Mock(content="System integration validated.", type="ai")
@@ -93,6 +94,7 @@ def mock_all_external_services():
             class _Graph:
                 def compile(self, checkpointer=None):
                     """Return compiled shim object."""
+                    del checkpointer
                     return _Compiled()
 
             mock_supervisor.return_value = _Graph()
@@ -153,7 +155,12 @@ class TestSystemIntegrationValidation:
                 all_chunks.append(chunk)
 
         # Build in-memory index for retrieval tests
-        from llama_index.core import Document as LIDocument, VectorStoreIndex  # noqa: I001
+        from llama_index.core import (
+            Document as LIDocument,
+        )
+        from llama_index.core import (
+            VectorStoreIndex,
+        )
 
         lidocs = [LIDocument(text=c.text, metadata=c.metadata) for c in all_chunks]
         index = VectorStoreIndex.from_documents(lidocs)
@@ -201,6 +208,7 @@ class TestSystemIntegrationValidation:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("mock_all_external_services")
+    @pytest.mark.usefixtures("integration_settings", "sample_documents")
     async def test_error_recovery_and_resilience_workflow(
         self, integration_settings, sample_documents
     ):
@@ -216,7 +224,7 @@ class TestSystemIntegrationValidation:
 
             from src.processing.document_processor import ProcessingError
 
-            async def failing_then_success(*args, **kwargs):
+            async def failing_then_success(*_args, **_kwargs):
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
@@ -320,10 +328,10 @@ class TestSystemIntegrationValidation:
         assert clear_result is True or clear_result is None  # Implementation dependent
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("mock_all_external_services")
-    async def test_concurrent_multi_user_workflow_simulation(
-        self, integration_settings, sample_documents
-    ):
+    @pytest.mark.usefixtures(
+        "mock_all_external_services", "integration_settings", "sample_documents"
+    )
+    async def test_concurrent_multi_user_workflow_simulation(self):
         """Test system performance under concurrent multi-user load."""
         coordinator = MultiAgentCoordinator()
 
@@ -394,7 +402,12 @@ class TestSystemIntegrationValidation:
         embedding_time = 0.0
 
         # Stage 3: Retrieval (timed) using in-memory index
-        from llama_index.core import Document as LIDocument, VectorStoreIndex  # noqa: I001
+        from llama_index.core import (
+            Document as LIDocument,
+        )
+        from llama_index.core import (
+            VectorStoreIndex,
+        )
 
         idx = VectorStoreIndex.from_documents(
             [
@@ -437,9 +450,8 @@ class TestSystemIntegrationValidation:
         assert response.content is not None
 
     @pytest.mark.asyncio
-    async def test_system_edge_case_handling(
-        self, integration_settings, tmp_path, mock_all_external_services
-    ):
+    @pytest.mark.usefixtures("mock_all_external_services")
+    async def test_system_edge_case_handling(self, integration_settings, tmp_path):
         """Test system handling of edge cases and boundary conditions."""
         processor = DocumentProcessor(integration_settings)
         coordinator = MultiAgentCoordinator()
@@ -515,8 +527,6 @@ class TestSystemValidationReporting:
             sample_documents["tech_docs"]
         )
         # Patch the actual async embedding method for the current embedder
-        from unittest.mock import AsyncMock
-
         with patch.object(
             embedder, "embed_texts_async", new_callable=AsyncMock
         ) as mock_embed:
@@ -524,7 +534,12 @@ class TestSystemValidationReporting:
             result = await embedder.embed_texts_async([doc_result.elements[0].text])
 
         # Build a small index to simulate storage/retrieval
-        from llama_index.core import Document as LIDocument, VectorStoreIndex  # noqa: I001
+        from llama_index.core import (
+            Document as LIDocument,
+        )
+        from llama_index.core import (
+            VectorStoreIndex,
+        )
 
         _index = VectorStoreIndex.from_documents(
             [
@@ -548,7 +563,7 @@ class TestSystemValidationReporting:
         assert len(result.dense_embeddings or []) > 0
         assert isinstance(response, AgentResponse)
 
-    def test_integration_test_coverage_validation(self, integration_settings):
+    def test_integration_test_coverage_validation(self):
         """Validate that integration tests cover required scenarios."""
         # Define required test scenarios
         required_scenarios = {

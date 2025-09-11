@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agents.tools import plan_query
+from src.agents.tools.planning import plan_query
 
 pytestmark = pytest.mark.unit
 
@@ -105,7 +105,7 @@ class TestPlanQuery:
     def test_plan_query_error_handling(self):
         """Timer error triggers fallback, not an exception."""
         with patch(
-            "src.agents.tools.time.perf_counter",
+            "src.agents.tools.planning.time.perf_counter",
             side_effect=RuntimeError("Timer error"),
         ):
             result_json = plan_query.invoke(

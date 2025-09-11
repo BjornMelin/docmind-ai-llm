@@ -72,9 +72,14 @@ dependencies = [
     "pyyaml>=6.0",                       # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
     "duckdb>=0.10.0",                    # DuckDB engine
+    # Analytics & Visualization
+    "pandas>=2.2,<3.0",                 # DataFrames (required by DuckDB .df())
+    "plotly>=5.22,<6.0",                # Streamlit charts (px/go)
     # Testing Support (runtime-level perf/property tests if invoked)
     "pytest-benchmark>=5.1.0",           # Benchmark harness
     "hypothesis>=6.137.2",               # Property-based tests
+    # Transitive dep override: 3.14.0 was yanked for debugpy crash
+    "rapidfuzz>=3.14.1",                 # Avoid yanked 3.14.0
 ]
 
 [project.optional-dependencies]
@@ -97,6 +102,10 @@ test = [
     "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
     "pytest-timeout>=2.3.1",
+]
+eval = [
+    "ragas>=0.2.10,<0.4.0",              # RAG evaluation toolkit (Pydantic v2 compatible)
+    "beir>=2.0.0,<3.0.0",                # IR benchmark datasets + evaluation
 ]
 
 # Note: spaCy models are not PyPI packages and must be installed separately:
@@ -199,10 +208,15 @@ py-version = "3.11"
 jobs = 0
 limit-inference-results = 100
 extension-pkg-allow-list = ["llama_index", "torch"]
+load-plugins = ["pylint_pytest"]
 source-roots = ["."]
 disable = [
   # Pydantic model attributes are resolved at runtime; avoid false positives
   "no-member",
+]
+ignore-patterns = [
+  # Ignore helper/CLI scripts from pylint; tests remain linted
+  "scripts/.*",
 ]
 
 # Keep pylint messages strict; use targeted per-file disables in tests when needed.
@@ -215,6 +229,9 @@ good-names = [
 
 [tool.pylint.format]
 max-line-length = 88
+
+[tool.pylint.overrides."tests/**/*.py".messages_control]
+disable = ["unused-argument"]
 
 
 [tool.pytest.ini_options]
@@ -285,8 +302,8 @@ asyncio_default_fixture_loop_scope = "function"
 
 [dependency-groups]
 dev = [
-    "ruff==0.12.8",
-    "pytest>=8.3.1",
+    "ruff==0.13.0",
+    "pytest==8.3.1",
     "pytest-cov>=6.2.1",
     "pytest-asyncio>=1.1.0",
     "pytest-benchmark>=5.0.0",
@@ -298,7 +315,7 @@ dev = [
     "pytest-httpx>=0.35.0",
     "testcontainers>=4.12.0",
     "coverage-badge>=1.1.2",
-    "pylint>=3.2.5",
+    "pylint==3.3.8",
 ]
 test = [
     "pytest==8.3.1",

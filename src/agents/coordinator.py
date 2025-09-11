@@ -1,31 +1,21 @@
-"""Multi-Agent Coordination System using ADR-011 compliant LangGraph supervisor.
+"""Multi-Agent Coordination System using LangGraph supervisor.
 
-This module implements the ADR-compliant MultiAgentCoordinator that orchestrates five
-specialized agents using langgraph-supervisor with modern optimization parameters.
-The system provides query processing with FP8 optimization and 128K context.
+This module implements a MultiAgentCoordinator that orchestrates five specialized agents
+using langgraph-supervisor for query processing with parallel tool execution and
+context management.
 
 Features:
-- ADR-011 compliant langgraph-supervisor with modern parameters
-- parallel_tool_calls=True for 50-87% token reduction
-- output_mode="structured" for enhanced response formatting
-- create_forward_message_tool=True for direct message passthrough
-- add_handoff_back_messages=True for coordination tracking
-- pre_model_hook and post_model_hook for 128K context management
-- Qwen3-4B-Instruct-2507-FP8 with FP8 KV cache optimization
-- Real DSPy integration for query optimization
-- Agent coordination overhead <200ms (improved from 300ms)
-
-ADR Compliance:
-- ADR-001: Modern Agentic RAG Architecture (5-agent supervisor system)
-- ADR-004: Local-First LLM Strategy (Qwen3-4B-Instruct-2507-FP8 with 128K context)
-- ADR-010: Performance Optimization Strategy (FP8 KV cache, dual-layer caching)
-- ADR-011: Agent Orchestration Framework (LangGraph supervisor with modern parameters)
-- ADR-018: DSPy Prompt Optimization (real implementation)
+- LangGraph supervisor with parallel tool execution
+- Structured output mode for consistent response formatting
+- Forward message tool for direct agent communication
+- Context trimming hooks for memory management
+- DSPy integration for query optimization
+- Performance tracking and timeout protection
 
 Example:
-    Using the ADR-compliant multi-agent coordinator::
+    Using the multi-agent coordinator:
 
-        from agents.coordinator import MultiAgentCoordinator
+        from src.agents.coordinator import MultiAgentCoordinator
         from llama_index.core.memory import ChatMemoryBuffer
 
         coordinator = MultiAgentCoordinator()
@@ -37,6 +27,7 @@ Example:
 """
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
 from typing import Any
@@ -51,14 +42,11 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
 
-from src.agents.tools import (
-    plan_query,
-    route_query,
-    router_tool,
-    synthesize_results,
-    validate_response,
-)
+# Note: tool imports are performed lazily inside _setup_agent_graph to avoid
+# importing heavy dependencies at module import time (improves Streamlit tests
+# that stub LlamaIndex modules).
 from src.config import settings
+from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 
 # Import agent-specific models
@@ -109,7 +97,6 @@ class ContextManager:
 
 
 # Constants
-
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
@@ -121,33 +108,31 @@ ADD_HANDOFF_BACK_MESSAGES_ENABLED = True
 class MultiAgentCoordinator:
     """Coordinator for multi-agent document analysis system.
 
-    Orchestrates five specialized agents using LangGraph supervisor pattern with
-    modern optimization parameters as specified in ADR-011:
+    Orchestrates five specialized agents using LangGraph supervisor pattern:
     - Router Agent: Analyzes queries and determines processing strategy
     - Planner Agent: Decomposes complex queries into sub-tasks
     - Retrieval Agent: Executes document retrieval with DSPy optimization
     - Synthesis Agent: Combines and deduplicates multi-source results
     - Validation Agent: Validates response quality and accuracy
 
-    Provides FP8 optimization, 128K context management, and <200ms coordination
-    overhead.
+    Provides context management, performance tracking, and timeout protection.
     """
 
     def __init__(
         self,
         model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
         *,
-        max_context_length: int = settings.vllm.context_window,  # 128K context
+        max_context_length: int = settings.vllm.context_window,
         backend: str = "vllm",
         enable_fallback: bool = True,
         max_agent_timeout: float = settings.agents.decision_timeout,
     ):
-        """Initialize ADR-compliant multi-agent coordinator.
+        """Initialize multi-agent coordinator.
 
         Args:
-            model_path: FP8 quantized model path
-            max_context_length: Maximum context in tokens (128K)
-            backend: Model backend ("vllm" for FP8 optimization)
+            model_path: Model path for LLM
+            max_context_length: Maximum context in tokens
+            backend: Model backend ("vllm" recommended)
             enable_fallback: Whether to fallback to basic RAG on agent failure
             max_agent_timeout: Maximum time for agent responses (seconds)
         """
@@ -193,9 +178,7 @@ class MultiAgentCoordinator:
         # Lazy initialization
         self._setup_complete = False
 
-        logger.info(
-            "ADR-compliant MultiAgentCoordinator initialized (model: %s)", model_path
-        )
+        logger.info("MultiAgentCoordinator initialized (model: %s)", model_path)
 
     def _ensure_setup(self) -> bool:
         """Ensure all components are set up (lazy initialization)."""
@@ -240,8 +223,14 @@ class MultiAgentCoordinator:
             return False
 
     def _setup_agent_graph(self) -> None:
-        """Setup LangGraph supervisor with ADR-011 modern parameters."""
+        """Setup LangGraph supervisor with agent orchestration."""
         try:
+            # Lazy import tool functions from explicit submodules (no re-exports)
+            from src.agents.tools.planning import plan_query, route_query
+            from src.agents.tools.router_tool import router_tool
+            from src.agents.tools.synthesis import synthesize_results
+            from src.agents.tools.validation import validate_response
+
             # Create individual agents with proper naming and tools
             router_agent = create_react_agent(
                 self.llm,
@@ -278,7 +267,7 @@ class MultiAgentCoordinator:
                 name="validation_agent",
             )
 
-            # Create supervisor system prompt (ADR-011)
+            # Create supervisor system prompt
             system_prompt = self._create_supervisor_prompt()
 
             # Create list of agents for supervisor
@@ -290,23 +279,20 @@ class MultiAgentCoordinator:
                 validation_agent,
             ]
 
-            # ADR-011: Create forward message tool for direct passthrough
+            # Create forward message tool for direct communication
             forward_tool = create_forward_message_tool("supervisor")
 
-            # ADR-011: Create supervisor with modern optimization parameters
+            # Create supervisor with optimization parameters
             self.graph = create_supervisor(
                 agents=agents,
                 model=self.llm,
                 prompt=system_prompt,
-                # CRITICAL: Modern optimization parameters (ADR-011)
-                parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,  # 50-87% reduction
-                output_mode=OUTPUT_MODE_STRUCTURED,  # Enhanced formatting
+                parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
+                output_mode=OUTPUT_MODE_STRUCTURED,
                 create_forward_message_tool=CREATE_FORWARD_MESSAGE_TOOL_ENABLED,
                 add_handoff_back_messages=ADD_HANDOFF_BACK_MESSAGES_ENABLED,
-                # ADR-004, ADR-011: Context management hooks for 128K limitation
-                pre_model_hook=self._create_pre_model_hook(),  # Context trimming
-                post_model_hook=self._create_post_model_hook(),  # Response formatting
-                # Additional modern parameters
+                pre_model_hook=self._create_pre_model_hook(),
+                post_model_hook=self._create_post_model_hook(),
                 tools=[forward_tool],
             )
 
@@ -322,46 +308,41 @@ class MultiAgentCoordinator:
             # Compile graph with memory
             self.compiled_graph = self.graph.compile(checkpointer=self.memory)
 
-            logger.info("ADR-011 compliant agent graph setup completed successfully")
+            logger.info("Agent graph setup completed successfully")
 
         except (RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Failed to setup ADR-compliant agent graph: %s", e)
+            logger.error("Failed to setup agent graph: %s", e)
             raise RuntimeError(f"Agent graph initialization failed: {e}") from e
 
     def _create_supervisor_prompt(self) -> str:
-        """Create system prompt for ADR-011 supervisor."""
+        """Create system prompt for supervisor agent."""
         return (
-            "You are a high-performance supervisor managing a team of specialized "
-            "document analysis agents with FP8 optimization and parallel execution.\n\n"
-            "Your team operates under strict performance requirements:\n"
-            "- Agent coordination overhead: <200ms per decision\n"
-            "- Parallel tool execution: 50-87% token reduction target\n"
-            "- Context management: 128K tokens with intelligent trimming\n"
-            "- FP8 KV cache optimization for memory efficiency\n\n"
+            "You are a supervisor managing a team of specialized document analysis\n"
+            "agents with parallel execution capabilities.\n\n"
+            "Performance target: keep coordination overhead under 200ms per turn.\n\n"
             "Team composition:\n"
             "- router_agent: Query analysis and strategy determination\n"
             "- planner_agent: Complex query decomposition\n"
             "- retrieval_agent: Document search with DSPy optimization\n"
             "- synthesis_agent: Multi-source result combination\n"
             "- validation_agent: Response quality validation\n\n"
-            "Coordination strategy (optimized for <200ms overhead):\n"
+            "Coordination strategy:\n"
             "1. Always start with router_agent for strategy analysis\n"
             "2. Use planner_agent only if needs_planning=true\n"
             "3. Execute retrieval_agent (may run parallel tool calls)\n"
             "4. Use synthesis_agent for multi-source results\n"
             "5. Always end with validation_agent for quality assurance\n\n"
-            "Optimize for parallel execution and minimize unnecessary agent calls. "
-            "Leverage parallel_tool_calls for maximum token efficiency.\n\n"
+            "Optimize for parallel execution and minimize unnecessary agent calls.\n\n"
             "Respond with agent name or 'FINISH' when complete."
         )
 
     def _create_pre_model_hook(self) -> Callable[[dict], dict]:
-        """Create pre-model hook for context trimming (ADR-004, ADR-011)."""
+        """Create pre-model hook for context trimming."""
 
         def pre_model_hook(state: dict) -> dict:
-            """Trim context before model processing with 128K management."""
+            """Trim context before model processing."""
             try:
-                # Import here so tests patching the function can intercept calls
+                # Defer import to allow runtime patching and reduce import-time deps
                 from langchain_core.messages.utils import trim_messages
 
                 messages = state.get("messages", [])
@@ -392,18 +373,22 @@ class MultiAgentCoordinator:
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
                 logger.warning("Pre-model hook failed: %s", e)
+                # Non-fatal: annotate state for observability only if dict
+                if isinstance(state, dict):
+                    state["hook_error"] = True
+                    state["hook_name"] = "pre_model_hook"
                 return state
 
         return pre_model_hook
 
     def _create_post_model_hook(self) -> Callable[[dict], dict]:
-        """Create post-model hook for response formatting (ADR-011)."""
+        """Create post-model hook for response formatting."""
 
         def post_model_hook(state: dict) -> dict:
             """Format response after model generation with structured output."""
             try:
                 if state.get("output_mode") == "structured":
-                    # Add optimization metadata
+                    # Add performance metadata
                     state["optimization_metrics"] = {
                         "context_used_tokens": self.context_manager.estimate_tokens(
                             state.get("messages", [])
@@ -414,13 +399,13 @@ class MultiAgentCoordinator:
                         "parallel_execution_active": state.get(
                             "parallel_tool_calls", False
                         ),
-                        "fp8_optimization": True,
+                        "optimization_enabled": True,
                         "model_path": self.model_path,
                         "context_trimmed": state.get("context_trimmed", False),
                         "tokens_trimmed": state.get("tokens_trimmed", 0),
                     }
 
-                    # Structure response for enhanced integration
+                    # Structure response with metadata
                     if "response" in state:
                         state["response"] = self.context_manager.structure_response(
                             state["response"]
@@ -429,6 +414,10 @@ class MultiAgentCoordinator:
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
                 logger.warning("Post-model hook failed: %s", e)
+                # Non-fatal: annotate state for observability only if dict
+                if isinstance(state, dict):
+                    state["hook_error"] = True
+                    state["hook_name"] = "post_model_hook"
                 return state
 
         return post_model_hook
@@ -440,10 +429,10 @@ class MultiAgentCoordinator:
         settings_override: dict[str, Any] | None = None,
         thread_id: str = "default",
     ) -> AgentResponse:
-        """Process user query through ADR-compliant multi-agent pipeline.
+        """Process user query through multi-agent pipeline.
 
-        Coordinates specialized agents with FP8 optimization, parallel tool execution,
-        and 128K context management. Targets <200ms coordination overhead.
+        Coordinates specialized agents with parallel tool execution and
+        context management.
 
         Args:
             query: User query to process
@@ -452,7 +441,7 @@ class MultiAgentCoordinator:
             thread_id: Thread ID for conversation continuity
 
         Returns:
-            AgentResponse with content, sources, metadata, and optimization metrics
+            AgentResponse with content, sources, metadata, and performance metrics
 
         Example:
             >>> response = coordinator.process_query("What is machine learning?")
@@ -468,7 +457,7 @@ class MultiAgentCoordinator:
             )
 
         try:
-            # Compose InjectedState/tools_data overrides (router, toggles, reranker)
+            # Compose tools_data overrides for agent configuration
             defaults: dict[str, Any] = {
                 "enable_dspy": settings.enable_dspy_optimization,
                 "enable_graphrag": (
@@ -485,14 +474,14 @@ class MultiAgentCoordinator:
             # Merge caller-provided overrides last (they win)
             tools_data: dict[str, Any] = {**defaults, **(settings_override or {})}
 
-            # Initialize state with optimization parameters
+            # Initialize state with execution parameters
             initial_state = MultiAgentState(
                 messages=[HumanMessage(content=query)],
                 tools_data=tools_data,
                 context=context,
                 total_start_time=start_time,
-                output_mode="structured",  # ADR-011
-                parallel_execution_active=True,  # ADR-011
+                output_mode="structured",
+                parallel_execution_active=True,
             )
 
             # Run multi-agent workflow with performance tracking
@@ -510,10 +499,30 @@ class MultiAgentCoordinator:
             processing_time = time.perf_counter() - start_time
             self._update_performance_metrics(processing_time, coordination_time)
 
-            # Validate performance targets (ADR-011)
-            if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:  # 200ms target
+            # Best-effort analytics logging (never impact user flow)
+            if getattr(settings, "analytics_enabled", False):
+                with contextlib.suppress(Exception):
+                    cfg = AnalyticsConfig(
+                        enabled=True,
+                        db_path=(
+                            settings.analytics_db_path
+                            or (settings.data_dir / "analytics" / "analytics.duckdb")
+                        ),
+                        retention_days=settings.analytics_retention_days,
+                    )
+                    am = AnalyticsManager.instance(cfg)
+                    am.log_query(
+                        query_type="chat",
+                        latency_ms=processing_time * 1000.0,
+                        result_count=0,
+                        retrieval_strategy="hybrid",
+                        success=True,
+                    )
+
+            # Validate performance targets
+            if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:
                 logger.warning(
-                    "Coordination overhead %.3fs exceeds 200ms target",
+                    "Coordination overhead %.3fs exceeds threshold",
                     coordination_time,
                 )
 
@@ -525,7 +534,7 @@ class MultiAgentCoordinator:
             return response
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
-            logger.error("ADR-compliant multi-agent processing failed: %s", e)
+            logger.error("Multi-agent processing failed: %s", e)
 
             # Fallback to basic RAG if enabled
             if self.enable_fallback:
@@ -535,7 +544,7 @@ class MultiAgentCoordinator:
     def _run_agent_workflow(
         self, initial_state: MultiAgentState, thread_id: str
     ) -> dict[str, Any]:
-        """Run the ADR-compliant multi-agent workflow with timeout protection."""
+        """Run the multi-agent workflow with timeout protection."""
         try:
             # Create async event loop if needed
             try:
@@ -556,7 +565,7 @@ class MultiAgentCoordinator:
             ):
                 result = state
 
-                # Check for timeout (more aggressive for <200ms target)
+                # Check for timeout
                 elapsed = time.perf_counter() - initial_state.total_start_time
                 if elapsed > self.max_agent_timeout:
                     logger.warning("Agent workflow timeout after %.2fs", elapsed)
@@ -565,7 +574,7 @@ class MultiAgentCoordinator:
             return result or initial_state
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
-            logger.error("ADR-compliant agent workflow execution failed: %s", e)
+            logger.error("Agent workflow execution failed: %s", e)
             raise
 
     def _extract_response(
@@ -600,12 +609,11 @@ class MultiAgentCoordinator:
             validation_result = final_state.get("validation_result", {})
             validation_score = validation_result.get("confidence", 0.0)
 
-            # Build optimization metrics (ADR-011)
+            # Build performance metrics
             processing_time = time.perf_counter() - start_time
             optimization_metrics = {
                 "coordination_overhead_ms": round(coordination_time * 1000, 2),
-                "meets_200ms_target": coordination_time
-                < COORDINATION_OVERHEAD_THRESHOLD,
+                "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
                 "parallel_execution_active": final_state.get(
                     "parallel_execution_active", False
                 ),
@@ -616,8 +624,8 @@ class MultiAgentCoordinator:
                 "tokens_trimmed": final_state.get("tokens_trimmed", 0),
                 "kv_cache_usage_gb": final_state.get("kv_cache_usage_gb", 0.0),
                 "model_path": self.model_path,
-                "fp8_optimization": True,
                 "context_window_used": self.max_context_length,
+                "optimization_enabled": True,
             }
 
             # Build metadata
@@ -630,12 +638,11 @@ class MultiAgentCoordinator:
                 "agents_used": list(final_state.get("agent_timings", {}).keys()),
                 "fallback_used": final_state.get("fallback_used", False),
                 "errors": final_state.get("errors", []),
-                "adr_compliance": {
-                    "adr_001": "5-agent supervisor system",
-                    "adr_004": f"FP8 model: {self.model_path}",
-                    "adr_010": "FP8 KV cache optimization",
-                    "adr_011": "Modern supervisor parameters",
-                    "adr_018": f"DSPy integration: {is_dspy_available()}",
+                "system_info": {
+                    "agents_used": 5,
+                    "model": self.model_path,
+                    "framework": "LangGraph Supervisor",
+                    "dspy_available": is_dspy_available(),
                 },
             }
 
@@ -741,11 +748,11 @@ class MultiAgentCoordinator:
             self.avg_coordination_overhead = coordination_time
 
     def get_performance_stats(self) -> dict[str, Any]:
-        """Get performance statistics including ADR-011 compliance metrics.
+        """Get performance statistics.
 
         Returns:
             Dictionary containing performance metrics including success rates,
-            processing times, coordination overhead, and ADR compliance status
+            processing times, and coordination overhead
         """
         success_rate = (
             self.successful_queries / self.total_queries
@@ -758,7 +765,7 @@ class MultiAgentCoordinator:
             else 0.0
         )
 
-        return {
+        stats = {
             # Basic metrics
             "total_queries": self.total_queries,
             "successful_queries": self.successful_queries,
@@ -766,44 +773,31 @@ class MultiAgentCoordinator:
             "success_rate": round(success_rate, 3),
             "fallback_rate": round(fallback_rate, 3),
             "avg_processing_time": round(self.avg_processing_time, 3),
-            # ADR-011 performance metrics
-            "avg_coordination_overhead_ms": round(
-                self.avg_coordination_overhead * 1000, 2
-            ),
-            "meets_200ms_target": self.avg_coordination_overhead
+            "avg_coordination_overhead": round(self.avg_coordination_overhead, 3),
+            "meets_target": self.avg_coordination_overhead
             < COORDINATION_OVERHEAD_THRESHOLD,
             "agent_timeout": self.max_agent_timeout,
             "fallback_enabled": self.enable_fallback,
-            # ADR compliance
-            "adr_compliance": {
-                "adr_001": "Modern Agentic RAG Architecture",
-                "adr_004": f"Local-First LLM ({self.model_path})",
-                "adr_010": "FP8 Performance Optimization",
-                "adr_011": "LangGraph Supervisor Framework",
-                "adr_018": f"DSPy Optimization ({is_dspy_available()})",
-            },
-            # Configuration
             "model_config": {
                 "model_path": self.model_path,
                 "max_context_length": self.max_context_length,
                 "backend": self.backend,
-                "fp8_optimization": True,
             },
         }
+        # Include ADR compliance snapshot for observability
+        stats["adr_compliance"] = self.validate_adr_compliance()
+        return stats
 
-    def validate_adr_compliance(self) -> dict[str, bool]:
-        """Validate compliance with all ADR requirements."""
+    def validate_system_status(self) -> dict[str, bool]:
+        """Validate system components and performance."""
         return {
-            "adr_001_supervisor_pattern": self._setup_complete
-            and self.compiled_graph is not None,
-            "adr_004_fp8_model": self.model_path.endswith("FP8"),
-            "adr_010_performance_optimization": True,  # FP8 config present
-            "adr_011_modern_parameters": True,  # Using langgraph-supervisor with
-            # modern params
-            "adr_018_dspy_integration": is_dspy_available(),
-            "coordination_under_200ms": self.avg_coordination_overhead
+            "graph_setup": self._setup_complete and self.compiled_graph is not None,
+            "model_configured": bool(self.model_path),
+            "performance_optimization": True,
+            "dspy_integration": is_dspy_available(),
+            "coordination_performance": self.avg_coordination_overhead
             < COORDINATION_OVERHEAD_THRESHOLD,
-            "context_128k_support": self.max_context_length >= 131072,
+            "context_support": self.max_context_length >= 131072,
         }
 
     def reset_performance_stats(self) -> None:
@@ -815,22 +809,43 @@ class MultiAgentCoordinator:
         self.avg_coordination_overhead = 0.0
         logger.info("Performance statistics reset")
 
+    def validate_adr_compliance(self) -> dict[str, bool]:
+        """Validate a subset of ADR requirements at runtime for visibility.
 
-# Factory function for ADR-compliant coordinator
+        Returns a small dictionary with pass/fail flags used by tests and the UI.
+        """
+        return {
+            # ADR-001: Supervisor pattern compiled and ready
+            "adr_001_supervisor_pattern": bool(
+                self._setup_complete and self.compiled_graph is not None
+            ),
+            # ADR-004: FP8 model variant used by default (suffix-based)
+            "adr_004_fp8_model": self.model_path.upper()
+            .split("/")[-1]
+            .endswith("-FP8"),
+            # Coordination under 200ms per turn
+            "coordination_under_200ms": self.avg_coordination_overhead
+            < COORDINATION_OVERHEAD_THRESHOLD,
+            # Context support for 128k tokens
+            "context_128k_support": self.max_context_length >= 131072,
+        }
+
+
+# Factory function for coordinator
 def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
     max_context_length: int = settings.vllm.context_window,
     enable_fallback: bool = True,
 ) -> MultiAgentCoordinator:
-    """Create ADR-compliant multi-agent coordinator.
+    """Create multi-agent coordinator.
 
     Args:
-        model_path: FP8 quantized model path
-        max_context_length: Maximum context in tokens (128K)
+        model_path: Model path for LLM
+        max_context_length: Maximum context in tokens
         enable_fallback: Whether to enable fallback to basic RAG
 
     Returns:
-        Configured MultiAgentCoordinator instance with ADR compliance
+        Configured MultiAgentCoordinator instance
     """
     return MultiAgentCoordinator(
         model_path=model_path,

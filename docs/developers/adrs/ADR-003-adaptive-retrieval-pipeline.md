@@ -1,12 +1,12 @@
 ---
 ADR: 003
 Title: Adaptive Retrieval Pipeline (RAPTOR‑Lite + Router)
-Status: Implemented
-Version: 3.4
-Date: 2025-09-04
+Status: Implemented (Amended)
+Version: 3.5
+Date: 2025-09-09
 Supersedes:
 Superseded-by:
-Related: 001, 002, 004, 024, 031, 037
+Related: 001, 002, 004, 019, 024, 031, 037, 038
 Tags: retrieval, routing, hybrid, raptor-lite, reranking
 References:
 - [LlamaIndex RouterQueryEngine](https://docs.llamaindex.ai/en/stable/api_reference/query_engine/router_query_engine/)
@@ -48,6 +48,10 @@ Flat vector search underperforms on complex queries, lacks hierarchical awarenes
 ## Decision
 
 Adopt **LlamaIndex RouterQueryEngine** with built‑in **HybridRetriever** (dense+sparse, RRF), **MultiQueryRetriever** (decomposition), and **MetadataFilters**. Optionally enable **PropertyGraphIndex** for relationship queries (ADR‑019). Reranking remains modality‑aware per ADR‑037. All components respect the **128K context cap** from ADR‑004.
+
+### GraphRAG Router Composition (Amendment)
+
+When a property graph is present and healthy, compose tools `[vector_query_engine, graph_query_engine(include_text=true, path_depth=1)]` with selector `PydanticSingleSelector` (OpenAI) else `LLMSingleSelector`. If the graph is absent/unhealthy, route to vector only. This approach aligns with ADR‑038 and ensures graceful degradation.
 
 ## High-Level Architecture
 
@@ -105,58 +109,23 @@ graph TD
 ### Implementation Details
 
 ```python
-# src/retrieval/query_engine.py (skeleton)
-from llama_index.core.query_engine import RouterQueryEngine
-from llama_index.core.selectors import LLMSingleSelector
-from llama_index.core.retrievers import HybridRetriever, MultiQueryRetriever
-from llama_index.core.tools import QueryEngineTool
-from llama_index.core import Settings
+# src/retrieval/router_factory.py (skeleton)
+from llama_index.core.indices import VectorStoreIndex
+from llama_index.core import PropertyGraphIndex
+from src.retrieval.router_factory import build_router_engine
 
-def build_adaptive_query_engine(index, llm, *, enable_graphrag: bool = False):
-    # Base retrievers
-    vector_retriever = index.as_retriever(similarity_top_k=10)
-    hybrid_retriever = HybridRetriever(
-        vector_retriever=index.as_retriever(similarity_top_k=5),
-        keyword_retriever=index.as_retriever(mode="keyword", top_k=5),
-        fusion_mode="reciprocal_rank",
-    )
-    multi_retriever = MultiQueryRetriever.from_defaults(
-        retriever=hybrid_retriever, llm=llm, num_queries=3
-    )
+def build_adaptive_query_engine(
+    vector_index: VectorStoreIndex,
+    graph_index: PropertyGraphIndex | None,
+    settings,
+):
+    """Compose RouterQueryEngine with semantic + hybrid (+ graph) tools.
 
-    tools = [
-        QueryEngineTool.from_defaults(
-            query_engine=vector_retriever.as_query_engine(),
-            name="vector_search",
-            description="Semantic similarity for simple factual queries",
-        ),
-        QueryEngineTool.from_defaults(
-            query_engine=hybrid_retriever.as_query_engine(),
-            name="hybrid_search",
-            description="Dense+sparse for keyword + semantic needs",
-        ),
-        QueryEngineTool.from_defaults(
-            query_engine=multi_retriever.as_query_engine(),
-            name="multi_query",
-            description="Decompose complex questions into subqueries",
-        ),
-    ]
-
-    if enable_graphrag:
-        from src.retrieval.graph_config import build_graph_query_engine
-        tools.append(
-            QueryEngineTool.from_defaults(
-                query_engine=build_graph_query_engine(index),
-                name="graph_search",
-                description="Relationship/multi‑hop retrieval",
-            )
-        )
-
-    return RouterQueryEngine(
-        selector=LLMSingleSelector.from_defaults(llm=llm),
-        query_engine_tools=tools,
-        verbose=True,
-    )
+    - `semantic_search`: vector_index.as_query_engine()
+    - `hybrid_search`: ServerHybridRetriever wrapped via RetrieverQueryEngine
+    - `knowledge_graph`: graph_index.as_retriever(path_depth=1).as_query_engine(include_text=True)
+    """
+    return build_router_engine(vector_index, graph_index, settings)
 ```
 
 ### Configuration
@@ -256,6 +225,7 @@ async def test_latency_budget(async_adaptive_engine):
 
 ## Changelog
 
+- 3.5 (2025-09-09): Added GraphRAG router composition details and cross‑links to ADR‑038/019
 - 3.4 (2025-09-04): Standardized to ADR template; added weighted decision matrix, high‑level architecture section, explicit PR/IR requirements, testing skeletons; moved dependencies under Consequences.
 - 3.2 (2025-09-02): Standardized to 128K context (ADR‑004/010), updated cache refs (ADR‑030).
 - 3.1 (2025-08-21): IMPLEMENTATION COMPLETE — RouterQueryEngine deployed with adaptive strategies.

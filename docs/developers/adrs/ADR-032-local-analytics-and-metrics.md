@@ -1,7 +1,7 @@
 ---
 ADR: 032
 Title: Local Analytics & Metrics (DuckDB)
-Status: Proposed
+Status: Implemented
 Version: 1.0
 Date: 2025-09-02
 Supersedes:
@@ -142,4 +142,5 @@ def test_schema_and_insert(tmp_path):
 
 ## Changelog
 
+- **1.1 (2025-09-10)**: Implemented synchronous, parameterized writes; added ingestion logging in `document_processor.py`; added allowlist tests and reranker telemetry fields (`rerank.path`, timeout budget). Docs updated; UI analytics page available when enabled.
 - **1.0 (2025-09-02)**: Initial proposal for optional DuckDB analytics DB and schema.
