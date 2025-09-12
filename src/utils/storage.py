@@ -51,14 +51,19 @@ FALLBACK_SPARSE_MODEL = "Qdrant/bm25"
 
 
 def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> None:
-    """Ensure the sparse vector config uses IDF modifier for BM42.
+    """Ensure the sparse vector config uses the IDF modifier.
 
-    If the collection exists and the sparse vector modifier is not IDF,
-    update the collection configuration in-place to set it to IDF.
+    If the collection exists and the sparse vector modifier is not IDF, this
+    updates the collection configuration in-place to set it to IDF. This is a
+    no-op when the modifier is already IDF or when the sparse vector head is
+    absent.
 
     Args:
-        client: QdrantClient instance
-        collection_name: Name of the collection to check/update
+        client (QdrantClient): Qdrant client instance.
+        collection_name (str): Name of the collection to check or update.
+
+    Returns:
+        None
     """
     try:
         info = client.get_collection(collection_name)
@@ -89,27 +94,19 @@ def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> No
         logger.warning("ensure_sparse_idf_modifier skipped: %s", e)
 
 
-def ensure_hybrid_collection(
-    client: QdrantClient,
-    collection_name: str,
-    dense_dim: int = settings.embedding.dimension,
-) -> None:
-    """Idempotently ensure named vectors and IDF sparse are configured.
-
-    Ensures the collection exists with required named vectors:
-    - "text-dense": cosine distance with the provided dimension (no-op if exists;
-      warn on size mismatch)
-    - "text-sparse": sparse vector with IDF modifier
-
-    Logs create vs already-present and is safe to call repeatedly.
+def _safe_collection_exists(client: QdrantClient, name: str) -> bool:
+    """Safely check whether a Qdrant collection exists.
 
     Args:
-        client: QdrantClient instance.
-        collection_name: Target collection name.
-        dense_dim: Dimension of the dense embedding vector.
+        client (QdrantClient): Configured Qdrant client.
+        name (str): Target collection name.
+
+    Returns:
+        bool: True if the collection exists; False if it does not or if an
+        error occurs while checking.
     """
     try:
-        exists = client.collection_exists(collection_name)
+        return bool(client.collection_exists(name))
     except (
         ResponseHandlingException,
         UnexpectedResponse,
@@ -119,47 +116,131 @@ def ensure_hybrid_collection(
         ValueError,
     ) as exc:  # pragma: no cover - defensive
         logger.warning("collection_exists check failed: %s", exc)
-        exists = False
+        return False
 
-    if not exists:
+
+def _create_hybrid_collection(client: QdrantClient, name: str, dense_dim: int) -> None:
+    """Create a hybrid collection with named dense and sparse vectors.
+
+    The dense head is created as ``text-dense`` using cosine distance; the
+    sparse head is created as ``text-sparse`` with the IDF modifier.
+
+    Args:
+        client (QdrantClient): Configured Qdrant client.
+        name (str): Collection name to create.
+        dense_dim (int): Dense vector dimensionality.
+
+    Returns:
+        None
+
+    Raises:
+        ResponseHandlingException: If the server returns a malformed response.
+        UnexpectedResponse: If the client cannot parse the response.
+        ConnectionError: On connection failures.
+        TimeoutError: On request timeout.
+        OSError: On local system I/O errors.
+        ValueError: On invalid parameters.
+    """
+    client.create_collection(
+        collection_name=name,
+        vectors_config={
+            "text-dense": VectorParams(size=dense_dim, distance=Distance.COSINE),
+        },
+        sparse_vectors_config={
+            "text-sparse": SparseVectorParams(
+                index=SparseIndexParams(on_disk=False),
+                modifier=qmodels.Modifier.IDF,
+            ),
+        },
+    )
+    logger.info("Created hybrid collection '%s' (dense=%d)", name, dense_dim)
+
+
+def _compute_hybrid_patches(
+    dense_cfg: dict | None, sparse_cfg: dict | None, dense_dim: int
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Compute schema patches for named vectors and the IDF modifier.
+
+    Args:
+        dense_cfg (dict | None): Existing dense vectors configuration (may be
+            ``params.vectors`` or ``params.vectors_config`` depending on client
+            version). Use ``None`` when unavailable.
+        sparse_cfg (dict | None): Existing sparse vectors configuration (may be
+            ``params.sparse_vectors`` or ``params.sparse_vectors_config``).
+        dense_dim (int): Desired dimensionality for the ``text-dense`` head.
+
+    Returns:
+        tuple[dict[str, Any] | None, dict[str, Any] | None]: A pair of optional
+        patch dictionaries:
+        - First element is the ``vectors_config`` to add/update ``text-dense`` or
+          ``None`` when no change is required.
+        - Second element is the ``sparse_vectors_config`` to add/update
+          ``text-sparse`` with the IDF modifier, or ``None`` when no change is
+          required.
+    """
+    patch_vectors: dict[str, Any] | None = None
+    if not isinstance(dense_cfg, dict) or "text-dense" not in dense_cfg:
+        patch_vectors = {
+            "text-dense": VectorParams(size=dense_dim, distance=Distance.COSINE)
+        }
+
+    patch_sparse: dict[str, Any] | None = None
+    needs_sparse_patch = True
+    if isinstance(sparse_cfg, dict) and "text-sparse" in sparse_cfg:
+        # Present: only patch if modifier not IDF
         try:
-            client.create_collection(
-                collection_name=collection_name,
-                vectors_config={
-                    "text-dense": VectorParams(
-                        size=dense_dim,
-                        distance=Distance.COSINE,
-                    )
-                },
-                sparse_vectors_config={
-                    "text-sparse": SparseVectorParams(
-                        index=SparseIndexParams(on_disk=False),
-                        modifier=qmodels.Modifier.IDF,
-                    )
-                },
+            cur = sparse_cfg["text-sparse"]
+            cur_mod = getattr(cur, "modifier", None)
+            needs_sparse_patch = cur_mod != qmodels.Modifier.IDF
+        except Exception:  # pragma: no cover - defensive
+            needs_sparse_patch = True
+
+    if needs_sparse_patch:
+        patch_sparse = {
+            "text-sparse": SparseVectorParams(
+                index=SparseIndexParams(on_disk=False),
+                modifier=qmodels.Modifier.IDF,
             )
-            logger.info(
-                "Created hybrid collection '%s' (dense=%d)", collection_name, dense_dim
-            )
-        except (
-            ResponseHandlingException,
-            UnexpectedResponse,
-            ConnectionError,
-            TimeoutError,
-            OSError,
-            ValueError,
-        ) as exc:  # pragma: no cover - defensive
+        }
+
+    return patch_vectors, patch_sparse
+
+
+def ensure_hybrid_collection(
+    client: QdrantClient,
+    collection_name: str,
+    dense_dim: int = settings.embedding.dimension,
+) -> None:
+    """Ensure a hybrid collection schema exists (idempotent).
+
+    This function guarantees the presence of the named dense (``text-dense``)
+    and sparse (``text-sparse`` with IDF) vector heads. It creates the
+    collection when missing, or patches the schema in-place when needed. It
+    logs a warning if the existing ``text-dense`` size differs from ``dense_dim``
+    but does not force a dimensionality change.
+
+    Args:
+        client (QdrantClient): Configured Qdrant client.
+        collection_name (str): Target collection name.
+        dense_dim (int): Expected dimension of the dense embedding vector.
+
+    Returns:
+        None
+    """
+    if not _safe_collection_exists(client, collection_name):
+        try:
+            _create_hybrid_collection(client, collection_name, dense_dim)
+        except Exception as exc:  # pragma: no cover - defensive
             logger.warning(
                 "create_collection failed for '%s': %s", collection_name, exc
             )
         return
 
-    # Exists: verify/patch sparse IDF and presence of named dense vector
     try:
         info = client.get_collection(collection_name)
-        params = getattr(info, "config", None)
+        params = getattr(info, "config", info)
         params = getattr(params, "params", params)
-        # Dense named vectors config shape may differ across client versions
+
         dense_cfg = getattr(params, "vectors", None) or getattr(
             params, "vectors_config", None
         )
@@ -167,77 +248,29 @@ def ensure_hybrid_collection(
             params, "sparse_vectors_config", None
         )
 
-        # Ensure text-dense exists
-        needs_dense = False
-        if isinstance(dense_cfg, dict):
-            if "text-dense" not in dense_cfg:
-                needs_dense = True
-            else:
-                try:
-                    cur = dense_cfg["text-dense"]
-                    cur_size = int(getattr(cur, "size", dense_dim))
-                    if cur_size != dense_dim:
-                        logger.warning(
-                            (
-                                "Collection '%s' text-dense size mismatch (have=%d, "
-                                "want=%d)"
-                            ),
-                            collection_name,
-                            cur_size,
-                            dense_dim,
-                        )
-                except (
-                    AttributeError,
-                    TypeError,
-                    ValueError,
-                    KeyError,
-                ) as exc:  # pragma: no cover - defensive
-                    logger.debug("dense verify skipped: %s", exc)
-        else:
-            # Unknown shape; attempt to set explicitly
-            needs_dense = True
+        # Warn on size mismatch if present
+        try:
+            if isinstance(dense_cfg, dict) and "text-dense" in dense_cfg:
+                cur_size = int(getattr(dense_cfg["text-dense"], "size", dense_dim))
+                if cur_size != dense_dim:
+                    logger.warning(
+                        "Collection '%s' text-dense size mismatch (have=%d, want=%d)",
+                        collection_name,
+                        cur_size,
+                        dense_dim,
+                    )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("dense size verify skipped: %s", exc)
 
-        # Ensure text-sparse exists with IDF
-        needs_sparse = True
-        set_idf = False
-        if isinstance(sparse_cfg, dict) and "text-sparse" in sparse_cfg:
-            needs_sparse = False
-            try:
-                cur_s = sparse_cfg["text-sparse"]
-                cur_mod = getattr(cur_s, "modifier", None)
-                if cur_mod != qmodels.Modifier.IDF:
-                    set_idf = True
-            except (
-                AttributeError,
-                TypeError,
-                ValueError,
-                KeyError,
-            ):  # pragma: no cover - defensive
-                set_idf = True
-
-        patch_vectors: dict[str, Any] | None = None
-        patch_sparse: dict[str, Any] | None = None
-        if needs_dense:
-            patch_vectors = {
-                "text-dense": VectorParams(size=dense_dim, distance=Distance.COSINE)
-            }
-        if needs_sparse or set_idf:
-            patch_sparse = {
-                "text-sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False),
-                    modifier=qmodels.Modifier.IDF,
-                )
-            }
-
-        if patch_vectors or patch_sparse:
-            logger.info(
-                "Updating collection '%s' schema (add/update named vectors)",
-                collection_name,
-            )
+        patch_vecs, patch_sprs = _compute_hybrid_patches(
+            dense_cfg, sparse_cfg, dense_dim
+        )
+        if patch_vecs or patch_sprs:
+            logger.info("Updating collection '%s' schema", collection_name)
             client.update_collection(
                 collection_name=collection_name,
-                vectors_config=patch_vectors,
-                sparse_vectors_config=patch_sparse,
+                vectors_config=patch_vecs,
+                sparse_vectors_config=patch_sprs,
             )
         else:
             logger.debug("Hybrid schema already present for '%s'", collection_name)
