@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from llama_index.core import Settings
 from llama_index.core.query_engine import RetrieverQueryEngine, RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
@@ -44,7 +43,7 @@ def build_router_engine(
         RouterQueryEngine: Configured router engine.
     """
     cfg = settings or default_settings
-    the_llm = llm or Settings.llm
+    the_llm = llm if llm is not None else None
 
     # Vector semantic tool
     try:
@@ -194,17 +193,41 @@ def build_router_engine(
             )
     except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
         logger.debug(f"Graph tool construction skipped: {e}")
+
+    # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm
+    class _NoOpLLM:
+        def __init__(self):
+            self.metadata = type(
+                "_MD", (), {"context_window": 2048, "num_output": 256}
+            )()
+
+        def predict(self, *args: Any, **kwargs: Any) -> str:
+            return ""
+
+        def complete(self, *args: Any, **kwargs: Any) -> str:
+            return ""
+
     # Selector: prefer PydanticSingleSelector when available, else LLM selector
     try:
         from llama_index.core.selectors import PydanticSingleSelector
 
         selector = PydanticSingleSelector.from_defaults(llm=the_llm)
     except (ImportError, AttributeError):
-        selector = LLMSingleSelector.from_defaults(llm=the_llm)
+        selector = LLMSingleSelector.from_defaults(llm=the_llm or _NoOpLLM())
 
-    router = RouterQueryEngine(
-        selector=selector, query_engine_tools=tools, verbose=False
-    )
+    try:
+        router = RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+            llm=the_llm or _NoOpLLM(),
+        )
+    except TypeError:
+        router = RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+        )
     # Expose both public and private tool lists for compatibility across LI versions
     try:
         router.query_engine_tools = tools

@@ -81,7 +81,8 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
         global configuration will not disrupt other users or in-flight requests.
     """
     # Configure LLM via factory
-    if Settings.llm is not None and not force_llm:
+    has_llm = getattr(Settings, "_llm", None) is not None
+    if has_llm and not force_llm:
         logger.info("LLM already configured; skipping override")
     else:
         try:
