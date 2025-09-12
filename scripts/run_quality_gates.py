@@ -508,7 +508,7 @@ def main() -> int:
             for failure in runner.failures:
                 print(f"  • {failure}")
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during quality gate execution")
         print(f"\n💥 Unexpected error: {e}")
         return 2

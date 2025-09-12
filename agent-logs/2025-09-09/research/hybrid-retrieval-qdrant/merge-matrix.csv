@@ -1,0 +1,8 @@
+topic,repo_paths,doc_files,exa_links,context7_ids,owner,status,conflicts,decision_ref
+Core behavior and flags,src/retrieval/hybrid.py|src/config/settings.py,005-spec-004-updates.md|014-IMPLEMENTATION-PROMPT.md,https://qdrant.tech/documentation/concepts/hybrid-queries/,/websites/qdrant_tech,retrieval-team,done,,003-consensus.md
+Library alignment (official APIs used),src/retrieval/hybrid.py|src/utils/storage.py,002-external-research.md|005-spec-004-updates.md,https://qdrant.tech/articles/hybrid-search/,/websites/qdrant_tech,platform-arch,done,,003-consensus.md
+Tests & acceptance mapping,tests/unit/retrieval/*|tests/unit/telemetry/*,009-test-plan.md|010-acceptance-criteria.md,,,qa,done,,006-reqs-rtm-updates.md
+UI and DX,src/ui/*|docs/user/*,005-spec-004-updates.md,,,frontend,done,,005-spec-004-updates.md
+Security & privacy considerations,src/utils/telemetry.py|src/config/*,004-thinkdeep-analysis.md,,,security,done,,004-thinkdeep-analysis.md
+Observability & analytics touchpoints,src/utils/telemetry.py|src/retrieval/hybrid.py,008-code-plan.md|010-acceptance-criteria.md,,,observability,done,,003-consensus.md
+Docs/ADRs integration,docs/specs/SPEC-004.md|docs/requirements/RTM.md|docs/adrs/*,013-docs-merge-and-integration-plan.md,,,docs,done,,007-adr-updates.md

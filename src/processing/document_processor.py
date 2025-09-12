@@ -756,7 +756,7 @@ class DocumentProcessor:
                         retrieval_strategy=str(strategy.value),
                         success=True,
                     )
-                except Exception as exc:  # pragma: no cover - non-failing telemetry
+                except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("analytics log (ingest) failed: %s", exc)
 
             return result
@@ -789,7 +789,7 @@ class DocumentProcessor:
                         retrieval_strategy="error",
                         success=False,
                     )
-                except Exception as exc:  # pragma: no cover - non-failing telemetry
+                except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("analytics log (error path) failed: %s", exc)
 
             if "corrupted" in str(e).lower() or "invalid" in str(e).lower():

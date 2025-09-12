@@ -33,15 +33,15 @@ from typing import Any
 
 try:
     import psutil  # type: ignore
-except Exception:  # pragma: no cover - optional
+except (ImportError, OSError):  # pragma: no cover - optional dependency
     psutil = None  # type: ignore
 try:
     import resource  # type: ignore
-except Exception:  # pragma: no cover - optional
+except (ImportError, OSError):  # pragma: no cover - optional dependency
     resource = None  # type: ignore
 try:
     import torch  # type: ignore
-except Exception:  # pragma: no cover - optional
+except (ImportError, OSError):  # pragma: no cover - optional dependency
     torch = None  # type: ignore
 
 # Import existing regression tracker
@@ -162,7 +162,7 @@ class PerformanceMonitor:
                 "duration": self.config["test_suite_timeout"],
                 "timestamp": datetime.now().isoformat(),
             }
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
             self.failures.append(f"Failed to run test suite: {e}")
             return {
                 "status": "error",
@@ -218,7 +218,7 @@ class PerformanceMonitor:
             ):
                 peak_bytes = torch.cuda.max_memory_allocated(0)
                 return float(peak_bytes) / (1024.0 * 1024.0)
-        except Exception:
+        except (RuntimeError, AttributeError, ValueError):
             return None
         return None
 
@@ -275,7 +275,7 @@ class PerformanceMonitor:
                 "collection_time": self.config["test_collection_timeout"],
                 "timestamp": datetime.now().isoformat(),
             }
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
             self.warnings.append(f"Failed to measure collection time: {e}")
             return {
                 "status": "error",
@@ -479,7 +479,7 @@ class PerformanceMonitor:
                 "timestamp": datetime.now().isoformat(),
             }
 
-        except Exception as e:
+        except (KeyError, ValueError, TypeError, AttributeError, RuntimeError) as e:
             self.failures.append(f"Failed to check regressions: {e}")
             return {
                 "status": "error",
@@ -562,7 +562,7 @@ class PerformanceMonitor:
 
                 report_lines.append("")
 
-            except Exception as e:
+            except (KeyError, ValueError, TypeError) as e:
                 report_lines.extend(
                     [
                         f"  Error analyzing trends: {e}",
@@ -786,7 +786,7 @@ def main() -> int:
                 print(f"  • {failure}")
             exit_code = 1
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during performance monitoring")
         print(f"❌ Unexpected error: {e}")
         exit_code = 2

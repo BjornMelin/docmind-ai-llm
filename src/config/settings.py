@@ -8,11 +8,13 @@ Usage:
     print(settings.embedding.model_name)
 """
 
+import os
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from loguru import logger
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -151,6 +153,16 @@ class RetrievalConfig(BaseModel):
         default=60, ge=10, le=1000, description="Prefetch/fused candidate cap"
     )
     rrf_k: int = Field(default=60, ge=1, le=256, description="RRF k-constant")
+    dbsf_enabled: bool = Field(
+        default=False,
+        description=("When true, force Fusion mode DBSF regardless of fusion_mode."),
+    )
+    prefetch_dense_limit: int = Field(
+        default=200, ge=1, le=5000, description="Per-branch dense prefetch limit"
+    )
+    prefetch_sparse_limit: int = Field(
+        default=400, ge=1, le=5000, description="Per-branch sparse prefetch limit"
+    )
     use_sparse_embeddings: bool = Field(default=True)
     # Deduplication key used before final fused cut
     dedup_key: Literal["page_id", "doc_id"] = Field(default="page_id")
@@ -176,6 +188,8 @@ class RetrievalConfig(BaseModel):
     reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
     # Optional keyword tool (BM25) registration flag (disabled by default)
     enable_keyword_tool: bool = Field(default=False)
+
+    # No additional methods; env mapping handled by BaseSettings
 
 
 class CacheConfig(BaseModel):
@@ -315,6 +329,10 @@ class DocMindSettings(BaseSettings):
             "Optional override path; default is data_dir/analytics/analytics.duckdb"
         ),
     )
+    telemetry_enabled: bool = Field(
+        default=True,
+        description="Enable local telemetry emission (writes to logs/telemetry.jsonl)",
+    )
 
     # Backup (ADR-033)
     backup_enabled: bool = Field(
@@ -446,7 +464,23 @@ class DocMindSettings(BaseSettings):
     # Pydantic v2 uses a context parameter; pylint's base stub differs.
     # pylint: disable=arguments-differ
     def model_post_init(self, __context: Any) -> None:
-        """Create necessary directories after initialization."""
+        """Finalize settings initialization and validate configuration.
+
+        Ensures required directories exist, applies top-level alias fields to
+        nested configs for ergonomics, and validates endpoint security and
+        LM Studio base URL invariants.
+
+        Args:
+            __context: Pydantic model initialization context (unused).
+
+        Raises:
+            ValueError: When provided values are invalid, e.g., non-positive
+                ``context_window``/``context_window_size`` or a
+                ``chunk_overlap`` larger than ``chunk_size``; or when remote
+                endpoints are disallowed and configured base URLs are not on
+                the allowlist; or when ``lmstudio_base_url`` does not end with
+                ``/v1``.
+        """
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -491,7 +525,12 @@ class DocMindSettings(BaseSettings):
         self._validate_lmstudio_url()
 
     def get_vllm_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
-        """Get vLLM configuration for client setup."""
+        """Get vLLM configuration for client setup.
+
+        Returns:
+            Mapping with keys ``model``, ``context_window``, and
+            ``temperature`` suitable for initializing a vLLM client.
+        """
         return {
             "model": self.model or self.vllm.model,
             "context_window": int(self.context_window or self.vllm.context_window),
@@ -499,7 +538,12 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_agent_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
-        """Return agent configuration as a simple mapping."""
+        """Return agent configuration as a simple mapping.
+
+        Returns:
+            Mapping with agent orchestration settings (timeouts, retries,
+            multi-agent enablement).
+        """
         return {
             "decision_timeout": self.agents.decision_timeout,
             "max_retries": self.agents.max_retries,
@@ -507,7 +551,11 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_vllm_env_vars(self) -> dict[str, str]:
-        """Return environment variables for vLLM process setup."""
+        """Return environment variables for vLLM process setup.
+
+        Returns:
+            Mapping of environment variable names to string values for vLLM.
+        """
         return {
             "VLLM_ATTENTION_BACKEND": self.vllm.attention_backend,
             "VLLM_KV_CACHE_DTYPE": self.vllm.kv_cache_dtype,
@@ -520,7 +568,12 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_model_config(self) -> dict[str, Any]:
-        """Get model configuration for LlamaIndex setup."""
+        """Get model configuration for LlamaIndex setup.
+
+        Returns:
+            Mapping with model identifier, effective context window capped by
+            ``llm_context_window_max``, generation params, and base URL.
+        """
         return {
             "model_name": self.model or self.vllm.model,
             # Enforce cap consistently
@@ -536,8 +589,10 @@ class DocMindSettings(BaseSettings):
     def get_embedding_config(self) -> dict[str, Any]:
         """Get embedding configuration for embedding factories.
 
-        Returns a flat mapping used by factory helpers while keeping the
-        class-based configuration as the single source of truth.
+        Returns:
+            Flat mapping used by embedding factory helpers (text+image
+            parameters and device selection), while keeping class-based config
+            as the single source of truth.
         """
         device = (
             ("cuda" if self.enable_gpu_acceleration else "cpu")
@@ -570,7 +625,11 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_processing_config(self) -> dict[str, Any]:
-        """Get document processing configuration."""
+        """Get document processing configuration.
+
+        Returns:
+            Mapping with chunking and document processing parameters.
+        """
         return {
             "chunk_size": self.processing.chunk_size,
             "new_after_n_chars": self.processing.new_after_n_chars,
@@ -580,13 +639,21 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_cache_db_path(self) -> Path:
-        """Return full path to DuckDB KV store file (ADR-030)."""
+        """Return full path to DuckDB KV store file (ADR-030).
+
+        Returns:
+            Path to the DuckDB KV store file.
+        """
         return (self.cache.dir or self.cache_dir) / self.cache.filename
 
     # === ADR COMPLIANCE CONFIGURATION METHODS ===
 
     def get_agent_orchestration_config(self) -> dict[str, Any]:
-        """Get agent orchestration configuration for ADR-011 compliance."""
+        """Get agent orchestration configuration for ADR-011 compliance.
+
+        Returns:
+            Mapping with agent context management and orchestration parameters.
+        """
         return {
             "context_trim_threshold": self.agents.context_trim_threshold,
             "context_buffer_size": self.agents.context_buffer_size,
@@ -598,7 +665,12 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_dspy_config(self) -> dict[str, Any]:
-        """Get DSPy optimization configuration for ADR-018."""
+        """Get DSPy optimization configuration for ADR-018.
+
+        Returns:
+            Mapping with DSPy optimization parameters such as iterations,
+            samples, retries, and metric thresholds.
+        """
         return {
             "enabled": self.enable_dspy_optimization,
             "iterations": self.dspy_optimization_iterations,
@@ -610,7 +682,11 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_graphrag_config(self) -> dict[str, Any]:
-        """Get GraphRAG configuration for ADR-019."""
+        """Get GraphRAG configuration for ADR-019.
+
+        Returns:
+            Mapping with GraphRAG enablement and extraction/traversal settings.
+        """
         # Prefer nested configuration; fallback to top-level fields
         if hasattr(self, "graphrag_cfg") and isinstance(
             self.graphrag_cfg, GraphRAGConfig
@@ -634,7 +710,12 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_semantic_cache_config(self) -> dict[str, Any]:
-        """Semantic cache configuration for ADR-035."""
+        """Semantic cache configuration for ADR-035.
+
+        Returns:
+            Mapping with semantic cache provider, thresholds, retention, and
+            namespacing configuration.
+        """
         c = self.semantic_cache
         return {
             "enabled": c.enabled,
@@ -647,18 +728,31 @@ class DocMindSettings(BaseSettings):
         }
 
     def get_chat_config(self) -> dict[str, Any]:
-        """Chat memory configuration for ADR-021."""
+        """Chat memory configuration for ADR-021.
+
+        Returns:
+            Mapping with chat memory storage parameters (e.g., sqlite path).
+        """
         return {"sqlite_path": str(self.chat.sqlite_path)}
 
     def get_analysis_config(self) -> dict[str, Any]:
-        """Analysis mode configuration for ADR-023."""
+        """Analysis mode configuration for ADR-023.
+
+        Returns:
+            Mapping with analysis mode and worker concurrency.
+        """
         return {
             "mode": self.analysis.mode,
             "max_workers": self.analysis.max_workers,
         }
 
     def get_ui_config(self) -> dict[str, Any]:
-        """Get UI configuration for ADR-016."""
+        """Get UI configuration for ADR-016.
+
+        Returns:
+            Mapping with UI theme, session persistence, streaming behavior, and
+            history/port settings.
+        """
         return {
             "theme": self.ui.theme,
             "session_persistence": self.ui.enable_session_persistence,
@@ -674,6 +768,10 @@ class DocMindSettings(BaseSettings):
 
         When ``allow_remote_endpoints`` is False, only localhost/127.0.0.1
         URLs are permitted. Users may extend ``endpoint_allowlist``.
+
+        Raises:
+            ValueError: If any configured base URL is not allowed while
+            ``allow_remote_endpoints`` is False.
         """
         if self.allow_remote_endpoints:
             return
@@ -723,7 +821,12 @@ class DocMindSettings(BaseSettings):
                 )
 
     def _validate_lmstudio_url(self) -> None:
-        """Ensure LM Studio base URL ends with /v1 as required by its API."""
+        """Ensure LM Studio base URL ends with ``/v1``.
+
+        Raises:
+            ValueError: If ``lmstudio_base_url`` is set and does not end with
+            ``/v1`` as required by the API.
+        """
         if self.lmstudio_base_url and not self.lmstudio_base_url.rstrip("/").endswith(
             "v1"
         ):
@@ -732,6 +835,36 @@ class DocMindSettings(BaseSettings):
 
 # Global settings instance - primary interface for the application
 settings = DocMindSettings()
+
+# Startup visibility for active hybrid fusion mode and limits (INFO)
+
+with suppress(Exception):  # pragma: no cover - logging must not fail
+    # Resolve DBSF toggle precedence and override fusion_mode if necessary
+    if (
+        bool(getattr(settings.retrieval, "dbsf_enabled", False))
+        and str(settings.retrieval.fusion_mode).lower() != "dbsf"
+    ):
+        logger.warning(
+            "DBSF enabled via env; overriding fusion_mode=%s to 'dbsf'",
+            settings.retrieval.fusion_mode,
+        )
+        settings.retrieval.fusion_mode = "dbsf"  # type: ignore[attr-defined]
+
+    # Bridge telemetry enabled -> disabled env, to honor existing sink behavior
+    if not bool(getattr(settings, "telemetry_enabled", True)):
+        os.environ["DOCMIND_TELEMETRY_DISABLED"] = "true"
+
+    logger.info(
+        (
+            "Hybrid fusion: mode=%s dense_limit=%d sparse_limit=%d "
+            "fused_top_k=%d dbsf_enabled=%s"
+        ),
+        str(settings.retrieval.fusion_mode).lower(),
+        settings.retrieval.prefetch_dense_limit,
+        settings.retrieval.prefetch_sparse_limit,
+        settings.retrieval.fused_top_k,
+        getattr(settings.retrieval, "dbsf_enabled", False),
+    )
 
 # Module exports
 __all__ = [
@@ -754,5 +887,9 @@ __all__ = [
 
 
 def get_vllm_env_vars() -> dict[str, str]:
-    """Module-level helper returning vLLM environment variables."""
+    """Module-level helper returning vLLM environment variables.
+
+    Returns:
+        Mapping of environment variable names to string values for vLLM.
+    """
     return settings.get_vllm_env_vars()

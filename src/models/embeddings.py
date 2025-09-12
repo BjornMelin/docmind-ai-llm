@@ -165,7 +165,7 @@ class TextEmbedder:
             return
         try:
             from FlagEmbedding import BGEM3FlagModel  # type: ignore
-        except Exception as exc:  # pragma: no cover - exercised via unit mocks
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             msg = (
                 "FlagEmbedding is required for TextEmbedder. "
                 "Install with: uv add FlagEmbedding"

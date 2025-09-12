@@ -41,6 +41,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   - Normalized `compute_corpus_hash(paths, base_dir=uploads/)` to use POSIX relpaths for cross‑platform stability.
 - Chat autoload/staleness UX: Chat/Documents pages compute corpus hash with relpaths and surface staleness badge based on manifest.
   
+#### Hybrid Retrieval (Qdrant)
+
+- Enforced server‑side hybrid retrieval via Qdrant Query API Prefetch + FusionQuery; RRF default; DBSF optional via env (`DOCMIND_RETRIEVAL__DBSF_ENABLED=true`).
+- Idempotent collection schema ensure for named vectors: `text-dense` (COSINE, embed dim) and `text-sparse` (IDF sparse).
+- Post‑fusion deduplication by `page_id` prior to final truncation; retain highest fused score per page.
+- Telemetry fields emitted: `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
+- Removed client‑side fusion/toggles; hybrid fusion is authoritative and server‑side only.
+
 ### Tests
 
 - New unit tests: allowlist validation (`tests/unit/config/test_settings_allowlist.py`), prompt helper (`tests/unit/prompting/test_helpers.py`), clear caches helper (`tests/unit/ui/test_cache_clear.py`).
