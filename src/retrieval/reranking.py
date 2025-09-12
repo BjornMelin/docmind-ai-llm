@@ -721,7 +721,10 @@ class MultimodalReranker(BaseNodePostprocessor):
 
         # Stage 3: visual rerank — SigLIP default within budget
         v_start = _now_ms()
-        if visual_nodes:
+        # Visual stage guarded by a feature flag to keep CI lightweight
+        if visual_nodes and bool(
+            getattr(settings.retrieval, "enable_visual_reranking", False)
+        ):
             try:
                 sr = _siglip_rescore(
                     query_bundle.query_str, visual_nodes, SIGLIP_TIMEOUT_MS
@@ -736,7 +739,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                         "rerank.batch_size": 8 if _has_cuda_vram(1.0) else 2,
                     }
                 )
-            except (RuntimeError, ValueError, OSError, TypeError) as exc:
+            except (RuntimeError, ValueError, OSError, TypeError, ImportError) as exc:
                 logger.warning("SigLIP rerank error: {} — continue without", exc)
 
             # Optional Stage 3b: ColPali policy (only when visual nodes exist)

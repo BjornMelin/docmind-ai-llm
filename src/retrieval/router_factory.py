@@ -268,11 +268,11 @@ def build_router_engine(
             verbose=False,
         )
     # Expose both public and private tool lists for compatibility across LI versions
+    # Expose public tool list for downstream introspection
     try:
         router.query_engine_tools = tools
-        router._query_engine_tools = tools  # pylint: disable=protected-access
-    except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
-        logger.debug("Router tool list attribute shim failed", exc_info=True)
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("Router engine lacks public tool attribute", exc_info=True)
     logger.info(
         "Router engine built (kg_present=%s)",
         any(t.metadata.name == "knowledge_graph" for t in tools),

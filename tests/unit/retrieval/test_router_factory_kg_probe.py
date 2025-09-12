@@ -59,6 +59,6 @@ def test_router_registers_kg_tool_even_on_empty_probe(
     vec = _VecIndex()
     pg = _PGIndex(probe_empty=True)
     engine = build_router_engine(vec, pg_index=pg, settings=cfg, llm=None)
-    # RouterQueryEngine exposes .tools
-    tool_names = [t.metadata.name for t in getattr(engine, "tools", [])]
+    tool_list = getattr(engine, "query_engine_tools", [])
+    tool_names = [t.metadata.name for t in tool_list]
     assert "knowledge_graph" in tool_names

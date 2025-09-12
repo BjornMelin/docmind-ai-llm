@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pytest
 
 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
@@ -34,16 +35,7 @@ class _ClientFake:
 
 @pytest.mark.unit
 def test_hybrid_di_and_dedup_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Minimal embed to avoid model dependency
-    from llama_index.core import Settings
-
-    class _Embed:
-        def get_query_embedding(
-            self, _t: str
-        ) -> list[float]:  # pragma: no cover - trivial
-            return [0.0, 1.0]
-
-    Settings.embed_model = _Embed()
+    # Avoid real embedding backends by patching retriever methods
 
     # Construct points with duplicate page_id and mixed scores
     pts = [
@@ -56,6 +48,10 @@ def test_hybrid_di_and_dedup_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
 
     client = _ClientFake(pts)
     retr = ServerHybridRetriever(_HybridParams(collection="col"), client=client)
+    retr._embed_dense = (  # type: ignore[attr-defined]
+        lambda _t: np.asarray([0.0, 1.0], dtype=np.float32)
+    )
+    retr._encode_sparse = lambda _t: None  # type: ignore[attr-defined]
     out = retr.retrieve("hello world")
     # Dedup keeps one for p1 and c remains; total 2
     assert len(out) == 2

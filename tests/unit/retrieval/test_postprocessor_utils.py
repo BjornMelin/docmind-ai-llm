@@ -64,7 +64,8 @@ def test_build_retriever_query_engine(
     retr = _Retriever()
     out = build_retriever_query_engine(retr, post, engine_cls=_Engine)
     assert out == "rq"
-    # Cannot easily introspect kwargs without instrumenting _Engine; ensure simply returns
+    # Cannot easily introspect kwargs without instrumenting _Engine;
+    # ensure simply returns
 
 
 @pytest.mark.unit

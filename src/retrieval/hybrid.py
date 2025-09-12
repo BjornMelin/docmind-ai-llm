@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
@@ -63,6 +64,8 @@ class ServerHybridRetriever:
         Args:
             params: Retrieval parameters including collection, fusion mode,
                 prefetch limits, and de-duplication key.
+            client: Optional pre-configured QdrantClient instance.
+            client_factory: Optional factory function to create QdrantClient.
         """
         self.params = params
         if client is not None:
@@ -86,10 +89,8 @@ class ServerHybridRetriever:
 
     def close(self) -> None:
         """Close underlying client (best-effort)."""
-        try:
+        with suppress(Exception):  # pragma: no cover - defensive
             self._client.close()
-        except Exception:  # pragma: no cover - defensive
-            pass
 
     def _embed_dense(self, text: str) -> np.ndarray:
         """Embed text into a dense vector using configured model.

@@ -31,9 +31,7 @@ class _FakeAM:
 
 
 @pytest.mark.unit
-def test_timeout_counters_and_analytics_single_log_with_fallback(
-    tmp_path, monkeypatch
-):  # type: ignore[no-untyped-def]
+def test_timeout_counters_and_analytics_single_log_with_fallback(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     """Timeout: do not count as success; log one failure entry."""
     coord = MultiAgentCoordinator(enable_fallback=True)
 
@@ -146,9 +144,7 @@ def test_success_counters_and_analytics_single_log(
 
 
 @pytest.mark.unit
-def test_timeout_no_fallback_counters_and_failure_analytics(
-    tmp_path, monkeypatch
-):  # type: ignore[no-untyped-def]
+def test_timeout_no_fallback_counters_and_failure_analytics(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     """Timeout without fallback: no success, no fallback increment, 1 failure log."""
     coord = MultiAgentCoordinator(enable_fallback=False)
 
