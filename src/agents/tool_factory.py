@@ -106,9 +106,16 @@ class ToolFactory:
             >>> response = tool.call("Find similar documents")
         """
         # Configure query engine with optimal settings
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        post = _get_pp(
+            "vector",
+            use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
+        )
         query_engine = index.as_query_engine(
             similarity_top_k=settings.retrieval.top_k,
             verbose=False,
+            node_postprocessors=post,
         )
 
         return cls.create_query_tool(
@@ -130,9 +137,18 @@ class ToolFactory:
         Note: Uses index.as_query_engine as a placeholder keyword retriever to
         avoid new vendor dependencies. Registration behind flag only.
         """
+        post = None
+        try:
+            if bool(getattr(settings.retrieval, "use_reranking", True)):
+                from src.retrieval.reranking import MultimodalReranker
+
+                post = [MultimodalReranker()]
+        except Exception:  # pragma: no cover - defensive
+            post = None
         query_engine = index.as_query_engine(
             similarity_top_k=settings.retrieval.top_k,
             verbose=False,
+            node_postprocessors=post,
         )
         return cls.create_query_tool(
             query_engine,
@@ -164,10 +180,18 @@ class ToolFactory:
         if not kg_index:
             return None
 
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        post = _get_pp(
+            "kg",
+            use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
+            top_n=DEFAULT_RERANKING_TOP_K,
+        )
         query_engine = kg_index.as_query_engine(
             similarity_top_k=KG_SIMILARITY_TOP_K,  # KG queries may need more results
             include_text=True,  # Include source text with entities
             verbose=False,
+            node_postprocessors=post,
         )
 
         return cls.create_query_tool(
@@ -196,7 +220,15 @@ class ToolFactory:
         Returns:
             QueryEngineTool: Configured hybrid search tool.
         """
-        query_engine = RetrieverQueryEngine(retriever=retriever)
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        post = _get_pp(
+            "hybrid",
+            use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
+        )
+        query_engine = RetrieverQueryEngine(
+            retriever=retriever, node_postprocessors=post
+        )
         return cls.create_query_tool(
             query_engine,
             "hybrid_search",
@@ -223,9 +255,16 @@ class ToolFactory:
             >>> tool = ToolFactory.create_hybrid_vector_tool(vector_index)
             >>> response = tool.call("Search using hybrid embeddings")
         """
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        post = _get_pp(
+            "hybrid",
+            use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
+        )
         query_engine = index.as_query_engine(
             similarity_top_k=settings.retrieval.top_k,
             verbose=False,
+            node_postprocessors=post,
         )
 
         return cls.create_query_tool(

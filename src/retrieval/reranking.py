@@ -272,11 +272,17 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
             ):
                 n.node.text = n.node.text[:TEXT_TRUNCATION_LIMIT]
         nodes_sorted = sorted(nodes, key=lambda x: x.score or 0.0, reverse=True)
-        # Cleanup temp files
+
+        # Cleanup images and temp files
+        for img in images:
+            with contextlib.suppress(Exception):
+                if hasattr(img, "close"):
+                    img.close()
         for tp in temp_files:
             with contextlib.suppress(Exception):
                 os.remove(tp)
         return nodes_sorted[: settings.retrieval.reranking_top_k]
+
     except (RuntimeError, ValueError, OSError, TypeError) as exc:
         logger.warning("SigLIP rerank error: {} — fail-open", exc)
         return nodes
@@ -881,3 +887,32 @@ __all__ = [
     "build_text_reranker",
     "build_visual_reranker",
 ]
+
+# ---- Helpers for factories (DRY) ----
+
+
+def get_postprocessors(
+    mode: str, *, use_reranking: bool, top_n: int | None = None
+) -> list | None:
+    """Return node_postprocessors list for the given mode or None.
+
+    Args:
+        mode: One of "vector", "hybrid", or "kg".
+        use_reranking: Global toggle; when False returns None.
+        top_n: Optional top_n for text reranker (KG).
+
+    Returns:
+        list | None: List of postprocessors or None when disabled/unavailable.
+    """
+    if not use_reranking:
+        return None
+    try:
+        if mode in ("vector", "hybrid"):
+            return [MultimodalReranker()]
+        if mode == "kg":
+            return [
+                build_text_reranker(top_n=top_n or settings.retrieval.reranking_top_k)
+            ]
+    except Exception:  # pragma: no cover - defensive
+        return None
+    return None

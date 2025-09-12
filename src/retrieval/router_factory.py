@@ -48,7 +48,14 @@ def build_router_engine(
 
     # Vector semantic tool
     try:
-        v_engine = vector_index.as_query_engine(similarity_top_k=cfg.retrieval.top_k)
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        _v_use = bool(getattr(cfg.retrieval, "use_reranking", True))
+        _v_post = _get_pp("vector", use_reranking=_v_use)
+        v_engine = vector_index.as_query_engine(
+            similarity_top_k=cfg.retrieval.top_k,
+            node_postprocessors=_v_post,
+        )
     except (TypeError, AttributeError, ValueError):
         # Last-resort default
         v_engine = vector_index.as_query_engine()
@@ -90,9 +97,22 @@ def build_router_engine(
                 dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
             )
             retr = ServerHybridRetriever(params)
-            h_engine = RetrieverQueryEngine.from_args(
-                retriever=retr, llm=the_llm, response_mode="compact", verbose=False
-            )
+            from src.retrieval.reranking import get_postprocessors as _get_pp
+
+            _h_use = bool(getattr(cfg.retrieval, "use_reranking", True))
+            _h_post = _get_pp("hybrid", use_reranking=_h_use)
+            try:
+                h_engine = RetrieverQueryEngine.from_args(
+                    retriever=retr,
+                    llm=the_llm,
+                    response_mode="compact",
+                    verbose=False,
+                    node_postprocessors=_h_post,
+                )
+            except TypeError:
+                h_engine = RetrieverQueryEngine.from_args(
+                    retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+                )
             tools.append(
                 QueryEngineTool(
                     query_engine=h_engine,
@@ -107,7 +127,7 @@ def build_router_engine(
     except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    # Optional graph tool with bounded health check
+    # Optional graph tool
     try:
         if (
             pg_index is not None
@@ -119,17 +139,48 @@ def build_router_engine(
                 else 1
             )
             g_engine = None
-            # Prefer retriever path when supported
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(
                     include_text=True, path_depth=default_depth
                 )
-                g_engine = RetrieverQueryEngine.from_args(
-                    retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+                from src.retrieval.reranking import get_postprocessors as _get_pp
+
+                _g_use = bool(getattr(cfg.retrieval, "use_reranking", True))
+                _g_post = _get_pp(
+                    "kg",
+                    use_reranking=_g_use,
+                    top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
+                try:
+                    g_engine = RetrieverQueryEngine.from_args(
+                        retriever=retr,
+                        llm=the_llm,
+                        response_mode="compact",
+                        verbose=False,
+                        node_postprocessors=_g_post,
+                    )
+                except TypeError:
+                    g_engine = RetrieverQueryEngine.from_args(
+                        retriever=retr,
+                        llm=the_llm,
+                        response_mode="compact",
+                        verbose=False,
+                    )
             elif hasattr(pg_index, "as_query_engine"):
-                # Fallback to direct query engine for older/limited implementations
-                g_engine = pg_index.as_query_engine(include_text=True)
+                from src.retrieval.reranking import get_postprocessors as _get_pp
+
+                _g_use2 = bool(getattr(cfg.retrieval, "use_reranking", True))
+                _g_post2 = _get_pp(
+                    "kg",
+                    use_reranking=_g_use2,
+                    top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
+                )
+                try:
+                    g_engine = pg_index.as_query_engine(
+                        include_text=True, node_postprocessors=_g_post2
+                    )
+                except TypeError:
+                    g_engine = pg_index.as_query_engine(include_text=True)
             tools.append(
                 QueryEngineTool(
                     query_engine=g_engine,
@@ -143,7 +194,6 @@ def build_router_engine(
             )
     except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
         logger.debug(f"Graph tool construction skipped: {e}")
-
     # Selector: prefer PydanticSingleSelector when available, else LLM selector
     try:
         from llama_index.core.selectors import PydanticSingleSelector
