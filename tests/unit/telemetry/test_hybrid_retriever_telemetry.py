@@ -43,7 +43,7 @@ def test_telemetry_fields_emitted(monkeypatch):
     assert events, "expected telemetry event"
     rec = events[-1]
     # Required keys
-    for k in [
+    expected = {
         "retrieval.fusion_mode",
         "retrieval.prefetch_dense_limit",
         "retrieval.prefetch_sparse_limit",
@@ -55,8 +55,9 @@ def test_telemetry_fields_emitted(monkeypatch):
         "dedup.input_count",
         "dedup.unique_count",
         "dedup.duplicates_removed",
-    ]:
-        assert k in rec
+    }
+    missing = expected.difference(rec.keys())
+    assert not missing, f"missing telemetry keys: {sorted(missing)}"
     # Sanity checks
     assert rec["retrieval.fusion_mode"] == "rrf"
     assert rec["retrieval.prefetch_dense_limit"] == 3

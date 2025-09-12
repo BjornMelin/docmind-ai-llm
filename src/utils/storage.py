@@ -192,7 +192,7 @@ def _compute_hybrid_patches(
             cur = sparse_cfg["text-sparse"]
             cur_mod = getattr(cur, "modifier", None)
             needs_sparse_patch = cur_mod != qmodels.Modifier.IDF
-        except Exception:  # pragma: no cover - defensive
+        except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
             needs_sparse_patch = True
 
     if needs_sparse_patch:
@@ -230,7 +230,14 @@ def ensure_hybrid_collection(
     if not _safe_collection_exists(client, collection_name):
         try:
             _create_hybrid_collection(client, collection_name, dense_dim)
-        except Exception as exc:  # pragma: no cover - defensive
+        except (
+            ResponseHandlingException,
+            UnexpectedResponse,
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+        ) as exc:  # pragma: no cover - defensive
             logger.warning(
                 "create_collection failed for '%s': %s", collection_name, exc
             )
@@ -259,7 +266,7 @@ def ensure_hybrid_collection(
                         cur_size,
                         dense_dim,
                     )
-        except Exception as exc:  # pragma: no cover - defensive
+        except (AttributeError, TypeError, ValueError, KeyError) as exc:  # pragma: no cover - defensive
             logger.debug("dense size verify skipped: %s", exc)
 
         patch_vecs, patch_sprs = _compute_hybrid_patches(
@@ -523,11 +530,10 @@ def create_vector_store(
     # Ensure named vectors schema exists when hybrid is enabled (idempotent)
     if enable_hybrid:
         try:
-            setup_hybrid_collection(
+            ensure_hybrid_collection(
                 client,
                 collection_name,
-                dense_embedding_size=_dense_embedding_size,
-                recreate=False,
+                dense_dim=_dense_embedding_size,
             )
         except (
             ResponseHandlingException,
@@ -538,7 +544,7 @@ def create_vector_store(
             ValueError,
         ):  # pragma: no cover - defensive ensure
             logger.warning(
-                "setup_hybrid_collection failed; proceeding with store creation"
+                "ensure_hybrid_collection failed; proceeding with store creation"
             )
 
     try:

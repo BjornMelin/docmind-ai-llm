@@ -138,7 +138,7 @@ def validate_export_path(base_or_dest: Path | str, dest_rel: str | None = None):
             from src.config.settings import settings as _settings  # local import
 
             base_dir = Path(getattr(_settings, "data_dir", Path(".")))
-        except (ImportError, AttributeError):  # pragma: no cover - defensive default
+        except (ImportError, AttributeError):  # pragma: no cover - fallback for missing config or attribute
             base_dir = Path(".")
         rel = base_or_dest
     else:

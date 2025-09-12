@@ -166,9 +166,9 @@ class ServerHybridRetriever:
         # Optional owner filter via env/telemetry could be added here
         # Headroom for server-side limit to mitigate post-fusion dedup underfill
         fused_fetch_k = max(
-            int(self.params.prefetch_dense),
-            int(self.params.prefetch_sparse),
-            int(self.params.fused_top_k),
+            self.params.prefetch_dense,
+            self.params.prefetch_sparse,
+            self.params.fused_top_k,
         )
 
         try:
@@ -235,19 +235,19 @@ class ServerHybridRetriever:
             log_jsonl(
                 {
                     "retrieval.fusion_mode": fusion_mode,
-                    "retrieval.prefetch_dense_limit": int(self.params.prefetch_dense),
-                    "retrieval.prefetch_sparse_limit": int(self.params.prefetch_sparse),
-                    "retrieval.fused_limit": int(self.params.fused_top_k),
+                    "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
+                    "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
+                    "retrieval.fused_limit": self.params.fused_top_k,
                     "retrieval.return_count": len(nodes),
                     "retrieval.latency_ms": latency_ms,
-                    "retrieval.sparse_fallback": bool(sparse_vec is None),
+                    "retrieval.sparse_fallback": sparse_vec is None,
                     "dedup.key": key_name,
-                    "dedup.input_count": int(input_count),
-                    "dedup.unique_count": int(unique_count),
-                    "dedup.duplicates_removed": int(max(0, input_count - unique_count)),
+                    "dedup.input_count": input_count,
+                    "dedup.unique_count": unique_count,
+                    "dedup.duplicates_removed": max(0, input_count - unique_count),
                 }
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except (OSError, ValueError, RuntimeError) as exc:
             logger.debug("Telemetry emit skipped: %s", exc)
 
         return nodes

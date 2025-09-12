@@ -268,7 +268,7 @@ def _run_vector_hybrid(
                                 reason="empty_results",
                                 query=primary_query,
                             )
-                except Exception as fe:  # pylint: disable=broad-exception-caught
+                except (OSError, RuntimeError, ValueError, AttributeError) as fe:
                     logger.warning("Vector fallback failed: {}", fe)
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
             logger.error("Retrieval failed for query '{}': {}", q, e)
