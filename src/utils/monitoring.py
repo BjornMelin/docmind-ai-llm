@@ -87,7 +87,8 @@ def log_error_with_context(
     if kwargs:
         error_context.update(kwargs)
 
-    logger.error("Operation failed", **error_context)
+    # Emit context as part of message for test observability
+    logger.error("Operation failed {}", error_context)
 
 
 def log_performance(
@@ -111,7 +112,8 @@ def log_performance(
     if metrics:
         perf_data.update(metrics)
 
-    logger.info("Performance metrics", **perf_data)
+    # Emit metrics dict in message for test observability
+    logger.info("Performance metrics {}", perf_data)
 
 
 @contextmanager

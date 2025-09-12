@@ -159,22 +159,19 @@ def build_router_engine(
                     _probe = _probe_retr.retrieve("health")
                     if not _probe:
                         logger.info(
-                            "Skipping knowledge_graph tool: health probe returned 0 "
-                            "results"
+                            "KG health probe returned 0 results; proceeding with "
+                            "best-effort tool registration"
                         )
-                        raise RuntimeError("kg_unhealthy")
                 else:
                     # If no retriever is available, proceed as before (best effort)
                     pass
             except Exception as _probe_exc:  # pylint: disable=broad-exception-caught
-                # On any probe failure, skip KG tool registration
-                if str(_probe_exc) != "kg_unhealthy":
-                    logger.debug(
-                        "KG health probe failed: %s — not registering KG tool",
-                        _probe_exc,
-                    )
-                # Continue without graph tool
-                raise RuntimeError("kg_probe_failed") from _probe_exc
+                # On probe error, skip registration but do not raise
+                logger.debug(
+                    "KG health probe failed: %s — continuing without KG tool",
+                    _probe_exc,
+                )
+                pg_index = None
             g_engine = None
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(
