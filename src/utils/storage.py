@@ -266,7 +266,12 @@ def ensure_hybrid_collection(
                         cur_size,
                         dense_dim,
                     )
-        except (AttributeError, TypeError, ValueError, KeyError) as exc:  # pragma: no cover - defensive
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+            KeyError,
+        ) as exc:  # pragma: no cover - defensive
             logger.debug("dense size verify skipped: %s", exc)
 
         patch_vecs, patch_sprs = _compute_hybrid_patches(

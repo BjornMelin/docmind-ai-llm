@@ -212,7 +212,11 @@ def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
     """
     try:
         from llama_index.core import StorageContext, load_index_from_storage
-    except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover - import guard
+    except (
+        ImportError,
+        ModuleNotFoundError,
+        AttributeError,
+    ):  # pragma: no cover - import guard
         return None
 
     snap = snapshot_dir or latest_snapshot_dir()
@@ -224,7 +228,12 @@ def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
     try:
         storage = StorageContext.from_defaults(persist_dir=str(vec_dir))
         return load_index_from_storage(storage)
-    except (OSError, RuntimeError, ValueError, AttributeError):  # pragma: no cover - defensive
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        AttributeError,
+    ):  # pragma: no cover - defensive
         return None
 
 
@@ -237,7 +246,11 @@ def load_property_graph_index(snapshot_dir: Path | None = None) -> Any | None:
     try:
         from llama_index.core import PropertyGraphIndex
         from llama_index.core.graph_stores import SimplePropertyGraphStore
-    except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover - import guard
+    except (
+        ImportError,
+        ModuleNotFoundError,
+        AttributeError,
+    ):  # pragma: no cover - import guard
         return None
 
     snap = snapshot_dir or latest_snapshot_dir()
@@ -249,7 +262,12 @@ def load_property_graph_index(snapshot_dir: Path | None = None) -> Any | None:
     try:
         store = SimplePropertyGraphStore.from_persist_dir(str(graph_dir))
         return PropertyGraphIndex.from_existing(property_graph_store=store)
-    except (OSError, RuntimeError, ValueError, AttributeError):  # pragma: no cover - defensive
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        AttributeError,
+    ):  # pragma: no cover - defensive
         return None
 
 
@@ -434,7 +452,11 @@ class SnapshotManager:
             import llama_index  # type: ignore
 
             pkg_versions["llama_index"] = getattr(llama_index, "__version__", None)
-        except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover - best-effort
+        except (
+            ImportError,
+            ModuleNotFoundError,
+            AttributeError,
+        ):  # pragma: no cover - best-effort
             import logging
 
             logging.getLogger(__name__).debug(
@@ -444,7 +466,11 @@ class SnapshotManager:
             import qdrant_client  # type: ignore
 
             pkg_versions["qdrant_client"] = getattr(qdrant_client, "__version__", None)
-        except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover - best-effort
+        except (
+            ImportError,
+            ModuleNotFoundError,
+            AttributeError,
+        ):  # pragma: no cover - best-effort
             import logging
 
             logging.getLogger(__name__).debug(
