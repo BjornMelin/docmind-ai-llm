@@ -12,13 +12,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from llama_index.core.query_engine import RetrieverQueryEngine, RouterQueryEngine
+from llama_index.core.query_engine import RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
 from src.config.settings import settings as default_settings
 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.postprocessor_utils import (
+    build_pg_query_engine,
+    build_retriever_query_engine,
+    build_vector_query_engine,
+)
 
 
 def build_router_engine(
@@ -51,9 +56,8 @@ def build_router_engine(
 
         _v_use = bool(getattr(cfg.retrieval, "use_reranking", True))
         _v_post = _get_pp("vector", use_reranking=_v_use)
-        v_engine = vector_index.as_query_engine(
-            similarity_top_k=cfg.retrieval.top_k,
-            node_postprocessors=_v_post,
+        v_engine = build_vector_query_engine(
+            vector_index, _v_post, similarity_top_k=cfg.retrieval.top_k
         )
     except (TypeError, AttributeError, ValueError):
         # Last-resort default
@@ -100,18 +104,9 @@ def build_router_engine(
 
             _h_use = bool(getattr(cfg.retrieval, "use_reranking", True))
             _h_post = _get_pp("hybrid", use_reranking=_h_use)
-            try:
-                h_engine = RetrieverQueryEngine.from_args(
-                    retriever=retr,
-                    llm=the_llm,
-                    response_mode="compact",
-                    verbose=False,
-                    node_postprocessors=_h_post,
-                )
-            except TypeError:
-                h_engine = RetrieverQueryEngine.from_args(
-                    retriever=retr, llm=the_llm, response_mode="compact", verbose=False
-                )
+            h_engine = build_retriever_query_engine(
+                retr, _h_post, llm=the_llm, response_mode="compact", verbose=False
+            )
             tools.append(
                 QueryEngineTool(
                     query_engine=h_engine,
@@ -150,21 +145,9 @@ def build_router_engine(
                     use_reranking=_g_use,
                     top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
-                try:
-                    g_engine = RetrieverQueryEngine.from_args(
-                        retriever=retr,
-                        llm=the_llm,
-                        response_mode="compact",
-                        verbose=False,
-                        node_postprocessors=_g_post,
-                    )
-                except TypeError:
-                    g_engine = RetrieverQueryEngine.from_args(
-                        retriever=retr,
-                        llm=the_llm,
-                        response_mode="compact",
-                        verbose=False,
-                    )
+                g_engine = build_retriever_query_engine(
+                    retr, _g_post, llm=the_llm, response_mode="compact", verbose=False
+                )
             elif hasattr(pg_index, "as_query_engine"):
                 from src.retrieval.reranking import get_postprocessors as _get_pp
 
@@ -174,12 +157,7 @@ def build_router_engine(
                     use_reranking=_g_use2,
                     top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
-                try:
-                    g_engine = pg_index.as_query_engine(
-                        include_text=True, node_postprocessors=_g_post2
-                    )
-                except TypeError:
-                    g_engine = pg_index.as_query_engine(include_text=True)
+                g_engine = build_pg_query_engine(pg_index, _g_post2, include_text=True)
             tools.append(
                 QueryEngineTool(
                     query_engine=g_engine,
@@ -201,10 +179,12 @@ def build_router_engine(
                 "_MD", (), {"context_window": 2048, "num_output": 256}
             )()
 
-        def predict(self, *args: Any, **kwargs: Any) -> str:
+        def predict(self, *_args: Any, **_kwargs: Any) -> str:
+            """No-op predict."""
             return ""
 
-        def complete(self, *args: Any, **kwargs: Any) -> str:
+        def complete(self, *_args: Any, **_kwargs: Any) -> str:
+            """No-op complete."""
             return ""
 
     # Selector: prefer PydanticSingleSelector when available, else LLM selector

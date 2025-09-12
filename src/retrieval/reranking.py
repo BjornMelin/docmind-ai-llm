@@ -911,7 +911,11 @@ def get_postprocessors(
             return [MultimodalReranker()]
         if mode == "kg":
             return [
-                build_text_reranker(top_n=top_n or settings.retrieval.reranking_top_k)
+                build_text_reranker(
+                    top_n=top_n
+                    if top_n is not None
+                    else settings.retrieval.reranking_top_k
+                )
             ]
     except Exception:  # pragma: no cover - defensive
         return None

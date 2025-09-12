@@ -516,13 +516,13 @@ def gpu_memory_context() -> Generator[None, None, None]:
     finally:
         # Always cleanup GPU resources
         try:
-            if torch is not None and torch.cuda.is_available():
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-        except RuntimeError as e:
+            import torch as _torch
+
+            if _torch.cuda.is_available():
+                _torch.cuda.synchronize()
+                _torch.cuda.empty_cache()
+        except Exception as e:
             logger.warning("GPU cleanup failed during context exit: %s", e)
-        except (ImportError, ModuleNotFoundError) as e:
-            logger.error("Import error during GPU cleanup: %s", e)
         finally:
             # Always run garbage collection
             gc.collect()
@@ -549,13 +549,13 @@ async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
     finally:
         # Always cleanup GPU resources
         try:
-            if torch is not None and torch.cuda.is_available():
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-        except RuntimeError as e:
+            import torch as _torch
+
+            if _torch.cuda.is_available():
+                _torch.cuda.synchronize()
+                _torch.cuda.empty_cache()
+        except Exception as e:
             logger.warning("GPU cleanup failed during async context exit: %s", e)
-        except (ImportError, ModuleNotFoundError) as e:
-            logger.error("Import error during async GPU cleanup: %s", e)
         finally:
             # Always run garbage collection
             gc.collect()
