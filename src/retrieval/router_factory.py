@@ -104,8 +104,10 @@ def build_router_engine(
             params = _hp(
                 collection=cfg.database.qdrant_collection,
                 fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
-                prefetch_sparse=400,
-                prefetch_dense=200,
+                prefetch_sparse=int(
+                    getattr(cfg.retrieval, "prefetch_sparse_limit", 400)
+                ),
+                prefetch_dense=int(getattr(cfg.retrieval, "prefetch_dense_limit", 200)),
                 fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
                 dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
             )
@@ -203,6 +205,12 @@ def build_router_engine(
 
     # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm
     class _NoOpLLM:
+        """Minimal no-op LLM stub for router defaults.
+
+        Provides required attributes and methods so that LlamaIndex router
+        construction does not attempt to implicitly resolve ``Settings.llm``.
+        """
+
         def __init__(self):
             self.metadata = type(
                 "_MD", (), {"context_window": 2048, "num_output": 256}
@@ -241,7 +249,7 @@ def build_router_engine(
     try:
         router.query_engine_tools = tools
         router._query_engine_tools = tools
-    except Exception:  # pragma: no cover - defensive
+    except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
         logger.debug("Router tool list attribute shim failed", exc_info=True)
     logger.info(
         "Router engine built (kg_present=%s)",
