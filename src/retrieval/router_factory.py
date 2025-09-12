@@ -186,14 +186,16 @@ def build_router_engine(
                         metadata=ToolMetadata(
                             name="knowledge_graph",
                             description=(
-                                "Knowledge graph traversal for relationship-centric queries"
+                                "Knowledge graph traversal for "
+                                "relationship-centric queries"
                             ),
                         ),
                     )
                 )
             else:
                 logger.debug(
-                    "Skipping knowledge_graph tool: pg_index lacks retriever/query engine"
+                    "Skipping knowledge_graph tool: pg_index lacks "
+                    "retriever/query engine"
                 )
     # pragma: no cover - defensive
     except (ValueError, TypeError, AttributeError, ImportError) as e:
