@@ -17,9 +17,13 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client import models as qmodels
+from qdrant_client.http.exceptions import (
+    ResponseHandlingException,
+    UnexpectedResponse,
+)
 
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
-from src.utils.storage import get_client_config
+from src.utils.storage import ensure_hybrid_collection, get_client_config
 from src.utils.telemetry import log_jsonl
 
 
@@ -56,6 +60,19 @@ class ServerHybridRetriever:
         """
         self.params = params
         self._client = QdrantClient(**get_client_config())
+        # Ensure hybrid schema exists for upgrade safety (idempotent)
+        try:
+            ensure_hybrid_collection(self._client, self.params.collection)
+        except (
+            ResponseHandlingException,
+            UnexpectedResponse,
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            AttributeError,
+        ) as exc:  # pragma: no cover - defensive best-effort
+            logger.debug("Hybrid schema ensure skipped: %s", exc)
 
     def _embed_dense(self, text: str) -> np.ndarray:
         """Embed text into a dense vector using configured model.
