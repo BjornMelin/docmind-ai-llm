@@ -30,9 +30,7 @@ def test_colpali_visual_fraction_true_when_high_and_vram_ok(monkeypatch):
     text_nodes = _mk_nodes(5, score=0.1)
     lists = [visual_nodes, text_nodes]
 
-    assert (
-        rr.MultimodalReranker._should_enable_colpali(visual_nodes, lists) is True
-    )
+    assert rr.MultimodalReranker._should_enable_colpali(visual_nodes, lists) is True
 
 
 def test_colpali_visual_fraction_false_when_low_even_with_vram(monkeypatch):
@@ -47,7 +45,4 @@ def test_colpali_visual_fraction_false_when_low_even_with_vram(monkeypatch):
     text_nodes = _mk_nodes(9, score=0.1)
     lists = [visual_nodes, text_nodes]
 
-    assert (
-        rr.MultimodalReranker._should_enable_colpali(visual_nodes, lists) is False
-    )
-
+    assert rr.MultimodalReranker._should_enable_colpali(visual_nodes, lists) is False
