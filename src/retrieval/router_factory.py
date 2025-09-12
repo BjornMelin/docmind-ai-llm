@@ -31,8 +31,14 @@ from src.retrieval.postprocessor_utils import (
 
 RetrieverQueryEngine = _RetrieverQueryEngine  # back-compat alias for tests
 
-server_hybrid_retriever = None  # type: ignore[assignment]
-_hybrid_params = None  # type: ignore[assignment]
+# Expose hybrid retriever symbols at module scope so tests and callers can
+# monkeypatch them without importing src.retrieval.hybrid inside call sites.
+try:  # pragma: no cover - import path varies in tests
+    from src.retrieval.hybrid import ServerHybridRetriever  # type: ignore
+    from src.retrieval.hybrid import _HybridParams as HybridParams  # type: ignore
+except Exception:  # pragma: no cover - defensive fallback for partial envs
+    ServerHybridRetriever = None  # type: ignore[assignment]
+    HybridParams = None  # type: ignore[assignment]
 
 
 def build_router_engine(
@@ -100,14 +106,14 @@ def build_router_engine(
                     or getattr(cfg.retrieval, "hybrid_enabled", False)
                 )
         if hybrid_ok:
-            if server_hybrid_retriever is None or _hybrid_params is None:
+            # Prefer module-level references (allowing monkeypatch in tests).
+            _shr = ServerHybridRetriever
+            _hp = HybridParams
+            if _shr is None or _hp is None:  # lazy import fallback
                 from src.retrieval.hybrid import (
                     ServerHybridRetriever as _shr,  # noqa: N813
                 )
                 from src.retrieval.hybrid import _HybridParams as _hp
-            else:
-                _shr = server_hybrid_retriever  # type: ignore[assignment]
-                _hp = _hybrid_params  # type: ignore[assignment]
             params = _hp(
                 collection=cfg.database.qdrant_collection,
                 fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
