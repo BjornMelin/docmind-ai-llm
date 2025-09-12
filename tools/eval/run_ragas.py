@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -41,6 +42,27 @@ except Exception:  # pragma: no cover - provide placeholders for tests
     faithfulness = None  # type: ignore[assignment]
 
 from src.agents.coordinator import MultiAgentCoordinator
+from src.eval.common.determinism import set_determinism
+
+SCHEMA_VERSION = "1.0"
+
+
+def _write_csv_row(path: Path, row: dict[str, Any]) -> None:
+    header = list(row.keys())
+    if path.exists():
+        first = path.read_text(encoding="utf-8").splitlines()[:1]
+        if first:
+            existing = first[0].split(",")
+            if existing != header:
+                raise ValueError(
+                    "Leaderboard schema mismatch; use a new file or bump schema_version"
+                )
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
+            f.write(",".join(header) + "\n")
+    with path.open("a", encoding="utf-8") as f:
+        f.write(",".join(str(v) for v in row.values()) + "\n")
 
 
 def main() -> None:
@@ -64,6 +86,9 @@ def main() -> None:
         ValueError: If the CSV doesn't contain required columns.
         RuntimeError: If the MultiAgentCoordinator fails to initialize.
     """
+    # Determinism first
+    set_determinism()
+
     ap = argparse.ArgumentParser(description="DocMind E2E RAG eval with RAGAS")
     ap.add_argument(
         "--dataset_csv",
@@ -71,10 +96,23 @@ def main() -> None:
         help=("CSV with: question, ground_truth, optional contexts JSON list"),
     )
     ap.add_argument("--results_dir", default="eval/results")
-    ap.add_argument("--top_k", type=int, default=5)
+    ap.add_argument(
+        "--ragas_mode",
+        choices=["offline", "online_smoke"],
+        default="offline",
+        help="Offline mocks in PR CI; limited online smoke in nightly",
+    )
+    ap.add_argument(
+        "--sample_count",
+        type=int,
+        default=0,
+        help="If >0, limit number of rows deterministically",
+    )
     args = ap.parse_args()
 
     df = pd.read_csv(args.dataset_csv)
+    if args.sample_count > 0:
+        df = df.head(args.sample_count)
     coord = MultiAgentCoordinator()
 
     answers: list[str] = []
@@ -86,11 +124,17 @@ def main() -> None:
         # If contexts not provided, leave empty; retrieval contexts can be added later
         contexts.append([])
 
+    # If dataset contains a 'contexts' column, preserve it; else empty lists
+    if "contexts" in df.columns:
+        ctxs = [c if isinstance(c, list) else [] for c in df["contexts"]]
+    else:
+        ctxs = [[] for _ in range(len(df))]
+
     data = pd.DataFrame(
         {
             "question": df["question"],
             "answer": answers,
-            "contexts": contexts,
+            "contexts": ctxs,
             "ground_truth": df["ground_truth"],
         }
     )
@@ -128,22 +172,31 @@ def main() -> None:
         metrics=[faithfulness, answer_relevancy, context_recall, context_precision],
         show_progress=False,
     )
+
+    # The mock in tests returns mapping of Series; handle that shape.
+    # Newer ragas may return EvaluationResult with dict-like access to arrays.
+    def _as_float(x: Any) -> float:
+        try:
+            # Pandas Series.mean or list/ndarray mean fallback
+            m = getattr(x, "mean", None)
+            return float(m()) if callable(m) else float(x)
+        except Exception:  # pragma: no cover - defensive fallback
+            return float("nan")
+
     out = {
+        "schema_version": SCHEMA_VERSION,
         "ts": datetime.now(UTC).isoformat(),
-        "n": len(data),
-        "faithfulness": float(result["faithfulness"].mean()),
-        "answer_relevancy": float(result["answer_relevancy"].mean()),
-        "context_recall": float(result["context_recall"].mean()),
-        "context_precision": float(result["context_precision"].mean()),
+        "dataset": Path(args.dataset_csv).name,
+        "faithfulness": _as_float(result["faithfulness"]),
+        "answer_relevancy": _as_float(result["answer_relevancy"]),
+        "context_recall": _as_float(result["context_recall"]),
+        "context_precision": _as_float(result["context_precision"]),
+        "sample_count": len(data),
     }
     out_dir = Path(args.results_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     lb = out_dir / "leaderboard.csv"
-    header = not lb.exists()
-    with lb.open("a", encoding="utf-8") as f:
-        if header:
-            f.write(",".join(out.keys()) + "\n")
-        f.write(",".join(str(v) for v in out.values()) + "\n")
+    _write_csv_row(lb, out)
 
 
 if __name__ == "__main__":
