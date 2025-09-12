@@ -456,7 +456,7 @@ class _TextRerankerAdapter:
             return scores
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("FlagEmbedding batch score error: {} — failing open", exc)
-            return [float(len(batch) - i) for i, _ in enumerate(batch)]
+            return [float(n.score or 0.0) for n in batch]
 
     def _score_batch_li(self, query: str, batch: list[NodeWithScore]) -> list[float]:
         if self._li is None:
@@ -546,6 +546,14 @@ class _TextRerankerAdapter:
                 }
             )
             done = work
+
+        # If all scores equal, preserve original order
+        try:
+            scores_only = [float(n.score or 0.0) for n in done]
+            if scores_only and max(scores_only) == min(scores_only):
+                return done[: self.top_n]
+        except (ValueError, TypeError):  # defensive: score cast
+            pass
 
         # Stable sort: score desc, tie-break by node_id asc
         def _key(n: NodeWithScore) -> tuple[float, str]:
@@ -917,6 +925,6 @@ def get_postprocessors(
                     else settings.retrieval.reranking_top_k
                 )
             ]
-    except Exception:  # pragma: no cover - defensive
+    except (ValueError, TypeError):  # defensive: score cast
         return None
     return None

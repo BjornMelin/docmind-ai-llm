@@ -23,7 +23,6 @@ from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
 from src.config.settings import settings as default_settings
-from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 from src.retrieval.postprocessor_utils import (
     build_pg_query_engine,
     build_retriever_query_engine,
@@ -31,6 +30,9 @@ from src.retrieval.postprocessor_utils import (
 )
 
 RetrieverQueryEngine = _RetrieverQueryEngine  # back-compat alias for tests
+
+server_hybrid_retriever = None  # type: ignore[assignment]
+_hybrid_params = None  # type: ignore[assignment]
 
 
 def build_router_engine(
@@ -66,7 +68,7 @@ def build_router_engine(
         v_engine = build_vector_query_engine(
             vector_index, _v_post, similarity_top_k=cfg.retrieval.top_k
         )
-    except (TypeError, AttributeError, ValueError):
+    except (TypeError, AttributeError, ValueError, ImportError):
         # Last-resort default
         v_engine = vector_index.as_query_engine()
 
@@ -98,7 +100,15 @@ def build_router_engine(
                     or getattr(cfg.retrieval, "hybrid_enabled", False)
                 )
         if hybrid_ok:
-            params = _HybridParams(
+            if server_hybrid_retriever is None or _hybrid_params is None:
+                from src.retrieval.hybrid import (
+                    ServerHybridRetriever as _shr,  # noqa: N813
+                )
+                from src.retrieval.hybrid import _HybridParams as _hp
+            else:
+                _shr = server_hybrid_retriever  # type: ignore[assignment]
+                _hp = _hybrid_params  # type: ignore[assignment]
+            params = _hp(
                 collection=cfg.database.qdrant_collection,
                 fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
                 prefetch_sparse=400,
@@ -106,7 +116,7 @@ def build_router_engine(
                 fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
                 dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
             )
-            retr = ServerHybridRetriever(params)
+            retr = _shr(params)
             from src.retrieval.reranking import get_postprocessors as _get_pp
 
             _h_use = bool(getattr(cfg.retrieval, "use_reranking", True))
@@ -130,7 +140,8 @@ def build_router_engine(
                     ),
                 )
             )
-    except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
+    # pragma: no cover - defensive
+    except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
     # Optional graph tool
@@ -186,7 +197,8 @@ def build_router_engine(
                     ),
                 )
             )
-    except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
+    # pragma: no cover - defensive
+    except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Graph tool construction skipped: {e}")
 
     # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm
