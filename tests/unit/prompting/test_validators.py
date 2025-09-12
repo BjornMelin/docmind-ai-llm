@@ -15,7 +15,7 @@ from src.prompting.validators import check_undeclared_variables, validate_meta
 @pytest.mark.unit
 def test_validate_meta_success() -> None:
     """Test that valid metadata passes validation without raising exceptions."""
-    meta = TemplateMeta(id="greet", name="Greeting", version=1)
+    meta = TemplateMeta(id="greet", name="Greeting", version=1, description="d")
     validate_meta(meta)  # should not raise
 
 
