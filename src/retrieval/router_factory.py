@@ -139,7 +139,7 @@ def build_router_engine(
     except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    # Optional graph tool (health‑gated)
+    # Optional graph tool (health-gated)
     try:
         if (
             pg_index is not None
@@ -159,7 +159,8 @@ def build_router_engine(
                     _probe = _probe_retr.retrieve("health")
                     if not _probe:
                         logger.info(
-                            "Skipping knowledge_graph tool: health probe returned 0 results"
+                            "Skipping knowledge_graph tool: health probe returned 0 "
+                            "results"
                         )
                         raise RuntimeError("kg_unhealthy")
                 else:
@@ -173,7 +174,7 @@ def build_router_engine(
                         _probe_exc,
                     )
                 # Continue without graph tool
-                raise RuntimeError("kg_probe_failed")
+                raise RuntimeError("kg_probe_failed") from None
             g_engine = None
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(

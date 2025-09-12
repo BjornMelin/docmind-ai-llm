@@ -5,7 +5,6 @@ Ensures that image resources are closed even on error/exception paths.
 
 from __future__ import annotations
 
-import io
 import importlib
 from pathlib import Path
 
@@ -34,7 +33,9 @@ def test_siglip_cleanup_on_error(tmp_path, monkeypatch):  # type: ignore[no-unty
     nodes = [_NWS(img_path)]
 
     # Force model loader to fail to trigger exception path after images are opened
-    monkeypatch.setattr(rmod, "_load_siglip", lambda: (_ for _ in ()).throw(RuntimeError("fail")))
+    monkeypatch.setattr(
+        rmod, "_load_siglip", lambda: (_ for _ in ()).throw(RuntimeError("fail"))
+    )
 
     # Track calls to Image.Image.close
     close_count = {"n": 0}
@@ -50,4 +51,3 @@ def test_siglip_cleanup_on_error(tmp_path, monkeypatch):  # type: ignore[no-unty
     assert isinstance(out, list)
     # We expect at least one close call (converted image closed in finally)
     assert close_count["n"] >= 1
-

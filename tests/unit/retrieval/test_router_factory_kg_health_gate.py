@@ -129,4 +129,3 @@ def test_kg_tool_present_when_probe_ok(monkeypatch):  # type: ignore[no-untyped-
     # vector + KG
     assert _count_tools(router) == 2
     assert _has_tool(router, "knowledge_graph") is True
-

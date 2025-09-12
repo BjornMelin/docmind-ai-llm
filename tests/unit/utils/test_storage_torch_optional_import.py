@@ -7,7 +7,6 @@ defaults when ``torch`` is unavailable.
 from __future__ import annotations
 
 import importlib
-from types import SimpleNamespace
 
 
 def test_cpu_only_paths_safe(monkeypatch):  # type: ignore[no-untyped-def]
@@ -38,4 +37,3 @@ def test_safe_cuda_operation_handles_import_error(monkeypatch):  # type: ignore[
 
     val = mod.safe_cuda_operation(_op, operation_name="probe", default_return=123)
     assert val == 123
-
