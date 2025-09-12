@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docmind.ai/schemas/leaderboard_beir.schema.json",
+  "title": "BEIR Leaderboard Row v1.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ts",
+    "dataset",
+    "k",
+    "sample_count"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "ts": { "type": "string" },
+    "dataset": { "type": "string" },
+    "k": { "type": "integer", "minimum": 1 },
+    "sample_count": { "type": "integer", "minimum": 0 }
+  },
+  "patternProperties": {
+    "^(ndcg|recall|mrr)@[0-9]+$": { "type": "number" }
+  },
+  "additionalProperties": false
+}
+

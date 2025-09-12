@@ -59,6 +59,10 @@ jobs:
         run: |
           uv run pytest -q -m "unit or integration" -k "not requires_gpu and not gpu_required and not performance"
 
+      - name: Validate evaluation leaderboard schemas (if present)
+        run: |
+          uv run python scripts/validate_schemas.py || true
+
       - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4

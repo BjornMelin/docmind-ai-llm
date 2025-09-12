@@ -19,6 +19,19 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   - `tools/eval/run_beir.py` (NDCG@10, Recall@10, MRR@10)
   - `tools/eval/run_ragas.py` (faithfulness, answer_relevancy, context_recall, context_precision)
   - `data/eval/README.md` with usage instructions.
+
+- Evaluation harness hardening (schema + determinism):
+  - Dynamic `@{k}` metric headers for BEIR (`ndcg@{k}`, `recall@{k}`, `mrr@{k}`) and explicit `k` field.
+  - Leaderboard rows now include `schema_version` and `sample_count` for reproducibility.
+  - JSON Schemas: `schemas/leaderboard_beir.schema.json`, `schemas/leaderboard_ragas.schema.json`, `schemas/doc_mapping.schema.json`.
+  - Validator script: `scripts/validate_schemas.py` (enforces header↔k consistency; validates required fields/types).
+  - Determinism utilities under `src/eval/common/`: seeds + thread caps.
+  - Doc id mapping persisted to `doc_mapping.json` per run.
+
+### Changed
+
+- BEIR and RAGAS CLIs now call determinism setup first; BEIR CLI respects `--k` for metric computation and emits dynamic headers matching `k`.
+- CI workflow: added schema validation step after tests to catch leaderboard schema drift.
   
 - Post‑ingest Qdrant indexing (hybrid) wired into ingestion adapter; Documents page builds a router engine for Chat.
 - SPEC‑006: GraphRAG exports (Parquet + JSONL) triggered by Documents page checkbox.

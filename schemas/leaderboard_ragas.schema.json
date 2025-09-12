@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docmind.ai/schemas/leaderboard_ragas.schema.json",
+  "title": "RAGAS Leaderboard Row v1.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ts",
+    "dataset",
+    "faithfulness",
+    "answer_relevancy",
+    "context_recall",
+    "context_precision",
+    "sample_count"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "ts": { "type": "string" },
+    "dataset": { "type": "string" },
+    "faithfulness": { "type": "number" },
+    "answer_relevancy": { "type": "number" },
+    "context_recall": { "type": "number" },
+    "context_precision": { "type": "number" },
+    "sample_count": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}
+
