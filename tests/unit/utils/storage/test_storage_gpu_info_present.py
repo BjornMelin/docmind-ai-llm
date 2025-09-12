@@ -46,3 +46,8 @@ def test_gpu_info_with_fake_torch(monkeypatch):
     assert info["device_name"] == "FakeGPU"
     assert info["total_memory_gb"] >= 7.5
     assert info["allocated_memory_gb"] >= 0.4
+
+    # Also hit get_safe_vram_usage positive path
+    vram = mod.get_safe_vram_usage()
+    assert isinstance(vram, float)
+    assert vram >= 0.4

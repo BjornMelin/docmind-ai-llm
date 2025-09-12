@@ -94,3 +94,11 @@ def test_cuda_error_context_paths():
         raise RuntimeError("CUDA BOOM")
     # After context, result should be default_return
     assert ctx.get("result") == 7
+
+
+@pytest.mark.unit
+def test_cuda_error_context_reraise_true():
+    mod = importlib.import_module("src.utils.storage")
+    with pytest.raises(RuntimeError):
+        with mod.cuda_error_context("probe", reraise=True):
+            raise RuntimeError("fail")
