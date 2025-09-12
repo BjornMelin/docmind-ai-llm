@@ -24,6 +24,7 @@ class _IndexStub:
 
 @pytest.mark.unit
 def test_create_vector_search_tool_basic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test vector search tool creation with mocked postprocessors."""
     # Avoid heavy reranking by returning empty postprocessors
     import src.retrieval.reranking as rr
 
@@ -38,6 +39,7 @@ def test_create_vector_search_tool_basic(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.unit
 def test_create_keyword_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test keyword search tool creation with mocked postprocessors."""
     import src.retrieval.reranking as rr
 
     monkeypatch.setattr(rr, "get_postprocessors", lambda *_a, **_k: [], raising=True)
@@ -53,6 +55,7 @@ class _KGIndexStub:
 
 @pytest.mark.unit
 def test_create_kg_search_tool() -> None:
+    """Test knowledge graph search tool creation."""
     kg = _KGIndexStub()
     tool = ToolFactory.create_kg_search_tool(kg)
     assert tool is not None

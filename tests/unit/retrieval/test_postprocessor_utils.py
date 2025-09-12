@@ -44,6 +44,7 @@ class _Engine:
 def test_build_vector_query_engine_combinations(
     post: list[str] | None, expect_key: str | None
 ) -> None:
+    """Test vector query engine combinations with different postprocessor scenarios."""
     idx = _Index()
     out = build_vector_query_engine(idx, post, similarity_top_k=2)
     assert out == "qe"
@@ -61,6 +62,7 @@ def test_build_vector_query_engine_combinations(
 def test_build_retriever_query_engine(
     post: list[str] | None, expect_node: bool
 ) -> None:
+    """Test retriever query engine construction with postprocessor scenarios."""
     retr = _Retriever()
     out = build_retriever_query_engine(retr, post, engine_cls=_Engine)
     assert out == "rq"
@@ -70,6 +72,7 @@ def test_build_retriever_query_engine(
 
 @pytest.mark.unit
 def test_build_pg_query_engine_fallbacks() -> None:
+    """Test property graph query engine fallbacks when postprocessors are None."""
     idx = _Index()
     out = build_pg_query_engine(idx, post=None)
     assert out == "qe"

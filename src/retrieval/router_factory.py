@@ -166,12 +166,13 @@ def build_router_engine(
                     # If no retriever is available, proceed as before (best effort)
                     pass
             except Exception as _probe_exc:  # pylint: disable=broad-exception-caught
-                # On probe error, skip registration but do not raise
+                # On probe error, proceed best-effort with registration
+                # rather than disabling
                 logger.debug(
-                    "KG health probe failed: %s — continuing without KG tool",
+                    "KG health probe failed: %s — proceeding with "
+                    "best-effort registration",
                     _probe_exc,
                 )
-                pg_index = None
             g_engine = None
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(

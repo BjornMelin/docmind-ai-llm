@@ -13,6 +13,7 @@ from src.utils.monitoring import log_error_with_context, log_performance
 
 @pytest.mark.unit
 def test_log_error_with_context_binds_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that log_error_with_context binds operation and context to error logs."""
     calls: list[tuple[str, tuple, dict]] = []
 
     def fake_error(
@@ -32,6 +33,7 @@ def test_log_error_with_context_binds_fields(monkeypatch: pytest.MonkeyPatch) ->
 
 @pytest.mark.unit
 def test_log_performance_binds_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that log_performance binds operation and metrics fields to info logs."""
     calls: list[tuple[str, tuple, dict]] = []
 
     def fake_info(
