@@ -27,7 +27,7 @@ from src.retrieval.postprocessor_utils import (
     build_vector_query_engine,
 )
 
-RetrieverQueryEngine = _RetrieverQueryEngine  # internal compatibility alias (shim)
+RetrieverQueryEngine = _RetrieverQueryEngine
 
 
 def build_router_engine(
@@ -139,7 +139,7 @@ def build_router_engine(
     except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    # Optional graph tool
+    # Optional graph tool (health-gated)
     try:
         if (
             pg_index is not None
@@ -150,6 +150,29 @@ def build_router_engine(
                 if cfg is not None
                 else 1
             )
+            # Health probe: shallow retrieve to ensure index is usable
+            try:
+                if hasattr(pg_index, "as_retriever"):
+                    _probe_retr = pg_index.as_retriever(
+                        include_text=False, path_depth=1, similarity_top_k=1
+                    )
+                    _probe = _probe_retr.retrieve("health")
+                    if not _probe:
+                        logger.info(
+                            "KG health probe returned 0 results; proceeding with "
+                            "best-effort tool registration"
+                        )
+                else:
+                    # If no retriever is available, proceed as before (best effort)
+                    pass
+            except Exception as _probe_exc:  # pylint: disable=broad-exception-caught
+                # On probe error, proceed best-effort with registration
+                # rather than disabling
+                logger.debug(
+                    "KG health probe failed: %s — proceeding with "
+                    "best-effort registration",
+                    _probe_exc,
+                )
             g_engine = None
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(
@@ -200,7 +223,7 @@ def build_router_engine(
                     "retriever/query engine"
                 )
     # pragma: no cover - defensive
-    except (ValueError, TypeError, AttributeError, ImportError) as e:
+    except (ValueError, TypeError, AttributeError, ImportError, RuntimeError) as e:
         logger.debug(f"Graph tool construction skipped: {e}")
 
     # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm
@@ -246,11 +269,11 @@ def build_router_engine(
             verbose=False,
         )
     # Expose both public and private tool lists for compatibility across LI versions
+    # Expose public tool list for downstream introspection
     try:
         router.query_engine_tools = tools
-        router._query_engine_tools = tools
-    except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
-        logger.debug("Router tool list attribute shim failed", exc_info=True)
+    except Exception:  # pragma: no cover - defensive
+        logger.debug("Router engine lacks public tool attribute", exc_info=True)
     logger.info(
         "Router engine built (kg_present=%s)",
         any(t.metadata.name == "knowledge_graph" for t in tools),

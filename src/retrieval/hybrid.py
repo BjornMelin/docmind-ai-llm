@@ -8,6 +8,8 @@ NodeWithScore list with deterministic ordering and de-duplication.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,15 +53,26 @@ class ServerHybridRetriever:
         - Deduplication key defaults to ``page_id`` but is configurable.
     """
 
-    def __init__(self, params: _HybridParams) -> None:
+    def __init__(
+        self,
+        params: _HybridParams,
+        client: QdrantClient | None = None,
+        client_factory: Callable[[], QdrantClient] | None = None,
+    ) -> None:
         """Initialize retriever with parameters and client.
 
         Args:
             params: Retrieval parameters including collection, fusion mode,
                 prefetch limits, and de-duplication key.
+            client: Optional pre-configured QdrantClient instance.
+            client_factory: Optional factory function to create QdrantClient.
         """
         self.params = params
-        self._client = QdrantClient(**get_client_config())
+        if client is not None:
+            self._client = client
+        else:
+            factory = client_factory or (lambda: QdrantClient(**get_client_config()))
+            self._client = factory()
         # Ensure hybrid schema exists for upgrade safety (idempotent)
         try:
             ensure_hybrid_collection(self._client, self.params.collection)
@@ -73,6 +86,11 @@ class ServerHybridRetriever:
             AttributeError,
         ) as exc:  # pragma: no cover - defensive best-effort
             logger.debug("Hybrid schema ensure skipped: %s", exc)
+
+    def close(self) -> None:
+        """Close underlying client (best-effort)."""
+        with suppress(Exception):  # pragma: no cover - defensive
+            self._client.close()
 
     def _embed_dense(self, text: str) -> np.ndarray:
         """Embed text into a dense vector using configured model.

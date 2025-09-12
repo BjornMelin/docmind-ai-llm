@@ -121,26 +121,25 @@ def create_app(llm, tools):
         agents=agents,
         model=llm,
         prompt=SUPERVISOR_PROMPT,
-        config={
-            # Verified modern parameters from LangGraph supervisor docs
-            "parallel_tool_calls": True,          # concurrent agent/tool paths
-            "output_mode": "structured",          # richer outputs + metadata
-            "create_forward_message_tool": True,  # direct passthrough when needed
-            "add_handoff_back_messages": True,    # track coordination handoffs
-        },
+        parallel_tool_calls=True,          # concurrent agent/tool paths
+        output_mode="last_message",        # structured data stays in state
+        add_handoff_messages=True,         # track coordination handoffs
         # Optional hooks for context/window management
         pre_model_hook=trim_context_hook,  # enforce 128K cap (ADR‑004/010)
         post_model_hook=collect_metrics_hook,
+        tools=[create_forward_message_tool("supervisor")],
     )
 ```
 
 ### Supervisor Configuration (Key Options)
 
 - `parallel_tool_calls`: Enable concurrent tool/agent branches to reduce tokens (50–87%)
-- `output_mode="structured"`: Include metadata fields for observability and UI
+- `output_mode`: Controls message history added by the supervisor. Supported values:
+  - `"last_message"` (default): Add only the final agent message
+  - `"full_history"`: Add the entire agent message history
 - `create_forward_message_tool`: Allow direct message passthrough when no processing is needed
-- `add_handoff_back_messages`: Emit coordination breadcrumbs for debugging and audits
-- `pre_model_hook`/`post_model_hook`: Trim context (e.g., at ~120K) and log metrics
+- `add_handoff_messages`: Emit coordination breadcrumbs for debugging and audits
+- `pre_model_hook`/`post_model_hook`: Trim context (e.g., at ~120K) and attach metrics (always-on)
 
 ### Configuration
 
@@ -153,6 +152,11 @@ DOCMIND_AGENTS__MAX_PARALLEL_CALLS=3
 DOCMIND_LOG_LEVEL=INFO
 ```
 
+### Deprecations
+
+- `output_mode="structured"` is not supported by the Supervisor. Structured metadata belongs in state and response models. Use `output_mode="last_message"` or `"full_history"` and rely on hooks/state to record metrics.
+- `add_handoff_back_messages` is no longer relied upon; use `add_handoff_messages=True` to include handoff traces.
+
 ## Testing
 
 ```python
@@ -160,6 +164,10 @@ def test_supervisor_boots_with_agents(supervisor_app):
     result = supervisor_app.invoke({"messages": [{"role": "user", "content": "hi"}]})
     assert "messages" in result
 ```
+
+## Limitations / Future Improvements
+
+- Deadline propagation: The supervisor’s wall-clock timeout (decision timeout) is enforced at the coordinator boundary. Deadlines are not yet propagated to nested LLM/tool calls, so a long-running subcall may continue even after the overall timeout has elapsed. In practice, the coordinator returns a timeout fallback quickly and stops streaming to the UI, but subcalls may continue in the background. A future enhancement should propagate an absolute deadline or remaining time budget through agent graph calls and tools to enable cooperative cancellation.
 
 ## Consequences
 

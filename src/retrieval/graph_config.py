@@ -174,7 +174,7 @@ def create_property_graph_index(
         max_triplets_per_chunk=DEFAULT_MAX_TRIPLETS_PER_CHUNK,
     )
 
-    logger.info("PropertyGraphIndex created with %d documents", len(documents))
+    logger.info("PropertyGraphIndex created with {} documents", len(documents))
     return index
 
 
@@ -343,7 +343,7 @@ async def traverse_graph(
             asyncio.to_thread(retriever.retrieve, query), timeout=timeout
         )
     except TimeoutError:
-        logger.warning("Graph traversal timed out after %.1fs", timeout)
+        logger.warning("Graph traversal timed out after {:.1f}s", timeout)
         return []
 
 
@@ -451,7 +451,7 @@ def export_graph_jsonl(
         ValueError,
         TypeError,
     ) as exc:  # pragma: no cover - defensive
-        logger.warning("JSONL export failed to build rel_map: %s", exc)
+        logger.warning("JSONL export failed to build rel_map: {}", exc)
         return
 
     def _sources_for(node: Any) -> list[str]:
@@ -539,7 +539,7 @@ def export_graph_parquet(
         import pyarrow as pa
         import pyarrow.parquet as pq
     except ImportError as exc:  # pragma: no cover - optional
-        logger.warning("PyArrow not available, skipping Parquet export: %s", exc)
+        logger.warning("PyArrow not available, skipping Parquet export: {}", exc)
         return
 
     store = getattr(index, "property_graph_store", None)
@@ -555,7 +555,7 @@ def export_graph_parquet(
         ValueError,
         TypeError,
     ) as exc:  # pragma: no cover - defensive
-        logger.warning("Parquet export failed to build rel_map: %s", exc)
+        logger.warning("Parquet export failed to build rel_map: {}", exc)
         return
 
     def _relation_label(_a: Any, b: Any) -> str:

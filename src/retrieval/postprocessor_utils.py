@@ -58,9 +58,11 @@ def build_retriever_query_engine(
                 self.metadata = type("_MD", (), md)()
 
             def predict(self, *_args: Any, **_kwargs: Any) -> str:
+                """No-op text prediction to satisfy interface."""
                 return ""
 
             def complete(self, *_args: Any, **_kwargs: Any) -> str:
+                """No-op completion to satisfy interface."""
                 return ""
 
         llm = _NoOpLLM()

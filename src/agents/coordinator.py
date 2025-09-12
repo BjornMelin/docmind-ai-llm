@@ -100,9 +100,6 @@ class ContextManager:
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
-OUTPUT_MODE_STRUCTURED = "structured"
-CREATE_FORWARD_MESSAGE_TOOL_ENABLED = True
-ADD_HANDOFF_BACK_MESSAGES_ENABLED = True
 
 
 class MultiAgentCoordinator:
@@ -282,15 +279,17 @@ class MultiAgentCoordinator:
             # Create forward message tool for direct communication
             forward_tool = create_forward_message_tool("supervisor")
 
-            # Create supervisor with optimization parameters
+            # Create supervisor with corrected flags per ADR-011
+            # - output_mode: "last_message" (structured metadata stays in state)
+            # - add_handoff_messages: True (handoff propagation)
+            # - include forward message tool in tools list
             self.graph = create_supervisor(
                 agents=agents,
                 model=self.llm,
                 prompt=system_prompt,
                 parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
-                output_mode=OUTPUT_MODE_STRUCTURED,
-                create_forward_message_tool=CREATE_FORWARD_MESSAGE_TOOL_ENABLED,
-                add_handoff_back_messages=ADD_HANDOFF_BACK_MESSAGES_ENABLED,
+                output_mode="last_message",
+                add_handoff_messages=True,
                 pre_model_hook=self._create_pre_model_hook(),
                 post_model_hook=self._create_post_model_hook(),
                 tools=[forward_tool],
@@ -382,45 +381,100 @@ class MultiAgentCoordinator:
         return pre_model_hook
 
     def _create_post_model_hook(self) -> Callable[[dict], dict]:
-        """Create post-model hook for response formatting."""
+        """Create post-model hook to attach optimization metrics consistently."""
 
         def post_model_hook(state: dict) -> dict:
-            """Format response after model generation with structured output."""
             try:
-                if state.get("output_mode") == "structured":
-                    # Add performance metadata
-                    state["optimization_metrics"] = {
-                        "context_used_tokens": self.context_manager.estimate_tokens(
-                            state.get("messages", [])
-                        ),
-                        "kv_cache_usage_gb": (
-                            self.context_manager.calculate_kv_cache_usage(state)
-                        ),
-                        "parallel_execution_active": state.get(
-                            "parallel_tool_calls", False
-                        ),
-                        "optimization_enabled": True,
-                        "model_path": self.model_path,
-                        "context_trimmed": state.get("context_trimmed", False),
-                        "tokens_trimmed": state.get("tokens_trimmed", 0),
-                    }
-
-                    # Structure response with metadata
-                    if "response" in state:
-                        state["response"] = self.context_manager.structure_response(
-                            state["response"]
-                        )
-
+                # Build base metrics from current state via shared helper
+                state["optimization_metrics"] = (
+                    self._build_base_optimization_metrics_from_state(state)
+                )
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
                 logger.warning("Post-model hook failed: %s", e)
-                # Non-fatal: annotate state for observability only if dict
                 if isinstance(state, dict):
                     state["hook_error"] = True
                     state["hook_name"] = "post_model_hook"
                 return state
 
         return post_model_hook
+
+    def _build_base_optimization_metrics_from_state(
+        self, state: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Build base optimization metrics derived only from current state.
+
+        Used by both the post-model hook (per-turn annotation) and the final
+        AgentResponse metrics builder to avoid duplication and ensure
+        consistency across code paths.
+        """
+        return {
+            "context_used_tokens": self.context_manager.estimate_tokens(
+                state.get("messages", [])
+            ),
+            "kv_cache_usage_gb": self.context_manager.calculate_kv_cache_usage(state),
+            # Normalize flag naming across code paths
+            "parallel_execution_active": bool(
+                state.get("parallel_execution_active")
+                or state.get("parallel_tool_calls", False)
+            ),
+            "optimization_enabled": True,
+            "model_path": self.model_path,
+            "context_trimmed": state.get("context_trimmed", False),
+            "tokens_trimmed": state.get("tokens_trimmed", 0),
+        }
+
+    def _build_optimization_metrics(
+        self, final_state: dict[str, Any], coordination_time: float
+    ) -> dict[str, Any]:
+        """Build optimization metrics for AgentResponse.
+
+        Args:
+            final_state: The final agent state containing messages and flags.
+            coordination_time: Time spent coordinating agents in seconds.
+
+        Returns:
+            A dictionary with optimization metrics fields suitable for
+            AgentResponse.optimization_metrics.
+        """
+        base = self._build_base_optimization_metrics_from_state(final_state)
+        base.update(
+            {
+                "coordination_overhead_ms": round(coordination_time * 1000, 2),
+                "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
+                "token_reduction_achieved": final_state.get(
+                    "token_reduction_achieved", 0.0
+                ),
+                "context_window_used": self.max_context_length,
+            }
+        )
+        return base
+
+    def _log_query_analytics(self, latency_s: float, success: bool) -> None:
+        """Best-effort analytics logging helper.
+
+        Wraps AnalyticsManager calls to keep process_query readable and to avoid
+        duplicate code across success and timeout branches.
+        """
+        if not getattr(settings, "analytics_enabled", False):
+            return
+        with contextlib.suppress(Exception):
+            cfg = AnalyticsConfig(
+                enabled=True,
+                db_path=(
+                    settings.analytics_db_path
+                    or (settings.data_dir / "analytics" / "analytics.duckdb")
+                ),
+                retention_days=settings.analytics_retention_days,
+            )
+            am = AnalyticsManager.instance(cfg)
+            am.log_query(
+                query_type="chat",
+                latency_ms=latency_s * 1000.0,
+                result_count=0,
+                retrieval_strategy="hybrid",
+                success=success,
+            )
 
     def process_query(
         self,
@@ -458,17 +512,34 @@ class MultiAgentCoordinator:
 
         try:
             # Compose tools_data overrides for agent configuration
+            # NOTE: Use defensive access so tests can patch a lightweight
+            # SimpleNamespace as settings without tripping AttributeError.
+            enable_dspy_opt = getattr(settings, "enable_dspy_optimization", False)
+            enable_graphrag_flag = getattr(settings, "enable_graphrag", False)
+            try:
+                if not enable_graphrag_flag and hasattr(
+                    settings, "get_graphrag_config"
+                ):
+                    gr_cfg = settings.get_graphrag_config()
+                    enable_graphrag_flag = bool(gr_cfg.get("enabled", False))
+            except (AttributeError, TypeError, ValueError):
+                # Best-effort; default to current flag
+                enable_graphrag_flag = bool(enable_graphrag_flag)
+
+            # Retrieval sub-config access guarded to avoid AttributeError in tests
+            try:
+                reranker_normalize = settings.retrieval.reranker_normalize_scores
+                reranking_top_k = settings.retrieval.reranking_top_k
+            except (AttributeError, TypeError, ValueError):
+                reranker_normalize = False
+                reranking_top_k = 0
+
             defaults: dict[str, Any] = {
-                "enable_dspy": settings.enable_dspy_optimization,
-                "enable_graphrag": (
-                    getattr(settings, "enable_graphrag", False)
-                    or settings.get_graphrag_config().get("enabled", False)
-                ),
+                "enable_dspy": bool(enable_dspy_opt),
+                "enable_graphrag": bool(enable_graphrag_flag),
                 "enable_multimodal": getattr(settings, "enable_multimodal", False),
-                "reranker_normalize_scores": (
-                    settings.retrieval.reranker_normalize_scores
-                ),
-                "reranking_top_k": settings.retrieval.reranking_top_k,
+                "reranker_normalize_scores": reranker_normalize,
+                "reranking_top_k": reranking_top_k,
             }
 
             # Merge caller-provided overrides last (they win)
@@ -480,7 +551,7 @@ class MultiAgentCoordinator:
                 tools_data=tools_data,
                 context=context,
                 total_start_time=start_time,
-                output_mode="structured",
+                output_mode="last_message",
                 parallel_execution_active=True,
             )
 
@@ -489,35 +560,61 @@ class MultiAgentCoordinator:
             result = self._run_agent_workflow(initial_state, thread_id)
             coordination_time = time.perf_counter() - coordination_start
 
-            # Extract response from final state
-            response = self._extract_response(
-                result, query, start_time, coordination_time
+            # Handle timeout signaled by workflow
+            workflow_timed_out = bool(
+                isinstance(result, dict) and result.get("timed_out")
             )
+            used_fallback = False
+            if workflow_timed_out:
+                logger.warning("Coordinator detected timeout; invoking fallback policy")
+                if self.enable_fallback:
+                    response = self._fallback_basic_rag(query, context, start_time)
+                    used_fallback = True
+                    # annotate fallback
+                    try:
+                        response.metadata["reason"] = "timeout"
+                        response.metadata["fallback_source"] = "basic_rag"
+                        # Add timeout indicator to optimization metrics consistently
+                        if isinstance(response.optimization_metrics, dict):
+                            response.optimization_metrics["timeout"] = True
+                        else:
+                            response.optimization_metrics = {"timeout": True}
+                    except (KeyError, TypeError, AttributeError) as exc:
+                        logger.debug("Failed to annotate fallback metadata: %s", exc)
+                else:
+                    processing_time = time.perf_counter() - start_time
+                    response = AgentResponse(
+                        content=(
+                            "The multi-agent system timed out while "
+                            "processing your request."
+                        ),
+                        sources=[],
+                        metadata={"fallback_used": True, "reason": "timeout"},
+                        validation_score=0.0,
+                        processing_time=processing_time,
+                        optimization_metrics={"timeout": True},
+                    )
+
+                # Best-effort analytics logging for timeout path
+                self._log_query_analytics(time.perf_counter() - start_time, False)
+            else:
+                # Extract response from final state
+                response = self._extract_response(
+                    result, query, start_time, coordination_time
+                )
 
             # Update performance metrics
-            self.successful_queries += 1
             processing_time = time.perf_counter() - start_time
+            if workflow_timed_out:
+                if used_fallback:
+                    self.fallback_queries += 1
+            else:
+                self.successful_queries += 1
             self._update_performance_metrics(processing_time, coordination_time)
 
             # Best-effort analytics logging (never impact user flow)
-            if getattr(settings, "analytics_enabled", False):
-                with contextlib.suppress(Exception):
-                    cfg = AnalyticsConfig(
-                        enabled=True,
-                        db_path=(
-                            settings.analytics_db_path
-                            or (settings.data_dir / "analytics" / "analytics.duckdb")
-                        ),
-                        retention_days=settings.analytics_retention_days,
-                    )
-                    am = AnalyticsManager.instance(cfg)
-                    am.log_query(
-                        query_type="chat",
-                        latency_ms=processing_time * 1000.0,
-                        result_count=0,
-                        retrieval_strategy="hybrid",
-                        success=True,
-                    )
+            if not workflow_timed_out:
+                self._log_query_analytics(processing_time, True)
 
             # Validate performance targets
             if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:
@@ -544,31 +641,36 @@ class MultiAgentCoordinator:
     def _run_agent_workflow(
         self, initial_state: MultiAgentState, thread_id: str
     ) -> dict[str, Any]:
-        """Run the multi-agent workflow with timeout protection."""
+        """Run the multi-agent workflow with timeout protection.
+
+        Marks timeout directly on the returned state (timed_out=True) when
+        wall-clock exceeds the configured decision timeout.
+        """
         try:
-            # Create async event loop if needed
+            # Ensure an event loop exists
             try:
-                loop = asyncio.get_event_loop()
+                asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-            # Run workflow with timeout
             config = {"configurable": {"thread_id": thread_id}}
-
-            # Execute workflow with parallel optimization
-            result = None
+            result: dict[str, Any] | None = None
             for state in self.compiled_graph.stream(
                 initial_state,
                 config=config,
                 stream_mode="values",
             ):
                 result = state
-
-                # Check for timeout
                 elapsed = time.perf_counter() - initial_state.total_start_time
                 if elapsed > self.max_agent_timeout:
                     logger.warning("Agent workflow timeout after %.2fs", elapsed)
+                    try:
+                        if isinstance(result, dict):
+                            result["timed_out"] = True
+                            result["deadline_s"] = float(self.max_agent_timeout)
+                    except (TypeError, AttributeError) as exc:
+                        logger.debug("Failed to mark timeout flag on state: %s", exc)
                     break
 
             return result or initial_state
@@ -611,22 +713,9 @@ class MultiAgentCoordinator:
 
             # Build performance metrics
             processing_time = time.perf_counter() - start_time
-            optimization_metrics = {
-                "coordination_overhead_ms": round(coordination_time * 1000, 2),
-                "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
-                "parallel_execution_active": final_state.get(
-                    "parallel_execution_active", False
-                ),
-                "token_reduction_achieved": final_state.get(
-                    "token_reduction_achieved", 0.0
-                ),
-                "context_trimmed": final_state.get("context_trimmed", False),
-                "tokens_trimmed": final_state.get("tokens_trimmed", 0),
-                "kv_cache_usage_gb": final_state.get("kv_cache_usage_gb", 0.0),
-                "model_path": self.model_path,
-                "context_window_used": self.max_context_length,
-                "optimization_enabled": True,
-            }
+            optimization_metrics = self._build_optimization_metrics(
+                final_state, coordination_time
+            )
 
             # Build metadata
             metadata = {

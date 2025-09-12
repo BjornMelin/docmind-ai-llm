@@ -425,7 +425,8 @@ async def setup_hybrid_collection_async(
             logger.info("Named-vectors multi-head feature flag is enabled (no-op)")
 
     # Create sync client for QdrantVectorStore compatibility
-    sync_client = QdrantClient(url=settings.database.qdrant_url)
+    config = get_client_config()
+    sync_client = QdrantClient(**config)
 
     try:
         return QdrantVectorStore(
@@ -531,7 +532,7 @@ def create_vector_store(
     Returns:
         Configured QdrantVectorStore
     """
-    client = QdrantClient(url=settings.database.qdrant_url)
+    client = QdrantClient(**get_client_config())
     # Ensure named vectors schema exists when hybrid is enabled (idempotent)
     if enable_hybrid:
         try:
