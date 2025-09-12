@@ -12,8 +12,15 @@ import contextlib
 from datetime import UTC, datetime
 from pathlib import Path
 
-from beir.datasets.data_loader import GenericDataLoader
-from beir.retrieval.evaluation import EvaluateRetrieval
+# Optional imports to keep module importable when BEIR is not installed. Tests
+# monkeypatch these symbols on the module to avoid heavy dependencies.
+try:  # pragma: no cover - environment-dependent
+    from beir.datasets.data_loader import GenericDataLoader  # type: ignore
+    from beir.retrieval.evaluation import EvaluateRetrieval  # type: ignore
+except Exception:  # pragma: no cover
+    GenericDataLoader = None  # type: ignore[assignment]
+    EvaluateRetrieval = None  # type: ignore[assignment]
+
 from qdrant_client import QdrantClient
 from qdrant_client import models as qm
 
@@ -53,6 +60,24 @@ def main() -> None:
     ap.add_argument("--results_dir", default="eval/results")
     ap.add_argument("--collection", default=settings.database.qdrant_collection)
     args = ap.parse_args()
+
+    # Import BEIR on-demand if not available at module import time.
+    global GenericDataLoader, EvaluateRetrieval
+    if GenericDataLoader is None or EvaluateRetrieval is None:  # pragma: no cover
+        try:
+            from beir.datasets.data_loader import (
+                GenericDataLoader as _GenericDataLoader,  # type: ignore
+            )
+            from beir.retrieval.evaluation import (
+                EvaluateRetrieval as _EvaluateRetrieval,  # type: ignore
+            )
+
+            GenericDataLoader = _GenericDataLoader  # type: ignore[assignment]
+            EvaluateRetrieval = _EvaluateRetrieval  # type: ignore[assignment]
+        except Exception as exc:  # pragma: no cover
+            raise ImportError(
+                "beir is required for IR evaluation; install optional eval extras"
+            ) from exc
 
     _corpus, queries, qrels = GenericDataLoader(args.data_dir).load(split="test")
 

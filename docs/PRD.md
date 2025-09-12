@@ -191,7 +191,7 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 - **Environment Variables** (`.env`): Runtime settings, model paths, feature flags
 - **Streamlit Native Config** (`.streamlit/config.toml`): UI theme, upload limits
 - **Library Defaults**: Components use sensible library defaults (LlamaIndex, Qdrant)
-- **Feature Flags**: Boolean environment variables for experimental features (GraphRAG, DSPy optimization). GraphRAG is currently default ON; disable via `DOCMIND_ENABLE_GRAPHRAG=false`.
+- **Feature Flags**: Boolean environment variables for experimental features (GraphRAG, DSPy optimization). GraphRAG is currently default ON; disable via `DOCMIND_ENABLE_GRAPHRAG=false`. Reranking is always-on by default; ops may override via the canonical env `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (no UI toggle).
 
 ### Snapshots & Staleness
 

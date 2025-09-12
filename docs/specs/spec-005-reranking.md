@@ -86,8 +86,24 @@ Feature: Reranking modes
 
 ## Always‑On Policy
 
+- Env override (ops only): `DOCMIND_RETRIEVAL__USE_RERANKING` (maps to `settings.retrieval.use_reranking`).
 - Reranking MUST be enabled by default with a modality‑aware policy:
   - Text reranking via BGE reranker v2‑m3.
   - Visual reranking via SigLIP scoring when relevant.
 - ColPali MAY be enabled behind a gate only when thresholds are met (image‑heavy corpora, GPU available). It MUST NOT be the default.
 - UI MUST NOT expose reranking toggles; policy is set in configuration.
+
+## Attachment Points (Where Reranking Is Applied)
+
+- Router parity: The RouterQueryEngine constructs the same rerank-enabled engines (vector/hybrid/KG) by passing `node_postprocessors` when `settings.retrieval.use_reranking` is True.
+
+- Tool layer (library‑first): Reranking is attached via `node_postprocessors` on LlamaIndex query engines created by the ToolFactory.
+  - Vector and hybrid tools use a modality‑aware `MultimodalReranker()` that applies text (BGE CrossEncoder) and visual (SigLIP; optional ColPali) reranking and merges results by RRF.
+  - Knowledge graph tools (text‑only) attach the text reranker built via `build_text_reranker(top_n=settings.retrieval.reranking_top_k)`.
+  - This keeps wiring DRY and localized, leveraging LlamaIndex’s documented postprocessor mechanism (index.as_query_engine(..., node_postprocessors=[...]) or RetrieverQueryEngine(..., node_postprocessors=[...])).
+
+## Disabling Reranking (Ops Override Only)
+
+- Environment variable: set `DOCMIND_RETRIEVAL__USE_RERANKING=false` (maps to `settings.retrieval.use_reranking = False`).
+  - When false, ToolFactory omits `node_postprocessors` so no reranking occurs.
+  - There is no UI toggle; disabling is an operational override for constrained environments or diagnostics.

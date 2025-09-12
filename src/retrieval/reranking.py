@@ -272,11 +272,17 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
             ):
                 n.node.text = n.node.text[:TEXT_TRUNCATION_LIMIT]
         nodes_sorted = sorted(nodes, key=lambda x: x.score or 0.0, reverse=True)
-        # Cleanup temp files
+
+        # Cleanup images and temp files
+        for img in images:
+            with contextlib.suppress(OSError, AttributeError, RuntimeError):
+                if hasattr(img, "close"):
+                    img.close()
         for tp in temp_files:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(OSError, AttributeError, RuntimeError):
                 os.remove(tp)
         return nodes_sorted[: settings.retrieval.reranking_top_k]
+
     except (RuntimeError, ValueError, OSError, TypeError) as exc:
         logger.warning("SigLIP rerank error: {} — fail-open", exc)
         return nodes
@@ -540,6 +546,14 @@ class _TextRerankerAdapter:
                 }
             )
             done = work
+
+        # If all scores equal, preserve original order
+        try:
+            scores_only = [float(n.score or 0.0) for n in done]
+            if scores_only and max(scores_only) == min(scores_only):
+                return done[: self.top_n]
+        except (ValueError, TypeError):  # defensive: score cast
+            pass
 
         # Stable sort: score desc, tie-break by node_id asc
         def _key(n: NodeWithScore) -> tuple[float, str]:
@@ -881,3 +895,36 @@ __all__ = [
     "build_text_reranker",
     "build_visual_reranker",
 ]
+
+# ---- Helpers for factories (DRY) ----
+
+
+def get_postprocessors(
+    mode: str, *, use_reranking: bool, top_n: int | None = None
+) -> list | None:
+    """Return node_postprocessors list for the given mode or None.
+
+    Args:
+        mode: One of "vector", "hybrid", or "kg".
+        use_reranking: Global toggle; when False returns None.
+        top_n: Optional top_n for text reranker (KG).
+
+    Returns:
+        list | None: List of postprocessors or None when disabled/unavailable.
+    """
+    if not use_reranking:
+        return None
+    try:
+        if mode in ("vector", "hybrid"):
+            return [MultimodalReranker()]
+        if mode == "kg":
+            return [
+                build_text_reranker(
+                    top_n=top_n
+                    if top_n is not None
+                    else settings.retrieval.reranking_top_k
+                )
+            ]
+    except (ValueError, TypeError):  # defensive: score cast
+        return None
+    return None

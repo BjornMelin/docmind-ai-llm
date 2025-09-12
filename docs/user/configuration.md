@@ -17,6 +17,9 @@ DOCMIND_RETRIEVAL__FUSION_MODE=rrf   # or dbsf (experimental)
 # De-duplication key for fused results
 DOCMIND_RETRIEVAL__DEDUP_KEY=page_id  # or doc_id
 
+# Reranking policy (always-on; override via env)
+DOCMIND_RETRIEVAL__USE_RERANKING=true   # set false to disable
+
 # GraphRAG toggle (default ON)
 DOCMIND_ENABLE_GRAPHRAG=true          # set false to disable
 

@@ -79,6 +79,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Removed
 
 - Removed legacy helpers from `src/app.py`; app remains a thin multipage shell.
+
 ### Fixed
 
 ### Security
@@ -148,6 +149,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Changed
 
 - Reranking is always-on (BGE v2‑m3 text + SigLIP visual) with policy-gated ColPali; UI no longer exposes reranker knobs. Implementation selection is automatic (no env/config toggles).
+- Canonical env override: `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (no UI toggle).
+- Deprecated: `DOCMIND_DISABLE_RERANKING` (use `DOCMIND_RETRIEVAL__USE_RERANKING`).
 
 - Test stability and design-for-testability:
   - Removed the last test-only seam from production code: integrations no longer expose a `ClipEmbedding` alias or accept test-only injection. Embedding setup always uses `HuggingFaceEmbedding`; tests patch the constructor via `monkeypatch` when needed.
@@ -255,6 +258,10 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Test runner `scripts/run_tests.py` updated to ASCII‑only output and corrected import validation list.
 
 - UI/runtime (SPEC‑001): removed legacy in‑app backend selection and ad‑hoc LLM construction; centralized provider selection and LLM creation via Settings page + unified factory with strict endpoint validation.
+
+- Retrieval & Reranking:
+  - Router parity: RouterQueryEngine now passes reranking `node_postprocessors` for vector/hybrid/KG tools when `DOCMIND_RETRIEVAL__USE_RERANKING=true` (mirrors ToolFactory). Safe fallbacks keep older signatures working.
+  - Tests: Added router_factory injection toggle test and KG fallback tests; added hybrid injection test behind explicit `enable_hybrid=True` with stubs.
 
 ### Docs/Specs/RTM
 

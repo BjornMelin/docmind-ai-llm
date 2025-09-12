@@ -12,14 +12,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from llama_index.core import Settings
-from llama_index.core.query_engine import RetrieverQueryEngine, RouterQueryEngine
+from llama_index.core.query_engine import (
+    RetrieverQueryEngine as _RetrieverQueryEngine,
+)
+from llama_index.core.query_engine import RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
 from src.config.settings import settings as default_settings
-from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.postprocessor_utils import (
+    build_pg_query_engine,
+    build_retriever_query_engine,
+    build_vector_query_engine,
+)
+
+RetrieverQueryEngine = _RetrieverQueryEngine  # internal compatibility alias (shim)
 
 
 def build_router_engine(
@@ -44,12 +52,18 @@ def build_router_engine(
         RouterQueryEngine: Configured router engine.
     """
     cfg = settings or default_settings
-    the_llm = llm or Settings.llm
+    the_llm = llm if llm is not None else None
 
     # Vector semantic tool
     try:
-        v_engine = vector_index.as_query_engine(similarity_top_k=cfg.retrieval.top_k)
-    except (TypeError, AttributeError, ValueError):
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        _v_use = bool(getattr(cfg.retrieval, "use_reranking", True))
+        _v_post = _get_pp("vector", use_reranking=_v_use)
+        v_engine = build_vector_query_engine(
+            vector_index, _v_post, similarity_top_k=cfg.retrieval.top_k
+        )
+    except (TypeError, AttributeError, ValueError, ImportError):
         # Last-resort default
         v_engine = vector_index.as_query_engine()
 
@@ -81,7 +95,13 @@ def build_router_engine(
                     or getattr(cfg.retrieval, "hybrid_enabled", False)
                 )
         if hybrid_ok:
-            params = _HybridParams(
+            # Import retriever on-demand to avoid heavy imports at module load.
+            from src.retrieval.hybrid import (
+                ServerHybridRetriever as _shr,  # noqa: N813
+            )
+            from src.retrieval.hybrid import _HybridParams as _hp
+
+            params = _hp(
                 collection=cfg.database.qdrant_collection,
                 fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
                 prefetch_sparse=400,
@@ -89,9 +109,18 @@ def build_router_engine(
                 fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
                 dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
             )
-            retr = ServerHybridRetriever(params)
-            h_engine = RetrieverQueryEngine.from_args(
-                retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+            retr = _shr(params)
+            from src.retrieval.reranking import get_postprocessors as _get_pp
+
+            _h_use = bool(getattr(cfg.retrieval, "use_reranking", True))
+            _h_post = _get_pp("hybrid", use_reranking=_h_use)
+            h_engine = build_retriever_query_engine(
+                retr,
+                _h_post,
+                llm=the_llm,
+                response_mode="compact",
+                verbose=False,
+                engine_cls=RetrieverQueryEngine,
             )
             tools.append(
                 QueryEngineTool(
@@ -104,10 +133,11 @@ def build_router_engine(
                     ),
                 )
             )
-    except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
+    # pragma: no cover - defensive
+    except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    # Optional graph tool with bounded health check
+    # Optional graph tool
     try:
         if (
             pg_index is not None
@@ -119,30 +149,72 @@ def build_router_engine(
                 else 1
             )
             g_engine = None
-            # Prefer retriever path when supported
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(
                     include_text=True, path_depth=default_depth
                 )
-                g_engine = RetrieverQueryEngine.from_args(
-                    retriever=retr, llm=the_llm, response_mode="compact", verbose=False
+                from src.retrieval.reranking import get_postprocessors as _get_pp
+
+                _g_use = bool(getattr(cfg.retrieval, "use_reranking", True))
+                _g_post = _get_pp(
+                    "kg",
+                    use_reranking=_g_use,
+                    top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
+                )
+                g_engine = build_retriever_query_engine(
+                    retr,
+                    _g_post,
+                    llm=the_llm,
+                    response_mode="compact",
+                    verbose=False,
+                    engine_cls=RetrieverQueryEngine,
                 )
             elif hasattr(pg_index, "as_query_engine"):
-                # Fallback to direct query engine for older/limited implementations
-                g_engine = pg_index.as_query_engine(include_text=True)
-            tools.append(
-                QueryEngineTool(
-                    query_engine=g_engine,
-                    metadata=ToolMetadata(
-                        name="knowledge_graph",
-                        description=(
-                            "Knowledge graph traversal for relationship-centric queries"
-                        ),
-                    ),
+                from src.retrieval.reranking import get_postprocessors as _get_pp
+
+                _g_use2 = bool(getattr(cfg.retrieval, "use_reranking", True))
+                _g_post2 = _get_pp(
+                    "kg",
+                    use_reranking=_g_use2,
+                    top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
-            )
-    except (ValueError, TypeError, AttributeError) as e:  # pragma: no cover - defensive
+                g_engine = build_pg_query_engine(pg_index, _g_post2, include_text=True)
+            if g_engine is not None:
+                tools.append(
+                    QueryEngineTool(
+                        query_engine=g_engine,
+                        metadata=ToolMetadata(
+                            name="knowledge_graph",
+                            description=(
+                                "Knowledge graph traversal for "
+                                "relationship-centric queries"
+                            ),
+                        ),
+                    )
+                )
+            else:
+                logger.debug(
+                    "Skipping knowledge_graph tool: pg_index lacks "
+                    "retriever/query engine"
+                )
+    # pragma: no cover - defensive
+    except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Graph tool construction skipped: {e}")
+
+    # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm
+    class _NoOpLLM:
+        def __init__(self):
+            self.metadata = type(
+                "_MD", (), {"context_window": 2048, "num_output": 256}
+            )()
+
+        def predict(self, *_args: Any, **_kwargs: Any) -> str:
+            """No-op predict."""
+            return ""
+
+        def complete(self, *_args: Any, **_kwargs: Any) -> str:
+            """No-op complete."""
+            return ""
 
     # Selector: prefer PydanticSingleSelector when available, else LLM selector
     try:
@@ -150,11 +222,21 @@ def build_router_engine(
 
         selector = PydanticSingleSelector.from_defaults(llm=the_llm)
     except (ImportError, AttributeError):
-        selector = LLMSingleSelector.from_defaults(llm=the_llm)
+        selector = LLMSingleSelector.from_defaults(llm=the_llm or _NoOpLLM())
 
-    router = RouterQueryEngine(
-        selector=selector, query_engine_tools=tools, verbose=False
-    )
+    try:
+        router = RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+            llm=the_llm or _NoOpLLM(),
+        )
+    except TypeError:
+        router = RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+        )
     # Expose both public and private tool lists for compatibility across LI versions
     try:
         router.query_engine_tools = tools
@@ -168,4 +250,4 @@ def build_router_engine(
     return router
 
 
-__all__ = ["build_router_engine"]
+__all__ = ["RetrieverQueryEngine", "build_router_engine"]

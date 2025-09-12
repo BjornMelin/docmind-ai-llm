@@ -26,8 +26,8 @@ from .settings import settings
 
 # Text embeddings default wrapper
 # NOTE: Avoid heavy imports at module import-time. The embedding constructor
-# symbol is bound lazily inside setup_llamaindex(). Tests may patch the module
-# attribute HuggingFaceEmbedding; we preserve a module-level name for this.
+# symbol is bound lazily inside setup_llamaindex(). Callers may patch the module
+# attribute HuggingFaceEmbedding; we preserve a stable module-level name for this.
 HuggingFaceEmbedding = None  # type: ignore  # pylint: disable=invalid-name
 _HF_EMBED_LOCK = threading.Lock()
 
@@ -81,7 +81,8 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
         global configuration will not disrupt other users or in-flight requests.
     """
     # Configure LLM via factory
-    if Settings.llm is not None and not force_llm:
+    has_llm = getattr(Settings, "_llm", None) is not None
+    if has_llm and not force_llm:
         logger.info("LLM already configured; skipping override")
     else:
         try:

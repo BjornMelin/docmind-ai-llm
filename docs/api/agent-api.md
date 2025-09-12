@@ -4,6 +4,7 @@
 
 The Agent Communication API provides direct interfaces for interacting with DocMind AI's 5-agent coordination system. This API enables fine-grained control over agent behavior, coordination patterns, and specialized processing workflows.
 
+> Note: Reranking is always-on; override only via DOCMIND_RETRIEVAL__USE_RERANKING=false (no UI toggle).
 > **Architecture**: Built on LangGraph supervisor pattern with 5 specialized agents: Query Router, Retrieval Expert, Planning Agent, Synthesis Agent, and Validation Agent.
 
 ## Agent System Architecture
@@ -115,7 +116,6 @@ POST /api/v1/agents/query-router/route
   "parameters": {
     "search_strategy": "hybrid",
     "top_k": 15,
-    "enable_reranking": true,
     "temporal_weighting": true,
     "analysis_depth": "comprehensive"
   },
@@ -357,7 +357,6 @@ retrieval_results = await retrieve_documents(
     },
     retrieval_options={
         "strategy": "hybrid",  # dense, sparse, hybrid
-        "enable_reranking": True,
         "reranker_model": "BAAI/bge-reranker-v2-m3",
         "fusion_method": "rrf",  # rrf, weighted, rank_fusion
         "fusion_alpha": 0.7,
@@ -417,7 +416,6 @@ POST /api/v1/agents/retrieval-expert/retrieve
   },
   "retrieval_options": {
     "strategy": "hybrid",
-    "enable_reranking": true,
     "reranker_model": "BAAI/bge-reranker-v2-m3",
     "fusion_method": "rrf",
     "fusion_alpha": 0.7,
@@ -515,7 +513,6 @@ batch_results = await retrieve_documents_batch(
     queries=batch_queries,
     shared_options={
         "strategy": "hybrid",
-        "enable_reranking": True,
         "max_results_per_query": 10
     }
 )

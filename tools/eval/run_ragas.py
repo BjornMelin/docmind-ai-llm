@@ -21,13 +21,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
-from ragas import evaluate
-from ragas.metrics import (
-    answer_relevancy,
-    context_precision,
-    context_recall,
-    faithfulness,
-)
+
+# Optional import: allow module import even if ragas is not installed so tests can
+# monkeypatch `evaluate` symbol. Real runs will import ragas at module import time
+# when available, or on-demand in `main()` when not patched.
+try:  # pragma: no cover - environment-dependent
+    from ragas import evaluate  # type: ignore
+    from ragas.metrics import (  # type: ignore
+        answer_relevancy,
+        context_precision,
+        context_recall,
+        faithfulness,
+    )
+except Exception:  # pragma: no cover - provide placeholders for tests
+    evaluate = None  # type: ignore[assignment]
+    answer_relevancy = None  # type: ignore[assignment]
+    context_precision = None  # type: ignore[assignment]
+    context_recall = None  # type: ignore[assignment]
+    faithfulness = None  # type: ignore[assignment]
 
 from src.agents.coordinator import MultiAgentCoordinator
 
@@ -83,6 +94,34 @@ def main() -> None:
             "ground_truth": df["ground_truth"],
         }
     )
+
+    # Import ragas on-demand if not already imported (and not monkeypatched).
+    global evaluate, faithfulness, answer_relevancy, context_recall, context_precision
+    if evaluate is None:  # pragma: no cover - executed only without ragas in env
+        try:
+            from ragas import evaluate as _evaluate  # type: ignore
+            from ragas.metrics import (  # type: ignore
+                answer_relevancy as _ans,
+            )
+            from ragas.metrics import (
+                context_precision as _cp,
+            )
+            from ragas.metrics import (
+                context_recall as _cr,
+            )
+            from ragas.metrics import (
+                faithfulness as _fh,
+            )
+
+            evaluate = _evaluate  # type: ignore[assignment]
+            answer_relevancy = _ans  # type: ignore[assignment]
+            context_precision = _cp  # type: ignore[assignment]
+            context_recall = _cr  # type: ignore[assignment]
+            faithfulness = _fh  # type: ignore[assignment]
+        except Exception as exc:  # pragma: no cover - defensive
+            raise ImportError(
+                "ragas is required for evaluation; install optional eval extras"
+            ) from exc
 
     result = evaluate(
         data,
