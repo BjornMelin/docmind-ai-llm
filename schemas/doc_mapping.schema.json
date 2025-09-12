@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docmind.ai/schemas/doc_mapping.schema.json",
+  "title": "Per-query rank to doc_id mapping",
+  "type": "object",
+  "patternProperties": {
+    "^[^,\n\r\t]+$": {
+      "type": "object",
+      "patternProperties": {
+        "^[1-9][0-9]*$": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+
