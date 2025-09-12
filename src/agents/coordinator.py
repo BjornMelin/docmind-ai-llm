@@ -561,10 +561,15 @@ class MultiAgentCoordinator:
             coordination_time = time.perf_counter() - coordination_start
 
             # Handle timeout signaled by workflow
-            if isinstance(result, dict) and bool(result.get("timed_out")):
+            workflow_timed_out = bool(
+                isinstance(result, dict) and result.get("timed_out")
+            )
+            used_fallback = False
+            if workflow_timed_out:
                 logger.warning("Coordinator detected timeout; invoking fallback policy")
                 if self.enable_fallback:
                     response = self._fallback_basic_rag(query, context, start_time)
+                    used_fallback = True
                     # annotate fallback
                     try:
                         response.metadata["reason"] = "timeout"
@@ -599,12 +604,17 @@ class MultiAgentCoordinator:
                 )
 
             # Update performance metrics
-            self.successful_queries += 1
             processing_time = time.perf_counter() - start_time
+            if workflow_timed_out:
+                if used_fallback:
+                    self.fallback_queries += 1
+            else:
+                self.successful_queries += 1
             self._update_performance_metrics(processing_time, coordination_time)
 
             # Best-effort analytics logging (never impact user flow)
-            self._log_query_analytics(processing_time, True)
+            if not workflow_timed_out:
+                self._log_query_analytics(processing_time, True)
 
             # Validate performance targets
             if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:
