@@ -203,7 +203,7 @@ def _run_vector_hybrid(
 ) -> tuple[list[dict], str | None, str | None]:
     documents: list[dict] = []
     strategy_used: str | None = None
-    for q in queries:
+    for idx, q in enumerate(queries):
         if strategy == "hybrid" and retriever:
             search_tool = _get_tool_factory().create_hybrid_search_tool(retriever)
             strategy_used = "hybrid_fusion"
@@ -243,6 +243,33 @@ def _run_vector_hybrid(
                 len(new_docs),
                 q,
             )
+            # If this is the primary query and hybrid returned empty, fallback to vector
+            if (
+                strategy in ["hybrid"]
+                and idx == 0
+                and retriever
+                and vector_index
+                and not new_docs
+            ):
+                try:
+                    from .telemetry import log_event  # local import
+                except Exception:  # pragma: no cover - defensive
+                    log_event = None
+                try:
+                    vtool = _get_tool_factory().create_vector_search_tool(vector_index)
+                    vres = vtool.call(primary_query)
+                    vdocs = _parse_tool_result(vres)
+                    if vdocs:
+                        documents.extend(vdocs)
+                        strategy_used = "vector"
+                        if log_event:
+                            log_event(
+                                "hybrid_fallback",
+                                reason="empty_results",
+                                query=primary_query,
+                            )
+                except Exception as fe:  # pragma: no cover - defensive
+                    logger.warning("Vector fallback failed: {}", fe)
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
             logger.error("Retrieval failed for query '{}': {}", q, e)
     return documents, strategy_used, None
