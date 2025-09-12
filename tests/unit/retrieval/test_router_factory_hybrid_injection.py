@@ -27,7 +27,7 @@ def test_hybrid_rerank_injection_toggle(monkeypatch):  # type: ignore[no-untyped
         def __init__(self, *_a, **_k):  # type: ignore[no-untyped-def]
             pass
 
-    monkeypatch.setattr(rf, "ServerHybridRetriever", _DummyHybrid)
+    monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
 
     # Capture from_args kwargs
     class _RQE:

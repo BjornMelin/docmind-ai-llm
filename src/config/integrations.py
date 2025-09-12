@@ -26,8 +26,8 @@ from .settings import settings
 
 # Text embeddings default wrapper
 # NOTE: Avoid heavy imports at module import-time. The embedding constructor
-# symbol is bound lazily inside setup_llamaindex(). Tests may patch the module
-# attribute HuggingFaceEmbedding; we preserve a module-level name for this.
+# symbol is bound lazily inside setup_llamaindex(). Callers may patch the module
+# attribute HuggingFaceEmbedding; we preserve a stable module-level name for this.
 HuggingFaceEmbedding = None  # type: ignore  # pylint: disable=invalid-name
 _HF_EMBED_LOCK = threading.Lock()
 

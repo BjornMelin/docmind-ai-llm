@@ -15,9 +15,7 @@ from typing import Any
 from llama_index.core.query_engine import (
     RetrieverQueryEngine as _RetrieverQueryEngine,
 )
-from llama_index.core.query_engine import (
-    RouterQueryEngine,
-)
+from llama_index.core.query_engine import RouterQueryEngine
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
@@ -29,16 +27,7 @@ from src.retrieval.postprocessor_utils import (
     build_vector_query_engine,
 )
 
-RetrieverQueryEngine = _RetrieverQueryEngine  # back-compat alias for tests
-
-# Expose hybrid retriever symbols at module scope so tests and callers can
-# monkeypatch them without importing src.retrieval.hybrid inside call sites.
-try:  # pragma: no cover - import path varies in tests
-    from src.retrieval.hybrid import ServerHybridRetriever  # type: ignore
-    from src.retrieval.hybrid import _HybridParams as HybridParams  # type: ignore
-except Exception:  # pragma: no cover - defensive fallback for partial envs
-    ServerHybridRetriever = None  # type: ignore[assignment]
-    HybridParams = None  # type: ignore[assignment]
+RetrieverQueryEngine = _RetrieverQueryEngine  # internal compatibility alias (shim)
 
 
 def build_router_engine(
@@ -106,14 +95,12 @@ def build_router_engine(
                     or getattr(cfg.retrieval, "hybrid_enabled", False)
                 )
         if hybrid_ok:
-            # Prefer module-level references (allowing monkeypatch in tests).
-            _shr = ServerHybridRetriever
-            _hp = HybridParams
-            if _shr is None or _hp is None:  # lazy import fallback
-                from src.retrieval.hybrid import (
-                    ServerHybridRetriever as _shr,  # noqa: N813
-                )
-                from src.retrieval.hybrid import _HybridParams as _hp
+            # Import retriever on-demand to avoid heavy imports at module load.
+            from src.retrieval.hybrid import (
+                ServerHybridRetriever as _shr,  # noqa: N813
+            )
+            from src.retrieval.hybrid import _HybridParams as _hp
+
             params = _hp(
                 collection=cfg.database.qdrant_collection,
                 fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
@@ -192,17 +179,22 @@ def build_router_engine(
                     top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
                 g_engine = build_pg_query_engine(pg_index, _g_post2, include_text=True)
-            tools.append(
-                QueryEngineTool(
-                    query_engine=g_engine,
-                    metadata=ToolMetadata(
-                        name="knowledge_graph",
-                        description=(
-                            "Knowledge graph traversal for relationship-centric queries"
+            if g_engine is not None:
+                tools.append(
+                    QueryEngineTool(
+                        query_engine=g_engine,
+                        metadata=ToolMetadata(
+                            name="knowledge_graph",
+                            description=(
+                                "Knowledge graph traversal for relationship-centric queries"
+                            ),
                         ),
-                    ),
+                    )
                 )
-            )
+            else:
+                logger.debug(
+                    "Skipping knowledge_graph tool: pg_index lacks retriever/query engine"
+                )
     # pragma: no cover - defensive
     except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Graph tool construction skipped: {e}")

@@ -53,13 +53,12 @@ def _tool_count(router) -> int:  # type: ignore[no-untyped-def]
 def test_build_router_engine_settings_fallback(monkeypatch, flag: bool) -> None:  # type: ignore[no-untyped-def]
     """When enable_hybrid is None, consult settings.retrieval.enable_server_hybrid."""
     # Patch ServerHybridRetriever to avoid real Qdrant dependency
-    import src.retrieval.router_factory as rf
 
     class _DummyHybrid:
         def __init__(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
             pass
 
-    monkeypatch.setattr(rf, "ServerHybridRetriever", _DummyHybrid)
+    monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
 
     # Toggle settings flag
     settings.retrieval.enable_server_hybrid = flag

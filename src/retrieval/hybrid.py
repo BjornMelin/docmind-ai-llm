@@ -46,9 +46,18 @@ class ServerHybridRetriever:
         self._client = QdrantClient(**get_client_config())
 
     def _embed_dense(self, text: str) -> np.ndarray:
-        vec = Settings.embed_model.get_query_embedding(  # type: ignore[attr-defined]
-            text
-        )
+        """Embed text to dense vector using configured embed model.
+
+        Raises:
+            RuntimeError: If Settings.embed_model is not configured.
+        """
+        embed = getattr(Settings, "embed_model", None)
+        if embed is None:
+            raise RuntimeError(
+                "Settings.embed_model is not configured. Initialize integrations or "
+                "setup embedding before using ServerHybridRetriever."
+            )
+        vec = embed.get_query_embedding(text)  # type: ignore[attr-defined]
         return np.asarray(vec, dtype=np.float32)
 
     def _encode_sparse(self, text: str) -> qmodels.SparseVector | None:
@@ -164,4 +173,4 @@ class ServerHybridRetriever:
         return nodes
 
 
-__all__ = ["ServerHybridRetriever", "_HybridParams"]
+__all__ = ["ServerHybridRetriever"]
