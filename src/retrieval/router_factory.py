@@ -27,7 +27,7 @@ from src.retrieval.postprocessor_utils import (
     build_vector_query_engine,
 )
 
-RetrieverQueryEngine = _RetrieverQueryEngine  # internal compatibility alias (shim)
+RetrieverQueryEngine = _RetrieverQueryEngine
 
 
 def build_router_engine(
