@@ -103,21 +103,24 @@ def main() -> None:
         results[qid] = doc_scores
 
     evaluator = EvaluateRetrieval()
-    ndcg, _map, recall, _precision = evaluator.evaluate(qrels, results, [10])
-    mrr = evaluator.evaluate_custom(qrels, results, [10]).get("mrr@10", 0.0)
+    k_list = [int(args.k)]
+    ndcg, _map, recall, _precision = evaluator.evaluate(qrels, results, k_list)
+    mrr_key = f"mrr@{args.k}"
+    mrr = evaluator.evaluate_custom(qrels, results, k_list).get(mrr_key, 0.0)
 
     out_dir = Path(args.results_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     dataset = Path(args.data_dir).name
 
     # Minimal CSV leaderboard append
+    # Use dynamic metric column names to reflect the chosen k
     row = {
         "ts": datetime.now(UTC).isoformat(),
         "dataset": dataset,
         "k": args.k,
-        "ndcg@10": ndcg.get("NDCG@10", 0.0),
-        "recall@10": recall.get("Recall@10", 0.0),
-        "mrr@10": mrr,
+        f"ndcg@{args.k}": ndcg.get(f"NDCG@{args.k}", 0.0),
+        f"recall@{args.k}": recall.get(f"Recall@{args.k}", 0.0),
+        f"mrr@{args.k}": mrr,
     }
     lb = out_dir / "leaderboard.csv"
     header = not lb.exists()
