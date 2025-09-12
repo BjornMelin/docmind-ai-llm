@@ -94,16 +94,17 @@ def main() -> None:
     df = pd.read_csv(args.dataset_csv)
     if args.sample_count > 0:
         df = df.head(args.sample_count)
-    coord = MultiAgentCoordinator()
 
-    answers: list[str] = []
-    contexts: list[list[str]] = []
-    for _, row in df.iterrows():
-        q = row["question"]
-        resp = coord.process_query(q)
-        answers.append(getattr(resp, "content", ""))
-        # If contexts not provided, leave empty; retrieval contexts can be added later
-        contexts.append([])
+    # Build answers depending on mode: offline skips online calls entirely
+    if args.ragas_mode == "offline":
+        answers: list[str] = [""] * len(df)
+    else:
+        coord = MultiAgentCoordinator()
+        answers = []
+        for _, row in df.iterrows():
+            q = row["question"]
+            resp = coord.process_query(q)
+            answers.append(getattr(resp, "content", ""))
 
     # If dataset contains a 'contexts' column, preserve it; else empty lists
     if "contexts" in df.columns:

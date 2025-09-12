@@ -131,11 +131,19 @@ def main() -> None:
                 doc_scores[str(did)] = float(nws.score)
         results[qid] = doc_scores
 
+    # Restrict evaluation to the same query subset when --sample_count is used
     evaluator = EvaluateRetrieval()
     k_list = [int(args.k)]
-    ndcg, _map, recall, _precision = evaluator.evaluate(qrels, results, k_list)
-    # MRR via custom metric; support uppercase/lowercase key variants
-    mrr_dict = evaluator.evaluate_custom(qrels, results, k_list, metric="mrr")
+    if 0 < args.sample_count < len(queries):
+        qrels_eval = {qid: qrels[qid] for qid, _ in qitems if qid in qrels}
+    else:
+        qrels_eval = qrels
+    ndcg, _map, recall, _precision = evaluator.evaluate(qrels_eval, results, k_list)
+    # MRR via custom metric; support version differences and key variants
+    try:
+        mrr_dict = evaluator.evaluate_custom(qrels_eval, results, k_list, metric="mrr")
+    except TypeError:
+        mrr_dict = evaluator.evaluate_custom(qrels_eval, results, k_list)
     mrr_val = mrr_dict.get(f"MRR@{args.k}")
     if mrr_val is None:
         mrr_val = mrr_dict.get(f"mrr@{args.k}", 0.0)

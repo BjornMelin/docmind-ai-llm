@@ -43,13 +43,10 @@ def build_doc_mapping(results: dict[str, list[Any]]) -> dict[str, dict[int, str]
     Returns:
         A mapping: ``{qid: {rank: doc_id}}`` where ranks start at 1.
     """
-    mapping: dict[str, dict[int, str]] = {}
-    for qid, nodes in results.items():
-        rank_map: dict[int, str] = {}
-        for idx, n in enumerate(nodes, start=1):
-            rank_map[idx] = to_doc_id(n)
-        mapping[qid] = rank_map
-    return mapping
+    return {
+        qid: {idx: to_doc_id(n) for idx, n in enumerate(nodes, start=1)}
+        for qid, nodes in results.items()
+    }
 
 
 __all__ = ["build_doc_mapping", "to_doc_id"]

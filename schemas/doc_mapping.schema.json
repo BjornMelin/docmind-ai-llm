@@ -1,17 +1,27 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://docmind.ai/schemas/doc_mapping.schema.json",
-  "title": "Per-query rank to doc_id mapping",
+  "title": "Doc mapping with run metadata",
   "type": "object",
-  "patternProperties": {
-    "^[^,\n\r\t]+$": {
+  "required": ["ts", "dataset", "k", "sample_count", "mapping"],
+  "properties": {
+    "ts": { "type": "string" },
+    "dataset": { "type": "string" },
+    "k": { "type": "integer", "minimum": 1 },
+    "sample_count": { "type": "integer", "minimum": 0 },
+    "mapping": {
       "type": "object",
       "patternProperties": {
-        "^[1-9][0-9]*$": { "type": "string" }
+        "^[^,\n\r\t]+$": {
+          "type": "object",
+          "patternProperties": {
+            "^[1-9][0-9]*$": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     }
   },
   "additionalProperties": false
 }
-

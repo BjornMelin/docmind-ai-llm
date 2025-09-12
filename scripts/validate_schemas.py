@@ -60,68 +60,67 @@ def validate_file(path: Path) -> None:
             )
         validator = BEIR_SCHEMA if kind == "beir" else RAGAS_SCHEMA
 
-        # If BEIR: enforce dynamic header ↔ k consistency
-        header_k: int | None = None
-        if kind == "beir":
-            dyn_cols = [h for h in header if re.match(r"^(ndcg|recall|mrr)@\d+$", h)]
-            if not dyn_cols:
+        def get_header_k(hdr: list[str]) -> int:
+            dyn = [h for h in hdr if re.match(r"^(ndcg|recall|mrr)@\d+$", h)]
+            if not dyn:
                 raise ValueError(
-                    "BEIR leaderboard must include at least one dynamic metric "
-                    "column (ndcg@k/recall@k/mrr@k)."
+                    "BEIR leaderboard must include at least one dynamic metric column"
                 )
-            ks = {int(h.split("@", 1)[1]) for h in dyn_cols}
+            ks = {int(h.split("@", 1)[1]) for h in dyn}
             if len(ks) != 1:
                 raise ValueError(
                     "Inconsistent dynamic metric headers; found Ks "
                     f"{sorted(ks)} in {path}"
                 )
-            header_k = next(iter(ks))
+            return ks.pop()
+
+        def normalize_beir(row: dict[str, str], header_k: int) -> dict[str, object]:
+            out: dict[str, object] = dict(row)
+            out["k"] = int(row.get("k", 0) or 0)
+            out["sample_count"] = int(row.get("sample_count", 0) or 0)
+            if out["k"] != header_k:
+                raise ValueError(
+                    "Row k does not match header k; "
+                    f"row has k={out['k']} while header k={header_k} in {path}"
+                )
+            for key, val in row.items():
+                if key.startswith(("ndcg@", "recall@", "mrr@")):
+                    try:
+                        out[key] = float(val)
+                    except Exception:
+                        out[key] = 0.0
+            return out
+
+        def normalize_ragas(row: dict[str, str]) -> dict[str, object]:
+            out: dict[str, object] = dict(row)
+            for key in (
+                "faithfulness",
+                "answer_relevancy",
+                "context_recall",
+                "context_precision",
+            ):
+                try:
+                    out[key] = float(row.get(key, "nan"))
+                except Exception:
+                    out[key] = 0.0
+            out["sample_count"] = int(row.get("sample_count", 0) or 0)
+            return out
+
+        header_k = get_header_k(header) if kind == "beir" else None
 
         for row_count, row in enumerate(reader, start=1):
-            # Cast numeric fields where possible
-            data: dict[str, object] = dict(row)
-            if kind == "beir":
-                # Required static fields
-                data["k"] = int(row.get("k", 0) or 0)
-                data["sample_count"] = int(row.get("sample_count", 0) or 0)
-                # Validate header_k equals row k
-                if header_k is not None and data["k"] != header_k:
-                    raise ValueError(
-                        "Row k does not match header k; "
-                        f"row {row_count} has k={data['k']} while header k={header_k} "
-                        f"in {path}"
-                    )
-                # Dynamic metric fields
-                for h in header:
-                    if h.startswith(("ndcg@", "recall@", "mrr@")):
-                        try:
-                            data[h] = float(row[h])
-                        except Exception:
-                            data[h] = 0.0
-            else:
-                # RAGAS required numeric fields
-                for h in (
-                    "faithfulness",
-                    "answer_relevancy",
-                    "context_recall",
-                    "context_precision",
-                ):
-                    try:
-                        data[h] = float(row.get(h, "nan"))
-                    except Exception:
-                        data[h] = 0.0
-                data["sample_count"] = int(row.get("sample_count", 0) or 0)
+            data = (
+                normalize_beir(row, int(header_k))  # type: ignore[arg-type]
+                if kind == "beir"
+                else normalize_ragas(row)
+            )
 
             # Validate static fields present
-            if "schema_version" not in data:
-                raise ValueError(f"Missing schema_version in row {row_count} of {path}")
-            if "dataset" not in data:
-                raise ValueError(f"Missing dataset in row {row_count} of {path}")
-            if "ts" not in data:
-                raise ValueError(f"Missing ts in row {row_count} of {path}")
+            for field in ("schema_version", "dataset", "ts"):
+                if field not in data:
+                    raise ValueError(f"Missing {field} in row {row_count} of {path}")
 
-            errors = sorted(validator.iter_errors(data), key=lambda e: e.path)
-            if errors:
+            if errors := sorted(validator.iter_errors(data), key=lambda e: e.path):
                 msg = "; ".join(
                     f"{list(e.path)}: {e.message}" if e.path else e.message
                     for e in errors
@@ -134,7 +133,7 @@ def discover_leaderboards() -> list[Path]:
     return [
         p
         for p in Path.cwd().rglob("leaderboard.csv")
-        if "/.venv/" not in str(p) and "/.git/" not in str(p)
+        if ".venv" not in p.parts and ".git" not in p.parts
     ]
 
 

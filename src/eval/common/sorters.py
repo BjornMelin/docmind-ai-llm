@@ -30,7 +30,10 @@ def _extract(item: Any) -> tuple[str, float]:
     sc = getattr(item, "score", None)
     if did is not None and sc is not None:
         return str(did), float(sc)
-    raise TypeError("Unsupported item shape for canonical_sort")
+    raise TypeError(
+        "Unsupported item shape for canonical_sort: "
+        f"type={type(item).__name__}, repr={item!r}"
+    )
 
 
 def canonical_sort(items: Iterable[Any]) -> list[tuple[str, float]]:
@@ -55,7 +58,7 @@ def round6(x: float) -> str:
     Returns:
         String formatted to 6 decimals with standard rounding.
     """
-    return f"{float(x):.6f}"
+    return f"{x:.6f}"
 
 
 __all__ = ["canonical_sort", "round6"]
