@@ -27,7 +27,10 @@ from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from typing import Any
 
-import torch
+try:  # Optional torch; CPU-only environments must not fail at import
+    import torch  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    torch = None  # type: ignore
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
@@ -513,7 +516,7 @@ def gpu_memory_context() -> Generator[None, None, None]:
     finally:
         # Always cleanup GPU resources
         try:
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
         except RuntimeError as e:
@@ -546,7 +549,7 @@ async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
     finally:
         # Always cleanup GPU resources
         try:
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
         except RuntimeError as e:
@@ -651,7 +654,11 @@ def cuda_error_context(
 
     Example:
         with cuda_error_context("VRAM check", reraise=False, default_return=0.0) as ctx:
-            vram = torch.cuda.memory_allocated() / 1024**3
+            vram = (
+                torch.cuda.memory_allocated() / 1024**3
+                if (torch is not None and torch.cuda.is_available())
+                else 0.0
+            )
             ctx['result'] = vram
 
         vram = ctx.get('result', 0.0)
@@ -746,7 +753,7 @@ def get_safe_vram_usage() -> float:
     """
     return safe_cuda_operation(
         lambda: torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
-        if torch.cuda.is_available()
+        if (torch is not None and torch.cuda.is_available())
         else 0.0,
         "VRAM usage check",
         default_return=0.0,
@@ -769,7 +776,7 @@ def get_safe_gpu_info() -> dict[str, Any]:
     }
 
     try:
-        info["cuda_available"] = torch.cuda.is_available()
+        info["cuda_available"] = bool(torch is not None and torch.cuda.is_available())
 
         if info["cuda_available"]:
             info["device_count"] = safe_cuda_operation(
