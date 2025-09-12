@@ -32,6 +32,7 @@ from qdrant_client import models as qm
 
 from src.config import settings
 from src.eval.common.determinism import set_determinism
+from src.eval.common.io import SCHEMA_VERSION, write_csv_row
 from src.eval.common.mapping import build_doc_mapping
 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 
@@ -58,27 +59,6 @@ def ensure_collection(client: QdrantClient, name: str) -> None:
         )
 
 
-SCHEMA_VERSION = "1.0"
-
-
-def _write_csv_row(path: Path, row: dict[str, Any]) -> None:
-    header = list(row.keys())
-    if path.exists():
-        first = path.read_text(encoding="utf-8").splitlines()[:1]
-        if first:
-            existing = first[0].split(",")
-            if existing != header:
-                raise ValueError(
-                    "Leaderboard schema mismatch; use a new file or bump schema_version"
-                )
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8") as f:
-            f.write(",".join(header) + "\n")
-    with path.open("a", encoding="utf-8") as f:
-        f.write(",".join(str(v) for v in row.values()) + "\n")
-
-
 def main() -> None:
     """Run evaluation for a BEIR dataset and log metrics to CSV."""
     # Determinism first
@@ -100,6 +80,8 @@ def main() -> None:
 
     if args.k <= 0:
         raise ValueError("--k must be > 0")
+    if args.sample_count < 0:
+        raise ValueError("--sample_count must be >= 0")
 
     # Import BEIR on-demand if not available at module import time.
     global GenericDataLoader, EvaluateRetrieval
@@ -191,7 +173,7 @@ def main() -> None:
         "sample_count": len(qitems),
     }
     lb = out_dir / "leaderboard.csv"
-    _write_csv_row(lb, row)
+    write_csv_row(lb, row)
 
 
 if __name__ == "__main__":

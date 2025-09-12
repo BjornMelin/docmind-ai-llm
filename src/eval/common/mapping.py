@@ -12,43 +12,25 @@ from typing import Any
 def to_doc_id(node_like: Any) -> str:
     """Extract a document identifier from a retrieval node-like object.
 
-    The function checks common locations where a "doc_id" may appear:
-        - ``obj.node.metadata['doc_id']``
-        - ``obj.node.doc_id``
-        - ``obj.node.id_`` / ``obj.node.id`` as fallback
-        - ``obj.metadata['doc_id']``
-        - ``obj.id`` as last resort
+    Tries a sequence of attribute paths in order, then falls back to repr().
     """
-    # NodeWithScore.node.metadata path
-    try:
-        md = getattr(getattr(node_like, "node", None), "metadata", None) or {}
-        if isinstance(md, dict) and "doc_id" in md and md["doc_id"] is not None:
-            return str(md["doc_id"])
-    except Exception:  # pragma: no cover - defensive
-        # fall through to other strategies
-        ...
-
-    # NodeWithScore.node direct attributes
-    try:
-        node = getattr(node_like, "node", None)
-        for attr in ("doc_id", "id_", "id"):
-            val = getattr(node, attr, None)
-            if val is not None:
-                return str(val)
-    except Exception:  # pragma: no cover - defensive
-        ...
-
-    # Flat metadata
-    try:
-        md = getattr(node_like, "metadata", None) or {}
-        if isinstance(md, dict) and md.get("doc_id") is not None:
-            return str(md["doc_id"])
-    except Exception:  # pragma: no cover - defensive
-        ...
-
-    # Final fallback: object id attribute or repr
-    val = getattr(node_like, "id", None)
-    return str(val) if val is not None else str(node_like)
+    lookup_paths = [
+        ("node", "metadata", "doc_id"),
+        ("node", "doc_id"),
+        ("node", "id_"),
+        ("node", "id"),
+        ("metadata", "doc_id"),
+        ("id",),
+    ]
+    for path in lookup_paths:
+        val = node_like
+        for attr in path:
+            val = val.get(attr) if isinstance(val, dict) else getattr(val, attr, None)
+            if val is None:
+                break
+        else:
+            return str(val)
+    return repr(node_like)
 
 
 def build_doc_mapping(results: dict[str, list[Any]]) -> dict[str, dict[int, str]]:

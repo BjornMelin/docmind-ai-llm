@@ -43,26 +43,7 @@ except Exception:  # pragma: no cover - provide placeholders for tests
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.eval.common.determinism import set_determinism
-
-SCHEMA_VERSION = "1.0"
-
-
-def _write_csv_row(path: Path, row: dict[str, Any]) -> None:
-    header = list(row.keys())
-    if path.exists():
-        first = path.read_text(encoding="utf-8").splitlines()[:1]
-        if first:
-            existing = first[0].split(",")
-            if existing != header:
-                raise ValueError(
-                    "Leaderboard schema mismatch; use a new file or bump schema_version"
-                )
-    else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8") as f:
-            f.write(",".join(header) + "\n")
-    with path.open("a", encoding="utf-8") as f:
-        f.write(",".join(str(v) for v in row.values()) + "\n")
+from src.eval.common.io import SCHEMA_VERSION, write_csv_row
 
 
 def main() -> None:
@@ -167,10 +148,14 @@ def main() -> None:
                 "ragas is required for evaluation; install optional eval extras"
             ) from exc
 
+    # Use ragas_mode to toggle minimal runtime behavior
+    show_progress = args.ragas_mode == "online_smoke"
+    batch_size = 8 if args.ragas_mode == "online_smoke" else None
     result = evaluate(
         data,
         metrics=[faithfulness, answer_relevancy, context_recall, context_precision],
-        show_progress=False,
+        show_progress=show_progress,
+        batch_size=batch_size,
     )
 
     # The mock in tests returns mapping of Series; handle that shape.
@@ -196,7 +181,7 @@ def main() -> None:
     out_dir = Path(args.results_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     lb = out_dir / "leaderboard.csv"
-    _write_csv_row(lb, out)
+    write_csv_row(lb, out)
 
 
 if __name__ == "__main__":
