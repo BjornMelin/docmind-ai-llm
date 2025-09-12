@@ -46,8 +46,9 @@ Feature: IR metrics
 
 ## CLI Outputs & Offline Requirements
 
-- IR (BEIR) CLI MUST write a `leaderboard.csv` containing columns including (but not limited to): `NDCG@10`, `Recall@10`, `MRR@10`.
-- E2E (RAGAS) CLI MUST write a `leaderboard.csv` containing columns including (but not limited to): `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`.
+- IR (BEIR) CLI MUST write a `leaderboard.csv` with fields: `schema_version`, `ts`, `dataset`, `k`, and dynamic metric columns `ndcg@{k}`, `recall@{k}`, `mrr@{k}` plus `sample_count`.
+- E2E (RAGAS) CLI MUST write a `leaderboard.csv` with fields: `schema_version`, `ts`, `dataset`, `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`, and `sample_count`.
+- Determinism: CLIs MUST set seeds and thread caps; support `--sample_count` for deterministic subsets.
 - Tests MUST be deterministic and offline:
   - Heavy network/dataset downloads are NOT allowed in CI; use strict mocks or tiny local datasets.
   - Coordinator/retriever interactions MUST be stubbed.
