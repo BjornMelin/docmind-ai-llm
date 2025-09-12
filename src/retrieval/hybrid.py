@@ -7,6 +7,7 @@ NodeWithScore list with deterministic ordering and de-duplication.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,6 +20,7 @@ from qdrant_client import models as qmodels
 
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
 from src.utils.storage import get_client_config
+from src.utils.telemetry import log_jsonl
 
 
 @dataclass
@@ -32,24 +34,40 @@ class _HybridParams:
 
 
 class ServerHybridRetriever:
-    """Retriever that uses Qdrant Query API server-side fusion (RRF/DBSF).
+    """Hybrid retriever using Qdrant's server-side fusion (RRF/DBSF).
 
-    - Computes dense + sparse for the query text.
-    - Prefetches sparse + dense using named vectors 'text-sparse'/'text-dense'.
-    - De-dups by the configured key before final cut.
-    - Returns LlamaIndex NodeWithScore list with deterministic ordering.
+    Computes dense and sparse query representations, prefetches candidates
+    for both named vectors (``text-dense``/``text-sparse``), applies
+    server-side fusion via Qdrant Query API, then performs deterministic
+    de-duplication before the final cut.
+
+    Notes:
+        - Fusion modes supported: Reciprocal Rank Fusion (RRF) and
+          Distribution-Based Score Fusion (DBSF).
+        - Deduplication key defaults to ``page_id`` but is configurable.
     """
 
     def __init__(self, params: _HybridParams) -> None:
-        """Initialize with retrieval parameters and Qdrant client."""
+        """Initialize retriever with parameters and client.
+
+        Args:
+            params: Retrieval parameters including collection, fusion mode,
+                prefetch limits, and de-duplication key.
+        """
         self.params = params
         self._client = QdrantClient(**get_client_config())
 
     def _embed_dense(self, text: str) -> np.ndarray:
-        """Embed text to dense vector using configured embed model.
+        """Embed text into a dense vector using configured model.
+
+        Args:
+            text: Input text to embed.
+
+        Returns:
+            Dense vector representation as ``np.ndarray[float32]``.
 
         Raises:
-            RuntimeError: If Settings.embed_model is not configured.
+            RuntimeError: If ``Settings.embed_model`` is not configured.
         """
         embed = getattr(Settings, "embed_model", None)
         if embed is None:
@@ -61,21 +79,52 @@ class ServerHybridRetriever:
         return np.asarray(vec, dtype=np.float32)
 
     def _encode_sparse(self, text: str) -> qmodels.SparseVector | None:
+        """Encode text into a Qdrant ``SparseVector`` when available.
+
+        Args:
+            text: Input text to encode sparsely.
+
+        Returns:
+            A ``SparseVector`` when a sparse encoder is available and succeeds;
+            otherwise ``None`` to indicate dense-only fallback.
+        """
         try:
             return _encode_sparse_query(text)
         except (ValueError, TypeError, AttributeError):  # pragma: no cover - defensive
             return None
 
     def _fusion(self) -> qmodels.FusionQuery:
+        """Build a ``FusionQuery`` based on configured fusion mode.
+
+        Returns:
+            ``FusionQuery`` configured for ``DBSF`` when ``fusion_mode`` is
+            ``"dbsf"`` (case-insensitive); otherwise defaults to ``RRF``.
+        """
         mode = (self.params.fusion_mode or "rrf").lower()
         if mode == "dbsf":
             return qmodels.FusionQuery(fusion=qmodels.Fusion.DBSF)
         return qmodels.FusionQuery(fusion=qmodels.Fusion.RRF)
 
     def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:  # pylint: disable=too-many-locals
-        """Execute hybrid retrieval and return deduplicated, ordered results."""
+        """Execute server-side hybrid retrieval.
+
+        Computes dense and sparse queries, prefetches candidates, fuses scores
+        on the server, performs deterministic de-duplication, and returns
+        ``NodeWithScore`` results ordered by score (descending) and id (stable).
+
+        Args:
+            query: Query text or ``QueryBundle``.
+
+        Returns:
+            A list of ``NodeWithScore`` instances up to ``fused_top_k``.
+
+        Notes:
+            On network or query errors, the retriever fails open and returns an
+            empty list rather than raising, to avoid breaking calling pipelines.
+        """
         qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
 
+        t0 = time.time()
         dense_vec = self._embed_dense(qtext)
         sparse_vec = self._encode_sparse(qtext)
 
@@ -115,12 +164,19 @@ class ServerHybridRetriever:
         )
 
         # Optional owner filter via env/telemetry could be added here
+        # Headroom for server-side limit to mitigate post-fusion dedup underfill
+        fused_fetch_k = max(
+            int(self.params.prefetch_dense),
+            int(self.params.prefetch_sparse),
+            int(self.params.fused_top_k),
+        )
+
         try:
             result = self._client.query_points(
                 collection_name=self.params.collection,
                 prefetch=prefetch,
                 query=self._fusion(),
-                limit=self.params.fused_top_k,
+                limit=fused_fetch_k,
                 with_payload=[
                     "doc_id",
                     "page_id",
@@ -140,6 +196,7 @@ class ServerHybridRetriever:
         key_name = (self.params.dedup_key or "page_id").strip()
         best: dict[str, tuple[float, Any]] = {}
         points = getattr(result, "points", []) or getattr(result, "result", [])
+        input_count = len(points)
         for p in points:
             payload = getattr(p, "payload", {}) or {}
             score = float(getattr(p, "score", 0.0))
@@ -152,6 +209,7 @@ class ServerHybridRetriever:
         dedup_sorted = sorted(
             best.values(), key=lambda x: (-x[0], str(getattr(x[1], "id", "")))
         )
+        unique_count = len(dedup_sorted)
         nodes: list[NodeWithScore] = []
         for score, p in dedup_sorted[: self.params.fused_top_k]:
             payload = getattr(p, "payload", {}) or {}
@@ -169,6 +227,28 @@ class ServerHybridRetriever:
             node = TextNode(text=text, id_=nid)
             node.metadata.update({k: v for k, v in payload.items() if k != "text"})
             nodes.append(NodeWithScore(node=node, score=score))
+
+        # Telemetry (PII-safe; no query text)
+        try:
+            latency_ms = int((time.time() - t0) * 1000)
+            fusion_mode = (self.params.fusion_mode or "rrf").lower()
+            log_jsonl(
+                {
+                    "retrieval.fusion_mode": fusion_mode,
+                    "retrieval.prefetch_dense_limit": int(self.params.prefetch_dense),
+                    "retrieval.prefetch_sparse_limit": int(self.params.prefetch_sparse),
+                    "retrieval.fused_limit": int(self.params.fused_top_k),
+                    "retrieval.return_count": len(nodes),
+                    "retrieval.latency_ms": latency_ms,
+                    "retrieval.sparse_fallback": bool(sparse_vec is None),
+                    "dedup.key": key_name,
+                    "dedup.input_count": int(input_count),
+                    "dedup.unique_count": int(unique_count),
+                    "dedup.duplicates_removed": int(max(0, input_count - unique_count)),
+                }
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.debug("Telemetry emit skipped: %s", exc)
 
         return nodes
 
