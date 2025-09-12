@@ -90,6 +90,8 @@ def main() -> None:
         help="If >0, limit number of rows deterministically",
     )
     args = ap.parse_args()
+    if args.sample_count < 0:
+        raise ValueError("--sample_count must be >= 0")
 
     df = pd.read_csv(args.dataset_csv)
     if args.sample_count > 0:
