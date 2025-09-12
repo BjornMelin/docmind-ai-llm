@@ -355,9 +355,8 @@ class TestMultiAgentCoordinator:
         # Validate create_supervisor was called with ADR-011 flags
         _, kwargs = mock_create_supervisor.call_args
         assert kwargs.get("parallel_tool_calls") is True
-        assert kwargs.get("output_mode") == "structured"
-        assert kwargs.get("create_forward_message_tool") is True
-        assert kwargs.get("add_handoff_back_messages") is True
+        assert kwargs.get("output_mode") == "last_message"
+        assert kwargs.get("add_handoff_messages") is True
         assert "pre_model_hook" in kwargs
         assert "post_model_hook" in kwargs
 
@@ -760,19 +759,12 @@ class TestConstants:
     def test_import_constants(self):
         """Test that all expected constants can be imported."""
         from src.agents.coordinator import (
-            ADD_HANDOFF_BACK_MESSAGES_ENABLED,
             CONTEXT_TRIM_STRATEGY,
-            CREATE_FORWARD_MESSAGE_TOOL_ENABLED,
-            OUTPUT_MODE_STRUCTURED,
             PARALLEL_TOOL_CALLS_ENABLED,
         )
 
-        assert isinstance(ADD_HANDOFF_BACK_MESSAGES_ENABLED, bool)
         assert isinstance(CONTEXT_TRIM_STRATEGY, str)
-        assert isinstance(CREATE_FORWARD_MESSAGE_TOOL_ENABLED, bool)
-        assert isinstance(OUTPUT_MODE_STRUCTURED, str)
         assert isinstance(PARALLEL_TOOL_CALLS_ENABLED, bool)
 
-        # Test specific values
-        assert OUTPUT_MODE_STRUCTURED == "structured"
+        # Test specific value
         assert CONTEXT_TRIM_STRATEGY == "last"

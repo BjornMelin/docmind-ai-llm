@@ -139,7 +139,7 @@ def build_router_engine(
     except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    # Optional graph tool
+    # Optional graph tool (health‑gated)
     try:
         if (
             pg_index is not None
@@ -150,6 +150,30 @@ def build_router_engine(
                 if cfg is not None
                 else 1
             )
+            # Health probe: shallow retrieve to ensure index is usable
+            try:
+                if hasattr(pg_index, "as_retriever"):
+                    _probe_retr = pg_index.as_retriever(
+                        include_text=False, path_depth=1, similarity_top_k=1
+                    )
+                    _probe = _probe_retr.retrieve("health")
+                    if not _probe:
+                        logger.info(
+                            "Skipping knowledge_graph tool: health probe returned 0 results"
+                        )
+                        raise RuntimeError("kg_unhealthy")
+                else:
+                    # If no retriever is available, proceed as before (best effort)
+                    pass
+            except Exception as _probe_exc:  # pylint: disable=broad-exception-caught
+                # On any probe failure, skip KG tool registration
+                if str(_probe_exc) != "kg_unhealthy":
+                    logger.debug(
+                        "KG health probe failed: %s — not registering KG tool",
+                        _probe_exc,
+                    )
+                # Continue without graph tool
+                raise RuntimeError("kg_probe_failed")
             g_engine = None
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(
@@ -200,7 +224,7 @@ def build_router_engine(
                     "retriever/query engine"
                 )
     # pragma: no cover - defensive
-    except (ValueError, TypeError, AttributeError, ImportError) as e:
+    except (ValueError, TypeError, AttributeError, ImportError, RuntimeError) as e:
         logger.debug(f"Graph tool construction skipped: {e}")
 
     # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm

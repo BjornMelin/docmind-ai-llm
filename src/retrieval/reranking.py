@@ -169,6 +169,8 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
     if not nodes:
         return nodes
     t0 = _now_ms()
+    images: list[Any] = []
+    temp_files: list[str] = []
     try:
         import torch  # local import to avoid global dependency in tests
 
@@ -200,8 +202,6 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
             def decrypt_file(p: str) -> str:  # type: ignore
                 return p
 
-        images: list[Any] = []
-        temp_files: list[str] = []
         for p in paths:
             if p:
                 try:
@@ -210,7 +210,9 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
                         dec = decrypt_file(p)
                         to_open = dec
                         temp_files.append(dec)
-                    images.append(Image.open(to_open).convert("RGB"))
+                    # Ensure we close the file handle from Image.open
+                    with Image.open(to_open) as _im:
+                        images.append(_im.convert("RGB"))
                 except (OSError, ValueError, RuntimeError, TypeError):
                     images.append(None)
             else:
@@ -273,7 +275,13 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
                 n.node.text = n.node.text[:TEXT_TRUNCATION_LIMIT]
         nodes_sorted = sorted(nodes, key=lambda x: x.score or 0.0, reverse=True)
 
-        # Cleanup images and temp files
+        return nodes_sorted[: settings.retrieval.reranking_top_k]
+
+    except (RuntimeError, ValueError, OSError, TypeError) as exc:
+        logger.warning("SigLIP rerank error: {} — fail-open", exc)
+        return nodes
+    finally:
+        # Always cleanup images and temporary files
         for img in images:
             with contextlib.suppress(OSError, AttributeError, RuntimeError):
                 if hasattr(img, "close"):
@@ -281,11 +289,6 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
         for tp in temp_files:
             with contextlib.suppress(OSError, AttributeError, RuntimeError):
                 os.remove(tp)
-        return nodes_sorted[: settings.retrieval.reranking_top_k]
-
-    except (RuntimeError, ValueError, OSError, TypeError) as exc:
-        logger.warning("SigLIP rerank error: {} — fail-open", exc)
-        return nodes
 
 
 def _parse_top_k(value: int | str | None) -> int:

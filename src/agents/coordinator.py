@@ -100,9 +100,6 @@ class ContextManager:
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
-OUTPUT_MODE_STRUCTURED = "structured"
-CREATE_FORWARD_MESSAGE_TOOL_ENABLED = True
-ADD_HANDOFF_BACK_MESSAGES_ENABLED = True
 
 
 class MultiAgentCoordinator:
@@ -282,15 +279,17 @@ class MultiAgentCoordinator:
             # Create forward message tool for direct communication
             forward_tool = create_forward_message_tool("supervisor")
 
-            # Create supervisor with optimization parameters
+            # Create supervisor with corrected flags per ADR-011
+            # - output_mode: "last_message" (structured metadata stays in state)
+            # - add_handoff_messages: True (handoff propagation)
+            # - include forward message tool in tools list
             self.graph = create_supervisor(
                 agents=agents,
                 model=self.llm,
                 prompt=system_prompt,
                 parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
-                output_mode=OUTPUT_MODE_STRUCTURED,
-                create_forward_message_tool=CREATE_FORWARD_MESSAGE_TOOL_ENABLED,
-                add_handoff_back_messages=ADD_HANDOFF_BACK_MESSAGES_ENABLED,
+                output_mode="last_message",
+                add_handoff_messages=True,
                 pre_model_hook=self._create_pre_model_hook(),
                 post_model_hook=self._create_post_model_hook(),
                 tools=[forward_tool],
@@ -480,7 +479,7 @@ class MultiAgentCoordinator:
                 tools_data=tools_data,
                 context=context,
                 total_start_time=start_time,
-                output_mode="structured",
+                output_mode="last_message",
                 parallel_execution_active=True,
             )
 

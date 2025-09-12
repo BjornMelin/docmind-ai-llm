@@ -121,16 +121,13 @@ def create_app(llm, tools):
         agents=agents,
         model=llm,
         prompt=SUPERVISOR_PROMPT,
-        config={
-            # Verified modern parameters from LangGraph supervisor docs
-            "parallel_tool_calls": True,          # concurrent agent/tool paths
-            "output_mode": "structured",          # richer outputs + metadata
-            "create_forward_message_tool": True,  # direct passthrough when needed
-            "add_handoff_back_messages": True,    # track coordination handoffs
-        },
+        parallel_tool_calls=True,          # concurrent agent/tool paths
+        output_mode="last_message",        # structured data stays in state
+        add_handoff_messages=True,         # track coordination handoffs
         # Optional hooks for context/window management
         pre_model_hook=trim_context_hook,  # enforce 128K cap (ADR‑004/010)
         post_model_hook=collect_metrics_hook,
+        tools=[create_forward_message_tool("supervisor")],
     )
 ```
 

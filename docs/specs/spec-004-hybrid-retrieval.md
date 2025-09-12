@@ -69,8 +69,10 @@ result = client.query_points(
 
 ### Router Interop (Note)
 
-- Compose router tools `[semantic_search, hybrid_search, knowledge_graph]` when a graph is present and healthy; otherwise `[semantic_search, hybrid_search]`. Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`. See ADR‑038 and SPEC‑006.
+- Compose router tools `[semantic_search, hybrid_search, knowledge_graph]` when a graph is present and healthy; otherwise `[semantic_search, hybrid_search]`. Health is determined via a shallow probe: `pg_index.as_retriever(include_text=False, path_depth=1, similarity_top_k=1).retrieve("health")` must return at least one result. Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`. See ADR‑038 and SPEC‑006.
 - Rerank parity: RouterQueryEngine tools (vector/hybrid/KG) apply the same reranking policy via `node_postprocessors` when `DOCMIND_RETRIEVAL__USE_RERANKING=true`. See SPEC‑005 for reranking architecture and attachment points.
+
+- Agent tool fallback: At the tool layer, when a hybrid query returns no documents for the primary query, the agent MUST fall back to vector search for that query (if available) and record a `hybrid_fallback` telemetry event.
 
 ## Libraries and Imports
 
