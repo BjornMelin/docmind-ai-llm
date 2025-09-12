@@ -608,7 +608,7 @@ def _build_visual_reranker_cached(top_n: int) -> Any:
         from llama_index.postprocessor.colpali_rerank import (
             ColPaliRerank,  # type: ignore
         )
-    except Exception as exc:  # pragma: no cover - optional dependency
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         raise ValueError("ColPaliRerank not available") from exc
     return ColPaliRerank(model="vidore/colpali-v1.2", top_n=top_n)
 

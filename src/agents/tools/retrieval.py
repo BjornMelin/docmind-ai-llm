@@ -253,7 +253,7 @@ def _run_vector_hybrid(
             ):
                 try:
                     from .telemetry import log_event  # local import
-                except Exception:  # pragma: no cover - defensive
+                except ImportError:  # pragma: no cover - defensive
                     log_event = None
                 try:
                     vtool = _get_tool_factory().create_vector_search_tool(vector_index)
@@ -268,7 +268,7 @@ def _run_vector_hybrid(
                                 reason="empty_results",
                                 query=primary_query,
                             )
-                except Exception as fe:  # pragma: no cover - defensive
+                except Exception as fe:  # pylint: disable=broad-exception-caught
                     logger.warning("Vector fallback failed: {}", fe)
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
             logger.error("Retrieval failed for query '{}': {}", q, e)

@@ -181,7 +181,7 @@ class TestRunner:
             result.output = "Test execution timed out after 30 minutes"
             print(f"TIMEOUT: {description} timed out")
 
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
             result.duration = time.time() - start_time
             result.exit_code = -1
             result.output = f"Execution error: {e}"
@@ -392,7 +392,7 @@ for module in modules:
     try:
         importlib.import_module(module)
         print(f'OK {module}')
-    except Exception as e:
+    except ImportError as e:
         print(f'FAIL {module}: {e}')
         failed.append(module)
 
@@ -489,7 +489,7 @@ else:
                 if not found:
                     print(f"   ❓ {critical}: Not found in coverage data")
 
-        except Exception as e:
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
             print(f"❌ Error analyzing coverage data: {e}")
 
     def print_summary(self) -> None:
@@ -696,7 +696,7 @@ Examples:
 
     except KeyboardInterrupt:
         print("\n⚠️  Test execution interrupted by user")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"\nUnexpected error: {e}")
         sys.exit(1)
 

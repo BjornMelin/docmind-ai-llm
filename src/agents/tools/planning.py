@@ -73,7 +73,7 @@ def route_query(
         logger.info("Query routed: {} complexity, {} strategy", complexity, strategy)
         return json.dumps(decision)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error("Query routing failed: {}", e)
         raise
 
