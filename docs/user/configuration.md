@@ -17,6 +17,10 @@ DOCMIND_RETRIEVAL__FUSION_MODE=rrf   # or dbsf (experimental)
 # De-duplication key for fused results
 DOCMIND_RETRIEVAL__DEDUP_KEY=page_id  # or doc_id
 
+# Prefetch limits (per-branch)
+DOCMIND_RETRIEVAL__PREFETCH_DENSE_LIMIT=200
+DOCMIND_RETRIEVAL__PREFETCH_SPARSE_LIMIT=400
+
 # Reranking policy (always-on; override via env)
 DOCMIND_RETRIEVAL__USE_RERANKING=true   # set false to disable
 
@@ -25,6 +29,14 @@ DOCMIND_ENABLE_GRAPHRAG=true          # set false to disable
 
 # Enable server-side hybrid tool (default OFF)
 DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=false
+
+# Telemetry (local JSONL; sampling)
+DOCMIND_TELEMETRY_SAMPLE=1.0            # 0.0..1.0; 1.0 logs all
+DOCMIND_TELEMETRY_DISABLED=false        # true to disable telemetry
+DOCMIND_TELEMETRY_ENABLED=true          # convenience enable/disable (bridged)
+
+# Hybrid fusion mode toggle (boolean convenience)
+DOCMIND_RETRIEVAL__DBSF_ENABLED=false   # when true, force DBSF
 ```
 
 Notes:

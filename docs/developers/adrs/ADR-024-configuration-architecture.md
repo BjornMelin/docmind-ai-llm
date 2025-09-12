@@ -47,6 +47,20 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions. Default hybrid fusion is server‑side RRF in Qdrant; DBSF is optional and gated by env/version support. Prefer BM42 sparse (FastEmbed) with IDF modifier.
 
+Amendment (Hybrid Fusion Flags):
+
+```env
+# Force Distribution-Based Score Fusion (DBSF); RRF remains the default
+DOCMIND_RETRIEVAL__DBSF_ENABLED=true|false
+
+# Resolve precedence at startup: dbsf_enabled=true overrides fusion_mode to 'dbsf'.
+DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf
+```
+
+Telemetry requirements (local JSONL; PII-safe, bounded, sampled):
+- Emit: `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
+- Tuning via env: `DOCMIND_TELEMETRY_SAMPLE`, `DOCMIND_TELEMETRY_ENABLED/DISABLED` (bridge ensures sinks honor disabled).
+
 Amendment (GraphRAG flags):
 
 ```env

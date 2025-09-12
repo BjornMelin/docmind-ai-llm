@@ -47,6 +47,14 @@ Earlier designs mixed concerns and introduced multiple storage backends. To redu
 
 Adopt Qdrant for vectors, LlamaIndex IngestionCache with DuckDBKVStore for processing cache (single file at `settings.cache_dir/docmind.duckdb`), and optionally SQLite for operational metadata. No test-only hooks in src; rely on library clients.
 
+Hybrid Retrieval Schema (Qdrant Collections):
+
+- Qdrant collections SHALL define named vectors to support server-side hybrid queries via the Query API:
+  - `text-dense`: `VectorParams(distance=COSINE, size=<embed_dim>)`
+  - `text-sparse`: `SparseVectorParams(modifier=IDF)`
+- Collection ensure is idempotent at startup; schema updates warn when dimensions differ.
+- See SPEC‑004 for hybrid query and fusion details (Prefetch + FusionQuery; RRF default; DBSF optional via env).
+
 ### SnapshotManager (Amendment — GraphRAG)
 
 For GraphRAG and indices requiring consistent reloads, adopt a SnapshotManager:
