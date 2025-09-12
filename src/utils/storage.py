@@ -29,7 +29,7 @@ from typing import Any
 
 try:  # Optional torch; CPU-only environments must not fail at import
     import torch  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
+except (ImportError, OSError):  # pragma: no cover - optional dependency
     torch = None  # type: ignore
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from loguru import logger
@@ -87,6 +87,171 @@ def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> No
         ValueError,
     ) as e:  # pragma: no cover - defensive path
         logger.warning("ensure_sparse_idf_modifier skipped: %s", e)
+
+
+def ensure_hybrid_collection(
+    client: QdrantClient,
+    collection_name: str,
+    dense_dim: int = settings.embedding.dimension,
+) -> None:
+    """Idempotently ensure named vectors and IDF sparse are configured.
+
+    Ensures the collection exists with required named vectors:
+    - "text-dense": cosine distance with the provided dimension (no-op if exists;
+      warn on size mismatch)
+    - "text-sparse": sparse vector with IDF modifier
+
+    Logs create vs already-present and is safe to call repeatedly.
+
+    Args:
+        client: QdrantClient instance.
+        collection_name: Target collection name.
+        dense_dim: Dimension of the dense embedding vector.
+    """
+    try:
+        exists = client.collection_exists(collection_name)
+    except (
+        ResponseHandlingException,
+        UnexpectedResponse,
+        ConnectionError,
+        TimeoutError,
+        OSError,
+        ValueError,
+    ) as exc:  # pragma: no cover - defensive
+        logger.warning("collection_exists check failed: %s", exc)
+        exists = False
+
+    if not exists:
+        try:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config={
+                    "text-dense": VectorParams(
+                        size=dense_dim,
+                        distance=Distance.COSINE,
+                    )
+                },
+                sparse_vectors_config={
+                    "text-sparse": SparseVectorParams(
+                        index=SparseIndexParams(on_disk=False),
+                        modifier=qmodels.Modifier.IDF,
+                    )
+                },
+            )
+            logger.info(
+                "Created hybrid collection '%s' (dense=%d)", collection_name, dense_dim
+            )
+        except (
+            ResponseHandlingException,
+            UnexpectedResponse,
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+        ) as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "create_collection failed for '%s': %s", collection_name, exc
+            )
+        return
+
+    # Exists: verify/patch sparse IDF and presence of named dense vector
+    try:
+        info = client.get_collection(collection_name)
+        params = getattr(info, "config", None)
+        params = getattr(params, "params", params)
+        # Dense named vectors config shape may differ across client versions
+        dense_cfg = getattr(params, "vectors", None) or getattr(
+            params, "vectors_config", None
+        )
+        sparse_cfg = getattr(params, "sparse_vectors", None) or getattr(
+            params, "sparse_vectors_config", None
+        )
+
+        # Ensure text-dense exists
+        needs_dense = False
+        if isinstance(dense_cfg, dict):
+            if "text-dense" not in dense_cfg:
+                needs_dense = True
+            else:
+                try:
+                    cur = dense_cfg["text-dense"]
+                    cur_size = int(getattr(cur, "size", dense_dim))
+                    if cur_size != dense_dim:
+                        logger.warning(
+                            (
+                                "Collection '%s' text-dense size mismatch (have=%d, "
+                                "want=%d)"
+                            ),
+                            collection_name,
+                            cur_size,
+                            dense_dim,
+                        )
+                except (
+                    AttributeError,
+                    TypeError,
+                    ValueError,
+                    KeyError,
+                ) as exc:  # pragma: no cover - defensive
+                    logger.debug("dense verify skipped: %s", exc)
+        else:
+            # Unknown shape; attempt to set explicitly
+            needs_dense = True
+
+        # Ensure text-sparse exists with IDF
+        needs_sparse = True
+        set_idf = False
+        if isinstance(sparse_cfg, dict) and "text-sparse" in sparse_cfg:
+            needs_sparse = False
+            try:
+                cur_s = sparse_cfg["text-sparse"]
+                cur_mod = getattr(cur_s, "modifier", None)
+                if cur_mod != qmodels.Modifier.IDF:
+                    set_idf = True
+            except (
+                AttributeError,
+                TypeError,
+                ValueError,
+                KeyError,
+            ):  # pragma: no cover - defensive
+                set_idf = True
+
+        patch_vectors: dict[str, Any] | None = None
+        patch_sparse: dict[str, Any] | None = None
+        if needs_dense:
+            patch_vectors = {
+                "text-dense": VectorParams(size=dense_dim, distance=Distance.COSINE)
+            }
+        if needs_sparse or set_idf:
+            patch_sparse = {
+                "text-sparse": SparseVectorParams(
+                    index=SparseIndexParams(on_disk=False),
+                    modifier=qmodels.Modifier.IDF,
+                )
+            }
+
+        if patch_vectors or patch_sparse:
+            logger.info(
+                "Updating collection '%s' schema (add/update named vectors)",
+                collection_name,
+            )
+            client.update_collection(
+                collection_name=collection_name,
+                vectors_config=patch_vectors,
+                sparse_vectors_config=patch_sparse,
+            )
+        else:
+            logger.debug("Hybrid schema already present for '%s'", collection_name)
+    except (
+        ResponseHandlingException,
+        UnexpectedResponse,
+        ConnectionError,
+        TimeoutError,
+        OSError,
+        ValueError,
+        TypeError,
+        AttributeError,
+    ) as exc:  # pragma: no cover - defensive
+        logger.warning("ensure_hybrid_collection skipped: %s", exc)
 
 
 # =============================================================================
@@ -375,7 +540,15 @@ def persist_image_metadata(
 ) -> bool:
     """Persist additional image metadata (e.g., phash) to Qdrant payload.
 
-    Returns True on success, False on error.
+    Args:
+        client: Qdrant client instance used to update payload.
+        collection_name: Target collection name.
+        point_id: Identifier of the point whose payload is updated.
+        metadata: Key-value pairs to merge into the point payload.
+
+    Returns:
+        bool: True on success; False when the update fails due to client or
+        system errors.
     """
     try:
         client.update_payload(
@@ -521,7 +694,7 @@ def gpu_memory_context() -> Generator[None, None, None]:
             if _torch.cuda.is_available():
                 _torch.cuda.synchronize()
                 _torch.cuda.empty_cache()
-        except Exception as e:
+        except (ImportError, RuntimeError, AttributeError) as e:
             logger.warning("GPU cleanup failed during context exit: %s", e)
         finally:
             # Always run garbage collection
@@ -554,7 +727,7 @@ async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
             if _torch.cuda.is_available():
                 _torch.cuda.synchronize()
                 _torch.cuda.empty_cache()
-        except Exception as e:
+        except (ImportError, RuntimeError, AttributeError) as e:
             logger.warning("GPU cleanup failed during async context exit: %s", e)
         finally:
             # Always run garbage collection
@@ -820,7 +993,16 @@ def get_safe_gpu_info() -> dict[str, Any]:
 
 
 async def _cleanup_model(model: Any, cleanup_method: str | None) -> None:
-    """Internal async cleanup helper for models."""
+    """Internal async cleanup helper for models.
+
+    Args:
+        model: Model instance to clean up.
+        cleanup_method: Optional name of the cleanup method (e.g., ``"close"``,
+            ``"cleanup"``). If not provided or method is absent, no-op.
+
+    Returns:
+        None
+    """
     if not cleanup_method:
         return
 
@@ -838,7 +1020,16 @@ async def _cleanup_model(model: Any, cleanup_method: str | None) -> None:
 
 
 def _sync_cleanup_model(model: Any, cleanup_method: str | None) -> None:
-    """Internal sync cleanup helper for models."""
+    """Internal sync cleanup helper for models.
+
+    Args:
+        model: Model instance to clean up.
+        cleanup_method: Optional name of the cleanup method (e.g., ``"close"``,
+            ``"cleanup"``). If not provided or method is absent, no-op.
+
+    Returns:
+        None
+    """
     if not cleanup_method:
         return
 
