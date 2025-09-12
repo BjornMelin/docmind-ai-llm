@@ -12,7 +12,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from llama_index.core.query_engine import RouterQueryEngine
+from llama_index.core.query_engine import (
+    RetrieverQueryEngine as _RetrieverQueryEngine,
+)
+from llama_index.core.query_engine import (
+    RouterQueryEngine,
+)
 from llama_index.core.selectors import LLMSingleSelector
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
@@ -24,6 +29,8 @@ from src.retrieval.postprocessor_utils import (
     build_retriever_query_engine,
     build_vector_query_engine,
 )
+
+RetrieverQueryEngine = _RetrieverQueryEngine  # back-compat alias for tests
 
 
 def build_router_engine(
@@ -105,7 +112,12 @@ def build_router_engine(
             _h_use = bool(getattr(cfg.retrieval, "use_reranking", True))
             _h_post = _get_pp("hybrid", use_reranking=_h_use)
             h_engine = build_retriever_query_engine(
-                retr, _h_post, llm=the_llm, response_mode="compact", verbose=False
+                retr,
+                _h_post,
+                llm=the_llm,
+                response_mode="compact",
+                verbose=False,
+                engine_cls=RetrieverQueryEngine,
             )
             tools.append(
                 QueryEngineTool(
@@ -146,7 +158,12 @@ def build_router_engine(
                     top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
                 g_engine = build_retriever_query_engine(
-                    retr, _g_post, llm=the_llm, response_mode="compact", verbose=False
+                    retr,
+                    _g_post,
+                    llm=the_llm,
+                    response_mode="compact",
+                    verbose=False,
+                    engine_cls=RetrieverQueryEngine,
                 )
             elif hasattr(pg_index, "as_query_engine"):
                 from src.retrieval.reranking import get_postprocessors as _get_pp
@@ -221,4 +238,4 @@ def build_router_engine(
     return router
 
 
-__all__ = ["build_router_engine"]
+__all__ = ["RetrieverQueryEngine", "build_router_engine"]

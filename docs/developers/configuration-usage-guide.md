@@ -1,7 +1,5 @@
 # Configuration Usage Guide
 
-> Note: Reranking is always-on by default; override only via `DOCMIND_RETRIEVAL__USE_RERANKING=false` (no UI toggle).
-
 This guide explains how to configure the application using the unified Pydantic Settings (v2) models, environment variables, and the provided `.env.example`.
 
 ## Overview
@@ -115,7 +113,7 @@ DOCMIND_GRAPHRAG_CFG__ENABLED=true
 - Increase context window (capped by `settings.llm_context_window_max`):
   - `DOCMIND_VLLM__CONTEXT_WINDOW=131072`
 - Disable reranking for performance testing:
-  - `DOCMIND_RETRIEVAL__USE_RERANKING=false`  # canonical env; no UI toggle
+  - `DOCMIND_RETRIEVAL__USE_RERANKING=false`
 - Toggle GraphRAG (default on per ADR‑019):
   - `DOCMIND_GRAPHRAG_CFG__ENABLED=false`
 - Switch multi‑agent mode:

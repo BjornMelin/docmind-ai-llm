@@ -44,37 +44,55 @@ def build_retriever_query_engine(
     post: list | None,
     *,
     llm: Any | None = None,
+    engine_cls: Any | None = None,
     **kwargs: dict[str, Any],
 ) -> Any:
     """Build retriever query engine with fallback if postprocessors fail."""
+    engine = engine_cls or RetrieverQueryEngine
+
+    if llm is None:
+
+        class _NoOpLLM:
+            def __init__(self):
+                md = {"context_window": 2048, "num_output": 256}
+                self.metadata = type("_MD", (), md)()
+
+            def predict(self, *_args: Any, **_kwargs: Any) -> str:
+                return ""
+
+            def complete(self, *_args: Any, **_kwargs: Any) -> str:
+                return ""
+
+        llm = _NoOpLLM()
+
     last_error = None
 
     if post:
         try:
-            return RetrieverQueryEngine.from_args(
+            return engine.from_args(
                 retriever=retriever, llm=llm, node_postprocessors=post, **kwargs
             )
         except TypeError as e:
             last_error = e
 
     try:
-        return RetrieverQueryEngine.from_args(retriever=retriever, llm=llm, **kwargs)
+        return engine.from_args(retriever=retriever, llm=llm, **kwargs)
     except TypeError as e:
         last_error = e
 
     try:
-        return RetrieverQueryEngine.from_args(retriever=retriever, **kwargs)
+        return engine.from_args(retriever=retriever, **kwargs)
     except TypeError as e:
         last_error = e
 
     try:
-        return RetrieverQueryEngine.from_args(retriever=retriever)
+        return engine.from_args(retriever=retriever)
     except TypeError as e:
         last_error = e
 
     if last_error:
         raise last_error
-    return RetrieverQueryEngine.from_args(retriever=retriever)
+    return engine.from_args(retriever=retriever)
 
 
 __all__ = [

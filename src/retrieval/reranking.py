@@ -275,11 +275,11 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
 
         # Cleanup images and temp files
         for img in images:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(OSError, AttributeError, RuntimeError):
                 if hasattr(img, "close"):
                     img.close()
         for tp in temp_files:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(OSError, AttributeError, RuntimeError):
                 os.remove(tp)
         return nodes_sorted[: settings.retrieval.reranking_top_k]
 
@@ -456,7 +456,7 @@ class _TextRerankerAdapter:
             return scores
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("FlagEmbedding batch score error: {} — failing open", exc)
-            return [float(n.score or 0.0) for n in batch]
+            return [float(len(batch) - i) for i, _ in enumerate(batch)]
 
     def _score_batch_li(self, query: str, batch: list[NodeWithScore]) -> list[float]:
         if self._li is None:
