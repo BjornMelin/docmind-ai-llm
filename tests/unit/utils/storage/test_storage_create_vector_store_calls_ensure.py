@@ -9,6 +9,7 @@ import pytest
 
 @pytest.mark.unit
 def test_create_vector_store_calls_ensure(monkeypatch):
+    """Test that create_vector_store calls ensure functions for hybrid schema."""
     mod = importlib.import_module("src.utils.storage")
 
     calls = {"ensure_hybrid": 0, "ensure_idf": 0}

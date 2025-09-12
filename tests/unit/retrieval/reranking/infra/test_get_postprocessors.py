@@ -35,5 +35,6 @@ def test_get_postprocessors_vector_and_kg():
 
 @pytest.mark.unit
 def test_get_postprocessors_unknown_mode_returns_none():
+    """Test that get_postprocessors returns None for unknown modes."""
     rr = importlib.import_module("src.retrieval.reranking")
     assert rr.get_postprocessors("unknown-mode", use_reranking=True) is None

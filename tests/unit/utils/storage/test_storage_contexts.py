@@ -10,6 +10,7 @@ import pytest
 
 @pytest.mark.unit
 def test_gpu_memory_context_smoke(monkeypatch):
+    """Test that gpu_memory_context works with mocked CUDA availability."""
     mod = importlib.import_module("src.utils.storage")
 
     class _Cuda:
@@ -36,6 +37,7 @@ def test_gpu_memory_context_smoke(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_async_gpu_memory_context_smoke(monkeypatch):
+    """Test that async_gpu_memory_context works with mocked CUDA availability."""
     mod = importlib.import_module("src.utils.storage")
 
     class _Cuda:
@@ -60,6 +62,7 @@ async def test_async_gpu_memory_context_smoke(monkeypatch):
 
 @pytest.mark.unit
 def test_model_context_cleanup(monkeypatch):
+    """Test that model_context and sync_model_context properly clean up resources."""
     mod = importlib.import_module("src.utils.storage")
 
     class _M:
@@ -87,6 +90,7 @@ def test_model_context_cleanup(monkeypatch):
 
 @pytest.mark.unit
 def test_cuda_error_context_paths():
+    """Test that cuda_error_context handles exceptions and returns default values."""
     mod = importlib.import_module("src.utils.storage")
 
     with mod.cuda_error_context("probe", reraise=False, default_return=7) as ctx:
@@ -98,6 +102,7 @@ def test_cuda_error_context_paths():
 
 @pytest.mark.unit
 def test_cuda_error_context_reraise_true():
+    """Test that cuda_error_context re-raises exceptions when reraise=True."""
     mod = importlib.import_module("src.utils.storage")
     with pytest.raises(RuntimeError), mod.cuda_error_context("probe", reraise=True):
         raise RuntimeError("fail")

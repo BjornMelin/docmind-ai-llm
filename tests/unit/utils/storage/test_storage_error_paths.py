@@ -9,6 +9,7 @@ import pytest
 
 @pytest.mark.unit
 def test_get_collection_info_exception(monkeypatch):
+    """Test that get_collection_info handles connection errors gracefully."""
     mod = importlib.import_module("src.utils.storage")
 
     class _CM:
@@ -26,6 +27,7 @@ def test_get_collection_info_exception(monkeypatch):
 
 @pytest.mark.unit
 def test_clear_collection_exception(monkeypatch):
+    """Test that clear_collection handles connection errors gracefully."""
     mod = importlib.import_module("src.utils.storage")
 
     class _Client:
