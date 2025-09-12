@@ -258,6 +258,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 - UI/runtime (SPEC‑001): removed legacy in‑app backend selection and ad‑hoc LLM construction; centralized provider selection and LLM creation via Settings page + unified factory with strict endpoint validation.
 
+- Retrieval & Reranking:
+  - Router parity: RouterQueryEngine now passes reranking `node_postprocessors` for vector/hybrid/KG tools when `DOCMIND_RETRIEVAL__USE_RERANKING=true` (mirrors ToolFactory). Safe fallbacks keep older signatures working.
+  - Tests: Added router_factory injection toggle test and KG fallback tests; added hybrid injection test behind explicit `enable_hybrid=True` with stubs.
+
+
 ### Docs/Specs/RTM
 
 - Specs updated:

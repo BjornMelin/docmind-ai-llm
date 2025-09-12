@@ -781,13 +781,13 @@ Note: Realized latency is hardware‑dependent. Reranking uses bounded timeouts 
 - Prefetch: dense≈200, sparse≈400; fused_top_k=60; page_id de-dup.
 - Reranking is always-on: BGE v2‑m3 (text) + SigLIP (visual) with optional ColPali; SigLIP loader is cached; batch‑wise cancellation only.
 - No UI toggles; ops overrides via env only.
+- Router parity: RouterQueryEngine tools (vector/hybrid/KG) apply the same reranking policy via `node_postprocessors` behind `DOCMIND_RETRIEVAL__USE_RERANKING`.
 
 #### Operational Flags (local-first)
 
 - `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` to disable network egress (after predownload).
 - `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to control Qdrant fusion.
 - `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (canonical env override; no UI toggle)
-- `DOCMIND_DISABLE_RERANKING` (deprecated; use `DOCMIND_RETRIEVAL__USE_RERANKING`)
 - Qdrant runs bound to `127.0.0.1` by default; remote endpoints are disallowed unless explicitly configured.
 
 ## 🔧 Offline Operation
