@@ -33,9 +33,10 @@ def test_siglip_cleanup_on_error(tmp_path, monkeypatch):  # type: ignore[no-unty
     nodes = [_NWS(img_path)]
 
     # Force model loader to fail to trigger exception path after images are opened
-    monkeypatch.setattr(
-        rmod, "_load_siglip", lambda: (_ for _ in ()).throw(RuntimeError("fail"))
-    )
+    def _raise_siglip_error():  # type: ignore[no-untyped-def]
+        raise RuntimeError("fail")
+
+    monkeypatch.setattr(rmod, "_load_siglip", _raise_siglip_error)
 
     # Track calls to Image.Image.close
     close_count = {"n": 0}

@@ -19,8 +19,7 @@ from src.agents.models import AgentResponse
 
 
 def _fake_write_stream(stream: Iterable[str]) -> str:  # matches st.write_stream
-    text = "".join(list(stream))
-    return text
+    return "".join(list(stream))
 
 
 @contextmanager

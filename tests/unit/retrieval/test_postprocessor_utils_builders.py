@@ -13,11 +13,11 @@ def test_build_vector_query_engine_fallback():  # type: ignore[no-untyped-def]
     m = importlib.import_module("src.retrieval.postprocessor_utils")
 
     class _Vec:
-        def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
-            # Simulate TypeError when passing node_postprocessors
-            if "node_postprocessors" in kwargs:
-                raise TypeError("unsupported")
-            return SimpleNamespace(engine=True, kwargs=kwargs)
+        # Deliberately restrict signature so unexpected kwargs raise TypeError
+        def as_query_engine(self, similarity_top_k=None):  # type: ignore[no-untyped-def]
+            return SimpleNamespace(
+                engine=True, kwargs={"similarity_top_k": similarity_top_k}
+            )
 
     eng = m.build_vector_query_engine(_Vec(), post=[object()], similarity_top_k=3)
     assert getattr(eng, "engine", False) is True
@@ -32,10 +32,23 @@ def test_build_retriever_query_engine_fallback():  # type: ignore[no-untyped-def
 
     class _RQE:
         @classmethod
-        def from_args(cls, **kwargs):  # type: ignore[no-untyped-def]
-            if "node_postprocessors" in kwargs:
-                raise TypeError("unsupported")
-            return SimpleNamespace(engine=True, kwargs=kwargs)
+        def from_args(
+            cls,
+            *,
+            retriever,  # type: ignore[no-untyped-def]
+            llm=None,  # type: ignore[no-untyped-def]
+            response_mode=None,  # type: ignore[no-untyped-def]
+            verbose=None,  # type: ignore[no-untyped-def]
+        ):  # type: ignore[no-untyped-def]
+            return SimpleNamespace(
+                engine=True,
+                kwargs={
+                    "retriever": retriever,
+                    "llm": llm,
+                    "response_mode": response_mode,
+                    "verbose": verbose,
+                },
+            )
 
     eng = m.build_retriever_query_engine(
         retriever=_Ret(), post=[object()], engine_cls=_RQE

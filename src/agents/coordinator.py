@@ -385,21 +385,10 @@ class MultiAgentCoordinator:
 
         def post_model_hook(state: dict) -> dict:
             try:
-                state["optimization_metrics"] = {
-                    "context_used_tokens": self.context_manager.estimate_tokens(
-                        state.get("messages", [])
-                    ),
-                    "kv_cache_usage_gb": (
-                        self.context_manager.calculate_kv_cache_usage(state)
-                    ),
-                    "parallel_execution_active": state.get(
-                        "parallel_tool_calls", False
-                    ),
-                    "optimization_enabled": True,
-                    "model_path": self.model_path,
-                    "context_trimmed": state.get("context_trimmed", False),
-                    "tokens_trimmed": state.get("tokens_trimmed", 0),
-                }
+                # Build base metrics from current state via shared helper
+                state["optimization_metrics"] = (
+                    self._build_base_optimization_metrics_from_state(state)
+                )
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
                 logger.warning("Post-model hook failed: %s", e)
@@ -409,6 +398,31 @@ class MultiAgentCoordinator:
                 return state
 
         return post_model_hook
+
+    def _build_base_optimization_metrics_from_state(
+        self, state: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Build base optimization metrics derived only from current state.
+
+        Used by both the post-model hook (per-turn annotation) and the final
+        AgentResponse metrics builder to avoid duplication and ensure
+        consistency across code paths.
+        """
+        return {
+            "context_used_tokens": self.context_manager.estimate_tokens(
+                state.get("messages", [])
+            ),
+            "kv_cache_usage_gb": self.context_manager.calculate_kv_cache_usage(state),
+            # Normalize flag naming across code paths
+            "parallel_execution_active": bool(
+                state.get("parallel_execution_active")
+                or state.get("parallel_tool_calls", False)
+            ),
+            "optimization_enabled": True,
+            "model_path": self.model_path,
+            "context_trimmed": state.get("context_trimmed", False),
+            "tokens_trimmed": state.get("tokens_trimmed", 0),
+        }
 
     def _build_optimization_metrics(
         self, final_state: dict[str, Any], coordination_time: float
@@ -423,22 +437,44 @@ class MultiAgentCoordinator:
             A dictionary with optimization metrics fields suitable for
             AgentResponse.optimization_metrics.
         """
-        return {
-            "coordination_overhead_ms": round(coordination_time * 1000, 2),
-            "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
-            "parallel_execution_active": final_state.get(
-                "parallel_execution_active", False
-            ),
-            "token_reduction_achieved": final_state.get(
-                "token_reduction_achieved", 0.0
-            ),
-            "context_trimmed": final_state.get("context_trimmed", False),
-            "tokens_trimmed": final_state.get("tokens_trimmed", 0),
-            "kv_cache_usage_gb": final_state.get("kv_cache_usage_gb", 0.0),
-            "model_path": self.model_path,
-            "context_window_used": self.max_context_length,
-            "optimization_enabled": True,
-        }
+        base = self._build_base_optimization_metrics_from_state(final_state)
+        base.update(
+            {
+                "coordination_overhead_ms": round(coordination_time * 1000, 2),
+                "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
+                "token_reduction_achieved": final_state.get(
+                    "token_reduction_achieved", 0.0
+                ),
+                "context_window_used": self.max_context_length,
+            }
+        )
+        return base
+
+    def _log_query_analytics(self, latency_s: float, success: bool) -> None:
+        """Best-effort analytics logging helper.
+
+        Wraps AnalyticsManager calls to keep process_query readable and to avoid
+        duplicate code across success and timeout branches.
+        """
+        if not getattr(settings, "analytics_enabled", False):
+            return
+        with contextlib.suppress(Exception):
+            cfg = AnalyticsConfig(
+                enabled=True,
+                db_path=(
+                    settings.analytics_db_path
+                    or (settings.data_dir / "analytics" / "analytics.duckdb")
+                ),
+                retention_days=settings.analytics_retention_days,
+            )
+            am = AnalyticsManager.instance(cfg)
+            am.log_query(
+                query_type="chat",
+                latency_ms=latency_s * 1000.0,
+                result_count=0,
+                retrieval_strategy="hybrid",
+                success=success,
+            )
 
     def process_query(
         self,
@@ -508,7 +544,7 @@ class MultiAgentCoordinator:
             coordination_time = time.perf_counter() - coordination_start
 
             # Handle timeout signaled by workflow
-            if isinstance(result, dict) and result.get("timed_out") is True:
+            if isinstance(result, dict) and bool(result.get("timed_out")):
                 logger.warning("Coordinator detected timeout; invoking fallback policy")
                 if self.enable_fallback:
                     response = self._fallback_basic_rag(query, context, start_time)
@@ -538,26 +574,7 @@ class MultiAgentCoordinator:
                     )
 
                 # Best-effort analytics logging for timeout path
-                if getattr(settings, "analytics_enabled", False):
-                    with contextlib.suppress(Exception):
-                        cfg = AnalyticsConfig(
-                            enabled=True,
-                            db_path=(
-                                settings.analytics_db_path
-                                or (
-                                    settings.data_dir / "analytics" / "analytics.duckdb"
-                                )
-                            ),
-                            retention_days=settings.analytics_retention_days,
-                        )
-                        am = AnalyticsManager.instance(cfg)
-                        am.log_query(
-                            query_type="chat",
-                            latency_ms=(time.perf_counter() - start_time) * 1000.0,
-                            result_count=0,
-                            retrieval_strategy="hybrid",
-                            success=False,
-                        )
+                self._log_query_analytics(time.perf_counter() - start_time, False)
             else:
                 # Extract response from final state
                 response = self._extract_response(
@@ -570,24 +587,7 @@ class MultiAgentCoordinator:
             self._update_performance_metrics(processing_time, coordination_time)
 
             # Best-effort analytics logging (never impact user flow)
-            if getattr(settings, "analytics_enabled", False):
-                with contextlib.suppress(Exception):
-                    cfg = AnalyticsConfig(
-                        enabled=True,
-                        db_path=(
-                            settings.analytics_db_path
-                            or (settings.data_dir / "analytics" / "analytics.duckdb")
-                        ),
-                        retention_days=settings.analytics_retention_days,
-                    )
-                    am = AnalyticsManager.instance(cfg)
-                    am.log_query(
-                        query_type="chat",
-                        latency_ms=processing_time * 1000.0,
-                        result_count=0,
-                        retrieval_strategy="hybrid",
-                        success=True,
-                    )
+            self._log_query_analytics(processing_time, True)
 
             # Validate performance targets
             if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:

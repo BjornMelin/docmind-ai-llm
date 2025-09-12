@@ -174,7 +174,7 @@ def build_router_engine(
                         _probe_exc,
                     )
                 # Continue without graph tool
-                raise RuntimeError("kg_probe_failed") from None
+                raise RuntimeError("kg_probe_failed") from _probe_exc
             g_engine = None
             if hasattr(pg_index, "as_retriever"):
                 retr = pg_index.as_retriever(
