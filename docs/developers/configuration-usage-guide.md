@@ -1,4 +1,4 @@
-## Configuration Usage Guide
+# Configuration Usage Guide
 
 > Note: Reranking is always-on by default; override only via `DOCMIND_RETRIEVAL__USE_RERANKING=false` (no UI toggle).
 
