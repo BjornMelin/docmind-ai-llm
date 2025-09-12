@@ -148,9 +148,7 @@ class ToolFactory:
                 from src.retrieval.reranking import MultimodalReranker
 
                 post = [MultimodalReranker()]
-        except (
-            Exception
-        ):  # pragma: no cover - defensive  # pylint: disable=broad-exception-caught
+        except Exception:  # pylint: disable=broad-exception-caught
             post = None
         query_engine = build_vector_query_engine(
             index, post, similarity_top_k=settings.retrieval.top_k, verbose=False

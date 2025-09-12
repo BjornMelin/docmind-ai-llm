@@ -273,7 +273,7 @@ def build_router_engine(
     # Expose both public and private tool lists for compatibility across LI versions
     try:
         router.query_engine_tools = tools
-        router._query_engine_tools = tools
+        router._query_engine_tools = tools  # pylint: disable=protected-access
     except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
         logger.debug("Router tool list attribute shim failed", exc_info=True)
     logger.info(

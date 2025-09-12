@@ -512,17 +512,34 @@ class MultiAgentCoordinator:
 
         try:
             # Compose tools_data overrides for agent configuration
+            # NOTE: Use defensive access so tests can patch a lightweight
+            # SimpleNamespace as settings without tripping AttributeError.
+            enable_dspy_opt = getattr(settings, "enable_dspy_optimization", False)
+            enable_graphrag_flag = getattr(settings, "enable_graphrag", False)
+            try:
+                if not enable_graphrag_flag and hasattr(
+                    settings, "get_graphrag_config"
+                ):
+                    gr_cfg = settings.get_graphrag_config()
+                    enable_graphrag_flag = bool(gr_cfg.get("enabled", False))
+            except (AttributeError, TypeError, ValueError):
+                # Best-effort; default to current flag
+                enable_graphrag_flag = bool(enable_graphrag_flag)
+
+            # Retrieval sub-config access guarded to avoid AttributeError in tests
+            try:
+                reranker_normalize = settings.retrieval.reranker_normalize_scores
+                reranking_top_k = settings.retrieval.reranking_top_k
+            except (AttributeError, TypeError, ValueError):
+                reranker_normalize = False
+                reranking_top_k = 0
+
             defaults: dict[str, Any] = {
-                "enable_dspy": settings.enable_dspy_optimization,
-                "enable_graphrag": (
-                    getattr(settings, "enable_graphrag", False)
-                    or settings.get_graphrag_config().get("enabled", False)
-                ),
+                "enable_dspy": bool(enable_dspy_opt),
+                "enable_graphrag": bool(enable_graphrag_flag),
                 "enable_multimodal": getattr(settings, "enable_multimodal", False),
-                "reranker_normalize_scores": (
-                    settings.retrieval.reranker_normalize_scores
-                ),
-                "reranking_top_k": settings.retrieval.reranking_top_k,
+                "reranker_normalize_scores": reranker_normalize,
+                "reranking_top_k": reranking_top_k,
             }
 
             # Merge caller-provided overrides last (they win)
