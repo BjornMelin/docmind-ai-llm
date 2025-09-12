@@ -99,6 +99,5 @@ def test_cuda_error_context_paths():
 @pytest.mark.unit
 def test_cuda_error_context_reraise_true():
     mod = importlib.import_module("src.utils.storage")
-    with pytest.raises(RuntimeError):
-        with mod.cuda_error_context("probe", reraise=True):
-            raise RuntimeError("fail")
+    with pytest.raises(RuntimeError), mod.cuda_error_context("probe", reraise=True):
+        raise RuntimeError("fail")
