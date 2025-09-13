@@ -15,7 +15,11 @@ from functools import wraps
 from typing import Any
 
 import qdrant_client
-import torch
+
+try:  # Optional torch - allow module import without GPU stack present
+    import torch as TORCH  # type: ignore  # noqa: N812
+except ImportError:  # pragma: no cover - torch may be unavailable in CI
+    TORCH = None  # type: ignore[assignment]
 from loguru import logger
 from qdrant_client.http.exceptions import (
     ResponseHandlingException,
@@ -27,6 +31,9 @@ from src.config.settings import DocMindSettings
 
 # Compatibility alias so tests can patch src.utils.core.AsyncQdrantClient
 AsyncQdrantClient = qdrant_client.AsyncQdrantClient
+
+# Back-compat alias for tests that patch src.utils.core.torch
+torch = TORCH  # type: ignore[assignment]
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -42,12 +49,19 @@ def detect_hardware() -> dict[str, Any]:
     }
 
     try:
-        hardware_info["cuda_available"] = torch.cuda.is_available()
+        cuda_ok = bool(
+            TORCH is not None
+            and getattr(TORCH, "cuda", None)
+            and TORCH.cuda.is_available()  # type: ignore[attr-defined]
+        )
+        hardware_info["cuda_available"] = cuda_ok
 
-        if hardware_info["cuda_available"]:
-            hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
+        if cuda_ok:
+            # type: ignore[attr-defined]
+            hardware_info["gpu_name"] = TORCH.cuda.get_device_name(0)
             vram_gb = (
-                torch.cuda.get_device_properties(0).total_memory
+                # type: ignore[attr-defined]
+                TORCH.cuda.get_device_properties(0).total_memory
                 / settings.monitoring.bytes_to_gb_divisor
             )
             hardware_info["vram_total_gb"] = round(vram_gb, 1)
@@ -60,6 +74,69 @@ def detect_hardware() -> dict[str, Any]:
         logger.error("Import error during hardware detection: %s", e)
 
     return hardware_info
+
+
+def has_cuda_vram(min_gb: float) -> bool:
+    """Return True when CUDA is available and total VRAM ≥ ``min_gb``.
+
+    Args:
+        min_gb: Minimum required VRAM (GiB) to consider the device sufficient.
+
+    Returns:
+        bool: True when CUDA is available and device VRAM meets the threshold;
+              False otherwise.
+    """
+    try:
+        if TORCH is None or not getattr(TORCH, "cuda", None):
+            return False
+        if not TORCH.cuda.is_available():  # type: ignore[attr-defined]
+            return False
+        # total VRAM in bytes → convert to GiB
+        # type: ignore[attr-defined]
+        total_bytes = TORCH.cuda.get_device_properties(0).total_memory
+        total_gb = total_bytes / (1024**3)
+        return total_gb >= float(min_gb)
+    except (RuntimeError, AttributeError, ImportError, TypeError):
+        return False
+
+
+def select_device(prefer: str = "auto") -> str:  # pylint: disable=too-many-return-statements
+    """Select an inference device string ('cuda'|'mps'|'cpu').
+
+    Preference order:
+    - When ``prefer`` is 'cpu' or 'cuda' or 'mps', honor if available; else fall back.
+    - When ``prefer`` is 'auto', choose 'cuda' if available; else 'mps' (Apple Silicon);
+      otherwise 'cpu'.
+
+    Returns:
+        str: One of 'cuda', 'mps', or 'cpu'.
+    """
+    p = (prefer or "auto").lower()
+    try:
+        if p == "cpu":
+            return "cpu"
+        cuda_ok = bool(
+            TORCH and getattr(TORCH, "cuda", None) and TORCH.cuda.is_available()
+        )  # type: ignore[attr-defined]
+        mps_backend = getattr(
+            getattr(TORCH, "backends", object()) if TORCH else object(),
+            "mps",
+            None,
+        )
+        mps_ok = bool(mps_backend) and bool(
+            getattr(mps_backend, "is_available", lambda: False)()
+        )
+        if p == "cuda":
+            return "cuda" if cuda_ok else "cpu"
+        if p == "mps":
+            return "mps" if mps_ok else ("cuda" if cuda_ok else "cpu")
+        if cuda_ok:
+            return "cuda"
+        if mps_ok:
+            return "mps"
+        return "cpu"
+    except (RuntimeError, AttributeError, ImportError, TypeError):
+        return "cpu"
 
 
 def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
@@ -97,8 +174,13 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
     # Check GPU configuration
     if app_settings.enable_gpu_acceleration:
         try:
-            if torch.cuda.is_available():
-                gpu_name = torch.cuda.get_device_name(0)
+            if (
+                TORCH
+                and getattr(TORCH, "cuda", None)
+                and TORCH.cuda.is_available()
+            ):  # type: ignore[attr-defined]
+                # type: ignore[attr-defined]
+                gpu_name = TORCH.cuda.get_device_name(0)
                 results["info"].append(f"GPU available: {gpu_name}")
             else:
                 results["warnings"].append(
@@ -122,9 +204,15 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
     try:
         yield
     finally:
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
+        if (
+            TORCH
+            and getattr(TORCH, "cuda", None)
+            and TORCH.cuda.is_available()
+        ):  # type: ignore[attr-defined]
+            # type: ignore[attr-defined]
+            TORCH.cuda.synchronize()
+            # type: ignore[attr-defined]
+            TORCH.cuda.empty_cache()
         gc.collect()
 
 

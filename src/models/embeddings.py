@@ -107,20 +107,29 @@ def _l2_normalize(arr: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 def _select_device(explicit: str | None = None) -> str:
-    """Choose a device string ('cuda' or 'cpu') based on availability.
+    """Choose a device string using utils.core.select_device.
 
-    A user-provided ``explicit`` overrides auto-detection.
+    Selects device via src.utils.core; explicit overrides auto.
     """
     if explicit:
         return explicit
-    if TORCH is not None:
-        if getattr(TORCH, "cuda", None) and TORCH.cuda.is_available():
+    try:
+        from src.utils.core import select_device as _sd
+
+        return _sd(explicit or "auto")
+    except (RuntimeError, AttributeError, ImportError, TypeError, ValueError):
+        if explicit:
+            return explicit
+        if (
+            TORCH is not None
+            and getattr(TORCH, "cuda", None)
+            and TORCH.cuda.is_available()
+        ):
             return "cuda"
-        # Apple Silicon MPS support when available
         mps = getattr(getattr(TORCH, "backends", object()), "mps", None)
         if mps is not None and getattr(mps, "is_available", lambda: False)():
             return "mps"
-    return "cpu"
+        return "cpu"
 
 
 # ===== Text: BGE-M3 =====
@@ -165,7 +174,7 @@ class TextEmbedder:
             return
         try:
             from FlagEmbedding import BGEM3FlagModel  # type: ignore
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except (ImportError, RuntimeError, AttributeError) as exc:
             msg = (
                 "FlagEmbedding is required for TextEmbedder. "
                 "Install with: uv add FlagEmbedding"
@@ -318,16 +327,26 @@ class ImageEmbedder:
 
     # --- Backend loading helpers ---
     def _choose_auto_backbone(self) -> _BackboneName:
-        if self.device == "cpu" or TORCH is None or not TORCH.cuda.is_available():
+        # Centralized device/VRAM policy via src.utils.core
+        if self.device == "cpu" or TORCH is None or not getattr(TORCH, "cuda", None):
             return "openclip_vitl14"
-        try:  # Estimate total VRAM
-            props = TORCH.cuda.get_device_properties(0)  # type: ignore[attr-defined]
-            total = props.total_memory / (1024**3)
-        except (RuntimeError, AttributeError):  # pragma: no cover
-            total = 8.0
-        if total >= 20.0:
-            return "openclip_vith14"
-        return "siglip_base"
+        try:
+            from src.utils.core import has_cuda_vram as _has_cuda_vram
+
+            # High-VRAM GPUs use OpenCLIP ViT-H/14; otherwise SigLIP base.
+            return "openclip_vith14" if _has_cuda_vram(20.0) else "siglip_base"
+        except (RuntimeError, ImportError, AttributeError, TypeError):
+            # Fallback heuristic if core helpers unavailable
+            try:  # pragma: no cover
+                if TORCH.cuda.is_available():  # type: ignore[attr-defined]
+                    props = TORCH.cuda.get_device_properties(
+                        0
+                    )  # type: ignore[attr-defined]
+                    total = float(props.total_memory) / float(1024**3)
+                    return "openclip_vith14" if total >= 20.0 else "siglip_base"
+            except (RuntimeError, AttributeError):
+                return "openclip_vitl14"
+            return "siglip_base"
 
     def _load_openclip(self, model_name: str) -> None:
         import importlib
@@ -369,34 +388,32 @@ class ImageEmbedder:
         self._dim = dim or (1024 if ("H-14" in model_name) else 768)
 
     def _load_siglip(self) -> None:
-        from transformers import SiglipModel, SiglipProcessor  # type: ignore
-
-        model_id = "google/siglip-base-patch16-224"
-        model = SiglipModel.from_pretrained(model_id, device_map=None)
-        if self.device == "cuda":
-            model = model.to("cuda")
-        processor = SiglipProcessor.from_pretrained(model_id)
-        self._backend = model
-        self._preprocess = processor
-        # Prefer config projection dim when available
         try:
-            proj = getattr(model.config, "projection_dim", 0)
-            self._dim = int(proj) or None
-        except (AttributeError, ValueError, TypeError):  # pragma: no cover - defensive
-            self._dim = None
-        if self._dim is None:
-            # Fallback probe via a tiny batch to determine dim
-            try:  # pragma: no cover - heavy path
-                dummy = np.zeros((224, 224, 3), dtype=np.uint8)
-                inputs = processor(images=[dummy], return_tensors="pt")
-                pix = inputs.get("pixel_values")
-                if self.device == "cuda":
-                    pix = pix.to("cuda")
-                with TORCH.no_grad():
-                    f = model.get_image_features(pixel_values=pix)
-                    self._dim = int(f.shape[-1])
-            except (RuntimeError, ValueError, TypeError):
-                self._dim = 768
+            from src.utils.vision_siglip import load_siglip
+
+            try:
+                from src.config import settings as _settings
+
+                model_id = getattr(
+                    _settings.embedding,
+                    "siglip_model_id",
+                    "google/siglip-base-patch16-224",
+                )
+            except (AttributeError, ImportError, RuntimeError, ValueError, TypeError):
+                model_id = "google/siglip-base-patch16-224"
+            model, processor, _dev = load_siglip(model_id=model_id, device=self.device)
+            self._backend = model
+            self._preprocess = processor
+        except (ImportError, RuntimeError, AttributeError, ValueError, TypeError):
+            from transformers import SiglipModel, SiglipProcessor  # type: ignore
+
+            model_id = "google/siglip-base-patch16-224"
+            model = SiglipModel.from_pretrained(model_id, device_map=None)
+            if self.device == "cuda":
+                model = model.to("cuda")
+            processor = SiglipProcessor.from_pretrained(model_id)
+            self._backend = model
+            self._preprocess = processor
 
     def _load_bge_visualized(self) -> None:
         # Optional path; raise clear error if selected without deps
