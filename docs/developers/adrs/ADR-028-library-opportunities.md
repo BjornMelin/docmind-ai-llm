@@ -2,7 +2,7 @@
 ADR: 028
 Title: Library Opportunities (Consolidation and Upgrades)
 Status: Accepted
-Version: 1.1
+Version: 1.2
 Date: 2025-08-19
 Supersedes:
 Superseded-by:
@@ -97,6 +97,8 @@ Not applicable — exploration ADR; track adoption via follow‑up PRs and bench
 - pin: `llama-index>=0.10`, `FlagEmbedding>=1.2`, `qdrant-client>=1.6`
 
 ## Changelog
+
+- 1.2 (2025‑09‑12): Acknowledged consolidation of reranking stack per SPEC‑005/ADR‑037: removed legacy adapters, unified device policy and SigLIP loader, added encrypted image helper; library‑first replacements now canonical.
 
 - 1.1 (2025‑09‑04): Standardized to template; added decision framework
 

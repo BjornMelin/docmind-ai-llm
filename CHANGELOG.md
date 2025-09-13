@@ -97,6 +97,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Snapshot manifest enriched and corpus hashing normalized to relpaths; Chat autoload/staleness detection wired to these fields.
 - Docs: aligned developer and API docs to new router/hybrid/GraphRAG/snapshots; added `docs/api/api.md` and `docs/developers/ci-cd-pipeline.md`.
 
+### Reranking/Multimodal Consolidation
+
+- Centralized device and VRAM policy via src.utils.core (select_device, has_cuda_vram) and delegated usage in embeddings and multimodal helpers.
+- Unified SigLIP loader (src/utils/vision_siglip.py) reused by adapter for consistent caching and device placement.
+- Enforced minimal reranking telemetry schema (stage, topk, latency_ms, timeout) with deterministic sorting and RRF tie-breakers.
+
 ### Removed
 
 - Removed legacy helpers from `src/app.py`; app remains a thin multipage shell.

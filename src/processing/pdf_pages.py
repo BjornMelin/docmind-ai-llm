@@ -19,7 +19,7 @@ from llama_index.core.schema import ImageDocument
 from PIL import Image  # type: ignore
 
 from src.config import settings
-from src.utils.security import decrypt_file, encrypt_file
+from src.utils.security import encrypt_file
 
 
 def _phash(img: Image.Image, hash_size: int = 8) -> str:
@@ -127,12 +127,10 @@ def _render_pdf_pages(
                 ph = ""
                 tmp: str | None = None
                 try:
-                    to_open = str(img_path)
-                    if to_open.endswith(".enc"):
-                        tmp = decrypt_file(to_open)
-                        to_open = tmp
-                    with Image.open(to_open) as im:
-                        ph = _phash(im)
+                    from src.utils.images import open_image_encrypted
+
+                    with open_image_encrypted(str(img_path)) as im:
+                        ph = _phash(im) if im is not None else ""
                 except (OSError, ValueError, RuntimeError):
                     ph = ""
                 finally:

@@ -45,26 +45,45 @@ class SiglipEmbedding:
 
     def _choose_device(self) -> str:
         try:
-            import torch  # type: ignore
+            import importlib.util as _ilu
 
-            if torch.cuda.is_available():  # type: ignore[attr-defined]
-                return "cuda"
-        except Exception:  # pylint: disable=broad-exception-caught
-            # Device selection fallback to CPU
+            if _ilu.find_spec("torch") is None:  # type: ignore[arg-type]
+                return "cpu"
+        except (
+            ImportError,
+            AttributeError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ):  # pragma: no cover - importlib edge cases
             return "cpu"
-        return "cpu"
+        try:
+            from src.utils.core import select_device as _sd
+
+            return _sd("auto")
+        except Exception:  # pylint: disable=broad-exception-caught
+            return "cpu"
 
     def _ensure_loaded(self) -> None:
         if self._model is not None and self._proc is not None:
             return
-        from transformers import SiglipModel, SiglipProcessor  # type: ignore
+        try:
+            from src.utils.vision_siglip import load_siglip
 
-        model = SiglipModel.from_pretrained(self.model_id)
-        if self.device == "cuda":
-            model = model.to("cuda")
-        proc = SiglipProcessor.from_pretrained(self.model_id)
-        self._model = model
-        self._proc = proc
+            model, proc, dev = load_siglip(self.model_id, self.device)
+            self.device = dev
+            self._model = model
+            self._proc = proc
+        except Exception:  # pylint: disable=broad-exception-caught
+            # Fallback to direct transformers path if shared loader unavailable
+            from transformers import SiglipModel, SiglipProcessor  # type: ignore
+
+            model = SiglipModel.from_pretrained(self.model_id)
+            if self.device == "cuda":
+                model = model.to("cuda")
+            proc = SiglipProcessor.from_pretrained(self.model_id)
+            self._model = model
+            self._proc = proc
         # best-effort dimension
         try:
             proj = getattr(model.config, "projection_dim", 0)

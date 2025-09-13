@@ -60,7 +60,8 @@ def test_siglip_decrypts_and_cleans_temp(monkeypatch, tmp_path):
     def fake_remove(path: str):
         calls["rm"].append(path)
 
-    monkeypatch.setattr(rr.os, "remove", fake_remove)
+    # Cleanup happens inside images helper; patch its os.remove
+    monkeypatch.setattr("src.utils.images.os.remove", fake_remove, raising=False)
 
     # Make budget 0 so _siglip_rescore aborts after loading images and triggers cleanup
     out = rr._siglip_rescore("q", nodes, budget_ms=0)

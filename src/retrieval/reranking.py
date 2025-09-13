@@ -9,7 +9,6 @@ Changes in this patch:
 from __future__ import annotations
 
 import contextlib
-import os
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -25,14 +24,12 @@ from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 
 from src.config import settings
-from src.utils.multimodal import TEXT_TRUNCATION_LIMIT
 from src.utils.telemetry import log_jsonl
 
 # Time budgets (ms)
 TEXT_RERANK_TIMEOUT_MS = 250
 SIGLIP_TIMEOUT_MS = 150
 COLPALI_TIMEOUT_MS = 400
-
 # Policy thresholds
 COLPALI_MIN_VRAM_GB = 8.0  # enable when >= 8-12 GB
 COLPALI_TOPK_MAX = 16  # small-K scenarios
@@ -46,37 +43,37 @@ def _now_ms() -> float:
 
 
 def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
-    """Execute a callable with a hard timeout.
+    """Execute a callable with a hard timeout (best effort, non-blocking).
 
-    Returns None when the timeout elapses; otherwise returns the callable's result.
+    Returns None when the timeout elapses; otherwise returns the callable's
+    result. Ensures the worker future is cancelled and the executor is shut
+    down without waiting so the caller does not block on long-running tasks.
     """
-    # Small executor per call keeps code simple and avoids shared state complexity
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(fn)
-        try:
-            return fut.result(timeout=max(0.0, timeout_ms) / 1000.0)
-        except FTimeoutError:
-            return None
+    ex = ThreadPoolExecutor(max_workers=1)
+    fut = ex.submit(fn)
+    try:
+        return fut.result(timeout=max(0.0, timeout_ms) / 1000.0)
+    except FTimeoutError:
+        with contextlib.suppress(Exception):
+            fut.cancel()
+            ex.shutdown(wait=False, cancel_futures=True)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            ex.shutdown(wait=False, cancel_futures=True)
 
 
 def _has_cuda_vram(min_gb: float) -> bool:
-    """Check if CUDA GPU has sufficient VRAM.
+    """Check if CUDA GPU has at least ``min_gb`` VRAM via core helpers.
 
-    Args:
-        min_gb: Minimum VRAM required in gigabytes.
-
-    Returns:
-        bool: True if CUDA is available and has sufficient VRAM, False otherwise.
+    Delegates to ``src.utils.core.has_cuda_vram`` to keep a single source of
+    truth for device capability checks. Retains name for test imports.
     """
     try:
-        import torch
+        from src.utils.core import has_cuda_vram as _hv
 
-        if not torch.cuda.is_available():  # type: ignore[attr-defined]
-            return False
-        props = torch.cuda.get_device_properties(0)  # type: ignore[attr-defined]
-        total = props.total_memory / (1024**3)
-        return total >= float(min_gb)
-    except (ImportError, AttributeError, RuntimeError):
+        return bool(_hv(float(min_gb)))
+    except (RuntimeError, ValueError, ImportError, AttributeError, TypeError):
         return False
 
 
@@ -102,54 +99,24 @@ def _rrf_merge(
                 scores[nid] = (inc, nws)
             else:
                 scores[nid] = (cur[0] + inc, cur[1])
-    fused = sorted(scores.values(), key=lambda x: x[0], reverse=True)
-    return [n for _score, n in fused]
-
-
-_SIGLIP_CACHE: dict[tuple[int, int, str], tuple[Any, Any, str]] = {}
+    fused_list = list(scores.values())
+    fused_list.sort(
+        key=lambda t: (-float(t[0]), str(getattr(t[1].node, "node_id", "")))
+    )
+    return [n for _score, n in fused_list]
 
 
 def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
-    """Lazy-load SigLIP model+processor and choose device.
-
-    Returns:
-        tuple[Any, Any, str]: Tuple of (model, processor, device_str).
-    """
-    from transformers import (
-        SiglipModel as _TSiglipModel,
-    )  # type: ignore
-    from transformers import (
-        SiglipProcessor as _TSiglipProcessor,
-    )
-
-    # Device selection
-    device = "cpu"
-    try:
-        import torch
-
-        if torch.cuda.is_available():  # type: ignore[attr-defined]
-            device = "cuda"
-    except (ImportError, AttributeError, RuntimeError):  # pragma: no cover - defensive
-        device = "cpu"
-
-    # Pull model id from settings if available, fallback to default
+    """Load SigLIP via shared utility to keep behavior consistent."""
     try:
         model_id = getattr(
             settings.embedding, "siglip_model_id", "google/siglip-base-patch16-224"
         )
     except AttributeError:
         model_id = "google/siglip-base-patch16-224"
-    # Resolve cache key from class identities + model id
-    key = (id(_TSiglipModel), id(_TSiglipProcessor), str(model_id))
-    if key in _SIGLIP_CACHE:
-        return _SIGLIP_CACHE[key]
+    from src.utils.vision_siglip import load_siglip
 
-    model = _TSiglipModel.from_pretrained(model_id)  # type: ignore[operator]
-    if device == "cuda" and hasattr(model, "to"):
-        model = model.to("cuda")  # type: ignore[assignment]
-    processor = _TSiglipProcessor.from_pretrained(model_id)  # type: ignore[operator]
-    _SIGLIP_CACHE[key] = (model, processor, device)
-    return _SIGLIP_CACHE[key]
+    return load_siglip(model_id=model_id, device=None)
 
 
 def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
@@ -170,7 +137,6 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
         return nodes
     t0 = _now_ms()
     images: list[Any] = []
-    temp_files: list[str] = []
     try:
         import torch  # local import to avoid global dependency in tests
 
@@ -190,43 +156,26 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
                 paths.append("")
             else:
                 paths.append(str(p))
-
         # Load images lazily; stop if time runs out
-        from PIL import Image  # type: ignore
-
-        # Support encrypted images written as .enc — decrypt to a temporary file first
-        try:
-            from src.utils.security import decrypt_file  # type: ignore
-        except ImportError:  # pragma: no cover - defensive
-
-            def decrypt_file(p: str) -> str:  # type: ignore
-                return p
 
         for p in paths:
             if p:
                 try:
-                    to_open = p
-                    if str(p).endswith(".enc"):
-                        dec = decrypt_file(p)
-                        to_open = dec
-                        temp_files.append(dec)
-                    # Ensure we close the file handle from Image.open
-                    with Image.open(to_open) as _im:
-                        images.append(_im.convert("RGB"))
-                except (OSError, ValueError, RuntimeError, TypeError):
+                    from src.utils.images import open_image_encrypted
+
+                    with open_image_encrypted(p) as _im:
+                        if _im is not None:
+                            images.append(_im.convert("RGB").copy())
+                        else:
+                            images.append(None)
+                except (OSError, ValueError, RuntimeError, TypeError, ImportError):
                     images.append(None)
             else:
                 images.append(None)
             if _now_ms() - t0 > budget_ms:
                 logger.warning("SigLIP load images timeout; fail-open")
-                # Cleanup temp files on early exit
-                for tp in temp_files:
-                    with contextlib.suppress(Exception):
-                        os.remove(tp)
                 return nodes
-
         model, processor, device = _load_siglip()
-
         # Text features (1, D)
         txt_inputs = processor(text=[query], padding="max_length", return_tensors="pt")
         if device == "cuda":
@@ -236,59 +185,56 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
             tfeat = model.get_text_features(**txt_inputs)
             tfeat = tfeat / tfeat.norm(dim=-1, keepdim=True)
         # Batched image features
-        feats: list[float] = []
-        for img in images:
+        feats: list[float] = [float("-inf") for _ in images]
+        valid: list[tuple[int, Any]] = [
+            (i, img) for i, img in enumerate(images) if img is not None
+        ]
+        # Determine batch size
+        try:
+            bs_conf = int(getattr(settings.retrieval, "siglip_batch_size", 0))
+        except (AttributeError, ValueError, TypeError):
+            bs_conf = 0
+        bs = bs_conf if bs_conf > 0 else (8 if device == "cuda" else 2)
+        for j in range(0, len(valid), bs):
             if _now_ms() - t0 > budget_ms:
                 logger.warning("SigLIP compute timeout; fail-open")
-                # Cleanup temp files on early exit
-                for tp in temp_files:
-                    with contextlib.suppress(Exception):
-                        os.remove(tp)
                 return nodes
-            if img is None:
-                feats.append(float("-inf"))
-                continue
-            im_inputs = processor(images=[img], return_tensors="pt")
+            idxs, batch_imgs = zip(*valid[j : j + bs], strict=False)
+            im_inputs = processor(images=list(batch_imgs), return_tensors="pt")
             if device == "cuda":
                 im_inputs["pixel_values"] = im_inputs["pixel_values"].to("cuda")
             with torch.no_grad():  # type: ignore[name-defined]
                 if hasattr(model, "get_image_features"):
-                    if device == "cuda":
-                        # mypy: ensure proper device placement
-                        pass
                     imfeat = model.get_image_features(**im_inputs)
                     imfeat = imfeat / imfeat.norm(dim=-1, keepdim=True)
-                    # Cosine is dot after normalization
-                    score = float((tfeat @ imfeat.T).squeeze().detach().cpu().numpy())
+                    sims = (tfeat @ imfeat.T).squeeze(0).detach().cpu().numpy().tolist()
                 else:
-                    score = float("-inf")
-            feats.append(score)
-
+                    sims = [float("-inf")] * len(idxs)
+            for k, s in zip(idxs, sims, strict=False):
+                feats[int(k)] = float(s)
         # Update scores and sort
         for n, s in zip(nodes, feats, strict=False):
             n.score = s
-            # Truncate text for visibility if needed (no UI dependency here)
-            if (
-                getattr(n.node, "text", None)
-                and len(n.node.text) > TEXT_TRUNCATION_LIMIT
-            ):
-                n.node.text = n.node.text[:TEXT_TRUNCATION_LIMIT]
-        nodes_sorted = sorted(nodes, key=lambda x: x.score or 0.0, reverse=True)
-
-        return nodes_sorted[: settings.retrieval.reranking_top_k]
-
+        # Deterministic sorting: score desc, id asc
+        nodes_sorted = sorted(
+            nodes,
+            key=lambda x: (-float(x.score or 0.0), str(getattr(x.node, "node_id", ""))),
+        )
+        # Pre-fusion prune M for visual stage
+        try:
+            prune_m = int(getattr(settings.retrieval, "siglip_prune_m", SIGLIP_PRUNE_M))
+        except (AttributeError, ValueError, TypeError):
+            prune_m = SIGLIP_PRUNE_M
+        return nodes_sorted[: max(1, prune_m)]
     except (RuntimeError, ValueError, OSError, TypeError) as exc:
         logger.warning("SigLIP rerank error: {} — fail-open", exc)
         return nodes
     finally:
-        # Always cleanup images and temporary files
+        # Always cleanup images
         for img in images:
             with contextlib.suppress(OSError, AttributeError, RuntimeError):
                 if hasattr(img, "close"):
                     img.close()
-        for tp in temp_files:
-            with contextlib.suppress(OSError, AttributeError, RuntimeError):
-                os.remove(tp)
 
 
 def _parse_top_k(value: int | str | None) -> int:
@@ -313,288 +259,21 @@ def _parse_top_k(value: int | str | None) -> int:
 
 @cache
 def _build_text_reranker_cached(top_n: int) -> SentenceTransformerRerank:
-    """Create cached SentenceTransformer reranker for text.
-
-    Args:
-        top_n: Number of top results to return.
-
-    Returns:
-        SentenceTransformerRerank: Configured text reranker instance.
-    """
-    # Respect configured model id to keep settings authoritative
+    """Create cached SentenceTransformer reranker for text."""
     return SentenceTransformerRerank(
         model=getattr(settings.retrieval, "reranker_model", "BAAI/bge-reranker-v2-m3"),
         top_n=top_n,
     )
 
 
-class _FlagTextReranker:
-    """Thin adapter for FlagEmbedding FlagReranker with LI-compatible interface."""
-
-    def __init__(self, top_n: int) -> None:
-        self.top_n = int(top_n)
-        self._model = None
-        self._model_id = getattr(
-            settings.retrieval, "reranker_model", "BAAI/bge-reranker-v2-m3"
-        )
-
-    def _ensure_loaded(self) -> None:
-        if self._model is not None:
-            return
-        try:
-            from FlagEmbedding import FlagReranker  # type: ignore
-        except ImportError as exc:  # pragma: no cover - optional dep
-            raise ImportError(
-                "FlagEmbedding is required for FlagReranker mode"
-            ) from exc
-
-        use_fp16 = _has_cuda_vram(1.0)
-        self._model = FlagReranker(self._model_id, use_fp16=use_fp16)
-
-    # Public helper to satisfy linters when used by adapters
-    def ensure_loaded(self) -> None:
-        """Ensure the underlying model is initialized."""
-        self._ensure_loaded()
-
-    def score_pairs(self, pairs: list[list[str]]) -> list[float]:
-        """Compute scores for (query, text) pairs using FlagEmbedding."""
-        self._ensure_loaded()
-        scores = self._model.compute_score(pairs)  # type: ignore[operator]
-        return [float(s) for s in scores]
-
-    def postprocess_nodes(
-        self, nodes: list[NodeWithScore], query_str: str
-    ) -> list[NodeWithScore]:
-        """Score nodes with FlagEmbedding reranker and return top_n.
-
-        Args:
-            nodes: Candidate nodes.
-            query_str: Query string.
-
-        Returns:
-            Top-n nodes sorted by model score (descending). Returns input
-            unchanged on failure or empty input.
-        """
-        if not nodes:
-            return nodes
-        self._ensure_loaded()
-        # Build pairs and score
-        pairs = []
-        texts: list[str] = []
-        for n in nodes:
-            t = (
-                getattr(n.node, "text", None)
-                or getattr(n.node, "get_content", lambda: "")()
-            )
-            texts.append(str(t))
-            pairs.append([query_str, str(t)])
-        try:
-            scores = self._model.compute_score(pairs)  # type: ignore[operator]
-        except (RuntimeError, ValueError, OSError, TypeError) as exc:
-            logger.warning("FlagReranker scoring error: %s — failing open", exc)
-            return nodes[: self.top_n]
-        # Attach scores and sort
-        for n, s in zip(nodes, scores, strict=False):
-            n.score = float(s)
-        nodes_sorted = sorted(nodes, key=lambda x: x.score or 0.0, reverse=True)
-        return nodes_sorted[: self.top_n]
-
-
-class _TextRerankerAdapter:
-    """Unified, cancellable text reranker with batch-wise early-exit.
-
-    - Prefers FlagEmbedding if available, falls back to LlamaIndex
-      SentenceTransformerRerank wrapper.
-    - Scores candidates in fixed-size batches and cooperatively stops
-      after full batches if time budget is exceeded.
-    - Deterministic ordering: primary by score desc, secondary by node_id asc.
-    - Exposes minimal function-level knobs via constructor only.
-    """
-
-    def __init__(
-        self,
-        top_n: int,
-        *,
-        batch_size: int | None = None,
-        device: str = "auto",
-        early_exit_on_cancel_only: bool = True,
-        timeout_ms: int = TEXT_RERANK_TIMEOUT_MS,
-    ) -> None:
-        self.top_n = int(top_n)
-        self.batch_size = (
-            int(batch_size) if batch_size else (16 if _has_cuda_vram(1.0) else 4)
-        )
-        self.device = device
-        self.early_exit_on_cancel_only = bool(early_exit_on_cancel_only)
-        self.timeout_ms = int(timeout_ms)
-        # internal backends
-        self._flag: _FlagTextReranker | None = None
-        self._li: SentenceTransformerRerank | None = None
-        # metrics for telemetry
-        self.last_stats: dict[str, int | bool] = {
-            "processed_count": 0,
-            "processed_batches": 0,
-            "timeout": False,
-        }
-
-        # Backend selection (prefer FlagEmbedding)
-        try:
-            __import__("FlagEmbedding")
-            self._flag = _FlagTextReranker(self.top_n)
-        except ImportError:
-            self._li = _build_text_reranker_cached(self.top_n)
-
-    def _score_batch_flag(self, query: str, batch: list[NodeWithScore]) -> list[float]:
-        if self._flag is None:
-            raise RuntimeError("FlagEmbedding backend not initialized")
-        pairs: list[list[str]] = []
-        for n in batch:
-            t = (
-                getattr(n.node, "text", None)
-                or getattr(n.node, "get_content", lambda: "")()
-            )
-            pairs.append([query, str(t)])
-        try:
-            scores = self._flag.score_pairs(pairs)
-            return scores
-        except (RuntimeError, ValueError, OSError, TypeError) as exc:
-            logger.warning("FlagEmbedding batch score error: {} — failing open", exc)
-            return [float(n.score or 0.0) for n in batch]
-
-    def _score_batch_li(self, query: str, batch: list[NodeWithScore]) -> list[float]:
-        if self._li is None:
-            raise RuntimeError("LI CrossEncoder backend not initialized")
-        # Cooperative timing probe to align with cancellation tests
-        _ = _now_ms()
-        # Ensure we return scores for every element in batch; temporarily set top_n
-        try:
-            # LlamaIndex postprocessor returns NodeWithScore with scores set
-            old_top = getattr(self._li, "top_n", len(batch))
-            self._li.top_n = len(batch)  # type: ignore[attr-defined]
-            # Timing probe mid-flow
-            _ = _now_ms()
-            result = self._li.postprocess_nodes(batch, query_str=query)
-            # Map scores back by node_id
-            score_map: dict[str, float] = {}
-            for nws in result:
-                with contextlib.suppress(Exception):
-                    score_map[str(nws.node.node_id)] = float(nws.score or 0.0)
-            scores: list[float] = []
-            for n in batch:
-                scores.append(score_map.get(str(n.node.node_id), float(n.score or 0.0)))
-            self._li.top_n = old_top  # type: ignore[attr-defined]
-            return scores
-        except (RuntimeError, ValueError, OSError, TypeError) as exc:
-            logger.warning("LI CrossEncoder batch score error: {} — failing open", exc)
-            return [float(n.score or 0.0) for n in batch]
-
-    def postprocess_nodes(
-        self, nodes: list[NodeWithScore], query_str: str
-    ) -> list[NodeWithScore]:
-        """Rerank nodes and return the top N.
-
-        Applies batch scoring using either FlagEmbedding or LlamaIndex reranker,
-        honoring the configured batch size and time budget.
-        """
-        if not nodes:
-            return nodes
-        # Ensure backends are ready
-        if self._flag is not None:
-            self._flag.ensure_loaded()
-        t0 = _now_ms()
-
-        # Partition deterministically into fixed-size batches
-        bs = max(1, self.batch_size)
-        processed = 0
-        processed_batches = 0
-        # We will mutate scores on copies to preserve input
-        work: list[NodeWithScore] = list(nodes)
-
-        for processed_batches, i in enumerate(range(0, len(work), bs), start=1):
-            batch = work[i : i + bs]
-            # Pre-batch cooperative cancellation probe (keeps tests deterministic)
-            _ = _now_ms()
-            # Compute scores for batch
-            if self._flag is not None:
-                scores = self._score_batch_flag(query_str, batch)
-            else:
-                scores = self._score_batch_li(query_str, batch)
-            # Mid-batch timing probe
-            _ = _now_ms()
-            for n, s in zip(batch, scores, strict=False):
-                n.score = float(s)
-            processed += len(batch)
-
-            # Check cooperative cancellation after completing the batch
-            _ = _now_ms()
-            elapsed = _now_ms() - t0
-            if elapsed > self.timeout_ms:
-                self.last_stats.update(
-                    {
-                        "processed_count": int(processed),
-                        "processed_batches": int(processed_batches),
-                        "timeout": True,
-                    }
-                )
-                # Return deterministic subset of fully processed batches only
-                done = work[: i + len(batch)]
-                break
-        else:
-            # Completed all batches within budget
-            self.last_stats.update(
-                {
-                    "processed_count": int(processed),
-                    "processed_batches": int(processed_batches),
-                    "timeout": False,
-                }
-            )
-            done = work
-
-        # If all scores equal, preserve original order
-        try:
-            scores_only = [float(n.score or 0.0) for n in done]
-            if scores_only and max(scores_only) == min(scores_only):
-                return done[: self.top_n]
-        except (ValueError, TypeError):  # defensive: score cast
-            pass
-
-        # Stable sort: score desc, tie-break by node_id asc
-        def _key(n: NodeWithScore) -> tuple[float, str]:
-            sid = str(getattr(n.node, "node_id", ""))
-            return (float(n.score or 0.0), sid)
-
-        out = sorted(done, key=_key, reverse=True)
-        return out[: self.top_n]
-
-
-def build_text_reranker(
-    top_n: int | str | None = None,
-    *,
-    batch_size: int | None = None,
-    device: str = "auto",
-    early_exit_on_cancel_only: bool = True,
-    timeout_ms: int = TEXT_RERANK_TIMEOUT_MS,
-) -> _TextRerankerAdapter:
-    """Create text CrossEncoder reranker (BGE v2-m3).
-
-    Args:
-        top_n: Number of top results to return. Defaults to settings value.
-        batch_size: Optional override for scoring batch size.
-        device: Preferred device ("auto"|"cpu"|"cuda") — advisory only.
-        early_exit_on_cancel_only: If True, stop only when over budget.
-        timeout_ms: Cooperative budget for scoring.
+def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRerank:
+    """Create text CrossEncoder reranker (BGE v2-m3) via LlamaIndex.
 
     Returns:
-        Cancellable unified adapter implementing postprocess_nodes.
+        SentenceTransformerRerank implementing postprocess_nodes.
     """
     k = _parse_top_k(top_n)
-    return _TextRerankerAdapter(
-        k,
-        batch_size=batch_size,
-        device=device,
-        early_exit_on_cancel_only=early_exit_on_cancel_only,
-        timeout_ms=timeout_ms,
-    )
+    return _build_text_reranker_cached(k)
 
 
 @cache
@@ -659,25 +338,16 @@ class MultimodalReranker(BaseNodePostprocessor):
         """
         if not nodes or not query_bundle:
             return nodes
-
         text_nodes, visual_nodes = self._split_by_modality(nodes)
-
         # Stage 2: text rerank with timeout (outer guard) + cooperative batches
         lists: list[list[NodeWithScore]] = []
         t_start = _now_ms()
         try:
             if text_nodes:
-                bs = 16 if _has_cuda_vram(1.0) else 4
-                adapter = build_text_reranker(
-                    top_n=settings.retrieval.reranking_top_k,
-                    batch_size=bs,
-                    device=("cuda" if _has_cuda_vram(1.0) else "cpu"),
-                    early_exit_on_cancel_only=True,
-                    timeout_ms=TEXT_RERANK_TIMEOUT_MS,
-                )
+                reranker = build_text_reranker(top_n=settings.retrieval.reranking_top_k)
 
                 def _do_text():
-                    return adapter.postprocess_nodes(
+                    return reranker.postprocess_nodes(
                         text_nodes, query_str=query_bundle.query_str
                     )
 
@@ -692,8 +362,6 @@ class MultimodalReranker(BaseNodePostprocessor):
                             "rerank.topk": int(settings.retrieval.reranking_top_k),
                             "rerank.latency_ms": int(_now_ms() - t_start),
                             "rerank.timeout": True,
-                            "rerank.processed_count": 0,
-                            "rerank.processed_batches": 0,
                         }
                     )
                     return nodes
@@ -702,29 +370,15 @@ class MultimodalReranker(BaseNodePostprocessor):
                         "rerank.stage": "text",
                         "rerank.topk": int(settings.retrieval.reranking_top_k),
                         "rerank.latency_ms": int(_now_ms() - t_start),
-                        "rerank.timeout": bool(
-                            getattr(adapter, "last_stats", {}).get("timeout", False)
-                        ),
-                        "rerank.batch_size": bs,
-                        "rerank.processed_count": int(
-                            getattr(adapter, "last_stats", {}).get("processed_count", 0)
-                        ),
-                        "rerank.processed_batches": int(
-                            getattr(adapter, "last_stats", {}).get(
-                                "processed_batches", 0
-                            )
-                        ),
+                        "rerank.timeout": False,
                     }
                 )
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("Text rerank error: {} — fail-open", exc)
-
         # Stage 3: visual rerank — SigLIP default within budget
         v_start = _now_ms()
-        # Visual stage guarded by a feature flag to keep CI lightweight
-        if visual_nodes and bool(
-            getattr(settings.retrieval, "enable_visual_reranking", False)
-        ):
+        # Visual stage runs whenever visual nodes exist (no UI toggle)
+        if visual_nodes:
             try:
                 sr = _siglip_rescore(
                     query_bundle.query_str, visual_nodes, SIGLIP_TIMEOUT_MS
@@ -736,12 +390,10 @@ class MultimodalReranker(BaseNodePostprocessor):
                         "rerank.topk": int(settings.retrieval.reranking_top_k),
                         "rerank.latency_ms": int(_now_ms() - v_start),
                         "rerank.timeout": False,
-                        "rerank.batch_size": 8 if _has_cuda_vram(1.0) else 2,
                     }
                 )
             except (RuntimeError, ValueError, OSError, TypeError, ImportError) as exc:
                 logger.warning("SigLIP rerank error: {} — continue without", exc)
-
             # Optional Stage 3b: ColPali policy (only when visual nodes exist)
             try:
                 if self._should_enable_colpali(visual_nodes, lists):
@@ -770,7 +422,6 @@ class MultimodalReranker(BaseNodePostprocessor):
                                 "rerank.topk": int(settings.retrieval.reranking_top_k),
                                 "rerank.latency_ms": int(_now_ms() - v_start),
                                 "rerank.timeout": False,
-                                "rerank.batch_size": 8 if _has_cuda_vram(1.0) else 2,
                             }
                         )
                     else:
@@ -785,7 +436,6 @@ class MultimodalReranker(BaseNodePostprocessor):
                         )
             except (RuntimeError, ValueError) as exc:
                 logger.warning("ColPali rerank error: {} — continue without", exc)
-
             # Only enforce visual-stage timeout when visual processing attempted
             if _now_ms() - v_start > (SIGLIP_TIMEOUT_MS + COLPALI_TIMEOUT_MS):
                 logger.warning("Visual rerank timeout; fail-open")
@@ -798,7 +448,6 @@ class MultimodalReranker(BaseNodePostprocessor):
                     }
                 )
                 return nodes
-
         if not lists:
             return nodes[: settings.retrieval.reranking_top_k]
         fused = _rrf_merge(lists, k_constant=int(settings.retrieval.rrf_k))
@@ -902,9 +551,8 @@ __all__ = [
     "build_visual_reranker",
 ]
 
+
 # ---- Helpers for factories (DRY) ----
-
-
 def get_postprocessors(
     mode: str, *, use_reranking: bool, top_n: int | None = None
 ) -> list | None:

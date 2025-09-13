@@ -15,7 +15,7 @@ def test_siglip_uses_padding_max_length(monkeypatch):
     nodes = [node]
 
     # Track processor call kwargs
-    calls = {"kwargs": None}
+    calls = {"all": []}
 
     class _FakeModel:
         def get_text_features(self, **kwargs):  # pragma: no cover - simplified
@@ -30,7 +30,7 @@ def test_siglip_uses_padding_max_length(monkeypatch):
 
     class _FakeProc:
         def __call__(self, *args, **kwargs):
-            calls["kwargs"] = kwargs
+            calls["all"].append(kwargs)
             # Return minimal tensors
             import torch
 
@@ -44,5 +44,5 @@ def test_siglip_uses_padding_max_length(monkeypatch):
     out = rr._siglip_rescore("hello", nodes, rr.SIGLIP_TIMEOUT_MS)
     assert out
     # Ensure padding was provided
-    assert calls["kwargs"] is not None
-    assert calls["kwargs"].get("padding") == "max_length"
+    assert calls["all"]
+    assert any(kw.get("padding") == "max_length" for kw in calls["all"])

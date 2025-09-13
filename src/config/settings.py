@@ -186,6 +186,16 @@ class RetrievalConfig(BaseModel):
     # Reranker model
     # (text-only CrossEncoder; ADR-006 legacy, ADR-037 multimodal supersedes)
     reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
+    # Visual rerank (SigLIP default; ColPali optional)
+    enable_colpali: bool = Field(
+        default=False, description="Enable optional ColPali visual reranker"
+    )
+    siglip_batch_size: int = Field(
+        default=8, ge=1, le=64, description="SigLIP image batch size"
+    )
+    siglip_prune_m: int = Field(
+        default=64, ge=1, le=512, description="Pre-fusion prune M for visual rerank"
+    )
     # Optional keyword tool (BM25) registration flag (disabled by default)
     enable_keyword_tool: bool = Field(default=False)
 

@@ -20,16 +20,15 @@
 
 2) **Use public APIs**
 
-   - Prefer high‑level entry points (e.g., build_router_engine via router_factory, RouterQueryEngine.query/aquery, BGECrossEncoderRerank.postprocess_nodes).
+   - Prefer high‑level entry points (e.g., build_router_engine via router_factory, RouterQueryEngine.query/aquery, build_text_reranker(...).postprocess_nodes).
      - Avoid private/underscored internals in production code.
 
 3) **Routing with LLMSingleSelector**
    - The selector reads `Settings.llm` (MockLLM). For deterministic routing, set the response text on the test LLM via `mock_llm_for_routing.response_text = "semantic_search"` (or `"hybrid_search"`, etc.).
    - When needed, stub `router_engine.router_engine.query = MagicMock(return_value=...)` to control underlying outcomes.
 
-4) **Reranking with CrossEncoder**
-   - Patch `src.retrieval.reranking.CrossEncoder` to return deterministic scores.
-   - For exact equality checks, construct the reranker with `normalize_scores=False`.
+4) **Reranking (text via SentenceTransformerRerank)**
+   - Patch `src.retrieval.reranking.build_text_reranker` to return a stubbed `SentenceTransformerRerank` that emits deterministic scores.
    - Prefer asserting ordering and `top_n` length rather than exact floats.
 
 5) **Memory/Performance checks**
@@ -57,23 +56,35 @@ def test_selects_hybrid(mock_vector_index, mock_hybrid_retriever, mock_llm_for_r
     assert engine.query("broad query").response == "ok"
 ```
 
-### Example: Deterministic reranker test
+### Example: Deterministic reranker test (text via SentenceTransformerRerank)
 
 ```python
-@patch("src.retrieval.reranking.CrossEncoder")
-def test_rerank_order(mock_cross):
-    mock_model = MagicMock()
-    mock_model.predict.return_value = np.array([0.9, 0.8, 0.7])
-    mock_cross.return_value = mock_model
+from unittest.mock import patch
+import numpy as np
 
-    rr = BGECrossEncoderRerank(top_n=2, normalize_scores=False)
+@patch("src.retrieval.reranking.build_text_reranker")
+def test_rerank_order(mock_build):
+    from llama_index.core.schema import NodeWithScore, TextNode, QueryBundle
+
+    class _StubRerank:
+        def __init__(self, top_n: int):
+            self.top_n = top_n
+
+        def postprocess_nodes(self, nodes, query_str: str):
+            scores = [0.9, 0.8, 0.7]
+            for node, s in zip(nodes, scores, strict=False):
+                node.score = s
+            return nodes[: self.top_n]
+
+    mock_build.return_value = _StubRerank(top_n=2)
+
     nodes = [
         NodeWithScore(node=TextNode(text="a", id_="1"), score=0.1),
         NodeWithScore(node=TextNode(text="b", id_="2"), score=0.1),
         NodeWithScore(node=TextNode(text="c", id_="3"), score=0.1),
     ]
     qb = QueryBundle(query_str="q")
-    out = rr.postprocess_nodes(nodes, qb)
+    out = mock_build().postprocess_nodes(nodes, qb.query_str)
     assert len(out) == 2
     assert out[0].score >= out[1].score
 ```
