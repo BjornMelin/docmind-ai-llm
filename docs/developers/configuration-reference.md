@@ -1505,4 +1505,4 @@ Notes:
 | DOCMIND_RETRIEVAL__SIGLIP_ADAPTER_UNIFIED | bool | true | Use shared vision_siglip.load_siglip in adapter to ensure consistent caching and device placement. |
 | DOCMIND_RETRIEVAL__RERANK_EXECUTOR | str | thread | Executor for rerank timeouts: thread (default) or process (strict isolation). |
 
-These flags support canary rollouts on GPU fleets to monitor OOM rate, P95 latency, and timeout counts. Flip flags to rollback safely if needed.
+These flags support canary rollouts on GPU fleets to monitor OOM rate, P95 latency, and timeout counts. Flip flags to rollback safely if needed. Under Plan 004, these flags are documented for operational clarity but not wired in code by default; behavior defaults to the centralized/unified implementation. Implement code-level gating only if product requests canary control.

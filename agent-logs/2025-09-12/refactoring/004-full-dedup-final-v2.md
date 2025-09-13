@@ -36,4 +36,4 @@ Notes
 - Deterministic ordering retained in reranking (score desc, id asc) and RRF tie-break.
 - Encrypted image helper already in use across reranking and pdf page I/O.
 - Plan 004 supersedes 003; remaining 002 items merged here.
-
+- Feature flags note: DEVICE_POLICY_CORE, SIGLIP_ADAPTER_UNIFIED, and RERANK_EXECUTOR are documented for operational clarity but not wired in code under Plan 004. Behavior defaults to the centralized/unified implementation without code-level gating. If product requests canary gating, add flags in a follow-up.
