@@ -24,6 +24,7 @@ from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 
 from src.config import settings
+from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.telemetry import log_jsonl
 
 # Time budgets (ms)
@@ -91,30 +92,7 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
                 executor.shutdown(wait=False, cancel_futures=True)
 
 
-def _has_cuda_vram(min_gb: float) -> bool:
-    """Check if CUDA GPU has at least ``min_gb`` VRAM via core helpers.
-
-    Delegates to ``src.utils.core.has_cuda_vram`` to keep a single source of
-    truth for device capability checks. Retains name for test imports.
-    """
-    try:
-        # Prefer centralized policy if enabled
-        if bool(getattr(settings.retrieval, "device_policy_core", True)):
-            from src.utils.core import has_cuda_vram as _hv
-
-            return bool(_hv(float(min_gb)))
-        # Minimal local check when disabled (canary rollback path)
-        try:
-            import torch as _t  # type: ignore
-
-            if not getattr(_t, "cuda", None) or not _t.cuda.is_available():  # type: ignore[attr-defined]
-                return False
-            total_bytes = _t.cuda.get_device_properties(0).total_memory  # type: ignore[attr-defined]
-            return (total_bytes / (1024**3)) >= float(min_gb)
-        except Exception:
-            return False
-    except (RuntimeError, ValueError, ImportError, AttributeError, TypeError):
-        return False
+# removed local _has_cuda_vram wrapper; use core.has_cuda_vram directly
 
 
 def _rrf_merge(
@@ -152,6 +130,7 @@ def _compute_siglip_scores(
     device: str,
     tfeat: Any,
     images: list[Any],
+    *,
     budget_ms: int,
     start_ms: float,
     batch_size: int,
@@ -174,6 +153,8 @@ def _compute_siglip_scores(
         im_inputs = processor(images=list(batch_imgs), return_tensors="pt")
         if device == "cuda":
             im_inputs["pixel_values"] = im_inputs["pixel_values"].to("cuda")
+        elif device == "mps":
+            im_inputs["pixel_values"] = im_inputs["pixel_values"].to("mps")
         with torch.no_grad():  # type: ignore[name-defined]
             if hasattr(model, "get_image_features"):
                 imfeat = model.get_image_features(**im_inputs)
@@ -199,6 +180,46 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     return load_siglip(model_id=model_id, device=None)
 
 
+def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
+    """Extract possible image paths from node metadata and attributes."""
+    out: list[str] = []
+    for nn in ns:
+        meta = getattr(nn.node, "metadata", {}) or {}
+        p = (
+            meta.get("image_path")
+            or meta.get("path")
+            or getattr(nn.node, "image_path", None)
+            or getattr(nn.node, "path", None)
+        )
+        out.append(str(p) if p else "")
+    return out
+
+
+def _load_images_for_siglip(
+    paths: list[str], start_ms: float, budget: int
+) -> list[Any]:
+    """Load images with timeout guard using encrypted-aware opener.
+
+    Returns a list of PIL images (RGB) or None placeholders for missing paths.
+    May early-return if the timeout budget is exceeded; caller decides policy.
+    """
+    imgs: list[Any] = []
+    from src.utils.images import open_image_encrypted
+
+    for pth in paths:
+        if pth:
+            try:
+                with open_image_encrypted(pth) as _im:
+                    imgs.append(_im.convert("RGB").copy() if _im is not None else None)
+            except (OSError, ValueError, RuntimeError, TypeError, ImportError):
+                imgs.append(None)
+        else:
+            imgs.append(None)
+        if _now_ms() - start_ms > budget:
+            return imgs
+    return imgs
+
+
 def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
     query: str, nodes: list[NodeWithScore], budget_ms: int
 ) -> list[NodeWithScore]:
@@ -218,41 +239,7 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
     t0 = _now_ms()
     images: list[Any] = []
     try:
-        import torch  # local import to avoid global dependency in tests
-
-        def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
-            out: list[str] = []
-            for nn in ns:
-                meta = getattr(nn.node, "metadata", {}) or {}
-                p = (
-                    meta.get("image_path")
-                    or meta.get("path")
-                    or getattr(nn.node, "image_path", None)
-                    or getattr(nn.node, "path", None)
-                )
-                out.append(str(p) if p else "")
-            return out
-
-        def _load_images_for_siglip(
-            paths: list[str], start_ms: float, budget: int
-        ) -> list[Any]:
-            imgs: list[Any] = []
-            from src.utils.images import open_image_encrypted
-
-            for pth in paths:
-                if pth:
-                    try:
-                        with open_image_encrypted(pth) as _im:
-                            imgs.append(
-                                _im.convert("RGB").copy() if _im is not None else None
-                            )
-                    except (OSError, ValueError, RuntimeError, TypeError, ImportError):
-                        imgs.append(None)
-                else:
-                    imgs.append(None)
-                if _now_ms() - start_ms > budget:
-                    return imgs  # caller decides on timeout handling
-            return imgs
+        import torch  # local import to avoid global dependency
 
         # Gather and load images
         paths = _extract_image_paths(nodes)
@@ -266,6 +253,9 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
         if device == "cuda":
             for k, v in txt_inputs.items():
                 txt_inputs[k] = v.to("cuda")
+        elif device == "mps":
+            for k, v in txt_inputs.items():
+                txt_inputs[k] = v.to("mps")
         with torch.no_grad():  # type: ignore[name-defined]
             tfeat = model.get_text_features(**txt_inputs)
             tfeat = tfeat / tfeat.norm(dim=-1, keepdim=True)
@@ -276,7 +266,14 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
             bs_conf = 0
         bs = bs_conf if bs_conf > 0 else (8 if device == "cuda" else 2)
         feats_or_none = _compute_siglip_scores(
-            model, processor, device, tfeat, images, budget_ms, t0, bs
+            model,
+            processor,
+            device,
+            tfeat,
+            images,
+            budget_ms=budget_ms,
+            start_ms=t0,
+            batch_size=bs,
         )
         if feats_or_none is None:
             logger.warning("SigLIP compute timeout; fail-open")
@@ -559,11 +556,15 @@ class MultimodalReranker(BaseNodePostprocessor):
             tuple[list[NodeWithScore], list[NodeWithScore]]: Tuple of
             (text_nodes, visual_nodes).
         """
-        text = [n for n in nodes if n.node.metadata.get("modality", "text") == "text"]
+
+        def _meta_of(nod: NodeWithScore) -> dict:
+            return getattr(nod.node, "metadata", {}) or {}
+
+        text = [n for n in nodes if _meta_of(n).get("modality", "text") == "text"]
         visual = [
             n
             for n in nodes
-            if n.node.metadata.get("modality") in {"image", "pdf_page_image"}
+            if _meta_of(n).get("modality") in {"image", "pdf_page_image"}
         ]
         return text, visual
 
@@ -591,7 +592,9 @@ class MultimodalReranker(BaseNodePostprocessor):
         total = max(1, sum(len(lst) for lst in lists) if lists else len(visual_nodes))
         visual_frac = (len(visual_nodes) / total) if total else 0.0
         topk_ok = settings.retrieval.reranking_top_k <= COLPALI_TOPK_MAX
-        vram_ok = _has_cuda_vram(COLPALI_MIN_VRAM_GB)
+        dev_str, dev_idx = resolve_device("auto")
+        _ = dev_str  # reserved for future routing
+        vram_ok = has_cuda_vram(COLPALI_MIN_VRAM_GB, device_index=int(dev_idx or 0))
         # Allow ops override via env/setting (optional); default False
         ops_force = bool(getattr(settings.retrieval, "enable_colpali", False))
         return ops_force or (visual_frac >= 0.4 and topk_ok and vram_ok)
