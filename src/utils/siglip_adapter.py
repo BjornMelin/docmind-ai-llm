@@ -38,26 +38,48 @@ class SiglipEmbedding:
             except Exception:  # pylint: disable=broad-exception-caught
                 model_id = None
         self.model_id = model_id or "google/siglip-base-patch16-224"
+        # Delegate device selection to shared helper with safe fallback
         self.device = device or self._choose_device()
         self._model: Any | None = None
         self._proc: Any | None = None
         self._dim: int | None = None
 
     def _choose_device(self) -> str:
-        """Delegate device selection to shared core helper with safe fallback."""
-        try:
-            import importlib.util as _ilu
+        """Select device via core helper; fall back to CPU when torch import fails.
 
-            if _ilu.find_spec("torch") is None:  # type: ignore[arg-type]
-                return "cpu"
-        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
+        This avoids test-only branches; we simply attempt an import to determine
+        if the runtime has torch available and then defer to select_device.
+        """
+        try:
+            import torch  # type: ignore
+        except Exception:  # pragma: no cover - optional dependency
             return "cpu"
         try:
             from src.utils.core import select_device as _sd
 
             return _sd("auto")
-        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
-            return "cpu"
+        except Exception:  # pragma: no cover - conservative
+            # Robust fallback using torch directly
+            try:
+                if getattr(torch, "cuda", None) and torch.cuda.is_available():  # type: ignore[attr-defined]
+                    return "cuda"
+                mps = getattr(getattr(torch, "backends", None), "mps", None)
+                if mps is not None and getattr(mps, "is_available", lambda: False)():
+                    return "mps"
+                return "cpu"
+            except Exception:
+                return "cpu"
+
+    def _load_siglip_transformers(self) -> None:
+        """Direct transformers-based SigLIP loading as a compatibility path."""
+        from transformers import SiglipModel, SiglipProcessor  # type: ignore
+
+        model = SiglipModel.from_pretrained(self.model_id)
+        if self.device in ("cuda", "mps"):
+            model = model.to(self.device)
+        proc = SiglipProcessor.from_pretrained(self.model_id)
+        self._model = model
+        self._proc = proc
 
     def _ensure_loaded(self) -> None:
         if self._model is not None and self._proc is not None:
@@ -89,27 +111,14 @@ class SiglipEmbedding:
                 TypeError,
             ):
                 # Fallback to direct transformers path
-                from transformers import SiglipModel, SiglipProcessor  # type: ignore
-
-                model = SiglipModel.from_pretrained(self.model_id)
-                if self.device == "cuda":
-                    model = model.to("cuda")
-                proc = SiglipProcessor.from_pretrained(self.model_id)
-                self._model = model
-                self._proc = proc
+                self._load_siglip_transformers()
         else:
-            from transformers import SiglipModel, SiglipProcessor  # type: ignore
-
-            model = SiglipModel.from_pretrained(self.model_id)
-            if self.device == "cuda":
-                model = model.to("cuda")
-            proc = SiglipProcessor.from_pretrained(self.model_id)
-            self._model = model
-            self._proc = proc
+            self._load_siglip_transformers()
         # best-effort dimension
         try:
-            proj = getattr(model.config, "projection_dim", 0)
-            self._dim = int(proj) or None
+            cfg = getattr(getattr(self, "_model", None), "config", None)
+            proj = int(getattr(cfg, "projection_dim", 0)) if cfg is not None else 0
+            self._dim = proj or None
         except Exception:  # pylint: disable=broad-exception-caught
             self._dim = None
 
@@ -136,6 +145,8 @@ class SiglipEmbedding:
             pix = inputs.get("pixel_values")
             if self.device == "cuda":
                 pix = pix.to("cuda")
+            elif self.device == "mps":
+                pix = pix.to("mps")
             with torch.no_grad():  # type: ignore[name-defined]
                 feats = self._model.get_image_features(pixel_values=pix)
                 feats = feats / feats.norm(dim=-1, keepdim=True)
