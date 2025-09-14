@@ -339,9 +339,7 @@ class ImageEmbedder:
             # Fallback heuristic if core helpers unavailable
             try:  # pragma: no cover
                 if TORCH.cuda.is_available():  # type: ignore[attr-defined]
-                    props = TORCH.cuda.get_device_properties(
-                        0
-                    )  # type: ignore[attr-defined]
+                    props = TORCH.cuda.get_device_properties(0)  # type: ignore[attr-defined]
                     total = float(props.total_memory) / float(1024**3)
                     return "openclip_vith14" if total >= 20.0 else "siglip_base"
             except (RuntimeError, AttributeError):

@@ -174,11 +174,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
     # Check GPU configuration
     if app_settings.enable_gpu_acceleration:
         try:
-            if (
-                TORCH
-                and getattr(TORCH, "cuda", None)
-                and TORCH.cuda.is_available()
-            ):  # type: ignore[attr-defined]
+            if TORCH and getattr(TORCH, "cuda", None) and TORCH.cuda.is_available():  # type: ignore[attr-defined]
                 # type: ignore[attr-defined]
                 gpu_name = TORCH.cuda.get_device_name(0)
                 results["info"].append(f"GPU available: {gpu_name}")
@@ -204,11 +200,7 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
     try:
         yield
     finally:
-        if (
-            TORCH
-            and getattr(TORCH, "cuda", None)
-            and TORCH.cuda.is_available()
-        ):  # type: ignore[attr-defined]
+        if TORCH and getattr(TORCH, "cuda", None) and TORCH.cuda.is_available():  # type: ignore[attr-defined]
             # type: ignore[attr-defined]
             TORCH.cuda.synchronize()
             # type: ignore[attr-defined]
