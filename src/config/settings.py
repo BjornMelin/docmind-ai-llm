@@ -196,6 +196,19 @@ class RetrievalConfig(BaseModel):
     siglip_prune_m: int = Field(
         default=64, ge=1, le=512, description="Pre-fusion prune M for visual rerank"
     )
+    # Advanced feature flags (canaries; default to unified behavior)
+    device_policy_core: bool = Field(
+        default=True,
+        description=("Route device/VRAM checks via src.utils.core"),
+    )
+    siglip_adapter_unified: bool = Field(
+        default=True,
+        description=("Use shared vision_siglip.load_siglip in adapter"),
+    )
+    rerank_executor: Literal["thread", "process"] = Field(
+        default="thread",
+        description=("Executor for rerank timeouts: 'thread' or 'process'"),
+    )
     # Optional keyword tool (BM25) registration flag (disabled by default)
     enable_keyword_tool: bool = Field(default=False)
 

@@ -44,38 +44,60 @@ class SiglipEmbedding:
         self._dim: int | None = None
 
     def _choose_device(self) -> str:
+        """Delegate device selection to shared core helper with safe fallback."""
         try:
             import importlib.util as _ilu
 
             if _ilu.find_spec("torch") is None:  # type: ignore[arg-type]
                 return "cpu"
-        except (
-            ImportError,
-            AttributeError,
-            RuntimeError,
-            ValueError,
-            TypeError,
-        ):  # pragma: no cover - importlib edge cases
+        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
             return "cpu"
         try:
             from src.utils.core import select_device as _sd
 
             return _sd("auto")
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
             return "cpu"
 
     def _ensure_loaded(self) -> None:
         if self._model is not None and self._proc is not None:
             return
+        # Gate unified loader via settings flag
+        use_unified = True
         try:
-            from src.utils.vision_siglip import load_siglip
+            from src.config import settings as app_settings
 
-            model, proc, dev = load_siglip(self.model_id, self.device)
-            self.device = dev
-            self._model = model
-            self._proc = proc
-        except Exception:  # pylint: disable=broad-exception-caught
-            # Fallback to direct transformers path if shared loader unavailable
+            use_unified = bool(
+                getattr(app_settings.retrieval, "siglip_adapter_unified", True)
+            )
+        except Exception:  # pragma: no cover - settings import edge
+            use_unified = True
+
+        if use_unified:
+            try:
+                from src.utils.vision_siglip import load_siglip
+
+                model, proc, dev = load_siglip(self.model_id, self.device)
+                self.device = dev
+                self._model = model
+                self._proc = proc
+            except (
+                ImportError,
+                AttributeError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+            ):
+                # Fallback to direct transformers path
+                from transformers import SiglipModel, SiglipProcessor  # type: ignore
+
+                model = SiglipModel.from_pretrained(self.model_id)
+                if self.device == "cuda":
+                    model = model.to("cuda")
+                proc = SiglipProcessor.from_pretrained(self.model_id)
+                self._model = model
+                self._proc = proc
+        else:
             from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
             model = SiglipModel.from_pretrained(self.model_id)
@@ -119,7 +141,7 @@ class SiglipEmbedding:
                 feats = feats / feats.norm(dim=-1, keepdim=True)
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
             # Return zeros if inference fails unexpectedly
             dim = int(self._dim or 768)
             return np.zeros(dim, dtype=np.float32)

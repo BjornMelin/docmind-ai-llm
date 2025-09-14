@@ -11,7 +11,7 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FTimeoutError
 from functools import cache
 from typing import Any
@@ -49,18 +49,46 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
     result. Ensures the worker future is cancelled and the executor is shut
     down without waiting so the caller does not block on long-running tasks.
     """
-    ex = ThreadPoolExecutor(max_workers=1)
-    fut = ex.submit(fn)
+    # Choose executor based on settings (default: thread). Process executors
+    # require picklable callables; fall back to thread if submission fails.
+    executor = None
+    try:
+        exec_type = getattr(
+            getattr(settings, "retrieval", object()), "rerank_executor", "thread"
+        )
+        if exec_type == "process":
+            try:
+                executor = ProcessPoolExecutor(max_workers=1)
+                fut = executor.submit(fn)
+            except Exception as exc:  # pragma: no cover - pickling/env edge cases
+                logger.warning(
+                    "Process executor unsupported; falling back to thread: {}",
+                    exc,
+                )
+                if executor is not None:
+                    with contextlib.suppress(Exception):
+                        executor.shutdown(wait=False, cancel_futures=True)
+                executor = ThreadPoolExecutor(max_workers=1)
+                fut = executor.submit(fn)
+        else:
+            executor = ThreadPoolExecutor(max_workers=1)
+            fut = executor.submit(fn)
+    except Exception as exc:  # defensive: ensure we have an executor
+        logger.warning(
+            "Executor initialization failed: {} — using thread fallback", exc
+        )
+        executor = ThreadPoolExecutor(max_workers=1)
+        fut = executor.submit(fn)
     try:
         return fut.result(timeout=max(0.0, timeout_ms) / 1000.0)
     except FTimeoutError:
         with contextlib.suppress(Exception):
             fut.cancel()
-            ex.shutdown(wait=False, cancel_futures=True)
         return None
     finally:
         with contextlib.suppress(Exception):
-            ex.shutdown(wait=False, cancel_futures=True)
+            if executor is not None:
+                executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _has_cuda_vram(min_gb: float) -> bool:
@@ -70,9 +98,21 @@ def _has_cuda_vram(min_gb: float) -> bool:
     truth for device capability checks. Retains name for test imports.
     """
     try:
-        from src.utils.core import has_cuda_vram as _hv
+        # Prefer centralized policy if enabled
+        if bool(getattr(settings.retrieval, "device_policy_core", True)):
+            from src.utils.core import has_cuda_vram as _hv
 
-        return bool(_hv(float(min_gb)))
+            return bool(_hv(float(min_gb)))
+        # Minimal local check when disabled (canary rollback path)
+        try:
+            import torch as _t  # type: ignore
+
+            if not getattr(_t, "cuda", None) or not _t.cuda.is_available():  # type: ignore[attr-defined]
+                return False
+            total_bytes = _t.cuda.get_device_properties(0).total_memory  # type: ignore[attr-defined]
+            return (total_bytes / (1024**3)) >= float(min_gb)
+        except Exception:
+            return False
     except (RuntimeError, ValueError, ImportError, AttributeError, TypeError):
         return False
 
@@ -140,41 +180,46 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
     try:
         import torch  # local import to avoid global dependency in tests
 
-        # Gather image paths
-        paths: list[str] = []
-        for n in nodes:
-            meta = getattr(n.node, "metadata", {}) or {}
-            # Accept path in either metadata or as attribute on the node
-            p = (
-                meta.get("image_path")
-                or meta.get("path")
-                or getattr(n.node, "image_path", None)
-                or getattr(n.node, "path", None)
-            )
-            if not p:
-                # Skip nodes without path; keep ordering later
-                paths.append("")
-            else:
-                paths.append(str(p))
-        # Load images lazily; stop if time runs out
+        def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
+            out: list[str] = []
+            for nn in ns:
+                meta = getattr(nn.node, "metadata", {}) or {}
+                p = (
+                    meta.get("image_path")
+                    or meta.get("path")
+                    or getattr(nn.node, "image_path", None)
+                    or getattr(nn.node, "path", None)
+                )
+                out.append(str(p) if p else "")
+            return out
 
-        for p in paths:
-            if p:
-                try:
-                    from src.utils.images import open_image_encrypted
+        def _load_images_for_siglip(
+            paths: list[str], start_ms: float, budget: int
+        ) -> list[Any]:
+            imgs: list[Any] = []
+            from src.utils.images import open_image_encrypted
 
-                    with open_image_encrypted(p) as _im:
-                        if _im is not None:
-                            images.append(_im.convert("RGB").copy())
-                        else:
-                            images.append(None)
-                except (OSError, ValueError, RuntimeError, TypeError, ImportError):
-                    images.append(None)
-            else:
-                images.append(None)
-            if _now_ms() - t0 > budget_ms:
-                logger.warning("SigLIP load images timeout; fail-open")
-                return nodes
+            for pth in paths:
+                if pth:
+                    try:
+                        with open_image_encrypted(pth) as _im:
+                            imgs.append(
+                                _im.convert("RGB").copy() if _im is not None else None
+                            )
+                    except (OSError, ValueError, RuntimeError, TypeError, ImportError):
+                        imgs.append(None)
+                else:
+                    imgs.append(None)
+                if _now_ms() - start_ms > budget:
+                    return imgs  # caller decides on timeout handling
+            return imgs
+
+        # Gather and load images
+        paths = _extract_image_paths(nodes)
+        images = _load_images_for_siglip(paths, t0, budget_ms)
+        if _now_ms() - t0 > budget_ms:
+            logger.warning("SigLIP load images timeout; fail-open")
+            return nodes
         model, processor, device = _load_siglip()
         # Text features (1, D)
         txt_inputs = processor(text=[query], padding="max_length", return_tensors="pt")
