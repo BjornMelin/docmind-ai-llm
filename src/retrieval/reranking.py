@@ -146,6 +146,46 @@ def _rrf_merge(
     return [n for _score, n in fused_list]
 
 
+def _compute_siglip_scores(
+    model: Any,
+    processor: Any,
+    device: str,
+    tfeat: Any,
+    images: list[Any],
+    budget_ms: int,
+    start_ms: float,
+    batch_size: int,
+) -> list[float] | None:
+    """Batched SigLIP cosine scores with timeout guard."""
+    try:
+        import torch  # type: ignore
+    except Exception:  # pragma: no cover - torch optional in CI
+        return [float("-inf")] * len(images)
+
+    feats: list[float] = [float("-inf")] * len(images)
+    valid: list[tuple[int, Any]] = [
+        (i, img) for i, img in enumerate(images) if img is not None
+    ]
+    bs = max(1, int(batch_size))
+    for j in range(0, len(valid), bs):
+        if _now_ms() - start_ms > budget_ms:
+            return None
+        idxs, batch_imgs = zip(*valid[j : j + bs], strict=False)
+        im_inputs = processor(images=list(batch_imgs), return_tensors="pt")
+        if device == "cuda":
+            im_inputs["pixel_values"] = im_inputs["pixel_values"].to("cuda")
+        with torch.no_grad():  # type: ignore[name-defined]
+            if hasattr(model, "get_image_features"):
+                imfeat = model.get_image_features(**im_inputs)
+                imfeat = imfeat / imfeat.norm(dim=-1, keepdim=True)
+                sims = (tfeat @ imfeat.T).squeeze(0).detach().cpu().numpy().tolist()
+            else:
+                sims = [float("-inf")] * len(idxs)
+        for k, s in zip(idxs, sims, strict=False):
+            feats[int(k)] = float(s)
+    return feats
+
+
 def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     """Load SigLIP via shared utility to keep behavior consistent."""
     try:
@@ -229,34 +269,19 @@ def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
         with torch.no_grad():  # type: ignore[name-defined]
             tfeat = model.get_text_features(**txt_inputs)
             tfeat = tfeat / tfeat.norm(dim=-1, keepdim=True)
-        # Batched image features
-        feats: list[float] = [float("-inf") for _ in images]
-        valid: list[tuple[int, Any]] = [
-            (i, img) for i, img in enumerate(images) if img is not None
-        ]
-        # Determine batch size
+        # Batched image features via helper
         try:
             bs_conf = int(getattr(settings.retrieval, "siglip_batch_size", 0))
         except (AttributeError, ValueError, TypeError):
             bs_conf = 0
         bs = bs_conf if bs_conf > 0 else (8 if device == "cuda" else 2)
-        for j in range(0, len(valid), bs):
-            if _now_ms() - t0 > budget_ms:
-                logger.warning("SigLIP compute timeout; fail-open")
-                return nodes
-            idxs, batch_imgs = zip(*valid[j : j + bs], strict=False)
-            im_inputs = processor(images=list(batch_imgs), return_tensors="pt")
-            if device == "cuda":
-                im_inputs["pixel_values"] = im_inputs["pixel_values"].to("cuda")
-            with torch.no_grad():  # type: ignore[name-defined]
-                if hasattr(model, "get_image_features"):
-                    imfeat = model.get_image_features(**im_inputs)
-                    imfeat = imfeat / imfeat.norm(dim=-1, keepdim=True)
-                    sims = (tfeat @ imfeat.T).squeeze(0).detach().cpu().numpy().tolist()
-                else:
-                    sims = [float("-inf")] * len(idxs)
-            for k, s in zip(idxs, sims, strict=False):
-                feats[int(k)] = float(s)
+        feats_or_none = _compute_siglip_scores(
+            model, processor, device, tfeat, images, budget_ms, t0, bs
+        )
+        if feats_or_none is None:
+            logger.warning("SigLIP compute timeout; fail-open")
+            return nodes
+        feats = feats_or_none
         # Update scores and sort
         for n, s in zip(nodes, feats, strict=False):
             n.score = s
@@ -386,7 +411,22 @@ class MultimodalReranker(BaseNodePostprocessor):
         text_nodes, visual_nodes = self._split_by_modality(nodes)
         # Stage 2: text rerank with timeout (outer guard) + cooperative batches
         lists: list[list[NodeWithScore]] = []
-        t_start = _now_ms()
+
+        def _run_stage(
+            name: str, fn: Callable[[], list[NodeWithScore]], timeout_ms: int
+        ) -> list[NodeWithScore] | None:
+            s = _now_ms()
+            res = _run_with_timeout(fn, timeout_ms)
+            log_jsonl(
+                {
+                    "rerank.stage": name,
+                    "rerank.topk": int(settings.retrieval.reranking_top_k),
+                    "rerank.latency_ms": int(_now_ms() - s),
+                    "rerank.timeout": res is None,
+                }
+            )
+            return res
+
         try:
             if text_nodes:
                 reranker = build_text_reranker(top_n=settings.retrieval.reranking_top_k)
@@ -396,28 +436,11 @@ class MultimodalReranker(BaseNodePostprocessor):
                         text_nodes, query_str=query_bundle.query_str
                     )
 
-                tr = _run_with_timeout(_do_text, TEXT_RERANK_TIMEOUT_MS + 50)
-                if tr is not None:
-                    lists.append(tr)
-                else:
+                tr = _run_stage("text", _do_text, TEXT_RERANK_TIMEOUT_MS + 50)
+                if tr is None:
                     logger.warning("Text rerank timeout; fail-open")
-                    log_jsonl(
-                        {
-                            "rerank.stage": "text",
-                            "rerank.topk": int(settings.retrieval.reranking_top_k),
-                            "rerank.latency_ms": int(_now_ms() - t_start),
-                            "rerank.timeout": True,
-                        }
-                    )
                     return nodes
-                log_jsonl(
-                    {
-                        "rerank.stage": "text",
-                        "rerank.topk": int(settings.retrieval.reranking_top_k),
-                        "rerank.latency_ms": int(_now_ms() - t_start),
-                        "rerank.timeout": False,
-                    }
-                )
+                lists.append(tr)
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("Text rerank error: {} — fail-open", exc)
         # Stage 3: visual rerank — SigLIP default within budget
@@ -458,27 +481,11 @@ class MultimodalReranker(BaseNodePostprocessor):
                         + COLPALI_TIMEOUT_MS
                         - int(_now_ms() - v_start),
                     )
-                    cr = _run_with_timeout(_do_colpali, remaining)
-                    if cr is not None:
-                        lists.append(cr)
-                        log_jsonl(
-                            {
-                                "rerank.stage": "colpali",
-                                "rerank.topk": int(settings.retrieval.reranking_top_k),
-                                "rerank.latency_ms": int(_now_ms() - v_start),
-                                "rerank.timeout": False,
-                            }
-                        )
-                    else:
+                    cr = _run_stage("colpali", _do_colpali, remaining)
+                    if cr is None:
                         logger.warning("ColPali rerank timeout; continue without")
-                        log_jsonl(
-                            {
-                                "rerank.stage": "colpali",
-                                "rerank.topk": int(settings.retrieval.reranking_top_k),
-                                "rerank.latency_ms": int(_now_ms() - v_start),
-                                "rerank.timeout": True,
-                            }
-                        )
+                    else:
+                        lists.append(cr)
             except (RuntimeError, ValueError) as exc:
                 logger.warning("ColPali rerank error: {} — continue without", exc)
             # Only enforce visual-stage timeout when visual processing attempted

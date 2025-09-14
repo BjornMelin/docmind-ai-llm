@@ -27,7 +27,7 @@ def open_image_encrypted(path: str):
     tmp: str | None = None
     try:
         to_open = path
-        if str(path).endswith(".enc"):
+        if path.endswith(".enc"):
             try:
                 from src.utils.security import decrypt_file  # type: ignore
             except (
