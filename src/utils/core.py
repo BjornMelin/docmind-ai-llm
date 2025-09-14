@@ -29,12 +29,6 @@ from qdrant_client.http.exceptions import (
 from src.config import settings
 from src.config.settings import DocMindSettings
 
-# Compatibility alias so tests can patch src.utils.core.AsyncQdrantClient
-AsyncQdrantClient = qdrant_client.AsyncQdrantClient
-
-# Back-compat alias for tests that patch src.utils.core.torch
-torch = TORCH  # type: ignore[assignment]
-
 
 def is_cuda_available() -> bool:
     """Return True when CUDA is available via torch."""
@@ -56,16 +50,56 @@ def _is_mps_available() -> bool:
         return False
 
 
-def get_vram_gb() -> float | None:
-    """Return total GPU VRAM in GiB when CUDA is available; else None."""
+def get_vram_gb(device_index: int = 0) -> float | None:
+    """Return total GPU VRAM in GiB for a CUDA device; else None.
+
+    Args:
+        device_index: CUDA device index to query (default: 0).
+    """
     if not is_cuda_available():
         return None
     try:
         # type: ignore[attr-defined]
-        total_bytes = TORCH.cuda.get_device_properties(0).total_memory
-        return round(total_bytes / settings.monitoring.bytes_to_gb_divisor, 1)
+        total_bytes = TORCH.cuda.get_device_properties(int(device_index)).total_memory
+        divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
+        return round(total_bytes / divisor, 1)
     except Exception:  # pragma: no cover - conservative
         return None
+
+
+def resolve_device(prefer: str = "auto") -> tuple[str, int | None]:
+    """Resolve a canonical device string and device index when applicable.
+
+    Args:
+        prefer: 'auto'|'cpu'|'mps'|'cuda' or a concrete 'cuda:N'.
+
+    Returns:
+        Tuple of (device_str, device_index or None for CPU/MPS).
+    """
+    try:
+        p = (prefer or "auto").lower()
+        # If explicit cuda:N provided
+        if p.startswith("cuda:"):
+            try:
+                idx = int(p.split(":", 1)[1])
+            except Exception:
+                idx = 0
+            return (f"cuda:{idx}", idx)
+        # Use existing selection logic
+        dev = select_device(p)
+        if dev == "cuda":
+            # Derive an index; prefer current device
+            try:
+                # type: ignore[attr-defined]
+                idx = int(TORCH.cuda.current_device()) if TORCH else 0
+            except Exception:
+                idx = 0
+            return (f"cuda:{idx}", idx)
+        if dev == "mps":
+            return ("mps", None)
+        return ("cpu", None)
+    except Exception:
+        return ("cpu", None)
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -99,11 +133,12 @@ def detect_hardware() -> dict[str, Any]:
     return hardware_info
 
 
-def has_cuda_vram(min_gb: float) -> bool:
-    """Return True when CUDA is available and total VRAM ≥ ``min_gb``.
+def has_cuda_vram(min_gb: float, device_index: int = 0) -> bool:
+    """Return True when CUDA is available and total VRAM ≥ ``min_gb`` for a device.
 
     Args:
         min_gb: Minimum required VRAM (GiB) to consider the device sufficient.
+        device_index: CUDA device index to check (default: 0).
 
     Returns:
         bool: True when CUDA is available and device VRAM meets the threshold;
@@ -112,11 +147,14 @@ def has_cuda_vram(min_gb: float) -> bool:
     try:
         if not is_cuda_available():
             return False
+        # Compare using raw bytes to avoid rounding edge cases
         # type: ignore[attr-defined]
-        total_bytes = TORCH.cuda.get_device_properties(0).total_memory
-        total_gb = total_bytes / (1024**3)
-        return total_gb >= min_gb
-    except (RuntimeError, AttributeError, ImportError, TypeError):
+        props = TORCH.cuda.get_device_properties(int(device_index))
+        total_bytes = float(getattr(props, "total_memory", 0.0))
+        divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
+        required_bytes = float(min_gb) * divisor
+        return total_bytes >= required_bytes
+    except (RuntimeError, AttributeError, ImportError, TypeError, ValueError):
         return False
 
 
@@ -231,7 +269,7 @@ async def managed_async_qdrant_client(
     """
     client = None
     try:
-        client = AsyncQdrantClient(url=url)
+        client = qdrant_client.AsyncQdrantClient(url=url)
         yield client
     finally:
         if client is not None:
