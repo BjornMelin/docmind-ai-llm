@@ -6,14 +6,13 @@ IngestionPipeline, with utilities for deterministic IDs and PDF page images.
 Exports a compact, convenient surface:
 - Core: DocumentProcessor, UnstructuredTransformation, ProcessingError
 - Models: DocumentElement, ProcessingResult, ProcessingStrategy
-- Embedding result models (for convenience): EmbeddingError/Parameters/Result
+- Embedding result models (for convenience): EmbeddingParameters/EmbeddingResult
 - PDF helpers: pdf_pages_to_image_documents, save_pdf_page_images
 - Utils: sha256_id, is_unstructured_like
 """
 
 # Import document processor and factory functions
 from src.models.embeddings import (
-    EmbeddingError,
     EmbeddingParameters,
     EmbeddingResult,
 )
@@ -39,7 +38,6 @@ from src.processing.utils import (
 __all__ = [
     "DocumentElement",
     "DocumentProcessor",
-    "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",
     "ProcessingError",

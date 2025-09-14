@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from src.models.embeddings import EmbeddingError, EmbeddingParameters, EmbeddingResult
+from src.models.embeddings import EmbeddingParameters, EmbeddingResult
 
 
 @pytest.mark.unit
@@ -514,64 +514,3 @@ class TestEmbeddingResult:
         assert result.processing_time == 0.0
         assert result.batch_size == 0
         assert result.memory_usage_mb == 0.0
-
-
-class TestEmbeddingError:
-    """Test suite for EmbeddingError exception."""
-
-    @pytest.mark.unit
-    def test_embedding_error_creation_basic(self):
-        """Test EmbeddingError creation and basic functionality."""
-        error = EmbeddingError("Test error message")
-
-        assert str(error) == "Test error message"
-        assert isinstance(error, Exception)
-
-    @pytest.mark.unit
-    def test_embedding_error_creation_empty(self):
-        """Test EmbeddingError with empty message."""
-        error = EmbeddingError("")
-        assert str(error) == ""
-
-    @pytest.mark.unit
-    def test_embedding_error_creation_unicode(self):
-        """Test EmbeddingError with unicode characters."""
-        error = EmbeddingError("错误信息 with émojis 🚀")
-        assert "错误信息" in str(error)
-        assert "🚀" in str(error)
-
-    @pytest.mark.unit
-    def test_embedding_error_inheritance(self):
-        """Test EmbeddingError inheritance from Exception."""
-        error = EmbeddingError("Test")
-        assert isinstance(error, Exception)
-        assert issubclass(EmbeddingError, Exception)
-
-    @pytest.mark.unit
-    def test_embedding_error_raising(self):
-        """Test raising and catching EmbeddingError."""
-        with pytest.raises(EmbeddingError) as exc_info:
-            raise EmbeddingError("Embedding processing failed")
-
-        assert str(exc_info.value) == "Embedding processing failed"
-
-    @pytest.mark.unit
-    def test_embedding_error_with_args(self):
-        """Test EmbeddingError with multiple arguments."""
-        error = EmbeddingError("Error", "Additional info", 42)
-
-        # Exception args should contain all arguments
-        assert error.args == ("Error", "Additional info", 42)
-
-    @pytest.mark.unit
-    def test_embedding_error_chaining(self):
-        """Test EmbeddingError exception chaining."""
-        # Test exception chaining with from clause
-        try:
-            raise ValueError("Original error")
-        except ValueError as e:
-            embedding_error = EmbeddingError("Embedding failed")
-            embedding_error.__cause__ = e
-
-        assert isinstance(embedding_error.__cause__, ValueError)
-        assert str(embedding_error.__cause__) == "Original error"
