@@ -481,7 +481,15 @@ class MultimodalReranker(BaseNodePostprocessor):
             try:
                 if self._should_enable_colpali(visual_nodes, lists):
                     base = lists[-1] if lists else visual_nodes
-                    pruned = base[:SIGLIP_PRUNE_M]
+                    try:
+                        prune_m = int(
+                            getattr(
+                                settings.retrieval, "siglip_prune_m", SIGLIP_PRUNE_M
+                            )
+                        )
+                    except (AttributeError, ValueError, TypeError):
+                        prune_m = SIGLIP_PRUNE_M
+                    pruned = base[: max(1, prune_m)]
 
                     def _do_colpali():
                         return build_visual_reranker(
