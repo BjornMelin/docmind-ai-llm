@@ -8,7 +8,6 @@ Usage:
     print(settings.embedding.model_name)
 """
 
-import os
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
@@ -56,6 +55,67 @@ class SemanticCacheConfig(BaseModel):
     top_k: int = Field(default=5, ge=1, le=50)
     max_response_bytes: int = Field(default=24_000, ge=1024)
     namespace: str = Field(default="default")
+
+
+class OpenAIConfig(BaseModel):
+    """Settings for OpenAI-compatible servers.
+
+    Used for LM Studio, vLLM OpenAI-compatible server, and llama.cpp server.
+    Ensures idempotent normalization of base URLs to include a single "/v1".
+    """
+
+    base_url: str = Field(default="http://localhost:1234/v1")
+    api_key: str | None = Field(default=None, description="Optional API key")
+
+    @field_validator("base_url", mode="before")
+    @classmethod
+    def _ensure_v1_on_base(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            return v
+        from urllib.parse import urlparse
+
+        try:
+            p = urlparse(v.rstrip("/"))
+            path = p.path or ""
+            if not path.endswith("/v1"):
+                path = f"{path}/v1"
+            return p._replace(path=path).geturl()
+        except Exception:
+            return v
+
+
+class SecurityConfig(BaseModel):
+    """Security and remote endpoint policy settings."""
+
+    allow_remote_endpoints: bool = Field(
+        default=False,
+        description=(
+            "When False, only localhost/127.0.0.1 endpoints are allowed for LLMs"
+        ),
+    )
+    endpoint_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost",
+            "http://127.0.0.1",
+            "https://localhost",
+            "https://127.0.0.1",
+        ]
+    )
+    trust_remote_code: bool = Field(
+        default=False,
+        description="Default posture for libraries that support remote code execution",
+    )
+
+
+class HybridConfig(BaseModel):
+    """Declarative hybrid retrieval policy."""
+
+    enabled: bool = Field(default=False)
+    server_side: bool = Field(default=False)
+    method: Literal["rrf", "dbsf"] = Field(default="rrf")
+    rrf_k: int = Field(default=60, ge=1, le=256)
+    dbsf_alpha: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class ProcessingConfig(BaseModel):
@@ -158,10 +218,6 @@ class RetrievalConfig(BaseModel):
         default=60, ge=10, le=1000, description="Prefetch/fused candidate cap"
     )
     rrf_k: int = Field(default=60, ge=1, le=256, description="RRF k-constant")
-    dbsf_enabled: bool = Field(
-        default=False,
-        description=("When true, force Fusion mode DBSF regardless of fusion_mode."),
-    )
     prefetch_dense_limit: int = Field(
         default=200, ge=1, le=5000, description="Per-branch dense prefetch limit"
     )
@@ -175,7 +231,7 @@ class RetrievalConfig(BaseModel):
     named_vectors_multi_head_enabled: bool = Field(default=False)
     # Router and feature toggles (ADR-003)
     router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
-    hybrid_enabled: bool = Field(default=True)
+    # Deprecated legacy flag removed; use enable_server_hybrid
     hierarchy_enabled: bool = Field(default=True)
     graph_enabled: bool = Field(default=False)
     # Server-side hybrid via Qdrant Query API fusion (prefetch + RRF/DBSF).
@@ -216,6 +272,33 @@ class RetrievalConfig(BaseModel):
     )
     # Optional keyword tool (BM25) registration flag (disabled by default)
     enable_keyword_tool: bool = Field(default=False)
+
+    # --- Centralized reranking timeouts (ms) ---
+    # Keep conservative defaults and make all budgets observable in telemetry.
+    text_rerank_timeout_ms: int = Field(
+        default=250,
+        ge=50,
+        le=5000,
+        description="Timeout (ms) for text cross-encoder reranking stage",
+    )
+    siglip_timeout_ms: int = Field(
+        default=150,
+        ge=25,
+        le=5000,
+        description="Timeout (ms) for SigLIP visual scoring stage",
+    )
+    colpali_timeout_ms: int = Field(
+        default=400,
+        ge=25,
+        le=10000,
+        description="Timeout (ms) for ColPali visual reranking stage",
+    )
+    total_rerank_budget_ms: int = Field(
+        default=800,
+        ge=100,
+        le=20000,
+        description="Overall best-effort budget (ms) across rerank stages",
+    )
 
     # No additional methods; env mapping handled by BaseSettings
 
@@ -403,32 +486,13 @@ class DocMindSettings(BaseSettings):
     )
     enable_gpu_acceleration: bool = Field(default=True)
 
-    # Security for endpoints
-    allow_remote_endpoints: bool = Field(
-        default=False,
-        description=(
-            "When False, only localhost/127.0.0.1 endpoints are allowed for LLMs"
-        ),
-    )
-    endpoint_allowlist: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost",
-            "http://127.0.0.1",
-            "https://localhost",
-            "https://127.0.0.1",
-        ]
-    )
-
     # Feature flags
     guided_json_enabled: bool = Field(
         default=False, description="Structured outputs available (SPEC-007 prep)"
     )
 
-    # OpenAI-compatible client flags (for LM Studio, vLLM OpenAI mode, llama-cpp server)
-    openai_like_api_key: str = Field(default="not-needed")
-    openai_like_is_chat_model: bool = Field(default=True)
-    openai_like_is_function_calling_model: bool = Field(default=False)
-    openai_like_extra_headers: dict | None = Field(default=None)
+    # OpenAI-compatible client configuration group
+    openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
 
     # Global LLM client behavior
     llm_request_timeout_seconds: int = Field(default=120, ge=5, le=600)
@@ -479,6 +543,8 @@ class DocMindSettings(BaseSettings):
     chat: ChatConfig = Field(default_factory=ChatConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
+    hybrid: HybridConfig = Field(default_factory=HybridConfig)
 
     # Alias fields mapped to nested configs for ergonomic top-level
     # environment overrides.
@@ -510,13 +576,13 @@ class DocMindSettings(BaseSettings):
         if self.enable_multi_agent is not None:
             with suppress(Exception):
                 self.agents.enable_multi_agent = bool(self.enable_multi_agent)
-        # Ensure required directories exist (explicit model initialization)
-        with suppress(Exception):  # pragma: no cover - defensive
-            self.data_dir.mkdir(parents=True, exist_ok=True)
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
-            self.log_file.parent.mkdir(parents=True, exist_ok=True)
-            if self.database.sqlite_db_path.parent != self.data_dir:
-                self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Map hybrid.* group to retrieval config
+        try:
+            self.retrieval.enable_server_hybrid = bool(self.hybrid.server_side)
+            self.retrieval.rrf_k = int(self.hybrid.rrf_k)
+            self.retrieval.fusion_mode = str(self.hybrid.method)
+        except Exception:  # pragma: no cover - defensive  # noqa: S110
+            pass
 
         # Validate base URLs and security posture using existing helpers
         self._validate_endpoints_security()
@@ -567,27 +633,22 @@ class DocMindSettings(BaseSettings):
         if self.llm_backend == "ollama":
             return self.ollama_base_url
         if self.llm_backend == "lmstudio":
-            return self._ensure_v1(self.lmstudio_base_url)
+            # Prefer explicit OpenAI group when provided
+            return self._ensure_v1(self.openai.base_url or self.lmstudio_base_url)
         if self.llm_backend == "vllm":
             # Prefer explicit OpenAI-like endpoint when provided
-            base = self.vllm_base_url or self.vllm.vllm_base_url
+            base = self.openai.base_url or self.vllm_base_url or self.vllm.vllm_base_url
             return self._ensure_v1(base)
         if self.llm_backend == "llamacpp":
-            return self._ensure_v1(self.llamacpp_base_url)
+            return self._ensure_v1(self.openai.base_url or self.llamacpp_base_url)
         return None
 
     def allow_remote_effective(self) -> bool:
-        """Return effective allow-remote policy (env override-aware).
+        """Return effective allow-remote policy.
 
-        Centralizes security policy evaluation. Prefer the configured
-        ``allow_remote_endpoints`` but honor environment variable
-        ``DOCMIND_ALLOW_REMOTE_ENDPOINTS`` for legacy flows and tests.
+        Uses the centralized security settings; no environment overrides.
         """
-        with suppress(Exception):  # pragma: no cover - defensive
-            env = (os.getenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "") or "").lower()
-            if env in {"1", "true", "yes"}:
-                return True
-        return bool(self.allow_remote_endpoints)
+        return bool(self.security.allow_remote_endpoints)
 
     def get_vllm_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
         """Get vLLM configuration for client setup.
@@ -835,7 +896,7 @@ class DocMindSettings(BaseSettings):
             ValueError: If any configured base URL is not allowed while
             ``allow_remote_endpoints`` is False.
         """
-        if self.allow_remote_endpoints:
+        if self.security.allow_remote_endpoints:
             return
 
         def _is_allowed(url: str | None) -> bool:
@@ -854,7 +915,7 @@ class DocMindSettings(BaseSettings):
 
                 # Build a set of allowed hostnames from the allowlist entries
                 allowed_hosts: set[str] = set()
-                for entry in self.endpoint_allowlist:
+                for entry in self.security.endpoint_allowlist:
                     e = (entry or "").strip()
                     if not e:
                         continue
@@ -871,9 +932,11 @@ class DocMindSettings(BaseSettings):
 
         urls = [
             self.ollama_base_url,
-            self.lmstudio_base_url,
-            self.vllm_base_url or self.vllm.vllm_base_url,
-            self.llamacpp_base_url,
+            self._ensure_v1(self.openai.base_url or self.lmstudio_base_url),
+            self._ensure_v1(
+                self.openai.base_url or self.vllm_base_url or self.vllm.vllm_base_url
+            ),
+            self._ensure_v1(self.openai.base_url or self.llamacpp_base_url),
         ]
         for url in urls:
             if not _is_allowed(url):

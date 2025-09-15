@@ -37,21 +37,7 @@ _HF_EMBED_LOCK = threading.Lock()
 logger = logging.getLogger(__name__)
 
 
-def _is_localhost(url: str | None) -> bool:
-    """Return True if URL is localhost/127.0.0.1.
-
-    Empty/None returns True (treated as local default).
-    """
-    if not url:
-        return True
-    try:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(url)
-        host = (parsed.hostname or "").lower()
-        return host in {"localhost", "127.0.0.1"}
-    except (ValueError, AttributeError):  # pragma: no cover - defensive
-        return False
+# Removed host-level checks; rely on centralized settings-side validation
 
 
 def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:  # pylint: disable=too-many-statements, too-many-branches
@@ -90,33 +76,10 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             # Observability: log provider + model + base_url once
             provider = settings.llm_backend
             model_name = settings.model or settings.vllm.model
-            base_url: str | None
-            if provider == "ollama":
-                base_url = settings.ollama_base_url
-            elif provider == "lmstudio":
-                base_url = settings.lmstudio_base_url
-            elif provider == "vllm":
-                base_url = settings.vllm_base_url or settings.vllm.vllm_base_url
-            elif provider == "llamacpp":
-                # Only enforce URL checks when a server URL is provided. A local
-                # GGUF model path is not a URL and must not be treated as one.
-                base_url = settings.llamacpp_base_url or None
-            else:
-                base_url = None
-
-            # Enforce local-only endpoints unless allowlist override via settings
-            allow_remote = settings.allow_remote_effective() or (
-                os.getenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "").lower()
-                in {"1", "true", "yes"}
+            base_url: str | None = getattr(
+                settings, "backend_base_url_normalized", None
             )
-            if (not allow_remote) and base_url and (not _is_localhost(base_url)):
-                raise ValueError(
-                    
-                        "Remote endpoint forbidden by policy. Set "
-                        "settings.allow_remote_endpoints=True or use "
-                        "localhost URLs."
-                    
-                )
+            # Centralized endpoint security validation is enforced in settings
             logger.info(
                 "LLM configured via factory: provider=%s model=%s base_url=%s",
                 provider,

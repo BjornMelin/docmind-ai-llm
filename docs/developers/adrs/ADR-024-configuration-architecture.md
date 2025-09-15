@@ -47,15 +47,28 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions. Default hybrid fusion is server‑side RRF in Qdrant; DBSF is optional and gated by env/version support. Prefer BM42 sparse (FastEmbed) with IDF modifier.
 
-Amendment (Hybrid Fusion Flags):
+Amendment (OpenAI‑compatible servers & Local‑First):
+
+- All OpenAI‑compatible backends (LM Studio, vLLM OpenAI server, llama.cpp server) must use base URLs that include a single `/v1` path segment. Base URLs are normalized idempotently in Settings; endpoint paths like `/chat/completions` must not be present in the base URL.
+- Introduce `openai.*` config group:
+  - `DOCMIND_OPENAI__BASE_URL` — e.g. `http://localhost:1234/v1` (LM Studio), `http://localhost:8000/v1` (vLLM), `http://localhost:8080/v1` (llama.cpp server)
+  - `DOCMIND_OPENAI__API_KEY` — placeholder string (local‑first; not required by servers but some clients expect a non‑empty token)
+- OpenAI cloud (optional): `DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1`, `DOCMIND_OPENAI__API_KEY=sk‑…`; requires enabling remote endpoints (see Security Policy below).
+- Security Policy: `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` by default; only loopback hosts are allowed when disabled. To use remote endpoints (e.g., OpenAI cloud), set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` or add the host to `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`.
+
+Factory Resolution (library‑first):
+- For OpenAI‑compatible backends, use LlamaIndex `OpenAILike` with `api_base=backend_base_url_normalized`. This ensures consistent `/v1` handling and avoids duplicated code.
+
+See also: the canonical configuration guide at `docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
+
+Amendment (Hybrid Fusion Flags; supersedes legacy flags):
 
 ```env
-# Force Distribution-Based Score Fusion (DBSF); RRF remains the default
-DOCMIND_RETRIEVAL__DBSF_ENABLED=true|false
-
-# Resolve precedence at startup: dbsf_enabled=true overrides fusion_mode to 'dbsf'.
+# Server-side hybrid and fusion mode
+DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true|false
 DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf
 ```
+Legacy flags such as `DOCMIND_RETRIEVAL__DBSF_ENABLED` are removed. Use `FUSION_MODE=dbsf` when server hybrid is enabled.
 
 Telemetry requirements (local JSONL; PII-safe, bounded, sampled):
 - Emit: `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
@@ -235,16 +248,23 @@ def build_llm(settings: DocMindSettings):
                       request_timeout=float(settings.llm_request_timeout_seconds))
     if settings.llm_backend == "vllm":
         from llama_index.llms.openai_like import OpenAILike
-        return OpenAILike(model=settings.vllm.model, api_base=settings.vllm.vllm_base_url,
-                          api_key=getattr(settings, "openai_like_api_key", "not-needed"),
-                          context_window=settings.vllm.context_window,
-                          timeout=float(settings.llm_request_timeout_seconds))
+        # Use normalized /v1 api_base and openai.api_key
+        return OpenAILike(
+            model=settings.vllm.model,
+            api_base=settings.backend_base_url_normalized,
+            api_key=(settings.openai.api_key or "not-needed"),
+            context_window=settings.vllm.context_window,
+            timeout=float(settings.llm_request_timeout_seconds),
+        )
     if settings.llm_backend == "lmstudio":
         from llama_index.llms.openai_like import OpenAILike
-        return OpenAILike(model=settings.vllm.model, api_base=settings.lmstudio_base_url,
-                          api_key=getattr(settings, "openai_like_api_key", "not-needed"),
-                          context_window=settings.vllm.context_window,
-                          timeout=float(settings.llm_request_timeout_seconds))
+        return OpenAILike(
+            model=settings.vllm.model,
+            api_base=settings.backend_base_url_normalized,
+            api_key=(settings.openai.api_key or "not-needed"),
+            context_window=settings.vllm.context_window,
+            timeout=float(settings.llm_request_timeout_seconds),
+        )
     if settings.llm_backend == "llamacpp":
         from llama_index.llms.llama_cpp import LlamaCPP
         return LlamaCPP(model_path=str(settings.vllm.llamacpp_model_path),

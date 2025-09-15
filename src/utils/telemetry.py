@@ -10,11 +10,29 @@ import json
 import logging
 import os
 import random
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 _TELEM_PATH = Path("./logs/telemetry.jsonl")
+
+# Context-managed request id (optional). When set, it will be added to events.
+_REQUEST_ID: ContextVar[str | None] = ContextVar("request_id", default=None)
+
+
+def set_request_id(request_id: str | None) -> None:
+    """Set the request ID for subsequent telemetry events in this context.
+
+    Args:
+        request_id: The request identifier to attach; None to clear.
+    """
+    _REQUEST_ID.set(request_id)
+
+
+def get_request_id() -> str | None:
+    """Return the current context request ID, if any."""
+    return _REQUEST_ID.get()
 
 
 def _ensure_dir(path: Path) -> None:
@@ -66,6 +84,13 @@ def log_jsonl(event: dict[str, Any]) -> None:
         "ts": datetime.now(UTC).isoformat(),
         **event,
     }
+    # Include request_id when present
+    try:
+        _rid = _REQUEST_ID.get()
+        if _rid:
+            rec.setdefault("request_id", _rid)
+    except LookupError:  # pragma: no cover - contextvar edge
+        pass
     _ensure_dir(_TELEM_PATH)
     _maybe_rotate(_TELEM_PATH)
     with _TELEM_PATH.open("a", encoding="utf-8") as f:

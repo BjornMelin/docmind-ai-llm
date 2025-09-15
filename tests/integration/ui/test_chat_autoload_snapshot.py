@@ -55,7 +55,7 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
     cfg_hash = compute_config_hash(
         {
             "router": _settings.retrieval.router,
-            "hybrid": _settings.retrieval.hybrid_enabled,
+            "hybrid": _settings.retrieval.enable_server_hybrid,
             "graph_enabled": _settings.enable_graphrag,
             "chunk_size": _settings.processing.chunk_size,
             "chunk_overlap": _settings.processing.chunk_overlap,

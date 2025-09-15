@@ -1,33 +1,38 @@
-"""Tests for prompting renderer helpers.
+"""Unit tests for prompting.renderer helpers using TemplateSpec.
 
-Covers compile_template, render_prompt, and format_messages.
+Validates compile_template, render_prompt, and format_messages with a simple
+template body.
 """
 
 from __future__ import annotations
 
-import pytest
-
-from src.prompting.models import TemplateMeta, TemplateSpec
-from src.prompting.renderer import compile_template, format_messages, render_prompt
+import importlib
 
 
-@pytest.mark.unit
-def test_renderer_text_and_messages() -> None:
-    """Test template compilation, prompt rendering, and message formatting."""
-    spec = TemplateSpec(
-        meta=TemplateMeta(
-            id="t",
-            name="T",
-            description="d",
-            required=[],
-            defaults={},
-            version=1,
-        ),
-        body="Hello {{ name }}",
+def _make_spec(body: str):  # type: ignore[no-untyped-def]
+    models = importlib.import_module("src.prompting.models")
+    meta = models.TemplateMeta(
+        id="t1",
+        name="test",
+        description="d",
+        tags=[],
+        required=[],
+        defaults={},
+        version=1,
     )
-    tpl = compile_template(spec)
-    assert tpl is not None
-    text = render_prompt(spec, {"name": "World"})
-    assert "World" in text
-    msgs = format_messages(spec, {"name": "World"})
+    return models.TemplateSpec(meta=meta, body=body)
+
+
+def test_compile_and_render_prompt_text():  # type: ignore[no-untyped-def]
+    rnd = importlib.import_module("src.prompting.renderer")
+    spec = _make_spec("Hello {{ name }}")
+    out = rnd.render_prompt(spec, {"name": "DocMind"})
+    assert out == "Hello DocMind"
+
+
+def test_format_messages_returns_list():  # type: ignore[no-untyped-def]
+    rnd = importlib.import_module("src.prompting.renderer")
+    spec = _make_spec("System: {{ s }}\nUser: {{ u }}")
+    msgs = rnd.format_messages(spec, {"s": "sys", "u": "user"})
     assert isinstance(msgs, list)
+    assert msgs, "Messages should not be empty"

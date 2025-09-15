@@ -42,7 +42,7 @@ def current_config_dict(settings_obj: Any | None = None) -> dict[str, Any]:
     s = settings_obj or default_settings
     return {
         "router": s.retrieval.router,
-        "hybrid": s.retrieval.hybrid_enabled,
+        "hybrid": s.retrieval.enable_server_hybrid,
         "graph_enabled": getattr(s, "enable_graphrag", True),
         "chunk_size": s.processing.chunk_size,
         "chunk_overlap": s.processing.chunk_overlap,

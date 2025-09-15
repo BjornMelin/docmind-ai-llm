@@ -8,6 +8,8 @@ from typing import Any
 
 from llama_index.core.query_engine import RetrieverQueryEngine
 
+from src.utils.telemetry import log_jsonl
+
 
 def build_vector_query_engine(
     index: Any, post: list | None, **kwargs: dict[str, Any]
@@ -17,10 +19,16 @@ def build_vector_query_engine(
         try:
             return index.as_query_engine(node_postprocessors=post, **kwargs)
         except TypeError:
-            pass
+            log_jsonl(
+                {
+                    "postproc.fallback": True,
+                    "reason": "vector:node_postprocessors_typeerror",
+                }
+            )
     try:
         return index.as_query_engine(**kwargs)
     except TypeError:
+        log_jsonl({"postproc.fallback": True, "reason": "vector:kwargs_typeerror"})
         return index.as_query_engine()
 
 
@@ -32,10 +40,16 @@ def build_pg_query_engine(
         try:
             return pg_index.as_query_engine(node_postprocessors=post, **kwargs)
         except TypeError:
-            pass
+            log_jsonl(
+                {
+                    "postproc.fallback": True,
+                    "reason": "pg:node_postprocessors_typeerror",
+                }
+            )
     try:
         return pg_index.as_query_engine(**kwargs)
     except TypeError:
+        log_jsonl({"postproc.fallback": True, "reason": "pg:kwargs_typeerror"})
         return pg_index.as_query_engine()
 
 
@@ -76,11 +90,18 @@ def build_retriever_query_engine(
             )
         except TypeError as e:
             last_error = e
+            log_jsonl(
+                {
+                    "postproc.fallback": True,
+                    "reason": "retriever:node_postprocessors_typeerror",
+                }
+            )
 
     try:
         return engine.from_args(retriever=retriever, llm=llm, **kwargs)
     except TypeError as e:
         last_error = e
+        log_jsonl({"postproc.fallback": True, "reason": "retriever:kwargs_typeerror"})
 
     try:
         return engine.from_args(retriever=retriever, **kwargs)
@@ -91,6 +112,7 @@ def build_retriever_query_engine(
         return engine.from_args(retriever=retriever)
     except TypeError as e:
         last_error = e
+        log_jsonl({"postproc.fallback": True, "reason": "retriever:bare_typeerror"})
 
     if last_error:
         raise last_error

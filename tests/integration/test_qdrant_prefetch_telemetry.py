@@ -1,0 +1,68 @@
+"""Integration-style test for Qdrant Prefetch+FusionQuery telemetry.
+
+Mocks the Qdrant client to verify that hybrid retrieval emits minimal telemetry
+fields expected by downstream observability. Marked as integration to reflect
+component interaction (retriever + settings + telemetry).
+"""
+
+from __future__ import annotations
+
+import importlib
+from typing import Any
+
+import pytest
+
+
+@pytest.mark.integration
+@pytest.mark.retrieval
+def test_qdrant_prefetch_fusionquery_telemetry(monkeypatch):  # type: ignore[no-untyped-def]
+    hmod = importlib.import_module("src.retrieval.hybrid")
+
+    # Minimal fake Qdrant response
+    class _Point:
+        def __init__(self, i: int):
+            self.id = i
+            self.score = 0.9 - (i * 0.01)
+            self.payload = {"page_id": f"p{i}", "text": f"chunk {i}"}
+
+    class _Res:
+        def __init__(self):
+            self.points = [_Point(i) for i in range(6)]
+
+    class _Client:
+        def query_points(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
+            # Validate prefetch and limit presence in kwargs
+            assert "prefetch" in _kwargs
+            assert "limit" in _kwargs
+            return _Res()
+
+        def close(self):  # type: ignore[no-untyped-def]
+            return None
+
+    # Capture telemetry
+    events: list[dict[str, Any]] = []
+
+    def _cap(evt: dict[str, Any]) -> None:  # type: ignore[no-untyped-def]
+        events.append(evt)
+
+    monkeypatch.setattr(hmod, "log_jsonl", _cap)
+
+    params = hmod._HybridParams(  # pylint: disable=protected-access
+        collection="c",
+        fused_top_k=5,
+        prefetch_sparse=8,
+        prefetch_dense=8,
+        fusion_mode="rrf",
+        dedup_key="page_id",
+    )
+    retr = hmod.ServerHybridRetriever(params, client=_Client())
+    out = retr.retrieve("query")
+    assert out is not None
+    assert len(out) <= 5
+    assert events, "Expected telemetry events"
+    e = events[-1]
+    # Minimal keys
+    assert e.get("retrieval.backend") == "qdrant"
+    assert e.get("retrieval.fusion_mode") in {"rrf", "dbsf"}
+    assert isinstance(e.get("retrieval.return_count"), int)
+    assert isinstance(e.get("retrieval.latency_ms"), int)

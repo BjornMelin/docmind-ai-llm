@@ -85,19 +85,12 @@ graph TD
 Select a backend using `DOCMIND_LLM_BACKEND` in `{ollama|vllm|lmstudio|llamacpp}`. Endpoints and paths:
 
 - `ollama`: `DOCMIND_OLLAMA_BASE_URL` (default `http://localhost:11434`).
-- `vllm`: `DOCMIND_VLLM__VLLM_BASE_URL` (default `http://localhost:8000` with no `/v1`). If running the OpenAI-compatible vLLM server, use `/v1`.
-- `lmstudio`: `DOCMIND_LMSTUDIO_BASE_URL` (default `http://localhost:1234/v1`).
-- `llamacpp`: local GGUF path via `DOCMIND_VLLM__LLAMACPP_MODEL_PATH`.
+- `vllm` (OpenAI-compatible): see OpenAI-compatible section; set `DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1`.
+- `lmstudio` (OpenAI-compatible): see OpenAI-compatible section; set `DOCMIND_OPENAI__BASE_URL=http://localhost:1234/v1`.
+- `llamacpp` (OpenAI-compatible server mode): see OpenAI-compatible section; set `DOCMIND_OPENAI__BASE_URL=http://localhost:8080/v1`.
+- `llamacpp` (local GGUF path): `DOCMIND_VLLM__LLAMACPP_MODEL_PATH=/path/to/model.gguf`.
 
-OpenAI-like flags for OpenAI-compatible servers (flat mapping):
-
-```env
-DOCMIND_OPENAI_LIKE_API_KEY=not-needed
-DOCMIND_OPENAI_LIKE_IS_CHAT_MODEL=true
-DOCMIND_OPENAI_LIKE_IS_FUNCTION_CALLING_MODEL=false
-# Optional JSON headers
-# DOCMIND_OPENAI_LIKE_EXTRA_HEADERS={"x-custom":"1"}
-```
+See the canonical OpenAI-compatible local server configuration below.
 
 ## Environment Variables Reference
 
@@ -1257,6 +1250,61 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 **Maintain and optimize these heavily-used fields**:
 
 1. **Agent coordination settings** - Core functionality, ADR-024 compliance
+
+## OpenAI-Compatible Local Servers (LM Studio, vLLM, llama.cpp)
+
+DocMind AI is local-first and runs fully offline. To use OpenAI-compatible local servers with LlamaIndex `OpenAILike`, set the following environment variables:
+
+```env
+# LM Studio
+DOCMIND_OPENAI__BASE_URL=http://localhost:1234/v1
+DOCMIND_OPENAI__API_KEY=not-needed
+
+# vLLM OpenAI-compatible server
+DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1
+DOCMIND_OPENAI__API_KEY=not-needed
+
+# llama.cpp server
+DOCMIND_OPENAI__BASE_URL=http://localhost:8080/v1
+DOCMIND_OPENAI__API_KEY=not-needed
+```
+
+Notes:
+- `BASE_URL` must include a single `/v1`. Do not include endpoint paths (e.g., `/chat/completions`).
+- A placeholder `API_KEY` is accepted for local servers; many clients require a non-empty token but it is not used.
+- Security policy defaults to local-only. Non-loopback hosts require enabling remote endpoints:
+
+```env
+DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
+# Optional allowlist for specific hosts
+DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=["https://api.openai.com"]
+```
+
+### Optional: OpenAI Cloud
+
+To use OpenAI cloud instead of a local server:
+
+```env
+DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1
+DOCMIND_OPENAI__API_KEY=sk-...
+DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
+```
+
+This breaks strict offline operation; ensure network egress is acceptable in your environment.
+
+### Local vs Cloud Configuration Matrix
+
+| Mode | Backend | Required Vars | Example Values |
+|------|---------|---------------|----------------|
+| Local (default) | LM Studio | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY` | `lmstudio`, `http://localhost:1234/v1`, `not-needed` |
+| Local (default) | vLLM (OpenAI server) | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY` | `vllm`, `http://localhost:8000/v1`, `not-needed` |
+| Local (default) | llama.cpp server | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY` | `llamacpp`, `http://localhost:8080/v1`, `not-needed` |
+| Local (GGUF file) | llama.cpp local | `DOCMIND_LLM_BACKEND`, `DOCMIND_VLLM__LLAMACPP_MODEL_PATH` | `llamacpp`, `/path/to/model.gguf` |
+| Cloud (optional) | OpenAI | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`, `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` | e.g., `lmstudio`, `https://api.openai.com/v1`, `sk-...`, `true` |
+
+Notes:
+- For cloud usage, review allowlists (`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`) and security posture.
+- Base URL normalization enforces a single `/v1` and rejects endpoint paths in base URLs.
 2. **Model selection fields** - Critical for inference pipeline  
 3. **Performance tuning parameters** - Directly impact user experience
 4. **GPU optimization settings** - Hardware utilization efficiency

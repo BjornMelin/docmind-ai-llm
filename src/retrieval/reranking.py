@@ -27,10 +27,29 @@ from src.config import settings
 from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.telemetry import log_jsonl
 
+
 # Time budgets (ms)
-TEXT_RERANK_TIMEOUT_MS = 250
-SIGLIP_TIMEOUT_MS = 150
-COLPALI_TIMEOUT_MS = 400
+def _text_timeout_ms() -> int:
+    try:
+        return int(settings.retrieval.text_rerank_timeout_ms)
+    except Exception:  # pragma: no cover - defensive default
+        return 250
+
+
+def _siglip_timeout_ms() -> int:
+    try:
+        return int(settings.retrieval.siglip_timeout_ms)
+    except Exception:  # pragma: no cover - defensive default
+        return 150
+
+
+def _colpali_timeout_ms() -> int:
+    try:
+        return int(settings.retrieval.colpali_timeout_ms)
+    except Exception:  # pragma: no cover - defensive default
+        return 400
+
+
 # Policy thresholds
 COLPALI_MIN_VRAM_GB = 8.0  # enable when >= 8-12 GB
 COLPALI_TOPK_MAX = 16  # small-K scenarios
@@ -451,7 +470,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                         text_nodes, query_str=query_bundle.query_str
                     )
 
-                tr = _run_stage("text", _do_text, TEXT_RERANK_TIMEOUT_MS + 50)
+                tr = _run_stage("text", _do_text, _text_timeout_ms() + 50)
                 if tr is None:
                     logger.warning("Text rerank timeout; fail-open")
                     return nodes
@@ -464,7 +483,7 @@ class MultimodalReranker(BaseNodePostprocessor):
         if visual_nodes:
             try:
                 sr = _siglip_rescore(
-                    query_bundle.query_str, visual_nodes, SIGLIP_TIMEOUT_MS
+                    query_bundle.query_str, visual_nodes, _siglip_timeout_ms()
                 )
                 lists.append(sr)
                 log_jsonl(
@@ -500,8 +519,8 @@ class MultimodalReranker(BaseNodePostprocessor):
 
                     remaining = max(
                         0,
-                        SIGLIP_TIMEOUT_MS
-                        + COLPALI_TIMEOUT_MS
+                        _siglip_timeout_ms()
+                        + _colpali_timeout_ms()
                         - int(_now_ms() - v_start),
                     )
                     cr = _run_stage("colpali", _do_colpali, remaining)
@@ -512,7 +531,7 @@ class MultimodalReranker(BaseNodePostprocessor):
             except (RuntimeError, ValueError) as exc:
                 logger.warning("ColPali rerank error: {} — continue without", exc)
             # Only enforce visual-stage timeout when visual processing attempted
-            if _now_ms() - v_start > (SIGLIP_TIMEOUT_MS + COLPALI_TIMEOUT_MS):
+            if _now_ms() - v_start > (_siglip_timeout_ms() + _colpali_timeout_ms()):
                 logger.warning("Visual rerank timeout; fail-open")
                 log_jsonl(
                     {
@@ -520,6 +539,9 @@ class MultimodalReranker(BaseNodePostprocessor):
                         "rerank.topk": int(settings.retrieval.reranking_top_k),
                         "rerank.latency_ms": int(_now_ms() - v_start),
                         "rerank.timeout": True,
+                        "rerank.executor": getattr(
+                            settings.retrieval, "rerank_executor", "thread"
+                        ),
                     }
                 )
                 return nodes
@@ -552,6 +574,13 @@ class MultimodalReranker(BaseNodePostprocessor):
                     else ("visual" if bool(visual_nodes) else "none")
                 )
             )
+            # simple score stats
+            try:
+                scores = [float(n.score or 0.0) for n in out]
+            except Exception:  # pragma: no cover - defensive
+                scores = []
+            score_mean = float(sum(scores) / len(scores)) if scores else 0.0
+            score_max = float(max(scores)) if scores else 0.0
             log_jsonl(
                 {
                     "rerank.stage": "final",
@@ -561,8 +590,20 @@ class MultimodalReranker(BaseNodePostprocessor):
                     "rerank.delta_changed_count": int(delta_changed),
                     "rerank.path": path,
                     "rerank.total_timeout_budget_ms": int(
-                        TEXT_RERANK_TIMEOUT_MS + SIGLIP_TIMEOUT_MS + COLPALI_TIMEOUT_MS
+                        getattr(settings.retrieval, "total_rerank_budget_ms", 0)
+                        or (
+                            _text_timeout_ms()
+                            + _siglip_timeout_ms()
+                            + _colpali_timeout_ms()
+                        )
                     ),
+                    "rerank.executor": getattr(
+                        settings.retrieval, "rerank_executor", "thread"
+                    ),
+                    "rerank.input_count": len(nodes),
+                    "rerank.output_count": len(out),
+                    "rerank.score.mean": score_mean,
+                    "rerank.score.max": score_max,
                 }
             )
         except (RuntimeError, ValueError, OSError, TypeError) as exc:

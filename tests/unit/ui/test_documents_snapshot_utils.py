@@ -108,7 +108,7 @@ def test_rebuild_snapshot_writes_manifest(tmp_path: Path) -> None:
     """
     settings_obj = SimpleNamespace(
         data_dir=tmp_path,
-        retrieval=SimpleNamespace(router="auto", hybrid_enabled=True),
+        retrieval=SimpleNamespace(router="auto", enable_server_hybrid=True),
         processing=SimpleNamespace(chunk_size=512, chunk_overlap=64),
         database=SimpleNamespace(vector_store_type="qdrant"),
         app_version="x",

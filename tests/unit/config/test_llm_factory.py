@@ -17,9 +17,7 @@ def test_build_llm_openai_like_and_ollama(backend):
     cfg.vllm.model = "qwen2.5-7b-instruct"
     cfg.vllm.context_window = 8192
     cfg.llm_request_timeout_seconds = 123
-    cfg.openai_like_api_key = "abc"
-    cfg.openai_like_is_chat_model = True
-    cfg.openai_like_is_function_calling_model = False
+    cfg.openai.api_key = "abc"
 
     if backend == "ollama":
         with patch("llama_index.llms.ollama.Ollama", autospec=True) as p:
@@ -41,9 +39,10 @@ def test_build_llm_openai_like_and_ollama(backend):
             out = build_llm(cfg)
             assert out is inst
             _, kwargs = p.call_args
-            assert kwargs["api_base"] == cfg.vllm.vllm_base_url  # no /v1 by default
+            # Always normalized to include /v1
+            assert kwargs["api_base"].endswith("/v1")
             assert kwargs["model"] == cfg.vllm.model
-            assert kwargs["api_key"] == cfg.openai_like_api_key
+            assert kwargs["api_key"] == cfg.openai.api_key
             assert kwargs["is_chat_model"] is True
             assert kwargs["is_function_calling_model"] is False
             assert kwargs["context_window"] == cfg.vllm.context_window
@@ -56,7 +55,7 @@ def test_build_llm_openai_like_and_ollama(backend):
             out = build_llm(cfg)
             assert out is inst
             _, kwargs = p.call_args
-            assert kwargs["api_base"] == cfg.lmstudio_base_url
+            assert kwargs["api_base"].endswith("/v1")
             assert kwargs["is_chat_model"] is True
             assert kwargs["is_function_calling_model"] is False
             assert kwargs["context_window"] == cfg.vllm.context_window
@@ -119,7 +118,7 @@ def test_vllm_top_level_overrides_and_api_base_precedence(
     )
 
     llm = build_llm(cfg)
-    assert getattr(llm, "api_base", None) == "http://localhost:8000"
+    assert str(getattr(llm, "api_base", None)).endswith("/v1")
     assert getattr(llm, "model", None) == "Override-Model"
     assert getattr(llm, "context_window", None) == 4096
     assert getattr(llm, "timeout", None) == 42.0

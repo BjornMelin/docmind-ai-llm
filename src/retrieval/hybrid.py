@@ -267,15 +267,29 @@ class ServerHybridRetriever:
         try:
             latency_ms = int((time.time() - t0) * 1000)
             fusion_mode = (self.params.fusion_mode or "rrf").lower()
+            # Pull rrf_k from settings if available
+            try:
+                from src.config import settings as _settings  # local import
+
+                rrf_k_val = int(getattr(_settings.retrieval, "rrf_k", 60))
+                qdrant_timeout_s = int(
+                    getattr(_settings.database, "qdrant_timeout", 60)
+                )
+            except Exception:  # pragma: no cover - defensive
+                rrf_k_val = 60
+                qdrant_timeout_s = 60
             log_jsonl(
                 {
+                    "retrieval.backend": "qdrant",
                     "retrieval.fusion_mode": fusion_mode,
+                    "retrieval.rrf_k": rrf_k_val,
                     "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
                     "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
                     "retrieval.fused_limit": self.params.fused_top_k,
                     "retrieval.return_count": len(nodes),
                     "retrieval.latency_ms": latency_ms,
                     "retrieval.sparse_fallback": sparse_vec is None,
+                    "qdrant.timeout_s": qdrant_timeout_s,
                     "dedup.key": key_name,
                     "dedup.input_count": input_count,
                     "dedup.unique_count": unique_count,
