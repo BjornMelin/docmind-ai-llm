@@ -35,7 +35,7 @@ class SiglipEmbedding:
                 from src.config import settings as app_settings  # local import
 
                 model_id = getattr(app_settings.embedding, "siglip_model_id", None)
-            except Exception:  # pylint: disable=broad-exception-caught
+            except (ImportError, AttributeError):
                 model_id = None
         self.model_id = model_id or "google/siglip-base-patch16-224"
         # Delegate device selection to shared helper with safe fallback
@@ -52,13 +52,13 @@ class SiglipEmbedding:
         """
         try:
             import torch  # type: ignore
-        except Exception:  # pragma: no cover - optional dependency
+        except ImportError:  # pragma: no cover - optional dependency
             return "cpu"
         try:
             from src.utils.core import select_device as _sd
 
             return _sd("auto")
-        except Exception:  # pragma: no cover - conservative
+        except (ImportError, AttributeError):  # pragma: no cover - conservative
             # Robust fallback using torch directly
             try:
                 if getattr(torch, "cuda", None) and torch.cuda.is_available():  # type: ignore[attr-defined]
@@ -67,7 +67,7 @@ class SiglipEmbedding:
                 if mps is not None and getattr(mps, "is_available", lambda: False)():
                     return "mps"
                 return "cpu"
-            except Exception:
+            except AttributeError:
                 return "cpu"
 
     def _load_siglip_transformers(self) -> None:
@@ -92,7 +92,7 @@ class SiglipEmbedding:
             use_unified = bool(
                 getattr(app_settings.retrieval, "siglip_adapter_unified", True)
             )
-        except Exception:  # pragma: no cover - settings import edge
+        except (ImportError, AttributeError):  # pragma: no cover - settings import edge
             use_unified = True
 
         if use_unified:
@@ -119,7 +119,7 @@ class SiglipEmbedding:
             cfg = getattr(getattr(self, "_model", None), "config", None)
             proj = int(getattr(cfg, "projection_dim", 0)) if cfg is not None else 0
             self._dim = proj or None
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (AttributeError, ValueError, TypeError):
             self._dim = None
 
     def get_image_embedding(self, image: Any) -> np.ndarray:

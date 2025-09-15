@@ -1497,12 +1497,11 @@ Notes:
 - Fusion is executed server‑side via Qdrant Query API (Prefetch + FusionQuery). There are no client‑side knobs.
 - GraphRAG tool is activated only when a PropertyGraphIndex is present and healthy; default traversal depth is `path_depth=1`.
 
-### Reranking & Device Policy Feature Flags (Advanced)
+### Reranking & Device Feature Flags (Advanced)
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| DOCMIND_RETRIEVAL__DEVICE_POLICY_CORE | bool | true | Route device/VRAM checks via src.utils.core (select_device, has_cuda_vram). |
 | DOCMIND_RETRIEVAL__SIGLIP_ADAPTER_UNIFIED | bool | true | Use shared vision_siglip.load_siglip in adapter to ensure consistent caching and device placement. |
 | DOCMIND_RETRIEVAL__RERANK_EXECUTOR | str | thread | Executor for rerank timeouts: thread (default) or process (strict isolation). |
 
-These flags support canary rollouts on GPU fleets to monitor OOM rate, P95 latency, and timeout counts. Flip flags to rollback safely if needed. As of PR #41, these flags are wired in code and default to the centralized/unified implementation (device policy via `src.utils.core`, unified SigLIP loader, and thread executor). Setting these flags allows operational canaries without functional drift.
+These flags support canary rollouts on GPU fleets to monitor OOM rate, P95 latency, and timeout counts. The device and VRAM policy is always centralized via `src.utils.core` (e.g., `select_device`, `resolve_device`, `has_cuda_vram`) and does not require a feature flag. The SigLIP adapter unification and the rerank executor remain configurable for operational flexibility.
