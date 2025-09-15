@@ -340,7 +340,23 @@ def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRe
         SentenceTransformerRerank implementing postprocess_nodes.
     """
     k = _parse_top_k(top_n)
-    return _build_text_reranker_cached(k)
+    try:
+        return _build_text_reranker_cached(k)
+    except OSError as exc:  # offline HF hub in CI or local
+        logger.warning("Text reranker offline; using NoOpTextReranker: {}", exc)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Text reranker init failed; using NoOpTextReranker: {}", exc)
+
+    class NoOpTextReranker:  # minimal LlamaIndex-like interface
+        def __init__(self, top_n: int) -> None:
+            self.top_n = int(top_n)
+
+        def postprocess_nodes(
+            self, nodes: list[NodeWithScore], **_: Any
+        ) -> list[NodeWithScore]:
+            return nodes[: self.top_n]
+
+    return NoOpTextReranker(k)  # type: ignore[return-value]
 
 
 @cache
