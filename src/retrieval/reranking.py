@@ -53,6 +53,7 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
     # Choose executor based on settings (default: thread). Process executors
     # require picklable callables; fall back to thread if submission fails.
     executor = None
+    executors: list[ThreadPoolExecutor | ProcessPoolExecutor] = []
     try:
         exec_type = getattr(
             getattr(settings, "retrieval", object()), "rerank_executor", "thread"
@@ -60,25 +61,26 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
         if exec_type == "process":
             try:
                 executor = ProcessPoolExecutor(max_workers=1)
+                executors.append(executor)
                 fut = executor.submit(fn)
             except Exception as exc:  # pragma: no cover - pickling/env edge cases
                 logger.warning(
                     "Process executor unsupported; falling back to thread: {}",
                     exc,
                 )
-                if executor is not None:
-                    with contextlib.suppress(Exception):
-                        executor.shutdown(wait=False, cancel_futures=True)
                 executor = ThreadPoolExecutor(max_workers=1)
+                executors.append(executor)
                 fut = executor.submit(fn)
         else:
             executor = ThreadPoolExecutor(max_workers=1)
+            executors.append(executor)
             fut = executor.submit(fn)
     except Exception as exc:  # defensive: ensure we have an executor
         logger.warning(
             "Executor initialization failed: {} — using thread fallback", exc
         )
         executor = ThreadPoolExecutor(max_workers=1)
+        executors.append(executor)
         fut = executor.submit(fn)
     try:
         return fut.result(timeout=max(0.0, timeout_ms) / 1000.0)
@@ -87,9 +89,9 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
             fut.cancel()
         return None
     finally:
-        with contextlib.suppress(Exception):
-            if executor is not None:
-                executor.shutdown(wait=False, cancel_futures=True)
+        for ex in executors:
+            with contextlib.suppress(Exception):
+                ex.shutdown(wait=False, cancel_futures=True)
 
 
 # removed local _has_cuda_vram wrapper; use core.has_cuda_vram directly
