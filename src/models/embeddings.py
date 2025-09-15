@@ -50,7 +50,10 @@ class EmbeddingParameters(BaseModel):
     return_colbert: bool = Field(
         default=False, description="Return ColBERT multi-vector embeddings"
     )
-    device: str = Field(default="cuda", description="Target device (cuda/cpu/auto)")
+    device: str = Field(
+        default="cuda",
+        description="Target device (cuda/mps/cpu/auto or 'cuda:N')",
+    )
     pooling_method: str = Field(
         default="cls", description="Pooling method ('cls', 'mean')"
     )
@@ -85,10 +88,6 @@ class EmbeddingResult(BaseModel):
     )
 
 
-class EmbeddingError(Exception):
-    """Custom exception for embedding processing errors."""
-
-
 # ===== Implementation helpers =====
 def _l2_normalize(arr: np.ndarray, axis: int = -1) -> np.ndarray:
     """L2-normalize a numpy array, guarding zero-norm rows.
@@ -107,20 +106,28 @@ def _l2_normalize(arr: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 def _select_device(explicit: str | None = None) -> str:
-    """Choose a device string ('cuda' or 'cpu') based on availability.
-
-    A user-provided ``explicit`` overrides auto-detection.
-    """
+    """Select device via shared core helper; explicit overrides."""
     if explicit:
         return explicit
-    if TORCH is not None:
-        if getattr(TORCH, "cuda", None) and TORCH.cuda.is_available():
-            return "cuda"
-        # Apple Silicon MPS support when available
-        mps = getattr(getattr(TORCH, "backends", object()), "mps", None)
-        if mps is not None and getattr(mps, "is_available", lambda: False)():
-            return "mps"
-    return "cpu"
+    try:
+        from src.utils.core import select_device as _sd
+
+        return _sd("auto")
+    except Exception:  # pragma: no cover - conservative fallback
+        # Robust fallback using local TORCH checks when core import fails
+        try:
+            if (
+                TORCH is not None
+                and getattr(TORCH, "cuda", None)
+                and TORCH.cuda.is_available()
+            ):
+                return "cuda"
+            mps = getattr(getattr(TORCH, "backends", None), "mps", None)
+            if mps is not None and getattr(mps, "is_available", lambda: False)():
+                return "mps"
+            return "cpu"
+        except Exception:  # pragma: no cover - final guard
+            return "cpu"
 
 
 # ===== Text: BGE-M3 =====
@@ -165,7 +172,7 @@ class TextEmbedder:
             return
         try:
             from FlagEmbedding import BGEM3FlagModel  # type: ignore
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except (ImportError, RuntimeError, AttributeError) as exc:
             msg = (
                 "FlagEmbedding is required for TextEmbedder. "
                 "Install with: uv add FlagEmbedding"
@@ -318,16 +325,34 @@ class ImageEmbedder:
 
     # --- Backend loading helpers ---
     def _choose_auto_backbone(self) -> _BackboneName:
-        if self.device == "cpu" or TORCH is None or not TORCH.cuda.is_available():
+        # Centralized device/VRAM policy via src.utils.core
+        if self.device == "cpu" or TORCH is None or not getattr(TORCH, "cuda", None):
             return "openclip_vitl14"
-        try:  # Estimate total VRAM
-            props = TORCH.cuda.get_device_properties(0)  # type: ignore[attr-defined]
-            total = props.total_memory / (1024**3)
-        except (RuntimeError, AttributeError):  # pragma: no cover
-            total = 8.0
-        if total >= 20.0:
-            return "openclip_vith14"
-        return "siglip_base"
+        try:
+            from src.utils.core import (
+                has_cuda_vram as _has_cuda_vram,
+            )
+            from src.utils.core import (
+                resolve_device as _resdev,
+            )
+
+            # High-VRAM GPUs use OpenCLIP ViT-H/14; otherwise SigLIP base.
+            _dev_str, _idx = _resdev(self.device)
+            return (
+                "openclip_vith14"
+                if _has_cuda_vram(20.0, device_index=int(_idx or 0))
+                else "siglip_base"
+            )
+        except (RuntimeError, ImportError, AttributeError, TypeError):
+            # Fallback heuristic if core helpers unavailable
+            try:  # pragma: no cover
+                if TORCH.cuda.is_available():  # type: ignore[attr-defined]
+                    props = TORCH.cuda.get_device_properties(0)  # type: ignore[attr-defined]
+                    total = float(props.total_memory) / float(1024**3)
+                    return "openclip_vith14" if total >= 20.0 else "siglip_base"
+            except (RuntimeError, AttributeError):
+                return "openclip_vitl14"
+            return "siglip_base"
 
     def _load_openclip(self, model_name: str) -> None:
         import importlib
@@ -339,6 +364,8 @@ class ImageEmbedder:
         model.eval()
         if self.device == "cuda":  # move if needed
             model = model.to("cuda")
+        elif self.device == "mps":
+            model = model.to("mps")
         self._backend = model
         self._preprocess = preprocess
         # Derive output dimension from model when possible
@@ -355,11 +382,15 @@ class ImageEmbedder:
         # Fallback probe: pass a single dummy image through encode_image
         if dim is None and TORCH is not None:  # pragma: no cover - heavy path
             try:
-                dummy = np.zeros((224, 224, 3), dtype=np.uint8)
+                from PIL import Image as _PilImage  # type: ignore
+
+                dummy = _PilImage.fromarray(np.zeros((224, 224, 3), dtype=np.uint8))
                 t = self._preprocess(dummy) if callable(self._preprocess) else None
                 if t is not None:
                     if self.device == "cuda":
                         t = t.to("cuda")
+                    elif self.device == "mps":
+                        t = t.to("mps")
                     with TORCH.no_grad():
                         f = model.encode_image(t.unsqueeze(0))
                         dim = int(f.shape[-1])
@@ -369,34 +400,36 @@ class ImageEmbedder:
         self._dim = dim or (1024 if ("H-14" in model_name) else 768)
 
     def _load_siglip(self) -> None:
+        try:
+            from src.utils.vision_siglip import load_siglip
+
+            try:
+                from src.config import settings as _settings
+
+                model_id = getattr(
+                    _settings.embedding,
+                    "siglip_model_id",
+                    "google/siglip-base-patch16-224",
+                )
+            except (AttributeError, ImportError, RuntimeError, ValueError, TypeError):
+                model_id = "google/siglip-base-patch16-224"
+            model, processor, _dev = load_siglip(model_id=model_id, device=self.device)
+            self._backend = model
+            self._preprocess = processor
+        except (ImportError, RuntimeError, AttributeError, ValueError, TypeError):
+            self._load_siglip_transformers_fallback()
+
+    def _load_siglip_transformers_fallback(self) -> None:
+        """Direct transformers-based SigLIP loading as a fallback path."""
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
         model_id = "google/siglip-base-patch16-224"
         model = SiglipModel.from_pretrained(model_id, device_map=None)
-        if self.device == "cuda":
-            model = model.to("cuda")
+        if self.device in ("cuda", "mps"):
+            model = model.to(self.device)
         processor = SiglipProcessor.from_pretrained(model_id)
         self._backend = model
         self._preprocess = processor
-        # Prefer config projection dim when available
-        try:
-            proj = getattr(model.config, "projection_dim", 0)
-            self._dim = int(proj) or None
-        except (AttributeError, ValueError, TypeError):  # pragma: no cover - defensive
-            self._dim = None
-        if self._dim is None:
-            # Fallback probe via a tiny batch to determine dim
-            try:  # pragma: no cover - heavy path
-                dummy = np.zeros((224, 224, 3), dtype=np.uint8)
-                inputs = processor(images=[dummy], return_tensors="pt")
-                pix = inputs.get("pixel_values")
-                if self.device == "cuda":
-                    pix = pix.to("cuda")
-                with TORCH.no_grad():
-                    f = model.get_image_features(pixel_values=pix)
-                    self._dim = int(f.shape[-1])
-            except (RuntimeError, ValueError, TypeError):
-                self._dim = 768
 
     def _load_bge_visualized(self) -> None:
         # Optional path; raise clear error if selected without deps
@@ -447,8 +480,12 @@ class ImageEmbedder:
             dim = int(self._dim or (1024 if (backbone == "openclip_vith14") else 768))
             return np.empty((0, dim), dtype=np.float32)
 
-        # Resolve effective device for this call without mutating instance state
-        effective_device = device or self.device
+        # Disallow per-call device overrides to avoid device mismatch with loaded model
+        if device and device != self.device:
+            raise ValueError(
+                "Per-call device override is not supported; "
+                "instantiate ImageEmbedder(device=...) instead."
+            )
         self._ensure_loaded(backbone)
 
         bs = int(batch_size or self.default_batch_size)
@@ -469,8 +506,10 @@ class ImageEmbedder:
                         "OpenCLIP image feature extraction requires torch."
                     )
                 x = TORCH.stack(tensors)  # type: ignore[arg-type]
-                if effective_device == "cuda":
+                if self.device == "cuda":
                     x = x.to("cuda")
+                elif self.device == "mps":
+                    x = x.to("mps")
                 with TORCH.no_grad():
                     f = self._backend.encode_image(x)
                     f = f / f.norm(dim=-1, keepdim=True) if normalize else f
@@ -495,8 +534,10 @@ class ImageEmbedder:
                     )
                 inputs = proc(images=batch, return_tensors="pt")
                 pix = inputs.get("pixel_values")
-                if effective_device == "cuda":
+                if self.device == "cuda":
                     pix = pix.to("cuda")
+                elif self.device == "mps":
+                    pix = pix.to("mps")
                 with TORCH.no_grad():
                     f = self._backend.get_image_features(pixel_values=pix)
                     if normalize:

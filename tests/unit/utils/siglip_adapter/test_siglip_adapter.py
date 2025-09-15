@@ -78,3 +78,28 @@ def test_siglip_embedding_forward_error_returns_zero(monkeypatch):
     out = emb.get_image_embedding(image=None)
     assert out.shape == (128,)
     assert np.all(out == 0)
+
+
+def test_siglip_adapter_dim_inference_from_config(monkeypatch):
+    """_dim should be inferred from model.config.projection_dim when present."""
+    from src.utils.siglip_adapter import SiglipEmbedding
+
+    s = SiglipEmbedding(model_id="dummy/ok", device="cpu")
+
+    class _Model:
+        class _Cfg:
+            projection_dim = 640
+
+        config = _Cfg()
+
+    class _Proc:
+        def __call__(self, *a, **k):
+            return {"pixel_values": object()}
+
+    def _fake_ensure():
+        s._model = _Model()
+        s._proc = _Proc()
+
+    monkeypatch.setattr(s, "_ensure_loaded", _fake_ensure)
+    _ = s.get_image_embedding(image=None)
+    assert s._dim == 640

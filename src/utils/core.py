@@ -15,7 +15,11 @@ from functools import wraps
 from typing import Any
 
 import qdrant_client
-import torch
+
+try:  # Optional torch - allow module import without GPU stack present
+    import torch as TORCH  # type: ignore  # noqa: N812
+except ImportError:  # pragma: no cover - torch may be unavailable in CI
+    TORCH = None  # type: ignore[assignment]
 from loguru import logger
 from qdrant_client.http.exceptions import (
     ResponseHandlingException,
@@ -25,8 +29,77 @@ from qdrant_client.http.exceptions import (
 from src.config import settings
 from src.config.settings import DocMindSettings
 
-# Compatibility alias so tests can patch src.utils.core.AsyncQdrantClient
-AsyncQdrantClient = qdrant_client.AsyncQdrantClient
+
+def is_cuda_available() -> bool:
+    """Return True when CUDA is available via torch."""
+    try:
+        return bool(
+            TORCH and getattr(TORCH, "cuda", None) and TORCH.cuda.is_available()
+        )  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - conservative
+        return False
+
+
+def _is_mps_available() -> bool:
+    """Return True when Apple MPS backend is available."""
+    try:
+        backends = getattr(TORCH, "backends", None)
+        mps = getattr(backends, "mps", None) if backends else None
+        return bool(mps) and bool(getattr(mps, "is_available", lambda: False)())
+    except Exception:  # pragma: no cover - conservative
+        return False
+
+
+def get_vram_gb(device_index: int = 0) -> float | None:
+    """Return total GPU VRAM in GiB for a CUDA device; else None.
+
+    Args:
+        device_index: CUDA device index to query (default: 0).
+    """
+    if not is_cuda_available():
+        return None
+    try:
+        # type: ignore[attr-defined]
+        total_bytes = TORCH.cuda.get_device_properties(int(device_index)).total_memory
+        divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
+        return round(total_bytes / divisor, 1)
+    except Exception:  # pragma: no cover - conservative
+        return None
+
+
+def resolve_device(prefer: str = "auto") -> tuple[str, int | None]:
+    """Resolve a canonical device string and device index when applicable.
+
+    Args:
+        prefer: 'auto'|'cpu'|'mps'|'cuda' or a concrete 'cuda:N'.
+
+    Returns:
+        Tuple of (device_str, device_index or None for CPU/MPS).
+    """
+    try:
+        p = (prefer or "auto").lower()
+        # If explicit cuda:N provided
+        if p.startswith("cuda:"):
+            try:
+                idx = int(p.split(":", 1)[1])
+            except Exception:
+                idx = 0
+            return (f"cuda:{idx}", idx)
+        # Use existing selection logic
+        dev = select_device(p)
+        if dev == "cuda":
+            # Derive an index; prefer current device
+            try:
+                # type: ignore[attr-defined]
+                idx = int(TORCH.cuda.current_device()) if TORCH else 0
+            except Exception:
+                idx = 0
+            return (f"cuda:{idx}", idx)
+        if dev == "mps":
+            return ("mps", None)
+        return ("cpu", None)
+    except Exception:
+        return ("cpu", None)
 
 
 def detect_hardware() -> dict[str, Any]:
@@ -42,15 +115,13 @@ def detect_hardware() -> dict[str, Any]:
     }
 
     try:
-        hardware_info["cuda_available"] = torch.cuda.is_available()
-
-        if hardware_info["cuda_available"]:
-            hardware_info["gpu_name"] = torch.cuda.get_device_name(0)
-            vram_gb = (
-                torch.cuda.get_device_properties(0).total_memory
-                / settings.monitoring.bytes_to_gb_divisor
-            )
-            hardware_info["vram_total_gb"] = round(vram_gb, 1)
+        cuda_ok = is_cuda_available()
+        hardware_info["cuda_available"] = cuda_ok
+        if cuda_ok:
+            # type: ignore[attr-defined]
+            hardware_info["gpu_name"] = TORCH.cuda.get_device_name(0)
+            vram = get_vram_gb()
+            hardware_info["vram_total_gb"] = vram
 
     except RuntimeError as e:
         logger.warning("CUDA error during hardware detection: %s", e)
@@ -60,6 +131,61 @@ def detect_hardware() -> dict[str, Any]:
         logger.error("Import error during hardware detection: %s", e)
 
     return hardware_info
+
+
+def has_cuda_vram(min_gb: float, device_index: int = 0) -> bool:
+    """Return True when CUDA is available and total VRAM ≥ ``min_gb`` for a device.
+
+    Args:
+        min_gb: Minimum required VRAM (GiB) to consider the device sufficient.
+        device_index: CUDA device index to check (default: 0).
+
+    Returns:
+        bool: True when CUDA is available and device VRAM meets the threshold;
+              False otherwise.
+    """
+    try:
+        if not is_cuda_available():
+            return False
+        # Compare using raw bytes to avoid rounding edge cases
+        # type: ignore[attr-defined]
+        props = TORCH.cuda.get_device_properties(int(device_index))
+        total_bytes = float(getattr(props, "total_memory", 0.0))
+        divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
+        required_bytes = float(min_gb) * divisor
+        return total_bytes >= required_bytes
+    except (RuntimeError, AttributeError, ImportError, TypeError, ValueError):
+        return False
+
+
+def select_device(prefer: str = "auto") -> str:
+    """Select an inference device string ('cuda'|'mps'|'cpu').
+
+    Preference order:
+    - When ``prefer`` is 'cpu' or 'cuda' or 'mps', honor if available; else fall back.
+    - When ``prefer`` is 'auto', choose 'cuda' if available; else 'mps' (Apple Silicon);
+      otherwise 'cpu'.
+
+    Returns:
+        str: One of 'cuda', 'mps', or 'cpu'.
+    """
+    p = (prefer or "auto").lower()
+    selected = "cpu"
+    try:
+        if p == "cpu":
+            selected = "cpu"
+        else:
+            cuda_ok = is_cuda_available()
+            mps_ok = _is_mps_available()
+            if p == "cuda":
+                selected = "cuda" if cuda_ok else "cpu"
+            elif p == "mps":
+                selected = "mps" if mps_ok else ("cuda" if cuda_ok else "cpu")
+            else:  # auto
+                selected = "cuda" if cuda_ok else ("mps" if mps_ok else "cpu")
+    except (RuntimeError, AttributeError, ImportError, TypeError):
+        selected = "cpu"
+    return selected
 
 
 def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
@@ -97,8 +223,9 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
     # Check GPU configuration
     if app_settings.enable_gpu_acceleration:
         try:
-            if torch.cuda.is_available():
-                gpu_name = torch.cuda.get_device_name(0)
+            if is_cuda_available():
+                # type: ignore[attr-defined]
+                gpu_name = TORCH.cuda.get_device_name(0)
                 results["info"].append(f"GPU available: {gpu_name}")
             else:
                 results["warnings"].append(
@@ -122,9 +249,11 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
     try:
         yield
     finally:
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
+        if is_cuda_available():
+            # type: ignore[attr-defined]
+            TORCH.cuda.synchronize()
+            # type: ignore[attr-defined]
+            TORCH.cuda.empty_cache()
         gc.collect()
 
 
@@ -142,7 +271,7 @@ async def managed_async_qdrant_client(
     """
     client = None
     try:
-        client = AsyncQdrantClient(url=url)
+        client = qdrant_client.AsyncQdrantClient(url=url)
         yield client
     finally:
         if client is not None:

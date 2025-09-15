@@ -1,29 +1,28 @@
 """Tests for `_has_cuda_vram` branch conditions."""
 
-import sys
-
 import pytest
 
 pytestmark = pytest.mark.unit
 
 
 def test_has_cuda_vram_false_when_no_torch(monkeypatch):
-    """Return False when torch cannot be imported."""
-    from src.retrieval import reranking as rr
+    """Return False when core helper import path fails (simulating no torch)."""
+    from src.utils import core
 
-    monkeypatch.setitem(sys.modules, "torch", None)
-    assert rr._has_cuda_vram(8.0) is False
+    # Simulate no CUDA by forcing helper to report unavailability
+    monkeypatch.setattr(
+        "src.utils.core.is_cuda_available", lambda: False, raising=False
+    )
+    assert core.has_cuda_vram(8.0) is False
 
 
 def test_has_cuda_vram_false_when_cuda_unavailable(monkeypatch):
-    """Return False when torch reports CUDA not available."""
-    from src.retrieval import reranking as rr
+    """Return False when core helper reports insufficient VRAM or no CUDA."""
+    from src.utils import core
 
-    class _T:
-        class cuda:  # noqa: N801
-            @staticmethod
-            def is_available():
-                return False
-
-    monkeypatch.setitem(sys.modules, "torch", _T)
-    assert rr._has_cuda_vram(8.0) is False
+    monkeypatch.setattr(
+        "src.utils.core.has_cuda_vram",
+        lambda _min, device_index=0: False,
+        raising=False,
+    )
+    assert core.has_cuda_vram(8.0) is False

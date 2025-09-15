@@ -58,7 +58,7 @@ def test_validate_startup_configuration_gpu_enabled_paths(monkeypatch):
         def is_available():
             return False
 
-    monkeypatch.setattr(c, "torch", SimpleNamespace(cuda=_Cuda))
+    monkeypatch.setattr(c, "TORCH", SimpleNamespace(cuda=_Cuda))
     s1 = DocMindSettings(enable_gpu_acceleration=True)
     out1 = c.validate_startup_configuration(s1)
     assert out1["valid"] is True
@@ -92,7 +92,7 @@ def test_validate_startup_configuration_gpu_enabled_paths(monkeypatch):
         def empty_cache():
             return None
 
-    monkeypatch.setattr(c, "torch", SimpleNamespace(cuda=_Cuda2))
+    monkeypatch.setattr(c, "TORCH", SimpleNamespace(cuda=_Cuda2))
     s2 = DocMindSettings(enable_gpu_acceleration=True)
     out2 = c.validate_startup_configuration(s2)
     assert out2["valid"] is True
@@ -113,8 +113,8 @@ async def test_managed_async_qdrant_client_closes(monkeypatch):
         async def close(self):
             closed["v"] = True
 
-    # Patch alias used in module
-    monkeypatch.setattr(c, "AsyncQdrantClient", _AClient)
+    # Patch qdrant async client constructor used in core
+    monkeypatch.setattr(c.qdrant_client, "AsyncQdrantClient", _AClient)
 
     async with c.managed_async_qdrant_client(url="http://localhost:6333") as _cli:
         assert isinstance(_cli, _AClient)
@@ -141,7 +141,7 @@ async def test_managed_gpu_operation_calls_cuda(monkeypatch):
         def empty_cache():
             calls["empty"] += 1
 
-    monkeypatch.setattr(c, "torch", SimpleNamespace(cuda=_Cuda))
+    monkeypatch.setattr(c, "TORCH", SimpleNamespace(cuda=_Cuda))
     async with c.managed_gpu_operation():
         pass
     assert calls["sync"] == 1

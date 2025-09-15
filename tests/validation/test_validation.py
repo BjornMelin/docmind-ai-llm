@@ -105,7 +105,7 @@ class TestImportValidation:
     )
     def test_hardware_detection_basic(self):
         """Test basic hardware detection functionality."""
-        with patch("src.utils.core.torch") as mock_torch:
+        with patch("src.utils.core.TORCH") as mock_torch:
             mock_torch.cuda.is_available.return_value = False
             mock_torch.cuda.device_count.return_value = 0
 

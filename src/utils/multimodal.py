@@ -54,7 +54,8 @@ async def generate_image_embeddings(clip: Any, image: Any) -> np.ndarray:
 def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
     """Return approximate VRAM delta (GB) for a tiny embedding run.
 
-    When CUDA is unavailable or any CUDA call fails, returns 0.0.
+    Uses direct torch CUDA checks to remain easily patchable in tests.
+    Returns 0.0 when CUDA is unavailable or on errors.
     """
     try:
         import torch  # type: ignore
@@ -62,8 +63,7 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
         return 0.0
 
     try:
-        cuda_mod = getattr(torch, "cuda", None)
-        if not cuda_mod or not torch.cuda.is_available():  # type: ignore[attr-defined]
+        if not getattr(torch, "cuda", None) or not torch.cuda.is_available():  # type: ignore[attr-defined]
             return 0.0
 
         before = float(torch.cuda.memory_allocated())  # type: ignore[attr-defined]

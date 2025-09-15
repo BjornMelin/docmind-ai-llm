@@ -14,7 +14,7 @@ from src.utils import core as core_mod
 async def test_managed_async_qdrant_client_closes() -> None:
     """Async client context yields client and awaits close on exit."""
     fake_client = AsyncMock()
-    with patch.object(core_mod, "AsyncQdrantClient", return_value=fake_client):
+    with patch("qdrant_client.AsyncQdrantClient", return_value=fake_client):
         async with core_mod.managed_async_qdrant_client("http://qdrant:6333") as cli:
             assert cli is fake_client
         fake_client.close.assert_awaited_once()
@@ -25,9 +25,9 @@ async def test_managed_async_qdrant_client_closes() -> None:
 async def test_managed_gpu_operation_calls_empty_cache_when_available() -> None:
     """GPU context calls synchronize and empty_cache when CUDA is available."""
     with (
-        patch("src.utils.core.torch.cuda.is_available", return_value=True),
-        patch("src.utils.core.torch.cuda.empty_cache") as empty_cache,
-        patch("src.utils.core.torch.cuda.synchronize") as sync,
+        patch("src.utils.core.TORCH.cuda.is_available", return_value=True),
+        patch("src.utils.core.TORCH.cuda.empty_cache") as empty_cache,
+        patch("src.utils.core.TORCH.cuda.synchronize") as sync,
     ):
         async with core_mod.managed_gpu_operation():
             pass

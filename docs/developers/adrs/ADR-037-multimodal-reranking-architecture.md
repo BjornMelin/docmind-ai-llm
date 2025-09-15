@@ -208,6 +208,7 @@ async def test_auto_gating_text_and_image_nodes(sample_nodes):
 
 - Track LlamaIndex ColPali integration updates
 - Periodically evaluate reranker latency
+- Centralize device/VRAM policy via src.utils.core (select_device, has_cuda_vram), and prefer a thread-based executor with optional ProcessPool fallback for strict timeouts when needed.
 
 ### Dependencies
 

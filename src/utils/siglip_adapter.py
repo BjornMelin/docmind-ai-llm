@@ -35,41 +35,91 @@ class SiglipEmbedding:
                 from src.config import settings as app_settings  # local import
 
                 model_id = getattr(app_settings.embedding, "siglip_model_id", None)
-            except Exception:  # pylint: disable=broad-exception-caught
+            except (ImportError, AttributeError):
                 model_id = None
         self.model_id = model_id or "google/siglip-base-patch16-224"
+        # Delegate device selection to shared helper with safe fallback
         self.device = device or self._choose_device()
         self._model: Any | None = None
         self._proc: Any | None = None
         self._dim: int | None = None
 
     def _choose_device(self) -> str:
+        """Select device via core helper; fall back to CPU when torch import fails.
+
+        This avoids test-only branches; we simply attempt an import to determine
+        if the runtime has torch available and then defer to select_device.
+        """
         try:
             import torch  # type: ignore
-
-            if torch.cuda.is_available():  # type: ignore[attr-defined]
-                return "cuda"
-        except Exception:  # pylint: disable=broad-exception-caught
-            # Device selection fallback to CPU
+        except ImportError:  # pragma: no cover - optional dependency
             return "cpu"
-        return "cpu"
+        try:
+            from src.utils.core import select_device as _sd
+
+            return _sd("auto")
+        except (ImportError, AttributeError):  # pragma: no cover - conservative
+            # Robust fallback using torch directly
+            try:
+                if getattr(torch, "cuda", None) and torch.cuda.is_available():  # type: ignore[attr-defined]
+                    return "cuda"
+                mps = getattr(getattr(torch, "backends", None), "mps", None)
+                if mps is not None and getattr(mps, "is_available", lambda: False)():
+                    return "mps"
+                return "cpu"
+            except AttributeError:
+                return "cpu"
+
+    def _load_siglip_transformers(self) -> None:
+        """Direct transformers-based SigLIP loading as a compatibility path."""
+        from transformers import SiglipModel, SiglipProcessor  # type: ignore
+
+        model = SiglipModel.from_pretrained(self.model_id)
+        if self.device in ("cuda", "mps"):
+            model = model.to(self.device)
+        proc = SiglipProcessor.from_pretrained(self.model_id)
+        self._model = model
+        self._proc = proc
 
     def _ensure_loaded(self) -> None:
         if self._model is not None and self._proc is not None:
             return
-        from transformers import SiglipModel, SiglipProcessor  # type: ignore
+        # Gate unified loader via settings flag
+        use_unified = True
+        try:
+            from src.config import settings as app_settings
 
-        model = SiglipModel.from_pretrained(self.model_id)
-        if self.device == "cuda":
-            model = model.to("cuda")
-        proc = SiglipProcessor.from_pretrained(self.model_id)
-        self._model = model
-        self._proc = proc
+            use_unified = bool(
+                getattr(app_settings.retrieval, "siglip_adapter_unified", True)
+            )
+        except (ImportError, AttributeError):  # pragma: no cover - settings import edge
+            use_unified = True
+
+        if use_unified:
+            try:
+                from src.utils.vision_siglip import load_siglip
+
+                model, proc, dev = load_siglip(self.model_id, self.device)
+                self.device = dev
+                self._model = model
+                self._proc = proc
+            except (
+                ImportError,
+                AttributeError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+            ):
+                # Fallback to direct transformers path
+                self._load_siglip_transformers()
+        else:
+            self._load_siglip_transformers()
         # best-effort dimension
         try:
-            proj = getattr(model.config, "projection_dim", 0)
-            self._dim = int(proj) or None
-        except Exception:  # pylint: disable=broad-exception-caught
+            cfg = getattr(getattr(self, "_model", None), "config", None)
+            proj = int(getattr(cfg, "projection_dim", 0)) if cfg is not None else 0
+            self._dim = proj or None
+        except (AttributeError, ValueError, TypeError):
             self._dim = None
 
     def get_image_embedding(self, image: Any) -> np.ndarray:
@@ -95,12 +145,14 @@ class SiglipEmbedding:
             pix = inputs.get("pixel_values")
             if self.device == "cuda":
                 pix = pix.to("cuda")
+            elif self.device == "mps":
+                pix = pix.to("mps")
             with torch.no_grad():  # type: ignore[name-defined]
                 feats = self._model.get_image_features(pixel_values=pix)
                 feats = feats / feats.norm(dim=-1, keepdim=True)
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
             # Return zeros if inference fails unexpectedly
             dim = int(self._dim or 768)
             return np.zeros(dim, dtype=np.float32)

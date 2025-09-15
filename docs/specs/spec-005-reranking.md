@@ -31,7 +31,7 @@ Improve retrieval quality by applying **BGE Cross-Encoder** for text nodes and *
   - Cascade option: SigLIP prune to m (e.g., 64) → ColPali final on m' (e.g., 16).
 
 - Telemetry
-  - Log per-stage latency, device, top_n, and activation decisions; count timeouts and fail-open events; include `rerank.batch_size`, `rerank.processed_count`, and `rerank.processed_batches` for text stage; cache SigLIP loader to reduce latency.
+  - Log per-stage latency, `top_n`, and activation decisions; count timeouts and fail-open events. Keep telemetry minimal: `rerank.stage`, `rerank.topk`, `rerank.latency_ms`, `rerank.timeout`. The final stage MAY include `rerank.delta_changed_count`, `rerank.path`, and `rerank.total_timeout_budget_ms`. Do not include batch size or per-batch counters.
 
 ## Development Notes
 

@@ -14,7 +14,6 @@ Following the consolidation strategy, models are now organized as:
 # Shared models (used across multiple modules)
 # Domain-specific models (consolidated for easy access)
 from .embeddings import (
-    EmbeddingError,
     EmbeddingParameters,
     EmbeddingResult,
 )
@@ -51,7 +50,6 @@ __all__ = [
     "Document",
     "DocumentElement",
     "DocumentMetadata",
-    "EmbeddingError",
     "EmbeddingParameters",
     "EmbeddingResult",
     "ErrorResponse",

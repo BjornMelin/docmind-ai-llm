@@ -1486,9 +1486,22 @@ DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
 
 # Reranking (always-on by default; no UI toggle). Canonical env override maps to settings.retrieval.use_reranking
 DOCMIND_RETRIEVAL__USE_RERANKING=true
+# Optional visual reranker (ColPali) and SigLIP controls
+DOCMIND_RETRIEVAL__ENABLE_COLPALI=false
+DOCMIND_RETRIEVAL__SIGLIP_BATCH_SIZE=8
+DOCMIND_RETRIEVAL__SIGLIP_PRUNE_M=64
 ```
 
 Notes:
 
 - Fusion is executed server‑side via Qdrant Query API (Prefetch + FusionQuery). There are no client‑side knobs.
 - GraphRAG tool is activated only when a PropertyGraphIndex is present and healthy; default traversal depth is `path_depth=1`.
+
+### Reranking & Device Feature Flags (Advanced)
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| DOCMIND_RETRIEVAL__SIGLIP_ADAPTER_UNIFIED | bool | true | Use shared vision_siglip.load_siglip in adapter to ensure consistent caching and device placement. |
+| DOCMIND_RETRIEVAL__RERANK_EXECUTOR | str | thread | Executor for rerank timeouts: thread (default) or process (strict isolation). |
+
+These flags support canary rollouts on GPU fleets to monitor OOM rate, P95 latency, and timeout counts. The device and VRAM policy is always centralized via `src.utils.core` (e.g., `select_device`, `resolve_device`, `has_cuda_vram`) and does not require a feature flag. The SigLIP adapter unification and the rerank executor remain configurable for operational flexibility.

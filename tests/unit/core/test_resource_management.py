@@ -22,7 +22,7 @@ async def test_managed_async_qdrant_client_cleanup():
     """Test that managed_async_qdrant_client properly cleans up resources."""
     from src.utils.core import managed_async_qdrant_client
 
-    with patch("src.utils.core.AsyncQdrantClient") as mock_client_class:
+    with patch("qdrant_client.AsyncQdrantClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
 
@@ -39,7 +39,7 @@ async def test_managed_async_qdrant_client_cleanup_on_exception():
     """Test that client is cleaned up even when exceptions occur."""
     from src.utils.core import managed_async_qdrant_client
 
-    with patch("src.utils.core.AsyncQdrantClient") as mock_client_class:
+    with patch("qdrant_client.AsyncQdrantClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client_class.return_value = mock_client
 

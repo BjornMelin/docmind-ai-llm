@@ -15,190 +15,8 @@ Tests cover:
 
 import pytest
 
-from src.models.embeddings import EmbeddingError
 from src.models.processing import ProcessingError
 from src.models.storage import PersistenceError
-
-
-class TestEmbeddingError:
-    """Comprehensive tests for EmbeddingError exception class."""
-
-    @pytest.mark.unit
-    def test_embedding_error_basic_instantiation(self):
-        """Test basic EmbeddingError instantiation and properties."""
-        error = EmbeddingError("Basic embedding error")
-
-        assert str(error) == "Basic embedding error"
-        assert isinstance(error, Exception)
-        assert isinstance(error, EmbeddingError)
-        assert error.args == ("Basic embedding error",)
-
-    @pytest.mark.unit
-    def test_embedding_error_empty_message(self):
-        """Test EmbeddingError with empty message."""
-        error = EmbeddingError("")
-
-        assert str(error) == ""
-        assert error.args == ("",)
-
-    @pytest.mark.unit
-    def test_embedding_error_none_message(self):
-        """Test EmbeddingError with None message."""
-        error = EmbeddingError(None)
-
-        assert str(error) == "None"
-        assert error.args == (None,)
-
-    @pytest.mark.unit
-    def test_embedding_error_unicode_message(self):
-        """Test EmbeddingError with Unicode characters."""
-        unicode_message = (
-            "嵌入错误: Failed to process 文档 with émojis 🚀 and математика"
-        )
-        error = EmbeddingError(unicode_message)
-
-        assert str(error) == unicode_message
-        assert "嵌入错误" in str(error)
-        assert "文档" in str(error)
-        assert "🚀" in str(error)
-        assert "математика" in str(error)
-
-    @pytest.mark.unit
-    def test_embedding_error_long_message(self):
-        """Test EmbeddingError with very long message."""
-        long_message = (
-            "Embedding processing failed: " + "A" * 10000 + " (detailed error context)"
-        )
-        error = EmbeddingError(long_message)
-
-        assert len(str(error)) > 10000
-        assert str(error).startswith("Embedding processing failed:")
-        assert str(error).endswith(" (detailed error context)")
-
-    @pytest.mark.unit
-    def test_embedding_error_multiple_arguments(self):
-        """Test EmbeddingError with multiple arguments."""
-        error = EmbeddingError(
-            "Primary error", "Secondary context", 42, {"detail": "extra info"}
-        )
-
-        assert error.args == (
-            "Primary error",
-            "Secondary context",
-            42,
-            {"detail": "extra info"},
-        )
-        # Python formats Exception(*args) as a tuple string when multiple args are provided  # noqa: E501
-        # in the exception constructor
-        assert error.args[0] == "Primary error"
-        assert "Primary error" in str(error)
-
-    @pytest.mark.unit
-    def test_embedding_error_inheritance(self):
-        """Test EmbeddingError inheritance hierarchy."""
-        error = EmbeddingError("Inheritance test")
-
-        # Should inherit from Exception
-        assert isinstance(error, Exception)
-        assert isinstance(error, BaseException)
-        assert issubclass(EmbeddingError, Exception)
-        assert issubclass(EmbeddingError, BaseException)
-
-    @pytest.mark.unit
-    def test_embedding_error_raising_and_catching(self):
-        """Test raising and catching EmbeddingError."""
-        with pytest.raises(EmbeddingError) as exc_info:
-            raise EmbeddingError("Test embedding failure")
-
-        assert str(exc_info.value) == "Test embedding failure"
-        assert exc_info.type == EmbeddingError
-
-    @pytest.mark.unit
-    def test_embedding_error_exception_chaining_from(self):
-        """Test EmbeddingError exception chaining with 'raise from'."""
-
-        def _raise_chained():
-            try:
-                raise ValueError("Original embedding model error")
-            except ValueError as original_error:
-                raise EmbeddingError(
-                    "Failed to initialize BGE-M3 embeddings"
-                ) from original_error
-
-        with pytest.raises(EmbeddingError) as exc_info:
-            _raise_chained()
-        chained_error = exc_info.value
-        assert str(chained_error) == "Failed to initialize BGE-M3 embeddings"
-        assert isinstance(chained_error.__cause__, ValueError)
-        assert str(chained_error.__cause__) == "Original embedding model error"
-
-    @pytest.mark.unit
-    def test_embedding_error_exception_chaining_during(self):
-        """Test EmbeddingError exception context (implicit chaining)."""
-
-        def _raise_context():
-            try:
-                raise RuntimeError("Embedding computation failed")
-            except RuntimeError as err:
-                raise EmbeddingError("Embedding pipeline error") from err
-
-        with pytest.raises(EmbeddingError) as exc_info:
-            _raise_context()
-        context_error = exc_info.value
-        assert str(context_error) == "Embedding pipeline error"
-        assert isinstance(context_error.__context__, RuntimeError)
-        assert str(context_error.__context__) == "Embedding computation failed"
-
-    @pytest.mark.unit
-    def test_embedding_error_realistic_scenarios(self):
-        """Test EmbeddingError in realistic usage scenarios."""
-
-        def mock_embedding_function(model_available: bool, memory_sufficient: bool):
-            """Mock function that can raise EmbeddingError in various scenarios."""
-            if not model_available:
-                raise EmbeddingError("BGE-M3 model not found or not downloaded")
-            if not memory_sufficient:
-                raise EmbeddingError(
-                    "Insufficient GPU memory for embedding batch processing"
-                )
-            return "Embeddings computed successfully"
-
-        # Test successful case
-        result = mock_embedding_function(model_available=True, memory_sufficient=True)
-        assert result == "Embeddings computed successfully"
-
-        # Test model unavailable
-        with pytest.raises(
-            EmbeddingError, match=r"model not found|not downloaded"
-        ) as exc_info:
-            mock_embedding_function(model_available=False, memory_sufficient=True)
-        assert "BGE-M3 model not found" in str(exc_info.value)
-
-        # Test insufficient memory
-        with pytest.raises(EmbeddingError, match="Insufficient GPU memory") as exc_info:
-            mock_embedding_function(model_available=True, memory_sufficient=False)
-        assert "Insufficient GPU memory" in str(exc_info.value)
-
-    @pytest.mark.unit
-    def test_embedding_error_with_technical_details(self):
-        """Test EmbeddingError with technical error details."""
-        technical_error = EmbeddingError(
-            "BGE-M3 embedding failed",
-            {
-                "model": "BAAI/bge-m3",
-                "input_tokens": 8192,
-                "batch_size": 32,
-                "device": "cuda:0",
-                "memory_used_mb": 12000,
-                "error_code": "CUDA_OUT_OF_MEMORY",
-            },
-        )
-
-        # Primary message should be first arg; overall str may include all args
-        assert technical_error.args[0] == "BGE-M3 embedding failed"
-        assert "BGE-M3 embedding failed" in str(technical_error)
-        assert technical_error.args[1]["model"] == "BAAI/bge-m3"
-        assert technical_error.args[1]["error_code"] == "CUDA_OUT_OF_MEMORY"
 
 
 class TestProcessingError:
@@ -527,7 +345,7 @@ class TestExceptionInteractionPatterns:
         def raise_random_error(error_type: str):
             """Raise different types of errors for testing."""
             if error_type == "embedding":
-                raise EmbeddingError("Embedding computation failed")
+                raise ProcessingError("Embedding computation failed")
             elif error_type == "processing":
                 raise ProcessingError("Document processing failed")
             elif error_type == "persistence":
@@ -536,7 +354,7 @@ class TestExceptionInteractionPatterns:
                 raise ValueError("General error")
 
         # Test specific exception catching
-        with pytest.raises(EmbeddingError):
+        with pytest.raises(ProcessingError):
             raise_random_error("embedding")
 
         with pytest.raises(ProcessingError):
@@ -549,7 +367,7 @@ class TestExceptionInteractionPatterns:
         import re
 
         matrix = [
-            ("embedding", EmbeddingError, r"embedding"),
+            ("embedding", ProcessingError, r"embedding"),
             ("processing", ProcessingError, r"processing"),
             # Persistence error message may not include the word 'persistence'
             # explicitly; accept broader database/persist phrasing.
@@ -566,13 +384,13 @@ class TestExceptionInteractionPatterns:
 
         def embedding_stage():
             """Simulate embedding stage failure."""
-            raise EmbeddingError("BGE-M3 model initialization failed")
+            raise ProcessingError("BGE-M3 model initialization failed")
 
         def processing_stage():
             """Simulate processing stage that depends on embedding."""
             try:
                 embedding_stage()
-            except EmbeddingError as e:
+            except ProcessingError as e:
                 raise ProcessingError(
                     "Document processing aborted due to embedding failure"
                 ) from e
@@ -599,7 +417,7 @@ class TestExceptionInteractionPatterns:
         assert "processing aborted" in str(processing_error)
 
         embedding_error = processing_error.__cause__
-        assert isinstance(embedding_error, EmbeddingError)
+        assert isinstance(embedding_error, ProcessingError)
         assert "BGE-M3 model initialization failed" in str(embedding_error)
 
     @pytest.mark.unit
@@ -612,7 +430,7 @@ class TestExceptionInteractionPatterns:
             try:
                 if should_fail:
                     if operation_name == "embedding":
-                        raise EmbeddingError(
+                        raise ProcessingError(
                             f"Embedding operation {operation_name} failed"
                         )
                     elif operation_name == "processing":
@@ -624,7 +442,7 @@ class TestExceptionInteractionPatterns:
                             f"Persistence operation {operation_name} failed"
                         )
                 return f"Operation {operation_name} succeeded"
-            except (EmbeddingError, ProcessingError, PersistenceError) as e:
+            except (ProcessingError, PersistenceError) as e:
                 errors_encountered.append((operation_name, type(e).__name__, str(e)))
                 return f"Operation {operation_name} failed gracefully"
 
@@ -641,7 +459,7 @@ class TestExceptionInteractionPatterns:
 
         # Verify errors were captured
         assert len(errors_encountered) == 2
-        assert errors_encountered[0][1] == "EmbeddingError"
+        assert errors_encountered[0][1] == "ProcessingError"
         assert errors_encountered[1][1] == "PersistenceError"
 
     @pytest.mark.unit
@@ -656,7 +474,7 @@ class TestExceptionInteractionPatterns:
         def _raise_nested():
             try:
                 embedding_error = create_detailed_error(
-                    EmbeddingError,
+                    ProcessingError,
                     "CUDA device not available",
                     device="cuda:0",
                     required_memory_gb=8.5,
@@ -664,7 +482,7 @@ class TestExceptionInteractionPatterns:
                     model="BAAI/bge-m3",
                 )
                 raise embedding_error
-            except EmbeddingError as e:
+            except ProcessingError as e:
                 processing_error = create_detailed_error(
                     ProcessingError,
                     "Cannot process documents without embeddings",
