@@ -84,16 +84,8 @@ def build_router_engine(
         if enable_hybrid is not None:
             hybrid_ok = bool(enable_hybrid)
         else:
-            # When explicit settings provided, allow either flag to enable hybrid.
-            # When settings is None (uses default_settings), only honor the explicit
-            # server-side flag to avoid surprises in generic callers/tests.
-            if settings is None:
-                hybrid_ok = bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
-            else:
-                hybrid_ok = bool(
-                    getattr(cfg.retrieval, "enable_server_hybrid", False)
-                    or getattr(cfg.retrieval, "hybrid_enabled", False)
-                )
+            # Single authoritative flag per ADR-024
+            hybrid_ok = bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
         if hybrid_ok:
             # Import retriever on-demand to avoid heavy imports at module load.
             from src.retrieval.hybrid import (
