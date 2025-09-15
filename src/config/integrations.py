@@ -104,16 +104,18 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
             else:
                 base_url = None
 
-            # Enforce local-only endpoints unless allowlist override
-            allow_remote = os.getenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "").lower() in {
-                "1",
-                "true",
-                "yes",
-            }
+            # Enforce local-only endpoints unless allowlist override via settings
+            allow_remote = settings.allow_remote_effective() or (
+                os.getenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "").lower()
+                in {"1", "true", "yes"}
+            )
             if (not allow_remote) and base_url and (not _is_localhost(base_url)):
                 raise ValueError(
-                    "Remote endpoint forbidden by default. Set "
-                    "DOCMIND_ALLOW_REMOTE_ENDPOINTS=true to override."
+                    
+                        "Remote endpoint forbidden by policy. Set "
+                        "settings.allow_remote_endpoints=True or use "
+                        "localhost URLs."
+                    
                 )
             logger.info(
                 "LLM configured via factory: provider=%s model=%s base_url=%s",
@@ -236,13 +238,50 @@ def get_vllm_server_command() -> list[str]:
         str(int(settings.vllm.max_num_seqs)),
         "--max-num-batched-tokens",
         str(int(settings.vllm.max_num_batched_tokens)),
-        "--trust-remote-code",
     ]
 
     if settings.vllm.enable_chunked_prefill:
         cmd.append("--enable-chunked-prefill")
 
     return cmd
+
+
+def startup_init(cfg: "settings.__class__" = settings) -> None:
+    """Perform explicit startup initialization (no import-time side effects).
+
+    - Ensure required directories exist
+    - Bridge telemetry env only here if needed
+    - Log resolved backend, normalized base URLs, timeouts, and hybrid mode
+    """
+    try:
+        # IO: ensure directories
+        cfg.data_dir.mkdir(parents=True, exist_ok=True)
+        cfg.cache_dir.mkdir(parents=True, exist_ok=True)
+        cfg.log_file.parent.mkdir(parents=True, exist_ok=True)
+        if cfg.database.sqlite_db_path.parent != cfg.data_dir:
+            cfg.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Telemetry env bridge (local JSONL sink still honored elsewhere)
+        if not bool(getattr(cfg, "telemetry_enabled", True)):
+            os.environ["DOCMIND_TELEMETRY_DISABLED"] = "true"
+
+        # Observability: log config highlights
+        try:
+            from loguru import logger as _logger
+
+            _logger.info(
+                "Startup: backend=%s base_url=%s timeout=%s hybrid=%s fusion=%s",
+                cfg.llm_backend,
+                getattr(cfg, "backend_base_url_normalized", None),
+                getattr(cfg, "llm_request_timeout_seconds", None),
+                bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
+                str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
+            )
+        except Exception as exc:  # pragma: no cover - logging must not fail
+            logger.debug("Startup logging failed: %s", exc)
+    except Exception as exc:  # pragma: no cover - defensive
+        # Do not crash app on startup side-effects; callers may retry/log
+        logger.warning("startup_init encountered error: %s", exc)
 
 
 def initialize_integrations(
@@ -256,6 +295,7 @@ def initialize_integrations(
 
     Calls :func:`setup_vllm_env` and :func:`setup_llamaindex` in order.
     """
+    startup_init(settings)
     setup_vllm_env()
     setup_llamaindex(force_llm=force_llm, force_embed=force_embed)
     logger.info(
