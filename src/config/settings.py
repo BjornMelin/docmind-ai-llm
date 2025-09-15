@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -71,6 +70,12 @@ class ProcessingConfig(BaseModel):
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     debug_chunk_flow: bool = Field(default=False)
     encrypt_page_images: bool = Field(default=False)
+
+    @model_validator(mode="after")
+    def _validate_overlap(self) -> "ProcessingConfig":
+        if int(self.chunk_overlap) > int(self.chunk_size):
+            raise ValueError("chunk_overlap cannot exceed chunk_size")
+        return self
 
 
 class ChatConfig(BaseModel):
@@ -484,68 +489,105 @@ class DocMindSettings(BaseSettings):
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
-    # Pydantic v2 uses a context parameter; pylint's base stub differs.
-    # pylint: disable=arguments-differ
-    def model_post_init(self, __context: Any) -> None:
-        """Finalize settings initialization and validate configuration.
-
-        Ensures required directories exist, applies top-level alias fields to
-        nested configs for ergonomics, and validates endpoint security and
-        LM Studio base URL invariants.
-
-        Args:
-            __context: Pydantic model initialization context (unused).
-
-        Raises:
-            ValueError: When provided values are invalid, e.g., non-positive
-                ``context_window``/``context_window_size`` or a
-                ``chunk_overlap`` larger than ``chunk_size``; or when remote
-                endpoints are disallowed and configured base URLs are not on
-                the allowlist; or when ``lmstudio_base_url`` does not end with
-                ``/v1``.
-        """
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)
-        if self.database.sqlite_db_path.parent != self.data_dir:
-            self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Apply alias fields to nested configs if provided
-        # Keep nested vllm.* in sync with top-level overrides when present
+    @model_validator(mode="after")
+    def _apply_aliases_and_validate(self) -> "DocMindSettings":
+        # Apply top-level aliases to nested configs if provided (no IO here)
         if self.model:
             with suppress(Exception):
                 self.vllm.model = str(self.model)
         if self.context_window:
-            if int(self.context_window) <= 0:
-                raise ValueError("context_window must be > 0")
             with suppress(Exception):
                 self.vllm.context_window = int(self.context_window)
-        if self.vllm_base_url:
-            with suppress(Exception):
-                self.vllm.vllm_base_url = str(self.vllm_base_url)
         if self.context_window_size is not None:
-            if int(self.context_window_size) <= 0:
-                raise ValueError("context_window_size must be > 0")
             with suppress(Exception):
                 self.vllm.context_window = int(self.context_window_size)
         if self.chunk_size is not None:
-            if int(self.chunk_size) <= 0:
-                raise ValueError("chunk_size must be > 0")
             with suppress(Exception):
                 self.processing.chunk_size = int(self.chunk_size)
         if self.chunk_overlap is not None:
-            if self.chunk_size is not None and int(self.chunk_overlap) > int(
-                self.chunk_size
-            ):
-                raise ValueError("chunk_overlap cannot exceed chunk_size")
             with suppress(Exception):
                 self.processing.chunk_overlap = int(self.chunk_overlap)
         if self.enable_multi_agent is not None:
             with suppress(Exception):
                 self.agents.enable_multi_agent = bool(self.enable_multi_agent)
+        # Ensure required directories exist (explicit model initialization)
+        with suppress(Exception):  # pragma: no cover - defensive
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            self.log_file.parent.mkdir(parents=True, exist_ok=True)
+            if self.database.sqlite_db_path.parent != self.data_dir:
+                self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Validate base URLs and security posture
+        # Validate base URLs and security posture using existing helpers
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
+        return self
+
+    @staticmethod
+    def _ensure_v1(url: str | None) -> str | None:
+        if not url:
+            return url
+        try:
+            p = urlparse(url.rstrip("/"))
+            path = p.path or ""
+            if not path.endswith("/v1"):
+                path = f"{path}/v1"
+            return p._replace(path=path).geturl()
+        except Exception:
+            return url
+
+    @field_validator("lmstudio_base_url", mode="before")
+    @classmethod
+    def _norm_lmstudio(cls, v: str) -> str:
+        return cls._ensure_v1(v) or v
+
+    @field_validator("llamacpp_base_url", mode="before")
+    @classmethod
+    def _norm_llamacpp(cls, v: str | None) -> str | None:
+        return cls._ensure_v1(v)
+
+    @field_validator("vllm_base_url", mode="before")
+    @classmethod
+    def _norm_vllm(cls, v: str | None) -> str | None:
+        return cls._ensure_v1(v)
+
+    @computed_field
+    @property
+    def effective_context_window(self) -> int:
+        """Return the effective context window with global cap applied."""
+        return min(
+            int(self.context_window or self.vllm.context_window),
+            int(self.llm_context_window_max),
+        )
+
+    @computed_field
+    @property
+    def backend_base_url_normalized(self) -> str | None:
+        """Return backend-aware normalized base URL (OpenAI-like -> /v1)."""
+        if self.llm_backend == "ollama":
+            return self.ollama_base_url
+        if self.llm_backend == "lmstudio":
+            return self._ensure_v1(self.lmstudio_base_url)
+        if self.llm_backend == "vllm":
+            # Prefer explicit OpenAI-like endpoint when provided
+            base = self.vllm_base_url or self.vllm.vllm_base_url
+            return self._ensure_v1(base)
+        if self.llm_backend == "llamacpp":
+            return self._ensure_v1(self.llamacpp_base_url)
+        return None
+
+    def allow_remote_effective(self) -> bool:
+        """Return effective allow-remote policy (env override-aware).
+
+        Centralizes security policy evaluation. Prefer the configured
+        ``allow_remote_endpoints`` but honor environment variable
+        ``DOCMIND_ALLOW_REMOTE_ENDPOINTS`` for legacy flows and tests.
+        """
+        with suppress(Exception):  # pragma: no cover - defensive
+            env = (os.getenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "") or "").lower()
+            if env in {"1", "true", "yes"}:
+                return True
+        return bool(self.allow_remote_endpoints)
 
     def get_vllm_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
         """Get vLLM configuration for client setup.
@@ -597,16 +639,13 @@ class DocMindSettings(BaseSettings):
             Mapping with model identifier, effective context window capped by
             ``llm_context_window_max``, generation params, and base URL.
         """
+        base_url = self.backend_base_url_normalized
         return {
             "model_name": self.model or self.vllm.model,
-            # Enforce cap consistently
-            "context_window": min(
-                int(self.context_window or self.vllm.context_window),
-                self.llm_context_window_max,
-            ),
+            "context_window": self.effective_context_window,
             "max_tokens": self.vllm.max_tokens,
             "temperature": self.vllm.temperature,
-            "base_url": self.ollama_base_url,
+            "base_url": base_url,
         }
 
     def get_embedding_config(self) -> dict[str, Any]:
@@ -644,7 +683,7 @@ class DocMindSettings(BaseSettings):
             "normalize_image": self.embedding.normalize_image,
             # Misc
             "embed_device": self.embedding.embed_device,
-            "trust_remote_code": True,
+            "trust_remote_code": False,
         }
 
     def get_processing_config(self) -> dict[str, Any]:
@@ -859,35 +898,8 @@ class DocMindSettings(BaseSettings):
 # Global settings instance - primary interface for the application
 settings = DocMindSettings()
 
-# Startup visibility for active hybrid fusion mode and limits (INFO)
-
-with suppress(Exception):  # pragma: no cover - logging must not fail
-    # Resolve DBSF toggle precedence and override fusion_mode if necessary
-    if (
-        bool(getattr(settings.retrieval, "dbsf_enabled", False))
-        and str(settings.retrieval.fusion_mode).lower() != "dbsf"
-    ):
-        logger.warning(
-            "DBSF enabled via env; overriding fusion_mode=%s to 'dbsf'",
-            settings.retrieval.fusion_mode,
-        )
-        settings.retrieval.fusion_mode = "dbsf"  # type: ignore[attr-defined]
-
-    # Bridge telemetry enabled -> disabled env, to honor existing sink behavior
-    if not bool(getattr(settings, "telemetry_enabled", True)):
-        os.environ["DOCMIND_TELEMETRY_DISABLED"] = "true"
-
-    logger.info(
-        (
-            "Hybrid fusion: mode=%s dense_limit=%d sparse_limit=%d "
-            "fused_top_k=%d dbsf_enabled=%s"
-        ),
-        str(settings.retrieval.fusion_mode).lower(),
-        settings.retrieval.prefetch_dense_limit,
-        settings.retrieval.prefetch_sparse_limit,
-        settings.retrieval.fused_top_k,
-        getattr(settings.retrieval, "dbsf_enabled", False),
-    )
+# Startup side-effects (logging, env bridges) are handled in startup_init()
+# located in src.config.integrations.
 
 # Module exports
 __all__ = [
@@ -907,12 +919,3 @@ __all__ = [
     "VLLMConfig",
     "settings",
 ]
-
-
-def get_vllm_env_vars() -> dict[str, str]:
-    """Module-level helper returning vLLM environment variables.
-
-    Returns:
-        Mapping of environment variable names to string values for vLLM.
-    """
-    return settings.get_vllm_env_vars()
