@@ -158,7 +158,7 @@ def has_cuda_vram(min_gb: float, device_index: int = 0) -> bool:
         return False
 
 
-def select_device(prefer: str = "auto") -> str:  # pylint: disable=too-many-return-statements
+def select_device(prefer: str = "auto") -> str:
     """Select an inference device string ('cuda'|'mps'|'cpu').
 
     Preference order:
@@ -170,20 +170,22 @@ def select_device(prefer: str = "auto") -> str:  # pylint: disable=too-many-retu
         str: One of 'cuda', 'mps', or 'cpu'.
     """
     p = (prefer or "auto").lower()
+    selected = "cpu"
     try:
         if p == "cpu":
-            return "cpu"
-        cuda_ok = is_cuda_available()
-        mps_ok = _is_mps_available()
-        if p == "cuda":
-            return "cuda" if cuda_ok else "cpu"
-        if p == "mps":
-            return "mps" if mps_ok else ("cuda" if cuda_ok else "cpu")
-        if cuda_ok:
-            return "cuda"
-        return "mps" if mps_ok else "cpu"
+            selected = "cpu"
+        else:
+            cuda_ok = is_cuda_available()
+            mps_ok = _is_mps_available()
+            if p == "cuda":
+                selected = "cuda" if cuda_ok else "cpu"
+            elif p == "mps":
+                selected = "mps" if mps_ok else ("cuda" if cuda_ok else "cpu")
+            else:  # auto
+                selected = "cuda" if cuda_ok else ("mps" if mps_ok else "cpu")
     except (RuntimeError, AttributeError, ImportError, TypeError):
-        return "cpu"
+        selected = "cpu"
+    return selected
 
 
 def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
