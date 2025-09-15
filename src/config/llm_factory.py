@@ -58,7 +58,12 @@ def build_llm(settings: DocMindSettings) -> Any:
     if backend == "vllm":
         from llama_index.llms.openai_like import OpenAILike  # type: ignore
 
-        api_base = settings.vllm_base_url or settings.vllm.vllm_base_url
+        # If explicit OpenAI-compatible endpoint provided, normalize '/v1'.
+        if settings.vllm_base_url:
+            api_base = settings.backend_base_url_normalized or settings.vllm_base_url
+        else:
+            # Fall back to native/base URL without forcing '/v1'.
+            api_base = settings.vllm.vllm_base_url
         return OpenAILike(
             model=model_name,
             api_base=api_base,
@@ -76,7 +81,9 @@ def build_llm(settings: DocMindSettings) -> Any:
 
         return OpenAILike(
             model=model_name,
-            api_base=settings.lmstudio_base_url,
+            api_base=(
+                settings.backend_base_url_normalized or settings.lmstudio_base_url
+            ),
             api_key=getattr(settings, "openai_like_api_key", "not-needed"),
             is_chat_model=True,
             is_function_calling_model=False,
@@ -91,7 +98,9 @@ def build_llm(settings: DocMindSettings) -> Any:
 
             return OpenAILike(
                 model=model_name,
-                api_base=settings.llamacpp_base_url,
+                api_base=(
+                    settings.backend_base_url_normalized or settings.llamacpp_base_url
+                ),
                 api_key=getattr(settings, "openai_like_api_key", "not-needed"),
                 is_chat_model=True,
                 is_function_calling_model=False,
