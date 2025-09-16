@@ -587,6 +587,26 @@ class DocMindSettings(BaseSettings):
         # Validate base URLs and security posture using existing helpers
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
+
+        # Custom directory overrides create directories eagerly; defaults stay lazy
+        try:
+            default_data_dir = Path(self.model_fields["data_dir"].default)
+            default_cache_dir = Path(self.model_fields["cache_dir"].default)
+            default_log_file = Path(self.model_fields["log_file"].default)
+        except KeyError:  # pragma: no cover - defensive
+            default_data_dir = default_cache_dir = default_log_file = None
+
+        def _mkdir_if_custom(target: Path, default: Path | None) -> None:
+            if default is not None and target == default:
+                return
+            with suppress(Exception):
+                target.mkdir(parents=True, exist_ok=True)
+
+        _mkdir_if_custom(self.data_dir, default_data_dir)
+        _mkdir_if_custom(self.cache_dir, default_cache_dir)
+        _mkdir_if_custom(
+            self.log_file.parent, default_log_file.parent if default_log_file else None
+        )
         return self
 
     @staticmethod
@@ -655,7 +675,9 @@ class DocMindSettings(BaseSettings):
 
         Returns:
             Mapping with keys ``model``, ``context_window``, and
-            ``temperature`` suitable for initializing a vLLM client.
+            ``temperature`` suitable for initializing a vLLM client. Retained
+            because launcher utilities import this helper instead of the full
+            settings model.
         """
         return {
             "model": self.model or self.vllm.model,
@@ -663,24 +685,13 @@ class DocMindSettings(BaseSettings):
             "temperature": self.vllm.temperature,
         }
 
-    def get_agent_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
-        """Return agent configuration as a simple mapping.
-
-        Returns:
-            Mapping with agent orchestration settings (timeouts, retries,
-            multi-agent enablement).
-        """
-        return {
-            "decision_timeout": self.agents.decision_timeout,
-            "max_retries": self.agents.max_retries,
-            "enable_multi_agent": self.agents.enable_multi_agent,
-        }
-
     def get_vllm_env_vars(self) -> dict[str, str]:
         """Return environment variables for vLLM process setup.
 
         Returns:
             Mapping of environment variable names to string values for vLLM.
+            Used by integration scripts that render env files without
+            serializing the entire settings object.
         """
         return {
             "VLLM_ATTENTION_BACKEND": self.vllm.attention_backend,
@@ -698,7 +709,9 @@ class DocMindSettings(BaseSettings):
 
         Returns:
             Mapping with model identifier, effective context window capped by
-            ``llm_context_window_max``, generation params, and base URL.
+            ``llm_context_window_max``, generation params, and base URL. The
+            LlamaIndex factory consumes this flat dict and predates
+            ``model_dump`` usage in containers.
         """
         base_url = self.backend_base_url_normalized
         return {
@@ -715,7 +728,8 @@ class DocMindSettings(BaseSettings):
         Returns:
             Flat mapping used by embedding factory helpers (text+image
             parameters and device selection), while keeping class-based config
-            as the single source of truth.
+            as the single source of truth. Several integration points expect a
+            plain dict to hydrate third-party clients.
         """
         device = (
             ("cuda" if self.enable_gpu_acceleration else "cpu")
@@ -747,68 +761,12 @@ class DocMindSettings(BaseSettings):
             "trust_remote_code": False,
         }
 
-    def get_processing_config(self) -> dict[str, Any]:
-        """Get document processing configuration.
-
-        Returns:
-            Mapping with chunking and document processing parameters.
-        """
-        return {
-            "chunk_size": self.processing.chunk_size,
-            "new_after_n_chars": self.processing.new_after_n_chars,
-            "combine_text_under_n_chars": self.processing.combine_text_under_n_chars,
-            "multipage_sections": self.processing.multipage_sections,
-            "max_document_size_mb": self.processing.max_document_size_mb,
-        }
-
-    def get_cache_db_path(self) -> Path:
-        """Return full path to DuckDB KV store file (ADR-030).
-
-        Returns:
-            Path to the DuckDB KV store file.
-        """
-        return (self.cache.dir or self.cache_dir) / self.cache.filename
-
-    # === ADR COMPLIANCE CONFIGURATION METHODS ===
-
-    def get_agent_orchestration_config(self) -> dict[str, Any]:
-        """Get agent orchestration configuration for ADR-011 compliance.
-
-        Returns:
-            Mapping with agent context management and orchestration parameters.
-        """
-        return {
-            "context_trim_threshold": self.agents.context_trim_threshold,
-            "context_buffer_size": self.agents.context_buffer_size,
-            "enable_parallel_execution": self.agents.enable_parallel_tool_execution,
-            "max_workflow_depth": self.agents.max_workflow_depth,
-            "enable_state_compression": self.agents.enable_agent_state_compression,
-            "chat_memory_limit": self.agents.chat_memory_limit_tokens,
-            "decision_timeout": self.agents.decision_timeout,
-        }
-
-    def get_dspy_config(self) -> dict[str, Any]:
-        """Get DSPy optimization configuration for ADR-018.
-
-        Returns:
-            Mapping with DSPy optimization parameters such as iterations,
-            samples, retries, and metric thresholds.
-        """
-        return {
-            "enabled": self.enable_dspy_optimization,
-            "iterations": self.dspy_optimization_iterations,
-            "samples": self.dspy_optimization_samples,
-            "max_retries": self.dspy_max_retries,
-            "temperature": self.dspy_temperature,
-            "metric_threshold": self.dspy_metric_threshold,
-            "bootstrapping": self.enable_dspy_bootstrapping,
-        }
-
     def get_graphrag_config(self) -> dict[str, Any]:
         """Get GraphRAG configuration for ADR-019.
 
         Returns:
             Mapping with GraphRAG enablement and extraction/traversal settings.
+            Router initialization consumes this helper directly.
         """
         # Prefer nested configuration; fallback to top-level fields
         if hasattr(self, "graphrag_cfg") and isinstance(
@@ -830,59 +788,6 @@ class DocMindSettings(BaseSettings):
             "max_hops": self.graphrag_max_hops,
             "max_triplets": self.graphrag_max_triplets,
             "chunk_size": self.graphrag_chunk_size,
-        }
-
-    def get_semantic_cache_config(self) -> dict[str, Any]:
-        """Semantic cache configuration for ADR-035.
-
-        Returns:
-            Mapping with semantic cache provider, thresholds, retention, and
-            namespacing configuration.
-        """
-        c = self.semantic_cache
-        return {
-            "enabled": c.enabled,
-            "provider": c.provider,
-            "score_threshold": c.score_threshold,
-            "ttl_seconds": c.ttl_seconds,
-            "top_k": c.top_k,
-            "max_response_bytes": c.max_response_bytes,
-            "namespace": c.namespace,
-        }
-
-    def get_chat_config(self) -> dict[str, Any]:
-        """Chat memory configuration for ADR-021.
-
-        Returns:
-            Mapping with chat memory storage parameters (e.g., sqlite path).
-        """
-        return {"sqlite_path": str(self.chat.sqlite_path)}
-
-    def get_analysis_config(self) -> dict[str, Any]:
-        """Analysis mode configuration for ADR-023.
-
-        Returns:
-            Mapping with analysis mode and worker concurrency.
-        """
-        return {
-            "mode": self.analysis.mode,
-            "max_workers": self.analysis.max_workers,
-        }
-
-    def get_ui_config(self) -> dict[str, Any]:
-        """Get UI configuration for ADR-016.
-
-        Returns:
-            Mapping with UI theme, session persistence, streaming behavior, and
-            history/port settings.
-        """
-        return {
-            "theme": self.ui.theme,
-            "session_persistence": self.ui.enable_session_persistence,
-            "response_streaming": self.ui.response_streaming,
-            "max_history_items": self.ui.max_history_items,
-            "streamlit_port": self.ui.streamlit_port,
-            "enable_dark_mode": self.ui.enable_dark_mode,
         }
 
     # === Validation helpers ===
@@ -930,16 +835,16 @@ class DocMindSettings(BaseSettings):
             except (ValueError, TypeError):  # pragma: no cover - defensive
                 return False
 
-        urls = [
+        raw_urls = {
             self.ollama_base_url,
-            self._ensure_v1(self.openai.base_url or self.lmstudio_base_url),
-            self._ensure_v1(
-                self.openai.base_url or self.vllm_base_url or self.vllm.vllm_base_url
-            ),
-            self._ensure_v1(self.openai.base_url or self.llamacpp_base_url),
-        ]
-        for url in urls:
-            if not _is_allowed(url):
+            self.openai.base_url,
+            self.lmstudio_base_url,
+            self.vllm_base_url,
+            getattr(self.vllm, "vllm_base_url", None),
+            self.llamacpp_base_url,
+        }
+        for url in raw_urls:
+            if not _is_allowed(self._ensure_v1(url)):
                 raise ValueError(
                     "Remote endpoints are disabled. Set allow_remote_endpoints=True "
                     "or use localhost URLs."

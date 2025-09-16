@@ -156,7 +156,7 @@ def collect_metrics_hook(state, output):
 from src.config.settings import settings
 
 def build_supervisor_with_guardrails(tools):
-    guard = settings.get_agent_orchestration_config()
+    guard = settings.agents.model_dump()
     sup = build_supervisor(tools)
     # Example: attach hooks or config from guardrails
     sup.pre_model_hook = trim_context_hook

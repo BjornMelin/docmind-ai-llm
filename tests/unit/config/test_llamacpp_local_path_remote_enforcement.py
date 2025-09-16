@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from src.config.settings import DocMindSettings
 
 
 def test_llamacpp_local_path_skips_remote_enforcement(monkeypatch):
@@ -28,30 +28,16 @@ def test_llamacpp_local_path_skips_remote_enforcement(monkeypatch):
 
     monkeypatch.setitem(integ.__dict__, "HuggingFaceEmbedding", _DummyEmb)
 
-    # Compose a minimal settings namespace
-    fake_settings = SimpleNamespace(
-        llm_backend="llamacpp",
-        model=None,
-        ollama_base_url="http://localhost:11434",
-        lmstudio_base_url="http://localhost:1234/v1",
-        vllm_base_url=None,
-        llamacpp_base_url=None,  # important: no URL provided
-        vllm=SimpleNamespace(
-            model="qwen2:7b-instruct",
-            context_window=8192,
-            max_tokens=256,
-            llamacpp_model_path="models/foo.gguf",
-        ),
-        embedding=SimpleNamespace(model_name="BAAI/bge-m3", device="cpu"),
-        context_window=8192,
-        llm_context_window_max=131072,
-    )
+    # Compose a minimal settings namespace using the real model
+    cfg = DocMindSettings(llm_backend="llamacpp")
+    cfg.model = "local-gguf-path"  # type: ignore[assignment]
+    cfg.context_window = 4096
+    cfg.vllm.llamacpp_model_path = "models/foo.gguf"  # type: ignore[assignment]
+    cfg.security.allow_remote_endpoints = False
+    cfg.llamacpp_base_url = None  # type: ignore[assignment]
 
     # Patch module-level settings object
-    monkeypatch.setitem(integ.__dict__, "settings", fake_settings)
-
-    # Ensure allow-remote not set
-    monkeypatch.delenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", raising=False)
+    monkeypatch.setitem(integ.__dict__, "settings", cfg)
 
     # Call setup; should not raise since a file path is not treated as URL
     integ.setup_llamaindex(force_llm=True, force_embed=False)

@@ -2,57 +2,59 @@
 
 import pytest
 
+from src.config.settings import DocMindSettings
+
 pytestmark = pytest.mark.unit
 
 
-def test_remote_forbidden_without_allow_env(monkeypatch):
+def _stubbed_integrations(monkeypatch):
     import src.config.integrations as integ
 
-    # Patch Settings and build_llm to be no-op
-    class _S:
+    class _SettingsProxy:
         llm = None
         embed_model = None
         context_window = None
         num_output = None
 
-    monkeypatch.setitem(integ.__dict__, "Settings", _S)
+    monkeypatch.setitem(integ.__dict__, "Settings", _SettingsProxy)
     monkeypatch.setitem(integ.__dict__, "build_llm", lambda _s: object())
     monkeypatch.setitem(
         integ.__dict__, "HuggingFaceEmbedding", lambda *a, **k: object()
     )
+    return integ
 
-    # Remote URL for vLLM
-    s = integ.settings
-    monkeypatch.setenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "0")
-    s.llm_backend = "vllm"  # type: ignore[assignment]
-    s.vllm_base_url = "http://remote.host:8000"  # type: ignore[assignment]
+
+def test_remote_forbidden_without_allowance(monkeypatch):
+    integ = _stubbed_integrations(monkeypatch)
+
+    cfg = DocMindSettings()
+    cfg.llm_backend = "vllm"  # type: ignore[assignment]
+    cfg.vllm_base_url = "http://remote.host:8000"  # type: ignore[assignment]
+    cfg.security.allow_remote_endpoints = False
+    cfg.security.endpoint_allowlist = [
+        "http://localhost",
+        "https://localhost",
+        "http://127.0.0.1",
+        "https://127.0.0.1",
+    ]
+
+    monkeypatch.setitem(integ.__dict__, "settings", cfg)
 
     integ.setup_llamaindex(force_llm=True, force_embed=False)
-    # Should not bind a remote LLM when allowlist is not set
+
     assert integ.Settings.llm is None
 
 
-def test_remote_allowed_with_env(monkeypatch):
-    import src.config.integrations as integ
+def test_remote_allowed_with_policy(monkeypatch):
+    integ = _stubbed_integrations(monkeypatch)
 
-    class _S:
-        llm = None
-        embed_model = None
-        context_window = None
-        num_output = None
+    cfg = DocMindSettings()
+    cfg.llm_backend = "lmstudio"  # type: ignore[assignment]
+    cfg.lmstudio_base_url = "http://remote.host:1234/v1"  # type: ignore[assignment]
+    cfg.security.allow_remote_endpoints = True
 
-    monkeypatch.setitem(integ.__dict__, "Settings", _S)
-    monkeypatch.setitem(integ.__dict__, "build_llm", lambda _s: object())
-    monkeypatch.setitem(
-        integ.__dict__, "HuggingFaceEmbedding", lambda *a, **k: object()
-    )
+    monkeypatch.setitem(integ.__dict__, "settings", cfg)
 
-    s = integ.settings
-    # Allow remote explicitly
-    monkeypatch.setenv("DOCMIND_ALLOW_REMOTE_ENDPOINTS", "true")
-    s.llm_backend = "lmstudio"  # type: ignore[assignment]
-    s.lmstudio_base_url = "http://remote.host:1234/v1"  # type: ignore[assignment]
-
-    # Should not raise
     integ.setup_llamaindex(force_llm=True, force_embed=False)
+
     assert integ.Settings.llm is not None

@@ -15,13 +15,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Enforced backend-aware OpenAI-like /v1 normalization in LLM factory for LM Studio, vLLM (OpenAI-compatible), and llama.cpp server.
 - Moved all import-time I/O from settings into explicit startup_init(settings) in integrations.
 - Unified server-side hybrid gating to retrieval.enable_server_hybrid + fusion_mode; removed legacy flags.
-- Settings UI now shows read-only policy state (server-side hybrid and fusion mode) and resolved normalized backend base URL.
+- Settings UI now shows read-only policy state (server-side hybrid, fusion mode, remote endpoint allowance, allowlist size) and resolved normalized backend base URL.
 - .env.example rewritten to use DOCMIND_OPENAI__*, DOCMIND_SECURITY__*, and DOCMIND_VLLM__*; removed raw VLLM_* keys.
 
 ### Removed
 - Legacy openai_like_* fields from settings and corresponding env keys from .env.example.
 - Legacy retrieval.hybrid_enabled and retrieval.dbsf_enabled; tests updated accordingly.
 - Duplicate and conflicting env keys in .env.example.
+- Compatibility shims for `DOCMIND_ALLOW_REMOTE_ENDPOINTS`; remote access policy now lives solely under `security.*`.
 
 ### Tests
 - Updated unit and integration tests for new openai.*, security.*, and unified hybrid policy.
@@ -34,6 +35,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - README updated with DOCMIND_OPENAI__* examples (LM Studio, vLLM, llama.cpp) and a link to the canonical configuration section.
 - SPEC‑001 (LLM Runtime) updated to reflect OpenAILike usage for OpenAI‑compatible backends and corrected Settings page path.
 - Traceability (FR‑SEC‑NET‑001) updated for OpenAI‑like `/v1` normalization and local‑first default posture.
+- Requirements specification aligned with nested `openai.*`, `security.*`, and `retrieval.hybrid.*` groups, reiterated the local-first security policy, and linked to the canonical configuration guide.
 
 ### Added
 

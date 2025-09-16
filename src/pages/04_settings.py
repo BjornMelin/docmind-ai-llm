@@ -142,6 +142,17 @@ def main() -> None:
         value=bool(settings.security.allow_remote_endpoints),
         help="When off, only localhost URLs are accepted",
     )
+    st.caption("Effective policy (read-only)")
+    st.text_input(
+        "Remote endpoints allowed",
+        value="true" if settings.security.allow_remote_endpoints else "false",
+        disabled=True,
+    )
+    st.text_input(
+        "Endpoint allowlist size",
+        value=str(len(settings.security.endpoint_allowlist)),
+        disabled=True,
+    )
 
     # Retrieval settings (expose minimal toggles; no IO on import)
     st.subheader("Retrieval (Policy)")

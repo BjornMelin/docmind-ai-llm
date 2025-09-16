@@ -21,7 +21,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.config.settings import DocMindSettings
+from src.config.settings import DocMindSettings, OpenAIConfig
+
+_DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
 
 
 def build_llm(settings: DocMindSettings) -> Any:
@@ -86,7 +88,11 @@ def build_llm(settings: DocMindSettings) -> Any:
 
     if backend == "llamacpp":
         # Support both server (OpenAI-compatible) and local library
-        if settings.llamacpp_base_url or settings.openai.base_url:
+        openai_base_url = settings.openai.base_url
+        has_custom_openai_base = bool(
+            openai_base_url and openai_base_url != _DEFAULT_OPENAI_BASE_URL
+        )
+        if settings.llamacpp_base_url or has_custom_openai_base:
             from llama_index.llms.openai_like import OpenAILike  # type: ignore
 
             return OpenAILike(

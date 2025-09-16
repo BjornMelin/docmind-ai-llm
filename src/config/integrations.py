@@ -72,27 +72,34 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
         logger.info("LLM already configured; skipping override")
     else:
         try:
-            Settings.llm = build_llm(settings)
-            # Observability: log provider + model + base_url once
-            provider = settings.llm_backend
-            model_name = settings.model or settings.vllm.model
-            base_url: str | None = getattr(
-                settings, "backend_base_url_normalized", None
-            )
-            # Centralized endpoint security validation is enforced in settings
-            logger.info(
-                "LLM configured via factory: provider=%s model=%s base_url=%s",
-                provider,
-                model_name,
-                base_url,
-            )
-            # Simple counters (log-based)
-            logger.info("counter.provider_used: %s", provider)
-            streaming = bool(getattr(settings, "llm_streaming_enabled", True))
-            logger.info("counter.streaming_enabled: %s", streaming)
-        except (ImportError, RuntimeError, ValueError, OSError) as e:
-            logger.warning("Could not configure LLM: %s", e, exc_info=True)
+            # Re-validate endpoints on demand because tests mutate URLs at runtime.
+            settings._validate_endpoints_security()  # pylint: disable=protected-access
+        except ValueError as err:
+            logger.warning("LLM configuration blocked by security policy: %s", err)
             Settings.llm = None
+        else:
+            try:
+                Settings.llm = build_llm(settings)
+                # Observability: log provider + model + base_url once
+                provider = settings.llm_backend
+                model_name = settings.model or settings.vllm.model
+                base_url: str | None = getattr(
+                    settings, "backend_base_url_normalized", None
+                )
+                # Centralized endpoint security validation is enforced in settings
+                logger.info(
+                    "LLM configured via factory: provider=%s model=%s base_url=%s",
+                    provider,
+                    model_name,
+                    base_url,
+                )
+                # Simple counters (log-based)
+                logger.info("counter.provider_used: %s", provider)
+                streaming = bool(getattr(settings, "llm_streaming_enabled", True))
+                logger.info("counter.streaming_enabled: %s", streaming)
+            except (ImportError, RuntimeError, ValueError, OSError) as e:
+                logger.warning("Could not configure LLM: %s", e, exc_info=True)
+                Settings.llm = None
 
     # Configure text embeddings (default to BGE-M3 1024D for global usage)
     try:
