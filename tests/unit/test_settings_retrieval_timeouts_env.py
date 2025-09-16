@@ -5,6 +5,8 @@ Ensures new timeout fields have sane defaults and can be overridden by env.
 
 from __future__ import annotations
 
+import pytest
+
 from src.config.settings import DocMindSettings
 
 
@@ -29,3 +31,15 @@ def test_retrieval_timeouts_defaults_and_env(monkeypatch):  # type: ignore[no-un
     assert s2.retrieval.siglip_timeout_ms == 333
     assert s2.retrieval.colpali_timeout_ms == 444
     assert s2.retrieval.total_rerank_budget_ms == 1234
+
+
+def test_retrieval_timeouts_invalid_values(monkeypatch):  # type: ignore[no-untyped-def]
+    """Negative or zero timeout values should trigger validation errors."""
+    monkeypatch.setenv("DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS", "-1")
+    with pytest.raises(ValueError, match="greater than or equal to 50"):
+        DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+
+    monkeypatch.delenv("DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS", raising=False)
+    monkeypatch.setenv("DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS", "0")
+    with pytest.raises(ValueError, match="greater than or equal to 100"):
+        DocMindSettings(_env_file=None)  # type: ignore[arg-type]

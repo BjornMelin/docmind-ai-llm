@@ -22,8 +22,7 @@ def _mk(**overrides):
             ],
         },
     }
-    base.update(overrides)
-    return DocMindSettings(**base)
+    return DocMindSettings(**(base | overrides))
 
 
 def test_allow_local_loopback_hosts_ok():
@@ -78,3 +77,17 @@ def test_malformed_url_rejected():
     """Malformed URLs should be rejected."""
     with pytest.raises(Exception, match="Remote endpoints are disabled"):
         _ = _mk(vllm_base_url="not a url")
+
+
+def test_remote_endpoints_allowed_when_policy_true():
+    """When allow_remote_endpoints is true, remote hosts should pass validation."""
+    s = _mk(
+        security={
+            "allow_remote_endpoints": True,
+            "endpoint_allowlist": [
+                "https://api.example.com",
+            ],
+        },
+        vllm_base_url="https://unlisted.remote.example",
+    )
+    s._validate_endpoints_security()  # pylint: disable=protected-access

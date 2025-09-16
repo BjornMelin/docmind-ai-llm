@@ -10,22 +10,21 @@ import importlib
 from typing import Any
 
 
-def test_router_rerank_topk_propagation(monkeypatch):  # type: ignore[no-untyped-def]
+def _run_router_with_capture(
+    monkeypatch, *, rerank_top_k: Any, enable_hybrid: bool = True
+):
     rfac = importlib.import_module("src.retrieval.router_factory")
+    captured: dict[str, tuple[bool, int | None]] = {}
 
-    # Capture calls
-    calls: list[tuple[str, bool, int]] = []
-
-    def _fake_get_pp(area: str, *, use_reranking: bool, top_n: int | None = None):  # type: ignore[no-untyped-def]
-        calls.append((area, use_reranking, int(top_n or -1)))
+    def _fake_get_pp(area: str, *, use_reranking: bool, top_n: int | None = None):
+        normalized = int(top_n) if top_n is not None else None
+        captured[area] = (use_reranking, normalized)
         return []
 
-    # Patch retrieval.reranking.get_postprocessors used inside router_factory
     import src.retrieval.reranking as rr
 
     monkeypatch.setattr(rr, "get_postprocessors", _fake_get_pp, raising=False)
 
-    # Patch ServerHybridRetriever to avoid real client interactions
     import src.retrieval.hybrid as hy
 
     class _StubRetriever:
@@ -37,28 +36,50 @@ def test_router_rerank_topk_propagation(monkeypatch):  # type: ignore[no-untyped
 
     monkeypatch.setattr(hy, "ServerHybridRetriever", _StubRetriever, raising=False)
 
-    # Configure settings values
     from src.config.settings import settings as cfg
 
     monkeypatch.setattr(cfg.retrieval, "use_reranking", True, raising=False)
-    monkeypatch.setattr(cfg.retrieval, "reranking_top_k", 7, raising=False)
-    monkeypatch.setattr(cfg.retrieval, "enable_server_hybrid", True, raising=False)
+    monkeypatch.setattr(cfg.retrieval, "reranking_top_k", rerank_top_k, raising=False)
+    monkeypatch.setattr(
+        cfg.retrieval, "enable_server_hybrid", enable_hybrid, raising=False
+    )
 
-    # Minimal vector index stub
     class _StubIndex:
-        def as_query_engine(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
+        def as_query_engine(self, **_kwargs: Any):
             class _QE:
-                def query(self, *_a: Any, **_k: Any):  # type: ignore[no-untyped-def]
+                def query(self, *_a: Any, **_k: Any):
                     return "ok"
 
             return _QE()
 
-    rfac.build_router_engine(vector_index=_StubIndex(), pg_index=None)
-    # We expect calls for at least 'vector' and 'hybrid' tools
-    areas = {a for (a, _u, _t) in calls}
-    assert "vector" in areas
-    assert "hybrid" in areas
-    # Validate top_n propagation
-    for _a, _u, t in calls:
-        if _a in {"vector", "hybrid"}:
-            assert t == 7
+    class _StubGraph:
+        def as_retriever(self, **_kwargs: Any):
+            class _Retriever:
+                def retrieve(self, *_args: Any, **_kwargs: Any):
+                    return []
+
+            return _Retriever()
+
+    rfac.build_router_engine(vector_index=_StubIndex(), pg_index=_StubGraph())
+    return captured
+
+
+def test_router_rerank_topk_propagation(monkeypatch):  # type: ignore[no-untyped-def]
+    captured = _run_router_with_capture(monkeypatch, rerank_top_k=7)
+    assert captured.get("vector") == (True, 7)
+    assert captured.get("hybrid") == (True, 7)
+    assert captured.get("kg") == (True, 7)
+
+
+def test_router_rerank_topk_none(monkeypatch):  # type: ignore[no-untyped-def]
+    captured = _run_router_with_capture(monkeypatch, rerank_top_k=None)
+    assert captured.get("vector") == (True, None)
+    assert captured.get("hybrid") == (True, None)
+    assert captured.get("kg") == (True, None)
+
+
+def test_router_rerank_topk_invalid(monkeypatch):  # type: ignore[no-untyped-def]
+    captured = _run_router_with_capture(monkeypatch, rerank_top_k="15")
+    assert captured.get("vector") == (True, 15)
+    assert captured.get("hybrid") == (True, 15)
+    assert captured.get("kg") == (True, 15)

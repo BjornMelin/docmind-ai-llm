@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib
 
+import pytest
+
 
 def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyped-def]
     hmod = importlib.import_module("src.retrieval.hybrid")
@@ -41,18 +43,14 @@ def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyp
     assert len([i for i in ids if i == "p1"]) == 1
 
 
-def test_fusion_selection_rrf_and_dbsf(monkeypatch):  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [("rrf", "RRF"), ("dbsf", "DBSF")],
+)
+def test_fusion_selection(monkeypatch, mode: str, expected: str):  # type: ignore[no-untyped-def]
     hmod = importlib.import_module("src.retrieval.hybrid")
-
-    # Validate that _fusion() produces proper FusionQuery type depending on mode
-    params_rrf = hmod._HybridParams(  # pylint: disable=protected-access
-        collection="c", fusion_mode="rrf"
+    params = hmod._HybridParams(  # pylint: disable=protected-access
+        collection="c", fusion_mode=mode
     )
-    r = hmod.ServerHybridRetriever(params_rrf, client=lambda: None)  # type: ignore[arg-type]
-    assert r._fusion().fusion.name == "RRF"  # pylint: disable=protected-access
-
-    params_dbsf = hmod._HybridParams(  # pylint: disable=protected-access
-        collection="c", fusion_mode="dbsf"
-    )
-    r2 = hmod.ServerHybridRetriever(params_dbsf, client=lambda: None)  # type: ignore[arg-type]
-    assert r2._fusion().fusion.name == "DBSF"  # pylint: disable=protected-access
+    retriever = hmod.ServerHybridRetriever(params, client=lambda: None)  # type: ignore[arg-type]
+    assert retriever._fusion().fusion.name == expected  # pylint: disable=protected-access

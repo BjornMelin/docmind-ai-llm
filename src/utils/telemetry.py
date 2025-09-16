@@ -85,12 +85,9 @@ def log_jsonl(event: dict[str, Any]) -> None:
         **event,
     }
     # Include request_id when present
-    try:
-        _rid = _REQUEST_ID.get()
-        if _rid:
-            rec.setdefault("request_id", _rid)
-    except LookupError:  # pragma: no cover - contextvar edge
-        pass
+    with contextlib.suppress(LookupError):
+        if rid := _REQUEST_ID.get():
+            rec.setdefault("request_id", rid)
     _ensure_dir(_TELEM_PATH)
     _maybe_rotate(_TELEM_PATH)
     with _TELEM_PATH.open("a", encoding="utf-8") as f:

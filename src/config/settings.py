@@ -8,6 +8,8 @@ Usage:
     print(settings.embedding.model_name)
 """
 
+import logging
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
@@ -15,6 +17,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class VLLMConfig(BaseModel):
@@ -57,6 +61,20 @@ class SemanticCacheConfig(BaseModel):
     namespace: str = Field(default="default")
 
 
+def ensure_v1(url: str | None) -> str | None:
+    """Normalize OpenAI-compatible base URLs to include a single /v1 segment."""
+    if not url:
+        return url
+    try:
+        parsed = urlparse(url.rstrip("/"))
+        path = parsed.path or ""
+        if not path.endswith("/v1"):
+            path = f"{path}/v1"
+        return parsed._replace(path=path).geturl()
+    except Exception:
+        return url
+
+
 class OpenAIConfig(BaseModel):
     """Settings for OpenAI-compatible servers.
 
@@ -70,19 +88,7 @@ class OpenAIConfig(BaseModel):
     @field_validator("base_url", mode="before")
     @classmethod
     def _ensure_v1_on_base(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            return v
-        from urllib.parse import urlparse
-
-        try:
-            p = urlparse(v.rstrip("/"))
-            path = p.path or ""
-            if not path.endswith("/v1"):
-                path = f"{path}/v1"
-            return p._replace(path=path).geturl()
-        except Exception:
-            return v
+        return ensure_v1((v or "").strip()) or ""
 
 
 class SecurityConfig(BaseModel):
@@ -557,85 +563,52 @@ class DocMindSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _apply_aliases_and_validate(self) -> "DocMindSettings":
-        # Apply top-level aliases to nested configs if provided (no IO here)
-        if self.model:
+        self._apply_alias_overrides()
+        self._map_hybrid_to_retrieval()
+        self._validate_endpoints_security()
+        self._validate_lmstudio_url()
+        return self
+
+    def _apply_alias_overrides(self) -> None:
+        alias_targets: dict[str, tuple[object, str, Callable[[Any], Any]]] = {
+            "model": (self.vllm, "model", str),
+            "context_window": (self.vllm, "context_window", int),
+            "context_window_size": (self.vllm, "context_window", int),
+            "chunk_size": (self.processing, "chunk_size", int),
+            "chunk_overlap": (self.processing, "chunk_overlap", int),
+            "enable_multi_agent": (self.agents, "enable_multi_agent", bool),
+        }
+        for field, (target, attr, caster) in alias_targets.items():
+            value = getattr(self, field, None)
+            if value is None:
+                continue
             with suppress(Exception):
-                self.vllm.model = str(self.model)
-        if self.context_window:
-            with suppress(Exception):
-                self.vllm.context_window = int(self.context_window)
-        if self.context_window_size is not None:
-            with suppress(Exception):
-                self.vllm.context_window = int(self.context_window_size)
-        if self.chunk_size is not None:
-            with suppress(Exception):
-                self.processing.chunk_size = int(self.chunk_size)
-        if self.chunk_overlap is not None:
-            with suppress(Exception):
-                self.processing.chunk_overlap = int(self.chunk_overlap)
-        if self.enable_multi_agent is not None:
-            with suppress(Exception):
-                self.agents.enable_multi_agent = bool(self.enable_multi_agent)
-        # Map hybrid.* group to retrieval config
+                setattr(target, attr, caster(value))
+
+    def _map_hybrid_to_retrieval(self) -> None:
         try:
             self.retrieval.enable_server_hybrid = bool(self.hybrid.server_side)
             self.retrieval.rrf_k = int(self.hybrid.rrf_k)
             self.retrieval.fusion_mode = str(self.hybrid.method)
-        except Exception:  # pragma: no cover - defensive  # noqa: S110
-            pass
-
-        # Validate base URLs and security posture using existing helpers
-        self._validate_endpoints_security()
-        self._validate_lmstudio_url()
-
-        # Custom directory overrides create directories eagerly; defaults stay lazy
-        try:
-            default_data_dir = Path(self.model_fields["data_dir"].default)
-            default_cache_dir = Path(self.model_fields["cache_dir"].default)
-            default_log_file = Path(self.model_fields["log_file"].default)
-        except KeyError:  # pragma: no cover - defensive
-            default_data_dir = default_cache_dir = default_log_file = None
-
-        def _mkdir_if_custom(target: Path, default: Path | None) -> None:
-            if default is not None and target == default:
-                return
-            with suppress(Exception):
-                target.mkdir(parents=True, exist_ok=True)
-
-        _mkdir_if_custom(self.data_dir, default_data_dir)
-        _mkdir_if_custom(self.cache_dir, default_cache_dir)
-        _mkdir_if_custom(
-            self.log_file.parent, default_log_file.parent if default_log_file else None
-        )
-        return self
-
-    @staticmethod
-    def _ensure_v1(url: str | None) -> str | None:
-        if not url:
-            return url
-        try:
-            p = urlparse(url.rstrip("/"))
-            path = p.path or ""
-            if not path.endswith("/v1"):
-                path = f"{path}/v1"
-            return p._replace(path=path).geturl()
-        except Exception:
-            return url
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "Failed to sync hybrid config into retrieval settings: %s", exc
+            )
 
     @field_validator("lmstudio_base_url", mode="before")
     @classmethod
     def _norm_lmstudio(cls, v: str) -> str:
-        return cls._ensure_v1(v) or v
+        return ensure_v1(v) or v
 
     @field_validator("llamacpp_base_url", mode="before")
     @classmethod
     def _norm_llamacpp(cls, v: str | None) -> str | None:
-        return cls._ensure_v1(v)
+        return ensure_v1(v)
 
     @field_validator("vllm_base_url", mode="before")
     @classmethod
     def _norm_vllm(cls, v: str | None) -> str | None:
-        return cls._ensure_v1(v)
+        return ensure_v1(v)
 
     @computed_field
     @property
@@ -654,13 +627,13 @@ class DocMindSettings(BaseSettings):
             return self.ollama_base_url
         if self.llm_backend == "lmstudio":
             # Prefer explicit OpenAI group when provided
-            return self._ensure_v1(self.openai.base_url or self.lmstudio_base_url)
+            return ensure_v1(self.openai.base_url or self.lmstudio_base_url)
         if self.llm_backend == "vllm":
             # Prefer explicit OpenAI-like endpoint when provided
             base = self.openai.base_url or self.vllm_base_url or self.vllm.vllm_base_url
-            return self._ensure_v1(base)
+            return ensure_v1(base)
         if self.llm_backend == "llamacpp":
-            return self._ensure_v1(self.openai.base_url or self.llamacpp_base_url)
+            return ensure_v1(self.openai.base_url or self.llamacpp_base_url)
         return None
 
     def allow_remote_effective(self) -> bool:
@@ -844,7 +817,11 @@ class DocMindSettings(BaseSettings):
             self.llamacpp_base_url,
         }
         for url in raw_urls:
+<<<<<<< HEAD
             if not _is_allowed(self._ensure_v1(url)):
+=======
+            if not _is_allowed(ensure_v1(url)):
+>>>>>>> 9a2e215 (chore(ui,docs,config): add UI read-only policy display; drop allow-remote legacy; update requirements doc; ruff/pylint/tests)
                 raise ValueError(
                     "Remote endpoints are disabled. Set allow_remote_endpoints=True "
                     "or use localhost URLs."
