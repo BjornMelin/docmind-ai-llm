@@ -27,7 +27,6 @@ Example:
 """
 
 import asyncio
-import contextlib
 import time
 from collections.abc import Callable
 from typing import Any
@@ -42,11 +41,12 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
 
+# Registry utilities
 # Note: tool imports are performed lazily inside _setup_agent_graph to avoid
 # importing heavy dependencies at module import time (improves Streamlit tests
 # that stub LlamaIndex modules).
+from src.agents.registry import DefaultToolRegistry, RetryLLMClient, ToolRegistry
 from src.config import settings
-from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 
 # Import agent-specific models
@@ -123,6 +123,8 @@ class MultiAgentCoordinator:
         backend: str = "vllm",
         enable_fallback: bool = True,
         max_agent_timeout: float = settings.agents.decision_timeout,
+        tool_registry: ToolRegistry | None = None,
+        use_shared_llm_client: bool | None = None,
     ):
         """Initialize multi-agent coordinator.
 
@@ -132,12 +134,23 @@ class MultiAgentCoordinator:
             backend: Model backend ("vllm" recommended)
             enable_fallback: Whether to fallback to basic RAG on agent failure
             max_agent_timeout: Maximum time for agent responses (seconds)
+            tool_registry: Optional tool registry (primarily for testing)
+            use_shared_llm_client: Override for the shared retrying LLM flag
         """
         self.model_path = model_path
         self.max_context_length = max_context_length
         self.backend = backend
         self.enable_fallback = enable_fallback
         self.max_agent_timeout = max_agent_timeout
+
+        self.tool_registry: ToolRegistry = tool_registry or DefaultToolRegistry()
+        if use_shared_llm_client is None:
+            self._use_shared_llm_client = bool(
+                getattr(settings.agents, "use_shared_llm_client", False)
+            )
+        else:
+            self._use_shared_llm_client = use_shared_llm_client
+        self._shared_llm_wrapper: RetryLLMClient | None = None
 
         # vLLM Configuration with unified settings
         env_vars = settings.get_vllm_env_vars()
@@ -193,8 +206,16 @@ class MultiAgentCoordinator:
             from llama_index.core import Settings
 
             if Settings.llm is not None:
-                self.llm = Settings.llm
-                logger.info("LLM initialized from LlamaIndex Settings")
+                base_llm = Settings.llm
+                if self._use_shared_llm_client and not isinstance(
+                    base_llm, RetryLLMClient
+                ):
+                    self._shared_llm_wrapper = RetryLLMClient(base_llm)
+                    self.llm = self._shared_llm_wrapper
+                    logger.info("LLM initialized with shared retry wrapper")
+                else:
+                    self.llm = base_llm
+                    logger.info("LLM initialized from LlamaIndex Settings")
             else:
                 # Raise error if LLM not properly configured
                 raise RuntimeError(
@@ -222,44 +243,44 @@ class MultiAgentCoordinator:
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with agent orchestration."""
         try:
-            # Lazy import tool functions from explicit submodules (no re-exports)
-            from src.agents.tools.planning import plan_query, route_query
-            from src.agents.tools.router_tool import router_tool
-            from src.agents.tools.synthesis import synthesize_results
-            from src.agents.tools.validation import validate_response
+            router_tools = list(self.tool_registry.get_router_tools())
+            planner_tools = list(self.tool_registry.get_planner_tools())
+            retrieval_tools = list(self.tool_registry.get_retrieval_tools())
+            synthesis_tools = list(self.tool_registry.get_synthesis_tools())
+            validation_tools = list(self.tool_registry.get_validation_tools())
 
             # Create individual agents with proper naming and tools
             router_agent = create_react_agent(
                 self.llm,
-                tools=[route_query],
+                tools=router_tools,
                 state_schema=MultiAgentState,
                 name="router_agent",
             )
 
             planner_agent = create_react_agent(
                 self.llm,
-                tools=[plan_query],
+                tools=planner_tools,
                 state_schema=MultiAgentState,
                 name="planner_agent",
             )
 
             retrieval_agent = create_react_agent(
                 self.llm,
-                tools=[router_tool],
+                tools=retrieval_tools,
                 state_schema=MultiAgentState,
                 name="retrieval_agent",
             )
 
             synthesis_agent = create_react_agent(
                 self.llm,
-                tools=[synthesize_results],
+                tools=synthesis_tools,
                 state_schema=MultiAgentState,
                 name="synthesis_agent",
             )
 
             validation_agent = create_react_agent(
                 self.llm,
-                tools=[validate_response],
+                tools=validation_tools,
                 state_schema=MultiAgentState,
                 name="validation_agent",
             )
@@ -451,29 +472,10 @@ class MultiAgentCoordinator:
         return base
 
     def _log_query_analytics(self, latency_s: float, success: bool) -> None:
-        """Best-effort analytics logging helper.
-
-        Wraps AnalyticsManager calls to keep process_query readable and to avoid
-        duplicate code across success and timeout branches.
-        """
-        if not getattr(settings, "analytics_enabled", False):
-            return
-        with contextlib.suppress(Exception):
-            cfg = AnalyticsConfig(
-                enabled=True,
-                db_path=(
-                    settings.analytics_db_path
-                    or (settings.data_dir / "analytics" / "analytics.duckdb")
-                ),
-                retention_days=settings.analytics_retention_days,
-            )
-            am = AnalyticsManager.instance(cfg)
-            am.log_query(
-                query_type="chat",
-                latency_ms=latency_s * 1000.0,
-                result_count=0,
-                retrieval_strategy="hybrid",
-                success=success,
+        """Placeholder analytics hook pending the new observability stack."""
+        if getattr(settings, "analytics_enabled", False):
+            logger.debug(
+                "analytics stub: query latency %.3fs success=%s", latency_s, success
             )
 
     def process_query(
@@ -511,39 +513,9 @@ class MultiAgentCoordinator:
             )
 
         try:
-            # Compose tools_data overrides for agent configuration
-            # NOTE: Use defensive access so tests can patch a lightweight
-            # SimpleNamespace as settings without tripping AttributeError.
-            enable_dspy_opt = getattr(settings, "enable_dspy_optimization", False)
-            enable_graphrag_flag = getattr(settings, "enable_graphrag", False)
-            try:
-                if not enable_graphrag_flag and hasattr(
-                    settings, "get_graphrag_config"
-                ):
-                    gr_cfg = settings.get_graphrag_config()
-                    enable_graphrag_flag = bool(gr_cfg.get("enabled", False))
-            except (AttributeError, TypeError, ValueError):
-                # Best-effort; default to current flag
-                enable_graphrag_flag = bool(enable_graphrag_flag)
-
-            # Retrieval sub-config access guarded to avoid AttributeError in tests
-            try:
-                reranker_normalize = settings.retrieval.reranker_normalize_scores
-                reranking_top_k = settings.retrieval.reranking_top_k
-            except (AttributeError, TypeError, ValueError):
-                reranker_normalize = False
-                reranking_top_k = 0
-
-            defaults: dict[str, Any] = {
-                "enable_dspy": bool(enable_dspy_opt),
-                "enable_graphrag": bool(enable_graphrag_flag),
-                "enable_multimodal": getattr(settings, "enable_multimodal", False),
-                "reranker_normalize_scores": reranker_normalize,
-                "reranking_top_k": reranking_top_k,
-            }
-
-            # Merge caller-provided overrides last (they win)
-            tools_data: dict[str, Any] = {**defaults, **(settings_override or {})}
+            tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
+                settings_override
+            )
 
             # Initialize state with execution parameters
             initial_state = MultiAgentState(
@@ -925,6 +897,9 @@ def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
     max_context_length: int = settings.vllm.context_window,
     enable_fallback: bool = True,
+    *,
+    tool_registry: ToolRegistry | None = None,
+    use_shared_llm_client: bool | None = None,
 ) -> MultiAgentCoordinator:
     """Create multi-agent coordinator.
 
@@ -932,6 +907,8 @@ def create_multi_agent_coordinator(
         model_path: Model path for LLM
         max_context_length: Maximum context in tokens
         enable_fallback: Whether to enable fallback to basic RAG
+        tool_registry: Optional registry override for tool resolution
+        use_shared_llm_client: Override for shared LLM retry wrapper flag
 
     Returns:
         Configured MultiAgentCoordinator instance
@@ -940,4 +917,6 @@ def create_multi_agent_coordinator(
         model_path=model_path,
         max_context_length=max_context_length,
         enable_fallback=enable_fallback,
+        tool_registry=tool_registry,
+        use_shared_llm_client=use_shared_llm_client,
     )

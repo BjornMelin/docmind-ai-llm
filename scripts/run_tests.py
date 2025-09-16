@@ -385,7 +385,7 @@ import importlib
 modules = [
     'src.utils.core', 'src.utils.document', 'src.utils.monitoring',
     'src.agents.coordinator', 'src.agents.tool_factory', 'src.agents.tools',
-    'src.config.settings', 'src.processing.document_processor'
+    'src.config.settings'
 ]
 
 failed = []
