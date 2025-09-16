@@ -817,11 +817,7 @@ class DocMindSettings(BaseSettings):
             self.llamacpp_base_url,
         }
         for url in raw_urls:
-<<<<<<< HEAD
-            if not _is_allowed(self._ensure_v1(url)):
-=======
             if not _is_allowed(ensure_v1(url)):
->>>>>>> 9a2e215 (chore(ui,docs,config): add UI read-only policy display; drop allow-remote legacy; update requirements doc; ruff/pylint/tests)
                 raise ValueError(
                     "Remote endpoints are disabled. Set allow_remote_endpoints=True "
                     "or use localhost URLs."
