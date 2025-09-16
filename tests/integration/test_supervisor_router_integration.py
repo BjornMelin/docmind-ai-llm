@@ -12,6 +12,7 @@ from unittest.mock import patch as _patch
 import pytest
 
 from src.agents.coordinator import MultiAgentCoordinator
+from src.agents.registry import DefaultToolRegistry
 
 # pylint: disable=protected-access
 # Rationale: tests set minimal coordinator internals to avoid heavy setup.
@@ -40,6 +41,7 @@ def test_supervisor_injected_state_router_engine_visible(supervisor_stream_shim)
             coord.enable_fallback = False
             coord.max_agent_timeout = 5
             coord._setup_complete = True
+            coord.tool_registry = DefaultToolRegistry()
             compiled = supervisor_stream_shim.compile()  # type: ignore[attr-defined]
             coord.compiled_graph = compiled
 

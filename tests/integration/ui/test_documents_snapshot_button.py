@@ -7,6 +7,7 @@ button to assert a snapshot success message is shown.
 
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -68,6 +69,12 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     # module execution under AppTest sees deterministic components.
     snap_stub = ModuleType("src.persistence.snapshot")
 
+    class _SnapshotLockTimeoutError(TimeoutError):
+        """Stub timeout raised when a snapshot lock cannot be acquired."""
+
+    snap_stub.SnapshotLockTimeoutError = _SnapshotLockTimeoutError
+    snap_stub.SnapshotLockTimeout = _SnapshotLockTimeoutError
+
     class _SM:
         def __init__(self, storage_dir: str | Path) -> None:
             self.base = Path(storage_dir)
@@ -86,7 +93,17 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
             (tmp / "graph" / "ok").write_text("1", encoding="utf-8")
 
         def write_manifest(self, tmp: Path, **_kwargs) -> None:
-            (tmp / "manifest.json").write_text("{}", encoding="utf-8")
+            payload = json.dumps(
+                {
+                    "corpus_hash": _kwargs.get("corpus_hash", "sha256:0"),
+                    "config_hash": _kwargs.get("config_hash", "sha256:0"),
+                },
+                ensure_ascii=False,
+            )
+            (tmp / "manifest.json").write_text(payload, encoding="utf-8")
+            (tmp / "manifest.meta.json").write_text(payload, encoding="utf-8")
+            (tmp / "manifest.jsonl").write_text("", encoding="utf-8")
+            (tmp / "manifest.checksum").write_text("{}", encoding="utf-8")
 
         def finalize_snapshot(self, tmp: Path) -> Path:
             final = self.base / "20250101T000000"
@@ -132,7 +149,17 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
             (tmp / "graph" / "ok").write_text("1", encoding="utf-8")
 
         def write_manifest(self, tmp: Path, **_kwargs) -> None:
-            (tmp / "manifest.json").write_text("{}", encoding="utf-8")
+            payload = json.dumps(
+                {
+                    "corpus_hash": _kwargs.get("corpus_hash", "sha256:0"),
+                    "config_hash": _kwargs.get("config_hash", "sha256:0"),
+                },
+                ensure_ascii=False,
+            )
+            (tmp / "manifest.json").write_text(payload, encoding="utf-8")
+            (tmp / "manifest.meta.json").write_text(payload, encoding="utf-8")
+            (tmp / "manifest.jsonl").write_text("", encoding="utf-8")
+            (tmp / "manifest.checksum").write_text("{}", encoding="utf-8")
 
         def finalize_snapshot(self, tmp: Path) -> Path:
             # Create a deterministic final directory without relying on rename

@@ -162,6 +162,26 @@ class AgentConfig(BaseModel):
     max_retries: int = Field(default=2, ge=0, le=10)
     max_concurrent_agents: int = Field(default=3, ge=1, le=10)
     enable_fallback_rag: bool = Field(default=True)
+    use_tool_registry: bool = Field(
+        default=True,
+        description=(
+            "Enable the centralized ToolRegistry (Phase 1 supervisor refactor)."
+        ),
+    )
+    use_shared_llm_client: bool = Field(
+        default=True,
+        description=(
+            "Wrap the shared LLM in a retry-aware client for agent workflows."
+        ),
+    )
+    enable_deadline_propagation: bool = Field(
+        default=False,
+        description="Propagate deadlines/cancellation tokens through the graph.",
+    )
+    enable_router_injection: bool = Field(
+        default=False,
+        description="Use injected router engines supplied by the tool registry.",
+    )
 
     # === ADR-011 AGENT CONTEXT MANAGEMENT ===
     context_trim_threshold: int = Field(default=122880, ge=65536, le=131072)
@@ -319,7 +339,7 @@ class CacheConfig(BaseModel):
     enable_document_caching: bool = Field(default=True)
     ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     max_size_mb: int = Field(default=1000, ge=100, le=10000)
-    backend: Literal["duckdb", "memory"] = Field(
+    backend: Literal["duckdb", "sqlite", "memory"] = Field(
         default="duckdb",
         description="Cache backend to use for ingestion artifacts",
     )

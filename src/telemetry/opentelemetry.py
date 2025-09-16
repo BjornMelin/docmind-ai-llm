@@ -16,7 +16,10 @@ from typing import Any
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import (
+    ConsoleMetricExporter,
+    PeriodicExportingMetricReader,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -127,6 +130,8 @@ def _create_span_exporter(app_settings: DocMindSettings):
 
 def _create_metric_exporter(app_settings: DocMindSettings):
     """Instantiate an OTLP metric exporter based on configured protocol."""
+    if app_settings.otel_exporter_endpoint == "console":
+        return ConsoleMetricExporter()
     kwargs = _build_otlp_kwargs(app_settings)
     if app_settings.otel_exporter_protocol == "grpc":
         from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (

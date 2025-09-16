@@ -59,10 +59,11 @@ Hybrid Retrieval Schema (Qdrant Collections):
 
 For GraphRAG and indices requiring consistent reloads, adopt a SnapshotManager:
 
-- Write under `storage/_tmp-<uuid>`; `fsync` and atomically rename to `storage/<timestamp>`
-- Persist vector index via `StorageContext.persist`; persist property graph via `SimpleGraphStore.persist`
-- Write `manifest.json` with `corpus_hash` and `config_hash` for staleness detection; use a lockfile to ensure a single writer
-- Load latest snapshot in Chat and show staleness badge (ADR‑038; SPEC‑014)
+- Write under `storage/_tmp-<uuid>`; `fsync` and atomically rename to `storage/<timestamp>`; readers resolve the `CURRENT` pointer first before falling back to lexicographic ordering.
+- Persist vector index via `StorageContext.persist`; persist property graph via `SimpleGraphStore.persist` and package graph exports under `graph_exports/` with timestamped filenames (`graph_export-YYYYMMDDTHHMMSSZ.*`).
+- Emit tri-file manifests (`manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`); `manifest.meta.json` keeps `complete=false` until promotion succeeds, then flips to `true`. Maintain `manifest.json` as a compatibility alias of the metadata payload.
+- Use a bounded `SnapshotLock` (`.lock` + JSON metadata) with stale-lock eviction logging and surfaced timeout messaging; telemetry captures export operations and stale-snapshot detection for observability.
+- Load latest snapshot in Chat (ADR‑038; SPEC‑014) using the pointer and staleness digests for badge display.
 
 ## High-Level Architecture
 
@@ -159,6 +160,7 @@ def test_cache_roundtrip(cache):
 
 ## Changelog
 
+- 1.3 (2025-09-16): Documented tri-file manifest layout, `complete` flag semantics, CURRENT pointer resolution, timestamped graph exports, and telemetry expectations.
 - 1.2 (2025-09-09): Added SnapshotManager and manifest hashing for GraphRAG; linked ADR‑038/SPEC‑014
 - **1.1 (2025-09-03)**: DOCS - Added Related Decisions note referencing ADR-035 (application-level semantic cache)
 - **1.0 (2025-09-02)**: Initial accepted version.

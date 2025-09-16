@@ -20,10 +20,13 @@ Define atomic, versioned snapshot persistence for indices and the property graph
 ```text
 storage/
   _tmp-<uuid>/
-    vector/           # StorageContext.persist output for vector index(es)
-    graph/            # SimpleGraphStore JSON persisted file(s)
-    manifest.json     # Snapshot manifest (see schema)
-  <timestamp>/        # Finalized snapshot (atomic rename from _tmp)
+    vector/            # StorageContext.persist output for vector index(es)
+    graph/             # SimpleGraphStore JSON persisted file(s)
+    manifest.jsonl     # Line-delimited entries for payload files (path + hash)
+    manifest.meta.json # Manifest metadata (schema below, complete=false while staging)
+    manifest.checksum  # Aggregate digest covering entries + metadata
+  <timestamp>/         # Finalized snapshot (atomic rename from _tmp)
+  CURRENT              # Pointer file referencing the active snapshot directory
 ```
 
 ## Manifest Schema
@@ -36,8 +39,8 @@ storage/
   "corpus_hash": "sha256:...",
   "config_hash": "sha256:...",
   "created_at": "YYYY-MM-DDTHH:MM:SSZ",
-  "schema_version": "1",
-  "persist_format_version": "1",
+  "schema_version": "1.0",
+  "persist_format_version": "1.0",
   "complete": true,
   "versions": {
     "app": "x.y.z",
@@ -48,6 +51,10 @@ storage/
 }
 ```
 
+- `manifest.jsonl` contains one JSON object per payload file with `path`, `sha256`, `size_bytes`, and `content_type` fields.
+- `manifest.meta.json` is written alongside the JSONL entries with `complete=false` while the workspace is still staged and flipped to `true` immediately after the atomic rename succeeds.
+- `manifest.checksum` stores `{schema_version, created_at, manifest_sha256}` where the digest covers the sorted line hashes plus the full metadata payload.
+
 ## Hashing Rules
 
 - corpus_hash: stable SHA‑256 over sorted list of `(relative_path, size, mtime_ns)` for ingested files
@@ -55,8 +62,9 @@ storage/
 
 ## Atomicity & Locking
 
-- Write all artifacts under `storage/_tmp-<uuid>` and `fsync` + atomic rename to `storage/<timestamp>`
-- Create a `storage/.lock` file (e.g., `filelock`) around snapshot creation; timeout raises a friendly error in UI
+- Write all artifacts under `storage/_tmp-<uuid>` and `fsync` + atomic rename to `storage/<timestamp>`.
+- Create a `storage/.lock` file (e.g., `filelock`) around snapshot creation; timeout raises a friendly error in UI.
+- Update `CURRENT.tmp` → `CURRENT` via atomic rename. Readers MUST resolve the pointer first and only fall back to lexicographic ordering when `CURRENT` is missing.
 
 ## UI Integration
 
@@ -87,7 +95,8 @@ Feature: Atomic snapshots with manifest
 Manifest Enrichment
 
 - Include fields: `schema_version`, `persist_format_version`, and `versions` (keys: `app`, `llama_index`, `qdrant_client`, `embed_model`).
-- Set `complete=true` after all files are written; use atomic tmp→rename to publish.
+- Write `manifest.jsonl`, `manifest.meta.json`, and `manifest.checksum` together; retain `manifest.json` only as a compatibility alias of the metadata payload.
+- Set `complete=true` immediately after the workspace renames into its immutable directory; prior to rename the field SHALL remain `false`.
 
 Relpath Hashing
 
@@ -125,5 +134,5 @@ Relpath Hashing
 
 - Documents page MUST provide:
   - Rebuild button (lock‑aware) and current snapshot path display.
-  - Exports section (JSONL baseline; Parquet optional with `pyarrow`) and seed cap display.
+  - Exports section (JSONL baseline; Parquet optional with `pyarrow`) and seed cap display. Export artifacts MUST be timestamped using `graph_export-YYYYMMDDTHHMMSSZ.*` naming, stored inside each snapshot under `graph_exports/`, and emit telemetry events recording destination paths and seed counts.
 - Chat page MUST show the staleness badge and tooltip per UI Staleness Badge above.

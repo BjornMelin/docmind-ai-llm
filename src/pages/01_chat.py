@@ -10,6 +10,7 @@ writing the response in small chunks to the UI for better perceived latency.
 from __future__ import annotations
 
 import contextlib
+import json
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -109,26 +110,20 @@ def main() -> None:  # pragma: no cover - Streamlit page
     try:
         storage_dir = settings.data_dir / "storage"
         if storage_dir.exists():
-            snaps = sorted(
-                [
-                    p
-                    for p in storage_dir.iterdir()
-                    if p.is_dir() and not p.name.startswith("_tmp-")
-                ]
-            )
-            if snaps:
-                latest = snaps[-1]
-                manifest_path = latest / "manifest.json"
-                if manifest_path.exists():
-                    manifest = manifest_path.read_text(encoding="utf-8")
-                    import json as _json
-
-                    data = _json.loads(manifest)
-                    # Compute staleness and render message
+            latest = latest_snapshot_dir(storage_dir)
+            if latest is not None:
+                manifest_data = load_manifest(latest, base_dir=storage_dir)
+                if manifest_data is None:
+                    legacy_path = latest / "manifest.json"
+                    if legacy_path.exists():
+                        manifest_data = json.loads(
+                            legacy_path.read_text(encoding="utf-8")
+                        )
+                if manifest_data:
                     uploads_dir = settings.data_dir / "uploads"
                     corpus_paths = _collect_corpus_paths(uploads_dir)
                     cfg = _current_config_dict()
-                    if compute_staleness(data, corpus_paths, cfg):
+                    if compute_staleness(manifest_data, corpus_paths, cfg):
                         st.warning(STALE_TOOLTIP)
                         with st.sidebar:
                             st.caption("Snapshot stale: content or config changed.")

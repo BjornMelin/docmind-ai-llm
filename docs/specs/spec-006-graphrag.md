@@ -83,4 +83,4 @@ Feature: GraphRAG with Router and Persistence
 - JSONL export is REQUIRED as the baseline; Parquet export is OPTIONAL and only available when `pyarrow` is installed.
 - Seed selection MUST be deterministic, de‑duplicated, and capped at 32 items.
   - Seeds MAY be derived from ingested documents (e.g., unique `page_id`s) or from a top‑K pass via the retriever.
-- Export file naming MUST be stable and include a timestamp and format suffix (e.g., `graph_export-YYYYMMDD-HHMMSS.jsonl`).
+- Export file naming MUST be stable and include a Zulu timestamp and format suffix (e.g., `graph_export-YYYYMMDDTHHMMSSZ.jsonl`) written inside each snapshot's `graph_exports/` directory. Successful exports SHALL emit telemetry events capturing export type, destination, seed count, and context (`manual` vs `snapshot`).

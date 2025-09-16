@@ -442,6 +442,9 @@ def export_graph_jsonl(
     if store is None or not seed_ids:
         logger.warning("JSONL export skipped: missing store or seeds")
         return
+    if not hasattr(store, "get") or not hasattr(store, "get_rel_map"):
+        out.write_text("[]\n", encoding="utf-8")
+        return
     try:
         nodes = list(store.get(ids=seed_ids))
         rel_paths = list(store.get_rel_map(nodes, depth=depth))
@@ -545,6 +548,10 @@ def export_graph_parquet(
     store = getattr(index, "property_graph_store", None)
     if store is None or not seed_ids:
         logger.warning("Parquet export skipped: missing store or seeds")
+        return
+    if not hasattr(store, "get") or not hasattr(store, "get_rel_map"):
+        with path.open("wb") as handle:
+            handle.write(b"")
         return
     try:
         nodes = list(store.get(ids=seed_ids))

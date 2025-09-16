@@ -72,6 +72,10 @@ class MockAgentConfig(AgentConfig):
     chat_memory_limit_tokens: int = Field(
         default=32768, ge=32768, le=98304
     )  # Use minimum allowed
+    use_tool_registry: bool = Field(default=True)
+    use_shared_llm_client: bool = Field(default=True)
+    enable_deadline_propagation: bool = Field(default=False)
+    enable_router_injection: bool = Field(default=False)
 
 
 class MockEmbeddingConfig(EmbeddingConfig):
