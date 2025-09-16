@@ -1,107 +1,165 @@
-"""Processing-specific Pydantic models for DocMind AI Document Processing Pipeline.
+"""Canonical ingestion models for the DocMind pipeline.
 
-This module contains data models specifically designed for the document processing
-pipeline, following requirements for direct Unstructured.io integration,
-semantic chunking, and BGE-M3 embeddings.
-
-Models:
-    ProcessingStrategy: Enum for document processing strategies
-    DocumentElement: Structured representation of unstructured.io elements
-    ProcessingResult: Result of document processing operations
-    ProcessingError: Custom exception for processing errors
+These Pydantic models describe the configuration, input payloads, and
+normalized outputs for the upcoming LlamaIndex-first ingestion system. They
+replace the legacy Unstructured-specific models that previously existed in
+this module.
 """
 
-import hashlib
-from enum import Enum
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, model_validator
 
 
-class ProcessingStrategy(str, Enum):
-    """Processing strategies for different document types."""
+class IngestionConfig(BaseModel):
+    """Declarative configuration for building the ingestion pipeline."""
 
-    HI_RES = "hi_res"
-    FAST = "fast"
-    OCR_ONLY = "ocr_only"
-
-
-class HashBundleModel(BaseModel):
-    """Serialized representation of canonical hashing bundle."""
-
-    raw_sha256: str = Field(description="SHA-256 digest of raw file bytes")
-    canonical_hmac_sha256: str = Field(
-        description="HMAC-SHA-256 digest of canonical payload"
+    chunk_size: int = Field(default=1024, ge=1, description="Maximum tokens per node")
+    chunk_overlap: int = Field(
+        default=100,
+        ge=0,
+        description="Tokens of overlap between contiguous nodes",
     )
-    canonicalization_version: str = Field(description="Canonicalisation version")
-    hmac_secret_version: str = Field(description="HMAC secret version identifier")
+    enable_image_encryption: bool = Field(
+        default=False,
+        description="Encrypt rendered page images with AES-GCM when true",
+    )
+    cache_dir: Path | None = Field(
+        default=None, description="Optional directory for LlamaIndex cache"
+    )
+    cache_collection: str = Field(
+        default="docmind_ingestion", description="Namespace for cache storage"
+    )
+    docstore_path: Path | None = Field(
+        default=None, description="Optional filesystem docstore location"
+    )
+    enable_observability: bool = Field(
+        default=False, description="Enable OpenTelemetry tracing/metrics"
+    )
+    observability_sample_rate: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Sampling probability for telemetry events",
+    )
+    span_exporter_endpoint: str | None = Field(
+        default=None,
+        description="OTLP endpoint used when observability is enabled",
+    )
+
+    @model_validator(mode="after")
+    def _validate(cls, values: IngestionConfig) -> IngestionConfig:  # noqa: N805  # pylint: disable=no-self-argument
+        """Ensure overlap < chunk size and observability fields are consistent."""
+        if values.chunk_overlap >= values.chunk_size:
+            msg = "chunk_overlap must be strictly less than chunk_size"
+            raise ValueError(msg)
+        if values.enable_observability and not values.span_exporter_endpoint:
+            msg = "span_exporter_endpoint required when observability is enabled"
+            raise ValueError(msg)
+        return values
 
 
-class DocumentElement(BaseModel):
-    """Structured representation of a document element from unstructured.io."""
+class IngestionInput(BaseModel):
+    """Normalized ingestion payload.
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    Exactly one of ``source_path`` or ``payload_bytes`` must be provided.
+    """
 
-    text: str = Field(description="Element text content")
-    category: str = Field(
-        description="Element category (Title, NarrativeText, Table, Image, etc.)"
+    document_id: str = Field(..., min_length=1, description="Stable document ID")
+    source_path: Path | None = Field(
+        default=None, description="Path to the document on disk"
+    )
+    payload_bytes: bytes | None = Field(
+        default=None, description="In-memory document payload"
     )
     metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Complete element metadata"
+        default_factory=dict, description="Arbitrary metadata for the document"
+    )
+    encrypt_images: bool = Field(
+        default=False, description="Override to force page-image encryption"
     )
 
+    @model_validator(mode="after")
+    def _validate_payload(cls, values: IngestionInput) -> IngestionInput:  # noqa: N805  # pylint: disable=no-self-argument
+        """Validate mutual exclusivity of payload fields and normalise paths."""
+        has_path = values.source_path is not None
+        has_bytes = values.payload_bytes is not None
+        if has_path == has_bytes:
+            msg = "Provide exactly one of source_path or payload_bytes"
+            raise ValueError(msg)
+        if values.source_path is not None:
+            values.source_path = values.source_path.expanduser()
+        return values
 
-class ProcessingResult(BaseModel):
-    """Result of document processing operation."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class ExportArtifact(BaseModel):
+    """Metadata describing an exported artifact (manifest entry, graph, etc.)."""
 
-    elements: list[DocumentElement] = Field(description="Processed document elements")
-    processing_time: float = Field(description="Processing time in seconds")
-    strategy_used: ProcessingStrategy = Field(description="Processing strategy applied")
+    name: str = Field(..., min_length=1, description="Human-readable artifact name")
+    path: Path = Field(..., description="Filesystem path to the artifact")
+    content_type: str = Field(
+        default="application/octet-stream",
+        description="MIME type of the artifact on disk",
+    )
+    size_bytes: int | None = Field(
+        default=None, ge=0, description="Size of the artifact, if known"
+    )
     metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Processing metadata"
-    )
-    document_hash: str = Field(
-        description="Canonical HMAC digest used as the primary document ID"
-    )
-    legacy_document_hash: str | None = Field(
-        default=None,
-        description="Legacy raw SHA-256 digest retained for migration/shadowing",
-    )
-    document_hash_bundle: HashBundleModel | None = Field(
-        default=None,
-        description="Full hashing bundle capturing canonical and legacy digests",
+        default_factory=dict, description="Additional exporter metadata"
     )
 
-    @classmethod
-    def create_hash_for_document(cls, file_path: str | Path) -> str:
-        """Calculate unique hash for document caching.
-
-        Args:
-            file_path: Path to the document file
-
-        Returns:
-            SHA-256 hash string of file content and metadata
-        """
-        file_path = Path(file_path)
-
-        # Hash file content + metadata for cache key
-        hasher = hashlib.sha256()
-
-        # Include file content
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                hasher.update(chunk)
-
-        # Include file metadata
-        stat = file_path.stat()
-        metadata = f"{file_path.name}:{stat.st_size}:{stat.st_mtime}".encode()
-        hasher.update(metadata)
-
-        return hasher.hexdigest()
+    @model_validator(mode="after")
+    def _resolve_path(cls, values: ExportArtifact) -> ExportArtifact:  # noqa: N805  # pylint: disable=no-self-argument
+        """Ensure ``path`` is always stored as a resolved ``Path`` instance."""
+        values.path = Path(values.path)
+        return values
 
 
-class ProcessingError(Exception):
-    """Custom exception for document processing errors."""
+class ManifestSummary(BaseModel):
+    """Summary of the snapshot manifest emitted by the ingestion pipeline."""
+
+    corpus_hash: str = Field(..., min_length=8, description="Hash of source corpus")
+    config_hash: str = Field(..., min_length=8, description="Hash of pipeline config")
+    payload_count: int = Field(..., ge=0, description="Number of payload files")
+    checksum: str | None = Field(
+        default=None, description="Optional checksum covering manifest lines"
+    )
+    complete: bool = Field(
+        default=False, description="Whether the manifest is marked complete"
+    )
+
+
+class IngestionResult(BaseModel):
+    """Structured output from a pipeline execution."""
+
+    nodes: list[Any] = Field(
+        default_factory=list, description="LlamaIndex nodes yielded by ingestion"
+    )
+    manifest: ManifestSummary = Field(
+        ..., description="Summary of the manifest written during ingestion"
+    )
+    exports: list[ExportArtifact] = Field(
+        default_factory=list, description="Artifacts emitted alongside the nodes"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Extra execution metadata"
+    )
+    duration_ms: float = Field(
+        default=0.0, ge=0.0, description="Total ingestion time in milliseconds"
+    )
+
+    def has_exports(self) -> bool:
+        """Return ``True`` when one or more export artifacts are present."""
+        return bool(self.exports)
+
+
+__all__ = [
+    "ExportArtifact",
+    "IngestionConfig",
+    "IngestionInput",
+    "IngestionResult",
+    "ManifestSummary",
+]
