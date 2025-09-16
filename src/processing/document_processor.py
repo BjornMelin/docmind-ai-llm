@@ -39,6 +39,7 @@ from src.config.settings import settings as app_settings
 from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 from src.processing.cache_manager import CacheManager, build_cache_settings
+from src.processing.ocr_controller import OcrController, OcrDecision, OcrFeatures
 from src.processing.pipeline_builder import PipelineBuilder
 from src.processing.utils import is_unstructured_like, sha256_id
 from src.utils.canonicalization import (
@@ -452,6 +453,7 @@ class DocumentProcessor:
         cache_settings = build_cache_settings(self.settings)
         self._cache_settings = cache_settings
         self._cache_manager = CacheManager(cache_settings)
+        self.ocr_controller = OcrController()
 
         # Document store for document management and deduplication
         self.docstore = SimpleDocumentStore()
@@ -482,31 +484,30 @@ class DocumentProcessor:
         """Return the default Unstructured transformation list."""
         return [UnstructuredTransformation(strategy, self.settings)]
 
-    def _get_strategy_for_file(self, file_path: str | Path) -> ProcessingStrategy:
-        """Determine processing strategy based on file extension.
+    def _decide_ocr_strategy(self, file_path: Path) -> OcrDecision:
+        """Return an OCR decision for ``file_path``."""
 
-        Args:
-            file_path: Path to the document file
+        features = self._build_ocr_features(file_path)
+        decision = self.ocr_controller.decide(features)
+        logger.debug(
+            "OCR decision %s for file %s with details %s",
+            decision.reason_code,
+            file_path,
+            decision.details,
+        )
+        return decision
 
-        Returns:
-            ProcessingStrategy enum value
+    def _build_ocr_features(self, file_path: Path) -> OcrFeatures:
+        """Construct :class:`OcrFeatures` for the controller."""
 
-        Raises:
-            ValueError: If file extension is not supported
-        """
-        file_path = Path(file_path)
-        extension = file_path.suffix.lower()
-
-        if extension not in self.strategy_map:
-            supported_extensions = ", ".join(sorted(self.strategy_map.keys()))
-            raise ValueError(
-                f"Unsupported file format '{extension}'. "
-                f"Supported formats: {supported_extensions}"
-            )
-
-        strategy = self.strategy_map[extension]
-        logger.debug("Selected strategy '{}' for file: {}", strategy, file_path)
-        return strategy
+        mime_type, _ = guess_type(str(file_path))
+        stat = file_path.stat()
+        return OcrFeatures(
+            file_path=file_path,
+            mime_type=mime_type,
+            extension=file_path.suffix.lower(),
+            size_bytes=stat.st_size,
+        )
 
     def _get_max_document_size_mb(self) -> int:
         """Resolve max document size from settings (nested preferred).
@@ -530,18 +531,24 @@ class DocumentProcessor:
         return 100
 
     def get_strategy_for_file(self, file_path: str | Path) -> ProcessingStrategy:
-        """Get processing strategy based on file extension.
+        """Return the processing strategy selected by the OCR controller.
 
         Args:
             file_path: Path to the document file.
 
         Returns:
             ProcessingStrategy: Chosen strategy.
-
-        Raises:
-            ValueError: If file extension is not supported.
         """
-        return self._get_strategy_for_file(file_path)
+        extension = Path(file_path).suffix.lower()
+        if extension not in self.strategy_map:
+            supported_extensions = ", ".join(sorted(self.strategy_map.keys()))
+            raise ValueError(
+                f"Unsupported file format '{extension}'. "
+                f"Supported formats: {supported_extensions}"
+            )
+
+        decision = self._decide_ocr_strategy(Path(file_path))
+        return decision.strategy
 
     def _compute_document_hashes(self, file_path: str | Path) -> HashBundle:
         """Compute deterministic hashes for a document.
@@ -683,8 +690,8 @@ class DocumentProcessor:
             )
 
         try:
-            # Determine processing strategy
-            strategy = self._get_strategy_for_file(file_path)
+            decision = self._decide_ocr_strategy(file_path)
+            strategy = decision.strategy
 
             # Calculate deterministic hashes up front so the ingestion cache and
             # docstore can re-use results across repeated runs. Shadow legacy
@@ -795,6 +802,8 @@ class DocumentProcessor:
                         "hits": getattr(pipeline.cache, "hits", 0),
                         "misses": getattr(pipeline.cache, "misses", 0),
                     },
+                    "ocr_decision": decision.reason_code,
+                    "ocr_details": decision.details,
                 },
                 document_hash=document_hash,
                 legacy_document_hash=hash_bundle.raw_sha256,
