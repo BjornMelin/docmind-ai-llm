@@ -731,7 +731,7 @@ class DocMindSettings(BaseSettings):
             "normalize_image": self.embedding.normalize_image,
             # Misc
             "embed_device": self.embedding.embed_device,
-            "trust_remote_code": False,
+            "trust_remote_code": bool(self.security.trust_remote_code),
         }
 
     def get_graphrag_config(self) -> dict[str, Any]:
