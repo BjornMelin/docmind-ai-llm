@@ -75,6 +75,9 @@ dependencies = [
     # Analytics & Visualization
     "pandas>=2.2,<3.0",                 # DataFrames (required by DuckDB .df())
     "plotly>=5.22,<6.0",                # Streamlit charts (px/go)
+    # Observability
+    "opentelemetry-sdk>=1.28.2",         # OTEL tracing/metrics SDK
+    "opentelemetry-exporter-otlp>=1.28.2", # OTLP exporters for traces/metrics
     # Testing Support (runtime-level perf/property tests if invoked)
     "pytest-benchmark>=5.1.0",           # Benchmark harness
     "hypothesis>=6.137.2",               # Property-based tests

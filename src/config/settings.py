@@ -391,6 +391,26 @@ class GraphRAGConfig(BaseModel):
     )
 
 
+class SnapshotConfig(BaseModel):
+    """Snapshot manager configuration."""
+
+    lock_timeout_seconds: float = Field(
+        default=10.0, ge=0.5, le=300.0, description="Lock acquisition timeout"
+    )
+    lock_ttl_seconds: float = Field(
+        default=30.0, ge=5.0, le=600.0, description="Lease TTL for metadata"
+    )
+    retention_count: int = Field(
+        default=5, ge=1, le=100, description="Snapshots to retain during GC"
+    )
+    gc_grace_seconds: int = Field(
+        default=86_400,
+        ge=0,
+        le=604_800,
+        description="Grace period before deleting old snapshots",
+    )
+
+
 class UIConfig(BaseModel):
     """User interface configuration."""
 
@@ -616,6 +636,7 @@ class DocMindSettings(BaseSettings):
     chat: ChatConfig = Field(default_factory=ChatConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+    snapshots: SnapshotConfig = Field(default_factory=SnapshotConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     hybrid: HybridConfig = Field(default_factory=HybridConfig)
 
