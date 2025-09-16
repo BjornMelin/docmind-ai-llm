@@ -7,6 +7,8 @@ Unstructured chunkers with deterministic settings.
 
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -14,6 +16,7 @@ from hypothesis import HealthCheck, assume, given
 from hypothesis import settings as hy_settings
 from hypothesis import strategies as st
 
+from src.config.settings import HashingConfig
 from src.models.processing import ProcessingStrategy
 from src.processing.document_processor import DocumentProcessor
 
@@ -28,24 +31,32 @@ def _mk_settings(
 ):
     """Create mock settings object for testing."""
     s = Mock()
+    s.processing = Mock()
     s.processing.chunk_size = chunk_size
     s.processing.new_after_n_chars = new_after
     s.processing.combine_text_under_n_chars = combine_under
     s.processing.multipage_sections = multipage
     s.processing.pipeline_version = "test"
     s.max_document_size_mb = max_mb
-    s.cache_dir = "./cache"
-    s.hashing.canonicalization_version = "1"
-    s.hashing.hmac_secret = "unit-secret"
-    s.hashing.hmac_secret_version = "1"
-    s.hashing.metadata_keys = [
-        "content_type",
-        "language",
-        "source",
-        "source_path",
-        "tenant_id",
-        "size_bytes",
-    ]
+    s.cache = SimpleNamespace(
+        backend="memory",
+        dir=Path("./cache"),
+        filename="cache.duckdb",
+    )
+    s.cache_version = "1"
+    s.hashing = HashingConfig().model_copy(
+        update={
+            "metadata_keys": [
+                "content_type",
+                "language",
+                "source",
+                "source_path",
+                "tenant_id",
+                "size_bytes",
+            ]
+        }
+    )
+    s.tenant_id = None
     return s
 
 

@@ -19,7 +19,7 @@ from llama_index.core.storage.docstore import BaseDocumentStore
 from src.models.processing import ProcessingStrategy
 
 TransformFactory = Callable[[ProcessingStrategy], Iterable[TransformComponent]]
-CacheFactory = Callable[[], IngestionCache | None]
+CacheFactory = Callable[[ProcessingStrategy], IngestionCache | None]
 DocstoreFactory = Callable[[], BaseDocumentStore | None]
 
 
@@ -30,10 +30,21 @@ class PipelineBuilder:
         self,
         *,
         transform_factories: Sequence[TransformFactory],
-        cache_factory: CacheFactory,
+        cache_factory: CacheFactory | None,
         docstore_factory: DocstoreFactory,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        """Store factories that assemble ingestion pipelines.
+
+        Args:
+            transform_factories: Ordered callables that provide transforms for a
+                given processing strategy.
+            cache_factory: Factory returning an ingestion cache instance or
+                ``None`` when caching is disabled.
+            docstore_factory: Factory returning a document store instance or
+                ``None`` when persistence is disabled.
+            metadata: Optional metadata annotated onto constructed pipelines.
+        """
         self._transform_factories = list(transform_factories)
         self._cache_factory = cache_factory
         self._docstore_factory = docstore_factory
@@ -52,7 +63,7 @@ class PipelineBuilder:
         for factory in self._transform_factories:
             transformations.extend(list(factory(strategy)))
 
-        cache = self._cache_factory()
+        cache = self._cache_factory(strategy) if self._cache_factory else None
         docstore = self._docstore_factory()
 
         pipeline = IngestionPipeline(

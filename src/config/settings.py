@@ -319,6 +319,10 @@ class CacheConfig(BaseModel):
     enable_document_caching: bool = Field(default=True)
     ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     max_size_mb: int = Field(default=1000, ge=100, le=10000)
+    backend: Literal["duckdb", "memory"] = Field(
+        default="duckdb",
+        description="Cache backend to use for ingestion artifacts",
+    )
     # Path configuration for DuckDB KV store
     dir: Path = Field(default=Path("./cache"))
     filename: str = Field(default="docmind.duckdb")
@@ -478,9 +482,40 @@ class DocMindSettings(BaseSettings):
             "Optional override path; default is data_dir/analytics/analytics.duckdb"
         ),
     )
-    telemetry_enabled: bool = Field(
-        default=True,
-        description="Enable local telemetry emission (writes to logs/telemetry.jsonl)",
+
+    # Observability / OpenTelemetry
+    otel_enabled: bool = Field(
+        default=False,
+        description="Enable OpenTelemetry tracing and metrics exporters.",
+    )
+    otel_service_name: str = Field(
+        default="docmind-agents",
+        description="service.name resource attribute for OpenTelemetry exporters.",
+    )
+    otel_exporter_endpoint: str | None = Field(
+        default=None,
+        description=(
+            "Optional OTLP endpoint override. If unset, exporter defaults are used."
+        ),
+    )
+    otel_exporter_protocol: Literal["grpc", "http/protobuf"] = Field(
+        default="http/protobuf",
+        description="OTLP transport protocol to use for tracing/metrics exporters.",
+    )
+    otel_exporter_headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional OTLP headers (e.g., authentication tokens).",
+    )
+    otel_sampling_ratio: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Trace sampling ratio (0 disables, 1 samples all traces).",
+    )
+    otel_metrics_interval_ms: int = Field(
+        default=60000,
+        ge=1000,
+        description="Periodic metrics export interval in milliseconds.",
     )
 
     # Backup (ADR-033)

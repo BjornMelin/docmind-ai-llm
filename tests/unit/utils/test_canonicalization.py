@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from src.config.settings import HashingConfig
 from src.utils.canonicalization import (
     CanonicalizationConfig,
     canonicalize_document,
@@ -15,11 +16,14 @@ from src.utils.canonicalization import (
 
 @pytest.fixture
 def canonical_config() -> CanonicalizationConfig:
-    secret = os.environ.get("DOCMIND_HASH_SECRET", "unit-test-secret").encode("utf-8")
+    hashing_defaults = HashingConfig()
+    secret = os.environ.get("DOCMIND_HASH_SECRET", hashing_defaults.hmac_secret).encode(
+        "utf-8"
+    )
     return CanonicalizationConfig(
-        version="1",
+        version=hashing_defaults.canonicalization_version,
         hmac_secret=secret,
-        hmac_secret_version="1",
+        hmac_secret_version=hashing_defaults.hmac_secret_version,
         metadata_keys=("content_type", "language", "tenant_id", "source"),
     )
 

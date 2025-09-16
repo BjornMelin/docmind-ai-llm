@@ -12,6 +12,8 @@ from typing import Any
 
 import pytest
 
+from src.config.settings import HashingConfig
+
 
 @pytest.mark.unit
 def test_round_trip_elements_to_nodes_and_back(monkeypatch, tmp_path) -> None:
@@ -83,21 +85,26 @@ def test_round_trip_elements_to_nodes_and_back(monkeypatch, tmp_path) -> None:
     assert node.metadata.get("processing_strategy") == processing_strategy_cls.FAST
 
     # Convert nodes -> elements
-    simple_hashing = SimpleNamespace(
-        canonicalization_version="1",
-        hmac_secret="unit-secret",
-        hmac_secret_version="1",
-        metadata_keys=[
-            "content_type",
-            "language",
-            "source",
-            "source_path",
-            "tenant_id",
-            "size_bytes",
-        ],
+    cache = SimpleNamespace(backend="memory", dir=tmp_path, filename="cache.duckdb")
+    hashing = HashingConfig().model_copy(
+        update={
+            "metadata_keys": [
+                "content_type",
+                "language",
+                "source",
+                "source_path",
+                "tenant_id",
+                "size_bytes",
+            ]
+        }
     )
     proc = dmod.DocumentProcessor(
-        settings=SimpleNamespace(cache_dir=str(tmp_path), hashing=simple_hashing)
+        settings=SimpleNamespace(
+            cache=cache,
+            hashing=hashing,
+            cache_version="1",
+            processing=SimpleNamespace(pipeline_version="test"),
+        )
     )
     out_elements: list[Any] = proc._convert_nodes_to_elements(nodes)  # pylint: disable=protected-access
 

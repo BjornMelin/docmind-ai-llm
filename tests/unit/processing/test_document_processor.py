@@ -10,11 +10,14 @@ hashing behavior where no public seam exists yet.
 
 # pylint: disable=protected-access
 
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from llama_index.core import Document
 
+from src.config.settings import HashingConfig
 from src.models.processing import (
     DocumentElement,
     ProcessingError,
@@ -31,22 +34,30 @@ from src.processing.document_processor import (
 def mock_settings():
     """Mock DocMind settings for testing."""
     mock_settings = Mock()
+    mock_settings.processing = Mock()
     mock_settings.processing.chunk_size = 1000
     mock_settings.processing.chunk_overlap = 100
     mock_settings.processing.pipeline_version = "test"
-    mock_settings.cache_dir = "./test_cache"
+    mock_settings.cache = SimpleNamespace(
+        backend="memory",
+        dir=Path("./test_cache"),
+        filename="cache.duckdb",
+    )
+    mock_settings.cache_version = "1"
     mock_settings.max_document_size_mb = 50
-    mock_settings.hashing.canonicalization_version = "1"
-    mock_settings.hashing.hmac_secret = "unit-secret"
-    mock_settings.hashing.hmac_secret_version = "1"
-    mock_settings.hashing.metadata_keys = [
-        "content_type",
-        "language",
-        "source",
-        "source_path",
-        "tenant_id",
-        "size_bytes",
-    ]
+    mock_settings.hashing = HashingConfig().model_copy(
+        update={
+            "metadata_keys": [
+                "content_type",
+                "language",
+                "source",
+                "source_path",
+                "tenant_id",
+                "size_bytes",
+            ]
+        }
+    )
+    mock_settings.tenant_id = None
     return mock_settings
 
 

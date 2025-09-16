@@ -20,10 +20,9 @@ from mimetypes import guess_type
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from llama_index.core.ingestion import IngestionCache, IngestionPipeline
+from llama_index.core.ingestion import IngestionPipeline
 from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.core.storage.docstore import SimpleDocumentStore
-from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 from loguru import logger
 from tenacity import (
     retry,
@@ -35,9 +34,11 @@ from unstructured.chunking.basic import chunk_elements as chunk_by_basic
 from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.auto import partition
 
+from src.config.settings import HashingConfig
 from src.config.settings import settings as app_settings
 from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
+from src.processing.cache_manager import CacheManager, build_cache_settings
 from src.processing.pipeline_builder import PipelineBuilder
 from src.processing.utils import is_unstructured_like, sha256_id
 from src.utils.canonicalization import (
@@ -448,12 +449,9 @@ class DocumentProcessor:
             ".bmp": ProcessingStrategy.OCR_ONLY,
         }
 
-        # Initialize DuckDB-backed cache for LlamaIndex IngestionPipeline
-        cache_dir = Path(getattr(self.settings, "cache_dir", "./cache"))
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_db = cache_dir / "docmind.duckdb"
-        kv = DuckDBKVStore(db_path=str(cache_db))
-        self.cache = IngestionCache(cache=kv, collection="docmind_processing")
+        cache_settings = build_cache_settings(self.settings)
+        self._cache_settings = cache_settings
+        self._cache_manager = CacheManager(cache_settings)
 
         # Document store for document management and deduplication
         self.docstore = SimpleDocumentStore()
@@ -468,7 +466,7 @@ class DocumentProcessor:
 
         self.pipeline_builder = PipelineBuilder(
             transform_factories=[self._build_unstructured_transformation],
-            cache_factory=lambda: self.cache,
+            cache_factory=self._cache_manager.build_cache,
             docstore_factory=lambda: self.docstore,
             metadata=pipeline_metadata,
         )
@@ -570,20 +568,18 @@ class DocumentProcessor:
 
         hashing_settings = getattr(self.settings, "hashing", None)
         if hashing_settings is None:
-            # Fallback for legacy tests/settings that have not yet wired hashing
-            # configuration. Defaults are intentionally deterministic.
-            hashing_settings = type("_Hashing", (), {})()
-            hashing_settings.canonicalization_version = "1"
-            hashing_settings.hmac_secret = "docmind-dev-secret"
-            hashing_settings.hmac_secret_version = "1"
-            hashing_settings.metadata_keys = [
-                "content_type",
-                "language",
-                "source",
-                "source_path",
-                "tenant_id",
-                "size_bytes",
-            ]
+            hashing_settings = HashingConfig().model_copy(
+                update={
+                    "metadata_keys": [
+                        "content_type",
+                        "language",
+                        "source",
+                        "source_path",
+                        "tenant_id",
+                        "size_bytes",
+                    ]
+                }
+            )
 
         config = CanonicalizationConfig(
             version=getattr(hashing_settings, "canonicalization_version", "1"),
@@ -631,9 +627,17 @@ class DocumentProcessor:
         try:
             return self.pipeline_builder.build(strategy)
         except TypeError:
-            # Fallback: only pass transformations when other kwargs unsupported
+            # Fallback path used when older LlamaIndex versions do not accept
+            # cache/docstore keyword arguments. Attach them manually if the
+            # attributes exist to avoid disabling caching unexpectedly.
             transformations = self._build_unstructured_transformation(strategy)
-            return IngestionPipeline(transformations=list(transformations))
+            pipeline = IngestionPipeline(transformations=list(transformations))
+            cache = self._cache_manager.build_cache(strategy)
+            if hasattr(pipeline, "cache"):
+                pipeline.cache = cache
+            if hasattr(pipeline, "docstore"):
+                pipeline.docstore = self.docstore
+            return pipeline
 
     @retry(
         retry=retry_if_exception_type((IOError, OSError)),
@@ -725,11 +729,7 @@ class DocumentProcessor:
                 # Lazy import to avoid importing PyMuPDF unless needed
                 from src.processing.pdf_pages import save_pdf_page_images
 
-                images_dir = (
-                    Path(getattr(self.settings, "cache_dir", "./cache"))
-                    / "page_images"
-                    / file_path.stem
-                )
+                images_dir = self._cache_settings.dir / "page_images" / file_path.stem
                 page_images = await asyncio.to_thread(
                     save_pdf_page_images, file_path, images_dir, 180
                 )
@@ -914,53 +914,38 @@ class DocumentProcessor:
         logger.info("Configuration override applied: {}", config)
 
     async def clear_cache(self) -> bool:
-        """Clear processing cache.
+        """Rotate the processing cache namespace used by ingestion.
 
         Returns:
-            bool: True if cache was cleared successfully.
+            bool: ``True`` if rotation succeeded, ``False`` otherwise.
         """
         try:
-            # Best-effort clear: delete DuckDB cache file; it will
-            # be recreated automatically on next use
-            cache_dir = Path(getattr(self.settings, "cache_dir", "./cache"))
-            cache_db = cache_dir / "docmind.duckdb"
-            if cache_db.exists():
-                cache_db.unlink()
-            logger.info("Processing cache cleared (duckdb file removed if present)")
+            previous_generation = self._cache_manager.generation
+            strategies = set(self.strategy_map.values())
+            self._cache_manager.purge_collections(strategies, previous_generation)
+            self._cache_manager.rotate()
+            logger.info(
+                "Processing cache rotated to generation %s",
+                self._cache_manager.generation,
+            )
             return True
-        except (OSError, RuntimeError) as e:
-            logger.error("Failed to clear cache: {}", e)
-            return False
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            # Boundary: ensure cache clear operation never crashes callers.
-            logger.error("Unexpected error clearing cache: {}", e)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("Failed to rotate cache: %s", exc)
             return False
 
     async def get_cache_stats(self) -> dict[str, Any]:
-        """Get cache statistics.
+        """Return lightweight cache statistics for observability.
 
         Returns:
-            dict[str, Any]: Basic stats for both caches.
+            dict[str, Any]: Summary including backend-specific data and the
+            number of configured strategy mappings.
         """
         try:
-            cache_dir = Path(getattr(self.settings, "cache_dir", "./cache"))
-            cache_db = cache_dir / "docmind.duckdb"
             return {
                 "processor_type": "hybrid",
-                "llamaindex_cache": {
-                    "cache_type": "duckdb_kvstore",
-                    "db_path": str(cache_db),
-                    "collection": getattr(
-                        self.cache, "collection", "docmind_processing"
-                    ),
-                    "total_documents": -1,
-                },
+                "cache": self._cache_manager.cache_stats(),
                 "strategy_mappings": len(self.strategy_map),
             }
-        except (OSError, RuntimeError) as e:
-            logger.error("Failed to get cache stats: {}", e)
-            return {"error": str(e), "processor_type": "hybrid"}
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            # Boundary: surface error as data instead of crashing monitoring code.
-            logger.error("Unexpected error getting cache stats: {}", e)
-            return {"error": str(e), "processor_type": "hybrid"}
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.error("Unexpected error getting cache stats: %s", exc)
+            return {"error": str(exc), "processor_type": "hybrid"}
