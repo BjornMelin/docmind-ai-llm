@@ -1,0 +1,60 @@
+"""Tests for canonicalization and hashing utilities."""
+
+from __future__ import annotations
+
+import os
+
+import pytest
+
+from src.utils.canonicalization import (
+    CanonicalizationConfig,
+    canonicalize_document,
+    compute_hashes,
+)
+
+
+@pytest.fixture
+def canonical_config() -> CanonicalizationConfig:
+    secret = os.environ.get("DOCMIND_HASH_SECRET", "unit-test-secret").encode("utf-8")
+    return CanonicalizationConfig(
+        version="1",
+        hmac_secret=secret,
+        hmac_secret_version="1",
+        metadata_keys=("content_type", "language", "tenant_id", "source"),
+    )
+
+
+def test_canonicalize_document_stable(canonical_config: CanonicalizationConfig) -> None:
+    content = "Résumé\r\n\r\nHello\u200b world".encode()
+    metadata = {
+        "content_type": "text/plain",
+        "language": "fr",
+        "tenant_id": "tenant-a",
+        "ignored_field": "should_not_participate",
+    }
+
+    payload_first = canonicalize_document(content, metadata, canonical_config)
+    payload_second = canonicalize_document(content, metadata, canonical_config)
+
+    assert payload_first == payload_second
+    assert "Résumé" in payload_first.decode("utf-8")
+    assert "ignored_field" not in payload_first.decode("utf-8")
+
+
+def test_compute_hashes_consistent(canonical_config: CanonicalizationConfig) -> None:
+    content = b"abc123"
+    metadata = {"content_type": "text/plain", "tenant_id": "t1"}
+    bundle = compute_hashes(content, metadata, canonical_config)
+
+    assert bundle.raw_sha256 != bundle.canonical_hmac_sha256
+    repeat = compute_hashes(content, metadata, canonical_config)
+    assert repeat == bundle
+
+
+def test_compute_hashes_changes_with_content(
+    canonical_config: CanonicalizationConfig,
+) -> None:
+    metadata = {"content_type": "text/plain", "tenant_id": "t1"}
+    bundle_a = compute_hashes(b"abc", metadata, canonical_config)
+    bundle_b = compute_hashes(b"abcd", metadata, canonical_config)
+    assert bundle_a != bundle_b

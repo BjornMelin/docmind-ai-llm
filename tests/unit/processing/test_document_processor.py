@@ -35,6 +35,17 @@ def mock_settings():
     mock_settings.processing.chunk_overlap = 100
     mock_settings.cache_dir = "./test_cache"
     mock_settings.max_document_size_mb = 50
+    mock_settings.hashing.canonicalization_version = "1"
+    mock_settings.hashing.hmac_secret = "unit-secret"
+    mock_settings.hashing.hmac_secret_version = "1"
+    mock_settings.hashing.metadata_keys = [
+        "content_type",
+        "language",
+        "source",
+        "source_path",
+        "tenant_id",
+        "size_bytes",
+    ]
     return mock_settings
 
 
@@ -163,21 +174,30 @@ class TestDocumentProcessor:
             assert "Unsupported file format" in str(excinfo.value)
             assert "xyz" in str(excinfo.value)
 
-    def test_calculate_document_hash(self, mock_settings, sample_text_file):
-        """Test document hash calculation for caching."""
+    def test_compute_document_hashes(self, mock_settings, sample_text_file):
+        """Test document hash bundle generation."""
         with (
             patch("src.processing.document_processor.IngestionCache"),
             patch("src.processing.document_processor.SimpleDocumentStore"),
         ):
             processor = DocumentProcessor(mock_settings)
-            doc_hash = processor._calculate_document_hash(sample_text_file)
+            bundle = processor._compute_document_hashes(sample_text_file)
 
-            assert isinstance(doc_hash, str)
-            assert len(doc_hash) == 64  # SHA-256 hex digest
+            assert bundle.raw_sha256
+            assert len(bundle.raw_sha256) == 64
+            assert bundle.canonical_hmac_sha256
+            assert len(bundle.canonical_hmac_sha256) == 64
+            assert (
+                bundle.canonicalization_version
+                == mock_settings.hashing.canonicalization_version
+            )
+            assert (
+                bundle.hmac_secret_version == mock_settings.hashing.hmac_secret_version
+            )
 
-            # Hash should be consistent
-            doc_hash2 = processor._calculate_document_hash(sample_text_file)
-            assert doc_hash == doc_hash2
+            # Hash bundle should be consistent between invocations
+            bundle_repeat = processor._compute_document_hashes(sample_text_file)
+            assert bundle == bundle_repeat
 
     def test_convert_nodes_to_elements(self, mock_settings):
         """Test conversion of LlamaIndex nodes to DocumentElements."""

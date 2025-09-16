@@ -27,6 +27,17 @@ class ProcessingStrategy(str, Enum):
     OCR_ONLY = "ocr_only"
 
 
+class HashBundleModel(BaseModel):
+    """Serialized representation of canonical hashing bundle."""
+
+    raw_sha256: str = Field(description="SHA-256 digest of raw file bytes")
+    canonical_hmac_sha256: str = Field(
+        description="HMAC-SHA-256 digest of canonical payload"
+    )
+    canonicalization_version: str = Field(description="Canonicalisation version")
+    hmac_secret_version: str = Field(description="HMAC secret version identifier")
+
+
 class DocumentElement(BaseModel):
     """Structured representation of a document element from unstructured.io."""
 
@@ -52,7 +63,17 @@ class ProcessingResult(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Processing metadata"
     )
-    document_hash: str = Field(description="Document content hash for caching")
+    document_hash: str = Field(
+        description="Canonical HMAC digest used as the primary document ID"
+    )
+    legacy_document_hash: str | None = Field(
+        default=None,
+        description="Legacy raw SHA-256 digest retained for migration/shadowing",
+    )
+    document_hash_bundle: HashBundleModel | None = Field(
+        default=None,
+        description="Full hashing bundle capturing canonical and legacy digests",
+    )
 
     @classmethod
     def create_hash_for_document(cls, file_path: str | Path) -> str:

@@ -34,6 +34,17 @@ def _mk_settings(
     s.processing.multipage_sections = multipage
     s.max_document_size_mb = max_mb
     s.cache_dir = "./cache"
+    s.hashing.canonicalization_version = "1"
+    s.hashing.hmac_secret = "unit-secret"
+    s.hashing.hmac_secret_version = "1"
+    s.hashing.metadata_keys = [
+        "content_type",
+        "language",
+        "source",
+        "source_path",
+        "tenant_id",
+        "size_bytes",
+    ]
     return s
 
 

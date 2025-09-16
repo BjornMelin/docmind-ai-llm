@@ -83,7 +83,22 @@ def test_round_trip_elements_to_nodes_and_back(monkeypatch, tmp_path) -> None:
     assert node.metadata.get("processing_strategy") == processing_strategy_cls.FAST
 
     # Convert nodes -> elements
-    proc = dmod.DocumentProcessor(settings=SimpleNamespace(cache_dir=str(tmp_path)))
+    simple_hashing = SimpleNamespace(
+        canonicalization_version="1",
+        hmac_secret="unit-secret",
+        hmac_secret_version="1",
+        metadata_keys=[
+            "content_type",
+            "language",
+            "source",
+            "source_path",
+            "tenant_id",
+            "size_bytes",
+        ],
+    )
+    proc = dmod.DocumentProcessor(
+        settings=SimpleNamespace(cache_dir=str(tmp_path), hashing=simple_hashing)
+    )
     out_elements: list[Any] = proc._convert_nodes_to_elements(nodes)  # pylint: disable=protected-access
 
     assert len(out_elements) == 1

@@ -39,11 +39,12 @@ def test_max_size_resolution_with_overrides(monkeypatch, tmp_path):  # type: ign
     assert proc2._get_max_document_size_mb() == 9  # pylint: disable=protected-access
 
 
-def test_calculate_document_hash(tmp_path):  # type: ignore[no-untyped-def]
+def test_compute_document_hashes(tmp_path):  # type: ignore[no-untyped-def]
     dmod = importlib.import_module("src.processing.document_processor")
     proc = dmod.DocumentProcessor()
     f = tmp_path / "file.txt"
     f.write_text("abc", encoding="utf-8")
-    h = proc._calculate_document_hash(f)  # pylint: disable=protected-access
-    assert isinstance(h, str)
-    assert len(h) == 64
+    bundle = proc._compute_document_hashes(f)  # pylint: disable=protected-access
+    assert bundle.raw_sha256
+    assert bundle.canonical_hmac_sha256
+    assert len(bundle.raw_sha256) == 64

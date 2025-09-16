@@ -320,6 +320,31 @@ class CacheConfig(BaseModel):
     filename: str = Field(default="docmind.duckdb")
 
 
+class HashingConfig(BaseModel):
+    """Deterministic hashing and canonicalisation configuration."""
+
+    canonicalization_version: str = Field(default="1")
+    hmac_secret: str = Field(
+        default="docmind-dev-secret",
+        repr=False,
+        description=(
+            "Shared secret for HMAC canonical hashes. Override via environment "
+            "in production deployments."
+        ),
+    )
+    hmac_secret_version: str = Field(default="1")
+    metadata_keys: list[str] = Field(
+        default_factory=lambda: [
+            "content_type",
+            "language",
+            "source",
+            "source_path",
+            "tenant_id",
+        ],
+        description="Ordered metadata keys included in canonical payloads.",
+    )
+
+
 class DatabaseConfig(BaseModel):
     """Database and vector store configuration."""
 
@@ -432,6 +457,9 @@ class DocMindSettings(BaseSettings):
     data_dir: Path = Field(default=Path("./data"))
     cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
+
+    # Canonical hashing (ADR-XXX)
+    hashing: HashingConfig = Field(default_factory=HashingConfig)
 
     # Analytics (ADR-032)
     analytics_enabled: bool = Field(

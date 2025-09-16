@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
+from mimetypes import guess_type
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,11 @@ from src.config.settings import settings as app_settings
 from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
 from src.processing.utils import is_unstructured_like, sha256_id
+from src.utils.canonicalization import (
+    CanonicalizationConfig,
+    HashBundle,
+    compute_hashes,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     pass
@@ -517,31 +523,79 @@ class DocumentProcessor:
         """
         return self._get_strategy_for_file(file_path)
 
-    def _calculate_document_hash(self, file_path: str | Path) -> str:
-        """Calculate unique hash for document caching.
+    def _compute_document_hashes(self, file_path: str | Path) -> HashBundle:
+        """Compute deterministic hashes for a document.
 
         Args:
-            file_path: Path to the document file
+            file_path: Path to the document file.
 
         Returns:
-            SHA-256 hash string of file content and metadata
+            :class:`HashBundle` with raw and canonical digests.
         """
         file_path = Path(file_path)
+        content = file_path.read_bytes()
 
-        # Hash file content + metadata for cache key
-        hasher = hashlib.sha256()
-
-        # Include file content
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                hasher.update(chunk)
-
-        # Include file metadata
+        mime_type, _ = guess_type(str(file_path))
         stat = file_path.stat()
-        metadata = f"{file_path.name}:{stat.st_size}:{stat.st_mtime}".encode()
-        hasher.update(metadata)
+        metadata = {
+            "content_type": mime_type or "application/octet-stream",
+            "language": getattr(self.settings, "default_language", None),
+            "source": str(file_path),
+            "source_path": str(file_path.resolve()),
+            "tenant_id": getattr(self.settings, "tenant_id", None),
+            "size_bytes": stat.st_size,
+        }
 
-        return hasher.hexdigest()
+        hashing_settings = getattr(self.settings, "hashing", None)
+        if hashing_settings is None:
+            # Fallback for legacy tests/settings that have not yet wired hashing
+            # configuration. Defaults are intentionally deterministic.
+            hashing_settings = type("_Hashing", (), {})()
+            hashing_settings.canonicalization_version = "1"
+            hashing_settings.hmac_secret = "docmind-dev-secret"
+            hashing_settings.hmac_secret_version = "1"
+            hashing_settings.metadata_keys = [
+                "content_type",
+                "language",
+                "source",
+                "source_path",
+                "tenant_id",
+                "size_bytes",
+            ]
+
+        config = CanonicalizationConfig(
+            version=getattr(hashing_settings, "canonicalization_version", "1"),
+            hmac_secret=str(
+                getattr(hashing_settings, "hmac_secret", "docmind-dev-secret")
+            ).encode("utf-8"),
+            hmac_secret_version=getattr(hashing_settings, "hmac_secret_version", "1"),
+            metadata_keys=getattr(
+                hashing_settings,
+                "metadata_keys",
+                [
+                    "content_type",
+                    "language",
+                    "source",
+                    "source_path",
+                    "tenant_id",
+                    "size_bytes",
+                ],
+            ),
+        )
+
+        model_versions = {
+            "unstructured": getattr(self.settings, "unstructured_version", None),
+            "ocr": getattr(self.settings, "ocr_model_version", None),
+        }
+
+        model_versions = {key: value for key, value in model_versions.items() if value}
+
+        return compute_hashes(
+            content=content,
+            metadata=metadata,
+            config=config,
+            model_versions=model_versions or None,
+        )
 
     def _create_pipeline(self, strategy: ProcessingStrategy) -> IngestionPipeline:
         """Create LlamaIndex IngestionPipeline with UnstructuredTransformation.
@@ -618,9 +672,11 @@ class DocumentProcessor:
             # Determine processing strategy
             strategy = self._get_strategy_for_file(file_path)
 
-            # Calculate a stable file hash up front so the ingestion cache and
-            # docstore can re-use results across repeated runs.
-            document_hash = self._calculate_document_hash(file_path)
+            # Calculate deterministic hashes up front so the ingestion cache and
+            # docstore can re-use results across repeated runs. Shadow legacy
+            # hashes via both raw and canonical digests for migration support.
+            hash_bundle = self._compute_document_hashes(file_path)
+            document_hash = hash_bundle.canonical_hmac_sha256
 
             # Create pipeline for this strategy
             pipeline = self._create_pipeline(strategy)
@@ -637,7 +693,12 @@ class DocumentProcessor:
                     "file_name": file_path.name,
                     "source": str(file_path),
                     "strategy": strategy.value,
-                    "file_sha256": document_hash,
+                    "legacy_file_sha256": hash_bundle.raw_sha256,
+                    "canonical_hmac_sha256": hash_bundle.canonical_hmac_sha256,
+                    "hash_versions": {
+                        "canonicalization": hash_bundle.canonicalization_version,
+                        "hmac_secret": hash_bundle.hmac_secret_version,
+                    },
                 },
             )
 
@@ -726,6 +787,8 @@ class DocumentProcessor:
                     },
                 },
                 document_hash=document_hash,
+                legacy_document_hash=hash_bundle.raw_sha256,
+                document_hash_bundle=hash_bundle.as_dict(),
             )
 
             logger.info(
