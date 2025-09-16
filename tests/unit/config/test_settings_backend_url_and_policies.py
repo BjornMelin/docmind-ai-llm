@@ -2,25 +2,32 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.config.settings import DocMindSettings
 
 
-def test_ensure_v1_normalization_on_backends(monkeypatch):  # type: ignore[no-untyped-def]
-    s = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
-    # vLLM base URL normalized to include /v1
-    monkeypatch.setattr(s, "llm_backend", "vllm", raising=False)
-    s.vllm_base_url = "http://localhost:8000"  # type: ignore[assignment]
-    assert s.backend_base_url_normalized.endswith("/v1")
+@pytest.mark.parametrize(
+    ("backend", "attr", "value", "expect_suffix"),
+    [
+        ("vllm", "vllm_base_url", "http://localhost:8000", "/v1"),
+        ("lmstudio", "lmstudio_base_url", "http://localhost:1234/v1", "/v1"),
+        ("ollama", "ollama_base_url", "http://localhost:11434", None),
+    ],
+)
+def test_backend_base_url_normalization(
+    monkeypatch, backend: str, attr: str, value: str, expect_suffix: str | None
+):  # type: ignore[no-untyped-def]
+    settings_obj = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    monkeypatch.setattr(settings_obj, "llm_backend", backend, raising=False)
+    setattr(settings_obj, attr, value)
+    normalized = settings_obj.backend_base_url_normalized
+    if expect_suffix is None:
+        assert normalized == value
+        return
 
-    # LM Studio already has /v1
-    monkeypatch.setattr(s, "llm_backend", "lmstudio", raising=False)
-    s.lmstudio_base_url = "http://localhost:1234/v1"  # type: ignore[assignment]
-    assert s.backend_base_url_normalized.endswith("/v1")
-
-    # Ollama returns raw base
-    monkeypatch.setattr(s, "llm_backend", "ollama", raising=False)
-    s.ollama_base_url = "http://localhost:11434"  # type: ignore[assignment]
-    assert s.backend_base_url_normalized == "http://localhost:11434"
+    assert normalized is not None
+    assert normalized.endswith(expect_suffix)
 
 
 def test_allow_remote_effective_env_override(monkeypatch):  # type: ignore[no-untyped-def]

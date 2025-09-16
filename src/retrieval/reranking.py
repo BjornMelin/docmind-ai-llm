@@ -587,7 +587,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                     "rerank.topk": int(settings.retrieval.reranking_top_k),
                     "rerank.latency_ms": 0,
                     "rerank.timeout": False,
-                    "rerank.delta_changed_count": int(delta_changed),
+                    "rerank.delta_changed_count": delta_changed,
                     "rerank.path": path,
                     "rerank.total_timeout_budget_ms": int(
                         getattr(settings.retrieval, "total_rerank_budget_ms", 0)
