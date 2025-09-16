@@ -100,7 +100,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                                 )
                                 cfg = {
                                     "router": settings.retrieval.router,
-                                    "hybrid": settings.retrieval.hybrid_enabled,
+                                    "hybrid": settings.retrieval.enable_server_hybrid,
                                     "graph_enabled": True,
                                     "chunk_size": settings.processing.chunk_size,
                                     "chunk_overlap": settings.processing.chunk_overlap,
@@ -249,7 +249,7 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
         chash = compute_corpus_hash(corpus_paths, base_dir=uploads_dir)
         cfg = {
             "router": settings_obj.retrieval.router,
-            "hybrid": settings_obj.retrieval.hybrid_enabled,
+            "hybrid": settings_obj.retrieval.enable_server_hybrid,
             "graph_enabled": True,
             "chunk_size": settings_obj.processing.chunk_size,
             "chunk_overlap": settings_obj.processing.chunk_overlap,

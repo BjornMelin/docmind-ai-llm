@@ -107,8 +107,10 @@ class TestSettingsBoundaryIntegration:
             cache_dir=str(tmp_path / "cache"),
             log_file=str(tmp_path / "logs" / "test.log"),
         )
+        from src.config.integrations import startup_init
 
-        # Test that directories are created during post-init
+        startup_init(settings)
+
         assert Path(settings.data_dir).exists()
         assert Path(settings.cache_dir).exists()
         assert Path(settings.log_file).parent.exists()

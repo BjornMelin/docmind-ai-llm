@@ -1,37 +1,36 @@
-"""Tests for sparse query encoding utilities.
+"""Unit tests for sparse query encoding in Qdrant format.
 
-Ensures encode_to_qdrant returns a SparseVector when a stub encoder is provided
-and returns None when unavailable.
+Covers encoder missing path and successful encode path with indices/values.
 """
 
 from __future__ import annotations
 
-from qdrant_client import models as qmodels
-
-import src.retrieval.sparse_query as sq
+import importlib
 
 
-def test_encode_to_qdrant_with_stub(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """Patch the sparse encoder to return a stub with indices/values."""
+def test_encode_returns_none_when_encoder_missing(monkeypatch):  # type: ignore[no-untyped-def]
+    mod = importlib.import_module("src.retrieval.sparse_query")
 
-    class _StubEmb:
-        def __init__(self) -> None:
-            self.indices = [1, 3, 7]
-            self.values = [0.2, 0.5, 0.3]
-
-    class _StubEncoder:
-        def embed(self, texts):  # type: ignore[no-untyped-def]
-            del texts
-            return [_StubEmb()]
-
-    monkeypatch.setattr(sq, "_get_sparse_encoder", lambda: _StubEncoder())
-    vec = sq.encode_to_qdrant("hello world")
-    assert isinstance(vec, qmodels.SparseVector)
-    assert vec.indices == [1, 3, 7]
-    assert vec.values == [0.2, 0.5, 0.3]
+    # Force cache to bypass real import and return None encoder
+    monkeypatch.setattr(mod, "_get_sparse_encoder", lambda: None, raising=False)
+    out = mod.encode_to_qdrant("query")
+    assert out is None
 
 
-def test_encode_to_qdrant_none(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """If encoder unavailable, function should return None."""
-    monkeypatch.setattr(sq, "_get_sparse_encoder", lambda: None)
-    assert sq.encode_to_qdrant("x") is None
+def test_encode_returns_sparse_vector(monkeypatch):  # type: ignore[no-untyped-def]
+    mod = importlib.import_module("src.retrieval.sparse_query")
+
+    class _Emb:
+        def __init__(self):
+            self.indices = [1, 5, 9]
+            self.values = [0.5, 0.3, 0.2]
+
+    class _Enc:
+        def embed(self, _items):  # type: ignore[no-untyped-def]
+            yield _Emb()
+
+    monkeypatch.setattr(mod, "_get_sparse_encoder", lambda: _Enc(), raising=False)
+    out = mod.encode_to_qdrant("hello")
+    assert out is not None
+    assert list(out.indices) == [1, 5, 9]
+    assert list(out.values) == [0.5, 0.3, 0.2]

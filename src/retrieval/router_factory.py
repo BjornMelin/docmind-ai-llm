@@ -52,14 +52,18 @@ def build_router_engine(
         RouterQueryEngine: Configured router engine.
     """
     cfg = settings or default_settings
+    # Unified gating flag (DRY): resolve once
+    try:
+        use_rerank_flag = bool(getattr(cfg.retrieval, "use_reranking", True))
+    except Exception:  # pragma: no cover - defensive
+        use_rerank_flag = True
     the_llm = llm if llm is not None else None
 
     # Vector semantic tool
     try:
         from src.retrieval.reranking import get_postprocessors as _get_pp
 
-        _v_use = bool(getattr(cfg.retrieval, "use_reranking", True))
-        _v_post = _get_pp("vector", use_reranking=_v_use)
+        _v_post = _get_pp("vector", use_reranking=use_rerank_flag)
         v_engine = build_vector_query_engine(
             vector_index, _v_post, similarity_top_k=cfg.retrieval.top_k
         )
@@ -84,16 +88,8 @@ def build_router_engine(
         if enable_hybrid is not None:
             hybrid_ok = bool(enable_hybrid)
         else:
-            # When explicit settings provided, allow either flag to enable hybrid.
-            # When settings is None (uses default_settings), only honor the explicit
-            # server-side flag to avoid surprises in generic callers/tests.
-            if settings is None:
-                hybrid_ok = bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
-            else:
-                hybrid_ok = bool(
-                    getattr(cfg.retrieval, "enable_server_hybrid", False)
-                    or getattr(cfg.retrieval, "hybrid_enabled", False)
-                )
+            # Single authoritative flag per ADR-024
+            hybrid_ok = bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
         if hybrid_ok:
             # Import retriever on-demand to avoid heavy imports at module load.
             from src.retrieval.hybrid import (
@@ -114,8 +110,7 @@ def build_router_engine(
             retr = _shr(params)
             from src.retrieval.reranking import get_postprocessors as _get_pp
 
-            _h_use = bool(getattr(cfg.retrieval, "use_reranking", True))
-            _h_post = _get_pp("hybrid", use_reranking=_h_use)
+            _h_post = _get_pp("hybrid", use_reranking=use_rerank_flag)
             h_engine = build_retriever_query_engine(
                 retr,
                 _h_post,
@@ -180,10 +175,9 @@ def build_router_engine(
                 )
                 from src.retrieval.reranking import get_postprocessors as _get_pp
 
-                _g_use = bool(getattr(cfg.retrieval, "use_reranking", True))
                 _g_post = _get_pp(
                     "kg",
-                    use_reranking=_g_use,
+                    use_reranking=use_rerank_flag,
                     top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
                 g_engine = build_retriever_query_engine(
@@ -197,10 +191,9 @@ def build_router_engine(
             elif hasattr(pg_index, "as_query_engine"):
                 from src.retrieval.reranking import get_postprocessors as _get_pp
 
-                _g_use2 = bool(getattr(cfg.retrieval, "use_reranking", True))
                 _g_post2 = _get_pp(
                     "kg",
-                    use_reranking=_g_use2,
+                    use_reranking=use_rerank_flag,
                     top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
                 )
                 g_engine = build_pg_query_engine(pg_index, _g_post2, include_text=True)

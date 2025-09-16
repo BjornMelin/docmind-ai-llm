@@ -23,10 +23,10 @@ Provide a single, definitive LLM runtime with **four providers** selectable in t
 
 - Use **LlamaIndex** official adapters:
   - `llama_index.llms.llama_cpp.LlamaCPP` for GGUF local models.
-  - `llama_index.llms.openai_like.OpenAILike` for **vLLM**/**LM Studio** endpoints.
+  - `llama_index.llms.openai_like.OpenAILike` for **vLLM**/**LM Studio**/**llama.cpp server** (OpenAI-compatible endpoints).
   - `llama_index.llms.ollama.Ollama` for **Ollama**.
 - Central factory: `src/config/llm_factory.py`.
-- UI wiring: `src/pages/settings.py` controls provider, model, base URLs, and advanced knobs.
+- UI wiring: `src/pages/04_settings.py` controls provider, model, base URLs, and advanced knobs.
 - Respect environment via `src/config/settings.py` and surfacing in UI.
 
 ## Libraries and Imports

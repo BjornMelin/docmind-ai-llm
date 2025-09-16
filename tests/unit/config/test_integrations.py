@@ -1,94 +1,131 @@
-"""Unit tests for src.config.integrations module.
-
-Covers LlamaIndex Settings configuration and vLLM command generation.
-"""
+"""Unit tests for src.config.integrations helpers."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.config.integrations import (
+    _configure_context_settings,
+    _configure_embeddings,
+    _configure_llm,
+    _configure_structured_outputs,
+    _should_configure_embeddings,
+    _should_configure_llm,
+    setup_llamaindex,
+)
+
+
+@pytest.fixture(autouse=True)
+def fake_settings(monkeypatch):
+    """Provide a lightweight stand-in for llama_index.core.Settings."""
+    fake = SimpleNamespace(
+        llm=None,
+        embed_model=None,
+        context_window=None,
+        num_output=None,
+        guided_json_enabled=False,
+    )
+    monkeypatch.setattr("src.config.integrations.Settings", fake)
+    return fake
+
 
 @pytest.mark.unit
-def test_setup_llamaindex_success() -> None:
-    """setup_llamaindex sets Settings.llm and Settings.embed_model on success."""
+def test_should_configure_llm_checks_existing(fake_settings):
+    fake_settings.llm = object()
+    assert not _should_configure_llm(force_llm=False)
+    assert _should_configure_llm(force_llm=True)
+    fake_settings.llm = None
+    assert _should_configure_llm(force_llm=False)
+
+
+@pytest.mark.unit
+def test_configure_llm_happy_path(monkeypatch, fake_settings):
+    sentinel = object()
+    monkeypatch.setattr("src.config.integrations.settings", MagicMock())
     with (
-        patch("src.config.integrations.settings") as _mock_settings,
-        patch("src.config.integrations.build_llm") as mock_build_llm,
-        patch("src.config.integrations.HuggingFaceEmbedding") as mock_embed,
+        patch("src.config.integrations.settings._validate_endpoints_security"),
+        patch("src.config.integrations.build_llm", return_value=sentinel),
     ):
-        mock_llm = object()
-        mock_build_llm.return_value = mock_llm
-        mock_embed.return_value = object()
-
-        from llama_index.core import Settings
-
-        from src.config.integrations import setup_llamaindex
-
-        # Reset globals
-        Settings.llm = None
-        Settings.embed_model = None
-
-        setup_llamaindex()
-        # A global fixture may pre-set a MockLLM; accept any non-None value
-        assert Settings.llm is not None
-        assert Settings.embed_model is not None
-        # Depending on how settings is patched, these may be ints or mocks.
-        assert Settings.context_window is not None
-        assert Settings.num_output is not None
+        _configure_llm()
+        assert fake_settings.llm is sentinel
 
 
 @pytest.mark.unit
-def test_setup_llamaindex_failure_paths() -> None:
-    """On import/config errors, Settings.llm/embed_model become None."""
+def test_configure_llm_security_failure(monkeypatch, fake_settings, caplog):
+    fake_settings.llm = object()
+    monkeypatch.setattr("src.config.integrations.settings", MagicMock())
     with (
-        patch("src.config.integrations.settings") as _mock_settings,
-        patch("src.config.integrations.build_llm", side_effect=ImportError("boom")),
         patch(
-            "src.config.integrations.HuggingFaceEmbedding",
-            side_effect=RuntimeError("x"),
+            "src.config.integrations.settings._validate_endpoints_security",
+            side_effect=ValueError("blocked"),
         ),
+        patch("src.config.integrations.build_llm"),
     ):
-        from llama_index.core import Settings
-
-        from src.config.integrations import setup_llamaindex
-
-        Settings.llm = None
-        Settings.embed_model = None
-
-        setup_llamaindex()
-        # In some unit contexts, a global fixture may pre-set MockLLM/MockEmbedding.
-        # Accept either None (on failure) or a known mock class.
-        llm_ok = (Settings.llm is None) or (
-            Settings.llm.__class__.__name__ == "MockLLM"
-        )
-        embed_ok = (Settings.embed_model is None) or (
-            Settings.embed_model.__class__.__name__
-            in {"MockEmbedding", "HuggingFaceEmbedding"}
-        )
-        assert llm_ok
-        assert embed_ok
+        _configure_llm()
+        assert fake_settings.llm is None
+        assert any("blocked" in record.message for record in caplog.records)
 
 
 @pytest.mark.unit
-def test_get_vllm_server_command_flags() -> None:
-    """Command contains expected flags and optional chunked prefill toggle."""
-    with patch("src.config.integrations.settings") as mock_settings:
-        # Minimal config
-        mock_settings.vllm.model = "qwen"
-        mock_settings.vllm.context_window = 8192
-        mock_settings.vllm.kv_cache_dtype = "fp8"
-        mock_settings.vllm.gpu_memory_utilization = 0.9
-        mock_settings.vllm.max_num_seqs = 4
-        mock_settings.vllm.max_num_batched_tokens = 4096
+def test_should_configure_embeddings_checks_existing(fake_settings):
+    fake_settings.embed_model = object()
+    assert not _should_configure_embeddings(force_embed=False)
+    assert _should_configure_embeddings(force_embed=True)
+    fake_settings.embed_model = None
+    assert _should_configure_embeddings(force_embed=False)
 
-        from src.config.integrations import get_vllm_server_command
 
-        mock_settings.vllm.enable_chunked_prefill = False
-        cmd = get_vllm_server_command()
-        assert "--enable-chunked-prefill" not in cmd
+@pytest.mark.unit
+def test_configure_embeddings_handles_failure(monkeypatch, fake_settings, caplog):
+    fake_settings.embed_model = None
+    monkeypatch.setattr("src.config.integrations.settings", MagicMock())
+    with patch(
+        "src.config.integrations.HuggingFaceEmbedding",
+        side_effect=RuntimeError("embed error"),
+    ):
+        _configure_embeddings()
+        assert fake_settings.embed_model is None
+        assert any("embed error" in record.message for record in caplog.records)
 
-        mock_settings.vllm.enable_chunked_prefill = True
-        cmd2 = get_vllm_server_command()
-        assert "--enable-chunked-prefill" in cmd2
+
+@pytest.mark.unit
+def test_configure_context_settings_sets_values(monkeypatch, fake_settings):
+    mock_settings = MagicMock(
+        context_window=4096,
+        vllm=MagicMock(context_window=8192, max_tokens=256),
+        llm_context_window_max=5000,
+    )
+    monkeypatch.setattr("src.config.integrations.settings", mock_settings)
+    _configure_context_settings()
+    assert fake_settings.context_window == 4096
+    assert fake_settings.num_output == 256
+
+
+@pytest.mark.unit
+def test_configure_structured_outputs_sets_flag(monkeypatch):
+    mock_settings = MagicMock(llm_backend="vllm")
+    monkeypatch.setattr("src.config.integrations.settings", mock_settings)
+    _configure_structured_outputs()
+    assert mock_settings.guided_json_enabled is True
+
+
+@pytest.mark.unit
+def test_setup_llamaindex_invokes_helpers(monkeypatch):
+    with (
+        patch("src.config.integrations._should_configure_llm", return_value=True),
+        patch("src.config.integrations._configure_llm") as mock_llm,
+        patch(
+            "src.config.integrations._should_configure_embeddings", return_value=True
+        ),
+        patch("src.config.integrations._configure_embeddings") as mock_emb,
+        patch("src.config.integrations._configure_context_settings") as mock_ctx,
+        patch("src.config.integrations._configure_structured_outputs") as mock_struct,
+    ):
+        setup_llamaindex(force_llm=False, force_embed=False)
+        mock_llm.assert_called_once_with()
+        mock_emb.assert_called_once_with()
+        mock_ctx.assert_called_once_with()
+        mock_struct.assert_called_once_with()

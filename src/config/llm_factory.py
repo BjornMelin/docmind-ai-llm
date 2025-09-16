@@ -11,8 +11,9 @@ Backends:
 - ``llamacpp`` -> :class:`llama_index.llms.llama_cpp.LlamaCPP`
 
 Notes:
-- vLLM default base URL should NOT include "/v1" unless you explicitly run
-  an OpenAI-compatible server. LM Studio always uses "/v1".
+- All OpenAI-compatible servers (LM Studio, vLLM OpenAI-compatible, llama.cpp server)
+  must use base URLs that include a single "/v1". Normalization is applied centrally
+  via settings.backend_base_url_normalized.
 - LlamaCPP GPU offload must be passed through ``model_kwargs={"n_gpu_layers": ...}``.
 """
 
@@ -20,7 +21,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.config.settings import DocMindSettings
+from src.config.settings import DocMindSettings, OpenAIConfig
+
+_DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
 
 
 def build_llm(settings: DocMindSettings) -> Any:
@@ -58,15 +61,14 @@ def build_llm(settings: DocMindSettings) -> Any:
     if backend == "vllm":
         from llama_index.llms.openai_like import OpenAILike  # type: ignore
 
-        api_base = settings.vllm_base_url or settings.vllm.vllm_base_url
+        # Always use the normalized backend base URL for OpenAI-like servers
+        api_base = settings.backend_base_url_normalized
         return OpenAILike(
             model=model_name,
             api_base=api_base,
-            api_key=getattr(settings, "openai_like_api_key", "not-needed"),
-            is_chat_model=getattr(settings, "openai_like_is_chat_model", True),
-            is_function_calling_model=getattr(
-                settings, "openai_like_is_function_calling_model", False
-            ),
+            api_key=(settings.openai.api_key or "not-needed"),
+            is_chat_model=True,
+            is_function_calling_model=False,
             context_window=context_window,
             timeout=timeout_s,
         )
@@ -76,8 +78,8 @@ def build_llm(settings: DocMindSettings) -> Any:
 
         return OpenAILike(
             model=model_name,
-            api_base=settings.lmstudio_base_url,
-            api_key=getattr(settings, "openai_like_api_key", "not-needed"),
+            api_base=settings.backend_base_url_normalized,
+            api_key=(settings.openai.api_key or "not-needed"),
             is_chat_model=True,
             is_function_calling_model=False,
             context_window=context_window,
@@ -86,13 +88,17 @@ def build_llm(settings: DocMindSettings) -> Any:
 
     if backend == "llamacpp":
         # Support both server (OpenAI-compatible) and local library
-        if settings.llamacpp_base_url:
+        openai_base_url = settings.openai.base_url
+        has_custom_openai_base = bool(
+            openai_base_url and openai_base_url != _DEFAULT_OPENAI_BASE_URL
+        )
+        if settings.llamacpp_base_url or has_custom_openai_base:
             from llama_index.llms.openai_like import OpenAILike  # type: ignore
 
             return OpenAILike(
                 model=model_name,
-                api_base=settings.llamacpp_base_url,
-                api_key=getattr(settings, "openai_like_api_key", "not-needed"),
+                api_base=settings.backend_base_url_normalized,
+                api_key=(settings.openai.api_key or "not-needed"),
                 is_chat_model=True,
                 is_function_calling_model=False,
                 context_window=context_window,

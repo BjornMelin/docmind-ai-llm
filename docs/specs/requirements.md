@@ -101,6 +101,10 @@ NFR‑PORT‑001 Single definitive architecture; no prod/local forks; configurat
 - Ingestion cache: DuckDBKV; pipeline caches node+transform hashes.  
 - LLM API: OpenAI‑compatible for vLLM/Ollama/LM Studio/llama.cpp server.  
 - UI contracts: `st.Page` navigation, chat stream, status blocks, fragments.  
+- Configuration schema: nested groups expose canonical policy surfaces.  
+  - `openai.*` fields normalize `base_url` to a single `/v1` suffix and accept placeholder `api_key` values for loopback servers, matching the OpenAI-compatible contracts for LM Studio and vLLM. Concrete examples live in the [configuration reference](../developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp).
+  - `security.*` enforces local-first defaults. `allow_remote_endpoints` is false by default, remote hosts **must** appear in the `endpoint_allowlist`, and effective policy state is surfaced read-only in the UI.
+  - `retrieval.hybrid.*` unifies server-side hybrid gating: `retrieval.enable_server_hybrid` (bool) plus `retrieval.fusion_mode` ∈ {`rrf`, `dbsf`}. No legacy client-side fusion flags remain.
 
 ## 5. Compliance, privacy, and security controls
 

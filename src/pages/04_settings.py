@@ -115,6 +115,14 @@ def main() -> None:
             placeholder="http://localhost:8080/v1",
         )
 
+    # Show resolved normalized backend base URL (read-only)
+    st.caption("Resolved backend base URL (normalized)")
+    st.text_input(
+        "Resolved base URL",
+        value=str(getattr(settings, "backend_base_url_normalized", "")),
+        disabled=True,
+    )
+
     gguf_path = st.text_input(
         "GGUF model path (LlamaCPP local)",
         value=str(settings.vllm.llamacpp_model_path),
@@ -131,20 +139,72 @@ def main() -> None:
     st.subheader("Security")
     allow_remote = st.checkbox(
         "Allow remote endpoints",
-        value=bool(settings.allow_remote_endpoints),
+        value=bool(settings.security.allow_remote_endpoints),
         help="When off, only localhost URLs are accepted",
     )
-
-    # Retrieval settings
-    st.subheader("Retrieval")
-    enable_server_hybrid = st.checkbox(
-        "Enable server-side hybrid retrieval (Qdrant fusion)",
-        value=bool(getattr(settings.retrieval, "enable_server_hybrid", False)),
-        help=(
-            "Registers a server-side hybrid search tool that leverages Qdrant's "
-            "Query API with prefetch + RRF/DBSF fusion. Default is off."
-        ),
+    st.caption("Effective policy (read-only)")
+    st.text_input(
+        "Remote endpoints allowed",
+        value="true" if settings.security.allow_remote_endpoints else "false",
+        disabled=True,
     )
+    st.text_input(
+        "Endpoint allowlist size",
+        value=str(len(settings.security.endpoint_allowlist)),
+        disabled=True,
+    )
+
+    # Retrieval settings (expose minimal toggles; no IO on import)
+    st.subheader("Retrieval (Policy)")
+    st.caption("Server-side hybrid and fusion are managed by environment policy")
+    st.text_input(
+        "Server-side hybrid enabled",
+        value=str(bool(getattr(settings.retrieval, "enable_server_hybrid", False))),
+        disabled=True,
+    )
+    st.text_input(
+        "Fusion mode",
+        value=str(getattr(settings.retrieval, "fusion_mode", "rrf")),
+        disabled=True,
+    )
+    # Reranking remains displayed as read-only policy
+    use_rerank = bool(getattr(settings.retrieval, "use_reranking", True))
+    st.text_input("Reranking enabled", value=str(use_rerank), disabled=True)
+    rrf_k = st.number_input(
+        "RRF k-constant",
+        min_value=1,
+        max_value=256,
+        value=int(getattr(settings.retrieval, "rrf_k", 60)),
+    )
+    col1t, col2t, col3t, col4t = st.columns(4)
+    with col1t:
+        t_text = st.number_input(
+            "Text rerank timeout (ms)",
+            min_value=50,
+            max_value=5000,
+            value=int(getattr(settings.retrieval, "text_rerank_timeout_ms", 250)),
+        )
+    with col2t:
+        t_siglip = st.number_input(
+            "SigLIP timeout (ms)",
+            min_value=25,
+            max_value=5000,
+            value=int(getattr(settings.retrieval, "siglip_timeout_ms", 150)),
+        )
+    with col3t:
+        t_colpali = st.number_input(
+            "ColPali timeout (ms)",
+            min_value=25,
+            max_value=10000,
+            value=int(getattr(settings.retrieval, "colpali_timeout_ms", 400)),
+        )
+    with col4t:
+        t_total = st.number_input(
+            "Total rerank budget (ms)",
+            min_value=100,
+            max_value=20000,
+            value=int(getattr(settings.retrieval, "total_rerank_budget_ms", 800)),
+        )
 
     # Basic validation rules
     if lmstudio_url and not lmstudio_url.rstrip("/").endswith("/v1"):
@@ -180,10 +240,14 @@ def main() -> None:
             if gguf_valid and gguf_path:
                 with suppress(Exception):  # pragma: no cover - UI guard
                     settings.vllm.llamacpp_model_path = Path(gguf_path)
-            settings.allow_remote_endpoints = bool(allow_remote)
-            # Retrieval toggles
+            settings.security.allow_remote_endpoints = bool(allow_remote)
+            # Apply retrieval timeouts to in-memory settings; policy is read-only
             with suppress(Exception):
-                settings.retrieval.enable_server_hybrid = bool(enable_server_hybrid)
+                settings.retrieval.rrf_k = int(rrf_k)
+                settings.retrieval.text_rerank_timeout_ms = int(t_text)
+                settings.retrieval.siglip_timeout_ms = int(t_siglip)
+                settings.retrieval.colpali_timeout_ms = int(t_colpali)
+                settings.retrieval.total_rerank_budget_ms = int(t_total)
 
             _apply_runtime()
 
@@ -201,11 +265,15 @@ def main() -> None:
                 "DOCMIND_LLAMACPP_BASE_URL": llamacpp_url or "",
                 # nested path override
                 "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": gguf_path,
-                "DOCMIND_ALLOW_REMOTE_ENDPOINTS": ("true" if allow_remote else "false"),
-                # Retrieval flag persisted via nested env mapping
-                "DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID": (
-                    "true" if enable_server_hybrid else "false"
+                "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
+                    "true" if allow_remote else "false"
                 ),
+                # Retrieval policy is configured via env; read-only here
+                "DOCMIND_RETRIEVAL__RRF_K": str(int(rrf_k)),
+                "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(int(t_text)),
+                "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(int(t_siglip)),
+                "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(int(t_colpali)),
+                "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(int(t_total)),
             }
             _persist_env(env_map)
             st.success("Saved to .env")

@@ -8,15 +8,17 @@ Usage:
     print(settings.embedding.model_name)
 """
 
-import os
+import logging
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class VLLMConfig(BaseModel):
@@ -59,6 +61,69 @@ class SemanticCacheConfig(BaseModel):
     namespace: str = Field(default="default")
 
 
+def ensure_v1(url: str | None) -> str | None:
+    """Normalize OpenAI-compatible base URLs to include a single /v1 segment."""
+    if not url:
+        return url
+    try:
+        parsed = urlparse(url.rstrip("/"))
+        path = parsed.path or ""
+        if not path.endswith("/v1"):
+            path = f"{path}/v1"
+        return parsed._replace(path=path).geturl()
+    except Exception:
+        return url
+
+
+class OpenAIConfig(BaseModel):
+    """Settings for OpenAI-compatible servers.
+
+    Used for LM Studio, vLLM OpenAI-compatible server, and llama.cpp server.
+    Ensures idempotent normalization of base URLs to include a single "/v1".
+    """
+
+    base_url: str = Field(default="http://localhost:1234/v1")
+    api_key: str | None = Field(default=None, description="Optional API key")
+
+    @field_validator("base_url", mode="before")
+    @classmethod
+    def _ensure_v1_on_base(cls, v: str) -> str:
+        return ensure_v1((v or "").strip()) or ""
+
+
+class SecurityConfig(BaseModel):
+    """Security and remote endpoint policy settings."""
+
+    allow_remote_endpoints: bool = Field(
+        default=False,
+        description=(
+            "When False, only localhost/127.0.0.1 endpoints are allowed for LLMs"
+        ),
+    )
+    endpoint_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost",
+            "http://127.0.0.1",
+            "https://localhost",
+            "https://127.0.0.1",
+        ]
+    )
+    trust_remote_code: bool = Field(
+        default=False,
+        description="Default posture for libraries that support remote code execution",
+    )
+
+
+class HybridConfig(BaseModel):
+    """Declarative hybrid retrieval policy."""
+
+    enabled: bool = Field(default=False)
+    server_side: bool = Field(default=False)
+    method: Literal["rrf", "dbsf"] = Field(default="rrf")
+    rrf_k: int = Field(default=60, ge=1, le=256)
+    dbsf_alpha: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
 class ProcessingConfig(BaseModel):
     """Document processing configuration (ADR-009)."""
 
@@ -71,6 +136,12 @@ class ProcessingConfig(BaseModel):
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     debug_chunk_flow: bool = Field(default=False)
     encrypt_page_images: bool = Field(default=False)
+
+    @model_validator(mode="after")
+    def _validate_overlap(self) -> "ProcessingConfig":
+        if int(self.chunk_overlap) > int(self.chunk_size):
+            raise ValueError("chunk_overlap cannot exceed chunk_size")
+        return self
 
 
 class ChatConfig(BaseModel):
@@ -153,10 +224,6 @@ class RetrievalConfig(BaseModel):
         default=60, ge=10, le=1000, description="Prefetch/fused candidate cap"
     )
     rrf_k: int = Field(default=60, ge=1, le=256, description="RRF k-constant")
-    dbsf_enabled: bool = Field(
-        default=False,
-        description=("When true, force Fusion mode DBSF regardless of fusion_mode."),
-    )
     prefetch_dense_limit: int = Field(
         default=200, ge=1, le=5000, description="Per-branch dense prefetch limit"
     )
@@ -170,7 +237,7 @@ class RetrievalConfig(BaseModel):
     named_vectors_multi_head_enabled: bool = Field(default=False)
     # Router and feature toggles (ADR-003)
     router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
-    hybrid_enabled: bool = Field(default=True)
+    # Deprecated legacy flag removed; use enable_server_hybrid
     hierarchy_enabled: bool = Field(default=True)
     graph_enabled: bool = Field(default=False)
     # Server-side hybrid via Qdrant Query API fusion (prefetch + RRF/DBSF).
@@ -211,6 +278,33 @@ class RetrievalConfig(BaseModel):
     )
     # Optional keyword tool (BM25) registration flag (disabled by default)
     enable_keyword_tool: bool = Field(default=False)
+
+    # --- Centralized reranking timeouts (ms) ---
+    # Keep conservative defaults and make all budgets observable in telemetry.
+    text_rerank_timeout_ms: int = Field(
+        default=250,
+        ge=50,
+        le=5000,
+        description="Timeout (ms) for text cross-encoder reranking stage",
+    )
+    siglip_timeout_ms: int = Field(
+        default=150,
+        ge=25,
+        le=5000,
+        description="Timeout (ms) for SigLIP visual scoring stage",
+    )
+    colpali_timeout_ms: int = Field(
+        default=400,
+        ge=25,
+        le=10000,
+        description="Timeout (ms) for ColPali visual reranking stage",
+    )
+    total_rerank_budget_ms: int = Field(
+        default=800,
+        ge=100,
+        le=20000,
+        description="Overall best-effort budget (ms) across rerank stages",
+    )
 
     # No additional methods; env mapping handled by BaseSettings
 
@@ -398,32 +492,13 @@ class DocMindSettings(BaseSettings):
     )
     enable_gpu_acceleration: bool = Field(default=True)
 
-    # Security for endpoints
-    allow_remote_endpoints: bool = Field(
-        default=False,
-        description=(
-            "When False, only localhost/127.0.0.1 endpoints are allowed for LLMs"
-        ),
-    )
-    endpoint_allowlist: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost",
-            "http://127.0.0.1",
-            "https://localhost",
-            "https://127.0.0.1",
-        ]
-    )
-
     # Feature flags
     guided_json_enabled: bool = Field(
         default=False, description="Structured outputs available (SPEC-007 prep)"
     )
 
-    # OpenAI-compatible client flags (for LM Studio, vLLM OpenAI mode, llama-cpp server)
-    openai_like_api_key: str = Field(default="not-needed")
-    openai_like_is_chat_model: bool = Field(default=True)
-    openai_like_is_function_calling_model: bool = Field(default=False)
-    openai_like_extra_headers: dict | None = Field(default=None)
+    # OpenAI-compatible client configuration group
+    openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
 
     # Global LLM client behavior
     llm_request_timeout_seconds: int = Field(default=120, ge=5, le=600)
@@ -474,6 +549,8 @@ class DocMindSettings(BaseSettings):
     chat: ChatConfig = Field(default_factory=ChatConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
+    hybrid: HybridConfig = Field(default_factory=HybridConfig)
 
     # Alias fields mapped to nested configs for ergonomic top-level
     # environment overrides.
@@ -484,75 +561,96 @@ class DocMindSettings(BaseSettings):
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
-    # Pydantic v2 uses a context parameter; pylint's base stub differs.
-    # pylint: disable=arguments-differ
-    def model_post_init(self, __context: Any) -> None:
-        """Finalize settings initialization and validate configuration.
-
-        Ensures required directories exist, applies top-level alias fields to
-        nested configs for ergonomics, and validates endpoint security and
-        LM Studio base URL invariants.
-
-        Args:
-            __context: Pydantic model initialization context (unused).
-
-        Raises:
-            ValueError: When provided values are invalid, e.g., non-positive
-                ``context_window``/``context_window_size`` or a
-                ``chunk_overlap`` larger than ``chunk_size``; or when remote
-                endpoints are disallowed and configured base URLs are not on
-                the allowlist; or when ``lmstudio_base_url`` does not end with
-                ``/v1``.
-        """
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)
-        if self.database.sqlite_db_path.parent != self.data_dir:
-            self.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Apply alias fields to nested configs if provided
-        # Keep nested vllm.* in sync with top-level overrides when present
-        if self.model:
-            with suppress(Exception):
-                self.vllm.model = str(self.model)
-        if self.context_window:
-            if int(self.context_window) <= 0:
-                raise ValueError("context_window must be > 0")
-            with suppress(Exception):
-                self.vllm.context_window = int(self.context_window)
-        if self.vllm_base_url:
-            with suppress(Exception):
-                self.vllm.vllm_base_url = str(self.vllm_base_url)
-        if self.context_window_size is not None:
-            if int(self.context_window_size) <= 0:
-                raise ValueError("context_window_size must be > 0")
-            with suppress(Exception):
-                self.vllm.context_window = int(self.context_window_size)
-        if self.chunk_size is not None:
-            if int(self.chunk_size) <= 0:
-                raise ValueError("chunk_size must be > 0")
-            with suppress(Exception):
-                self.processing.chunk_size = int(self.chunk_size)
-        if self.chunk_overlap is not None:
-            if self.chunk_size is not None and int(self.chunk_overlap) > int(
-                self.chunk_size
-            ):
-                raise ValueError("chunk_overlap cannot exceed chunk_size")
-            with suppress(Exception):
-                self.processing.chunk_overlap = int(self.chunk_overlap)
-        if self.enable_multi_agent is not None:
-            with suppress(Exception):
-                self.agents.enable_multi_agent = bool(self.enable_multi_agent)
-
-        # Validate base URLs and security posture
+    @model_validator(mode="after")
+    def _apply_aliases_and_validate(self) -> "DocMindSettings":
+        self._apply_alias_overrides()
+        self._map_hybrid_to_retrieval()
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
+        return self
+
+    def _apply_alias_overrides(self) -> None:
+        alias_targets: dict[str, tuple[object, str, Callable[[Any], Any]]] = {
+            "model": (self.vllm, "model", str),
+            "context_window": (self.vllm, "context_window", int),
+            "context_window_size": (self.vllm, "context_window", int),
+            "chunk_size": (self.processing, "chunk_size", int),
+            "chunk_overlap": (self.processing, "chunk_overlap", int),
+            "enable_multi_agent": (self.agents, "enable_multi_agent", bool),
+        }
+        for field, (target, attr, caster) in alias_targets.items():
+            value = getattr(self, field, None)
+            if value is None:
+                continue
+            with suppress(Exception):
+                setattr(target, attr, caster(value))
+
+    def _map_hybrid_to_retrieval(self) -> None:
+        try:
+            self.retrieval.enable_server_hybrid = bool(self.hybrid.server_side)
+            self.retrieval.rrf_k = int(self.hybrid.rrf_k)
+            self.retrieval.fusion_mode = str(self.hybrid.method)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "Failed to sync hybrid config into retrieval settings: %s", exc
+            )
+
+    @field_validator("lmstudio_base_url", mode="before")
+    @classmethod
+    def _norm_lmstudio(cls, v: str) -> str:
+        return ensure_v1(v) or v
+
+    @field_validator("llamacpp_base_url", mode="before")
+    @classmethod
+    def _norm_llamacpp(cls, v: str | None) -> str | None:
+        return ensure_v1(v)
+
+    @field_validator("vllm_base_url", mode="before")
+    @classmethod
+    def _norm_vllm(cls, v: str | None) -> str | None:
+        return ensure_v1(v)
+
+    @computed_field
+    @property
+    def effective_context_window(self) -> int:
+        """Return the effective context window with global cap applied."""
+        return min(
+            int(self.context_window or self.vllm.context_window),
+            int(self.llm_context_window_max),
+        )
+
+    @computed_field
+    @property
+    def backend_base_url_normalized(self) -> str | None:
+        """Return backend-aware normalized base URL (OpenAI-like -> /v1)."""
+        if self.llm_backend == "ollama":
+            return self.ollama_base_url
+        if self.llm_backend == "lmstudio":
+            # Prefer explicit OpenAI group when provided
+            return ensure_v1(self.openai.base_url or self.lmstudio_base_url)
+        if self.llm_backend == "vllm":
+            # Prefer explicit OpenAI-like endpoint when provided
+            base = self.openai.base_url or self.vllm_base_url or self.vllm.vllm_base_url
+            return ensure_v1(base)
+        if self.llm_backend == "llamacpp":
+            return ensure_v1(self.openai.base_url or self.llamacpp_base_url)
+        return None
+
+    def allow_remote_effective(self) -> bool:
+        """Return effective allow-remote policy.
+
+        Uses the centralized security settings; no environment overrides.
+        """
+        return bool(self.security.allow_remote_endpoints)
 
     def get_vllm_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
         """Get vLLM configuration for client setup.
 
         Returns:
             Mapping with keys ``model``, ``context_window``, and
-            ``temperature`` suitable for initializing a vLLM client.
+            ``temperature`` suitable for initializing a vLLM client. Retained
+            because launcher utilities import this helper instead of the full
+            settings model.
         """
         return {
             "model": self.model or self.vllm.model,
@@ -560,24 +658,13 @@ class DocMindSettings(BaseSettings):
             "temperature": self.vllm.temperature,
         }
 
-    def get_agent_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
-        """Return agent configuration as a simple mapping.
-
-        Returns:
-            Mapping with agent orchestration settings (timeouts, retries,
-            multi-agent enablement).
-        """
-        return {
-            "decision_timeout": self.agents.decision_timeout,
-            "max_retries": self.agents.max_retries,
-            "enable_multi_agent": self.agents.enable_multi_agent,
-        }
-
     def get_vllm_env_vars(self) -> dict[str, str]:
         """Return environment variables for vLLM process setup.
 
         Returns:
             Mapping of environment variable names to string values for vLLM.
+            Used by integration scripts that render env files without
+            serializing the entire settings object.
         """
         return {
             "VLLM_ATTENTION_BACKEND": self.vllm.attention_backend,
@@ -595,18 +682,17 @@ class DocMindSettings(BaseSettings):
 
         Returns:
             Mapping with model identifier, effective context window capped by
-            ``llm_context_window_max``, generation params, and base URL.
+            ``llm_context_window_max``, generation params, and base URL. The
+            LlamaIndex factory consumes this flat dict and predates
+            ``model_dump`` usage in containers.
         """
+        base_url = self.backend_base_url_normalized
         return {
             "model_name": self.model or self.vllm.model,
-            # Enforce cap consistently
-            "context_window": min(
-                int(self.context_window or self.vllm.context_window),
-                self.llm_context_window_max,
-            ),
+            "context_window": self.effective_context_window,
             "max_tokens": self.vllm.max_tokens,
             "temperature": self.vllm.temperature,
-            "base_url": self.ollama_base_url,
+            "base_url": base_url,
         }
 
     def get_embedding_config(self) -> dict[str, Any]:
@@ -615,7 +701,8 @@ class DocMindSettings(BaseSettings):
         Returns:
             Flat mapping used by embedding factory helpers (text+image
             parameters and device selection), while keeping class-based config
-            as the single source of truth.
+            as the single source of truth. Several integration points expect a
+            plain dict to hydrate third-party clients.
         """
         device = (
             ("cuda" if self.enable_gpu_acceleration else "cpu")
@@ -644,64 +731,7 @@ class DocMindSettings(BaseSettings):
             "normalize_image": self.embedding.normalize_image,
             # Misc
             "embed_device": self.embedding.embed_device,
-            "trust_remote_code": True,
-        }
-
-    def get_processing_config(self) -> dict[str, Any]:
-        """Get document processing configuration.
-
-        Returns:
-            Mapping with chunking and document processing parameters.
-        """
-        return {
-            "chunk_size": self.processing.chunk_size,
-            "new_after_n_chars": self.processing.new_after_n_chars,
-            "combine_text_under_n_chars": self.processing.combine_text_under_n_chars,
-            "multipage_sections": self.processing.multipage_sections,
-            "max_document_size_mb": self.processing.max_document_size_mb,
-        }
-
-    def get_cache_db_path(self) -> Path:
-        """Return full path to DuckDB KV store file (ADR-030).
-
-        Returns:
-            Path to the DuckDB KV store file.
-        """
-        return (self.cache.dir or self.cache_dir) / self.cache.filename
-
-    # === ADR COMPLIANCE CONFIGURATION METHODS ===
-
-    def get_agent_orchestration_config(self) -> dict[str, Any]:
-        """Get agent orchestration configuration for ADR-011 compliance.
-
-        Returns:
-            Mapping with agent context management and orchestration parameters.
-        """
-        return {
-            "context_trim_threshold": self.agents.context_trim_threshold,
-            "context_buffer_size": self.agents.context_buffer_size,
-            "enable_parallel_execution": self.agents.enable_parallel_tool_execution,
-            "max_workflow_depth": self.agents.max_workflow_depth,
-            "enable_state_compression": self.agents.enable_agent_state_compression,
-            "chat_memory_limit": self.agents.chat_memory_limit_tokens,
-            "decision_timeout": self.agents.decision_timeout,
-        }
-
-    def get_dspy_config(self) -> dict[str, Any]:
-        """Get DSPy optimization configuration for ADR-018.
-
-        Returns:
-            Mapping with DSPy optimization parameters such as iterations,
-            samples, retries, and metric thresholds.
-        """
-        return {
-            "enabled": self.enable_dspy_optimization,
-            "iterations": self.dspy_optimization_iterations,
-            "samples": self.dspy_optimization_samples,
-            "max_retries": self.dspy_max_retries,
-            "temperature": self.dspy_temperature,
-            "metric_threshold": self.dspy_metric_threshold,
-            "bootstrapping": self.enable_dspy_bootstrapping,
+            "trust_remote_code": bool(self.security.trust_remote_code),
         }
 
     def get_graphrag_config(self) -> dict[str, Any]:
@@ -709,6 +739,7 @@ class DocMindSettings(BaseSettings):
 
         Returns:
             Mapping with GraphRAG enablement and extraction/traversal settings.
+            Router initialization consumes this helper directly.
         """
         # Prefer nested configuration; fallback to top-level fields
         if hasattr(self, "graphrag_cfg") and isinstance(
@@ -732,59 +763,6 @@ class DocMindSettings(BaseSettings):
             "chunk_size": self.graphrag_chunk_size,
         }
 
-    def get_semantic_cache_config(self) -> dict[str, Any]:
-        """Semantic cache configuration for ADR-035.
-
-        Returns:
-            Mapping with semantic cache provider, thresholds, retention, and
-            namespacing configuration.
-        """
-        c = self.semantic_cache
-        return {
-            "enabled": c.enabled,
-            "provider": c.provider,
-            "score_threshold": c.score_threshold,
-            "ttl_seconds": c.ttl_seconds,
-            "top_k": c.top_k,
-            "max_response_bytes": c.max_response_bytes,
-            "namespace": c.namespace,
-        }
-
-    def get_chat_config(self) -> dict[str, Any]:
-        """Chat memory configuration for ADR-021.
-
-        Returns:
-            Mapping with chat memory storage parameters (e.g., sqlite path).
-        """
-        return {"sqlite_path": str(self.chat.sqlite_path)}
-
-    def get_analysis_config(self) -> dict[str, Any]:
-        """Analysis mode configuration for ADR-023.
-
-        Returns:
-            Mapping with analysis mode and worker concurrency.
-        """
-        return {
-            "mode": self.analysis.mode,
-            "max_workers": self.analysis.max_workers,
-        }
-
-    def get_ui_config(self) -> dict[str, Any]:
-        """Get UI configuration for ADR-016.
-
-        Returns:
-            Mapping with UI theme, session persistence, streaming behavior, and
-            history/port settings.
-        """
-        return {
-            "theme": self.ui.theme,
-            "session_persistence": self.ui.enable_session_persistence,
-            "response_streaming": self.ui.response_streaming,
-            "max_history_items": self.ui.max_history_items,
-            "streamlit_port": self.ui.streamlit_port,
-            "enable_dark_mode": self.ui.enable_dark_mode,
-        }
-
     # === Validation helpers ===
     def _validate_endpoints_security(self) -> None:
         """Validate endpoint URLs against security policy.
@@ -796,7 +774,7 @@ class DocMindSettings(BaseSettings):
             ValueError: If any configured base URL is not allowed while
             ``allow_remote_endpoints`` is False.
         """
-        if self.allow_remote_endpoints:
+        if self.security.allow_remote_endpoints:
             return
 
         def _is_allowed(url: str | None) -> bool:
@@ -815,7 +793,7 @@ class DocMindSettings(BaseSettings):
 
                 # Build a set of allowed hostnames from the allowlist entries
                 allowed_hosts: set[str] = set()
-                for entry in self.endpoint_allowlist:
+                for entry in self.security.endpoint_allowlist:
                     e = (entry or "").strip()
                     if not e:
                         continue
@@ -830,14 +808,16 @@ class DocMindSettings(BaseSettings):
             except (ValueError, TypeError):  # pragma: no cover - defensive
                 return False
 
-        urls = [
+        raw_urls = {
             self.ollama_base_url,
+            self.openai.base_url,
             self.lmstudio_base_url,
-            self.vllm_base_url or self.vllm.vllm_base_url,
+            self.vllm_base_url,
+            getattr(self.vllm, "vllm_base_url", None),
             self.llamacpp_base_url,
-        ]
-        for url in urls:
-            if not _is_allowed(url):
+        }
+        for url in raw_urls:
+            if not _is_allowed(ensure_v1(url)):
                 raise ValueError(
                     "Remote endpoints are disabled. Set allow_remote_endpoints=True "
                     "or use localhost URLs."
@@ -859,35 +839,8 @@ class DocMindSettings(BaseSettings):
 # Global settings instance - primary interface for the application
 settings = DocMindSettings()
 
-# Startup visibility for active hybrid fusion mode and limits (INFO)
-
-with suppress(Exception):  # pragma: no cover - logging must not fail
-    # Resolve DBSF toggle precedence and override fusion_mode if necessary
-    if (
-        bool(getattr(settings.retrieval, "dbsf_enabled", False))
-        and str(settings.retrieval.fusion_mode).lower() != "dbsf"
-    ):
-        logger.warning(
-            "DBSF enabled via env; overriding fusion_mode=%s to 'dbsf'",
-            settings.retrieval.fusion_mode,
-        )
-        settings.retrieval.fusion_mode = "dbsf"  # type: ignore[attr-defined]
-
-    # Bridge telemetry enabled -> disabled env, to honor existing sink behavior
-    if not bool(getattr(settings, "telemetry_enabled", True)):
-        os.environ["DOCMIND_TELEMETRY_DISABLED"] = "true"
-
-    logger.info(
-        (
-            "Hybrid fusion: mode=%s dense_limit=%d sparse_limit=%d "
-            "fused_top_k=%d dbsf_enabled=%s"
-        ),
-        str(settings.retrieval.fusion_mode).lower(),
-        settings.retrieval.prefetch_dense_limit,
-        settings.retrieval.prefetch_sparse_limit,
-        settings.retrieval.fused_top_k,
-        getattr(settings.retrieval, "dbsf_enabled", False),
-    )
+# Startup side-effects (logging, env bridges) are handled in startup_init()
+# located in src.config.integrations.
 
 # Module exports
 __all__ = [
@@ -907,12 +860,3 @@ __all__ = [
     "VLLMConfig",
     "settings",
 ]
-
-
-def get_vllm_env_vars() -> dict[str, str]:
-    """Module-level helper returning vLLM environment variables.
-
-    Returns:
-        Mapping of environment variable names to string values for vLLM.
-    """
-    return settings.get_vllm_env_vars()

@@ -191,7 +191,34 @@
    ```bash
    cp .env.example .env
    # Edit .env with your preferred settings
+
+   # Example — LM Studio (local, OpenAI-compatible):
+   #   DOCMIND_LLM_BACKEND=lmstudio
+   #   DOCMIND_OPENAI__BASE_URL=http://localhost:1234/v1
+   #   DOCMIND_OPENAI__API_KEY=not-needed
+
+   # Example — vLLM OpenAI-compatible server:
+   #   DOCMIND_LLM_BACKEND=vllm
+   #   DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1
+   #   DOCMIND_OPENAI__API_KEY=not-needed
+
+   # Example — llama.cpp server:
+   #   DOCMIND_LLM_BACKEND=llamacpp
+   #   DOCMIND_OPENAI__BASE_URL=http://localhost:8080/v1
+   #   DOCMIND_OPENAI__API_KEY=not-needed
+
+   # Offline-first recommended:
+   #   HF_HUB_OFFLINE=1
+   #   TRANSFORMERS_OFFLINE=1
+
+   # Optional — OpenAI Cloud (breaks strict offline):
+   #   DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1
+   #   DOCMIND_OPENAI__API_KEY=sk-...
+   #   DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
    ```
+
+For a complete overview (including a Local vs Cloud matrix), see
+`docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
 
 5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
 
