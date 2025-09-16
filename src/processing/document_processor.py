@@ -38,6 +38,7 @@ from unstructured.partition.auto import partition
 from src.config.settings import settings as app_settings
 from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.models.processing import DocumentElement, ProcessingResult, ProcessingStrategy
+from src.processing.pipeline_builder import PipelineBuilder
 from src.processing.utils import is_unstructured_like, sha256_id
 from src.utils.canonicalization import (
     CanonicalizationConfig,
@@ -457,10 +458,31 @@ class DocumentProcessor:
         # Document store for document management and deduplication
         self.docstore = SimpleDocumentStore()
 
+        pipeline_metadata = {
+            "pipeline_version": getattr(
+                getattr(self.settings, "processing", self.settings),
+                "pipeline_version",
+                getattr(self.settings, "pipeline_version", "1"),
+            )
+        }
+
+        self.pipeline_builder = PipelineBuilder(
+            transform_factories=[self._build_unstructured_transformation],
+            cache_factory=lambda: self.cache,
+            docstore_factory=lambda: self.docstore,
+            metadata=pipeline_metadata,
+        )
+
         logger.info(
-            "DocumentProcessor initialized with strategy mapping for {} file types",
+            "DocumentProcessor initialized with strategy mapping for %s file types",
             len(self.strategy_map),
         )
+
+    def _build_unstructured_transformation(
+        self, strategy: ProcessingStrategy
+    ) -> list[TransformComponent]:
+        """Return the default Unstructured transformation list."""
+        return [UnstructuredTransformation(strategy, self.settings)]
 
     def _get_strategy_for_file(self, file_path: str | Path) -> ProcessingStrategy:
         """Determine processing strategy based on file extension.
@@ -606,24 +628,12 @@ class DocumentProcessor:
         Returns:
             Configured IngestionPipeline instance
         """
-        # Create transformations pipeline: Unstructured parsing + our chunking inside
-        transformations = [
-            UnstructuredTransformation(strategy, self.settings),
-        ]
-
-        # Create pipeline with all LlamaIndex benefits. Some tests may monkeypatch
-        # IngestionPipeline with a simplified constructor; fall back gracefully.
         try:
-            pipeline = IngestionPipeline(
-                transformations=transformations,
-                cache=self.cache,  # Built-in caching
-                docstore=self.docstore,  # Document deduplication
-            )
+            return self.pipeline_builder.build(strategy)
         except TypeError:
             # Fallback: only pass transformations when other kwargs unsupported
-            pipeline = IngestionPipeline(transformations=transformations)
-
-        return pipeline
+            transformations = self._build_unstructured_transformation(strategy)
+            return IngestionPipeline(transformations=list(transformations))
 
     @retry(
         retry=retry_if_exception_type((IOError, OSError)),

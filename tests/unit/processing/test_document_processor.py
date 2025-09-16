@@ -33,6 +33,7 @@ def mock_settings():
     mock_settings = Mock()
     mock_settings.processing.chunk_size = 1000
     mock_settings.processing.chunk_overlap = 100
+    mock_settings.processing.pipeline_version = "test"
     mock_settings.cache_dir = "./test_cache"
     mock_settings.max_document_size_mb = 50
     mock_settings.hashing.canonicalization_version = "1"

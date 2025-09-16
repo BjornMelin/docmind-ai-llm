@@ -136,6 +136,10 @@ class ProcessingConfig(BaseModel):
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     debug_chunk_flow: bool = Field(default=False)
     encrypt_page_images: bool = Field(default=False)
+    pipeline_version: str = Field(
+        default="1",
+        description="Version identifier for ingestion pipeline wiring",
+    )
 
     @model_validator(mode="after")
     def _validate_overlap(self) -> "ProcessingConfig":

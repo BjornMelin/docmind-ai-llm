@@ -32,6 +32,7 @@ def _mk_settings(
     s.processing.new_after_n_chars = new_after
     s.processing.combine_text_under_n_chars = combine_under
     s.processing.multipage_sections = multipage
+    s.processing.pipeline_version = "test"
     s.max_document_size_mb = max_mb
     s.cache_dir = "./cache"
     s.hashing.canonicalization_version = "1"
