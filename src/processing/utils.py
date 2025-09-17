@@ -10,7 +10,14 @@ from typing import Any
 
 
 def _normalize_text(value: str) -> str:
-    """Normalize text for stable hashing (trim + collapse whitespace)."""
+    """Normalize text for stable hashing by trimming and collapsing whitespace.
+
+    Args:
+        value: Raw string value to normalize.
+
+    Returns:
+        str: Normalized string suitable for hashing.
+    """
     return "" if not value else " ".join(value.split()).strip()
 
 
@@ -23,7 +30,7 @@ def sha256_id(*parts: str | bytes) -> str:
         *parts: Strings or bytes to include in the digest
 
     Returns:
-        Hex-encoded SHA-256 digest
+        str: Hex-encoded SHA-256 digest.
     """
     h = hashlib.sha256()
     for p in parts:
@@ -45,7 +52,8 @@ def is_unstructured_like(element: Any) -> bool:
         element: Candidate element to inspect.
 
     Returns:
-        True if the object appears compatible with Unstructured; otherwise False.
+        bool: ``True`` when the object appears compatible with Unstructured;
+        otherwise ``False``.
     """
     if not (
         hasattr(element, "text")

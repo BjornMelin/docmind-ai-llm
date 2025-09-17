@@ -57,7 +57,7 @@ class PipelineBuilder:
             strategy: Processing strategy selected for the document.
 
         Returns:
-            Configured :class:`IngestionPipeline` instance.
+            IngestionPipeline: Configured ingestion pipeline instance.
         """
         transformations: list[TransformComponent] = []
         for factory in self._transform_factories:

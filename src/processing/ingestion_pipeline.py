@@ -53,7 +53,12 @@ logger = logging.getLogger(__name__)
 
 
 def _default_embedding() -> BaseEmbedding | None:
-    """Return the default embedding model if available."""
+    """Return the default embedding model when the optional dependency loads.
+
+    Returns:
+        BaseEmbedding | None: HuggingFace embedding instance, or ``None`` when
+        the optional package is unavailable or model initialization fails.
+    """
     if HuggingFaceEmbedding is None:  # pragma: no cover - optional path
         return None
     try:
@@ -64,12 +69,30 @@ def _default_embedding() -> BaseEmbedding | None:
 
 
 def _ensure_cache_path(cfg: IngestionConfig) -> Path:
+    """Resolve and materialize the cache path used by the ingestion pipeline.
+
+    Args:
+        cfg: Runtime ingestion configuration.
+
+    Returns:
+        Path: Fully qualified DuckDB cache path guaranteed to exist.
+    """
     base_dir = cfg.cache_dir or app_settings.cache_dir
     base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir / "docmind.duckdb"
 
 
 def _ensure_docstore(cfg: IngestionConfig) -> tuple[SimpleDocumentStore, Path | None]:
+    """Return a document store instance, restoring persisted state when present.
+
+    Args:
+        cfg: Runtime ingestion configuration.
+
+    Returns:
+        tuple[SimpleDocumentStore, Path | None]: Instantiated docstore and the
+        persistence path when configured. The path is ``None`` when persistence
+        is disabled.
+    """
     path = cfg.docstore_path
     if path is None:
         return SimpleDocumentStore(), None
@@ -84,7 +107,16 @@ def build_ingestion_pipeline(
     *,
     embedding: BaseEmbedding | None = None,
 ) -> tuple[IngestionPipeline, Path, Path | None]:
-    """Construct an :class:`IngestionPipeline` with DuckDB-backed caching."""
+    """Construct an :class:`IngestionPipeline` configured with local persistence.
+
+    Args:
+        cfg: Ingestion options controlling chunking, caching, and persistence.
+        embedding: Optional embedding component injected into the pipeline.
+
+    Returns:
+        tuple[IngestionPipeline, Path, Path | None]: Pipeline instance, cache
+        database path, and optional docstore persist path.
+    """
     cache_path = _ensure_cache_path(cfg)
     kv_store = DuckDBKVStore(database_name=str(cache_path))
     ingest_cache = IngestionCache(cache=kv_store, collection=cfg.cache_collection)
@@ -121,6 +153,15 @@ def build_ingestion_pipeline(
 def _document_from_input(
     reader: UnstructuredReader | None, item: IngestionInput
 ) -> list[Document]:
+    """Convert an ingestion input into LlamaIndex ``Document`` objects.
+
+    Args:
+        reader: Optional Unstructured reader used for rich parsing.
+        item: Normalized ingestion payload describing the source corpus item.
+
+    Returns:
+        list[Document]: Documents populated with normalized metadata.
+    """
     if item.source_path is not None and reader is not None:
         try:
             docs = reader.load_data(
@@ -150,6 +191,16 @@ def _document_from_input(
 def _page_image_exports(
     path: Path, cfg: IngestionConfig, encrypt_override: bool
 ) -> list[ExportArtifact]:
+    """Generate optional page-image export artifacts for PDF inputs.
+
+    Args:
+        path: Source document path.
+        cfg: Ingestion configuration controlling cache directories.
+        encrypt_override: Per-document override to force image encryption.
+
+    Returns:
+        list[ExportArtifact]: Export metadata describing rendered page images.
+    """
     if path.suffix.lower() != ".pdf":
         return []
 
@@ -191,6 +242,16 @@ def _page_image_exports(
 def _load_documents(
     cfg: IngestionConfig, inputs: Sequence[IngestionInput]
 ) -> tuple[list[Document], list[ExportArtifact]]:
+    """Load source corpus into ``Document`` instances and capture exports.
+
+    Args:
+        cfg: Ingestion configuration used to resolve cache locations.
+        inputs: Sequence of normalized ingestion inputs.
+
+    Returns:
+        tuple[list[Document], list[ExportArtifact]]: Parsed documents paired
+        with any generated artifact exports.
+    """
     reader = UnstructuredReader() if UnstructuredReader is not None else None
     documents: list[Document] = []
     exports: list[ExportArtifact] = []
@@ -209,7 +270,17 @@ async def ingest_documents(
     *,
     embedding: BaseEmbedding | None = None,
 ) -> IngestionResult:
-    """Run the configured ingestion pipeline and normalize the result."""
+    """Run the configured ingestion pipeline and normalize the result payload.
+
+    Args:
+        cfg: Ingestion configuration specifying chunking and persistence.
+        inputs: Normalized ingestion inputs to process.
+        embedding: Optional embedding instance overriding defaults.
+
+    Returns:
+        IngestionResult: Structured ingestion output including nodes, manifest
+        summary, exports, metadata, and execution timing.
+    """
     pipeline, cache_path, docstore_path = build_ingestion_pipeline(
         cfg, embedding=embedding
     )
@@ -253,7 +324,16 @@ def ingest_documents_sync(
     *,
     embedding: BaseEmbedding | None = None,
 ) -> IngestionResult:
-    """Synchronous helper around :func:`ingest_documents`."""
+    """Run :func:`ingest_documents` synchronously via ``asyncio.run``.
+
+    Args:
+        cfg: Ingestion configuration specifying chunking and persistence.
+        inputs: Normalized ingestion inputs to process.
+        embedding: Optional embedding instance overriding defaults.
+
+    Returns:
+        IngestionResult: Structured ingestion output from the async pipeline.
+    """
     return asyncio.run(ingest_documents(cfg, inputs, embedding=embedding))
 
 

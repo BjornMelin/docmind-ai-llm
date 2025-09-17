@@ -23,9 +23,14 @@ from src.utils.security import encrypt_file
 
 
 def _phash(img: Image.Image, hash_size: int = 8) -> str:
-    """Compute a simple perceptual hash (average hash) for dedup hints.
+    """Compute a simple perceptual hash (average hash) for deduplication.
 
-    This avoids external deps; not a full DCT pHash but sufficient for duplicates.
+    Args:
+        img: Image to hash.
+        hash_size: Width/height of the hash grid; defaults to 8.
+
+    Returns:
+        str: Hex-encoded average hash suitable for duplicate detection hints.
     """
     gray = img.convert("L").resize((hash_size, hash_size), Image.LANCZOS)
     arr = np.asarray(gray, dtype=np.float32)
@@ -40,9 +45,17 @@ def _phash(img: Image.Image, hash_size: int = 8) -> str:
 
 
 def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
-    """Save pixmap as WebP (preferred) or JPEG fallback. Returns (path, phash).
+    """Persist a rendered page as WebP (preferred) or JPEG fallback.
 
-    When encryption is enabled, returns the .enc path.
+    Encryption is applied when ``settings.processing.encrypt_page_images`` is
+    enabled, yielding ``*.enc`` outputs.
+
+    Args:
+        pix: PyMuPDF pixmap for the rendered page.
+        target_stem: Path stem used to derive the output filename.
+
+    Returns:
+        tuple[Path, str]: Output path (possibly encrypted) and perceptual hash.
     """
     # Convert to PIL Image from raw samples
     mode = "RGB" if pix.n < 4 else "RGBA"
@@ -79,15 +92,20 @@ def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
 def _render_pdf_pages(
     pdf_path: Path, out_dir: Path, dpi: int = 200
 ) -> list[tuple[int, Path, fitz.Rect, str]]:
-    """Render each page to a stable image file (WebP preferred; JPEG fallback).
+    """Render PDF pages to image files while preserving deterministic names.
 
-    - Stable filename stem: ``<stem>__page-<n>`` (1-based), extension ``.webp``
-      when supported, otherwise ``.jpg``. When encryption is enabled, files are
-      written as ``*.enc``.
-    - Idempotent but refreshes images if the source PDF is newer than existing
-      artifacts.
+    Output filenames follow the ``<stem>__page-<n>`` convention and reuse
+    existing images unless the source PDF has changed. When encryption is
+    enabled, rendered files are suffixed with ``.enc``.
 
-    Returns list of tuples ``(page_no, image_path, page_rect, phash)``.
+    Args:
+        pdf_path: Source PDF path.
+        out_dir: Directory to store rendered images.
+        dpi: Render resolution in dots per inch; defaults to 200.
+
+    Returns:
+        list[tuple[int, Path, fitz.Rect, str]]: One entry per page containing
+        the 1-based page number, output image path, page rectangle, and hash.
     """
     pdf_path = Path(pdf_path)
     out_dir = Path(out_dir)
@@ -153,7 +171,8 @@ def pdf_pages_to_image_documents(
         output_dir: Directory to save images. Created if ``None``.
 
     Returns:
-        Tuple of ImageDocuments and the directory containing the images.
+        tuple[list[ImageDocument], Path]: Generated image documents and the
+        directory containing the rendered assets.
     """
     pdf_path = Path(pdf_path)
     out_dir = Path(output_dir) if output_dir else Path(tempfile.mkdtemp())
@@ -193,7 +212,7 @@ def save_pdf_page_images(pdf_path: Path, out_dir: Path, dpi: int = 200) -> list[
         dpi: Render resolution (dots per inch)
 
     Returns:
-        A list of dicts with page metadata.
+        list[dict]: Page metadata containing image path, bbox, phash, and flags.
     """
     entries = _render_pdf_pages(Path(pdf_path), Path(out_dir), dpi)
 
