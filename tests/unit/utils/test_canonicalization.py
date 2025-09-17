@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 
 import pytest
@@ -17,9 +18,13 @@ from src.utils.canonicalization import (
 @pytest.fixture
 def canonical_config() -> CanonicalizationConfig:
     hashing_defaults = HashingConfig()
-    secret = os.environ.get("DOCMIND_HASH_SECRET", hashing_defaults.hmac_secret).encode(
-        "utf-8"
-    )
+    secret_source = os.environ.get(
+        "DOCMIND_HASH_SECRET", hashing_defaults.hmac_secret
+    ).strip()
+    secret = secret_source.encode("utf-8")
+    if len(secret) < 32:
+        # Derive a deterministic high-entropy fallback for test environments.
+        secret = hashlib.sha256(secret).digest()
     return CanonicalizationConfig(
         version=hashing_defaults.canonicalization_version,
         hmac_secret=secret,

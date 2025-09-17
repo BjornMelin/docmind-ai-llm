@@ -23,6 +23,20 @@ from src.agents.models import AgentResponse
 from tests.fixtures.test_settings import MockDocMindSettings
 
 
+def _make_llm_mock() -> Mock:
+    """Create a fully mocked LLM with sync/async surfaces."""
+    llm = Mock()
+    llm.metadata = Mock()
+    llm.metadata.model_name = "test-model"
+    llm.invoke = Mock(return_value="ok")
+    llm.ainvoke = AsyncMock(return_value="ok")
+    llm.predict = Mock(return_value="ok")
+    llm.apredict = AsyncMock(return_value="ok")
+    llm.stream = Mock(return_value=iter(()))
+    llm.astream = AsyncMock(return_value=iter(()))
+    return llm
+
+
 @pytest.fixture
 def test_settings():
     """Create test settings for coordinator tests."""
@@ -42,16 +56,7 @@ def sample_messages():
 @pytest.fixture
 def mock_llm():
     """Mock LLM for testing."""
-    llm = Mock()
-    llm.metadata = Mock()
-    llm.metadata.model_name = "test-model"
-    llm.invoke = Mock(return_value="ok")
-    llm.ainvoke = AsyncMock(return_value="ok")
-    llm.predict = Mock(return_value="ok")
-    llm.apredict = AsyncMock(return_value="ok")
-    llm.stream = Mock(return_value=iter(()))
-    llm.astream = AsyncMock(return_value=iter(()))
-    return llm
+    return _make_llm_mock()
 
 
 @pytest.fixture
@@ -237,13 +242,7 @@ class TestMultiAgentCoordinator:
     def test_ensure_setup_success(self, mock_settings, mock_setup):
         """Test successful setup of coordinator components."""
         # Mock LLM in Settings
-        mock_llm = Mock()
-        mock_llm.invoke = Mock(return_value="ok")
-        mock_llm.ainvoke = AsyncMock(return_value="ok")
-        mock_llm.predict = Mock(return_value="ok")
-        mock_llm.apredict = AsyncMock(return_value="ok")
-        mock_llm.stream = Mock(return_value=iter(()))
-        mock_llm.astream = AsyncMock(return_value=iter(()))
+        mock_llm = _make_llm_mock()
         mock_settings.llm = mock_llm
 
         # Mock DSPy availability

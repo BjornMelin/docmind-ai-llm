@@ -110,11 +110,12 @@ def test_snapshot_lock_respects_grace_period(tmp_path: Path) -> None:
     contender = snapshot.SnapshotLock(
         lock_path, timeout=0.2, ttl_seconds=1.0, grace_seconds=5.0
     )
-    takeover = contender._evict_if_stale()
-    assert takeover == 0
+    with pytest.raises(snapshot.SnapshotLockTimeout):
+        contender.acquire()
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert payload["takeover_count"] == 0
     assert lock_path.exists()
     assert meta_path.exists()
-    contender.release()
 
 
 def test_snapshot_lock_refresh_updates_metadata(tmp_path: Path) -> None:

@@ -399,7 +399,7 @@ class HashingConfig(BaseModel):
 
     canonicalization_version: str = Field(default="1")
     hmac_secret: str = Field(
-        default="docmind-dev-secret",
+        default="docmind-dev-secret-please-override-0123456789",
         repr=False,
         description=(
             "Shared secret for HMAC canonical hashes. Override via environment "
@@ -417,6 +417,15 @@ class HashingConfig(BaseModel):
         ],
         description="Ordered metadata keys included in canonical payloads.",
     )
+
+    @field_validator("hmac_secret")
+    @classmethod
+    def _validate_hmac_secret(cls, value: str) -> str:
+        if len(value.encode("utf-8")) < 32:
+            raise ValueError(
+                "DOCMIND_HASH_SECRET must be at least 32 bytes for HMAC strength"
+            )
+        return value
 
 
 class DatabaseConfig(BaseModel):

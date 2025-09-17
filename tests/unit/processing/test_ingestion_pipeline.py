@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,9 @@ class DummyEmbedding(BaseEmbedding):
     """Deterministic embedding for tests."""
 
     def _get_text_embedding(self, text: str):  # type: ignore[override]
-        return [float(len(text) % 5)]
+        digest = hashlib.sha256(text.encode("utf-8")).digest()
+        value = int.from_bytes(digest[:8], "big") / 2**64
+        return [float(value)]
 
     async def _aget_text_embedding(self, text: str):  # type: ignore[override]
         return self._get_text_embedding(text)

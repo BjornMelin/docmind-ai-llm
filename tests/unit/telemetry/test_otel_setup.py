@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
@@ -73,17 +75,17 @@ def test_setup_metrics_enabled() -> None:
 
 def test_configure_observability_instruments_llamaindex(monkeypatch) -> None:
     """LlamaIndex instrumentation registers once when enabled."""
-    calls: dict[str, int] = {}
+    calls: defaultdict[str, int] = defaultdict(int)
 
     class DummyInstrumentor:
         def __init__(self) -> None:
-            calls["init"] = calls.get("init", 0) + 1
+            calls["init"] += 1
 
         def start_registering(self) -> None:
-            calls["started"] = calls.get("started", 0) + 1
+            calls["started"] += 1
 
         def shutdown(self) -> None:
-            calls["shutdown"] = calls.get("shutdown", 0) + 1
+            calls["shutdown"] += 1
 
     monkeypatch.setattr(otel, "LlamaIndexOpenTelemetry", DummyInstrumentor)
     enabled_settings = settings.model_copy(
