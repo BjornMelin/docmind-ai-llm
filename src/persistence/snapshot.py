@@ -183,7 +183,17 @@ def begin_snapshot(base_dir: Path | None = None) -> Path:
     )
     lock.acquire()
     _ACTIVE_LOCK = lock
-    workspace = start_workspace(paths.base_dir)
+    try:
+        workspace = start_workspace(paths.base_dir)
+    except Exception:
+        try:
+            _release_active_lock()
+        except Exception as release_error:  # pragma: no cover - defensive
+            logger.warning(
+                "Failed to release snapshot lock after workspace error: %s",
+                release_error,
+            )
+        raise
     return workspace.root
 
 

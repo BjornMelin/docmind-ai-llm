@@ -20,6 +20,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed
 * Snapshot manifest/schema now records `complete`, `schema_version`, `persist_format_version`, graph export metadata, and enforces `_tmp-` workspace + `CURRENT` pointer discipline.
+* Guard snapshot workspace initialization to release file locks if creation fails (`src/persistence/snapshot.py`).
 * Router, UI, and telemetry layers consistently emit OpenTelemetry spans/metrics for ingestion, snapshot promotion, GraphRAG selection, and export flows.
 * Packaging + CI rely on `uv` with an `observability` extra (OTLP exporters, portalocker, LlamaIndex OTEL) and run `ruff`, `pylint`, and `uv run scripts/run_tests.py --coverage` under locked environments.
 * Shared fixtures/tests cover ingestion pipeline builders, snapshot locks, Streamlit AppTest interactions, and console exporter stubs.
