@@ -15,6 +15,17 @@ from typing import Any
 
 import pytest
 
+_MODULE_TARGETS = [
+    "src.retrieval",
+    "src.retrieval.graph_config",
+    "src.retrieval.router_factory",
+    "src.retrieval.hybrid",
+    "src.retrieval.reranking",
+    "src.utils.storage",
+    "src.utils.monitoring",
+]
+_ORIGINAL_MODULES = {name: sys.modules.get(name) for name in _MODULE_TARGETS}
+
 _stub_retrieval_pkg = ModuleType("src.retrieval")
 _stub_retrieval_pkg.__path__ = []  # type: ignore[attr-defined]
 sys.modules.setdefault("src.retrieval", _stub_retrieval_pkg)
@@ -86,10 +97,6 @@ sys.modules.setdefault("src.retrieval.reranking", _stub_rerank)
 _stub_storage = ModuleType("src.utils.storage")
 _stub_storage.create_vector_store = _stub_noop  # type: ignore[attr-defined]
 sys.modules.setdefault("src.utils.storage", _stub_storage)
-
-_stub_ingest = ModuleType("src.ui.ingest_adapter")
-_stub_ingest.ingest_files = _stub_noop  # type: ignore[attr-defined]
-sys.modules.setdefault("src.ui.ingest_adapter", _stub_ingest)
 
 _stub_monitoring = ModuleType("src.utils.monitoring")
 _stub_monitoring.log_performance = lambda *_, **__: None
@@ -240,3 +247,12 @@ def test_rebuild_snapshot_writes_manifest(
     for evt in events:
         assert evt.get("context") == "snapshot"
         assert "duration_ms" in evt
+
+
+def teardown_module(module) -> None:
+    """Restore original modules patched at import time."""
+    for name, original in _ORIGINAL_MODULES.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original

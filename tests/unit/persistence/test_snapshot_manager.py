@@ -151,3 +151,36 @@ def test_persist_graph_store_failure_records_error(tmp_path: Path) -> None:
     data = log_path.read_text(encoding="utf-8")
     assert "persist_graph" in data
     assert "graph-broke" in data
+
+
+def test_snapshot_manager_includes_graph_exports(tmp_path: Path) -> None:
+    """Graph export metadata is persisted into manifest.meta.json."""
+    mgr = SnapshotManager(tmp_path)
+    workspace = mgr.begin_snapshot()
+    export_dir = workspace / "graph" / "graph_export-20240101T000000Z.jsonl"
+    export_dir.parent.mkdir(parents=True, exist_ok=True)
+    export_dir.write_text("{}\n", encoding="utf-8")
+    mgr.write_manifest(
+        workspace,
+        index_id="graph",
+        graph_store_type="simple",
+        vector_store_type="qdrant",
+        corpus_hash="deadbeef",
+        config_hash="cafebabe",
+        graph_exports=[
+            {
+                "path": "graph/graph_export-20240101T000000Z.jsonl",
+                "format": "jsonl",
+                "created_at": "2024-01-01T00:00:00Z",
+                "seed_count": 10,
+                "size_bytes": export_dir.stat().st_size,
+            }
+        ],
+    )
+    snap = mgr.finalize_snapshot(workspace)
+    manifest_meta = json.loads(
+        (snap / "manifest.meta.json").read_text(encoding="utf-8")
+    )
+    assert manifest_meta["graph_exports"][0]["path"].startswith("graph/graph_export-")
+    entries = list(snapshot.load_manifest_entries(snap))
+    assert any(entry["content_type"] == "application/x-ndjson" for entry in entries)

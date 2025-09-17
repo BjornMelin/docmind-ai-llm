@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -14,11 +15,9 @@ from src.persistence import snapshot
 
 
 @pytest.fixture(autouse=True)
-def _isolate_storage_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point snapshot storage to an isolated temp directory for each test."""
-    from src.config.settings import settings as _settings
-
-    _settings.data_dir = tmp_path
+def _force_snapshot_root(snapshot_storage_root: Path) -> None:
+    """Ensure snapshot storage writes to an isolated test directory."""
+    return snapshot_storage_root
 
 
 def test_snapshot_lock_acquire_and_release(tmp_path: Path) -> None:
@@ -116,3 +115,19 @@ def test_snapshot_lock_respects_grace_period(tmp_path: Path) -> None:
     assert lock_path.exists()
     assert meta_path.exists()
     contender.release()
+
+
+def test_snapshot_lock_refresh_updates_metadata(tmp_path: Path) -> None:
+    """Refreshing the lock updates the heartbeat timestamp."""
+    lock_path = tmp_path / "lockfile"
+    lock = snapshot.SnapshotLock(lock_path, timeout=0.5, ttl_seconds=0.2)
+    lock.acquire()
+    try:
+        meta_path = lock_path.with_suffix(lock_path.suffix + ".meta.json")
+        before = json.loads(meta_path.read_text(encoding="utf-8"))["last_heartbeat"]
+        time.sleep(0.05)
+        lock.refresh()
+        after = json.loads(meta_path.read_text(encoding="utf-8"))["last_heartbeat"]
+        assert after > before
+    finally:
+        lock.release()

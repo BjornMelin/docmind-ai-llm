@@ -8,7 +8,7 @@ import pytest
 from llama_index.core.base.embeddings.base import BaseEmbedding
 
 from src.models.processing import IngestionConfig, IngestionInput
-from src.processing.ingestion_pipeline import ingest_documents
+from src.processing.ingestion_pipeline import build_ingestion_pipeline, ingest_documents
 
 
 class DummyEmbedding(BaseEmbedding):
@@ -50,6 +50,7 @@ async def test_ingest_documents_with_bytes_payload(tmp_path: Path) -> None:
     assert result.duration_ms >= 0
     assert result.manifest.payload_count == len(result.nodes)
     assert result.metadata["document_count"] == 1
+    assert Path(result.metadata["docstore_path"]).exists()
 
 
 @pytest.mark.asyncio
@@ -75,6 +76,7 @@ async def test_ingest_documents_with_path(tmp_path: Path) -> None:
 
     assert result.manifest.corpus_hash
     assert result.metadata["cache_path"].endswith("docmind.duckdb")
+    assert (tmp_path / "docstore.json").exists()
 
 
 @pytest.mark.asyncio
@@ -84,3 +86,21 @@ async def test_ingest_documents_sync_wrapper(tmp_path: Path) -> None:
 
     result = await ingest_documents(cfg, inputs, embedding=DummyEmbedding())
     assert not result.exports
+
+
+def test_build_ingestion_pipeline_uses_cache_and_docstore(tmp_path: Path) -> None:
+    """build_ingestion_pipeline returns configured cache and docstore paths."""
+    cfg = IngestionConfig(
+        chunk_size=64,
+        chunk_overlap=16,
+        cache_dir=tmp_path / "cache",
+        docstore_path=tmp_path / "docstore.json",
+    )
+
+    pipeline, cache_path, docstore_path = build_ingestion_pipeline(
+        cfg, embedding=DummyEmbedding()
+    )
+
+    assert cache_path == cfg.cache_dir / "docmind.duckdb"
+    assert docstore_path == cfg.docstore_path
+    assert pipeline.transformations  # TokenTextSplitter + optional components
