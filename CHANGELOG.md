@@ -7,11 +7,21 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ## [Unreleased]
 
 ### Added
+- Streamlit ingestion adapter backed by the LlamaIndex `IngestionPipeline`, including
+  deterministic manifest summaries, optional GraphRAG index creation, and
+  OpenTelemetry spans for rebuild/export operations.
+- UI telemetry scaffolding: `configure_observability` helper and OTEL span/counter
+  instrumentation for the multi-agent coordinator and router tool.
 - OpenAIConfig (openai.*) with idempotent /v1 base_url normalization and api_key.
 - SecurityConfig (security.*) centralizing allow_remote_endpoints, endpoint_allowlist, trust_remote_code.
 - HybridConfig (hybrid.*) declarative policy (enabled/server_side/method/rrf_k/dbsf_alpha).
 
 ### Changed
+- Documents and Chat pages now hydrate router/session state via the new ingestion
+  adapter, surface manifest metadata from `manifest.meta.json`, and sanitize
+  manual GraphRAG export paths.
+- GraphRAG helpers rely solely on documented LlamaIndex APIs; router factory and
+  tests updated accordingly.
 - Enforced backend-aware OpenAI-like /v1 normalization in LLM factory for LM Studio, vLLM (OpenAI-compatible), and llama.cpp server.
 - Moved all import-time I/O from settings into explicit startup_init(settings) in integrations.
 - Unified server-side hybrid gating to retrieval.enable_server_hybrid + fusion_mode; removed legacy flags.

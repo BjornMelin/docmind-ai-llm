@@ -311,6 +311,7 @@ async def ingest_documents(
 
     return IngestionResult(
         nodes=nodes,
+        documents=documents,
         manifest=manifest,
         exports=exports,
         metadata=metadata,

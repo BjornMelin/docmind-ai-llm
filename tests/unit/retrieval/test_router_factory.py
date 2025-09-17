@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -38,10 +39,32 @@ def _tool_count(router) -> int:
 
 
 @pytest.mark.unit
-def test_build_router_engine_with_graph() -> None:
+def test_build_router_engine_with_graph(monkeypatch) -> None:
     vec = _VecIndex()
     pg = _PgIndex(healthy=True)
-    router = build_router_engine(vec, pg, settings=None)
+
+    def _fake_build_graph_query_engine(*_args, **_kwargs):
+        return SimpleNamespace(
+            query_engine=MagicMock(name="graph_qe"),
+            retriever=MagicMock(name="graph_retriever"),
+        )
+
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_graph_query_engine",
+        _fake_build_graph_query_engine,
+    )
+    monkeypatch.setattr(
+        "src.retrieval.reranking.get_postprocessors", lambda *_a, **_k: []
+    )
+    cfg = SimpleNamespace(
+        enable_graphrag=True,
+        retrieval=SimpleNamespace(
+            top_k=10, use_reranking=False, enable_server_hybrid=False, reranking_top_k=5
+        ),
+        graphrag_cfg=SimpleNamespace(default_path_depth=1),
+        database=SimpleNamespace(qdrant_collection="col"),
+    )
+    router = build_router_engine(vec, pg, settings=cfg)
     assert _tool_count(router) == 2
 
 
@@ -49,5 +72,13 @@ def test_build_router_engine_with_graph() -> None:
 def test_build_router_engine_vector_only_fallback() -> None:
     vec = _VecIndex()
     pg = _PgIndex(healthy=False)
-    router = build_router_engine(vec, pg, settings=None)
+    cfg = SimpleNamespace(
+        enable_graphrag=True,
+        retrieval=SimpleNamespace(
+            top_k=10, use_reranking=False, enable_server_hybrid=False, reranking_top_k=5
+        ),
+        graphrag_cfg=SimpleNamespace(default_path_depth=1),
+        database=SimpleNamespace(qdrant_collection="col"),
+    )
+    router = build_router_engine(vec, pg, settings=cfg)
     assert _tool_count(router) == 1

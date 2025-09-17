@@ -30,6 +30,11 @@ from src.config.settings import DocMindSettings
 _TRACE_PROVIDER: TracerProvider | None = None
 _METER_PROVIDER: MeterProvider | None = None
 
+_GRAPH_EXPORT_COUNTER = None
+_GRAPH_EXPORT_DURATION = None
+_GRAPH_EXPORT_SEEDS = None
+_GRAPH_EXPORT_BYTES = None
+
 
 def setup_tracing(app_settings: DocMindSettings) -> None:
     """Configure OpenTelemetry tracing when enabled.
@@ -79,6 +84,16 @@ def setup_metrics(app_settings: DocMindSettings) -> None:
     _METER_PROVIDER = provider
 
 
+def configure_observability(app_settings: DocMindSettings) -> None:
+    """Idempotently configure OpenTelemetry tracing and metrics.
+
+    Args:
+        app_settings: Loaded application settings.
+    """
+    setup_tracing(app_settings)
+    setup_metrics(app_settings)
+
+
 def shutdown_tracing() -> None:
     """Shutdown the active tracer provider (used in tests)."""
     global _TRACE_PROVIDER  # pylint: disable=global-statement
@@ -97,6 +112,57 @@ def shutdown_metrics() -> None:
     _METER_PROVIDER.shutdown()
     _METER_PROVIDER = None
     metrics.set_meter_provider(metrics.NoOpMeterProvider())
+
+
+def record_graph_export_metric(
+    export_type: str,
+    *,
+    duration_ms: float | None = None,
+    seed_count: int | None = None,
+    size_bytes: int | None = None,
+    context: str | None = None,
+) -> None:
+    """Record OpenTelemetry metrics for graph exports when meters are configured."""
+    if metrics is None:  # type: ignore[truthy-function]
+        return
+    meter = metrics.get_meter(__name__)
+    global _GRAPH_EXPORT_COUNTER  # pylint: disable=global-statement
+    global _GRAPH_EXPORT_DURATION
+    global _GRAPH_EXPORT_SEEDS
+    global _GRAPH_EXPORT_BYTES
+    if _GRAPH_EXPORT_COUNTER is None:
+        _GRAPH_EXPORT_COUNTER = meter.create_counter(
+            "docmind.graph.export.count",
+            description="Number of GraphRAG export operations",
+        )
+    attributes: dict[str, str] = {"export_type": export_type}
+    if context:
+        attributes["context"] = context
+    _GRAPH_EXPORT_COUNTER.add(1, attributes=attributes)
+    if duration_ms is not None:
+        if _GRAPH_EXPORT_DURATION is None:
+            _GRAPH_EXPORT_DURATION = meter.create_histogram(
+                "docmind.graph.export.duration",
+                description="Graph export duration in milliseconds",
+                unit="ms",
+            )
+        _GRAPH_EXPORT_DURATION.record(float(duration_ms), attributes=attributes)
+    if seed_count is not None:
+        if _GRAPH_EXPORT_SEEDS is None:
+            _GRAPH_EXPORT_SEEDS = meter.create_histogram(
+                "docmind.graph.export.seed_count",
+                description="Number of seeds used for graph export",
+                unit="1",
+            )
+        _GRAPH_EXPORT_SEEDS.record(float(seed_count), attributes=attributes)
+    if size_bytes is not None:
+        if _GRAPH_EXPORT_BYTES is None:
+            _GRAPH_EXPORT_BYTES = meter.create_histogram(
+                "docmind.graph.export.size",
+                description="Graph export size in bytes",
+                unit="By",
+            )
+        _GRAPH_EXPORT_BYTES.record(float(size_bytes), attributes=attributes)
 
 
 def _build_resource(app_settings: DocMindSettings) -> Resource:
@@ -164,6 +230,8 @@ def _format_headers(headers: Mapping[str, Any]) -> dict[str, str]:
 
 
 __all__ = [
+    "configure_observability",
+    "record_graph_export_metric",
     "setup_metrics",
     "setup_tracing",
     "shutdown_metrics",

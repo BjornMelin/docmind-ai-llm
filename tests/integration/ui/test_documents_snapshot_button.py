@@ -119,6 +119,11 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     snap_stub.SnapshotManager = _SM
     snap_stub.compute_corpus_hash = _compute_hash
     snap_stub.compute_config_hash = _compute_hash
+    snap_stub.load_manifest = lambda *_args, **_kwargs: {
+        "corpus_hash": "sha256:0",
+        "config_hash": "sha256:0",
+        "graph_exports": [],
+    }
     monkeypatch.setitem(sys.modules, "src.persistence.snapshot", snap_stub)
 
     # Import the page module now and patch remaining consumer attributes.
@@ -128,6 +133,7 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     monkeypatch.setattr(page_mod, "build_router_engine", lambda *_, **__: object())
     monkeypatch.setattr(page_mod, "export_graph_jsonl", lambda *_, **__: None)
     monkeypatch.setattr(page_mod, "export_graph_parquet", lambda *_, **__: None)
+    monkeypatch.setattr(page_mod, "load_manifest", snap_stub.load_manifest)
 
     # Provide a minimal SnapshotManager stub to avoid lock/rename races across
     # full-suite execution and ensure deterministic behavior.

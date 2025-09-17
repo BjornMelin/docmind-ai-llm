@@ -27,6 +27,7 @@ Example:
 """
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
 from typing import Any
@@ -40,6 +41,7 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 # Import LlamaIndex Settings for context window access
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
+from opentelemetry import metrics, trace
 
 # Registry utilities
 # Note: tool imports are performed lazily inside _setup_agent_graph to avoid
@@ -48,9 +50,14 @@ from loguru import logger
 from src.agents.registry import DefaultToolRegistry, RetryLLMClient, ToolRegistry
 from src.config import settings
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
+from src.telemetry.opentelemetry import configure_observability
 
 # Import agent-specific models
 from .models import AgentResponse, MultiAgentState
+
+_COORDINATOR_TRACER = trace.get_tracer("docmind.agents.coordinator")
+_COORDINATOR_LATENCY = None
+_COORDINATOR_COUNTER = None
 
 
 class ContextManager:
@@ -137,6 +144,7 @@ class MultiAgentCoordinator:
             tool_registry: Optional tool registry (primarily for testing)
             use_shared_llm_client: Override for the shared retrying LLM flag
         """
+        configure_observability(settings)
         self.model_path = model_path
         self.max_context_length = max_context_length
         self.backend = backend
@@ -471,12 +479,26 @@ class MultiAgentCoordinator:
         )
         return base
 
-    def _log_query_analytics(self, latency_s: float, success: bool) -> None:
-        """Placeholder analytics hook pending the new observability stack."""
-        if getattr(settings, "analytics_enabled", False):
-            logger.debug(
-                "analytics stub: query latency %.3fs success=%s", latency_s, success
-            )
+    def _record_query_metrics(self, latency_s: float, success: bool) -> None:
+        """Record coordinator latency metrics via OpenTelemetry when available."""
+        with contextlib.suppress(Exception):
+            global _COORDINATOR_LATENCY  # pylint: disable=global-statement
+            global _COORDINATOR_COUNTER  # pylint: disable=global-statement
+            meter = metrics.get_meter(__name__)
+            if _COORDINATOR_LATENCY is None:
+                _COORDINATOR_LATENCY = meter.create_histogram(
+                    "docmind.coordinator.latency",
+                    description="Coordinator end-to-end latency",
+                    unit="s",
+                )
+            if _COORDINATOR_COUNTER is None:
+                _COORDINATOR_COUNTER = meter.create_counter(
+                    "docmind.coordinator.calls",
+                    description="Coordinator invocation count",
+                )
+            attributes = {"success": "true" if success else "false"}
+            _COORDINATOR_LATENCY.record(float(latency_s), attributes=attributes)
+            _COORDINATOR_COUNTER.add(1, attributes=attributes)
 
     def process_query(
         self,
@@ -511,6 +533,13 @@ class MultiAgentCoordinator:
             return self._create_error_response(
                 "Failed to initialize coordinator", start_time
             )
+
+        exit_stack = contextlib.ExitStack()
+        span = exit_stack.enter_context(
+            _COORDINATOR_TRACER.start_as_current_span("coordinator.process_query")
+        )
+        span.set_attribute("coordinator.thread_id", thread_id)
+        span.set_attribute("query.length", len(query))
 
         try:
             tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
@@ -568,7 +597,7 @@ class MultiAgentCoordinator:
                     )
 
                 # Best-effort analytics logging for timeout path
-                self._log_query_analytics(time.perf_counter() - start_time, False)
+                self._record_query_metrics(time.perf_counter() - start_time, False)
             else:
                 # Extract response from final state
                 response = self._extract_response(
@@ -586,7 +615,7 @@ class MultiAgentCoordinator:
 
             # Best-effort analytics logging (never impact user flow)
             if not workflow_timed_out:
-                self._log_query_analytics(processing_time, True)
+                self._record_query_metrics(processing_time, True)
 
             # Validate performance targets
             if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:
@@ -594,6 +623,18 @@ class MultiAgentCoordinator:
                     "Coordination overhead %.3fs exceeds threshold",
                     coordination_time,
                 )
+
+            span.set_attribute("coordinator.workflow_timeout", bool(workflow_timed_out))
+            span.set_attribute(
+                "coordinator.fallback", bool(workflow_timed_out and used_fallback)
+            )
+            span.set_attribute(
+                "coordinator.success", not workflow_timed_out or used_fallback
+            )
+            span.set_attribute(
+                "coordinator.processing_time_ms", round(processing_time * 1000.0, 3)
+            )
+            exit_stack.close()
 
             logger.info(
                 "Query processed successfully in %.3fs (coordination: %.3fs)",
@@ -603,6 +644,11 @@ class MultiAgentCoordinator:
             return response
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
+            if "span" in locals() and span is not None:
+                span.set_attribute("coordinator.success", False)
+                span.set_attribute("coordinator.error", str(e))
+            if "exit_stack" in locals():
+                exit_stack.close()
             logger.error("Multi-agent processing failed: %s", e)
 
             # Fallback to basic RAG if enabled

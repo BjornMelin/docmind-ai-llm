@@ -6,6 +6,7 @@ and safe fallback behavior.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -45,18 +46,44 @@ def _tool_count(router) -> int:
 
 
 @pytest.mark.integration
-def test_router_composes_vector_and_graph_tools() -> None:
+def test_router_composes_vector_and_graph_tools(monkeypatch) -> None:
     """Router includes both vector and graph tools when graph is healthy."""
     vec = _VecIndex()
     pg = _PgIndex(healthy=True)
-    router = build_router_engine(vec, pg, settings=None)
+
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_graph_query_engine",
+        lambda *_a, **_k: SimpleNamespace(
+            query_engine=MagicMock(name="graph_qe"),
+            retriever=MagicMock(name="graph_retriever"),
+        ),
+    )
+    monkeypatch.setattr(
+        "src.retrieval.reranking.get_postprocessors", lambda *_a, **_k: []
+    )
+
+    cfg = SimpleNamespace(
+        enable_graphrag=True,
+        retrieval=SimpleNamespace(
+            top_k=10,
+            use_reranking=False,
+            enable_server_hybrid=False,
+            reranking_top_k=5,
+        ),
+        graphrag_cfg=SimpleNamespace(default_path_depth=1),
+        database=SimpleNamespace(qdrant_collection="col"),
+    )
+    router = build_router_engine(vec, pg, settings=cfg)
     assert _tool_count(router) == 2
 
 
 @pytest.mark.integration
-def test_router_fallbacks_to_vector_only_when_graph_missing() -> None:
+def test_router_fallbacks_to_vector_only_when_graph_missing(monkeypatch) -> None:
     """Router falls back to vector-only when graph store is missing."""
     vec = _VecIndex()
     pg = _PgIndex(healthy=False)
+    monkeypatch.setattr(
+        "src.retrieval.reranking.get_postprocessors", lambda *_a, **_k: []
+    )
     router = build_router_engine(vec, pg, settings=None)
     assert _tool_count(router) == 1

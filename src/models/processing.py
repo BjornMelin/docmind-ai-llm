@@ -147,6 +147,10 @@ class IngestionResult(BaseModel):
     nodes: list[Any] = Field(
         default_factory=list, description="LlamaIndex nodes yielded by ingestion"
     )
+    documents: list[Any] = Field(
+        default_factory=list,
+        description="Source documents supplied to the ingestion pipeline",
+    )
     manifest: ManifestSummary = Field(
         ..., description="Summary of the manifest written during ingestion"
     )

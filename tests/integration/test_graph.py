@@ -18,7 +18,8 @@ class TestGraphImports:
         try:
             from src.retrieval import graph_config
 
-            assert hasattr(graph_config, "create_property_graph_index")
+            assert hasattr(graph_config, "build_graph_query_engine")
+            assert hasattr(graph_config, "export_graph_jsonl")
         except ImportError as e:  # pragma: no cover
             pytest.skip(f"Graph modules unavailable: {e}")
 
