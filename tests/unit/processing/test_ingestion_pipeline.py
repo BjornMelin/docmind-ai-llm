@@ -13,6 +13,7 @@ from src.processing.ingestion_pipeline import (
     _document_from_input,
     build_ingestion_pipeline,
     ingest_documents,
+    ingest_documents_sync,
 )
 
 
@@ -86,13 +87,22 @@ async def test_ingest_documents_with_path(tmp_path: Path) -> None:
     assert (tmp_path / "docstore.json").exists()
 
 
-@pytest.mark.asyncio
-async def test_ingest_documents_sync_wrapper(tmp_path: Path) -> None:
+def test_ingest_documents_sync_wrapper(tmp_path: Path) -> None:
     cfg = IngestionConfig(cache_dir=tmp_path / "cache")
     inputs = [IngestionInput(document_id="doc", payload_bytes=b"inline text")]
 
-    result = await ingest_documents(cfg, inputs, embedding=DummyEmbedding())
+    result = ingest_documents_sync(cfg, inputs, embedding=DummyEmbedding())
     assert not result.exports
+
+
+@pytest.mark.asyncio
+async def test_ingest_documents_sync_guard() -> None:
+    cfg = IngestionConfig()
+    inputs = [IngestionInput(document_id="doc", payload_bytes=b"inline text")]
+
+    with pytest.raises(RuntimeError) as exc_info:
+        ingest_documents_sync(cfg, inputs, embedding=DummyEmbedding())
+    assert "await ingest_documents" in str(exc_info.value)
 
 
 def test_build_ingestion_pipeline_uses_cache_and_docstore(tmp_path: Path) -> None:

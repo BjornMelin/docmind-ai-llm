@@ -80,7 +80,11 @@ def _ensure_cache_path(cfg: IngestionConfig) -> Path:
     """
     base_dir = cfg.cache_dir or app_settings.cache_dir
     base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir / "docmind.duckdb"
+    cache_filename = getattr(cfg, "cache_filename", None)
+    if cache_filename is None:
+        cache_settings = getattr(app_settings, "cache", None)
+        cache_filename = getattr(cache_settings, "filename", "docmind.duckdb")
+    return base_dir / Path(cache_filename)
 
 
 def _ensure_docstore(cfg: IngestionConfig) -> tuple[SimpleDocumentStore, Path | None]:
@@ -225,11 +229,16 @@ def _page_image_exports(
     exports: list[ExportArtifact] = []
     for entry in entries:
         image_path = Path(entry["image_path"])
-        suffix = image_path.suffix.lower()
+        name = image_path.name.lower()
         content_type = "application/octet-stream"
-        if suffix.endswith(".webp") or suffix.endswith(".webp.enc"):
+        if name.endswith(".webp") or name.endswith(".webp.enc"):
             content_type = "image/webp"
-        elif suffix.endswith(".jpg") or suffix.endswith(".jpeg"):
+        elif (
+            name.endswith(".jpg")
+            or name.endswith(".jpeg")
+            or name.endswith(".jpg.enc")
+            or name.endswith(".jpeg.enc")
+        ):
             content_type = "image/jpeg"
 
         metadata = {k: v for k, v in entry.items() if k != "image_path"}
@@ -346,7 +355,14 @@ def ingest_documents_sync(
     Returns:
         IngestionResult: Structured ingestion output from the async pipeline.
     """
-    return asyncio.run(ingest_documents(cfg, inputs, embedding=embedding))
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:  # No running loop, safe to create one
+        return asyncio.run(ingest_documents(cfg, inputs, embedding=embedding))
+    raise RuntimeError(
+        "ingest_documents_sync cannot be called while an event loop is running; "
+        "await ingest_documents(...) instead"
+    )
 
 
 __all__ = [
