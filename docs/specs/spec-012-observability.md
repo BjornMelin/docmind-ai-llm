@@ -37,6 +37,11 @@ class ObservabilityConfig(BaseModel):
 - Values may be overridden by environment variables following the `DOCMIND_OBSERVABILITY__*` naming convention.
 - Resource attributes SHALL merge user-supplied keys with defaults (`service.name`, `service.namespace`, `telemetry.sdk.*`).
 
+### Dependencies
+
+- The project exposes an optional extras group for observability (`uv sync --extra observability`) that installs OTLP HTTP/gRPC exporters and `portalocker` for cross-platform snapshot locking.
+- Base environments retain console exporters so instrumentation remains optional during development.
+
 ### Environment Overrides
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_PROTOCOL`, and `OTEL_SERVICE_NAME` MUST be respected when present.

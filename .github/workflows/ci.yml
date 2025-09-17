@@ -30,26 +30,23 @@ jobs:
       - name: Sync environment (app + test extras)
         run: |
           # Create project venv and install dependencies from lockfile, including tests
-          uv sync --extra test --frozen
+          uv sync --extra test --extra observability --frozen
 
       - name: Quality Gate - Ruff (format+lint)
         run: |
           uvx ruff format --check .
-          uvx ruff check .
+          uvx ruff check --fix --exit-non-zero-on-fix .
 
       - name: Quality Gate - Pylint (fail-under=9.5)
         run: |
-          uvx pylint --fail-under=9.5 -j 0 src tests
+          uv run pylint --fail-under=9.5 -j 0 src tests scripts
 
-      - name: Run unit/integration tests (no coverage gate)
+      - name: Run tiered unit/integration tests (fast gate)
         env:
           HF_HUB_OFFLINE: '1'
           TRANSFORMERS_OFFLINE: '1'
         run: |
-          uv run pytest -q \
-            -o addopts="--strict-markers --tb=short -ra -v --import-mode=importlib --maxfail=10" \
-            -m "unit or integration" \
-            -k "not requires_gpu and not gpu_required and not performance"
+          uv run python scripts/run_tests.py --fast
 
       - name: Run unit/integration with coverage (soft gate)
         continue-on-error: true
@@ -57,7 +54,7 @@ jobs:
           HF_HUB_OFFLINE: '1'
           TRANSFORMERS_OFFLINE: '1'
         run: |
-          uv run pytest -q -m "unit or integration" -k "not requires_gpu and not gpu_required and not performance"
+          uv run python scripts/run_tests.py --coverage
 
       - name: Validate evaluation leaderboard schemas (if present)
         run: |

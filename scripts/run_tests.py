@@ -560,7 +560,7 @@ else:
 
         print("   Coverage report: htmlcov/index.html")
         print("   Coverage data: coverage.json")
-        print("   Re-run specific tests: pytest tests/test_<name>.py -v")
+        print("   Re-run specific tests: uv run pytest tests/test_<name>.py -v")
 
 
 def main():
@@ -573,10 +573,10 @@ def main():
   Tier 3 (System): Real models + GPU (<5min each)
 
 Examples:
-  python run_tests.py                    # Run all tiers in sequence
-  python run_tests.py --unit --fast      # Quick unit test validation
-  python run_tests.py --integration      # Integration tests only
-  python run_tests.py --gpu              # GPU tests only (requires GPU)
+  uv run python scripts/run_tests.py                    # Run all tiers in sequence
+  uv run python scripts/run_tests.py --unit --fast      # Quick unit test validation
+  uv run python scripts/run_tests.py --integration      # Integration tests only
+  uv run python scripts/run_tests.py --gpu              # GPU tests only (requires GPU)
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

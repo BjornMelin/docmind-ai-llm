@@ -291,7 +291,7 @@ class QualityGateRunner:
             return False
         except FileNotFoundError:
             error_msg = (
-                "pre-commit command not found - install with: pip install pre-commit"
+                "pre-commit command not found - install with: uv pip install pre-commit"
             )
             self.failures.append(error_msg)
             logger.error("💥 %s", error_msg)

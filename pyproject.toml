@@ -77,7 +77,9 @@ dependencies = [
     "plotly>=5.22,<6.0",                # Streamlit charts (px/go)
     # Observability
     "opentelemetry-sdk>=1.28.2",         # OTEL tracing/metrics SDK
-    "opentelemetry-exporter-otlp>=1.28.2", # OTLP exporters for traces/metrics
+    "opentelemetry-exporter-otlp-proto-http>=1.28.2",  # OTLP HTTP exporters
+    "opentelemetry-exporter-otlp-proto-grpc>=1.28.2",  # OTLP gRPC exporters
+    "portalocker>=3.2.0",                # Cross-platform snapshot locking
     # Testing Support (runtime-level perf/property tests if invoked)
     "pytest-benchmark>=5.1.0",           # Benchmark harness
     "hypothesis>=6.137.2",               # Property-based tests
@@ -105,6 +107,12 @@ test = [
     "pytest-benchmark>=5.0.0",
     "hypothesis>=6.137.1",
     "pytest-timeout>=2.3.1",
+]
+observability = [
+    "opentelemetry-sdk>=1.28.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.28.2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.28.2",
+    "portalocker>=3.2.0",
 ]
 eval = [
     "ragas>=0.2.10,<0.4.0",              # RAG evaluation toolkit (Pydantic v2 compatible)
@@ -319,6 +327,7 @@ dev = [
     "testcontainers>=4.12.0",
     "coverage-badge>=1.1.2",
     "pylint==3.3.8",
+    "tomli>=2.2.1",
 ]
 test = [
     "pytest==8.3.1",
