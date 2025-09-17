@@ -2,7 +2,7 @@
 ADR: 031
 Title: Local-First Persistence Architecture (Vectors, Cache, Operational Data)
 Status: Accepted (Amended)
-Version: 1.2
+Version: 1.4
 Date: 2025-09-09
 Supersedes:
 Superseded-by:
@@ -60,9 +60,9 @@ Hybrid Retrieval Schema (Qdrant Collections):
 For GraphRAG and indices requiring consistent reloads, adopt a SnapshotManager:
 
 - Write under `storage/_tmp-<uuid>`; `fsync` and atomically rename to `storage/<timestamp>`; readers resolve the `CURRENT` pointer first before falling back to lexicographic ordering.
-- Persist vector index via `StorageContext.persist`; persist property graph via `SimpleGraphStore.persist` and package graph exports under `graph_exports/` with timestamped filenames (`graph_export-YYYYMMDDTHHMMSSZ.*`).
-- Emit tri-file manifests (`manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`); `manifest.meta.json` keeps `complete=false` until promotion succeeds, then flips to `true`. Maintain `manifest.json` as a compatibility alias of the metadata payload.
-- Use a bounded `SnapshotLock` (`.lock` + JSON metadata) with stale-lock eviction logging and surfaced timeout messaging; telemetry captures export operations and stale-snapshot detection for observability.
+- Persist vector index via `StorageContext.persist`; persist property graph via `SimpleGraphStore.persist` and package graph exports under `graph/graph_export-YYYYMMDDTHHMMSSZ.*` (JSONL required, Parquet optional) with telemetry metadata (`seed_count`, `size_bytes`, `duration_ms`, checksum).
+- Emit tri-file manifests (`manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`) plus optional `errors.jsonl`; `manifest.meta.json` keeps `complete=false` until promotion succeeds, then flips to `true`. Legacy `manifest.json` SHALL NOT be emitted.
+- Use a bounded `SnapshotLock` (`.lock` + JSON metadata) implemented via `portalocker` with heartbeats and stale eviction; rotate stale lock files to `.stale-*` suffixes; fall back to `os.O_EXCL` when `portalocker` is unavailable. Telemetry captures export operations and stale-snapshot detection for observability.
 - Load latest snapshot in Chat (ADR‑038; SPEC‑014) using the pointer and staleness digests for badge display.
 
 ## High-Level Architecture
@@ -160,6 +160,7 @@ def test_cache_roundtrip(cache):
 
 ## Changelog
 
+- 1.4 (2025-09-16): Documented portalocker-based locking with TTL metadata, fallback locking, graph export telemetry, and removal of legacy `manifest.json`.
 - 1.3 (2025-09-16): Documented tri-file manifest layout, `complete` flag semantics, CURRENT pointer resolution, timestamped graph exports, and telemetry expectations.
 - 1.2 (2025-09-09): Added SnapshotManager and manifest hashing for GraphRAG; linked ADR‑038/SPEC‑014
 - **1.1 (2025-09-03)**: DOCS - Added Related Decisions note referencing ADR-035 (application-level semantic cache)

@@ -10,8 +10,17 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
+
+
+class ProcessingStrategy(str, Enum):
+    """Enumerate OCR processing strategies for the ingestion pipeline."""
+
+    FAST = "fast"
+    OCR_ONLY = "ocr_only"
+    HI_RES = "hi_res"
 
 
 class IngestionConfig(BaseModel):
@@ -162,4 +171,5 @@ __all__ = [
     "IngestionInput",
     "IngestionResult",
     "ManifestSummary",
+    "ProcessingStrategy",
 ]

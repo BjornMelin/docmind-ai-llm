@@ -9,6 +9,8 @@ while reporting progress in the UI.
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,11 +19,8 @@ import streamlit as st
 from llama_index.core import VectorStoreIndex
 
 from src.config.settings import settings
-from src.persistence.snapshot import (
-    SnapshotManager,
-    compute_config_hash,
-    compute_corpus_hash,
-)
+from src.persistence.hashing import compute_config_hash, compute_corpus_hash
+from src.persistence.snapshot import SnapshotManager
 
 try:  # pragma: no cover - compatibility with test stubs
     from src.persistence.snapshot import SnapshotLockTimeout
@@ -50,7 +49,8 @@ def main() -> None:  # pragma: no cover - Streamlit page
         with st.expander("About snapshots", expanded=False):
             st.markdown(
                 "- Snapshots are created atomically in data/storage/<timestamp>.\n"
-                "- manifest.json stores corpus/config hashes for staleness detection.\n"
+                "- manifest.meta.json stores corpus/config hashes for staleness "
+                "detection.\n"
                 "- Rebuild a snapshot anytime; for new content, re-ingest first."
             )
         submitted = st.form_submit_button("Ingest")
@@ -89,11 +89,11 @@ def main() -> None:  # pragma: no cover - Streamlit page
                         try:
                             final = rebuild_snapshot(vector_index, pg_index, settings)
                             st.success(f"Snapshot created: {final.name}")
-                            export_dir = final / "graph_exports"
-                            if export_dir.exists():
+                            graph_dir = final / "graph"
+                            exports = list(graph_dir.glob("graph_export-*"))
+                            if exports:
                                 st.info(
-                                    "Graph exports packaged with snapshot: "
-                                    f"{export_dir}"
+                                    f"Graph exports packaged with snapshot: {graph_dir}"
                                 )
                         except SnapshotLockTimeout:
                             st.warning(
@@ -215,42 +215,69 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
     """Rebuild snapshot for current indices and return final path."""
     storage_dir = settings_obj.data_dir / "storage"
     mgr = SnapshotManager(storage_dir)
-    paths = mgr.begin_snapshot()
+    workspace = mgr.begin_snapshot()
     try:
-        mgr.persist_vector_index(vector_index, paths)
-        mgr.persist_graph_store(pg_index.property_graph_store, paths)
+        mgr.persist_vector_index(vector_index, workspace)
+        graph_store = getattr(pg_index, "property_graph_store", None)
+        if graph_store is not None:
+            mgr.persist_graph_store(graph_store, workspace)
         export_cap = int(
             getattr(
                 getattr(settings_obj, "graphrag_cfg", object()), "export_seed_cap", 32
             )
         )
         seeds: list[str] = get_export_seed_ids(pg_index, vector_index, cap=export_cap)
-        export_dir = paths / "graph_exports"
-        export_dir.mkdir(parents=True, exist_ok=True)
-        jsonl_path = _timestamped_export_path(export_dir, "jsonl")
-        export_graph_jsonl(pg_index, jsonl_path, seeds)
-        if jsonl_path.exists():
+        graph_dir = workspace / "graph"
+        graph_dir.mkdir(parents=True, exist_ok=True)
+        exports_meta: list[dict[str, Any]] = []
+
+        def _file_sha256(path: Path) -> str:
+            hasher = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            return hasher.hexdigest()
+
+        def _record_export(path: Path, fmt: str, duration_ms: float) -> None:
+            if not path.exists():
+                return
+            metadata = {
+                "path": path.relative_to(workspace).as_posix(),
+                "format": fmt,
+                "seed_count": len(seeds),
+                "size_bytes": path.stat().st_size,
+                "created_at": datetime.now(UTC).isoformat(),
+                "duration_ms": round(duration_ms, 3),
+                "sha256": _file_sha256(path),
+            }
+            exports_meta.append(metadata)
             _log_export_event(
                 {
                     "export_performed": True,
-                    "export_type": "graph_jsonl",
-                    "seed_count": len(seeds),
-                    "dest_path": str(jsonl_path),
+                    "export_type": f"graph_{fmt}",
+                    "seed_count": metadata["seed_count"],
+                    "dest_path": str(path),
                     "context": "snapshot",
+                    "duration_ms": metadata["duration_ms"],
+                    "size_bytes": metadata["size_bytes"],
                 }
             )
-        parquet_path = _timestamped_export_path(export_dir, "parquet")
-        export_graph_parquet(pg_index, parquet_path, seeds)
-        if parquet_path.exists():
-            _log_export_event(
-                {
-                    "export_performed": True,
-                    "export_type": "graph_parquet",
-                    "seed_count": len(seeds),
-                    "dest_path": str(parquet_path),
-                    "context": "snapshot",
-                }
+
+        if graph_store is not None:
+            jsonl_path = _timestamped_export_path(graph_dir, "jsonl")
+            start_json = time.perf_counter()
+            export_graph_jsonl(pg_index, jsonl_path, seeds)
+            _record_export(
+                jsonl_path, "jsonl", (time.perf_counter() - start_json) * 1000.0
             )
+
+            parquet_path = _timestamped_export_path(graph_dir, "parquet")
+            start_parquet = time.perf_counter()
+            export_graph_parquet(pg_index, parquet_path, seeds)
+            _record_export(
+                parquet_path, "parquet", (time.perf_counter() - start_parquet) * 1000.0
+            )
+
         uploads_dir = settings_obj.data_dir / "uploads"
         corpus_paths = (
             [p for p in uploads_dir.glob("**/*") if p.is_file()]
@@ -260,19 +287,36 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
         chash = compute_corpus_hash(corpus_paths, base_dir=uploads_dir)
         cfg = current_config_dict(settings_obj)
         cfg_hash = compute_config_hash(cfg)
+        versions: dict[str, str] = {"app": settings_obj.app_version}
+        with contextlib.suppress(Exception):  # pragma: no cover - optional dependency
+            import llama_index  # type: ignore[import]
+
+            versions["llamaindex"] = getattr(llama_index, "__version__", "unknown")
+        with contextlib.suppress(Exception):  # pragma: no cover - optional dependency
+            from qdrant_client import (
+                __version__ as qdrant_version,  # type: ignore[import]
+            )
+
+            versions.setdefault("qdrant_client", qdrant_version)
+        if hasattr(settings_obj.database, "client_version"):
+            versions.setdefault(
+                "vector_client", str(settings_obj.database.client_version)
+            )
+        exports_meta.sort(key=lambda item: item["path"])
         mgr.write_manifest(
-            paths,
+            workspace,
             index_id="docmind",
             graph_store_type="property_graph",
             vector_store_type=settings_obj.database.vector_store_type,
             corpus_hash=chash,
             config_hash=cfg_hash,
-            versions={"app": settings_obj.app_version},
+            versions=versions,
+            graph_exports=exports_meta,
         )
-        final = mgr.finalize_snapshot(paths)
+        final = mgr.finalize_snapshot(workspace)
         return final
     except Exception:
-        mgr.cleanup_tmp(paths)
+        mgr.cleanup_tmp(workspace)
         raise
 
 

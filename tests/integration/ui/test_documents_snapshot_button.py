@@ -95,12 +95,12 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
         def write_manifest(self, tmp: Path, **_kwargs) -> None:
             payload = json.dumps(
                 {
-                    "corpus_hash": _kwargs.get("corpus_hash", "sha256:0"),
-                    "config_hash": _kwargs.get("config_hash", "sha256:0"),
+                    "corpus_hash": _kwargs.get("corpus_hash", "000"),
+                    "config_hash": _kwargs.get("config_hash", "000"),
+                    "graph_exports": _kwargs.get("graph_exports", []),
                 },
                 ensure_ascii=False,
             )
-            (tmp / "manifest.json").write_text(payload, encoding="utf-8")
             (tmp / "manifest.meta.json").write_text(payload, encoding="utf-8")
             (tmp / "manifest.jsonl").write_text("", encoding="utf-8")
             (tmp / "manifest.checksum").write_text("{}", encoding="utf-8")
@@ -151,12 +151,12 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
         def write_manifest(self, tmp: Path, **_kwargs) -> None:
             payload = json.dumps(
                 {
-                    "corpus_hash": _kwargs.get("corpus_hash", "sha256:0"),
-                    "config_hash": _kwargs.get("config_hash", "sha256:0"),
+                    "corpus_hash": _kwargs.get("corpus_hash", "000"),
+                    "config_hash": _kwargs.get("config_hash", "000"),
+                    "graph_exports": _kwargs.get("graph_exports", []),
                 },
                 ensure_ascii=False,
             )
-            (tmp / "manifest.json").write_text(payload, encoding="utf-8")
             (tmp / "manifest.meta.json").write_text(payload, encoding="utf-8")
             (tmp / "manifest.jsonl").write_text("", encoding="utf-8")
             (tmp / "manifest.checksum").write_text("{}", encoding="utf-8")

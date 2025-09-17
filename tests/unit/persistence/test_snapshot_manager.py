@@ -12,12 +12,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
+import src.persistence.snapshot as snapshot
 from src.persistence.snapshot import (
     SnapshotManager,
+    SnapshotPersistenceError,
     compute_config_hash,
     compute_corpus_hash,
     latest_snapshot_dir,
@@ -56,15 +58,12 @@ def test_snapshot_manager_roundtrip(tmp_path: Path) -> None:
     )
     snap = mgr.finalize_snapshot(tmp)
     assert snap.exists()
-    manifest_json = snap / "manifest.json"
     manifest_meta = snap / "manifest.meta.json"
     manifest_jsonl = snap / "manifest.jsonl"
     manifest_checksum = snap / "manifest.checksum"
 
-    assert manifest_json.exists()
-    assert manifest_meta.exists()
-    assert manifest_jsonl.exists()
-    assert manifest_checksum.exists()
+    for path_obj in (manifest_meta, manifest_jsonl, manifest_checksum):
+        assert path_obj.exists()
 
     payload = json.loads(manifest_meta.read_text(encoding="utf-8"))
     assert payload["corpus_hash"] == chash
@@ -75,7 +74,7 @@ def test_snapshot_manager_roundtrip(tmp_path: Path) -> None:
 
     checksum_payload = json.loads(manifest_checksum.read_text(encoding="utf-8"))
     assert checksum_payload["manifest_sha256"]
-    assert checksum_payload["schema_version"] == 1
+    assert checksum_payload["schema_version"] == "1.0"
 
     current_pointer = tmp_path / "CURRENT"
     assert current_pointer.read_text(encoding="utf-8").strip() == snap.name
@@ -105,6 +104,50 @@ def test_config_hash_matches_current_config(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(_settings.processing, "chunk_size", 128)
     monkeypatch.setattr(_settings.processing, "chunk_overlap", 16)
 
-    default_hash = compute_config_hash()
-    dict_hash = compute_config_hash(current_config_dict(_settings))
-    assert default_hash == dict_hash
+    cfg_dict = current_config_dict(_settings)
+    hash_a = compute_config_hash(cfg_dict)
+    reordered = dict(reversed(list(cfg_dict.items())))
+    hash_b = compute_config_hash(reordered)
+    assert hash_a == hash_b
+
+
+def test_persist_vector_index_failure_records_error(tmp_path: Path) -> None:
+    """Errors during vector persistence are recorded to errors.jsonl."""
+    workspace = tmp_path / "_tmp-vec"
+    vector_dir = workspace / "vector"
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    class _FailingStorage:
+        def persist(self, persist_dir: str) -> None:  # type: ignore[unused-argument]
+            raise RuntimeError("boom")
+
+    failing_index = SimpleNamespace(storage_context=_FailingStorage())
+
+    with pytest.raises(SnapshotPersistenceError):
+        snapshot.persist_vector_index(failing_index, vector_dir)
+
+    log_path = workspace / "errors.jsonl"
+    assert log_path.exists()
+    contents = log_path.read_text(encoding="utf-8")
+    assert "persist_vector" in contents
+    assert "boom" in contents
+
+
+def test_persist_graph_store_failure_records_error(tmp_path: Path) -> None:
+    """Errors during graph persistence are recorded to errors.jsonl."""
+    workspace = tmp_path / "_tmp-graph"
+    graph_dir = workspace / "graph"
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    class _FailingGraphStore:
+        def persist(self, persist_dir: str) -> None:  # type: ignore[unused-argument]
+            raise RuntimeError("graph-broke")
+
+    with pytest.raises(SnapshotPersistenceError):
+        snapshot.persist_graph_store(_FailingGraphStore(), graph_dir)
+
+    log_path = workspace / "errors.jsonl"
+    assert log_path.exists()
+    data = log_path.read_text(encoding="utf-8")
+    assert "persist_graph" in data
+    assert "graph-broke" in data

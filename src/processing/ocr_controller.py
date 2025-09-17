@@ -121,7 +121,14 @@ class OcrController:
         )
 
     def _detect_pdf_native_text(self, file_path: Path) -> bool:
-        """Return ``True`` if sampled pages contain actual text."""
+        """Probe a PDF for embedded text by sampling pages via PyMuPDF.
+
+        Args:
+            file_path: PDF path under evaluation.
+
+        Returns:
+            bool: ``True`` when any sampled page contains extractable text.
+        """
         try:
             import fitz  # type: ignore
 
@@ -137,7 +144,14 @@ class OcrController:
 
     @staticmethod
     def _count_pdf_pages(file_path: Path) -> int | None:
-        """Return the number of pages in the PDF, if determinable."""
+        """Determine the number of pages in the provided PDF file.
+
+        Args:
+            file_path: PDF path under evaluation.
+
+        Returns:
+            int | None: Page count when available; otherwise ``None``.
+        """
         try:
             import fitz  # type: ignore
 

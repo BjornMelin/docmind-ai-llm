@@ -1,41 +1,86 @@
 """SnapshotManager for index and property graph persistence.
 
-Implements atomic, versioned snapshots with a manifest and single-writer lock.
-The manifest carries corpus/config hashes for staleness detection.
-
 Provides atomic snapshots of vector and graph indices with a manifest for
-staleness detection. Uses a directory lock to ensure single-writer semantics
-and an atomic rename to finalize snapshots.
+staleness detection. Uses a single-writer filesystem lock and atomic renames to
+finalize snapshots. Manifest generation and workspace management leverage helper
+modules to ensure deterministic hashing and metadata emission.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import posixpath
 import shutil
-import socket
 import time
-from collections.abc import Iterator
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from types import TracebackType
 from typing import Any
 from uuid import uuid4
 
-from filelock import FileLock, Timeout
 from loguru import logger
 
 from src.config.settings import settings
+from src.persistence.hashing import compute_config_hash, compute_corpus_hash
+from src.persistence.lockfile import (
+    SnapshotLock,
+    SnapshotLockError,
+    SnapshotLockTimeoutError,
+)
+from src.persistence.snapshot_writer import (
+    load_manifest_entries,
+    mark_manifest_complete,
+    start_workspace,
+)
+from src.persistence.snapshot_writer import (
+    write_manifest as _writer_write_manifest,
+)
 
-MANIFEST_SCHEMA_VERSION = "1.0"
-MANIFEST_FORMAT_VERSION = "1.0"
+try:  # pragma: no cover - optional instrumentation
+    from opentelemetry import trace
+except ImportError:  # pragma: no cover
+    trace = None  # type: ignore[assignment]
+
+if trace is not None:
+    _tracer = trace.get_tracer(__name__)
+else:  # pragma: no cover - fallback when OTel not installed
+
+    class _NoopTracer:
+        """Minimal tracer when OpenTelemetry instrumentation is unavailable."""
+
+        def start_as_current_span(self, name: str):
+            """Return a no-op context manager for span instrumentation."""
+            del name
+            return nullcontext()
+
+    _tracer = _NoopTracer()
+
+SnapshotLockTimeout = SnapshotLockTimeoutError
 
 
-@dataclass(frozen=True)
+class SnapshotError(RuntimeError):
+    """Base error for snapshot operations."""
+
+
+class SnapshotManifestError(SnapshotError):
+    """Raised when manifest generation fails."""
+
+
+class SnapshotPromotionError(SnapshotError):
+    """Raised when atomic promotion or CURRENT update fails."""
+
+
+class SnapshotPersistenceError(SnapshotError):
+    """Raised when persisting snapshot artifacts fails."""
+
+
+class SnapshotLoadError(SnapshotError):
+    """Raised when snapshot payloads cannot be loaded."""
+
+
+@dataclass(frozen=True, slots=True)
 class SnapshotPaths:
     """Resolved filesystem paths for snapshot persistence."""
 
@@ -44,102 +89,8 @@ class SnapshotPaths:
     current_file: Path
 
 
-class SnapshotLockTimeoutError(TimeoutError):
-    """Raised when a snapshot lock cannot be acquired in time."""
-
-
-SnapshotLockTimeout = SnapshotLockTimeoutError
-
-
-class SnapshotLock:
-    """Context manager wrapping :class:`filelock.FileLock` with metadata."""
-
-    def __init__(
-        self, path: Path, *, timeout: float, ttl_seconds: float = 30.0
-    ) -> None:
-        """Initialize a snapshot lock around ``path`` with the supplied timing."""
-        self.path = path
-        self.timeout = timeout
-        self.ttl_seconds = ttl_seconds
-        self._lock = FileLock(str(path))
-
-    def acquire(self) -> None:
-        """Acquire the underlying file lock, evicting stale holders when needed."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._evict_stale_lock()
-        try:
-            self._lock.acquire(timeout=self.timeout)
-        except Timeout as exc:  # pragma: no cover - defensive
-            raise SnapshotLockTimeoutError(str(exc)) from exc
-        self._write_metadata()
-
-    def refresh(self) -> None:
-        """Refresh lock metadata to extend the lease TTL."""
-        if not self._lock.is_locked:
-            raise RuntimeError("Cannot refresh an unlocked snapshot lock")
-        self._write_metadata()
-
-    def release(self) -> None:
-        """Release the lock and clean up associated metadata files."""
-        if self._lock.is_locked:
-            self._lock.release()
-        with suppress(OSError):
-            self.path.unlink()
-        with suppress(OSError):
-            self._meta_path().unlink()
-
-    def __enter__(self) -> SnapshotLock:
-        """Enter context manager and acquire lock."""
-        self.acquire()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Release the lock on context manager exit."""
-        self.release()
-
-    def _write_metadata(self) -> None:
-        expires_at = datetime.now(UTC) + timedelta(seconds=self.ttl_seconds)
-        payload = {
-            "pid": os.getpid(),
-            "hostname": socket.gethostname(),
-            "acquired_at": datetime.now(UTC).isoformat(),
-            "expires_at": expires_at.isoformat(),
-        }
-        meta_path = self._meta_path()
-        with meta_path.open("w", encoding="utf-8") as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-    def _meta_path(self) -> Path:
-        return self.path.with_suffix(self.path.suffix + ".meta")
-
-    def _evict_stale_lock(self) -> None:
-        meta_path = self._meta_path()
-        if not meta_path.exists():
-            return
-        try:
-            payload = json.loads(meta_path.read_text(encoding="utf-8"))
-            expires = payload.get("expires_at")
-            if not expires:
-                return
-            expiry_dt = datetime.fromisoformat(expires)
-        except (OSError, json.JSONDecodeError, ValueError):  # pragma: no cover
-            return
-        if expiry_dt <= datetime.now(UTC):
-            with suppress(OSError):
-                self.path.unlink()
-            with suppress(OSError):
-                meta_path.unlink()
-            logger.info("Removed stale snapshot lock at %s", self.path)
-
-
 def _snapshot_paths(base_dir: Path | None = None) -> SnapshotPaths:
+    """Resolve snapshot paths for the provided base directory."""
     base = Path(base_dir) if base_dir is not None else settings.data_dir / "storage"
     return SnapshotPaths(
         base_dir=base,
@@ -148,42 +99,13 @@ def _snapshot_paths(base_dir: Path | None = None) -> SnapshotPaths:
     )
 
 
-def _create_workspace(base_dir: Path) -> Path:
-    workspace = base_dir / f"_tmp-{uuid4().hex}"
-    workspace.mkdir(parents=True, exist_ok=False)
-    for child in ("vector", "graph"):
-        (workspace / child).mkdir(parents=True, exist_ok=True)
-    return workspace
-
-
 def _generate_version_name() -> str:
+    """Return a timestamped version identifier for finalized snapshots."""
     return f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{uuid4().hex[:8]}"
 
 
-def _iter_payload_files(tmp_dir: Path) -> Iterator[Path]:
-    for path in tmp_dir.rglob("*"):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(tmp_dir)
-        if rel.name in {
-            "manifest.jsonl",
-            "manifest.checksum",
-            "manifest.meta.json",
-            "manifest.json",
-        }:
-            continue
-        yield path
-
-
-def _hash_file(path: Path) -> str:
-    hasher = sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-
 def _fsync_dir(path: Path) -> None:
+    """Best-effort ``fsync`` of a directory descriptor."""
     with suppress(OSError):
         fd = os.open(path, os.O_RDONLY)
         try:
@@ -193,86 +115,51 @@ def _fsync_dir(path: Path) -> None:
 
 
 def _fsync_file(path: Path) -> None:
+    """Best-effort ``fsync`` of a regular file."""
     with suppress(FileNotFoundError), path.open("rb") as handle:
         os.fsync(handle.fileno())
 
 
-def _dump_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+def _write_text_atomic(path: Path, data: str) -> None:
+    """Atomically replace ``path`` with the provided textual ``data``."""
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(data, encoding="utf-8")
+    _fsync_file(tmp_path)
+    os.replace(tmp_path, path)
     _fsync_file(path)
 
 
-def _enrich_manifest_payload(manifest: dict[str, Any]) -> dict[str, Any]:
-    enriched = {
-        **manifest,
-        "schema_version": manifest.get("schema_version", MANIFEST_SCHEMA_VERSION),
-        "persist_format_version": manifest.get(
-            "persist_format_version", MANIFEST_FORMAT_VERSION
-        ),
-        "complete": manifest.get("complete", False),
-    }
-    enriched.setdefault("versions", {})
-    return enriched
-
-
-def _calculate_manifest_digest(
-    entries: list[dict[str, Any]], manifest_payload: dict[str, Any]
-) -> str:
-    aggregate = sha256()
-    for entry in entries:
-        aggregate.update(entry["sha256"].encode("utf-8"))
-    aggregate.update(
-        json.dumps(manifest_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    )
-    return aggregate.hexdigest()
-
-
-def _write_manifest_checksum(
-    snapshot_dir: Path, entries: list[dict[str, Any]], manifest_payload: dict[str, Any]
+def _emit_snapshot_log(
+    stage: str, *, status: str, snapshot_id: str | None = None, **extras: Any
 ) -> None:
-    checksum_payload = {
-        "schema_version": 1,
-        "manifest_sha256": _calculate_manifest_digest(entries, manifest_payload),
-        "created_at": datetime.now(UTC).isoformat(),
-    }
-    checksum_path = _manifest_checksum_path(snapshot_dir)
-    _dump_json(checksum_path, checksum_payload)
+    """Emit a structured log entry for snapshot operations."""
+    logger.bind(
+        snapshot_stage=stage, status=status, snapshot_id=snapshot_id, **extras
+    ).info("snapshot.%s", stage)
 
 
-def _load_manifest_entries(snapshot_dir: Path) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    manifest_path = _manifest_path(snapshot_dir)
-    if not manifest_path.exists():
-        return entries
-    with manifest_path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:  # pragma: no cover - defensive
-                continue
-    return entries
+def _append_error_record(base_dir: Path, payload: dict[str, Any]) -> None:
+    """Append an error record to ``errors.jsonl`` under ``base_dir``."""
+    errors_path = base_dir / "errors.jsonl"
+    errors_path.parent.mkdir(parents=True, exist_ok=True)
+    with errors_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
-def _mark_manifest_complete(snapshot_dir: Path) -> None:
-    meta_path = snapshot_dir / "manifest.meta.json"
-    if not meta_path.exists():
+def _pulse_lock() -> None:
+    """Refresh the active snapshot lock heartbeat, ignoring failures."""
+    if _ACTIVE_LOCK is None:
         return
-    try:
-        manifest_payload = json.loads(meta_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:  # pragma: no cover - defensive
-        return
-    if manifest_payload.get("complete") is True:
-        return
-    manifest_payload["complete"] = True
-    legacy_manifest = snapshot_dir / "manifest.json"
-    _dump_json(meta_path, manifest_payload)
-    if legacy_manifest.exists():
-        _dump_json(legacy_manifest, manifest_payload)
-    entries = _load_manifest_entries(snapshot_dir)
-    _write_manifest_checksum(snapshot_dir, entries, manifest_payload)
+    with suppress(SnapshotLockError):
+        _ACTIVE_LOCK.refresh()
+
+
+def _manifest_path(snapshot_dir: Path) -> Path:
+    return snapshot_dir / "manifest.jsonl"
+
+
+def _manifest_checksum_path(snapshot_dir: Path) -> Path:
+    return snapshot_dir / "manifest.checksum"
 
 
 _ACTIVE_LOCK: SnapshotLock | None = None
@@ -287,17 +174,21 @@ def begin_snapshot(base_dir: Path | None = None) -> Path:
     paths = _snapshot_paths(base_dir)
     paths.base_dir.mkdir(parents=True, exist_ok=True)
     config = settings.snapshots
+    grace = max(1.0, float(config.lock_ttl_seconds) * 0.2)
     lock = SnapshotLock(
         paths.lock_file,
         timeout=float(config.lock_timeout_seconds),
         ttl_seconds=float(config.lock_ttl_seconds),
+        grace_seconds=grace,
     )
     lock.acquire()
     _ACTIVE_LOCK = lock
-    return _create_workspace(paths.base_dir)
+    workspace = start_workspace(paths.base_dir)
+    return workspace.root
 
 
 def _release_active_lock() -> None:
+    """Release the active snapshot lock when held."""
     global _ACTIVE_LOCK
     if _ACTIVE_LOCK is None:
         return
@@ -313,56 +204,46 @@ def cleanup_tmp(tmp_dir: Path) -> None:
         _release_active_lock()
 
 
-def _manifest_path(snapshot_dir: Path) -> Path:
-    return snapshot_dir / "manifest.jsonl"
-
-
-def _manifest_checksum_path(snapshot_dir: Path) -> Path:
-    return snapshot_dir / "manifest.checksum"
-
-
-def write_manifest(tmp_dir: Path, manifest: dict[str, Any]) -> None:
+def write_manifest(tmp_dir: Path, manifest_meta: dict[str, Any]) -> None:
     """Write snapshot manifest (JSONL + checksum + metadata)."""
-    entries: list[dict[str, Any]] = []
-    for file_path in sorted(_iter_payload_files(tmp_dir)):
-        relative = file_path.relative_to(tmp_dir)
-        entries.append(
-            {
-                "path": relative.as_posix(),
-                "sha256": _hash_file(file_path),
-                "size_bytes": file_path.stat().st_size,
-                "content_type": "application/octet-stream",
-            }
-        )
-
-    manifest_path = _manifest_path(tmp_dir)
-    with manifest_path.open("w", encoding="utf-8") as handle:
-        for entry in entries:
-            handle.write(json.dumps(entry, ensure_ascii=False))
-            handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-
-    enriched_manifest = _enrich_manifest_payload(manifest)
-    meta_path = tmp_dir / "manifest.meta.json"
-    _dump_json(meta_path, enriched_manifest)
-
-    legacy_manifest = tmp_dir / "manifest.json"
-    _dump_json(legacy_manifest, enriched_manifest)
-
-    _write_manifest_checksum(tmp_dir, entries, enriched_manifest)
+    workspace = Path(tmp_dir)
+    snapshot_id = workspace.name
+    _pulse_lock()
+    with _tracer.start_as_current_span("snapshot.write_manifest"):
+        try:
+            _writer_write_manifest(workspace, manifest_meta)
+        except Exception as exc:  # pragma: no cover - defensive
+            _emit_snapshot_log(
+                "write_manifest",
+                status="failure",
+                snapshot_id=snapshot_id,
+                error=str(exc),
+                error_code="manifest_write_failed",
+                retryable=False,
+            )
+            _append_error_record(
+                workspace.parent,
+                {
+                    "stage": "write_manifest",
+                    "snapshot_id": snapshot_id,
+                    "error": str(exc),
+                    "error_code": "manifest_write_failed",
+                },
+            )
+            raise SnapshotManifestError("Failed to write snapshot manifest") from exc
+    _emit_snapshot_log("write_manifest", status="success", snapshot_id=snapshot_id)
+    _pulse_lock()
 
 
 def _write_current_pointer(paths: SnapshotPaths, version_name: str) -> None:
-    tmp_pointer = paths.base_dir / "CURRENT.tmp"
-    tmp_pointer.write_text(version_name, encoding="utf-8")
-    _fsync_file(tmp_pointer)
-    os.replace(tmp_pointer, paths.current_file)
-    _fsync_file(paths.current_file)
+    """Update the ``CURRENT`` pointer to reference ``version_name``."""
+    current_path = paths.base_dir / "CURRENT"
+    _write_text_atomic(current_path, f"{version_name}\n")
     _fsync_dir(paths.base_dir)
 
 
 def _garbage_collect(paths: SnapshotPaths) -> None:
+    """Remove old snapshot versions respecting retention and grace period."""
     config = settings.snapshots
     keep = max(1, int(config.retention_count))
     grace = max(0, int(config.gc_grace_seconds))
@@ -386,7 +267,7 @@ def _garbage_collect(paths: SnapshotPaths) -> None:
 
 
 def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
-    """Rename workspace to versioned snapshot and update CURRENT."""
+    """Rename workspace to versioned snapshot and update ``CURRENT``."""
     from src.utils.monitoring import log_performance  # local import to avoid heavy deps
 
     start = time.perf_counter()
@@ -397,36 +278,64 @@ def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
 
     version_name = _generate_version_name()
     destination = paths.base_dir / version_name
-
-    try:
-        _fsync_dir(tmp_dir)
-        tmp_dir.rename(destination)
-        _mark_manifest_complete(destination)
-        _fsync_dir(paths.base_dir)
-        _write_current_pointer(paths, version_name)
-        _garbage_collect(paths)
-        log_performance(
-            operation="snapshot_finalize",
-            success=True,
-            duration_seconds=time.perf_counter() - start,
-            version=version_name,
-        )
-        logger.info("Snapshot finalized at %s", destination)
-        return destination
-    except Exception as exc:
-        log_performance(
-            operation="snapshot_finalize",
-            success=False,
-            duration_seconds=time.perf_counter() - start,
-            error=str(exc),
-        )
-        raise
-    finally:
-        _release_active_lock()
+    _pulse_lock()
+    with _tracer.start_as_current_span("snapshot.finalize"):
+        try:
+            _fsync_dir(tmp_dir)
+            os.replace(tmp_dir, destination)
+            mark_manifest_complete(destination)
+            _fsync_dir(destination)
+            _fsync_dir(paths.base_dir)
+            _write_current_pointer(paths, version_name)
+            _garbage_collect(paths)
+            duration = time.perf_counter() - start
+            log_performance(
+                operation="snapshot_finalize",
+                success=True,
+                duration_seconds=duration,
+                version=version_name,
+            )
+            _emit_snapshot_log(
+                "finalize",
+                status="success",
+                snapshot_id=version_name,
+                duration_seconds=duration,
+            )
+            _pulse_lock()
+            logger.info("Snapshot finalized at %s", destination)
+            return destination
+        except Exception as exc:  # pragma: no cover - defensive
+            duration = time.perf_counter() - start
+            log_performance(
+                operation="snapshot_finalize",
+                success=False,
+                duration_seconds=duration,
+                error=str(exc),
+            )
+            _emit_snapshot_log(
+                "finalize",
+                status="failure",
+                snapshot_id=version_name,
+                error=str(exc),
+                error_code="snapshot_finalize_failed",
+                retryable=False,
+            )
+            _append_error_record(
+                paths.base_dir,
+                {
+                    "stage": "finalize",
+                    "snapshot_id": version_name,
+                    "error": str(exc),
+                    "error_code": "snapshot_finalize_failed",
+                },
+            )
+            raise
+        finally:
+            _release_active_lock()
 
 
 def latest_snapshot_dir(base_dir: Path | None = None) -> Path | None:
-    """Return the most recent version directory or ``None``."""
+    """Return the most recent snapshot directory or ``None``."""
     paths = _snapshot_paths(base_dir)
     if not paths.base_dir.exists():
         return None
@@ -451,59 +360,96 @@ def load_manifest(
     snapshot_dir: Path | None = None, *, base_dir: Path | None = None
 ) -> dict[str, Any] | None:
     """Load snapshot metadata manifest."""
-    snap = snapshot_dir or latest_snapshot_dir(base_dir)
-    if not snap:
+    target = snapshot_dir or latest_snapshot_dir(base_dir)
+    if target is None:
         return None
-    meta = snap / "manifest.meta.json"
-    if meta.exists():
-        try:
-            return json.loads(meta.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:  # pragma: no cover
-            logger.debug("Failed to parse manifest.meta.json in %s: %s", snap, exc)
-            return None
-    legacy = snap / "manifest.json"
-    if legacy.exists():
-        try:
-            return json.loads(legacy.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:  # pragma: no cover
-            logger.debug("Failed to parse manifest.json in %s: %s", snap, exc)
-            return None
-    return None
-
-
-# --- Remaining downstream helpers (persist/load/hash) adapted from legacy ---
-#     implementation
+    meta_path = target / "manifest.meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:  # pragma: no cover - defensive
+        return None
 
 
 def persist_vector_index(index: Any, out_dir: Path) -> None:
-    """Persist a vector index into ``out_dir`` using the storage context API."""
-    try:
-        index.storage_context.persist(persist_dir=str(out_dir))  # type: ignore[attr-defined]
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        raise RuntimeError(f"Persist vector index failed: {exc}") from exc
+    """Persist a vector index into ``out_dir`` using LlamaIndex helpers."""
+    snapshot_dir = out_dir.parent
+    snapshot_id = snapshot_dir.name if snapshot_dir is not None else None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _pulse_lock()
+    with _tracer.start_as_current_span("snapshot.persist_vector"):
+        try:
+            index.storage_context.persist(  # type: ignore[attr-defined]
+                persist_dir=str(out_dir)
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            _emit_snapshot_log(
+                "persist_vector",
+                status="failure",
+                snapshot_id=snapshot_id,
+                error=str(exc),
+                error_code="vector_persist_failed",
+                retryable=False,
+            )
+            _append_error_record(
+                snapshot_dir or out_dir.parent,
+                {
+                    "stage": "persist_vector",
+                    "snapshot_id": snapshot_id,
+                    "error": str(exc),
+                    "error_code": "vector_persist_failed",
+                },
+            )
+            raise SnapshotPersistenceError(
+                f"Persist vector index failed: {exc}"
+            ) from exc
+        _emit_snapshot_log("persist_vector", status="success", snapshot_id=snapshot_id)
+        _pulse_lock()
 
 
 def persist_graph_store(store: Any, out_dir: Path) -> None:
     """Persist a property graph store into ``out_dir`` in a library-first way."""
-    try:
-        out_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_dir = out_dir.parent
+    snapshot_id = snapshot_dir.name if snapshot_dir is not None else None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _pulse_lock()
+    with _tracer.start_as_current_span("snapshot.persist_graph"):
         try:
-            store.persist(persist_dir=str(out_dir))  # type: ignore[attr-defined]
-        except TypeError:
-            store.persist(str(out_dir))
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        raise RuntimeError(f"Persist graph store failed: {exc}") from exc
+            try:
+                store.persist(persist_dir=str(out_dir))  # type: ignore[attr-defined]
+            except TypeError:
+                store.persist(str(out_dir))
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            _emit_snapshot_log(
+                "persist_graph",
+                status="failure",
+                snapshot_id=snapshot_id,
+                error=str(exc),
+                error_code="graph_persist_failed",
+                retryable=False,
+            )
+            _append_error_record(
+                snapshot_dir or out_dir.parent,
+                {
+                    "stage": "persist_graph",
+                    "snapshot_id": snapshot_id,
+                    "error": str(exc),
+                    "error_code": "graph_persist_failed",
+                },
+            )
+            raise SnapshotPersistenceError(
+                f"Persist graph store failed: {exc}"
+            ) from exc
+        _emit_snapshot_log("persist_graph", status="success", snapshot_id=snapshot_id)
+        _pulse_lock()
 
 
 def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
     """Load a persisted vector index from ``snapshot_dir`` when available."""
     try:
         from llama_index.core import StorageContext, load_index_from_storage
-    except (
-        ImportError,
-        ModuleNotFoundError,
-        AttributeError,
-    ):  # pragma: no cover - import guard
+    except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
         return None
 
     snap = snapshot_dir or latest_snapshot_dir()
@@ -520,7 +466,7 @@ def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
         RuntimeError,
         ValueError,
         AttributeError,
-    ) as exc:  # pragma: no cover - defensive
+    ) as exc:  # pragma: no cover
         logger.debug("Unable to load vector index from %s: %s", vec_dir, exc)
         return None
 
@@ -530,11 +476,7 @@ def load_property_graph_index(snapshot_dir: Path | None = None) -> Any | None:
     try:
         from llama_index.core import PropertyGraphIndex
         from llama_index.core.graph_stores import SimplePropertyGraphStore
-    except (
-        ImportError,
-        ModuleNotFoundError,
-        AttributeError,
-    ):  # pragma: no cover - import guard
+    except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
         return None
 
     snap = snapshot_dir or latest_snapshot_dir()
@@ -551,59 +493,9 @@ def load_property_graph_index(snapshot_dir: Path | None = None) -> Any | None:
         RuntimeError,
         ValueError,
         AttributeError,
-    ) as exc:  # pragma: no cover - defensive
+    ) as exc:  # pragma: no cover
         logger.debug("Unable to load property graph index from %s: %s", graph_dir, exc)
         return None
-
-
-def compute_corpus_hash(
-    upload: Path | list[Path] | None = None, *, base_dir: Path | None = None
-) -> str:
-    """Compute a stable SHA256 hash for the ingestion corpus."""
-    files: list[Path] = []
-    if upload is None:
-        base = settings.data_dir / "uploads"
-        if base.exists():
-            files = [p for p in base.rglob("*") if p.is_file()]
-    elif isinstance(upload, Path):
-        base = upload
-        if base.exists():
-            files = [p for p in base.rglob("*") if p.is_file()]
-    else:
-        files = [p for p in upload if isinstance(p, Path) and p.is_file()]
-    items = []
-    for p in files:
-        try:
-            stat = p.stat()
-            if base_dir is not None:
-                try:
-                    rel = p.relative_to(base_dir)
-                except ValueError:
-                    rel = p
-                name = posixpath.join(*rel.parts)
-            else:
-                name = str(p)
-            items.append((name, stat.st_size, stat.st_mtime_ns))
-        except OSError:  # pragma: no cover
-            continue
-    hasher = sha256()
-    for name, size, mtime in sorted(items):
-        hasher.update(f"{name}|{size}|{mtime}".encode())
-    return f"sha256:{hasher.hexdigest()}"
-
-
-def compute_config_hash(cfg: dict[str, Any] | None = None) -> str:
-    """Compute a SHA256 hash for the active retrieval/configuration payload."""
-    if cfg is None:
-        cfg = {
-            "router": getattr(settings.retrieval, "router", None),
-            "hybrid": getattr(settings.retrieval, "enable_server_hybrid", None),
-            "graph_enabled": getattr(settings, "enable_graphrag", False),
-            "chunk_size": getattr(settings.processing, "chunk_size", None),
-            "chunk_overlap": getattr(settings.processing, "chunk_overlap", None),
-        }
-    blob = json.dumps(cfg, sort_keys=True, ensure_ascii=False)
-    return f"sha256:{sha256(blob.encode('utf-8')).hexdigest()}"
 
 
 def is_stale(manifest: dict[str, Any] | None) -> bool:
@@ -626,7 +518,7 @@ def is_stale(manifest: dict[str, Any] | None) -> bool:
 
 
 def recover_snapshots(base_dir: Path | None = None) -> None:
-    """Remove stale workspaces and repair CURRENT pointer if missing."""
+    """Remove stale workspaces and repair the ``CURRENT`` pointer if missing."""
     paths = _snapshot_paths(base_dir)
     if not paths.base_dir.exists():
         return
@@ -635,6 +527,13 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
         if candidate.is_dir():
             shutil.rmtree(candidate, ignore_errors=True)
             logger.debug("Removed stale workspace %s", candidate)
+
+    for stale_lock in paths.base_dir.glob(".lock.stale-*"):
+        with suppress(FileNotFoundError):
+            stale_lock.unlink()
+    for stale_meta in paths.base_dir.glob(".lock.meta.json.stale-*"):
+        with suppress(FileNotFoundError):
+            stale_meta.unlink()
 
     current_target: Path | None = None
     if paths.current_file.exists():
@@ -666,6 +565,14 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
     logger.info("Recovered CURRENT pointer -> %s", latest)
 
 
+def _hash_file(path: Path) -> str:
+    hasher = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
 def verify_snapshot(snapshot_dir: Path) -> bool:
     """Verify manifest hashes and payload integrity for a snapshot directory."""
     manifest_path = _manifest_path(snapshot_dir)
@@ -675,28 +582,26 @@ def verify_snapshot(snapshot_dir: Path) -> bool:
         return False
 
     try:
-        expected = json.loads(checksum_path.read_text(encoding="utf-8"))[
-            "manifest_sha256"
-        ]
-    except (KeyError, json.JSONDecodeError):  # pragma: no cover
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        checksum_payload = json.loads(checksum_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:  # pragma: no cover - defensive
         return False
 
-    entries = []
-    with manifest_path.open(encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            entries.append(json.loads(line))
+    entries = load_manifest_entries(snapshot_dir)
+    expected = checksum_payload.get("manifest_sha256")
+    if expected is None:
+        return False
 
     for entry in entries:
-        target = snapshot_dir / entry.get("path", "")
+        rel = entry.get("path")
+        if not rel:
+            return False
+        target = snapshot_dir / Path(rel)
         if not target.exists():
             return False
         if _hash_file(target) != entry.get("sha256"):
             return False
 
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
     aggregate = sha256()
     for entry in entries:
         aggregate.update(entry["sha256"].encode("utf-8"))
@@ -708,6 +613,7 @@ __all__ = [
     "SnapshotLock",
     "SnapshotLockTimeout",
     "SnapshotLockTimeoutError",
+    "SnapshotPersistenceError",
     "begin_snapshot",
     "cleanup_tmp",
     "compute_config_hash",
@@ -730,20 +636,39 @@ class SnapshotManager:
     """Compatibility wrapper for UI components expecting a class API."""
 
     def __init__(self, storage_dir: Path) -> None:
-        """Initialize the manager, ensuring ``storage_dir`` exists."""
+        """Initialize the manager with the provided storage directory.
+
+        Args:
+            storage_dir: Base directory used to store finalized snapshots.
+        """
         self.storage_dir = storage_dir
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        recover_snapshots(self.storage_dir)
 
     def begin_snapshot(self) -> Path:
-        """Create a locked workspace under ``storage_dir``."""
+        """Create and lock a workspace for snapshot persistence.
+
+        Returns:
+            Path: Root directory for the temporary snapshot workspace.
+        """
         return begin_snapshot(self.storage_dir)
 
     def persist_vector_index(self, index: Any, tmp_dir: Path) -> None:
-        """Persist a vector index into the workspace ``tmp_dir``."""
+        """Persist the vector index artifact into the workspace.
+
+        Args:
+            index: In-memory vector index to serialize to disk.
+            tmp_dir: Temporary snapshot workspace directory.
+        """
         persist_vector_index(index, tmp_dir / "vector")
 
     def persist_graph_store(self, store: Any, tmp_dir: Path) -> None:
-        """Persist a graph store into the workspace ``tmp_dir``."""
+        """Persist the property graph store into the workspace.
+
+        Args:
+            store: Property graph store to export.
+            tmp_dir: Temporary snapshot workspace directory.
+        """
         persist_graph_store(store, tmp_dir / "graph")
 
     def write_manifest(
@@ -756,28 +681,49 @@ class SnapshotManager:
         corpus_hash: str,
         config_hash: str,
         versions: dict[str, Any] | None = None,
+        graph_exports: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Write manifest metadata for the current workspace."""
-        data = {
+        """Write manifest metadata describing the snapshot contents.
+
+        Args:
+            tmp_dir: Temporary snapshot workspace directory.
+            index_id: Identifier representing the persisted index.
+            graph_store_type: Storage backend used for graph data.
+            vector_store_type: Storage backend used for vector data.
+            corpus_hash: Content hash of the ingested corpus.
+            config_hash: Hash summarizing configuration inputs.
+            versions: Optional mapping of component versions.
+            graph_exports: Optional metadata about packaged graph export files.
+        """
+        metadata = {
             "index_id": index_id,
             "graph_store_type": graph_store_type,
             "vector_store_type": vector_store_type,
             "corpus_hash": corpus_hash,
             "config_hash": config_hash,
-            "created_at": datetime.now(UTC).isoformat(),
             "versions": versions or {},
-            "schema_version": MANIFEST_SCHEMA_VERSION,
-            "persist_format_version": MANIFEST_FORMAT_VERSION,
-            "complete": False,
         }
-        write_manifest(tmp_dir, data)
+        if graph_exports:
+            metadata["graph_exports"] = graph_exports
+        write_manifest(tmp_dir, metadata)
 
     def finalize_snapshot(self, tmp_dir: Path) -> Path:
-        """Finalize the workspace into an immutable snapshot directory."""
+        """Promote the workspace to an immutable snapshot directory.
+
+        Args:
+            tmp_dir: Temporary snapshot workspace directory.
+
+        Returns:
+            Path: Path to the finalized snapshot directory.
+        """
         return finalize_snapshot(tmp_dir, base_dir=self.storage_dir)
 
     def cleanup_tmp(self, tmp_dir: Path) -> None:
-        """Remove temporary workspace and release the active lock."""
+        """Remove the workspace directory and release the snapshot lock.
+
+        Args:
+            tmp_dir: Temporary snapshot workspace directory.
+        """
         cleanup_tmp(tmp_dir)
 
 
