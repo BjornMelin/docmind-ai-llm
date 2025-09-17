@@ -32,6 +32,7 @@ Usage:
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import subprocess
@@ -86,6 +87,13 @@ class TestRunner:
         """
         self.project_root = project_root
         self.results: list[TestResult] = []
+
+    def _has_xdist(self) -> bool:
+        """Return True when pytest-xdist is available."""
+        try:
+            return importlib.util.find_spec("xdist") is not None
+        except Exception:
+            return False
 
     def clean_artifacts(self) -> None:
         """Clean test artifacts and caches."""
@@ -155,7 +163,7 @@ class TestRunner:
                 result.output += f"\n--- STDERR ---\n{process.stderr}"
 
             # Parse pytest output for statistics
-            if "pytest" in command[0] or "pytest" in command[1]:
+            if any("pytest" in part for part in command):
                 self._parse_pytest_output(result)
 
             if result.exit_code == 0:
@@ -316,7 +324,10 @@ class TestRunner:
         ]
         ci_env = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
         if ci_env and sys.version_info >= (3, 11):
-            command += ["-n", "auto"]
+            if self._has_xdist():
+                command += ["-n", "auto"]
+            else:
+                print("pytest-xdist not available; running coverage tests serially.")
         return self.run_command(command, "All Tests with Coverage (unit+integration)")
 
     def run_smoke_tests(self) -> TestResult:

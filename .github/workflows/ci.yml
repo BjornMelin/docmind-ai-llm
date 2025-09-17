@@ -27,10 +27,10 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Sync environment (app + test extras)
+      - name: Sync environment (app + test extras + quality group)
         run: |
-          # Create project venv and install dependencies from lockfile, including tests
-          uv sync --extra test --extra observability --frozen
+          # Create project venv and install dependencies from lockfile, including tests and quality tooling
+          uv sync --extra test --extra observability --group quality --frozen
 
       - name: Quality Gate - Ruff (format+lint)
         run: |
