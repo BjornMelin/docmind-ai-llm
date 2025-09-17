@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -208,14 +209,12 @@ def _page_image_exports(
     output_dir = base_dir / "page_images" / path.stem
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    original_flag = app_settings.processing.encrypt_page_images
-    desired_flag = encrypt_override or cfg.enable_image_encryption or original_flag
-    if desired_flag != original_flag:
-        app_settings.processing.encrypt_page_images = desired_flag
-    try:
-        entries = save_pdf_page_images(path, output_dir)
-    finally:
-        app_settings.processing.encrypt_page_images = original_flag
+    desired_flag = (
+        encrypt_override
+        or cfg.enable_image_encryption
+        or getattr(app_settings.processing, "encrypt_page_images", False)
+    )
+    entries = save_pdf_page_images(path, output_dir, encrypt=desired_flag)
 
     exports: list[ExportArtifact] = []
     for entry in entries:
@@ -296,8 +295,14 @@ async def ingest_documents(
         pipeline.docstore.persist(str(docstore_path))
 
     corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
+    base_dir: Path | None = None
+    if corpus_paths:
+        try:
+            base_dir = Path(os.path.commonpath([str(p.parent) for p in corpus_paths]))
+        except ValueError:
+            base_dir = None
     manifest = ManifestSummary(
-        corpus_hash=compute_corpus_hash(corpus_paths),
+        corpus_hash=compute_corpus_hash(corpus_paths, base_dir=base_dir),
         config_hash=compute_config_hash(cfg.model_dump()),
         payload_count=len(nodes),
         complete=False,

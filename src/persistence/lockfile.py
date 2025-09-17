@@ -11,6 +11,7 @@ import contextlib
 import json
 import os
 import socket
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -113,6 +114,9 @@ class SnapshotLock:
     _pending_takeover_count: int = field(init=False, default=0)
     _use_portalocker: bool = field(init=False, default=True)
     _fd: int | None = field(init=False, default=None)
+    _hb_stop: bool = field(init=False, default=False)
+    _hb_thread: threading.Thread | None = field(init=False, default=None)
+    _metadata_lock: threading.Lock = field(init=False, default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
         """Prepare the lock file path and validate portalocker availability.
@@ -169,14 +173,16 @@ class SnapshotLock:
                     )
                     self._fd = fd
                     self._handle = os.fdopen(fd, "a+")
+                now = datetime.now(UTC)
                 self._metadata = _LockMetadata(
                     owner_id=_owner_id(),
-                    created_at=datetime.now(UTC),
-                    last_heartbeat=datetime.now(UTC),
+                    created_at=now,
+                    last_heartbeat=now,
                     ttl_seconds=self.ttl_seconds,
                     takeover_count=self._pending_takeover_count,
                 )
                 self._write_metadata()
+                self._start_heartbeat()
                 logger.debug("Acquired snapshot lock %s", self.path)
                 return
             except LockException:  # pragma: no cover - depends on timing
@@ -194,6 +200,7 @@ class SnapshotLock:
     def release(self) -> None:
         """Release the lock and clean up sidecar metadata."""
         try:
+            self._stop_heartbeat()
             if self._lock is not None:
                 self._lock.release()
             elif self._fd is not None:
@@ -207,9 +214,39 @@ class SnapshotLock:
             self._handle = None
             self._metadata = None
             self._fd = None
+            self._hb_thread = None
             _remove_if_exists(self._metadata_path())
             _remove_if_exists(self.path)
             logger.debug("Released snapshot lock %s", self.path)
+
+    def _start_heartbeat(self) -> None:
+        """Start a background thread that periodically refreshes the lock."""
+        self._hb_stop = False
+        interval = max(1.0, self.ttl_seconds / 2.0)
+
+        def _worker() -> None:
+            while not self._hb_stop:
+                time.sleep(interval)
+                if self._hb_stop:
+                    break
+                try:
+                    self.refresh()
+                except SnapshotLockError:
+                    break
+
+        self._hb_thread = threading.Thread(
+            target=_worker, name=f"SnapshotLockHeartbeat[{self.path.name}]", daemon=True
+        )
+        self._hb_thread.start()
+
+    def _stop_heartbeat(self) -> None:
+        """Stop the background heartbeat thread if running."""
+        self._hb_stop = True
+        thread = self._hb_thread
+        if thread is None:
+            return
+        with contextlib.suppress(Exception):
+            thread.join(timeout=1.0)
 
     def _metadata_path(self) -> Path:
         return self.path.with_suffix(self.path.suffix + ".meta.json")
@@ -248,13 +285,14 @@ class SnapshotLock:
         if self._metadata is None:
             return
         payload = self._metadata.to_json()
-        tmp_path = self._metadata_path().with_suffix(".tmp")
-        tmp_path.write_text(
-            json.dumps(payload, separators=(",", ":")), encoding="utf-8"
-        )
-        _fsync_file(tmp_path)
-        os.replace(tmp_path, self._metadata_path())
-        _fsync_file(self._metadata_path())
+        with self._metadata_lock:
+            tmp_path = self._metadata_path().with_suffix(".tmp")
+            tmp_path.write_text(
+                json.dumps(payload, separators=(",", ":")), encoding="utf-8"
+            )
+            _fsync_file(tmp_path)
+            os.replace(tmp_path, self._metadata_path())
+            _fsync_file(self._metadata_path())
 
 
 def _owner_id() -> str:

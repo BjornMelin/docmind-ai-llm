@@ -44,19 +44,25 @@ def _phash(img: Image.Image, hash_size: int = 8) -> str:
     return f"{value:0{width}x}"
 
 
-def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
+def _save_with_format(
+    pix: fitz.Pixmap, target_stem: Path, *, encrypt: bool | None = None
+) -> tuple[Path, str]:
     """Persist a rendered page as WebP (preferred) or JPEG fallback.
 
-    Encryption is applied when ``settings.processing.encrypt_page_images`` is
-    enabled, yielding ``*.enc`` outputs.
+    Encryption is applied when ``encrypt`` is true (defaulting to
+    ``settings.processing.encrypt_page_images``), yielding ``*.enc`` outputs.
 
     Args:
         pix: PyMuPDF pixmap for the rendered page.
         target_stem: Path stem used to derive the output filename.
+        encrypt: Whether to encrypt the rendered output; ``None`` uses settings.
 
     Returns:
         tuple[Path, str]: Output path (possibly encrypted) and perceptual hash.
     """
+    if encrypt is None:
+        encrypt = getattr(settings.processing, "encrypt_page_images", False)
+
     # Convert to PIL Image from raw samples
     mode = "RGB" if pix.n < 4 else "RGBA"
     img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
@@ -76,7 +82,7 @@ def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
     try:
         img.save(webp_path, format="WEBP", quality=70, method=6)
         out = str(webp_path)
-        if getattr(settings.processing, "encrypt_page_images", False):
+        if encrypt:
             out = encrypt_file(out)
         return Path(out), _phash(img)
     except (OSError, ValueError):
@@ -84,13 +90,13 @@ def _save_with_format(pix: fitz.Pixmap, target_stem: Path) -> tuple[Path, str]:
         jpg_path = target_stem.with_suffix(".jpg")
         img.save(jpg_path, format="JPEG", quality=75)
         out = str(jpg_path)
-        if getattr(settings.processing, "encrypt_page_images", False):
+        if encrypt:
             out = encrypt_file(out)
         return Path(out), _phash(img)
 
 
 def _render_pdf_pages(
-    pdf_path: Path, out_dir: Path, dpi: int = 200
+    pdf_path: Path, out_dir: Path, dpi: int = 200, *, encrypt: bool | None = None
 ) -> list[tuple[int, Path, fitz.Rect, str]]:
     """Render PDF pages to image files while preserving deterministic names.
 
@@ -102,6 +108,7 @@ def _render_pdf_pages(
         pdf_path: Source PDF path.
         out_dir: Directory to store rendered images.
         dpi: Render resolution in dots per inch; defaults to 200.
+        encrypt: Whether to encrypt rendered outputs; ``None`` defers to settings.
 
     Returns:
         list[tuple[int, Path, fitz.Rect, str]]: One entry per page containing
@@ -133,7 +140,9 @@ def _render_pdf_pages(
             if needs_render:
                 pix = page.get_pixmap(matrix=mat)
                 # Save as WebP or JPEG fallback
-                img_path, phash = _save_with_format(pix, out_dir / img_stem)
+                img_path, phash = _save_with_format(
+                    pix, out_dir / img_stem, encrypt=encrypt
+                )
                 # Ensure deterministic mtime ordering for downstream caches/tests:
                 # set the image mtime to at least the source PDF's mtime.
                 with contextlib.suppress(OSError):
@@ -161,7 +170,11 @@ def _render_pdf_pages(
 
 
 def pdf_pages_to_image_documents(
-    pdf_path: Path, dpi: int = 200, output_dir: Path | None = None
+    pdf_path: Path,
+    dpi: int = 200,
+    output_dir: Path | None = None,
+    *,
+    encrypt: bool | None = None,
 ) -> tuple[list[ImageDocument], Path]:
     """Render PDF pages to images and return ImageDocument nodes.
 
@@ -169,6 +182,7 @@ def pdf_pages_to_image_documents(
         pdf_path: Path to the PDF file
         dpi: Render resolution (dots per inch)
         output_dir: Directory to save images. Created if ``None``.
+        encrypt: Whether to encrypt rendered outputs (defaults to settings).
 
     Returns:
         tuple[list[ImageDocument], Path]: Generated image documents and the
@@ -176,7 +190,7 @@ def pdf_pages_to_image_documents(
     """
     pdf_path = Path(pdf_path)
     out_dir = Path(output_dir) if output_dir else Path(tempfile.mkdtemp())
-    entries = _render_pdf_pages(pdf_path, out_dir, dpi)
+    entries = _render_pdf_pages(pdf_path, out_dir, dpi, encrypt=encrypt)
     docs: list[ImageDocument] = []
 
     for i, path, _rect, phash in entries:
@@ -198,7 +212,13 @@ def pdf_pages_to_image_documents(
     return docs, out_dir
 
 
-def save_pdf_page_images(pdf_path: Path, out_dir: Path, dpi: int = 200) -> list[dict]:
+def save_pdf_page_images(
+    pdf_path: Path,
+    out_dir: Path,
+    dpi: int = 200,
+    *,
+    encrypt: bool | None = None,
+) -> list[dict]:
     """Render each PDF page to a stable image (WebP/JPEG) and return metadata.
 
     - Stable filename format: ``<stem>__page-<n>.<webp|jpg>``; encrypted outputs
@@ -210,11 +230,12 @@ def save_pdf_page_images(pdf_path: Path, out_dir: Path, dpi: int = 200) -> list[
         pdf_path: Path to the source PDF
         out_dir: Directory to store generated images
         dpi: Render resolution (dots per inch)
+        encrypt: Whether to encrypt rendered outputs; ``None`` defers to settings.
 
     Returns:
         list[dict]: Page metadata containing image path, bbox, phash, and flags.
     """
-    entries = _render_pdf_pages(Path(pdf_path), Path(out_dir), dpi)
+    entries = _render_pdf_pages(Path(pdf_path), Path(out_dir), dpi, encrypt=encrypt)
 
     return [
         {

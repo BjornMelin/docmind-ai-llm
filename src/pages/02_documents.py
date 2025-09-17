@@ -369,7 +369,15 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
         with contextlib.suppress(Exception):  # pragma: no cover - optional dependency
             import llama_index  # type: ignore[import]
 
-            versions["llamaindex"] = getattr(llama_index, "__version__", "unknown")
+            versions["llama_index"] = getattr(llama_index, "__version__", "unknown")
+
+        embed_model_name = "unknown"
+        with contextlib.suppress(Exception):
+            service_context = getattr(vector_index, "service_context", None)
+            embed_model = getattr(service_context, "embed_model", None)
+            if embed_model is not None:
+                embed_model_name = getattr(embed_model, "model_name", "unknown")
+        versions.setdefault("embed_model", embed_model_name)
         with contextlib.suppress(Exception):  # pragma: no cover - optional dependency
             from qdrant_client import (
                 __version__ as qdrant_version,  # type: ignore[import]

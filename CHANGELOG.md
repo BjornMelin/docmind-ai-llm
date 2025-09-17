@@ -10,6 +10,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 * Canonical ingestion models and hashing helpers powering the library-first ingestion pipeline (`src/models/processing.py`, `src/persistence/hashing.py`).
 * LlamaIndex-based ingestion pipeline, DuckDB-backed cache/docstore wiring, AES-GCM page-image exports, and OpenTelemetry spans (`src/processing/ingestion_pipeline.py`).
 * Snapshot lock + writer modules with heartbeat/takeover metadata, atomic promotion, tri-file manifest, and timestamped graph export metadata (`src/persistence/lockfile.py`, `src/persistence/snapshot_writer.py`).
+* Snapshot lock heartbeat refresher prevents TTL expiry during long-running persists (`src/persistence/lockfile.py`).
+* Manifest metadata now records the active embedding model and spec-compliant `versions["llama_index"]` entry (`src/pages/02_documents.py`).
+* PDF page-image exports accept explicit encryption flags to avoid global state mutation (`src/processing/pdf_pages.py`, `src/processing/ingestion_pipeline.py`).
 * GraphRAG router/query helpers using native LlamaIndex retrievers and telemetry instrumentation for export counters and spans (`src/retrieval/graph_config.py`, `src/retrieval/router_factory.py`, `src/agents/tools/router_tool.py`).
 * Streamlit UI integration that surfaces manifest metadata, staleness badges, GraphRAG export tooling, and ingestion orchestration (`src/pages/01_chat.py`, `src/pages/02_documents.py`, `src/ui/ingest_adapter.py`, `src/agents/coordinator.py`).
 * Observability configuration + helpers for OTLP/console exporters and optional LlamaIndex instrumentation (`ObservabilityConfig`, `configure_observability`, updated `scripts/demo_metrics_console.py`).
