@@ -165,10 +165,16 @@ def _document_from_input(
     """
     if item.source_path is not None and reader is not None:
         try:
-            docs = reader.load_data(
-                unstructured_kwargs={"filename": str(item.source_path)}
+            docs = reader.load_data(  # type: ignore[call-arg]
+                file=str(item.source_path),
+                unstructured_kwargs={"filename": str(item.source_path)},
             )
-        except (OSError, ValueError, RuntimeError) as exc:  # pragma: no cover
+        except (
+            TypeError,
+            OSError,
+            ValueError,
+            RuntimeError,
+        ) as exc:  # pragma: no cover
             logger.debug("UnstructuredReader failed: %s", exc)
             text = Path(item.source_path).read_text(encoding="utf-8", errors="ignore")
             docs = [Document(text=text, doc_id=item.document_id)]

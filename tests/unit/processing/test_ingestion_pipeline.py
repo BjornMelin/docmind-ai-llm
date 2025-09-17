@@ -9,7 +9,11 @@ import pytest
 from llama_index.core.base.embeddings.base import BaseEmbedding
 
 from src.models.processing import IngestionConfig, IngestionInput
-from src.processing.ingestion_pipeline import build_ingestion_pipeline, ingest_documents
+from src.processing.ingestion_pipeline import (
+    _document_from_input,
+    build_ingestion_pipeline,
+    ingest_documents,
+)
 
 
 class DummyEmbedding(BaseEmbedding):
@@ -107,3 +111,20 @@ def test_build_ingestion_pipeline_uses_cache_and_docstore(tmp_path: Path) -> Non
     assert cache_path == cfg.cache_dir / "docmind.duckdb"
     assert docstore_path == cfg.docstore_path
     assert pipeline.transformations  # TokenTextSplitter + optional components
+
+
+def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
+    """TypeError from UnstructuredReader triggers text fallback path."""
+    sample = tmp_path / "sample.txt"
+    sample.write_text("Fallback content", encoding="utf-8")
+
+    class ExplodingReader:
+        def load_data(self, *args, **kwargs):  # pragma: no cover - simple stub
+            raise TypeError("unexpected signature")
+
+    item = IngestionInput(document_id="doc-1", source_path=sample)
+    docs = _document_from_input(ExplodingReader(), item)
+
+    assert len(docs) == 1
+    assert docs[0].doc_id == "doc-1"
+    assert docs[0].text == "Fallback content"
