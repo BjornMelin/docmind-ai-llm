@@ -8,9 +8,9 @@ this module.
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Any
-from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
 
