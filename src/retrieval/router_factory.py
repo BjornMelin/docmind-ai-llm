@@ -21,8 +21,8 @@ from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
 from src.config.settings import settings as default_settings
+from src.retrieval.graph_config import build_graph_query_engine
 from src.retrieval.postprocessor_utils import (
-    build_pg_query_engine,
     build_retriever_query_engine,
     build_vector_query_engine,
 )
@@ -134,90 +134,50 @@ def build_router_engine(
     except (ValueError, TypeError, AttributeError, ImportError) as e:
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    # Optional graph tool (health-gated)
+    # Optional graph tool (GraphRAG)
     try:
         if (
             pg_index is not None
             and getattr(pg_index, "property_graph_store", None) is not None
+            and bool(getattr(cfg, "enable_graphrag", True))
         ):
-            default_depth = (
-                int(getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1))
-                if cfg is not None
-                else 1
+            graph_depth = int(
+                getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
             )
-            # Health probe: shallow retrieve to ensure index is usable
-            try:
-                if hasattr(pg_index, "as_retriever"):
-                    _probe_retr = pg_index.as_retriever(
-                        include_text=False, path_depth=1, similarity_top_k=1
-                    )
-                    _probe = _probe_retr.retrieve("health")
-                    if not _probe:
-                        logger.info(
-                            "KG health probe returned 0 results; proceeding with "
-                            "best-effort tool registration"
-                        )
-                else:
-                    # If no retriever is available, proceed as before (best effort)
-                    pass
-            except Exception as _probe_exc:  # pylint: disable=broad-exception-caught
-                # On probe error, proceed best-effort with registration
-                # rather than disabling
-                logger.debug(
-                    "KG health probe failed: %s — proceeding with "
-                    "best-effort registration",
-                    _probe_exc,
-                )
-            g_engine = None
-            if hasattr(pg_index, "as_retriever"):
-                retr = pg_index.as_retriever(
-                    include_text=True, path_depth=default_depth
-                )
-                from src.retrieval.reranking import get_postprocessors as _get_pp
+            graph_top_k = int(getattr(cfg.retrieval, "top_k", 10))
+            from src.retrieval.reranking import get_postprocessors as _get_pp
 
-                _g_post = _get_pp(
-                    "kg",
-                    use_reranking=use_rerank_flag,
-                    top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
-                )
-                g_engine = build_retriever_query_engine(
-                    retr,
-                    _g_post,
-                    llm=the_llm,
-                    response_mode="compact",
-                    verbose=False,
-                    engine_cls=RetrieverQueryEngine,
-                )
-            elif hasattr(pg_index, "as_query_engine"):
-                from src.retrieval.reranking import get_postprocessors as _get_pp
-
-                _g_post2 = _get_pp(
-                    "kg",
-                    use_reranking=use_rerank_flag,
-                    top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
-                )
-                g_engine = build_pg_query_engine(pg_index, _g_post2, include_text=True)
-            if g_engine is not None:
-                tools.append(
-                    QueryEngineTool(
-                        query_engine=g_engine,
-                        metadata=ToolMetadata(
-                            name="knowledge_graph",
-                            description=(
-                                "Knowledge graph traversal for "
-                                "relationship-centric queries"
-                            ),
+            graph_post = _get_pp(
+                "kg",
+                use_reranking=use_rerank_flag,
+                top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
+            )
+            artifacts = build_graph_query_engine(
+                pg_index,
+                llm=the_llm,
+                include_text=True,
+                path_depth=graph_depth,
+                similarity_top_k=graph_top_k,
+                node_postprocessors=graph_post,
+            )
+            tools.append(
+                QueryEngineTool(
+                    query_engine=artifacts.query_engine,
+                    metadata=ToolMetadata(
+                        name="knowledge_graph",
+                        description=(
+                            "Knowledge graph traversal for relationship-centric queries"
                         ),
-                    )
+                    ),
                 )
-            else:
-                logger.debug(
-                    "Skipping knowledge_graph tool: pg_index lacks "
-                    "retriever/query engine"
-                )
-    # pragma: no cover - defensive
-    except (ValueError, TypeError, AttributeError, ImportError, RuntimeError) as e:
-        logger.debug(f"Graph tool construction skipped: {e}")
+            )
+    except (
+        ValueError,
+        TypeError,
+        AttributeError,
+        ImportError,
+    ) as exc:  # pragma: no cover - defensive
+        logger.debug(f"Graph tool construction skipped: {exc}")
 
     # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm
     class _NoOpLLM:

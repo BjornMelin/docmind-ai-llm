@@ -6,6 +6,8 @@ Welcome to the documentation for **DocMind AI**, a local-first document analysis
 
 DocMind AI is an offline-first document analysis system featuring a 5-agent LangGraph supervisor coordination system, hybrid retrieval, and local processing for privacy.
 
+Ingestion is handled by a library-first LlamaIndex `IngestionPipeline` with DuckDB-backed caching and deterministic hashing, while snapshot persistence relies on a portalocker-based SnapshotManager that produces tri-file manifests and timestamps GraphRAG exports. Observability is unified through OpenTelemetry with OTLP exporters (or console fallback) so ingestion, snapshot promotion, GraphRAG exports, and Streamlit UI flows emit consistent spans, metrics, and telemetry events.
+
 Retrieval/Router overview: Queries are routed through a RouterQueryEngine composed via `router_factory` with tools `semantic_search`, `hybrid_search` (Qdrant server‑side fusion), and (optionally) `knowledge_graph` when a PropertyGraphIndex is present and healthy. The selector prefers `PydanticSingleSelector` and falls back to `LLMSingleSelector`.
 
 Snapshots & Staleness: Index snapshots persist vector and graph stores with an enriched manifest (schema/persist versions, versions map, hashes). Chat auto‑loads the latest non‑stale snapshot and surfaces a staleness badge if current corpus/config differ.

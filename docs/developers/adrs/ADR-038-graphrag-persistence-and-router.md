@@ -1,8 +1,8 @@
 ---
 ADR: 038
 Title: GraphRAG Persistence and Router Integration
-Status: Proposed
-Version: 1.0
+Status: Accepted
+Version: 1.1
 Date: 2025-09-09
 Supersedes:
 Superseded-by:
@@ -54,7 +54,7 @@ GraphRAG was accepted (ADR‑019) as an optional enhancement, but lacked standar
 - Router: When a graph exists and is healthy, compose tools `[vector_query_engine, graph_query_engine(include_text=true, path_depth=1)]` with `PydanticSingleSelector` (OpenAI) else `LLMSingleSelector`. If graph absent/unhealthy, use vector tool only.
 - Graph helpers: Use documented APIs (`property_graph_store.get`, `get_rel_map`) and `PropertyGraphIndex.as_retriever/as_query_engine`. No index mutation.
 - Persistence: Implement SnapshotManager to write to `storage/_tmp-<uuid>` and atomically rename to `storage/<timestamp>`. Write `manifest.json` with `corpus_hash`, `config_hash`, `created_at`, `versions`. Use a lockfile to ensure a single writer. Load the latest snapshot in Chat and show a staleness badge on mismatch.
-- Exports: JSONL baseline (one relation per line from `get_rel_map`); Parquet optional if `pyarrow` is available.
+- Exports: JSONL baseline (one relation per line from `get_rel_map`); Parquet optional if `pyarrow` is available. Metadata is recorded in `manifest.graph_exports` with telemetry fields (`seed_count`, `duration_ms`, `size_bytes`, `sha256`).
 - UI: Documents page “Build GraphRAG (beta)” toggle (default off, configurable). Chat defaults to router when graph present and shows staleness badge when hashes mismatch.
 
 ## High-Level Architecture
@@ -123,6 +123,12 @@ DOCMIND_GRAPHRAG__DEFAULT_PATH_DEPTH=1
 - Integration: exports; ingest→router composition
 - E2E (smoke): small doc set → router response with sources
 
+## Telemetry & Observability
+
+- Graph ingestion, export, and router selection MUST emit OpenTelemetry spans via `configure_observability` (SPEC-012).
+- Structured telemetry events (`router_selected`, `export_performed`, `lock_takeover`) SHALL be logged via `log_jsonl` and mirrored in manifests.
+- Console exporters provide offline-first observability when no OTLP endpoint is configured.
+
 ## Consequences
 
 ### Positive Outcomes
@@ -145,4 +151,5 @@ DOCMIND_GRAPHRAG__DEFAULT_PATH_DEPTH=1
 
 ## Changelog
 
+- 1.1 (2025-09-16): Accepted; documented manifest metadata and OpenTelemetry instrumentation
 - 1.0 (2025-09-09): Initial proposed ADR for GraphRAG router+SnapshotManager

@@ -19,6 +19,8 @@
 
 - **Privacy-Focused:** Local processing ensures data security without cloud dependency.
 
+- **Library-First Ingestion Pipeline:** LlamaIndex `IngestionPipeline` orchestrates Unstructured parsing, deterministic hashing, DuckDB caching, and AES-GCM page image handling with OpenTelemetry spans for each run.
+
 - **Versatile Document Handling:** Supports multiple file formats:
   - 📄 PDF
   - 📑 DOCX
@@ -130,6 +132,7 @@
     - [Development Guidelines](#development-guidelines)
       - [🧪 Tests and CI](#-tests-and-ci)
   - [📃 License](#-license)
+  - [📡 Observability](#-observability)
 
 ## 🚀 Getting Started with DocMind AI
 
@@ -156,6 +159,12 @@
 
    ```bash
    uv sync
+   ```
+
+   _Need OTLP exporters and cross-platform snapshot locking?_ Install the optional observability extras as well:
+
+   ```bash
+   uv sync --extra observability
    ```
 
    **Key Dependencies Included:**
@@ -799,7 +808,7 @@ Note: Realized latency is hardware‑dependent. Reranking uses bounded timeouts 
 | 5,000 docs | 3.5 hours | <5 seconds | 2.1GB |
 | 10,000 docs | 7 hours | <8 seconds | 3.5GB |
 
-> *Benchmarks performed on RTX 4090 Laptop GPU, 16GB RAM, NVMe SSD*
+> _Benchmarks performed on RTX 4090 Laptop GPU, 16GB RAM, NVMe SSD_
 
 ### Retrieval & Reranking Defaults
 
@@ -1077,23 +1086,39 @@ We use a tiered test strategy and keep everything offline by default:
 Quick local commands:
 
 ```bash
-# Unit only (with coverage)
-uv run pytest tests/unit -m unit --cov=src -q
+# Fast unit + integration sweep (offline)
+uv run python scripts/run_tests.py --fast
 
-# Integration only (offline; no coverage gating)
-uv run pytest tests/integration -m integration --no-cov -q
+# Full coverage gate (unit + integration)
+uv run python scripts/run_tests.py --coverage
 
-# Combined (unit + integration) with coverage on src only
-uv run pytest -m "unit or integration" --cov=src -q
+# Targeted module or pattern
+uv run python scripts/run_tests.py tests/unit/persistence/test_snapshot_manager.py
 ```
 
-CI pipeline runs unit tests with coverage and a separate integration job without coverage gating. This keeps coverage gates stable while preserving integration signal. See ADR‑014 for quality gates/validation and ADR‑029 for the boundary‑first testing strategy.
+CI pipeline mirrors this flow using `uv run python scripts/run_tests.py --fast` as a quick gate followed by `--coverage` for the full report. This keeps coverage thresholds stable while still surfacing integration regressions early. See ADR‑014 for quality gates/validation and ADR‑029 for the boundary‑first testing strategy.
 
 See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed guidelines. For an overview of the unit test layout and fixture strategy, see tests/README.md.
 
 ## 📃 License
 
 This project is licensed under the MIT License—see the [LICENSE](LICENSE) file for details.
+
+## 📡 Observability
+
+DocMind AI configures OpenTelemetry tracing and metrics via `configure_observability` (see SPEC-012).
+
+- Install the optional extras when you need OTLP exporters + `portalocker`: `uv sync --extra observability`.
+- Default mode uses console exporters to remain offline-first.
+- Set `DOCMIND_OBSERVABILITY__ENDPOINT` (or OTEL env vars) to forward spans and metrics to an OTLP collector.
+- Core spans cover ingestion pipeline runs, snapshot promotion, GraphRAG exports, router selection, and Streamlit UI actions.
+- Telemetry events (`router_selected`, `export_performed`, `lock_takeover`, `snapshot_stale_detected`) are persisted as JSONL for local audits.
+
+```bash
+uv run python -m src.telemetry.opentelemetry --dry-run
+```
+
+Use `tests/unit/telemetry/test_observability_config.py` as a reference for wiring custom exporters in extensions.
 
 ---
 

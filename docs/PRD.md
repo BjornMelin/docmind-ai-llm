@@ -12,6 +12,9 @@
 > - **Token Efficiency**: Achieved 50-87% token reduction through parallel tool execution
 > - **GPU Stack**: Complete CUDA 12.8+, PyTorch 2.7.1, vLLM >=0.10.1 (+ FlashInfer)
 >
+> - **Library-First Ingestion Pipeline**: LlamaIndex `IngestionPipeline` with DuckDB cache, deterministic hashing, and AES-GCM page image support
+> - **Snapshot Persistence**: Portalocker-backed SnapshotManager with tri-file manifests, CURRENT pointer discipline, GraphRAG export packaging
+> - **OpenTelemetry Observability**: Configurable OTLP exporters, console fallback, and span coverage for ingestion, snapshots, GraphRAG, and UI actions
 > **Final Architecture Update (2025-08-20):** This PRD now documents the final, validated 5-agent LangGraph supervisor system with complete technical specifications and performance validation results.
 
 ## 1. Executive Summary

@@ -1,27 +1,15 @@
 """Models module for DocMind AI.
 
-This module provides access to core data models and analysis schemas.
-
-CONSOLIDATED MODEL ORGANIZATION:
-Following the consolidation strategy, models are now organized as:
-- Shared models (used across modules) are in schemas.py
-- Processing models are consolidated in processing.py
-- Embedding models are consolidated in embeddings.py
-- Storage models are consolidated in storage.py
-- Agent-specific models remain in agents/models.py
+Expose Pydantic models used across the application.
 """
 
-# Shared models (used across multiple modules)
-# Domain-specific models (consolidated for easy access)
-from .embeddings import (
-    EmbeddingParameters,
-    EmbeddingResult,
-)
+from .embeddings import EmbeddingParameters, EmbeddingResult
 from .processing import (
-    DocumentElement,
-    ProcessingError,
-    ProcessingResult,
-    ProcessingStrategy,
+    ExportArtifact,
+    IngestionConfig,
+    IngestionInput,
+    IngestionResult,
+    ManifestSummary,
 )
 from .schemas import (
     AgentDecision,
@@ -48,16 +36,17 @@ __all__ = [
     "ConversationContext",
     "ConversationTurn",
     "Document",
-    "DocumentElement",
     "DocumentMetadata",
     "EmbeddingParameters",
     "EmbeddingResult",
     "ErrorResponse",
+    "ExportArtifact",
+    "IngestionConfig",
+    "IngestionInput",
+    "IngestionResult",
+    "ManifestSummary",
     "PerformanceMetrics",
     "PersistenceError",
-    "ProcessingError",
-    "ProcessingResult",
-    "ProcessingStrategy",
     "QueryRequest",
     "SearchResult",
     "StorageStats",

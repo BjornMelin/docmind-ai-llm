@@ -57,6 +57,17 @@ def test_router_registers_kg_tool_even_on_empty_probe(
     monkeypatch.setattr(rr, "get_postprocessors", lambda *_a, **_k: [], raising=True)
 
     vec = _VecIndex()
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_graph_query_engine",
+        lambda *_a, **_k: type(
+            "A",
+            (),
+            {
+                "query_engine": object(),
+                "retriever": object(),
+            },
+        )(),
+    )
     pg = _PGIndex(probe_empty=True)
     engine = build_router_engine(vec, pg_index=pg, settings=cfg, llm=None)
     tool_list = getattr(engine, "query_engine_tools", [])

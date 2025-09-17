@@ -14,6 +14,8 @@ Key Components:
 
 import asyncio
 import time
+from collections.abc import Callable
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -27,6 +29,64 @@ from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.llms.llm import LLM
 from llama_index.core.llms.mock import MockLLM
 from llama_index.core.schema import NodeWithScore, TextNode
+from opentelemetry.sdk.metrics.export import ConsoleMetricExporter
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
+from src.config.settings import settings as app_settings
+from src.models.processing import IngestionConfig
+from src.processing.ingestion_pipeline import build_ingestion_pipeline
+from src.telemetry import opentelemetry as otel
+
+
+@pytest.fixture
+def snapshot_storage_root(tmp_path: Path) -> Path:
+    """Provide an isolated snapshot storage root for each test."""
+    original_dir = app_settings.data_dir
+    app_settings.data_dir = tmp_path
+    storage = tmp_path / "storage"
+    storage.mkdir(parents=True, exist_ok=True)
+    try:
+        yield storage
+    finally:
+        app_settings.data_dir = original_dir
+
+
+@pytest.fixture
+def ingestion_pipeline_builder(
+    tmp_path: Path,
+) -> Callable[[IngestionConfig | None], tuple[Any, Path, Path | None]]:
+    """Factory fixture that yields configured ingestion pipelines."""
+
+    def _builder(
+        cfg: IngestionConfig | None = None, *, embedding: Any | None = None
+    ) -> tuple[Any, Path, Path | None]:
+        configuration = cfg or IngestionConfig(cache_dir=tmp_path / "cache")
+        return build_ingestion_pipeline(configuration, embedding=embedding)
+
+    return _builder
+
+
+@pytest.fixture
+def configured_observability_console(monkeypatch: pytest.MonkeyPatch):
+    """Enable console-only OpenTelemetry exporters for tests."""
+    original_config = app_settings.observability.model_copy()
+    app_settings.observability = original_config.model_copy(
+        update={"enabled": True, "endpoint": None, "instrument_llamaindex": False}
+    )
+    monkeypatch.setattr(
+        otel, "_create_span_exporter", lambda _obs: ConsoleSpanExporter()
+    )
+    monkeypatch.setattr(
+        otel, "_create_metric_exporter", lambda _obs: ConsoleMetricExporter()
+    )
+    otel.configure_observability(app_settings)
+    try:
+        yield app_settings
+    finally:
+        otel.shutdown_metrics()
+        otel.shutdown_tracing()
+        app_settings.observability = original_config
+
 
 # ============================================================================
 # LLAMAINDEX MOCK FACTORIES (LIBRARY-FIRST APPROACH)

@@ -9,7 +9,7 @@ Covers configuration, state management, workflow setup, and error handling.
 # Keep private access minimal and well-documented.
 # pylint: disable=protected-access,redefined-outer-name,unused-argument
 
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -21,6 +21,20 @@ from src.agents.coordinator import (
 )
 from src.agents.models import AgentResponse
 from tests.fixtures.test_settings import MockDocMindSettings
+
+
+def _make_llm_mock() -> Mock:
+    """Create a fully mocked LLM with sync/async surfaces."""
+    llm = Mock()
+    llm.metadata = Mock()
+    llm.metadata.model_name = "test-model"
+    llm.invoke = Mock(return_value="ok")
+    llm.ainvoke = AsyncMock(return_value="ok")
+    llm.predict = Mock(return_value="ok")
+    llm.apredict = AsyncMock(return_value="ok")
+    llm.stream = Mock(return_value=iter(()))
+    llm.astream = AsyncMock(return_value=iter(()))
+    return llm
 
 
 @pytest.fixture
@@ -42,10 +56,7 @@ def sample_messages():
 @pytest.fixture
 def mock_llm():
     """Mock LLM for testing."""
-    llm = Mock()
-    llm.metadata = Mock()
-    llm.metadata.model_name = "test-model"
-    return llm
+    return _make_llm_mock()
 
 
 @pytest.fixture
@@ -154,13 +165,13 @@ class TestMultiAgentCoordinator:
     """Comprehensive tests for MultiAgentCoordinator class."""
 
     @pytest.mark.usefixtures("test_settings")
-    def test_coordinator_initialization_defaults(self):
+    def test_coordinator_initialization_defaults(self, mock_llm):
         """Test coordinator initialization with default parameters."""
         with (
             patch("src.config.setup_llamaindex"),
             patch("llama_index.core.Settings") as mock_settings,
         ):
-            mock_settings.llm = Mock()
+            mock_settings.llm = mock_llm
 
             coordinator = MultiAgentCoordinator()
 
@@ -231,7 +242,7 @@ class TestMultiAgentCoordinator:
     def test_ensure_setup_success(self, mock_settings, mock_setup):
         """Test successful setup of coordinator components."""
         # Mock LLM in Settings
-        mock_llm = Mock()
+        mock_llm = _make_llm_mock()
         mock_settings.llm = mock_llm
 
         # Mock DSPy availability
@@ -256,10 +267,12 @@ class TestMultiAgentCoordinator:
 
             assert result is True
             assert coordinator._setup_complete is True
-            assert coordinator.llm == mock_llm
+            assert hasattr(coordinator.llm, "invoke")
+            assert coordinator._shared_llm_wrapper is not None
+            assert coordinator._shared_llm_wrapper.inner == mock_llm
             assert coordinator.compiled_graph == mock_compiled
             mock_setup.assert_called_once()
-            mock_dspy.assert_called_once_with(llm=mock_llm)
+            mock_dspy.assert_called_once_with(llm=coordinator.llm)
             assert mock_react.call_count == 5
 
     @patch("src.config.setup_llamaindex")
@@ -722,6 +735,8 @@ class TestFactoryFunction:
                 model_path="Qwen/Qwen3-4B-Instruct-2507-FP8",
                 max_context_length=131072,  # From MockDocMindSettings
                 enable_fallback=True,
+                tool_registry=None,
+                use_shared_llm_client=None,
             )
             assert result == mock_instance
 
@@ -741,6 +756,8 @@ class TestFactoryFunction:
                 model_path="custom/model",
                 max_context_length=64000,
                 enable_fallback=False,
+                tool_registry=None,
+                use_shared_llm_client=None,
             )
             assert result == mock_instance
 

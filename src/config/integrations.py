@@ -21,6 +21,7 @@ from llama_index.core import Settings
 
 from src.config.llm_factory import build_llm
 from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
+from src.telemetry.opentelemetry import setup_metrics, setup_tracing
 
 from .settings import settings
 
@@ -108,11 +109,10 @@ def get_vllm_server_command() -> list[str]:
 
 
 def startup_init(cfg: "settings.__class__" = settings) -> None:
-    """Perform explicit startup initialization (no import-time side effects).
+    """Perform explicit startup initialization without import-time side effects.
 
-    - Ensure required directories exist
-    - Bridge telemetry env only here if needed
-    - Log resolved backend, normalized base URLs, timeouts, and hybrid mode
+    Ensures required directories exist, logs configuration highlights, and
+    configures OpenTelemetry exporters when enabled.
     """
     try:
         # IO: ensure directories
@@ -143,6 +143,10 @@ def startup_init(cfg: "settings.__class__" = settings) -> None:
     except Exception as exc:  # pragma: no cover - defensive
         # Do not crash app on startup side-effects; callers may retry/log
         logger.warning("startup_init encountered error: %s", exc)
+        return
+
+    setup_tracing(cfg)
+    setup_metrics(cfg)
 
 
 def initialize_integrations(

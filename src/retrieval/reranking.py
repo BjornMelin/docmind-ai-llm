@@ -560,11 +560,19 @@ class MultimodalReranker(BaseNodePostprocessor):
                 break
         # Emit final delta metric: simple change count in top-k ids
         try:
-            before_ids = [
-                n.node.node_id for n in nodes[: settings.retrieval.reranking_top_k]
-            ]
-            after_ids = [n.node.node_id for n in out]
-            delta_changed = len(set(after_ids) - set(before_ids))
+            configured_k = settings.retrieval.reranking_top_k
+            effective_k = min(10, configured_k)
+            before_ids = [n.node.node_id for n in nodes[:effective_k]]
+            after_ids = [n.node.node_id for n in out[:effective_k]]
+            before_positions = {nid: idx for idx, nid in enumerate(before_ids)}
+            mrr_before = 0.0
+            for idx in range(min(effective_k, len(before_ids))):
+                mrr_before += 1.0 / float(idx + 1)
+            mrr_after = 0.0
+            for _rank, node_id in enumerate(after_ids, start=1):
+                if node_id in before_positions:
+                    mrr_after += 1.0 / float(before_positions[node_id] + 1)
+            delta_mrr = mrr_after - mrr_before
             path = (
                 "both"
                 if (bool(text_nodes) and bool(visual_nodes))
@@ -584,10 +592,10 @@ class MultimodalReranker(BaseNodePostprocessor):
             log_jsonl(
                 {
                     "rerank.stage": "final",
-                    "rerank.topk": int(settings.retrieval.reranking_top_k),
+                    "rerank.topk": int(configured_k),
                     "rerank.latency_ms": 0,
                     "rerank.timeout": False,
-                    "rerank.delta_changed_count": delta_changed,
+                    "rerank.delta_mrr_at_10": delta_mrr,
                     "rerank.path": path,
                     "rerank.total_timeout_budget_ms": int(
                         getattr(settings.retrieval, "total_rerank_budget_ms", 0)

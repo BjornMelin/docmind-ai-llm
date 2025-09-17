@@ -16,6 +16,7 @@ from typing import Any
 
 import streamlit as st
 from loguru import logger
+from opentelemetry import trace
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config.settings import settings
@@ -35,6 +36,7 @@ from src.persistence.snapshot_utils import (
     current_config_dict as _current_config_dict,
 )
 from src.retrieval.router_factory import build_router_engine
+from src.telemetry.opentelemetry import configure_observability
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
 
@@ -43,6 +45,9 @@ STALE_TOOLTIP = (
     "Snapshot is stale (content/config changed). Rebuild in Documents → "
     "Rebuild GraphRAG Snapshot."
 )
+
+
+_TRACER = trace.get_tracer("docmind.chat")
 
 
 def _chunked_stream(text: str, chunk_size: int = 48) -> Iterable[str]:
@@ -85,6 +90,7 @@ def _get_settings_override() -> dict[str, Any] | None:
 
 def main() -> None:  # pragma: no cover - Streamlit page
     """Render the Chat page and handle interactions."""
+    configure_observability(settings)
     st.title("Chat")
     provider_badge(settings)
 
@@ -109,39 +115,31 @@ def main() -> None:  # pragma: no cover - Streamlit page
     try:
         storage_dir = settings.data_dir / "storage"
         if storage_dir.exists():
-            snaps = sorted(
-                [
-                    p
-                    for p in storage_dir.iterdir()
-                    if p.is_dir() and not p.name.startswith("_tmp-")
-                ]
-            )
-            if snaps:
-                latest = snaps[-1]
-                manifest_path = latest / "manifest.json"
-                if manifest_path.exists():
-                    manifest = manifest_path.read_text(encoding="utf-8")
-                    import json as _json
-
-                    data = _json.loads(manifest)
-                    # Compute staleness and render message
-                    uploads_dir = settings.data_dir / "uploads"
-                    corpus_paths = _collect_corpus_paths(uploads_dir)
-                    cfg = _current_config_dict()
-                    if compute_staleness(data, corpus_paths, cfg):
-                        st.warning(STALE_TOOLTIP)
-                        with st.sidebar:
-                            st.caption("Snapshot stale: content or config changed.")
-                        with contextlib.suppress(Exception):
-                            log_jsonl(
-                                {
-                                    "snapshot_stale_detected": True,
-                                    "snapshot_id": latest.name,
-                                    "reason": "digest_mismatch",
-                                }
-                            )
-                    else:
-                        st.caption(f"Snapshot up-to-date: {latest.name}")
+            latest = latest_snapshot_dir(storage_dir)
+            if latest is not None:
+                with _TRACER.start_as_current_span("chat.staleness_check") as span:
+                    span.set_attribute("snapshot.id", latest.name)
+                    manifest_data = load_manifest(latest)
+                    if manifest_data:
+                        uploads_dir = settings.data_dir / "uploads"
+                        corpus_paths = _collect_corpus_paths(uploads_dir)
+                        cfg = _current_config_dict()
+                        is_stale = compute_staleness(manifest_data, corpus_paths, cfg)
+                        span.set_attribute("snapshot.is_stale", bool(is_stale))
+                        if is_stale:
+                            st.warning(STALE_TOOLTIP)
+                            with st.sidebar:
+                                st.caption("Snapshot stale: content or config changed.")
+                            with contextlib.suppress(Exception):
+                                log_jsonl(
+                                    {
+                                        "snapshot_stale_detected": True,
+                                        "snapshot_id": latest.name,
+                                        "reason": "digest_mismatch",
+                                    }
+                                )
+                        else:
+                            st.caption(f"Snapshot up-to-date: {latest.name}")
     except Exception as exc:  # pylint: disable=broad-exception-caught
         # Do not interrupt chat if staleness check fails
         st.caption(f"Staleness check skipped: {exc}")

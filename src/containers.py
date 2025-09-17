@@ -27,7 +27,6 @@ from typing import Any
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.config import settings
-from src.processing.document_processor import DocumentProcessor
 
 
 def get_embedding_model(*, _nodes: list[Any] | None = None) -> Any:
@@ -37,22 +36,6 @@ def get_embedding_model(*, _nodes: list[Any] | None = None) -> Any:
     configuration mapping for embedding setups. Tests validate non-None.
     """
     return settings.get_embedding_config()
-
-
-def get_document_processor(*, config: Any | None = None) -> DocumentProcessor:
-    """Create and return a DocumentProcessor.
-
-    The processor applies Unstructured-first parsing and project-specific
-    chunking according to unified settings.
-
-    Args:
-      config: Optional settings object. When omitted, the global settings are
-        used.
-
-    Returns:
-      DocumentProcessor: A configured document processor instance.
-    """
-    return DocumentProcessor(settings=config or settings)
 
 
 def get_multi_agent_coordinator(
@@ -86,7 +69,6 @@ def get_multi_agent_coordinator(
 
 
 __all__ = [
-    "get_document_processor",
     "get_embedding_model",
     "get_multi_agent_coordinator",
 ]

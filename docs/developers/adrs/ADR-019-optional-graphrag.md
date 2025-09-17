@@ -2,7 +2,7 @@
 ADR: 019
 Title: Optional GraphRAG Module
 Status: Accepted (Amended)
-Version: 3.3
+Version: 3.4
 Date: 2025-09-09
 Supersedes:
 Superseded-by:
@@ -114,6 +114,11 @@ def test_graph_build_smoke():
 
 - Additional code path to maintain (feature‑flagged)
 
+### Instrumentation
+
+- Graph build, export, and router selection SHALL emit OpenTelemetry spans via `configure_observability` (SPEC-012).
+- `export_performed` and `router_selected` telemetry events provide structured logging for audits and offline analysis.
+
 ### Ongoing Maintenance & Considerations
 
 - Monitor library updates and hybrid retrieval performance
@@ -124,6 +129,7 @@ def test_graph_build_smoke():
 
 ## Changelog
 
+- 3.4 (2025-09-16): Documented snapshot manifest integration and OpenTelemetry instrumentation requirements
 - 3.3 (2025-09-09): Amended by ADR‑038 — router composition (vector+graph), SnapshotManager persistence, staleness badge, exports clarified
 - 3.2 (2025-09-08): Library-first API policy; no index mutation; exports via get_rel_map JSONL/Parquet; updated tests
 - 3.1 (2025-08-22): Implementation complete

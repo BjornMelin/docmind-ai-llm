@@ -7,50 +7,30 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ## [Unreleased]
 
 ### Added
+- Canonical ingestion models and hashing helpers powering the library-first ingestion pipeline (`src/models/processing.py`, `src/persistence/hashing.py`).
+- LlamaIndex-based ingestion pipeline, DuckDB-backed cache/docstore wiring, AES-GCM page-image exports, and OpenTelemetry spans (`src/processing/ingestion_pipeline.py`).
+- Snapshot lock and writer modules with heartbeat/takeover metadata, atomic promotion, tri-file manifest, and timestamped graph export metadata (`src/persistence/lockfile.py`, `src/persistence/snapshot_writer.py`).
+- Snapshot lock heartbeat refresher prevents TTL expiry during long-running persists (`src/persistence/lockfile.py`).
+- Manifest metadata now records the active embedding model and spec-compliant `versions["llama_index"]` entry (`src/pages/02_documents.py`).
+- PDF page-image exports accept explicit encryption flags to avoid global state mutation (`src/processing/pdf_pages.py`, `src/processing/ingestion_pipeline.py`).
+- GraphRAG router/query helpers using native LlamaIndex retrievers and telemetry instrumentation for export counters and spans (`src/retrieval/graph_config.py`, `src/retrieval/router_factory.py`, `src/agents/tools/router_tool.py`).
+- Streamlit UI integration that surfaces manifest metadata, staleness badges, GraphRAG export tooling, and ingestion orchestration (`src/pages/01_chat.py`, `src/pages/02_documents.py`, `src/ui/ingest_adapter.py`, `src/agents/coordinator.py`).
+- Observability configuration and helpers for OTLP/console exporters and optional LlamaIndex instrumentation (`ObservabilityConfig`, `configure_observability`, updated `scripts/demo_metrics_console.py`).
+- Quick-start demos for the overhaul: `scripts/run_ingestion_demo.py` (pipeline smoke test) and refreshed console metrics demo.
 - OpenAIConfig (openai.*) with idempotent /v1 base_url normalization and api_key.
 - SecurityConfig (security.*) centralizing allow_remote_endpoints, endpoint_allowlist, trust_remote_code.
 - HybridConfig (hybrid.*) declarative policy (enabled/server_side/method/rrf_k/dbsf_alpha).
-
-### Changed
-- Enforced backend-aware OpenAI-like /v1 normalization in LLM factory for LM Studio, vLLM (OpenAI-compatible), and llama.cpp server.
-- Moved all import-time I/O from settings into explicit startup_init(settings) in integrations.
-- Unified server-side hybrid gating to retrieval.enable_server_hybrid + fusion_mode; removed legacy flags.
-- Settings UI now shows read-only policy state (server-side hybrid, fusion mode, remote endpoint allowance, allowlist size) and resolved normalized backend base URL.
-- .env.example rewritten to use DOCMIND_OPENAI__*, DOCMIND_SECURITY__*, and DOCMIND_VLLM__*; removed raw VLLM_* keys.
-
-### Removed
-- Legacy openai_like_* fields from settings and corresponding env keys from .env.example.
-- Legacy retrieval.hybrid_enabled and retrieval.dbsf_enabled; tests updated accordingly.
-- Duplicate and conflicting env keys in .env.example.
-- Compatibility shims for `DOCMIND_ALLOW_REMOTE_ENDPOINTS`; remote access policy now lives solely under `security.*`.
-
-### Tests
-- Updated unit and integration tests for new openai.*, security.*, and unified hybrid policy.
-- Adjusted factory tests to expect /v1-normalized api_base for OpenAI-like servers.
-- Removed legacy env toggle tests and added/updated allowlist and normalization tests.
-
-### Docs
-- ADR‑024 amended with OpenAI‑compatible servers and openai.* group; documented idempotent `/v1` base URL policy and linked to the canonical configuration guide.
-- Configuration Reference updated with a canonical “OpenAI‑Compatible Local Servers” section and a Local vs Cloud configuration matrix.
-- README updated with DOCMIND_OPENAI__* examples (LM Studio, vLLM, llama.cpp) and a link to the canonical configuration section.
-- SPEC‑001 (LLM Runtime) updated to reflect OpenAILike usage for OpenAI‑compatible backends and corrected Settings page path.
-- Traceability (FR‑SEC‑NET‑001) updated for OpenAI‑like `/v1` normalization and local‑first default posture.
-- Requirements specification aligned with nested `openai.*`, `security.*`, and `retrieval.hybrid.*` groups, reiterated the local-first security policy, and linked to the canonical configuration guide.
-
-### Added
-
 - Clear caches feature: Settings page button and `src/ui/cache.py` helper (bumps `settings.cache_version` and clears Streamlit caches).
 - Pure prompting helper: `src/prompting/helpers.py` with `build_prompt_context` (pure; no UI/telemetry) and unit tests.
-- SPEC‑008: Programmatic Streamlit UI with `st.Page` + `st.navigation`.
+- SPEC-008: Programmatic Streamlit UI with `st.Page` + `st.navigation`.
   - New pages: `src/pages/01_chat.py`, `src/pages/02_documents.py`, `src/pages/03_analytics.py`.
   - New adapter: `src/ui/ingest_adapter.py` for form-based ingestion.
-- ADR‑032: Local analytics manager (`src/core/analytics.py`) with DuckDB and best‑effort background writes; coordinator logs query metrics.
-- SPEC‑013 (ADR‑040): Model pre‑download CLI `tools/models/pull.py` using `huggingface_hub`.
-- SPEC‑010 (ADR‑039): Offline evaluation CLIs:
+- ADR-032: Local analytics manager (`src/core/analytics.py`) with DuckDB and best-effort background writes; coordinator logs query metrics.
+- SPEC-013 (ADR-040): Model pre-download CLI `tools/models/pull.py` using `huggingface_hub`.
+- SPEC-010 (ADR-039): Offline evaluation CLIs:
   - `tools/eval/run_beir.py` (NDCG@10, Recall@10, MRR@10)
   - `tools/eval/run_ragas.py` (faithfulness, answer_relevancy, context_recall, context_precision)
   - `data/eval/README.md` with usage instructions.
-
 - Evaluation harness hardening (schema + determinism):
   - Dynamic `@{k}` metric headers for BEIR (`ndcg@{k}`, `recall@{k}`, `mrr@{k}`) and explicit `k` field.
   - Leaderboard rows now include `schema_version` and `sample_count` for reproducibility.
@@ -60,41 +40,46 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   - Doc id mapping persisted to `doc_mapping.json` per run.
 
 ### Changed
-
+- Snapshot manifest/schema now records `complete`, `schema_version`, `persist_format_version`, graph export metadata, and enforces `_tmp-` workspace plus `CURRENT` pointer discipline.
+- Guard snapshot workspace initialization to release file locks if creation fails (`src/persistence/snapshot.py`).
+- Router, UI, and telemetry layers consistently emit OpenTelemetry spans/metrics for ingestion, snapshot promotion, GraphRAG selection, and export flows.
+- Packaging and CI rely on `uv` with an `observability` extra (OTLP exporters, portalocker, LlamaIndex OTEL) and run `ruff`, `pylint`, and `uv run scripts/run_tests.py --coverage` under locked environments.
+- Shared fixtures/tests cover ingestion pipeline builders, snapshot locks, Streamlit AppTest interactions, and console exporter stubs.
+- Enforced backend-aware OpenAI-like `/v1` normalization in LLM factory for LM Studio, vLLM (OpenAI-compatible), and llama.cpp server.
+- Moved all import-time I/O from settings into explicit `startup_init(settings)` in integrations.
+- Unified server-side hybrid gating to `retrieval.enable_server_hybrid` + `fusion_mode`; removed legacy flags.
+- Settings UI now shows read-only policy state (server-side hybrid, fusion mode, remote endpoint allowance, allowlist size) and resolved normalized backend base URL.
+- `.env.example` rewritten to use `DOCMIND_OPENAI__*`, `DOCMIND_SECURITY__*`, and `DOCMIND_VLLM__*`; removed raw `VLLM_*` keys.
 - BEIR and RAGAS CLIs now call determinism setup first; BEIR CLI respects `--k` for metric computation and emits dynamic headers matching `k`.
 - CI workflow: added schema validation step after tests to catch leaderboard schema drift.
-  
-- Post‑ingest Qdrant indexing (hybrid) wired into ingestion adapter; Documents page builds a router engine for Chat.
-- SPEC‑006: GraphRAG exports (Parquet + JSONL) triggered by Documents page checkbox.
-- GraphRAG (Phase 1): Library‑first refactor of `src/retrieval/graph_config.py` to use only documented LlamaIndex APIs (`as_retriever`, `as_query_engine`, `get`, `get_rel_map`); removed legacy/dead code and index mutation; added portable JSONL/Parquet exports via `get_rel_map`.
+- Post-ingest Qdrant indexing (hybrid) wired into ingestion adapter; Documents page builds a router engine for Chat.
+- SPEC-006: GraphRAG exports (Parquet + JSONL) triggered by Documents page checkbox.
+- GraphRAG (Phase 1): Library-first refactor of `src/retrieval/graph_config.py` to use only documented LlamaIndex APIs (`as_retriever`, `as_query_engine`, `get`, `get_rel_map`); removed legacy/dead code and index mutation; added portable JSONL/Parquet exports via `get_rel_map`.
 - GraphRAG (Phase 2): Added `create_graph_rag_components()` factory to return (`graph_store`, `query_engine`, `retriever`) from a `PropertyGraphIndex`.
-- UI wiring: Documents page stores `vector_index`, `hybrid_retriever`, and optional `graphrag_index` in `st.session_state`; Chat page forwards these in `settings_override` (`vector`, `retriever`, `kg`) for coordinator/tools.
-- GraphRAG (Phase 2): SnapshotManager for atomic snapshots with `manifest.json` (corpus/config hashes, versions, lock) under `src/persistence/snapshot.py`.
-- Router factory for GraphRAG: `src/retrieval/router_factory.py` builds a `RouterQueryEngine` with vector+graph tools and safe fallback to vector-only.
-- Export helpers: JSONL baseline (subject, relation, object, depth, path_id, source_ids) and Parquet (optional, guarded when `pyarrow` missing).
-- UI: Documents page toggle "Build GraphRAG (beta)", snapshot creation notice, and export buttons; Chat staleness badge when manifest hashes mismatch.
+- UI wiring: Documents page stores `vector_index`, `hybrid_retriever`, and optional `graphrag_index` in `st.session_state`.
+- Coordinator: best-effort analytics logging added after processing each query.
+- Router toolset unified: `router_factory.build_router_engine(...)` composes `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; selector policy prefers `PydanticSingleSelector` then falls back to `LLMSingleSelector`.
+- GraphRAG helpers (`graph_config.py`) now emit label-preserving exports and provide `get_export_seed_ids()` for deterministic seeding.
+- Snapshot manifest enriched and corpus hashing normalized to relpaths; Chat autoload/staleness detection wired to these fields.
+- Docs updated: README and system-architecture examples use `MultiAgentCoordinator` directly instead of removed helpers.
+- UI refactor: `src/app.py` now only defines pages and runs navigation; all monolithic UI logic moved to `src/pages/*`.
+- Tests now patch real library seams (LlamaIndex, utils) instead of `src.app` re-exports.
+- Removed short-lived re-exports from `src/app.py` (e.g., LlamaIndex classes, loader helpers) to maintain strict production/test separation.
 
-- Server-side hybrid retriever module: `src/retrieval/hybrid.py` exposing `ServerHybridRetriever` and `_HybridParams` (Qdrant Query API Prefetch + FusionQuery; RRF default, DBSF optional). Deterministic de‑duplication and dense‑only fallback when sparse unavailable.
-- Router composition unification via `src/retrieval/router_factory.py`:
-  - Tools: `semantic_search` (vector.as_query_engine), `hybrid_search` (RetrieverQueryEngine wrapping `ServerHybridRetriever`), `knowledge_graph` (PropertyGraphIndex retriever/query engine with `path_depth=1`).
-  - Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`; fail‑open to vector‑only when graph is absent/unhealthy.
-- GraphRAG exports now preserve relation labels when provided by `get_rel_map`; fallback label is `related`. JSONL baseline retained; Parquet optional (guarded when PyArrow missing).
-- Retriever‑first seed policy helper `get_export_seed_ids()` in `src/retrieval/graph_config.py` used by `src/ui/ingest_adapter.py` for deterministic export seeding (graph → vector → stable fallback; dedup + stable tie‑break).
-- Snapshot manifest enrichment in `src/persistence/snapshot.py`:
-  - Added `schema_version`, `persist_format_version`, `complete`, and enriched `versions` (`app`, `llama_index`, `qdrant_client`, `embed_model`).
-  - Normalized `compute_corpus_hash(paths, base_dir=uploads/)` to use POSIX relpaths for cross‑platform stability.
-- Chat autoload/staleness UX: Chat/Documents pages compute corpus hash with relpaths and surface staleness badge based on manifest.
-  
-#### Hybrid Retrieval (Qdrant)
-
-- Enforced server‑side hybrid retrieval via Qdrant Query API Prefetch + FusionQuery; RRF default; DBSF optional via env (`DOCMIND_RETRIEVAL__DBSF_ENABLED=true`).
-- Idempotent collection schema ensure for named vectors: `text-dense` (COSINE, embed dim) and `text-sparse` (IDF sparse).
-- Post‑fusion deduplication by `page_id` prior to final truncation; retain highest fused score per page.
-- Telemetry fields emitted: `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
-- Removed client‑side fusion/toggles; hybrid fusion is authoritative and server‑side only.
+### Removed
+- Legacy ingestion/analytics modules (document processor, cache manager, legacy telemetry instrumentation) and associated compatibility shims/tests.
+- Legacy `openai_like_*` fields from settings and corresponding env keys from `.env.example`.
+- Legacy `retrieval.hybrid_enabled` and `retrieval.dbsf_enabled`; tests updated accordingly.
+- Duplicate and conflicting env keys in `.env.example`.
+- Compatibility shims for `DOCMIND_ALLOW_REMOTE_ENDPOINTS`; remote access policy now lives solely under `security.*`.
+- Removed legacy helpers from `src/app.py`; app remains a thin multipage shell.
 
 ### Tests
-
+- Rebuilt unit/integration suites for ingestion, snapshot locking, GraphRAG seed policy, Streamlit pages, and observability helpers (`tests/unit/processing/test_ingestion_pipeline.py`, `tests/unit/persistence/test_snapshot_*`, `tests/unit/retrieval/test_graph_seed_policy.py`, `tests/unit/ui/test_documents_snapshot_utils.py`, `tests/unit/observability/test_config.py`, integration UI tests).
+- Coverage workflow consolidated under `scripts/run_tests.py --coverage` with HTML/JSON/XML artifacts.
+- Updated unit and integration tests for new openai.*, security.*, and unified hybrid policy.
+- Adjusted factory tests to expect /v1-normalized api_base for OpenAI-like servers.
+- Removed legacy env toggle tests and added/updated allowlist and normalization tests.
 - New unit tests: allowlist validation (`tests/unit/config/test_settings_allowlist.py`), prompt helper (`tests/unit/prompting/test_helpers.py`), clear caches helper (`tests/unit/ui/test_cache_clear.py`).
 - Removed dependency on deleted app helpers: `tests/unit/app/test_app.py` removed.
 - Added unit tests for analytics manager insert/prune.
@@ -106,50 +91,45 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Added integration tests for router composition (`tests/integration/test_ingest_router_flow.py`) and exports (`tests/integration/test_graphrag_exports.py`).
 - Added E2E smoke test for Chat via router override (`tests/e2e/test_chat_graphrag_smoke.py`).
 - Updated Chat router override test to allow additional forwarded components when present.
-
 - New hybrid/router/graph tests:
-  - `tests/unit/retrieval/test_hybrid_retriever_basic.py` (dedup determinism; sparse‑unavailable dense fallback)
+  - `tests/unit/retrieval/test_hybrid_retriever_basic.py` (dedup determinism; sparse-unavailable dense fallback)
   - `tests/unit/retrieval/test_router_factory_hybrid.py` (vector + hybrid + knowledge_graph tools)
-  - `tests/unit/retrieval/test_seed_policy.py` (retriever‑first seed policy and fallbacks)
+  - `tests/unit/retrieval/test_seed_policy.py` (retriever-first seed policy and fallbacks)
   - `tests/unit/retrieval/test_graph_helpers.py` (label preservation + `related` fallback)
   - `tests/unit/persistence/test_corpus_hash_relpaths.py` (relpath hashing determinism)
   - Updated/removed legacy integration tests; examples now use `router_factory`
 
-### Changed
-
-- Page hygiene: `src/pages/01_chat.py` removes duplicate import and uses `None` sentinel; `src/pages/02_documents.py` switches to mapping-style session_state.
+### Docs
+- SPEC-014, SPEC-006, SPEC-012, requirements, traceability matrix, README, overview, PRD, and ADR-031/033/019 updated to describe the new ingestion pipeline, snapshot/lock semantics, GraphRAG workflow, and observability configuration.
+- ADR-024 amended with OpenAI-compatible servers and openai.* group; documented idempotent `/v1` base URL policy and linked to the canonical configuration guide.
+- Configuration Reference updated with a canonical “OpenAI-Compatible Local Servers” section and a Local vs Cloud configuration matrix.
+- README updated with DOCMIND_OPENAI__* examples (LM Studio, vLLM, llama.cpp) and a link to the canonical configuration section.
+- SPEC-001 (LLM Runtime) updated to reflect OpenAILike usage for OpenAI-compatible backends and corrected Settings page path.
+- Traceability (FR-SEC-NET-001) updated for OpenAI-like `/v1` normalization and local-first default posture.
+- Requirements specification aligned with nested `openai.*`, `security.*`, and `retrieval.hybrid.*` groups, reiterated the local-first security policy, and linked to the canonical configuration guide.
 - Docs updated: README and system-architecture examples use `MultiAgentCoordinator` directly instead of removed helpers.
-- UI refactor: `src/app.py` now only defines pages and runs navigation; all monolithic UI logic moved to `src/pages/*`.
-  - Tests now patch real library seams (LlamaIndex, utils) instead of `src.app` re‑exports.
-  - Removed short‑lived re‑exports from `src/app.py` (e.g., LlamaIndex classes, loader helpers) to maintain strict production/test separation.
-- Coordinator: best‑effort analytics logging added after processing each query.
-- Router toolset unified: `router_factory.build_router_engine(...)` composes `semantic_search`, `hybrid_search`, and `knowledge_graph` tools; selector policy prefers `PydanticSingleSelector` then falls back to `LLMSingleSelector`.
-- GraphRAG helpers (`graph_config.py`) now emit label‑preserving exports and provide `get_export_seed_ids()` for deterministic seeding.
-- Snapshot manifest enriched and corpus hashing normalized to relpaths; Chat autoload/staleness detection wired to these fields.
-- Docs: aligned developer and API docs to new router/hybrid/GraphRAG/snapshots; added `docs/api/api.md` and `docs/developers/ci-cd-pipeline.md`.
+
+### Tooling
+- CI workflow pins `uv sync --extra observability --extra test --frozen`, runs Ruff/pylint/test gates, and enforces updated formatting/lint rules.
+- Developer documentation references the new extras, commands, and smoke scripts for ingestion and telemetry verification.
 
 ### Reranking/Multimodal Consolidation
-
-- Centralized device and VRAM policy via src.utils.core (select_device, has_cuda_vram) and delegated usage in embeddings and multimodal helpers.
-- Unified SigLIP loader (src/utils/vision_siglip.py) reused by adapter for consistent caching and device placement.
+- Centralized device and VRAM policy via `src/utils/core` (`select_device`, `has_cuda_vram`) and delegated usage in embeddings and multimodal helpers.
+- Unified SigLIP loader (`src/utils/vision_siglip.py`) reused by adapter for consistent caching and device placement.
 - Enforced minimal reranking telemetry schema (stage, topk, latency_ms, timeout) with deterministic sorting and RRF tie-breakers.
 
-### Removed
-
-- Removed legacy helpers from `src/app.py`; app remains a thin multipage shell.
-
 ### Fixed
+- Read-only settings panel simplified; no longer references removed `reranker_mode`.
+- README updated with offline predownload steps and new envs.
+- `validate_startup_configuration` handles Qdrant `ResponseHandlingException`/`UnexpectedResponse` as connectivity failures with structured results (production-safe, test-friendly behavior).
 
 ### Security
-
 - Hardened endpoint allowlist validation in `src/config/settings.py` to validate parsed hostnames/IPs and block spoofed `localhost` and malformed URLs.
 - Router telemetry test stability: patch `log_jsonl` on the module object via `importlib` to account for LangChain `StructuredTool` wrapper.
 - Security: `validate_export_path` error messages aligned with tests and documentation (egress/traversal vs. outside project root).
-
 - Deleted legacy model predownload script: `scripts/model_prep/predownload_models.py`.
 - Removed monolithic UI blocks from `src/app.py` (chat/ingestion/analytics).
 - Removed legacy/custom router code and tests; all retrieval routes via `router_factory`. No backwards compatibility retained.
-
 ## [1.3.0] - 2025-09-08
 
 ### Breaking

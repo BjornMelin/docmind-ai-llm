@@ -71,6 +71,9 @@ def test_snapshot_roundtrip_with_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             config_hash="sha256:0",
             versions={"app": "test"},
         )
+        stub_monitoring = ModuleType("src.utils.monitoring")
+        stub_monitoring.log_performance = lambda *_, **__: None
+        sys.modules.setdefault("src.utils.monitoring", stub_monitoring)
         final = mgr.finalize_snapshot(tmp)
     except Exception:
         mgr.cleanup_tmp(tmp)

@@ -14,7 +14,6 @@ from loguru import logger
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.models import AgentResponse
 from src.config.settings import DocMindSettings, settings
-from src.processing.document_processor import DocumentProcessor
 
 # Load environment variables
 load_dotenv()
@@ -48,8 +47,8 @@ class DocMindApplication:
 
     def _initialize_components(self) -> None:
         """Initialize application components."""
-        # Document processor for ingestion
-        self.document_processor = DocumentProcessor(settings=self.settings)
+        # Document ingestion pipeline will be reintroduced in Phase 2.
+        self.document_processor = None
 
         # Initialize retrieval components (handled through agents)
         # Retrieval is managed through the multi-agent coordinator
@@ -166,6 +165,12 @@ class DocMindApplication:
         try:
             logger.info("Ingesting document: %s", file_path)
 
+            if self.document_processor is None:
+                raise RuntimeError(
+                    "Document ingestion pipeline is temporarily unavailable. "
+                    "Complete Phase 2 of the ingestion refactor before ingesting."
+                )
+
             if process_async:
                 result = await self.document_processor.process_document_async(file_path)
             else:
@@ -176,7 +181,7 @@ class DocMindApplication:
             logger.info("Document ingested successfully: %s", file_path)
             return result
 
-        except (ValueError, TypeError, OSError, FileNotFoundError) as e:
+        except (ValueError, TypeError, OSError, FileNotFoundError, RuntimeError) as e:
             logger.error("Error ingesting document %s: %s", file_path, e)
             return {"error": str(e), "status": "failed"}
 

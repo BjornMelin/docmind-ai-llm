@@ -136,6 +136,10 @@ class ProcessingConfig(BaseModel):
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
     debug_chunk_flow: bool = Field(default=False)
     encrypt_page_images: bool = Field(default=False)
+    pipeline_version: str = Field(
+        default="1",
+        description="Version identifier for ingestion pipeline wiring",
+    )
 
     @model_validator(mode="after")
     def _validate_overlap(self) -> "ProcessingConfig":
@@ -158,6 +162,26 @@ class AgentConfig(BaseModel):
     max_retries: int = Field(default=2, ge=0, le=10)
     max_concurrent_agents: int = Field(default=3, ge=1, le=10)
     enable_fallback_rag: bool = Field(default=True)
+    use_tool_registry: bool = Field(
+        default=True,
+        description=(
+            "Enable the centralized ToolRegistry (Phase 1 supervisor refactor)."
+        ),
+    )
+    use_shared_llm_client: bool = Field(
+        default=True,
+        description=(
+            "Wrap the shared LLM in a retry-aware client for agent workflows."
+        ),
+    )
+    enable_deadline_propagation: bool = Field(
+        default=False,
+        description="Propagate deadlines/cancellation tokens through the graph.",
+    )
+    enable_router_injection: bool = Field(
+        default=False,
+        description="Use injected router engines supplied by the tool registry.",
+    )
 
     # === ADR-011 AGENT CONTEXT MANAGEMENT ===
     context_trim_threshold: int = Field(default=122880, ge=65536, le=131072)
@@ -173,6 +197,52 @@ class AnalysisConfig(BaseModel):
 
     mode: Literal["auto", "separate", "combined"] = Field(default="auto")
     max_workers: int = Field(default=4, ge=1, le=32)
+
+
+class ObservabilityConfig(BaseModel):
+    """OpenTelemetry exporter configuration (SPEC-012 / Phase 6)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable OpenTelemetry tracing and metrics exporters.",
+    )
+    service_name: str = Field(
+        default="docmind-agents",
+        description="service.name resource attribute for telemetry exporters.",
+    )
+    endpoint: str | None = Field(
+        default=None,
+        description=(
+            "Optional OTLP endpoint override. Use 'console' to emit metrics to"
+            " stdout during development."
+        ),
+    )
+    protocol: Literal["grpc", "http/protobuf"] = Field(
+        default="http/protobuf",
+        description="OTLP transport protocol to use for tracing/metrics exporters.",
+    )
+    headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional OTLP headers (for auth tokens, multi-tenant keys).",
+    )
+    sampling_ratio: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Trace sampling ratio (0 disables tracing entirely).",
+    )
+    metrics_interval_ms: int = Field(
+        default=60_000,
+        ge=1_000,
+        description="Periodic metrics export interval in milliseconds.",
+    )
+    instrument_llamaindex: bool = Field(
+        default=True,
+        description=(
+            "Automatically register LlamaIndex OpenTelemetry instrumentation"
+            " when exporters are enabled and the integration is installed."
+        ),
+    )
 
 
 class EmbeddingConfig(BaseModel):
@@ -315,9 +385,47 @@ class CacheConfig(BaseModel):
     enable_document_caching: bool = Field(default=True)
     ttl_seconds: int = Field(default=3600, ge=300, le=86400)
     max_size_mb: int = Field(default=1000, ge=100, le=10000)
+    backend: Literal["duckdb", "sqlite", "memory"] = Field(
+        default="duckdb",
+        description="Cache backend to use for ingestion artifacts",
+    )
     # Path configuration for DuckDB KV store
     dir: Path = Field(default=Path("./cache"))
     filename: str = Field(default="docmind.duckdb")
+
+
+class HashingConfig(BaseModel):
+    """Deterministic hashing and canonicalisation configuration."""
+
+    canonicalization_version: str = Field(default="1")
+    hmac_secret: str = Field(
+        default="docmind-dev-secret-please-override-0123456789",
+        repr=False,
+        description=(
+            "Shared secret for HMAC canonical hashes. Override via environment "
+            "in production deployments."
+        ),
+    )
+    hmac_secret_version: str = Field(default="1")
+    metadata_keys: list[str] = Field(
+        default_factory=lambda: [
+            "content_type",
+            "language",
+            "source",
+            "source_path",
+            "tenant_id",
+        ],
+        description="Ordered metadata keys included in canonical payloads.",
+    )
+
+    @field_validator("hmac_secret")
+    @classmethod
+    def _validate_hmac_secret(cls, value: str) -> str:
+        if len(value.encode("utf-8")) < 32:
+            raise ValueError(
+                "DOCMIND_HASH_SECRET must be at least 32 bytes for HMAC strength"
+            )
+        return value
 
 
 class DatabaseConfig(BaseModel):
@@ -355,6 +463,26 @@ class GraphRAGConfig(BaseModel):
     )
     pinned_snapshot_id: str | None = Field(
         default=None, description="Pinned snapshot directory name for autoload"
+    )
+
+
+class SnapshotConfig(BaseModel):
+    """Snapshot manager configuration."""
+
+    lock_timeout_seconds: float = Field(
+        default=10.0, ge=0.5, le=300.0, description="Lock acquisition timeout"
+    )
+    lock_ttl_seconds: float = Field(
+        default=30.0, ge=5.0, le=600.0, description="Lease TTL for metadata"
+    )
+    retention_count: int = Field(
+        default=5, ge=1, le=100, description="Snapshots to retain during GC"
+    )
+    gc_grace_seconds: int = Field(
+        default=86_400,
+        ge=0,
+        le=604_800,
+        description="Grace period before deleting old snapshots",
     )
 
 
@@ -433,6 +561,9 @@ class DocMindSettings(BaseSettings):
     cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
 
+    # Canonical hashing (ADR-XXX)
+    hashing: HashingConfig = Field(default_factory=HashingConfig)
+
     # Analytics (ADR-032)
     analytics_enabled: bool = Field(
         default=False, description="Enable optional local DuckDB analytics database"
@@ -446,9 +577,11 @@ class DocMindSettings(BaseSettings):
             "Optional override path; default is data_dir/analytics/analytics.duckdb"
         ),
     )
-    telemetry_enabled: bool = Field(
-        default=True,
-        description="Enable local telemetry emission (writes to logs/telemetry.jsonl)",
+
+    # Observability / OpenTelemetry
+    observability: ObservabilityConfig = Field(
+        default_factory=ObservabilityConfig,
+        description="OpenTelemetry exporter configuration.",
     )
 
     # Backup (ADR-033)
@@ -549,6 +682,7 @@ class DocMindSettings(BaseSettings):
     chat: ChatConfig = Field(default_factory=ChatConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+    snapshots: SnapshotConfig = Field(default_factory=SnapshotConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     hybrid: HybridConfig = Field(default_factory=HybridConfig)
 

@@ -41,16 +41,23 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 # Import LlamaIndex Settings for context window access
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
+from opentelemetry import metrics, trace
 
+# Registry utilities
 # Note: tool imports are performed lazily inside _setup_agent_graph to avoid
 # importing heavy dependencies at module import time (improves Streamlit tests
 # that stub LlamaIndex modules).
+from src.agents.registry import DefaultToolRegistry, RetryLLMClient, ToolRegistry
 from src.config import settings
-from src.core.analytics import AnalyticsConfig, AnalyticsManager
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
+from src.telemetry.opentelemetry import configure_observability
 
 # Import agent-specific models
 from .models import AgentResponse, MultiAgentState
+
+_COORDINATOR_TRACER = trace.get_tracer("docmind.agents.coordinator")
+_COORDINATOR_LATENCY = None
+_COORDINATOR_COUNTER = None
 
 
 class ContextManager:
@@ -123,6 +130,8 @@ class MultiAgentCoordinator:
         backend: str = "vllm",
         enable_fallback: bool = True,
         max_agent_timeout: float = settings.agents.decision_timeout,
+        tool_registry: ToolRegistry | None = None,
+        use_shared_llm_client: bool | None = None,
     ):
         """Initialize multi-agent coordinator.
 
@@ -132,12 +141,24 @@ class MultiAgentCoordinator:
             backend: Model backend ("vllm" recommended)
             enable_fallback: Whether to fallback to basic RAG on agent failure
             max_agent_timeout: Maximum time for agent responses (seconds)
+            tool_registry: Optional tool registry (primarily for testing)
+            use_shared_llm_client: Override for the shared retrying LLM flag
         """
+        configure_observability(settings)
         self.model_path = model_path
         self.max_context_length = max_context_length
         self.backend = backend
         self.enable_fallback = enable_fallback
         self.max_agent_timeout = max_agent_timeout
+
+        self.tool_registry: ToolRegistry = tool_registry or DefaultToolRegistry()
+        if use_shared_llm_client is None:
+            self._use_shared_llm_client = bool(
+                getattr(settings.agents, "use_shared_llm_client", False)
+            )
+        else:
+            self._use_shared_llm_client = use_shared_llm_client
+        self._shared_llm_wrapper: RetryLLMClient | None = None
 
         # vLLM Configuration with unified settings
         env_vars = settings.get_vllm_env_vars()
@@ -193,8 +214,16 @@ class MultiAgentCoordinator:
             from llama_index.core import Settings
 
             if Settings.llm is not None:
-                self.llm = Settings.llm
-                logger.info("LLM initialized from LlamaIndex Settings")
+                base_llm = Settings.llm
+                if self._use_shared_llm_client and not isinstance(
+                    base_llm, RetryLLMClient
+                ):
+                    self._shared_llm_wrapper = RetryLLMClient(base_llm)
+                    self.llm = self._shared_llm_wrapper
+                    logger.info("LLM initialized with shared retry wrapper")
+                else:
+                    self.llm = base_llm
+                    logger.info("LLM initialized from LlamaIndex Settings")
             else:
                 # Raise error if LLM not properly configured
                 raise RuntimeError(
@@ -222,44 +251,44 @@ class MultiAgentCoordinator:
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with agent orchestration."""
         try:
-            # Lazy import tool functions from explicit submodules (no re-exports)
-            from src.agents.tools.planning import plan_query, route_query
-            from src.agents.tools.router_tool import router_tool
-            from src.agents.tools.synthesis import synthesize_results
-            from src.agents.tools.validation import validate_response
+            router_tools = list(self.tool_registry.get_router_tools())
+            planner_tools = list(self.tool_registry.get_planner_tools())
+            retrieval_tools = list(self.tool_registry.get_retrieval_tools())
+            synthesis_tools = list(self.tool_registry.get_synthesis_tools())
+            validation_tools = list(self.tool_registry.get_validation_tools())
 
             # Create individual agents with proper naming and tools
             router_agent = create_react_agent(
                 self.llm,
-                tools=[route_query],
+                tools=router_tools,
                 state_schema=MultiAgentState,
                 name="router_agent",
             )
 
             planner_agent = create_react_agent(
                 self.llm,
-                tools=[plan_query],
+                tools=planner_tools,
                 state_schema=MultiAgentState,
                 name="planner_agent",
             )
 
             retrieval_agent = create_react_agent(
                 self.llm,
-                tools=[router_tool],
+                tools=retrieval_tools,
                 state_schema=MultiAgentState,
                 name="retrieval_agent",
             )
 
             synthesis_agent = create_react_agent(
                 self.llm,
-                tools=[synthesize_results],
+                tools=synthesis_tools,
                 state_schema=MultiAgentState,
                 name="synthesis_agent",
             )
 
             validation_agent = create_react_agent(
                 self.llm,
-                tools=[validate_response],
+                tools=validation_tools,
                 state_schema=MultiAgentState,
                 name="validation_agent",
             )
@@ -450,31 +479,26 @@ class MultiAgentCoordinator:
         )
         return base
 
-    def _log_query_analytics(self, latency_s: float, success: bool) -> None:
-        """Best-effort analytics logging helper.
-
-        Wraps AnalyticsManager calls to keep process_query readable and to avoid
-        duplicate code across success and timeout branches.
-        """
-        if not getattr(settings, "analytics_enabled", False):
-            return
+    def _record_query_metrics(self, latency_s: float, success: bool) -> None:
+        """Record coordinator latency metrics via OpenTelemetry when available."""
         with contextlib.suppress(Exception):
-            cfg = AnalyticsConfig(
-                enabled=True,
-                db_path=(
-                    settings.analytics_db_path
-                    or (settings.data_dir / "analytics" / "analytics.duckdb")
-                ),
-                retention_days=settings.analytics_retention_days,
-            )
-            am = AnalyticsManager.instance(cfg)
-            am.log_query(
-                query_type="chat",
-                latency_ms=latency_s * 1000.0,
-                result_count=0,
-                retrieval_strategy="hybrid",
-                success=success,
-            )
+            global _COORDINATOR_LATENCY  # pylint: disable=global-statement
+            global _COORDINATOR_COUNTER  # pylint: disable=global-statement
+            meter = metrics.get_meter(__name__)
+            if _COORDINATOR_LATENCY is None:
+                _COORDINATOR_LATENCY = meter.create_histogram(
+                    "docmind.coordinator.latency",
+                    description="Coordinator end-to-end latency",
+                    unit="s",
+                )
+            if _COORDINATOR_COUNTER is None:
+                _COORDINATOR_COUNTER = meter.create_counter(
+                    "docmind.coordinator.calls",
+                    description="Coordinator invocation count",
+                )
+            attributes = {"success": "true" if success else "false"}
+            _COORDINATOR_LATENCY.record(float(latency_s), attributes=attributes)
+            _COORDINATOR_COUNTER.add(1, attributes=attributes)
 
     def process_query(
         self,
@@ -510,40 +534,17 @@ class MultiAgentCoordinator:
                 "Failed to initialize coordinator", start_time
             )
 
+        exit_stack = contextlib.ExitStack()
+        span = exit_stack.enter_context(
+            _COORDINATOR_TRACER.start_as_current_span("coordinator.process_query")
+        )
+        span.set_attribute("coordinator.thread_id", thread_id)
+        span.set_attribute("query.length", len(query))
+
         try:
-            # Compose tools_data overrides for agent configuration
-            # NOTE: Use defensive access so tests can patch a lightweight
-            # SimpleNamespace as settings without tripping AttributeError.
-            enable_dspy_opt = getattr(settings, "enable_dspy_optimization", False)
-            enable_graphrag_flag = getattr(settings, "enable_graphrag", False)
-            try:
-                if not enable_graphrag_flag and hasattr(
-                    settings, "get_graphrag_config"
-                ):
-                    gr_cfg = settings.get_graphrag_config()
-                    enable_graphrag_flag = bool(gr_cfg.get("enabled", False))
-            except (AttributeError, TypeError, ValueError):
-                # Best-effort; default to current flag
-                enable_graphrag_flag = bool(enable_graphrag_flag)
-
-            # Retrieval sub-config access guarded to avoid AttributeError in tests
-            try:
-                reranker_normalize = settings.retrieval.reranker_normalize_scores
-                reranking_top_k = settings.retrieval.reranking_top_k
-            except (AttributeError, TypeError, ValueError):
-                reranker_normalize = False
-                reranking_top_k = 0
-
-            defaults: dict[str, Any] = {
-                "enable_dspy": bool(enable_dspy_opt),
-                "enable_graphrag": bool(enable_graphrag_flag),
-                "enable_multimodal": getattr(settings, "enable_multimodal", False),
-                "reranker_normalize_scores": reranker_normalize,
-                "reranking_top_k": reranking_top_k,
-            }
-
-            # Merge caller-provided overrides last (they win)
-            tools_data: dict[str, Any] = {**defaults, **(settings_override or {})}
+            tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
+                settings_override
+            )
 
             # Initialize state with execution parameters
             initial_state = MultiAgentState(
@@ -596,7 +597,7 @@ class MultiAgentCoordinator:
                     )
 
                 # Best-effort analytics logging for timeout path
-                self._log_query_analytics(time.perf_counter() - start_time, False)
+                self._record_query_metrics(time.perf_counter() - start_time, False)
             else:
                 # Extract response from final state
                 response = self._extract_response(
@@ -614,7 +615,7 @@ class MultiAgentCoordinator:
 
             # Best-effort analytics logging (never impact user flow)
             if not workflow_timed_out:
-                self._log_query_analytics(processing_time, True)
+                self._record_query_metrics(processing_time, True)
 
             # Validate performance targets
             if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:
@@ -622,6 +623,18 @@ class MultiAgentCoordinator:
                     "Coordination overhead %.3fs exceeds threshold",
                     coordination_time,
                 )
+
+            span.set_attribute("coordinator.workflow_timeout", bool(workflow_timed_out))
+            span.set_attribute(
+                "coordinator.fallback", bool(workflow_timed_out and used_fallback)
+            )
+            span.set_attribute(
+                "coordinator.success", not workflow_timed_out or used_fallback
+            )
+            span.set_attribute(
+                "coordinator.processing_time_ms", round(processing_time * 1000.0, 3)
+            )
+            exit_stack.close()
 
             logger.info(
                 "Query processed successfully in %.3fs (coordination: %.3fs)",
@@ -631,6 +644,11 @@ class MultiAgentCoordinator:
             return response
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
+            if "span" in locals() and span is not None:
+                span.set_attribute("coordinator.success", False)
+                span.set_attribute("coordinator.error", str(e))
+            if "exit_stack" in locals():
+                exit_stack.close()
             logger.error("Multi-agent processing failed: %s", e)
 
             # Fallback to basic RAG if enabled
@@ -925,6 +943,9 @@ def create_multi_agent_coordinator(
     model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
     max_context_length: int = settings.vllm.context_window,
     enable_fallback: bool = True,
+    *,
+    tool_registry: ToolRegistry | None = None,
+    use_shared_llm_client: bool | None = None,
 ) -> MultiAgentCoordinator:
     """Create multi-agent coordinator.
 
@@ -932,6 +953,8 @@ def create_multi_agent_coordinator(
         model_path: Model path for LLM
         max_context_length: Maximum context in tokens
         enable_fallback: Whether to enable fallback to basic RAG
+        tool_registry: Optional registry override for tool resolution
+        use_shared_llm_client: Override for shared LLM retry wrapper flag
 
     Returns:
         Configured MultiAgentCoordinator instance
@@ -940,4 +963,6 @@ def create_multi_agent_coordinator(
         model_path=model_path,
         max_context_length=max_context_length,
         enable_fallback=enable_fallback,
+        tool_registry=tool_registry,
+        use_shared_llm_client=use_shared_llm_client,
     )
