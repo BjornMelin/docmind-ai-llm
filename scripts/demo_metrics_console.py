@@ -11,11 +11,7 @@ from opentelemetry.sdk.metrics.export import (
     PeriodicExportingMetricReader,
 )
 
-from src.telemetry.instrumentation import (
-    record_cache_operation,
-    record_ingestion_duration,
-    record_ocr_decision,
-)
+from src.telemetry.opentelemetry import record_graph_export_metric
 
 
 def main() -> None:
@@ -25,26 +21,26 @@ def main() -> None:
     provider = MeterProvider(metric_readers=[reader])
     metrics.set_meter_provider(provider)
 
-    record_ingestion_duration(
-        245.0, attributes={"strategy": "hi_res", "cache_backend": "sqlite"}
+    record_graph_export_metric(
+        "jsonl",
+        duration_ms=135.0,
+        seed_count=24,
+        size_bytes=4096,
+        context="demo",
     )
-    record_ingestion_duration(
-        530.0,
-        status="error",
-        attributes={
-            "strategy": "ocr_only",
-            "cache_backend": "sqlite",
-            "error_type": "ProcessingError",
-        },
+    record_graph_export_metric(
+        "parquet",
+        duration_ms=245.0,
+        seed_count=16,
+        size_bytes=8192,
+        context="demo",
     )
-    record_cache_operation(
-        backend="sqlite", op="write", outcome="ok", attributes={"strategy": "hi_res"}
-    )
-    record_cache_operation(
-        backend="sqlite", op="purge", outcome="ok", attributes={"reason": "ttl"}
-    )
-    record_ocr_decision(
-        mode="hi_res", pages=7, attributes={"reason": "PDF_LARGE_SCANNED"}
+    record_graph_export_metric(
+        "jsonl",
+        duration_ms=75.0,
+        seed_count=8,
+        size_bytes=1024,
+        context="demo",
     )
 
     # Allow the periodic exporter to flush once
