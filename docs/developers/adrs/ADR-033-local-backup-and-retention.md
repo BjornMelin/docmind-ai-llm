@@ -2,7 +2,7 @@
 ADR: 033
 Title: Local Backup & Retention
 Status: Proposed (Amended)
-Version: 1.2
+Version: 1.3
 Date: 2025-09-09
 Supersedes:
 Superseded-by:
@@ -50,9 +50,10 @@ Ship a CLI/script that creates a timestamped backup directory and prunes older b
 
 Include snapshot directories (`storage/<timestamp>`) in retention rules:
 
-- Retain N latest snapshots (configurable) or apply TTL
-- `manifest.meta.json` includes `created_at`, `versions`, and `graph_exports` metadata to aid audit/rotation (JSONL entries remain deterministic).
-- Provide a safe non‑destructive cleanup that prunes only fully finalized snapshot directories and removes `_tmp-*` workspaces plus stale `.lock.stale-*` remnants on recovery.
+- Retain N latest snapshots (configurable) while never deleting the directory referenced by `CURRENT`.
+- `manifest.meta.json` includes `created_at`, `versions`, `graph_exports`, and `complete` to aid audit/rotation (JSONL entries remain deterministic).
+- Provide a safe non-destructive cleanup that prunes only fully finalized snapshot directories, removes `_tmp-*` workspaces, and rotates or deletes `.lock.stale-*` remnants on recovery.
+- Emit OpenTelemetry spans (`snapshot.retention`) and `log_jsonl` events describing deletions for audit trails.
 
 ## High-Level Architecture
 
@@ -154,6 +155,7 @@ def test_rotation(tmp_path):
 
 ## Changelog
 
+- 1.3 (2025-09-16): Added CURRENT pointer guardrail, OpenTelemetry retention spans, and stale lock handling guidance.
 - 1.2 (2025-09-16): Clarified snapshot metadata (`manifest.meta.json`, `graph_exports`) and cleanup of `_tmp-*` workspaces / `.lock.stale-*` remnants.
 - 1.1 (2025-09-09): Added snapshot retention guidance and ADR‑038 cross‑link
 

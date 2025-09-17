@@ -1,6 +1,6 @@
 # DocMind AI — Software Requirements Specification (SRS)
 
-Version: 1.2.0 • Date: 2025-09-07 • Owner: Eng/Arch
+Version: 1.3.0 • Date: 2025-09-16 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -37,7 +37,7 @@ FR-005 The system **shall** persist vectors in Qdrant with named vectors `text-d
 FR-006 The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. Source: SPEC‑004; Accept: AC‑FR‑006.  
 FR-007 The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). Source: SPEC‑005/ADR‑037; Accept: AC‑FR‑007.  
 FR-008 The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables. (canonical: `DOCMIND_RETRIEVAL__USE_RERANKING`, mapping to `settings.retrieval.use_reranking`). Source: ADR‑024; Accept: AC‑FR‑008.  
-FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. No custom synonym retriever. Compose RouterQueryEngine with vector+graph tools (fallback to vector when graph missing). Persist via SnapshotManager with manifest hashing, `graph_exports` metadata, and a single-writer lock. Graph exports SHALL be produced from `get_rel_map` to JSONL (required) and Parquet (optional) with telemetry recorded in manifest metadata. Source: ADR‑019/ADR‑038/SPEC‑006/SPEC‑014; Accept: AC‑FR‑009. (Status: In progress)  
+FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. No custom synonym retriever. Compose RouterQueryEngine with vector+graph tools (fallback to vector when graph missing). Persist via SnapshotManager with manifest hashing, `graph_exports` metadata, and a single-writer lock. Graph exports SHALL be produced from `get_rel_map` to JSONL (required) and Parquet (optional) with telemetry recorded in manifest metadata. Source: ADR‑019/ADR‑038/SPEC‑006/SPEC‑014; Accept: AC‑FR‑009. (Status: Completed)  
 FR-009.1 The system **shall** display a staleness badge in Chat when manifest hashes differ, with tooltip copy exactly: “Snapshot is stale (content/config changed). Rebuild in Documents → Rebuild GraphRAG Snapshot.” The check MUST be local‑only (no network). Source: SPEC‑014; Accept: AC‑FR‑009.  
 FR-009.2 The system **shall** implement SnapshotManager single‑writer lock semantics with bounded timeout, `portalocker`-backed metadata (owner, heartbeat, ttl, takeover count), atomic `_tmp → <timestamp>` rename, and the tri-file manifest (`manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`) plus `graph_exports` metadata. Source: SPEC‑014; Accept: AC‑FR‑009‑LOCK.  
 FR-009.3 The system **shall** provide exports with JSONL required and Parquet optional (guarded by PyArrow), using timestamped filenames (`graph_export-YYYYMMDDTHHMMSSZ.*`) stored under `graph/` and recording telemetry (`dest_path`, `seed_count`, `size_bytes`, `duration_ms`). Source: SPEC‑006; Accept: AC‑FR‑009.  
@@ -51,7 +51,7 @@ FR-013 The system **shall** provide OpenAI‑compatible client wiring for vLLM, 
 FR-014 The system **shall** run a LangGraph‑supervised multi‑agent flow with deterministic JSON‑schema outputs when available. Source: ADR‑001; Accept: AC‑FR‑014.  
 FR-015 The system **shall** persist ingestion cache via DuckDBKV and operational metadata via SQLite WAL. Source: ADR‑010; Accept: AC‑FR‑015.  
 FR-016 The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR) and E2E (RAGAS) runnable offline. Source: ADR‑011; Accept: AC‑FR‑016.  
-FR-017 The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally.
+FR-017 The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. (Status: Implemented)
 FR-020 The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets (tones/roles/lengths). It SHALL expose minimal APIs to list templates, get metadata, render text prompts, and format chat messages, and SHALL fully replace legacy `src/prompts.py` constants without back‑compat shims. Source: ADR‑020/SPEC‑020; Accept: AC‑FR‑020.
 
 ## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010

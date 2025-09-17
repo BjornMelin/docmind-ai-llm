@@ -1,10 +1,10 @@
 ---
 spec: SPEC-014
 title: Index Persistence Snapshots (SnapshotManager)
-version: 1.1.0
+version: 1.2.0
 date: 2025-09-16
 owners: ["ai-arch"]
-status: Draft
+status: Accepted
 related_requirements:
   - FR-009.2: SnapshotManager persistence + manifest + lock
   - FR-009.5: Staleness badge integration
@@ -13,7 +13,7 @@ related_adrs: ["ADR-038","ADR-031","ADR-034","ADR-019"]
 
 ## Objective
 
-Define atomic, versioned snapshot persistence for indices and the property graph store. Provide a manifest with corpus/config hashes for staleness detection, and a lockfile to guarantee single‑writer safety.
+Define atomic, versioned snapshot persistence for indices and the property graph store. Provide a manifest with corpus/config hashes for staleness detection, GraphRAG export telemetry, and a lockfile with TTL metadata to guarantee single‑writer safety across platforms.
 
 ## Filesystem Layout
 
@@ -27,7 +27,7 @@ storage/
     manifest.meta.json # Manifest metadata (schema below, complete=false while staging)
     manifest.checksum  # Aggregate digest covering entries + metadata
   <timestamp>/         # Finalized snapshot (atomic rename from _tmp)
-  CURRENT              # Pointer file referencing the active snapshot directory
+  CURRENT              # Pointer file referencing the active snapshot directory (authoritative)
 ```
 
 ## Manifest Schema
@@ -111,14 +111,51 @@ Manifest Enrichment
 
 - Include fields: `schema_version`, `persist_format_version`, and `versions` (keys: `app`, `llama_index`, `qdrant_client`, `vector_client`, `embed_model`).
 - Write `manifest.jsonl`, `manifest.meta.json`, and `manifest.checksum` together; `manifest.json` SHALL NOT be emitted going forward.
-- Record GraphRAG export metadata under `graph_exports` (path, format, seed_count, size_bytes, duration_ms, sha256, created_at).
-- Set `complete=true` immediately after the workspace renames into its immutable directory; prior to rename the field SHALL remain `false`.
+- Record GraphRAG export metadata under `graph_exports` (path, format, seed_count, size_bytes, duration_ms, sha256, created_at). Timestamped export files SHALL follow `graph_export-YYYYMMDDTHHMMSSZ.<ext>` naming and be written *before* manifest hashing.
+- Set `complete=true` only after the workspace renames into its immutable directory; prior to rename the field SHALL remain `false` and consumers MUST ignore incomplete manifests.
+- Persist an optional `errors.jsonl` capturing structured failure events (stage, snapshot_id, error_code, message) for telemetry and troubleshooting.
 
 Relpath Hashing
 
 - Compute `corpus_hash` using POSIX relpaths relative to `uploads/` for OS-agnostic stability.
+- Compute `config_hash` from a canonical JSON structure with sorted keys, normalized booleans, and sanitized paths. The same helper MUST be reused by SnapshotManager, UI staleness checks, and tests to guarantee determinism.
 - ADR‑031 Local‑first Persistence Architecture
 - ADR‑034 Idempotent Indexing and Embedding Reuse
+
+Lock Metadata & Heartbeats
+
+- Single-writer locks SHALL be implemented via a `SnapshotLock` backed by `portalocker` when available, with a fallback to `os.O_EXCL` semantics.
+- Each lock acquisition writes a JSON sidecar `<lock>.meta.json` containing:
+  - `owner_id`: `<pid>@<hostname>` identifying the holder.
+  - `created_at` / `last_heartbeat`: UTC timestamps (ISO8601) updated on every refresh.
+  - `ttl_seconds`: client-configured lease duration.
+  - `takeover_count`: cumulative number of stale lock evictions.
+  - `schema_version`: metadata schema revision (currently `1`).
+- Holders MUST refresh (`last_heartbeat`) at least every `ttl_seconds / 2`. Contenders SHALL treat a lock as stale when `now - last_heartbeat > ttl_seconds + grace_seconds` and rotate both sentinel and metadata files to `.stale-<timestamp>-<owner>-<counter>` before attempting takeover.
+- All metadata writes use write-to-temp + `os.replace` + `fsync` to guarantee durability on POSIX systems. Parent directories SHOULD be fsynced where supported; on Windows best-effort semantics apply.
+- Stale lock rotation MUST occur prior to every acquisition attempt to guarantee single-writer safety after crashes.
+
+Promotion & CURRENT Pointer Discipline
+
+- `_tmp-` workspaces and final snapshot directories MUST reside on the same filesystem (validated via `stat().st_dev`) to preserve `os.replace` atomicity.
+- Promotion sequence:
+  1. Write manifest artifacts with `complete=false` and `fsync` each file.
+  2. `os.replace` `_tmp-<uuid>` with `<timestamp>`; `fsync` the parent directory.
+  3. Write `CURRENT.tmp` containing the promoted directory name; `fsync` file then parent.
+  4. `os.replace` `CURRENT.tmp` -> `CURRENT`.
+- Readers MUST resolve `CURRENT` and only fall back to lexicographic snapshot lookup when the pointer is absent or corrupted.
+
+Retention & Cleanup
+
+- Retain the latest `settings.snapshot.retention_count` finalized directories, never deleting the directory referenced by `CURRENT`.
+- `_tmp-*` workspaces older than `settings.snapshot.gc_grace_seconds` SHALL be removed during initialization. Stale lock artifacts (`*.stale-*`) MAY be pruned opportunistically.
+- SnapshotManager MUST run retention under the same lock to avoid concurrent deletions during promotion.
+
+Telemetry & Observability
+
+- Snapshot operations emit OpenTelemetry spans (`snapshot.begin`, `snapshot.persist`, `snapshot.promote`, `snapshot.retention`) annotated with `snapshot_id`, `corpus_hash`, `config_hash`, and export durations.
+- Graph export operations (manual and snapshot-triggered) emit `export_performed` events with the telemetry payload recorded in `manifest.graph_exports`.
+- Lock evictions emit structured log events at `warning` level including previous owner identifier and elapsed TTL.
 
 ## Changelog
 

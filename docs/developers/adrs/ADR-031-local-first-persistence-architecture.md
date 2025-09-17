@@ -2,7 +2,7 @@
 ADR: 031
 Title: Local-First Persistence Architecture (Vectors, Cache, Operational Data)
 Status: Accepted (Amended)
-Version: 1.4
+Version: 1.5
 Date: 2025-09-09
 Supersedes:
 Superseded-by:
@@ -62,7 +62,8 @@ For GraphRAG and indices requiring consistent reloads, adopt a SnapshotManager:
 - Write under `storage/_tmp-<uuid>`; `fsync` and atomically rename to `storage/<timestamp>`; readers resolve the `CURRENT` pointer first before falling back to lexicographic ordering.
 - Persist vector index via `StorageContext.persist`; persist property graph via `SimpleGraphStore.persist` and package graph exports under `graph/graph_export-YYYYMMDDTHHMMSSZ.*` (JSONL required, Parquet optional) with telemetry metadata (`seed_count`, `size_bytes`, `duration_ms`, checksum).
 - Emit tri-file manifests (`manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`) plus optional `errors.jsonl`; `manifest.meta.json` keeps `complete=false` until promotion succeeds, then flips to `true`. Legacy `manifest.json` SHALL NOT be emitted.
-- Use a bounded `SnapshotLock` (`.lock` + JSON metadata) implemented via `portalocker` with heartbeats and stale eviction; rotate stale lock files to `.stale-*` suffixes; fall back to `os.O_EXCL` when `portalocker` is unavailable. Telemetry captures export operations and stale-snapshot detection for observability.
+- Use a bounded `SnapshotLock` (`.lock` + JSON metadata) implemented via `portalocker` with heartbeats and stale eviction; metadata captures `owner_id`, `ttl_seconds`, `takeover_count`, and timestamps. Rotate stale lock files to `.stale-*` suffixes; fall back to `os.O_EXCL` when `portalocker` is unavailable. Telemetry captures export operations, lock takeovers, and stale-snapshot detection for observability.
+- Run retention under the same lock, pruning `_tmp-*` workspaces older than `gc_grace_seconds` while never deleting the directory referenced by `CURRENT`.
 - Load latest snapshot in Chat (ADR‑038; SPEC‑014) using the pointer and staleness digests for badge display.
 
 ## High-Level Architecture
@@ -137,6 +138,12 @@ def test_cache_roundtrip(cache):
     assert cache.get(key) == value
 ```
 
+### Observability
+
+- configure_observability() (SPEC-012) provisions OpenTelemetry tracer/meter providers with OTLP (or console) exporters and registers LlamaIndex instrumentation.
+- Snapshot, ingestion, and router workflows emit spans and metrics annotated with snapshot IDs, hashes, and GraphRAG metadata; console fallback keeps local-first deployments viable.
+- JSONL telemetry events (`router_selected`, `export_performed`, `lock_takeover`, `snapshot_stale_detected`) serve as the structured logging contract for offline audits.
+
 ## Consequences
 
 ### Positive Outcomes
@@ -160,6 +167,7 @@ def test_cache_roundtrip(cache):
 
 ## Changelog
 
+- 1.5 (2025-09-16): Clarified SnapshotLock heartbeat/takeover semantics, retention discipline, and OpenTelemetry logging requirements.
 - 1.4 (2025-09-16): Documented portalocker-based locking with TTL metadata, fallback locking, graph export telemetry, and removal of legacy `manifest.json`.
 - 1.3 (2025-09-16): Documented tri-file manifest layout, `complete` flag semantics, CURRENT pointer resolution, timestamped graph exports, and telemetry expectations.
 - 1.2 (2025-09-09): Added SnapshotManager and manifest hashing for GraphRAG; linked ADR‑038/SPEC‑014

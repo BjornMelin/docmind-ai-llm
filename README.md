@@ -19,6 +19,8 @@
 
 - **Privacy-Focused:** Local processing ensures data security without cloud dependency.
 
+- **Library-First Ingestion Pipeline:** LlamaIndex `IngestionPipeline` orchestrates Unstructured parsing, deterministic hashing, DuckDB caching, and AES-GCM page image handling with OpenTelemetry spans for each run.
+
 - **Versatile Document Handling:** Supports multiple file formats:
   - 📄 PDF
   - 📑 DOCX
@@ -130,6 +132,7 @@
     - [Development Guidelines](#development-guidelines)
       - [🧪 Tests and CI](#-tests-and-ci)
   - [📃 License](#-license)
+  - [📡 Observability](#-observability)
 
 ## 🚀 Getting Started with DocMind AI
 
@@ -1094,6 +1097,21 @@ See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed
 ## 📃 License
 
 This project is licensed under the MIT License—see the [LICENSE](LICENSE) file for details.
+
+## 📡 Observability
+
+DocMind AI configures OpenTelemetry tracing and metrics via `configure_observability` (see SPEC-012).
+
+- Default mode uses console exporters to remain offline-first.
+- Set `DOCMIND_OBSERVABILITY__ENDPOINT` (or OTEL env vars) to forward spans and metrics to an OTLP collector.
+- Core spans cover ingestion pipeline runs, snapshot promotion, GraphRAG exports, router selection, and Streamlit UI actions.
+- Telemetry events (`router_selected`, `export_performed`, `lock_takeover`, `snapshot_stale_detected`) are persisted as JSONL for local audits.
+
+```bash
+uv run python -m src.telemetry.opentelemetry --dry-run
+```
+
+Use `tests/unit/telemetry/test_observability_config.py` as a reference for wiring custom exporters in extensions.
 
 ---
 
