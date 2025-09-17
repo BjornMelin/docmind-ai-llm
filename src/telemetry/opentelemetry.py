@@ -14,6 +14,11 @@ from contextlib import suppress
 from importlib import metadata
 from typing import Any
 
+try:
+    from llama_index.observability.otel import LlamaIndexOpenTelemetry
+except ImportError:  # pragma: no cover - optional dependency
+    LlamaIndexOpenTelemetry = None  # type: ignore[assignment]
+
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import (
@@ -25,10 +30,11 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
-from src.config.settings import DocMindSettings
+from src.config.settings import DocMindSettings, ObservabilityConfig
 
 _TRACE_PROVIDER: TracerProvider | None = None
 _METER_PROVIDER: MeterProvider | None = None
+_LLAMA_INDEX_INSTRUMENTOR = None
 
 _GRAPH_EXPORT_COUNTER = None
 _GRAPH_EXPORT_DURATION = None
@@ -42,15 +48,16 @@ def setup_tracing(app_settings: DocMindSettings) -> None:
     Args:
         app_settings: Loaded application settings.
     """
-    if not app_settings.otel_enabled:
+    obs = app_settings.observability
+    if not obs.enabled:
         return
 
     global _TRACE_PROVIDER  # pylint: disable=global-statement
     if _TRACE_PROVIDER is not None:
         return
 
-    exporter = _create_span_exporter(app_settings)
-    sampler = ParentBased(TraceIdRatioBased(app_settings.otel_sampling_ratio))
+    exporter = _create_span_exporter(obs)
+    sampler = ParentBased(TraceIdRatioBased(obs.sampling_ratio))
     resource = _build_resource(app_settings)
 
     provider = TracerProvider(resource=resource, sampler=sampler)
@@ -65,17 +72,18 @@ def setup_metrics(app_settings: DocMindSettings) -> None:
     Args:
         app_settings: Loaded application settings.
     """
-    if not app_settings.otel_enabled:
+    obs = app_settings.observability
+    if not obs.enabled:
         return
 
     global _METER_PROVIDER  # pylint: disable=global-statement
     if _METER_PROVIDER is not None:
         return
 
-    exporter = _create_metric_exporter(app_settings)
+    exporter = _create_metric_exporter(obs)
     reader = PeriodicExportingMetricReader(
         exporter,
-        export_interval_millis=app_settings.otel_metrics_interval_ms,
+        export_interval_millis=obs.metrics_interval_ms,
     )
     resource = _build_resource(app_settings)
 
@@ -92,6 +100,7 @@ def configure_observability(app_settings: DocMindSettings) -> None:
     """
     setup_tracing(app_settings)
     setup_metrics(app_settings)
+    _maybe_configure_llamaindex(app_settings.observability)
 
 
 def shutdown_tracing() -> None:
@@ -101,6 +110,7 @@ def shutdown_tracing() -> None:
         return
     _TRACE_PROVIDER.shutdown()
     _TRACE_PROVIDER = None
+    _shutdown_llamaindex()
     trace.set_tracer_provider(trace.NoOpTracerProvider())
 
 
@@ -165,10 +175,37 @@ def record_graph_export_metric(
         _GRAPH_EXPORT_BYTES.record(float(size_bytes), attributes=attributes)
 
 
+def _maybe_configure_llamaindex(obs: ObservabilityConfig) -> None:
+    """Attach LlamaIndex OpenTelemetry instrumentation when configured."""
+    global _LLAMA_INDEX_INSTRUMENTOR  # pylint: disable=global-statement
+    if not obs.enabled or not obs.instrument_llamaindex:
+        return
+    if LlamaIndexOpenTelemetry is None:
+        return
+    if _LLAMA_INDEX_INSTRUMENTOR is not None:
+        return
+    instrumentor = LlamaIndexOpenTelemetry()
+    instrumentor.start_registering()
+    _LLAMA_INDEX_INSTRUMENTOR = instrumentor
+
+
+def _shutdown_llamaindex() -> None:
+    """Tear down LlamaIndex instrumentation if active."""
+    global _LLAMA_INDEX_INSTRUMENTOR  # pylint: disable=global-statement
+    if _LLAMA_INDEX_INSTRUMENTOR is None:
+        return
+    with suppress(Exception):
+        shutdown = getattr(_LLAMA_INDEX_INSTRUMENTOR, "shutdown", None)
+        if callable(shutdown):
+            shutdown()
+    _LLAMA_INDEX_INSTRUMENTOR = None
+
+
 def _build_resource(app_settings: DocMindSettings) -> Resource:
     """Create OTEL resource metadata from application settings."""
+    obs = app_settings.observability
     attributes: dict[str, Any] = {
-        "service.name": app_settings.otel_service_name,
+        "service.name": obs.service_name,
     }
     with suppress(metadata.PackageNotFoundError):
         attributes["service.version"] = metadata.version("docmind_ai_llm")
@@ -177,10 +214,10 @@ def _build_resource(app_settings: DocMindSettings) -> Resource:
     return Resource.create(attributes)
 
 
-def _create_span_exporter(app_settings: DocMindSettings):
+def _create_span_exporter(obs: ObservabilityConfig):
     """Instantiate an OTLP span exporter based on configured protocol."""
-    kwargs = _build_otlp_kwargs(app_settings)
-    if app_settings.otel_exporter_protocol == "grpc":
+    kwargs = _build_otlp_kwargs(obs)
+    if obs.protocol == "grpc":
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter as GrpcSpanExporter,
         )
@@ -194,12 +231,12 @@ def _create_span_exporter(app_settings: DocMindSettings):
     return HttpSpanExporter(**kwargs)
 
 
-def _create_metric_exporter(app_settings: DocMindSettings):
+def _create_metric_exporter(obs: ObservabilityConfig):
     """Instantiate an OTLP metric exporter based on configured protocol."""
-    if app_settings.otel_exporter_endpoint == "console":
+    if obs.endpoint == "console":
         return ConsoleMetricExporter()
-    kwargs = _build_otlp_kwargs(app_settings)
-    if app_settings.otel_exporter_protocol == "grpc":
+    kwargs = _build_otlp_kwargs(obs)
+    if obs.protocol == "grpc":
         from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
             OTLPMetricExporter as GrpcMetricExporter,
         )
@@ -213,12 +250,12 @@ def _create_metric_exporter(app_settings: DocMindSettings):
     return HttpMetricExporter(**kwargs)
 
 
-def _build_otlp_kwargs(app_settings: DocMindSettings) -> dict[str, Any]:
+def _build_otlp_kwargs(obs: ObservabilityConfig) -> dict[str, Any]:
     """Return keyword arguments shared by metric and span exporters."""
-    headers = _format_headers(app_settings.otel_exporter_headers)
+    headers = _format_headers(obs.headers)
     kwargs: dict[str, Any] = {}
-    if app_settings.otel_exporter_endpoint:
-        kwargs["endpoint"] = app_settings.otel_exporter_endpoint
+    if obs.endpoint:
+        kwargs["endpoint"] = obs.endpoint
     if headers:
         kwargs["headers"] = headers
     return kwargs

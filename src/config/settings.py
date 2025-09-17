@@ -199,6 +199,52 @@ class AnalysisConfig(BaseModel):
     max_workers: int = Field(default=4, ge=1, le=32)
 
 
+class ObservabilityConfig(BaseModel):
+    """OpenTelemetry exporter configuration (SPEC-012 / Phase 6)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable OpenTelemetry tracing and metrics exporters.",
+    )
+    service_name: str = Field(
+        default="docmind-agents",
+        description="service.name resource attribute for telemetry exporters.",
+    )
+    endpoint: str | None = Field(
+        default=None,
+        description=(
+            "Optional OTLP endpoint override. Use 'console' to emit metrics to"
+            " stdout during development."
+        ),
+    )
+    protocol: Literal["grpc", "http/protobuf"] = Field(
+        default="http/protobuf",
+        description="OTLP transport protocol to use for tracing/metrics exporters.",
+    )
+    headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional OTLP headers (for auth tokens, multi-tenant keys).",
+    )
+    sampling_ratio: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Trace sampling ratio (0 disables tracing entirely).",
+    )
+    metrics_interval_ms: int = Field(
+        default=60_000,
+        ge=1_000,
+        description="Periodic metrics export interval in milliseconds.",
+    )
+    instrument_llamaindex: bool = Field(
+        default=True,
+        description=(
+            "Automatically register LlamaIndex OpenTelemetry instrumentation"
+            " when exporters are enabled and the integration is installed."
+        ),
+    )
+
+
 class EmbeddingConfig(BaseModel):
     """Embedding configuration (SPEC-003; ADR-002/004).
 
@@ -524,38 +570,9 @@ class DocMindSettings(BaseSettings):
     )
 
     # Observability / OpenTelemetry
-    otel_enabled: bool = Field(
-        default=False,
-        description="Enable OpenTelemetry tracing and metrics exporters.",
-    )
-    otel_service_name: str = Field(
-        default="docmind-agents",
-        description="service.name resource attribute for OpenTelemetry exporters.",
-    )
-    otel_exporter_endpoint: str | None = Field(
-        default=None,
-        description=(
-            "Optional OTLP endpoint override. If unset, exporter defaults are used."
-        ),
-    )
-    otel_exporter_protocol: Literal["grpc", "http/protobuf"] = Field(
-        default="http/protobuf",
-        description="OTLP transport protocol to use for tracing/metrics exporters.",
-    )
-    otel_exporter_headers: dict[str, str] = Field(
-        default_factory=dict,
-        description="Additional OTLP headers (e.g., authentication tokens).",
-    )
-    otel_sampling_ratio: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Trace sampling ratio (0 disables, 1 samples all traces).",
-    )
-    otel_metrics_interval_ms: int = Field(
-        default=60000,
-        ge=1000,
-        description="Periodic metrics export interval in milliseconds.",
+    observability: ObservabilityConfig = Field(
+        default_factory=ObservabilityConfig,
+        description="OpenTelemetry exporter configuration.",
     )
 
     # Backup (ADR-033)

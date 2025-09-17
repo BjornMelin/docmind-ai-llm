@@ -47,9 +47,10 @@ def test_ingest_files_builds_vector_and_optional_graph(monkeypatch, tmp_path):
     monkeypatch.setattr(adapter.settings, "data_dir", tmp_path)
     monkeypatch.setattr(adapter.settings, "cache_dir", tmp_path / "cache")
     monkeypatch.setattr(adapter.settings.processing, "encrypt_page_images", False)
-    monkeypatch.setattr(adapter.settings, "otel_enabled", False)
-    monkeypatch.setattr(adapter.settings, "otel_exporter_endpoint", None)
-    monkeypatch.setattr(adapter.settings, "otel_sampling_ratio", 1.0)
+    obs = adapter.settings.observability.model_copy(
+        update={"enabled": False, "endpoint": None, "sampling_ratio": 1.0}
+    )
+    monkeypatch.setattr(adapter.settings, "observability", obs)
     monkeypatch.setattr(adapter.settings.database, "qdrant_collection", "test")
     monkeypatch.setattr(adapter.settings.database, "vector_store_type", "qdrant")
     monkeypatch.setattr(adapter.settings.retrieval, "enable_server_hybrid", False)

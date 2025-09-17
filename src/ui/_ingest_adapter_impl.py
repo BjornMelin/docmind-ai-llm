@@ -125,9 +125,8 @@ def _build_ingestion_config(encrypt_images: bool | None) -> IngestionConfig:
     cache_dir.mkdir(parents=True, exist_ok=True)
     docstore_path = cache_dir / "docstore.json"
 
-    enable_observability = bool(
-        settings.otel_enabled and settings.otel_exporter_endpoint
-    )
+    observability = settings.observability
+    enable_observability = bool(observability.enabled and observability.endpoint)
 
     return IngestionConfig(
         chunk_size=settings.processing.chunk_size,
@@ -137,10 +136,8 @@ def _build_ingestion_config(encrypt_images: bool | None) -> IngestionConfig:
         cache_collection="docmind_ingestion",
         docstore_path=docstore_path,
         enable_observability=enable_observability,
-        observability_sample_rate=settings.otel_sampling_ratio,
-        span_exporter_endpoint=settings.otel_exporter_endpoint
-        if enable_observability
-        else None,
+        observability_sample_rate=observability.sampling_ratio,
+        span_exporter_endpoint=observability.endpoint if enable_observability else None,
     )
 
 

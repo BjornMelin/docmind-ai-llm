@@ -17,6 +17,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - HybridConfig (hybrid.*) declarative policy (enabled/server_side/method/rrf_k/dbsf_alpha).
 
 ### Changed
+- Observability settings now live under `observability.*` with explicit endpoint, protocol, sampling, metrics interval, and LlamaIndex instrumentation toggles; `configure_observability` wires OTLP span/metric exporters and optionally registers `LlamaIndexOpenTelemetry`.
+- Streamlit ingestion adapter consumes the new observability config and continues emitting graph export metrics via OpenTelemetry helpers.
 - Documents and Chat pages now hydrate router/session state via the new ingestion
   adapter, surface manifest metadata from `manifest.meta.json`, and sanitize
   manual GraphRAG export paths.
@@ -35,11 +37,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Compatibility shims for `DOCMIND_ALLOW_REMOTE_ENDPOINTS`; remote access policy now lives solely under `security.*`.
 
 ### Tests
+- Added OpenTelemetry instrumentation unit test coverage and refreshed ingestion adapter tests for the new settings schema.
 - Updated unit and integration tests for new openai.*, security.*, and unified hybrid policy.
 - Adjusted factory tests to expect /v1-normalized api_base for OpenAI-like servers.
 - Removed legacy env toggle tests and added/updated allowlist and normalization tests.
 
 ### Docs
+- Observability guide updated with `observability.*` configuration terminology.
 - ADR‑024 amended with OpenAI‑compatible servers and openai.* group; documented idempotent `/v1` base URL policy and linked to the canonical configuration guide.
 - Configuration Reference updated with a canonical “OpenAI‑Compatible Local Servers” section and a Local vs Cloud configuration matrix.
 - README updated with DOCMIND_OPENAI__* examples (LM Studio, vLLM, llama.cpp) and a link to the canonical configuration section.

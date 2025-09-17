@@ -34,7 +34,7 @@ export DOCMIND_OTEL_EXPORTER_PROTOCOL="http/protobuf"
 export DOCMIND_OTEL__EXPORTER_ENDPOINT="console"  # special value handled by DocMind
 ```
 
-When `otel_enabled` is true and the endpoint is `console`, metrics are exported
+When `observability.enabled` is true and the observability.endpoint is `console`, metrics are exported
 via the console exporter at the interval defined by
 `DOCMIND_OTEL__METRICS_INTERVAL_MS` (defaults to 60000 ms). This keeps
 observability local-first and avoids introducing Prometheus/Grafana

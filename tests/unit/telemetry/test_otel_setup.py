@@ -19,7 +19,13 @@ def teardown_function() -> None:
 def test_setup_tracing_disabled() -> None:
     """Tracing remains untouched when feature flag is disabled."""
     base_provider = trace.get_tracer_provider()
-    disabled_settings = settings.model_copy(update={"otel_enabled": False})
+    disabled_settings = settings.model_copy(
+        update={
+            "observability": settings.observability.model_copy(
+                update={"enabled": False}
+            )
+        }
+    )
     otel.setup_tracing(disabled_settings)
     assert trace.get_tracer_provider() is base_provider
     assert otel._TRACE_PROVIDER is None
@@ -29,10 +35,14 @@ def test_setup_tracing_enabled() -> None:
     """Tracing provider is configured once when enabled."""
     enabled_settings = settings.model_copy(
         update={
-            "otel_enabled": True,
-            "otel_exporter_protocol": "http/protobuf",
-            "otel_exporter_endpoint": "http://localhost:4318/v1/traces",
-            "otel_sampling_ratio": 0.5,
+            "observability": settings.observability.model_copy(
+                update={
+                    "enabled": True,
+                    "protocol": "http/protobuf",
+                    "endpoint": "http://localhost:4318/v1/traces",
+                    "sampling_ratio": 0.5,
+                }
+            )
         }
     )
     otel.setup_tracing(enabled_settings)
@@ -45,13 +55,56 @@ def test_setup_metrics_enabled() -> None:
     """Metrics provider is configured with periodic exporter when enabled."""
     enabled_settings = settings.model_copy(
         update={
-            "otel_enabled": True,
-            "otel_exporter_protocol": "http/protobuf",
-            "otel_exporter_endpoint": "http://localhost:4318",
-            "otel_metrics_interval_ms": 2000,
+            "observability": settings.observability.model_copy(
+                update={
+                    "enabled": True,
+                    "protocol": "http/protobuf",
+                    "endpoint": "http://localhost:4318",
+                    "metrics_interval_ms": 2000,
+                }
+            )
         }
     )
     otel.setup_metrics(enabled_settings)
     provider = metrics.get_meter_provider()
     assert isinstance(provider, MeterProvider)
     assert otel._METER_PROVIDER is provider
+
+
+def test_configure_observability_instruments_llamaindex(monkeypatch) -> None:
+    """LlamaIndex instrumentation registers once when enabled."""
+    calls: dict[str, int] = {}
+
+    class DummyInstrumentor:
+        def __init__(self) -> None:
+            calls["init"] = calls.get("init", 0) + 1
+
+        def start_registering(self) -> None:
+            calls["started"] = calls.get("started", 0) + 1
+
+        def shutdown(self) -> None:
+            calls["shutdown"] = calls.get("shutdown", 0) + 1
+
+    monkeypatch.setattr(otel, "LlamaIndexOpenTelemetry", DummyInstrumentor)
+    enabled_settings = settings.model_copy(
+        update={
+            "observability": settings.observability.model_copy(
+                update={
+                    "enabled": True,
+                    "endpoint": "http://localhost:4318",
+                    "instrument_llamaindex": True,
+                }
+            )
+        }
+    )
+    otel.configure_observability(enabled_settings)
+    assert isinstance(otel._LLAMA_INDEX_INSTRUMENTOR, DummyInstrumentor)
+    assert calls == {"init": 1, "started": 1}
+
+    # Idempotent configuration should not instantiate additional instrumentors
+    otel.configure_observability(enabled_settings)
+    assert calls == {"init": 1, "started": 1}
+
+    otel.shutdown_tracing()
+    assert calls.get("shutdown") == 1
+    assert otel._LLAMA_INDEX_INSTRUMENTOR is None
