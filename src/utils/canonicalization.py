@@ -11,8 +11,8 @@ The design mirrors the guidance captured in the ingestion refactor plan:
 * Normalize Unicode text to NFKC and collapse redundant whitespace.
 * Strip zero-width characters and control codes that often vary between OCR
   runs.
-* Include a curated set of metadata fields (content type, language, tenant,
-  source) sorted deterministically.
+* Include a curated set of metadata fields (content type, language, source,
+  source_path) sorted deterministically.
 * Version all canonicalization and HMAC secrets to support rotations without
   breaking determinism guarantees.
 
@@ -50,7 +50,6 @@ DEFAULT_METADATA_KEYS: tuple[str, ...] = (
     "language",
     "source",
     "source_path",
-    "tenant_id",
 )
 
 

@@ -22,7 +22,6 @@ except ImportError:  # pragma: no cover - optional dependency
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import (
-    ConsoleMetricExporter,
     PeriodicExportingMetricReader,
 )
 from opentelemetry.sdk.resources import Resource
@@ -233,8 +232,6 @@ def _create_span_exporter(obs: ObservabilityConfig):
 
 def _create_metric_exporter(obs: ObservabilityConfig):
     """Instantiate an OTLP metric exporter based on configured protocol."""
-    if obs.endpoint == "console":
-        return ConsoleMetricExporter()
     kwargs = _build_otlp_kwargs(obs)
     if obs.protocol == "grpc":
         from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (

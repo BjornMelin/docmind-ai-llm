@@ -38,6 +38,13 @@ from src.persistence.snapshot_writer import (
     write_manifest as _writer_write_manifest,
 )
 
+try:  # pragma: no cover - optional monitoring dependencies
+    from src.utils.monitoring import log_performance
+except Exception:  # pragma: no cover - defensive fallback
+    def log_performance(*_args: Any, **_kwargs: Any) -> None:
+        """No-op performance logger when monitoring stack is unavailable."""
+        return None
+
 try:  # pragma: no cover - optional instrumentation
     from opentelemetry import trace
 except ImportError:  # pragma: no cover
@@ -278,8 +285,6 @@ def _garbage_collect(paths: SnapshotPaths) -> None:
 
 def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
     """Rename workspace to versioned snapshot and update ``CURRENT``."""
-    from src.utils.monitoring import log_performance  # local import to avoid heavy deps
-
     start = time.perf_counter()
     paths = _snapshot_paths(base_dir)
     if not tmp_dir.exists():  # pragma: no cover - defensive

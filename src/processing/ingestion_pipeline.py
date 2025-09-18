@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from llama_index.core import Document
+from llama_index.core import Document, Settings
 from llama_index.core.extractors import TitleExtractor
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
@@ -43,30 +43,12 @@ from src.processing.pdf_pages import save_pdf_page_images
 
 try:
     from llama_index.core.base.embeddings.base import BaseEmbedding
-    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 except ImportError:  # pragma: no cover - optional dependency
-    HuggingFaceEmbedding = None  # type: ignore
     BaseEmbedding = Any  # type: ignore
 
 
 _TRACER = trace.get_tracer("docmind.ingestion")
 logger = logging.getLogger(__name__)
-
-
-def _default_embedding() -> BaseEmbedding | None:
-    """Return the default embedding model when the optional dependency loads.
-
-    Returns:
-        BaseEmbedding | None: HuggingFace embedding instance, or ``None`` when
-        the optional package is unavailable or model initialization fails.
-    """
-    if HuggingFaceEmbedding is None:  # pragma: no cover - optional path
-        return None
-    try:
-        return HuggingFaceEmbedding(model_name="BAAI/bge-small-en")
-    except (OSError, ValueError, RuntimeError) as exc:  # pragma: no cover
-        logger.debug("Default embedding unavailable: %s", exc)
-        return None
 
 
 def _ensure_cache_path(cfg: IngestionConfig) -> Path:
@@ -110,13 +92,13 @@ def _ensure_docstore(cfg: IngestionConfig) -> tuple[SimpleDocumentStore, Path | 
 def build_ingestion_pipeline(
     cfg: IngestionConfig,
     *,
-    embedding: BaseEmbedding | None = None,
+    embedding: BaseEmbedding,
 ) -> tuple[IngestionPipeline, Path, Path | None]:
     """Construct an :class:`IngestionPipeline` configured with local persistence.
 
     Args:
         cfg: Ingestion options controlling chunking, caching, and persistence.
-        embedding: Optional embedding component injected into the pipeline.
+        embedding: Embedding component injected into the pipeline.
 
     Returns:
         tuple[IngestionPipeline, Path, Path | None]: Pipeline instance, cache
@@ -135,17 +117,14 @@ def build_ingestion_pipeline(
         ),
     ]
 
-    # Title extraction is optional; when the embedding is missing we still allow
-    # the pipeline to run quickly without network access.
+    # Title extraction remains optional; failures simply skip the transform.
     try:
         extractor = TitleExtractor(show_progress=False)
         transformations.append(extractor)
     except (ImportError, ValueError, RuntimeError) as exc:  # pragma: no cover
         logger.debug("TitleExtractor unavailable: %s", exc)
 
-    embed_model = embedding or _default_embedding()
-    if embed_model is not None:
-        transformations.append(embed_model)
+    transformations.append(embedding)
 
     pipeline = IngestionPipeline(
         transformations=transformations,
@@ -153,6 +132,28 @@ def build_ingestion_pipeline(
         docstore=docstore,
     )
     return pipeline, cache_path, docstore_path
+
+
+def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding:
+    """Return an explicit embedding instance for ingestion.
+
+    Args:
+        embedding: Optional embedding provided by the caller.
+
+    Returns:
+        BaseEmbedding: Resolved embedding model.
+
+    Raises:
+        ValueError: If neither an explicit embedding nor Settings.embed_model is
+            configured.
+    """
+    resolved = embedding or getattr(Settings, "embed_model", None)
+    if resolved is None:
+        raise ValueError(
+            "No embedding model configured. Provide an embedding argument or call "
+            "setup_llamaindex() to bind Settings.embed_model."
+        )
+    return resolved
 
 
 def _document_from_input(
@@ -289,14 +290,15 @@ async def ingest_documents(
     Args:
         cfg: Ingestion configuration specifying chunking and persistence.
         inputs: Normalized ingestion inputs to process.
-        embedding: Optional embedding instance overriding defaults.
+        embedding: Optional embedding instance overriding global Settings.embed_model.
 
     Returns:
         IngestionResult: Structured ingestion output including nodes, manifest
         summary, exports, metadata, and execution timing.
     """
+    resolved_embedding = _resolve_embedding(embedding)
     pipeline, cache_path, docstore_path = build_ingestion_pipeline(
-        cfg, embedding=embedding
+        cfg, embedding=resolved_embedding
     )
     documents, exports = _load_documents(cfg, inputs)
 
@@ -350,7 +352,7 @@ def ingest_documents_sync(
     Args:
         cfg: Ingestion configuration specifying chunking and persistence.
         inputs: Normalized ingestion inputs to process.
-        embedding: Optional embedding instance overriding defaults.
+        embedding: Optional embedding instance overriding global Settings.embed_model.
 
     Returns:
         IngestionResult: Structured ingestion output from the async pipeline.

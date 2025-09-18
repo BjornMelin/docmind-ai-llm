@@ -29,7 +29,7 @@ def canonical_config() -> CanonicalizationConfig:
         version=hashing_defaults.canonicalization_version,
         hmac_secret=secret,
         hmac_secret_version=hashing_defaults.hmac_secret_version,
-        metadata_keys=("content_type", "language", "tenant_id", "source"),
+        metadata_keys=("content_type", "language", "source"),
     )
 
 
@@ -38,7 +38,6 @@ def test_canonicalize_document_stable(canonical_config: CanonicalizationConfig) 
     metadata = {
         "content_type": "text/plain",
         "language": "fr",
-        "tenant_id": "tenant-a",
         "ignored_field": "should_not_participate",
     }
 
@@ -52,7 +51,7 @@ def test_canonicalize_document_stable(canonical_config: CanonicalizationConfig) 
 
 def test_compute_hashes_consistent(canonical_config: CanonicalizationConfig) -> None:
     content = b"abc123"
-    metadata = {"content_type": "text/plain", "tenant_id": "t1"}
+    metadata = {"content_type": "text/plain"}
     bundle = compute_hashes(content, metadata, canonical_config)
 
     assert bundle.raw_sha256 != bundle.canonical_hmac_sha256
@@ -63,7 +62,7 @@ def test_compute_hashes_consistent(canonical_config: CanonicalizationConfig) -> 
 def test_compute_hashes_changes_with_content(
     canonical_config: CanonicalizationConfig,
 ) -> None:
-    metadata = {"content_type": "text/plain", "tenant_id": "t1"}
+    metadata = {"content_type": "text/plain"}
     bundle_a = compute_hashes(b"abc", metadata, canonical_config)
     bundle_b = compute_hashes(b"abcd", metadata, canonical_config)
     assert bundle_a != bundle_b

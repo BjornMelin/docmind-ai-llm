@@ -113,6 +113,7 @@ observability = [
     "opentelemetry-exporter-otlp-proto-http>=1.28.2",
     "opentelemetry-exporter-otlp-proto-grpc>=1.28.2",
     "portalocker>=3.2.0",
+    "llama-index-observability-otel>=0.2.1",
 ]
 eval = [
     "ragas>=0.2.10,<0.4.0",              # RAG evaluation toolkit (Pydantic v2 compatible)

@@ -898,6 +898,7 @@ dependencies = [
     { name = "llama-index-llms-openai" },
     { name = "llama-index-llms-openai-like" },
     { name = "llama-index-llms-vllm" },
+    { name = "llama-index-observability-otel" },
     { name = "llama-index-postprocessor-colpali-rerank" },
     { name = "llama-index-readers-file" },
     { name = "llama-index-storage-kvstore-duckdb" },
@@ -1024,6 +1025,7 @@ requires-dist = [
     { name = "llama-index-llms-openai" },
     { name = "llama-index-llms-openai-like" },
     { name = "llama-index-llms-vllm" },
+    { name = "llama-index-observability-otel", specifier = ">=0.2.1" },
     { name = "llama-index-postprocessor-colpali-rerank", specifier = "==0.3.0" },
     { name = "llama-index-readers-file" },
     { name = "llama-index-storage-kvstore-duckdb", specifier = ">=0.2.0" },
@@ -2627,6 +2629,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/07/08/d9a81ec12f005fd0d8421820979b5418fc3d0541daf04dd6d728b9b6dfb7/llama_index_llms_vllm-0.6.0.tar.gz", hash = "sha256:687bef31fad3909c513b50961b37f7ca08da23f1eb695e847b260cabb228e332", size = 6343, upload-time = "2025-07-30T21:08:16.529Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d3/b6/82696cb54e9347f16302265b32a1fe3df421ff1b84631848da5b84a3a699/llama_index_llms_vllm-0.6.0-py3-none-any.whl", hash = "sha256:8f0368fb31374b94b65f5f4e16c401d303a3218e548af31b63f8b81062e86047", size = 6200, upload-time = "2025-07-30T21:08:15.527Z" },
+]
+
+[[package]]
+name = "llama-index-observability-otel"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "llama-index-core" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "termcolor" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/23/5a/b91cf89aad6c1c448bd54dda940ea43a5af338cb4a694da2bbdf87cbece7/llama_index_observability_otel-0.2.1.tar.gz", hash = "sha256:9fcd919b6af8111fb77b8a30e130ba1d24a9816ca66063a3f2e180b73e41dae2", size = 6383, upload-time = "2025-09-08T20:35:31.869Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/93/aa31c08b7b6be0f44986eb04170489810aa06c22c5661b90e38cfe145415/llama_index_observability_otel-0.2.1-py3-none-any.whl", hash = "sha256:de4e933b5372b5a53fd42b07d33e46f2bd1fc8b21bccf8d8ff345cb4b5f9c8d9", size = 6308, upload-time = "2025-09-08T20:35:30.778Z" },
 ]
 
 [[package]]
@@ -5486,6 +5504,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0a/d4/2b0cd0fe285e14b36db076e78c93766ff1d529d70408bd1d2a5a84f1d929/tenacity-9.1.2.tar.gz", hash = "sha256:1169d376c297e7de388d18b4481760d478b0e99a777cad3a9c86e556f4b697cb", size = 48036, upload-time = "2025-04-02T08:25:09.966Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/30/643397144bfbfec6f6ef821f36f33e57d35946c44a2352d3c9f0ae847619/tenacity-9.1.2-py3-none-any.whl", hash = "sha256:f77bf36710d8b73a50b2dd155c97b870017ad21afe6ab300326b0371b3b05138", size = 28248, upload-time = "2025-04-02T08:25:07.678Z" },
+]
+
+[[package]]
+name = "termcolor"
+version = "3.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/6c/3d75c196ac07ac8749600b60b03f4f6094d54e132c4d94ebac6ee0e0add0/termcolor-3.1.0.tar.gz", hash = "sha256:6a6dd7fbee581909eeec6a756cff1d7f7c376063b14e4a298dc4980309e55970", size = 14324, upload-time = "2025-04-30T11:37:53.791Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/bd/de8d508070629b6d84a30d01d57e4a65c69aa7f5abe7560b8fad3b50ea59/termcolor-3.1.0-py3-none-any.whl", hash = "sha256:591dd26b5c2ce03b9e43f391264626557873ce1d379019786f99b0c2bee140aa", size = 7684, upload-time = "2025-04-30T11:37:52.382Z" },
 ]
 
 [[package]]

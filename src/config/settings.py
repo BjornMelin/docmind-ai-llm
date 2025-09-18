@@ -212,10 +212,7 @@ class ObservabilityConfig(BaseModel):
     )
     endpoint: str | None = Field(
         default=None,
-        description=(
-            "Optional OTLP endpoint override. Use 'console' to emit metrics to"
-            " stdout during development."
-        ),
+        description=("Optional OTLP endpoint override for telemetry exporters."),
     )
     protocol: Literal["grpc", "http/protobuf"] = Field(
         default="http/protobuf",
@@ -413,7 +410,6 @@ class HashingConfig(BaseModel):
             "language",
             "source",
             "source_path",
-            "tenant_id",
         ],
         description="Ordered metadata keys included in canonical payloads.",
     )
