@@ -898,7 +898,6 @@ dependencies = [
     { name = "llama-index-llms-openai" },
     { name = "llama-index-llms-openai-like" },
     { name = "llama-index-llms-vllm" },
-    { name = "llama-index-observability-otel" },
     { name = "llama-index-postprocessor-colpali-rerank" },
     { name = "llama-index-readers-file" },
     { name = "llama-index-storage-kvstore-duckdb" },
@@ -949,6 +948,7 @@ gpu = [
     { name = "vllm" },
 ]
 observability = [
+    { name = "llama-index-observability-otel" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -1025,7 +1025,7 @@ requires-dist = [
     { name = "llama-index-llms-openai" },
     { name = "llama-index-llms-openai-like" },
     { name = "llama-index-llms-vllm" },
-    { name = "llama-index-observability-otel", specifier = ">=0.2.1" },
+    { name = "llama-index-observability-otel", marker = "extra == 'observability'", specifier = ">=0.2.1" },
     { name = "llama-index-postprocessor-colpali-rerank", specifier = "==0.3.0" },
     { name = "llama-index-readers-file" },
     { name = "llama-index-storage-kvstore-duckdb", specifier = ">=0.2.0" },
