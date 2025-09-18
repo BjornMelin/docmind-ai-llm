@@ -174,6 +174,7 @@ def test_resolve_embedding_configures_llamaindex(
     assert call_state == {"get": 2, "force": True}
     assert resolved is dummy
 
+
 @pytest.mark.asyncio
 async def test_ingest_documents_without_embedding_warns_and_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -206,7 +207,9 @@ async def test_ingest_documents_without_embedding_warns_and_runs(
     monkeypatch.setattr(module, "get_settings_embed_model", lambda: None)
     monkeypatch.setattr(module, "setup_llamaindex", lambda **_: None)
 
-    cfg = IngestionConfig(cache_dir=tmp_path / "cache", docstore_path=tmp_path / "docstore.json")
+    cfg = IngestionConfig(
+        cache_dir=tmp_path / "cache", docstore_path=tmp_path / "docstore.json"
+    )
     inputs = [IngestionInput(document_id="doc", payload_bytes=b"payload")]
 
     with caplog.at_level("WARNING"):
@@ -214,8 +217,9 @@ async def test_ingest_documents_without_embedding_warns_and_runs(
 
     assert call_state["embedding"] is None
     assert result.nodes == [{"doc_id": "doc", "text": "payload"}]
-    assert any("No embedding model configured" in record.message for record in caplog.records)
-
+    assert any(
+        "No embedding model configured" in record.message for record in caplog.records
+    )
 
 
 def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
@@ -270,12 +274,16 @@ def test_load_documents_uses_reader(monkeypatch, tmp_path: Path) -> None:
             return [SimpleNamespace(text="doc", doc_id="doc-1", metadata={})]
 
     monkeypatch.setattr(module, "UnstructuredReader", DummyReader)
-    monkeypatch.setattr(module, "_page_image_exports", lambda path, cfg, flag: ["export"])
+    monkeypatch.setattr(
+        module, "_page_image_exports", lambda path, cfg, flag: ["export"]
+    )
 
     sample = tmp_path / "sample.pdf"
     sample.write_text("content", encoding="utf-8")
     cfg = IngestionConfig(cache_dir=tmp_path)
-    inputs = [IngestionInput(document_id="doc-1", source_path=sample, encrypt_images=True)]
+    inputs = [
+        IngestionInput(document_id="doc-1", source_path=sample, encrypt_images=True)
+    ]
 
     docs, exports = module._load_documents(cfg, inputs)
     assert docs[0].metadata["document_id"] == "doc-1"

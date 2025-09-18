@@ -214,7 +214,12 @@ def _load_latest_snapshot_into_session() -> None:
             if man:
                 compute_staleness(man, corpus_paths, cfg)
                 _hydrate_router_from_snapshot(snap_dir)
-        except Exception:  # pragma: no cover - defensive
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ):  # pragma: no cover - defensive
             return
     else:  # pinned (skip staleness)
         _hydrate_router_from_snapshot(snap_dir)
@@ -234,7 +239,12 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
         st.caption(
             f"Autoloaded snapshot: {snap_dir.name} (graph={'yes' if kg else 'no'})"
         )
-    except Exception:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        RuntimeError,
+        OSError,
+        TypeError,
+    ):  # pragma: no cover - defensive
         # No router created; keep vector/graph in session for manual wiring
         import logging
 

@@ -26,14 +26,18 @@ def test_set_determinism_applies_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-def test_set_determinism_handles_optional_modules(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_determinism_handles_optional_modules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: dict[str, list] = {"torch": [], "numpy": []}
 
     class DummyNumpy:
-        class random:
+        class Random:
             @staticmethod
             def seed(value: int) -> None:
                 calls["numpy"].append(value)
+
+        random = Random()
 
         @staticmethod
         def seed(value: int) -> None:
@@ -49,9 +53,11 @@ def test_set_determinism_handles_optional_modules(monkeypatch: pytest.MonkeyPatc
             calls.setdefault("cuda", []).append(value)
 
     class DummyBackends:
-        class cudnn:  # type: ignore[assignment]
+        class CudnnBackend:  # type: ignore[assignment]
             deterministic = False
             benchmark = True
+
+        cudnn = CudnnBackend()
 
     class DummyTorch:
         cuda = DummyCuda()

@@ -73,7 +73,7 @@ class PipelineBuilder:
         )
         # Attach pipeline metadata for debugging/telemetry; LlamaIndex does not
         # use it directly but keeping reference simplifies validation.
-        pipeline._docmind_metadata = self._metadata | {  # type: ignore[attr-defined]
+        pipeline.docmind_metadata = self._metadata | {
             "strategy": strategy.value,
         }
         return pipeline

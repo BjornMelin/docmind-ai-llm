@@ -33,3 +33,20 @@ def test_compute_config_hash_sorted() -> None:
     scrambled = json.loads(json.dumps(config))
 
     assert compute_config_hash(config) == compute_config_hash(scrambled)
+
+
+def test_canonicalize_handles_paths_and_sets(tmp_path: Path) -> None:
+    from src.persistence.hashing import _canonicalize
+
+    payload = {
+        "flags": {"b", "a"},
+        "path": tmp_path / "sample.txt",
+        "nested": (1, 2, 3),
+        "ratio": 0.12345678901234,
+    }
+    canonical = _canonicalize(payload)
+
+    assert canonical["flags"] == ["a", "b"]
+    assert canonical["path"].endswith("sample.txt")
+    assert canonical["nested"] == [1, 2, 3]
+    assert canonical["ratio"] == float(f"{payload['ratio']:.12g}")

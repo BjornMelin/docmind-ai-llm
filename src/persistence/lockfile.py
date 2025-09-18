@@ -152,13 +152,17 @@ class SnapshotLock:
         """Acquire the lock, evicting stale holders when necessary."""
         deadline = time.monotonic() + self.timeout
         while True:
-            self._pending_takeover_count = self._evict_if_stale()
+            takeover_count, within_grace = self._evict_if_stale()
+            self._pending_takeover_count = takeover_count
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise SnapshotLockTimeoutError(
                     f"Timed out acquiring snapshot lock at {self.path} "
                     f"after {self.timeout:.1f}s"
                 )
+            if within_grace:
+                time.sleep(min(_DEFAULT_SLEEP, max(0.0, remaining)))
+                continue
             try:
                 if self._use_portalocker:
                     lock = portalocker.Lock(
@@ -251,10 +255,10 @@ class SnapshotLock:
     def _metadata_path(self) -> Path:
         return self.path.with_suffix(self.path.suffix + ".meta.json")
 
-    def _evict_if_stale(self) -> int:
+    def _evict_if_stale(self) -> tuple[int, bool]:
         metadata_path = self._metadata_path()
         if not metadata_path.exists():
-            return 0
+            return 0, False
         try:
             data = json.loads(metadata_path.read_text(encoding="utf-8"))
             metadata = _LockMetadata.from_json(data)
@@ -262,12 +266,12 @@ class SnapshotLock:
             logger.warning("Lock metadata corrupted at %s: %s", metadata_path, exc)
             _remove_if_exists(metadata_path)
             _remove_if_exists(self.path)
-            return 0
+            return 0, False
         now = datetime.now(UTC)
         elapsed = (now - metadata.last_heartbeat).total_seconds()
         effective_ttl = metadata.ttl_seconds + self.grace_seconds
         if elapsed <= effective_ttl:
-            return 0
+            return metadata.takeover_count, True
         logger.warning(
             "Evicting stale snapshot lock %s held by %s (elapsed %.1fs > TTL %.1fs)",
             self.path,
@@ -279,7 +283,7 @@ class SnapshotLock:
         _rotate_stale_lock(
             self.path, metadata_path, metadata.owner_id, metadata.takeover_count
         )
-        return new_takeover
+        return new_takeover, False
 
     def _write_metadata(self) -> None:
         if self._metadata is None:

@@ -113,20 +113,17 @@ def _select_device(explicit: str | None = None) -> str:
         from src.utils.core import select_device as _sd
 
         return _sd("auto")
-    except Exception:  # pragma: no cover - conservative fallback
+    except (ImportError, AttributeError):  # pragma: no cover - conservative fallback
         # Robust fallback using local TORCH checks when core import fails
         try:
-            if (
-                TORCH is not None
-                and getattr(TORCH, "cuda", None)
-                and TORCH.cuda.is_available()
-            ):
+            cuda_mod = getattr(TORCH, "cuda", None)
+            if TORCH is not None and cuda_mod and cuda_mod.is_available():
                 return "cuda"
             mps = getattr(getattr(TORCH, "backends", None), "mps", None)
             if mps is not None and getattr(mps, "is_available", lambda: False)():
                 return "mps"
             return "cpu"
-        except Exception:  # pragma: no cover - final guard
+        except (AttributeError, RuntimeError):  # pragma: no cover - final guard
             return "cpu"
 
 
@@ -346,8 +343,9 @@ class ImageEmbedder:
         except (RuntimeError, ImportError, AttributeError, TypeError):
             # Fallback heuristic if core helpers unavailable
             try:  # pragma: no cover
-                if TORCH.cuda.is_available():  # type: ignore[attr-defined]
-                    props = TORCH.cuda.get_device_properties(0)  # type: ignore[attr-defined]
+                cuda_mod = getattr(TORCH, "cuda", None)
+                if cuda_mod and cuda_mod.is_available():
+                    props = cuda_mod.get_device_properties(0)
                     total = float(props.total_memory) / float(1024**3)
                     return "openclip_vith14" if total >= 20.0 else "siglip_base"
             except (RuntimeError, AttributeError):
@@ -582,7 +580,8 @@ class UnifiedEmbedder:
                     supported = (np.ndarray,) + (
                         (pil_type,) if pil_type is not None else ()
                     )
-                    if not isinstance(it, supported):  # pylint: disable=isinstance-second-argument-not-valid-type
+                    # pylint: disable=isinstance-second-argument-not-valid-type
+                    if not isinstance(it, supported):
                         t = type(it)
                         msg = f"Unsupported image type: {t}. Supported: {supported}"
                         raise TypeError(msg)
