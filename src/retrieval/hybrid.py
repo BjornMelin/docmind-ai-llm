@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from llama_index.core import Settings
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
@@ -24,6 +23,7 @@ from qdrant_client.http.exceptions import (
     UnexpectedResponse,
 )
 
+from src.config.integrations import get_settings_embed_model
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
 from src.utils.storage import ensure_hybrid_collection, get_client_config
 from src.utils.telemetry import log_jsonl
@@ -104,7 +104,7 @@ class ServerHybridRetriever:
         Raises:
             RuntimeError: If ``Settings.embed_model`` is not configured.
         """
-        embed = getattr(Settings, "embed_model", None)
+        embed = get_settings_embed_model()
         if embed is None:
             raise RuntimeError(
                 "Settings.embed_model is not configured. Initialize integrations or "

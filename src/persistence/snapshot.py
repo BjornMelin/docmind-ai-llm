@@ -41,9 +41,11 @@ from src.persistence.snapshot_writer import (
 try:  # pragma: no cover - optional monitoring dependencies
     from src.utils.monitoring import log_performance
 except Exception:  # pragma: no cover - defensive fallback
+
     def log_performance(*_args: Any, **_kwargs: Any) -> None:
         """No-op performance logger when monitoring stack is unavailable."""
         return None
+
 
 try:  # pragma: no cover - optional instrumentation
     from opentelemetry import trace

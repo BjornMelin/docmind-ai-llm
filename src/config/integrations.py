@@ -16,8 +16,14 @@ import logging
 import os
 import threading
 from contextlib import suppress
+from typing import Any
 
 from llama_index.core import Settings
+
+try:
+    from llama_index.core.base.embeddings.base import BaseEmbedding
+except ImportError:  # pragma: no cover - optional dependency
+    BaseEmbedding = Any  # type: ignore
 
 from src.config.llm_factory import build_llm
 from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
@@ -172,6 +178,7 @@ def initialize_integrations(
 
 # Convenience exports
 __all__ = [
+    "get_settings_embed_model",
     "get_vllm_server_command",
     "initialize_integrations",
     "setup_llamaindex",
@@ -257,8 +264,21 @@ def _configure_llm() -> None:
         Settings.llm = None
 
 
+def get_settings_embed_model() -> BaseEmbedding | None:
+    """Return the currently configured LlamaIndex embedding instance.
+
+    The helper guards against ``AttributeError`` when custom ``Settings``
+    objects override ``__getattr__`` or omit the ``embed_model`` attribute.
+    """
+    try:
+        return getattr(Settings, "embed_model", None)
+    except AttributeError:  # pragma: no cover - defensive
+        logger.debug("Settings.embed_model attribute not present")
+        return None
+
+
 def _should_configure_embeddings(force_embed: bool) -> bool:
-    return force_embed or getattr(Settings, "embed_model", None) is None
+    return force_embed or get_settings_embed_model() is None
 
 
 def _configure_embeddings() -> None:

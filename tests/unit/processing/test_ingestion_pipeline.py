@@ -11,6 +11,7 @@ from llama_index.core.base.embeddings.base import BaseEmbedding
 from src.models.processing import IngestionConfig, IngestionInput
 from src.processing.ingestion_pipeline import (
     _document_from_input,
+    _resolve_embedding,
     build_ingestion_pipeline,
     ingest_documents,
     ingest_documents_sync,
@@ -121,6 +122,51 @@ def test_build_ingestion_pipeline_uses_cache_and_docstore(tmp_path: Path) -> Non
     assert cache_path == cfg.cache_dir / "docmind.duckdb"
     assert docstore_path == cfg.docstore_path
     assert pipeline.transformations  # TokenTextSplitter + optional components
+
+
+def test_build_ingestion_pipeline_without_embedding(tmp_path: Path) -> None:
+    """Pipeline construction succeeds when no embedding is configured."""
+    cfg = IngestionConfig(
+        chunk_size=64,
+        chunk_overlap=16,
+        cache_dir=tmp_path / "cache",
+    )
+
+    pipeline, _cache_path, _docstore_path = build_ingestion_pipeline(
+        cfg, embedding=None
+    )
+
+    # TokenTextSplitter is always present even without embeddings.
+    assert pipeline.transformations
+    assert all(component is not None for component in pipeline.transformations)
+    assert not any(
+        isinstance(component, DummyEmbedding) for component in pipeline.transformations
+    )
+
+
+def test_resolve_embedding_configures_llamaindex(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_embedding calls setup_llamaindex when Settings lacks a model."""
+    from src.processing import ingestion_pipeline as module
+
+    dummy = DummyEmbedding()
+    call_state = {"get": 0, "force": False}
+
+    def fake_get_settings_embed_model() -> DummyEmbedding | None:  # pragma: no cover
+        call_state["get"] += 1
+        return dummy if call_state["get"] > 1 else None
+
+    def fake_setup_llamaindex(*, force_embed: bool = False) -> None:  # pragma: no cover
+        call_state["force"] = force_embed
+
+    monkeypatch.setattr(module, "get_settings_embed_model", fake_get_settings_embed_model)
+    monkeypatch.setattr(module, "setup_llamaindex", fake_setup_llamaindex)
+
+    resolved = _resolve_embedding(None)
+
+    assert call_state == {"get": 2, "force": True}
+    assert resolved is dummy
 
 
 def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:

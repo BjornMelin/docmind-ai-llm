@@ -10,10 +10,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from llama_index.core import Settings, StorageContext, VectorStoreIndex
+from llama_index.core import StorageContext, VectorStoreIndex
 from loguru import logger
 
 from src.config import setup_llamaindex
+from src.config.integrations import get_settings_embed_model
 from src.config.settings import settings
 from src.models.processing import IngestionConfig, IngestionInput
 from src.processing.ingestion_pipeline import ingest_documents_sync
@@ -45,7 +46,7 @@ def ingest_files(
         Mapping containing ingestion metadata and constructed indices.
     """
     setup_llamaindex(force_embed=False)
-    if getattr(Settings, "embed_model", None) is None:
+    if get_settings_embed_model() is None:
         raise RuntimeError("Settings.embed_model must be configured before ingestion")
 
     if not files:

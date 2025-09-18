@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from llama_index.core import Document, Settings
+from llama_index.core import Document
 from llama_index.core.extractors import TitleExtractor
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
@@ -31,6 +31,8 @@ from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 from opentelemetry import trace
 
 from src.config import settings as app_settings
+from src.config import setup_llamaindex
+from src.config.integrations import get_settings_embed_model
 from src.models.processing import (
     ExportArtifact,
     IngestionConfig,
@@ -92,13 +94,13 @@ def _ensure_docstore(cfg: IngestionConfig) -> tuple[SimpleDocumentStore, Path | 
 def build_ingestion_pipeline(
     cfg: IngestionConfig,
     *,
-    embedding: BaseEmbedding,
+    embedding: BaseEmbedding | None,
 ) -> tuple[IngestionPipeline, Path, Path | None]:
     """Construct an :class:`IngestionPipeline` configured with local persistence.
 
     Args:
         cfg: Ingestion options controlling chunking, caching, and persistence.
-        embedding: Embedding component injected into the pipeline.
+        embedding: Optional embedding component injected into the pipeline.
 
     Returns:
         tuple[IngestionPipeline, Path, Path | None]: Pipeline instance, cache
@@ -124,7 +126,8 @@ def build_ingestion_pipeline(
     except (ImportError, ValueError, RuntimeError) as exc:  # pragma: no cover
         logger.debug("TitleExtractor unavailable: %s", exc)
 
-    transformations.append(embedding)
+    if embedding is not None:
+        transformations.append(embedding)
 
     pipeline = IngestionPipeline(
         transformations=transformations,
@@ -134,26 +137,29 @@ def build_ingestion_pipeline(
     return pipeline, cache_path, docstore_path
 
 
-def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding:
-    """Return an explicit embedding instance for ingestion.
+def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
+    """Return a usable embedding instance for ingestion.
 
     Args:
         embedding: Optional embedding provided by the caller.
 
     Returns:
-        BaseEmbedding: Resolved embedding model.
-
-    Raises:
-        ValueError: If neither an explicit embedding nor Settings.embed_model is
-            configured.
+        BaseEmbedding | None: Resolved embedding model, or ``None`` when no
+        embedding is available and the pipeline should run without the
+        transformation.
     """
-    resolved = embedding or getattr(Settings, "embed_model", None)
-    if resolved is None:
-        raise ValueError(
-            "No embedding model configured. Provide an embedding argument or call "
-            "setup_llamaindex() to bind Settings.embed_model."
-        )
-    return resolved
+    if embedding is not None:
+        return embedding
+
+    resolved = get_settings_embed_model()
+    if resolved is not None:
+        return resolved
+
+    try:
+        setup_llamaindex(force_embed=True)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("setup_llamaindex(force_embed=True) failed: %s", exc)
+    return get_settings_embed_model()
 
 
 def _document_from_input(
@@ -297,6 +303,11 @@ async def ingest_documents(
         summary, exports, metadata, and execution timing.
     """
     resolved_embedding = _resolve_embedding(embedding)
+    if resolved_embedding is None:
+        logger.warning(
+            "No embedding model configured; proceeding without embedding transform"
+        )
+
     pipeline, cache_path, docstore_path = build_ingestion_pipeline(
         cfg, embedding=resolved_embedding
     )
