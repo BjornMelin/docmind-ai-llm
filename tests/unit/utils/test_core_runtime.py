@@ -1,4 +1,3 @@
-
 """Runtime-oriented tests for src.utils.core covering device resolution and clients."""
 
 from __future__ import annotations
@@ -90,6 +89,7 @@ def test_validate_startup_configuration_handles_qdrant(monkeypatch):
     assert result["valid"] is True
     assert created["client"].closed is True
 
+
 @pytest.mark.unit
 def test_validate_startup_configuration_records_errors(monkeypatch):
     import src.utils.core as core
@@ -139,7 +139,9 @@ async def test_async_timer_logs(monkeypatch):
     import src.utils.core as core
 
     calls: list[tuple[str, float]] = []
-    monkeypatch.setattr(core.logger, "info", lambda msg, *args: calls.append((msg, args[0])))
+    monkeypatch.setattr(
+        core.logger, "info", lambda msg, *args: calls.append((msg, args[0]))
+    )
 
     @core.async_timer
     async def _do_work():
@@ -147,4 +149,34 @@ async def test_async_timer_logs(monkeypatch):
 
     result = await _do_work()
     assert result == "done"
-    assert calls and calls[0][0] == "%s completed in %.2fs"
+    assert calls
+    assert calls[0][0] == "%s completed in %.2fs"
+
+
+@pytest.mark.unit
+def test_has_cuda_vram_returns_false_without_cuda(monkeypatch):
+    import src.utils.core as core
+
+    monkeypatch.setattr(core, "is_cuda_available", lambda: False)
+    assert core.has_cuda_vram(8.0) is False
+
+
+@pytest.mark.unit
+def test_select_device_prefers_mps_when_available(monkeypatch):
+    import src.utils.core as core
+
+    monkeypatch.setattr(core, "is_cuda_available", lambda: False)
+    monkeypatch.setattr(core, "_is_mps_available", lambda: True)
+    assert core.select_device("auto") == "mps"
+    assert core.select_device("mps") == "mps"
+
+
+@pytest.mark.unit
+def test_select_device_handles_invalid_inputs(monkeypatch):
+    import src.utils.core as core
+
+    def _broken(*_a, **_k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(core, "is_cuda_available", _broken)
+    assert core.select_device("auto") == "cpu"

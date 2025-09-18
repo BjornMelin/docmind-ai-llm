@@ -947,6 +947,9 @@ gpu = [
     { name = "ninja" },
     { name = "vllm" },
 ]
+llama = [
+    { name = "llama-index-core" },
+]
 observability = [
     { name = "llama-index-observability-otel" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
@@ -1016,6 +1019,7 @@ requires-dist = [
     { name = "langgraph-supervisor", specifier = ">=0.0.29" },
     { name = "llama-cpp-python", specifier = ">=0.3.0,<0.4.0" },
     { name = "llama-index", specifier = "==0.13.4" },
+    { name = "llama-index-core", marker = "extra == 'llama'", specifier = ">=0.13.4,<0.14.0" },
     { name = "llama-index-embeddings-clip" },
     { name = "llama-index-embeddings-fastembed" },
     { name = "llama-index-embeddings-huggingface" },
@@ -1075,7 +1079,7 @@ requires-dist = [
     { name = "unstructured-ingest", specifier = ">=0.2.1" },
     { name = "vllm", marker = "extra == 'gpu'", specifier = ">=0.6.3,<0.10.0" },
 ]
-provides-extras = ["gpu", "test", "observability", "eval"]
+provides-extras = ["gpu", "llama", "test", "observability", "eval"]
 
 [package.metadata.requires-dev]
 dev = [

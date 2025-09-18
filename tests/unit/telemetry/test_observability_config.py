@@ -19,8 +19,10 @@ def test_configure_observability_console(configured_observability_console) -> No
 
 def test_configure_observability_disabled(monkeypatch) -> None:
     """When disabled, configuration leaves tracer/meter providers untouched."""
-    monkeypatch.setattr(otel, "_TRACE_PROVIDER", None)
-    monkeypatch.setattr(otel, "_METER_PROVIDER", None)
+    otel.shutdown_tracing()
+    otel.shutdown_metrics()
+    trace.set_tracer_provider(trace.NoOpTracerProvider())
+    metrics.set_meter_provider(metrics.NoOpMeterProvider())
     start_tracer = trace.get_tracer_provider()
     start_meter = metrics.get_meter_provider()
 
