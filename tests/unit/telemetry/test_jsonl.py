@@ -11,7 +11,9 @@ from src.utils import telemetry
 
 
 @pytest.mark.unit
-def test_log_jsonl_respects_disable_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_log_jsonl_respects_disable_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     target = tmp_path / "telemetry.jsonl"
     monkeypatch.setattr(telemetry, "_TELEM_PATH", target)
     monkeypatch.setenv("DOCMIND_TELEMETRY_DISABLED", "true")
@@ -20,7 +22,9 @@ def test_log_jsonl_respects_disable_flag(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 
 @pytest.mark.unit
-def test_log_jsonl_writes_event(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_log_jsonl_writes_event(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     target = tmp_path / "telemetry.jsonl"
     monkeypatch.setattr(telemetry, "_TELEM_PATH", target)
     monkeypatch.delenv("DOCMIND_TELEMETRY_DISABLED", raising=False)
@@ -36,7 +40,9 @@ def test_log_jsonl_writes_event(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
 
 @pytest.mark.unit
-def test_log_jsonl_rotates_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_log_jsonl_rotates_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     target = tmp_path / "telemetry.jsonl"
     rotated = target.with_suffix(".jsonl.1")
     target.write_text("old\n", encoding="utf-8")

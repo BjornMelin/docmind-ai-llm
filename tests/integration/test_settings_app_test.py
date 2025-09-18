@@ -18,8 +18,8 @@ def test_settings_page_renders_and_has_hybrid_toggle() -> None:
     """
     at = AppTest.from_file("src/pages/04_settings.py")
     at.run()
-    # Find the checkbox labeled with our retrieval toggle text
-    labels = [getattr(cb, "label", "") for cb in at.checkbox]
+    # Find the read-only field exposing the retrieval toggle state
+    labels = [getattr(inp, "label", "") for inp in at.text_input]
     assert any(
-        "server-side hybrid retrieval" in str(label).lower() for label in labels
-    ), "Expected server-side hybrid retrieval toggle to be present in Settings page"
+        str(label).lower() == "server-side hybrid enabled" for label in labels
+    ), "Expected server-side hybrid retrieval field to be present in Settings page"

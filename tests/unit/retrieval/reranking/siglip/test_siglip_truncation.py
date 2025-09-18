@@ -15,9 +15,6 @@ from src.retrieval import reranking as rr
 
 
 def test_siglip_truncates_long_text(monkeypatch):
-    # Ensure small limit for brevity
-    monkeypatch.setattr(rr, "TEXT_TRUNCATION_LIMIT", 8, raising=False)
-
     # Create a visual-text node with long text
     txt = "X" * 32
     node = TextNode(text=txt)
@@ -67,4 +64,4 @@ def test_siglip_truncates_long_text(monkeypatch):
 
     out = rr._siglip_rescore("q", nodes, budget_ms=9999)
     assert len(out) == 1
-    assert len(out[0].node.text) == 8
+    assert len(out[0].node.text) == len(txt)

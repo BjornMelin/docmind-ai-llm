@@ -1,4 +1,3 @@
-
 """Tests for src.utils.vision_siglip loader caching behavior."""
 
 from __future__ import annotations
@@ -38,5 +37,6 @@ def test_load_siglip_uses_cached_loader(monkeypatch):
     model2, proc2, device2 = vision_siglip.load_siglip("siglip-test", "cpu")
 
     assert call_count == {"model": 1, "processor": 1}
-    assert model1 is model2 and proc1 is proc2
+    assert model1 is model2
+    assert proc1 is proc2
     assert device1 == device2 == "cpu"

@@ -46,6 +46,7 @@ async def test_async_performance_timer_failure_path_logs_error() -> None:
     assert kwargs.get("success") is False
     assert "error" in kwargs
 
+
 @pytest.mark.unit
 def test_get_memory_usage_handles_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """get_memory_usage returns zeroed metrics when psutil fails."""
@@ -82,7 +83,9 @@ def test_get_system_info_handles_errors(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_performance_timer_handles_psutil_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_performance_timer_handles_psutil_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """performance_timer should not crash when psutil.Process fails."""
 
     class _ExplodingProcess:  # pragma: no cover - simple stub
@@ -96,4 +99,3 @@ def test_performance_timer_handles_psutil_errors(monkeypatch: pytest.MonkeyPatch
 
     # No exception thrown and metrics captured
     assert metrics["value"] == 1
-

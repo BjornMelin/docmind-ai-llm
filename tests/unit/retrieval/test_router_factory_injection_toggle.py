@@ -9,6 +9,7 @@ resolution and capture constructed engines.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from types import SimpleNamespace
 
 

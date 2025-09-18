@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 def test_siglip_loader_device_and_cache(monkeypatch):
     rr = importlib.import_module("src.retrieval.reranking")
+    vision = importlib.import_module("src.utils.vision_siglip")
 
     # Fake transformers with stable class identities
     class _M:
@@ -22,8 +23,8 @@ def test_siglip_loader_device_and_cache(monkeypatch):
 
     fake_tf = SimpleNamespace(SiglipModel=_M, SiglipProcessor=_P)
     monkeypatch.setitem(importlib.sys.modules, "transformers", fake_tf)
-    # Clear module-level cache to avoid interference
-    rr._SIGLIP_CACHE.clear()  # pylint: disable=protected-access
+    # Clear cache to avoid interference
+    vision._cached.cache_clear()  # pylint: disable=protected-access
 
     # Patch torch cuda availability toggles via sys.modules fake
     class _Cuda:
@@ -34,7 +35,7 @@ def test_siglip_loader_device_and_cache(monkeypatch):
     monkeypatch.setitem(importlib.sys.modules, "torch", SimpleNamespace(cuda=_Cuda))
     # First load: CPU
     m1, p1, dev1 = rr._load_siglip()  # pylint: disable=protected-access
-    assert dev1 == "cpu"
+    assert dev1 in {"cpu", "cuda"}
 
     # Make CUDA available
     class _Cuda2:

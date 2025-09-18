@@ -26,7 +26,7 @@ def test_write_csv_row_enforces_header(tmp_path: Path) -> None:
     target = tmp_path / "report.csv"
     write_csv_row(target, {"a": "x", "b": "y"})
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Leaderboard schema mismatch"):
         write_csv_row(target, {"b": "y", "a": "x", "c": "z"})
 
 
@@ -38,5 +38,5 @@ def test_write_csv_row_appends(tmp_path: Path) -> None:
 
     lines = target.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 3
-    assert lines[1] == "row1,\"1,2\""
-    assert lines[2] == "row2,\"3,4\""
+    assert lines[1] == 'row1,"1,2"'
+    assert lines[2] == 'row2,"3,4"'

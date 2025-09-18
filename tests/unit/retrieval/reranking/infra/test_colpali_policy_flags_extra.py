@@ -31,7 +31,7 @@ def test_colpali_policy_ops_force_and_topk(monkeypatch):
     monkeypatch.setattr(
         rr, "settings", SimpleNamespace(retrieval=_RetrCfg2()), raising=False
     )
-    monkeypatch.setattr(rr, "_has_cuda_vram", lambda *_a, **_k: True)
+    monkeypatch.setattr(rr, "has_cuda_vram", lambda *_a, **_k: True)
     assert (
         rr.MultimodalReranker._should_enable_colpali(text_nodes, [text_nodes]) is False
     )

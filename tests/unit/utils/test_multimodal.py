@@ -53,10 +53,10 @@ def test_validate_vram_usage_without_torch_returns_zero(
 
     real_import = builtins.__import__
 
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def fake_import(name, globals_=None, locals_=None, fromlist=(), level=0):
         if name == "torch":
             raise ImportError("torch not available")
-        return real_import(name, globals, locals, fromlist, level)
+        return real_import(name, globals_, locals_, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 

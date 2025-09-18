@@ -1,13 +1,13 @@
-"""Tests for canonicalization and hashing utilities."""
+"""Tests for canonicalization helpers."""
 
 from __future__ import annotations
 
 import hashlib
-import os
+import hmac
+import json
 
 import pytest
 
-from src.config.settings import HashingConfig
 from src.utils.canonicalization import (
     CanonicalizationConfig,
     canonicalize_document,
@@ -17,52 +17,68 @@ from src.utils.canonicalization import (
 
 @pytest.fixture
 def canonical_config() -> CanonicalizationConfig:
-    hashing_defaults = HashingConfig()
-    secret_source = os.environ.get(
-        "DOCMIND_HASH_SECRET", hashing_defaults.hmac_secret
-    ).strip()
-    secret = secret_source.encode("utf-8")
-    if len(secret) < 32:
-        # Derive a deterministic high-entropy fallback for test environments.
-        secret = hashlib.sha256(secret).digest()
+    """Return a canonicalization config used across tests."""
     return CanonicalizationConfig(
-        version=hashing_defaults.canonicalization_version,
-        hmac_secret=secret,
-        hmac_secret_version=hashing_defaults.hmac_secret_version,
-        metadata_keys=("content_type", "language", "source"),
+        version="v1",
+        hmac_secret=b"unit-secret",
+        hmac_secret_version="secret-v1",  # noqa: S106 - benign test fixture
+        metadata_keys=("content_type", "extra"),
     )
 
 
-def test_canonicalize_document_stable(canonical_config: CanonicalizationConfig) -> None:
-    content = "Résumé\r\n\r\nHello\u200b world".encode()
-    metadata = {
-        "content_type": "text/plain",
-        "language": "fr",
-        "ignored_field": "should_not_participate",
-    }
-
-    payload_first = canonicalize_document(content, metadata, canonical_config)
-    payload_second = canonicalize_document(content, metadata, canonical_config)
-
-    assert payload_first == payload_second
-    assert "Résumé" in payload_first.decode("utf-8")
-    assert "ignored_field" not in payload_first.decode("utf-8")
-
-
-def test_compute_hashes_consistent(canonical_config: CanonicalizationConfig) -> None:
-    content = b"abc123"
-    metadata = {"content_type": "text/plain"}
-    bundle = compute_hashes(content, metadata, canonical_config)
-
-    assert bundle.raw_sha256 != bundle.canonical_hmac_sha256
-    repeat = compute_hashes(content, metadata, canonical_config)
-    assert repeat == bundle
-
-
-def test_compute_hashes_changes_with_content(
+def test_canonicalize_document_normalizes_text_and_metadata(
     canonical_config: CanonicalizationConfig,
 ) -> None:
-    metadata = {"content_type": "text/plain"}
-    bundle_a = compute_hashes(b"abc", metadata, canonical_config)
-    bundle_b = compute_hashes(b"abcd", metadata, canonical_config)
-    assert bundle_a != bundle_b
+    """Canonical payload should normalise text, metadata, and model versions."""
+    content = "H\u200bello  \r\n\nworld \u0007".encode()
+    metadata = {
+        "content_type": "text/plain",
+        "extra": {"b": 2, "a": 1},
+        "ignored": "value",
+    }
+    model_versions = {"parser": "1.0.0", "ocr": "0.2"}
+
+    payload = canonicalize_document(
+        content=content,
+        metadata=metadata,
+        config=canonical_config,
+        model_versions=model_versions,
+    )
+    envelope = json.loads(payload.decode("utf-8"))
+
+    assert envelope["v"] == canonical_config.version
+    assert envelope["text"] == "Hello world"
+    assert envelope["metadata"] == {
+        "content_type": "text/plain",
+        "extra": {"a": 1, "b": 2},
+    }
+    assert envelope["models"] == {"ocr": "0.2", "parser": "1.0.0"}
+
+
+def test_compute_hashes_returns_expected_digests(
+    canonical_config: CanonicalizationConfig,
+) -> None:
+    """Hash bundle should include raw SHA256 and canonical HMAC digests."""
+    content = b"DocMind canonicalization test"
+    metadata = {"content_type": "text/plain", "extra": {"flag": True}}
+
+    bundle = compute_hashes(content, metadata, canonical_config)
+
+    assert bundle.raw_sha256 == hashlib.sha256(content).hexdigest()
+
+    payload = canonicalize_document(content, metadata, canonical_config)
+    expected_hmac = hashlib.sha256
+    # Manual HMAC check to guard against accidental regressions
+    computed = hmac.new(
+        canonical_config.hmac_secret,
+        payload,
+        expected_hmac,
+    ).hexdigest()
+    assert bundle.canonical_hmac_sha256 == computed
+
+    assert bundle.as_dict() == {
+        "raw_sha256": bundle.raw_sha256,
+        "canonical_hmac_sha256": bundle.canonical_hmac_sha256,
+        "canonicalization_version": canonical_config.version,
+        "hmac_secret_version": canonical_config.hmac_secret_version,
+    }

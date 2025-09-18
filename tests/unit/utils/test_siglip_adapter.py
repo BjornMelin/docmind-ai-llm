@@ -13,8 +13,6 @@ from src.utils.siglip_adapter import SiglipEmbedding
 
 @pytest.mark.unit
 def test_ensure_loaded_prefers_unified_loader(monkeypatch):
-    import src.utils.siglip_adapter as adapter
-
     sentinel_model = object()
     sentinel_proc = object()
 
@@ -33,16 +31,12 @@ def test_ensure_loaded_prefers_unified_loader(monkeypatch):
 
 @pytest.mark.unit
 def test_ensure_loaded_falls_back_to_transformers(monkeypatch):
-    import src.utils.siglip_adapter as adapter
-
     stub = types.SimpleNamespace(
         load_siglip=lambda *_: (_ for _ in ()).throw(RuntimeError("fail"))
     )
     monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", stub)
 
-    fake_model = types.SimpleNamespace(
-        config=types.SimpleNamespace(projection_dim=384)
-    )
+    fake_model = types.SimpleNamespace(config=types.SimpleNamespace(projection_dim=384))
     fake_proc = object()
     transformers = types.SimpleNamespace(
         SiglipModel=types.SimpleNamespace(from_pretrained=lambda _mid: fake_model),

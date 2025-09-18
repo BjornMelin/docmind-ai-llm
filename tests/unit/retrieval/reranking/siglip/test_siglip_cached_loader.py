@@ -6,12 +6,15 @@ imports our stubs, exercising the cache without modifying production code.
 
 from __future__ import annotations
 
+import importlib
 import sys
 from types import ModuleType, SimpleNamespace
 
 
 def test_siglip_loader_cached(monkeypatch):
     from src.retrieval import reranking as rr
+
+    vision = importlib.import_module("src.utils.vision_siglip")
 
     calls = {"model": 0, "proc": 0}
 
@@ -30,14 +33,14 @@ def test_siglip_loader_cached(monkeypatch):
             calls["proc"] += 1
             return SimpleNamespace()
 
-    monkeypatch.setattr(rr, "TEXT_TRUNCATION_LIMIT", 9999, raising=False)
-    monkeypatch.setattr(rr, "SIGLIP_TIMEOUT_MS", 10, raising=False)
-    monkeypatch.setattr(rr, "COLPALI_TIMEOUT_MS", 10, raising=False)
     monkeypatch.setattr(
         rr,
         "settings",
         SimpleNamespace(
-            embedding=SimpleNamespace(siglip_model_id="google/siglip-base-patch16-224")
+            embedding=SimpleNamespace(siglip_model_id="google/siglip-base-patch16-224"),
+            retrieval=SimpleNamespace(
+                text_rerank_timeout_ms=10, siglip_timeout_ms=10, colpali_timeout_ms=10
+            ),
         ),
         raising=False,
     )
@@ -50,6 +53,7 @@ def test_siglip_loader_cached(monkeypatch):
     fake_tf.SiglipModel = _FakeModel
     fake_tf.SiglipProcessor = _FakeProcessor
     monkeypatch.setitem(sys.modules, "transformers", fake_tf)
+    vision._cached.cache_clear()  # pylint: disable=protected-access
 
     # First load
     _ = rr._load_siglip()

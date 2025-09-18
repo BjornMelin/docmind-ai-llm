@@ -7,6 +7,7 @@ verifying DRY gating and consistent propagation.
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 from typing import Any
 
 
@@ -43,6 +44,13 @@ def _run_router_with_capture(
     monkeypatch.setattr(
         cfg.retrieval, "enable_server_hybrid", enable_hybrid, raising=False
     )
+    monkeypatch.setattr(cfg, "enable_graphrag", True, raising=False)
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_graph_query_engine",
+        lambda *_a, **_k: SimpleNamespace(
+            query_engine=SimpleNamespace(), retriever=SimpleNamespace()
+        ),
+    )
 
     class _StubIndex:
         def as_query_engine(self, **_kwargs: Any):
@@ -53,6 +61,9 @@ def _run_router_with_capture(
             return _QE()
 
     class _StubGraph:
+        def __init__(self) -> None:
+            self.property_graph_store = object()
+
         def as_retriever(self, **_kwargs: Any):
             class _Retriever:
                 def retrieve(self, *_args: Any, **_kwargs: Any):
