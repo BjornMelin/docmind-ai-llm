@@ -46,8 +46,7 @@ def ingest_files(
         Mapping containing ingestion metadata and constructed indices.
     """
     setup_llamaindex(force_embed=False)
-    if get_settings_embed_model() is None:
-        raise RuntimeError("Settings.embed_model must be configured before ingestion")
+    embed_model = get_settings_embed_model()
 
     if not files:
         return {
@@ -58,6 +57,9 @@ def ingest_files(
             "exports": [],
             "duration_ms": 0.0,
         }
+
+    if embed_model is None:
+        _LOG.warning("No embedding configured; vector index creation will be skipped")
 
     configure_observability(settings)
 
@@ -83,7 +85,9 @@ def ingest_files(
     cfg = _build_ingestion_config(encrypt_images)
     result = ingest_documents_sync(cfg, saved_inputs)
 
-    vector_index = _build_vector_index(result.nodes)
+    vector_index = (
+        _build_vector_index(result.nodes) if embed_model is not None else None
+    )
     pg_index = _build_property_graph(result.documents) if enable_graphrag else None
 
     return {

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from llama_index.core.base.embeddings.base import BaseEmbedding
@@ -160,13 +162,60 @@ def test_resolve_embedding_configures_llamaindex(
     def fake_setup_llamaindex(*, force_embed: bool = False) -> None:  # pragma: no cover
         call_state["force"] = force_embed
 
-    monkeypatch.setattr(module, "get_settings_embed_model", fake_get_settings_embed_model)
+    monkeypatch.setattr(
+        module,
+        "get_settings_embed_model",
+        fake_get_settings_embed_model,
+    )
     monkeypatch.setattr(module, "setup_llamaindex", fake_setup_llamaindex)
 
     resolved = _resolve_embedding(None)
 
     assert call_state == {"get": 2, "force": True}
     assert resolved is dummy
+
+@pytest.mark.asyncio
+async def test_ingest_documents_without_embedding_warns_and_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """ingest_documents proceeds when embeddings remain unavailable."""
+    from src.processing import ingestion_pipeline as module
+
+    call_state: dict[str, Any] = {}
+
+    async def _fake_arun(documents):  # type: ignore[no-untyped-def]
+        return [
+            {"doc_id": doc.doc_id, "text": getattr(doc, "text", "")}
+            for doc in documents
+        ]
+
+    class _Pipeline:  # pragma: no cover - simple stub
+        def __init__(self) -> None:
+            self.docstore = SimpleNamespace(persist=lambda path: None)
+            self.transformations: list[Any] = []
+
+        async def arun(self, documents):  # type: ignore[no-untyped-def]
+            return await _fake_arun(documents)
+
+    def _fake_build(cfg, embedding):  # type: ignore[no-untyped-def]
+        call_state["embedding"] = embedding
+        pipeline = _Pipeline()
+        return pipeline, tmp_path / "cache.duckdb", tmp_path / "docstore.json"
+
+    monkeypatch.setattr(module, "build_ingestion_pipeline", _fake_build)
+    monkeypatch.setattr(module, "get_settings_embed_model", lambda: None)
+    monkeypatch.setattr(module, "setup_llamaindex", lambda **_: None)
+
+    cfg = IngestionConfig(cache_dir=tmp_path / "cache", docstore_path=tmp_path / "docstore.json")
+    inputs = [IngestionInput(document_id="doc", payload_bytes=b"payload")]
+
+    with caplog.at_level("WARNING"):
+        result = await module.ingest_documents(cfg, inputs, embedding=None)
+
+    assert call_state["embedding"] is None
+    assert result.nodes == [{"doc_id": "doc", "text": "payload"}]
+    assert any("No embedding model configured" in record.message for record in caplog.records)
+
 
 
 def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
@@ -184,3 +233,50 @@ def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
     assert len(docs) == 1
     assert docs[0].doc_id == "doc-1"
     assert docs[0].text == "Fallback content"
+
+
+def test_page_image_exports_builds_metadata(monkeypatch, tmp_path: Path) -> None:
+    from src.processing import ingestion_pipeline as module
+
+    entries = [
+        {
+            "page": 1,
+            "image_path": str(tmp_path / "sample.webp"),
+            "phash": "abc",
+        },
+        {
+            "page": 2,
+            "image_path": str(tmp_path / "sample.jpg.enc"),
+            "phash": "def",
+        },
+    ]
+    monkeypatch.setattr(module, "save_pdf_page_images", lambda *args, **kwargs: entries)
+
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_text("pdf", encoding="utf-8")
+    cfg = IngestionConfig(cache_dir=tmp_path)
+
+    exports = module._page_image_exports(pdf, cfg, encrypt_override=False)
+
+    assert exports[0].content_type == "image/webp"
+    assert exports[1].content_type == "image/jpeg"
+
+
+def test_load_documents_uses_reader(monkeypatch, tmp_path: Path) -> None:
+    from src.processing import ingestion_pipeline as module
+
+    class DummyReader:
+        def load_data(self, file: str, unstructured_kwargs: dict[str, str]):  # type: ignore[no-untyped-def]
+            return [SimpleNamespace(text="doc", doc_id="doc-1", metadata={})]
+
+    monkeypatch.setattr(module, "UnstructuredReader", DummyReader)
+    monkeypatch.setattr(module, "_page_image_exports", lambda path, cfg, flag: ["export"])
+
+    sample = tmp_path / "sample.pdf"
+    sample.write_text("content", encoding="utf-8")
+    cfg = IngestionConfig(cache_dir=tmp_path)
+    inputs = [IngestionInput(document_id="doc-1", source_path=sample, encrypt_images=True)]
+
+    docs, exports = module._load_documents(cfg, inputs)
+    assert docs[0].metadata["document_id"] == "doc-1"
+    assert exports == ["export"]
