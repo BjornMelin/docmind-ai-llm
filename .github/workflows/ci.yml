@@ -13,6 +13,13 @@ concurrency:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ base, llama ]
+    env:
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,10 +34,13 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Sync environment (app + test extras + quality group)
+      - name: Sync environment (matrix aware)
         run: |
-          # Create project venv and install dependencies from lockfile, including tests and quality tooling
-          uv sync --extra test --extra observability --group quality --frozen
+          if [ "${{ matrix.profile }}" = "llama" ]; then
+            uv sync --extra test --extra observability --extra llama --group quality --frozen
+          else
+            uv sync --extra test --extra observability --group quality --frozen
+          fi
 
       - name: Quality Gate - Ruff (format+lint)
         run: |
@@ -43,28 +53,28 @@ jobs:
 
       - name: Run tiered unit/integration tests (fast gate)
         env:
-          HF_HUB_OFFLINE: '1'
-          TRANSFORMERS_OFFLINE: '1'
+          REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}
         run: |
           uv run python scripts/run_tests.py --fast
 
       - name: Run unit/integration with coverage (soft gate)
+        if: ${{ matrix.profile == 'base' }}
         continue-on-error: true
         env:
-          HF_HUB_OFFLINE: '1'
-          TRANSFORMERS_OFFLINE: '1'
+          REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}
         run: |
           uv run python scripts/run_tests.py --coverage
 
       - name: Validate evaluation leaderboard schemas (if present)
+        if: ${{ matrix.profile == 'base' }}
         run: |
           uv run python scripts/validate_schemas.py || true
 
       - name: Upload coverage artifacts
-        if: always()
+        if: ${{ always() && matrix.profile == 'base' }}
         uses: actions/upload-artifact@v4
         with:
-          name: coverage
+          name: coverage-${{ matrix.profile }}
           path: |
             htmlcov
             coverage.xml
