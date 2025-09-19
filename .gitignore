@@ -239,6 +239,7 @@ system_test_data/
 test_cache/
 vector_test_cache/
 vector_test_data/
+unused/
 
 # Temporary files
 *.tmp
