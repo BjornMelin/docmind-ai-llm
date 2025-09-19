@@ -1,67 +1,64 @@
-"""Retrieval expert agent for multi-agent coordination system.
+"""Lean retrieval agent built on LangGraph tooling.
 
-This module implements the RetrievalAgent that executes document retrieval
-using multiple strategies and optimizations. The agent handles vector search,
-hybrid search, GraphRAG, and DSPy query optimization for optimal results.
-
-Features:
-- Multi-strategy retrieval (vector/hybrid/graphrag)
-- DSPy query optimization and rewriting
-- GraphRAG for entity relationship queries
-- Fallback mechanisms and error handling
-- Performance monitoring under 150ms
-- Integration with existing tool factory
-
-Example:
-    Using the retrieval agent::
-
-        from agents.retrieval import RetrievalAgent
-
-        retrieval_agent = RetrievalAgent(llm, tools_data)
-        result = retrieval_agent.retrieve_documents(
-            "machine learning algorithms",
-            strategy="hybrid",
-            use_dspy=True
-        )
-        # len(result.documents) contains the document count
+This module intentionally mirrors the lightweight patterns recommended in the
+official LangGraph tutorials and the ``langgraph-supervisor-py`` reference
+implementation. The agent simply orchestrates the shared
+``retrieve_documents`` tool through ``create_react_agent`` and only contains
+small amounts of glue code for metrics and result normalisation.
 """
 
-import json
+from __future__ import annotations
+
 import time
 from typing import Any
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.prebuilt import create_react_agent
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.agents.tools.retrieval import retrieve_documents
 
-# Constants
 RECURSION_LIMIT = 3
-PERFORMANCE_TARGET_MS = 150  # milliseconds
-BASE_CONFIDENCE = 0.5
-CONFIDENCE_HIGH_DOC_COUNT = 0.3
-CONFIDENCE_MEDIUM_DOC_COUNT = 0.2
-CONFIDENCE_LOW_DOC_COUNT = 0.1
-CONFIDENCE_STRATEGY_BONUS = 0.1
-CONFIDENCE_QUALITY_BONUS = 0.05
+BASE_CONFIDENCE = 0.4
+HIGH_DOC_BONUS = 0.3
+MEDIUM_DOC_BONUS = 0.2
+LOW_DOC_BONUS = 0.1
+STRATEGY_BONUS = 0.1
+DSPY_BONUS = 0.05
+TARGET_LATENCY_S = 0.150
+
+
+class RetrievalPayload(BaseModel):
+    """Internal representation of the tool payload."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    documents: list[dict[str, Any]] = Field(default_factory=list)
+    strategy_used: str | None = Field(default=None)
+    query_original: str | None = Field(default=None)
+    query_optimized: str | None = Field(default=None)
+    document_count: int = 0
+    processing_time_ms: float = 0.0
+    dspy_used: bool = False
+    graphrag_used: bool = False
+    error: str | None = None
 
 
 class RetrievalResult(BaseModel):
-    """Document retrieval result with metadata."""
+    """Document retrieval result exposed to callers."""
 
     documents: list[dict[str, Any]] = Field(
         default_factory=list, description="Retrieved documents"
     )
     strategy_used: str = Field(description="Actual retrieval strategy used")
     query_original: str = Field(description="Original search query")
-    query_optimized: str = Field(description="Optimized query after DSPy")
+    query_optimized: str = Field(description="Optimised query after DSPy")
     document_count: int = Field(description="Number of documents retrieved")
     processing_time_ms: float = Field(description="Time taken for retrieval")
     dspy_used: bool = Field(
-        default=False, description="Whether DSPy optimization was used"
+        default=False, description="Whether DSPy optimisation was used"
     )
     graphrag_used: bool = Field(default=False, description="Whether GraphRAG was used")
     confidence_score: float = Field(
@@ -71,479 +68,415 @@ class RetrievalResult(BaseModel):
 
 
 class RetrievalAgent:
-    """Specialized agent for document retrieval with multi-strategy support.
-
-    Executes document retrieval using optimal strategies based on query
-    characteristics and available tools. Supports vector search, hybrid search,
-    and GraphRAG with DSPy optimization for improved query performance.
-
-    Retrieval Strategies:
-    - Vector search: Direct semantic similarity using dense embeddings
-    - Hybrid search: Combined dense + sparse embeddings with fusion
-    - GraphRAG: Entity relationship queries using knowledge graphs
-    - Fallback: Automatic strategy degradation on failures
-    """
+    """Thin wrapper around ``retrieve_documents`` using LangGraph."""
 
     def __init__(self, llm: Any, tools_data: dict[str, Any]):
-        """Initialize retrieval agent.
+        """Initialise the agent with its language model and shared tool state.
 
         Args:
-            llm: Language model for retrieval decisions
-            tools_data: Dictionary containing indexes and retrieval tools
+            llm: Large language model provided to ``create_react_agent``.
+            tools_data: Shared retrieval configuration injected into the tool.
         """
         self.llm = llm
         self.tools_data = tools_data
         self.total_retrievals = 0
-        self.retrieval_times = []
-        self.strategy_usage = {"vector": 0, "hybrid": 0, "graphrag": 0, "fallback": 0}
-
-        # Create LangGraph agent
+        self._durations: list[float] = []
+        self.strategy_usage = {
+            "vector": 0,
+            "hybrid": 0,
+            "graphrag": 0,
+            "fallback": 0,
+        }
         self.agent = create_react_agent(
             model=self.llm,
             tools=[retrieve_documents],
+            name="retrieval_agent",
         )
-
-        logger.info("RetrievalAgent initialized")
+        self._tool_func = getattr(retrieve_documents, "func", retrieve_documents)
+        logger.info("RetrievalAgent initialised")
 
     def retrieve_documents(
         self,
         query: str,
         strategy: str = "hybrid",
+        *,
         use_dspy: bool = True,
         use_graphrag: bool = False,
-        _context: ChatMemoryBuffer | None = None,
-        **_kwargs: Any,
+        context: ChatMemoryBuffer | None = None,
     ) -> RetrievalResult:
-        """Execute document retrieval using specified strategy.
-
-        Retrieves relevant documents using the specified strategy with
-        optional optimizations. Automatically handles fallbacks and
-        provides detailed metadata about the retrieval process.
+        """Execute retrieval through the shared tool and post-process the payload.
 
         Args:
-            query: Search query for document retrieval
-            strategy: Retrieval strategy ("vector", "hybrid", "graphrag")
-            use_dspy: Whether to use DSPy query optimization
-            use_graphrag: Whether to use GraphRAG for relationships
-            _context: Optional conversation context (not yet implemented)
-            **_kwargs: Additional parameters for retrieval (not yet implemented)
+            query: Natural-language query describing the information need.
+            strategy: Preferred retrieval strategy requested by the caller.
+            use_dspy: Whether DSPy optimisation should be applied when supported.
+            use_graphrag: Whether GraphRAG augmentation should be requested.
+            context: Optional chat history forwarded to the agent for grounding.
 
         Returns:
-            RetrievalResult with documents and comprehensive metadata
-
-        Example:
-            >>> result = agent.retrieve_documents("AI ethics", "hybrid")
-            >>> result.document_count, result.strategy_used
+            RetrievalResult: Normalised retrieval output for downstream agents.
         """
         start_time = time.perf_counter()
         self.total_retrievals += 1
 
+        agent_failed = False
         try:
-            # Prepare agent input
-            messages = [
+            payload = self._invoke_agent(query, strategy, context)
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            AttributeError,
+            ValidationError,
+        ) as exc:
+            logger.warning("Agent retrieval failed; falling back to tool: %s", exc)
+            payload = self._call_tool_directly(
+                query,
+                strategy,
+                use_dspy=use_dspy,
+                use_graphrag=use_graphrag,
+            )
+            agent_failed = True
+
+        duration = time.perf_counter() - start_time
+        self._durations.append(duration)
+
+        result = self._build_retrieval_result(
+            payload,
+            query,
+            requested_strategy=strategy,
+            use_dspy=use_dspy,
+            use_graphrag=use_graphrag,
+            processing_time=duration,
+        )
+        self._record_strategy(payload, agent_failed)
+        logger.info(
+            "Retrieved %d documents via %s (%.1fms)",
+            result.document_count,
+            result.strategy_used,
+            result.processing_time_ms,
+        )
+        return result
+
+    def _invoke_agent(
+        self,
+        query: str,
+        strategy: str,
+        context: ChatMemoryBuffer | None,
+    ) -> RetrievalPayload:
+        """Invoke the LangGraph agent and extract the retrieval payload.
+
+        Args:
+            query: User search query to forward to the agent.
+            strategy: Retrieval strategy requested by the caller.
+            context: Optional chat memory shared with the agent.
+
+        Returns:
+            RetrievalPayload: Structured payload produced by the agent.
+
+        Raises:
+            ValueError: If the agent response cannot be parsed into a payload.
+        """
+        payload: dict[str, Any] = {
+            "messages": [
                 HumanMessage(
                     content=f"Retrieve documents for: {query} using {strategy} strategy"
                 )
-            ]
+            ],
+            "tools_data": self.tools_data,
+        }
+        if context is not None:
+            payload["context"] = context
 
-            # Include tools data and context in state
-            # Note: state not used directly but kept for future context handling
+        response = self.agent.invoke(
+            payload,
+            config={"recursion_limit": RECURSION_LIMIT},
+        )
+        return self._payload_from_response(response)
 
-            # Execute retrieval through agent
-            result = self.agent.invoke(
-                {"messages": messages},
-                {
-                    "recursion_limit": RECURSION_LIMIT
-                },  # Limit iterations for performance
-            )
+    def _payload_from_response(self, response: Any) -> RetrievalPayload:
+        """Convert the LangGraph response into a retrieval payload.
 
-            # Parse agent response
-            retrieval_data = self._parse_agent_response(result, query, strategy)
+        Args:
+            response: Raw result returned by ``create_react_agent``.
 
-            # Calculate processing time
-            processing_time = time.perf_counter() - start_time
-            self.retrieval_times.append(processing_time)
+        Returns:
+            RetrievalPayload: Structured payload parsed from the agent output.
 
-            # Update strategy usage statistics
-            strategy_used = retrieval_data.get("strategy_used", strategy)
-            if strategy_used in self.strategy_usage:
-                self.strategy_usage[strategy_used] += 1
-            else:
-                self.strategy_usage["fallback"] += 1
+        Raises:
+            ValueError: If the response is not a dictionary or lacks messages.
+        """
+        if not isinstance(response, dict):
+            raise ValueError("Agent response must be a dictionary")
+        messages = response.get("messages", [])
+        content = self._extract_message_content(messages)
+        return self._payload_from_raw(content)
 
-            # Build comprehensive result
-            result_data = self._build_retrieval_result(
-                retrieval_data,
-                query,
-                requested_strategy=strategy,
-                use_dspy=use_dspy,
-                use_graphrag=use_graphrag,
-                processing_time=processing_time,
-            )
+    def _extract_message_content(self, messages: list[BaseMessage] | list[Any]) -> str:
+        """Return the textual payload from the final agent message.
 
-            retrieval_result = RetrievalResult(**result_data)
+        Args:
+            messages: Sequence of messages returned by the agent call.
 
-            logger.info(
-                "Retrieved %d documents via %s (%.1fms)",
-                retrieval_result.document_count,
-                retrieval_result.strategy_used,
-                processing_time * 1000,
-            )
+        Returns:
+            str: Textual body holding the retrieval payload.
 
-            return retrieval_result
+        Raises:
+            ValueError: If the agent emitted no messages.
+        """
+        if not messages:
+            raise ValueError("Agent produced no messages")
+        last_message = messages[-1]
+        content = getattr(last_message, "content", last_message)
+        if isinstance(content, list):
+            parts: list[str] = []
+            for chunk in content:
+                if isinstance(chunk, dict) and "text" in chunk:
+                    parts.append(str(chunk["text"]))
+                else:
+                    parts.append(str(chunk))
+            content = "".join(parts)
+        return str(content)
 
-        except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Document retrieval failed: %s", e)
+    def _payload_from_raw(self, raw: Any) -> RetrievalPayload:
+        """Parse the raw payload emitted by the tool into structured data.
 
-            # Fallback retrieval
-            processing_time = time.perf_counter() - start_time
-            return self._fallback_retrieval(query, strategy, processing_time, str(e))
+        Args:
+            raw: Raw payload, typically JSON or a dictionary.
 
-    def _parse_agent_response(
-        self, result: dict, query: str, strategy: str
-    ) -> dict[str, Any]:
-        """Parse agent response to extract retrieval data."""
+        Returns:
+            RetrievalPayload: Structured payload matching ``RetrievalPayload``.
+
+        Raises:
+            ValueError: If the payload cannot be deserialised or validated.
+        """
+        if isinstance(raw, dict):
+            return RetrievalPayload(**raw)
+        serialised = raw if isinstance(raw, str) else str(raw)
         try:
-            # Get the final message from agent
-            messages = result.get("messages", [])
-            if not messages:
-                raise ValueError("No messages in agent response")
+            return RetrievalPayload.model_validate_json(serialised)
+        except ValidationError as exc:
+            logger.debug("Malformed retrieval payload", exc_info=False)
+            raise ValueError("Malformed tool payload") from exc
 
-            last_message = messages[-1]
-            content = getattr(last_message, "content", str(last_message))
+    def _call_tool_directly(
+        self,
+        query: str,
+        strategy: str,
+        *,
+        use_dspy: bool,
+        use_graphrag: bool,
+    ) -> RetrievalPayload:
+        """Invoke the retrieval tool directly as a fallback path.
 
-            # Try to parse JSON from agent response
-            try:
-                retrieval_data = json.loads(content)
-                if isinstance(retrieval_data, dict) and "documents" in retrieval_data:
-                    return retrieval_data
-            except json.JSONDecodeError:
-                pass
+        Args:
+            query: Natural-language query issued by the caller.
+            strategy: Retrieval strategy originally requested.
+            use_dspy: Whether DSPy optimisation should be used when supported.
+            use_graphrag: Whether GraphRAG augmentation should be requested.
 
-            # If JSON parsing failed, use fallback retrieval
-            logger.warning("Could not parse JSON from agent, using fallback retrieval")
-            return self._execute_fallback_retrieval(query, strategy)
-
-        except (RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Failed to parse agent response: %s", e)
-            return self._execute_fallback_retrieval(query, strategy)
-
-    def _execute_fallback_retrieval(self, query: str, strategy: str) -> dict[str, Any]:
-        """Execute fallback retrieval when agent fails."""
+        Returns:
+            RetrievalPayload: Structured payload returned by the fallback tool.
+        """
+        raw = self._tool_func(
+            query=query,
+            strategy=strategy,
+            use_dspy=use_dspy,
+            use_graphrag=use_graphrag,
+            state={"tools_data": self.tools_data},
+        )
         try:
-            # Use tool factory directly for fallback
-            from src.agents.tool_factory import ToolFactory
-
-            vector_index = self.tools_data.get("vector")
-            kg_index = self.tools_data.get("kg")
-            retriever = self.tools_data.get("retriever")
-
-            if not vector_index:
-                return {
-                    "documents": [],
-                    "error": "No vector index available",
-                    "strategy_used": "none",
-                    "query_original": query,
-                    "query_optimized": query,
-                }
-
-            # Select fallback strategy
-            if strategy == "graphrag" and kg_index:
-                tool = ToolFactory.create_kg_search_tool(kg_index)
-                strategy_used = "graphrag_fallback"
-            elif strategy == "hybrid" and retriever:
-                tool = ToolFactory.create_hybrid_search_tool(retriever)
-                strategy_used = "hybrid_fallback"
-            else:
-                tool = ToolFactory.create_vector_search_tool(vector_index)
-                strategy_used = "vector_fallback"
-
-            # Execute search
-            search_result = tool.call(query)
-
-            # Parse tool result
-            documents = self._parse_tool_result(search_result)
-
-            return {
-                "documents": documents,
-                "strategy_used": strategy_used,
-                "query_original": query,
-                "query_optimized": query,
-                "document_count": len(documents),
-                "dspy_used": False,
-                "graphrag_used": strategy == "graphrag",
-            }
-
-        except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Fallback retrieval also failed: %s", e)
-            return {
-                "documents": [],
-                "error": str(e),
-                "strategy_used": "failed",
-                "query_original": query,
-                "query_optimized": query,
-            }
-
-    def _parse_tool_result(self, result: Any) -> list[dict[str, Any]]:
-        """Parse tool result to extract document list."""
-        if isinstance(result, str):
-            # Tool returned text response — create a minimal document entry
-            return [
-                {
-                    "content": result,
-                    "metadata": {"source": "tool_response"},
-                    "score": 1.0,
-                }
-            ]
-        if hasattr(result, "response"):
-            # LlamaIndex response object
-            documents = []
-            if hasattr(result, "source_nodes"):
-                for node in result.source_nodes:
-                    documents.append(
-                        {
-                            "content": node.text,
-                            "metadata": node.metadata,
-                            "score": getattr(node, "score", 1.0),
-                        }
-                    )
-            else:
-                documents.append(
-                    {
-                        "content": result.response,
-                        "metadata": {"source": "response"},
-                        "score": 1.0,
-                    }
-                )
-            return documents
-        if isinstance(result, list):
-            # List of documents
-            documents = []
-            for item in result:
-                if hasattr(item, "text") and hasattr(item, "metadata"):
-                    documents.append(
-                        {
-                            "content": item.text,
-                            "metadata": item.metadata,
-                            "score": getattr(item, "score", 1.0),
-                        }
-                    )
-                elif isinstance(item, dict):
-                    documents.append(item)
-            return documents
-        # Fallback - convert to string
-        return [
-            {
-                "content": str(result),
-                "metadata": {"source": "unknown"},
-                "score": 1.0,
-            }
-        ]
+            return self._payload_from_raw(raw)
+        except ValueError:
+            logger.error("Direct tool returned malformed payload", exc_info=False)
+            return RetrievalPayload(
+                documents=[],
+                query_original=query,
+                query_optimized=query,
+                strategy_used=f"{strategy}_failed",
+                error="Malformed tool payload",
+            )
 
     def _build_retrieval_result(
         self,
-        retrieval_data: dict,
+        payload: RetrievalPayload,
         original_query: str,
         *,
         requested_strategy: str,
         use_dspy: bool,
         use_graphrag: bool,
         processing_time: float,
-    ) -> dict[str, Any]:
-        """Build comprehensive retrieval result."""
-        documents = retrieval_data.get("documents", [])
-        strategy_used = retrieval_data.get("strategy_used", requested_strategy)
+    ) -> RetrievalResult:
+        """Transform a payload into the externally-consumed result model.
 
-        # Calculate confidence score based on retrieval quality
-        confidence = self._calculate_confidence_score(
-            documents, strategy_used, retrieval_data
+        Args:
+            payload: Structured payload returned by the retrieval tool.
+            original_query: Query string issued by the user.
+            requested_strategy: Strategy that the caller initially requested.
+            use_dspy: Whether DSPy optimisation was requested.
+            use_graphrag: Whether GraphRAG augmentation was requested.
+            processing_time: Runtime of the full retrieval call in seconds.
+
+        Returns:
+            RetrievalResult: Normalised result object for downstream consumers.
+        """
+        documents = payload.documents
+        strategy_used = payload.strategy_used or requested_strategy
+        query_original = payload.query_original or original_query
+        query_optimized = payload.query_optimized or original_query
+        processing_time_ms = (
+            payload.processing_time_ms
+            if payload.processing_time_ms > 0
+            else round(processing_time * 1000, 2)
         )
 
-        # Generate reasoning
+        confidence = self._calculate_confidence_score(payload, len(documents))
         reasoning = self._generate_reasoning(
-            retrieval_data, requested_strategy, strategy_used, len(documents)
+            payload,
+            requested_strategy,
+            use_dspy,
+            use_graphrag,
         )
 
-        return {
-            "documents": documents,
-            "strategy_used": strategy_used,
-            "query_original": original_query,
-            "query_optimized": retrieval_data.get("query_optimized", original_query),
-            "document_count": len(documents),
-            "processing_time_ms": round(processing_time * 1000, 2),
-            "dspy_used": use_dspy and retrieval_data.get("dspy_used", False),
-            "graphrag_used": use_graphrag
-            and retrieval_data.get("graphrag_used", False),
-            "confidence_score": confidence,
-            "reasoning": reasoning,
-        }
+        return RetrievalResult(
+            documents=documents,
+            strategy_used=strategy_used,
+            query_original=query_original,
+            query_optimized=query_optimized,
+            document_count=len(documents),
+            processing_time_ms=processing_time_ms,
+            dspy_used=use_dspy and payload.dspy_used,
+            graphrag_used=use_graphrag and payload.graphrag_used,
+            confidence_score=confidence,
+            reasoning=reasoning,
+        )
 
     def _calculate_confidence_score(
-        self, documents: list, strategy_used: str, retrieval_data: dict
+        self, payload: RetrievalPayload, doc_count: int
     ) -> float:
-        """Calculate confidence score for retrieval quality."""
-        confidence = BASE_CONFIDENCE  # Base confidence
+        """Compute a heuristic confidence score for the retrieval output.
 
-        # Document count factor
-        doc_count = len(documents)
+        Args:
+            payload: Structured payload returned by the retrieval tool.
+            doc_count: Number of documents contained in the payload.
+
+        Returns:
+            float: Confidence value in the range ``[0.0, 1.0]``.
+        """
+        if payload.error:
+            return 0.0
+
+        confidence = BASE_CONFIDENCE
         if doc_count >= 5:
-            confidence += CONFIDENCE_HIGH_DOC_COUNT
+            confidence += HIGH_DOC_BONUS
         elif doc_count >= 2:
-            confidence += CONFIDENCE_MEDIUM_DOC_COUNT
+            confidence += MEDIUM_DOC_BONUS
         elif doc_count >= 1:
-            confidence += CONFIDENCE_LOW_DOC_COUNT
+            confidence += LOW_DOC_BONUS
 
-        # Strategy factor
-        if "fallback" not in strategy_used:
-            confidence += CONFIDENCE_STRATEGY_BONUS
-        if strategy_used in ["hybrid_fusion", "graphrag"]:
-            confidence += CONFIDENCE_STRATEGY_BONUS
-
-        # Quality indicators
-        if retrieval_data.get("dspy_used"):
-            confidence += CONFIDENCE_QUALITY_BONUS
-        if "error" not in retrieval_data:
-            confidence += CONFIDENCE_QUALITY_BONUS
-
+        if payload.strategy_used in {"hybrid", "graphrag"}:
+            confidence += STRATEGY_BONUS
+        if payload.dspy_used:
+            confidence += DSPY_BONUS
         return min(confidence, 1.0)
 
     def _generate_reasoning(
-        self, retrieval_data: dict, requested: str, used: str, doc_count: int
+        self,
+        payload: RetrievalPayload,
+        requested_strategy: str,
+        use_dspy: bool,
+        use_graphrag: bool,
     ) -> str:
-        """Generate human-readable reasoning for retrieval decisions."""
-        reasons = []
+        """Generate a concise reasoning summary for the retrieval outcome.
 
-        # Strategy reasoning
-        if used == requested:
-            reasons.append(f"Used requested {used} strategy")
-        else:
-            reasons.append(f"Fallback from {requested} to {used} strategy")
-
-        # Results reasoning
-        if doc_count > 0:
-            reasons.append(f"Retrieved {doc_count} relevant documents")
-        else:
-            reasons.append("No documents found matching query")
-
-        # Optimization reasoning
-        if retrieval_data.get("dspy_used"):
-            reasons.append("Query optimized with DSPy")
-        if retrieval_data.get("graphrag_used"):
-            reasons.append("Used GraphRAG for entity relationships")
-
-        # Error reasoning
-        if "error" in retrieval_data:
-            reasons.append(f"Encountered issue: {retrieval_data['error']}")
-
-        return "; ".join(reasons)
-
-    def _fallback_retrieval(
-        self, query: str, strategy: str, processing_time: float, error: str
-    ) -> RetrievalResult:
-        """Create fallback result when retrieval fails completely."""
-        self.strategy_usage["fallback"] += 1
-
-        return RetrievalResult(
-            documents=[],
-            strategy_used=f"{strategy}_failed",
-            query_original=query,
-            query_optimized=query,
-            document_count=0,
-            processing_time_ms=round(processing_time * 1000, 2),
-            dspy_used=False,
-            graphrag_used=False,
-            confidence_score=0.0,
-            reasoning=f"Retrieval failed: {error}",
-        )
-
-    def get_performance_stats(self) -> dict[str, Any]:
-        """Get retrieval performance statistics.
+        Args:
+            payload: Structured payload returned by the retrieval tool.
+            requested_strategy: Retrieval strategy the caller requested.
+            use_dspy: Whether DSPy optimisation was requested by the caller.
+            use_graphrag: Whether GraphRAG augmentation was requested.
 
         Returns:
-            Dictionary with retrieval performance metrics
+            str: Human-readable explanation of the retrieval path taken.
         """
-        if not self.retrieval_times:
+        if payload.error:
+            return f"Retrieval failed: {payload.error}"
+
+        steps: list[str] = []
+        strategy_used = payload.strategy_used or requested_strategy
+        if strategy_used == requested_strategy:
+            steps.append(f"Used requested {requested_strategy} strategy")
+        else:
+            steps.append(
+                f"Used {strategy_used} strategy after {requested_strategy} request"
+            )
+
+        steps.append(f"Retrieved {len(payload.documents)} documents")
+
+        if use_dspy and payload.dspy_used:
+            steps.append("Applied DSPy optimisation")
+        if use_graphrag and payload.graphrag_used:
+            steps.append("Included GraphRAG context")
+
+        return "; ".join(steps)
+
+    def _record_strategy(self, payload: RetrievalPayload, agent_failed: bool) -> None:
+        """Track strategy usage metrics for observability.
+
+        Args:
+            payload: Structured payload returned by the retrieval tool.
+            agent_failed: Whether the agent invocation failed and triggered fallback.
+
+        Returns:
+            None: This helper only updates local counters.
+        """
+        strategy = payload.strategy_used or ""
+        if agent_failed or "fallback" in strategy or "failed" in strategy:
+            self.strategy_usage["fallback"] += 1
+            return
+        normalised = strategy.split("_", 1)[0]
+        if normalised in self.strategy_usage:
+            self.strategy_usage[normalised] += 1
+        else:
+            self.strategy_usage["fallback"] += 1
+
+    def get_performance_stats(self) -> dict[str, Any]:
+        """Summarise latency samples and strategy usage for observability.
+
+        Returns:
+            dict[str, Any]: Aggregated latency and strategy metrics.
+        """
+        if not self._durations:
             return {
                 "total_retrievals": self.total_retrievals,
                 "avg_retrieval_time_ms": 0.0,
                 "max_retrieval_time_ms": 0.0,
                 "min_retrieval_time_ms": 0.0,
+                "performance_target_met": True,
                 "strategy_usage": self.strategy_usage,
             }
 
-        avg_time = sum(self.retrieval_times) / len(self.retrieval_times)
-        max_time = max(self.retrieval_times)
-        min_time = min(self.retrieval_times)
-
+        avg_time = sum(self._durations) / len(self._durations)
         return {
             "total_retrievals": self.total_retrievals,
             "avg_retrieval_time_ms": round(avg_time * 1000, 2),
-            "max_retrieval_time_ms": round(max_time * 1000, 2),
-            "min_retrieval_time_ms": round(min_time * 1000, 2),
-            "performance_target_met": avg_time
-            < (PERFORMANCE_TARGET_MS / 1000),  # 150ms target
+            "max_retrieval_time_ms": round(max(self._durations) * 1000, 2),
+            "min_retrieval_time_ms": round(min(self._durations) * 1000, 2),
+            "performance_target_met": avg_time <= TARGET_LATENCY_S,
             "strategy_usage": self.strategy_usage,
         }
 
     def reset_stats(self) -> None:
-        """Reset performance statistics."""
+        """Reset metrics to support deterministic tests and benchmarks.
+
+        Returns:
+            None: This method only clears internal statistics.
+        """
         self.total_retrievals = 0
-        self.retrieval_times = []
-        self.strategy_usage = {"vector": 0, "hybrid": 0, "graphrag": 0, "fallback": 0}
+        self._durations.clear()
+        self.strategy_usage = {
+            "vector": 0,
+            "hybrid": 0,
+            "graphrag": 0,
+            "fallback": 0,
+        }
         logger.info("Retrieval performance stats reset")
-
-
-# Strategy optimization utilities
-def optimize_query_for_strategy(query: str, strategy: str) -> str:
-    """Optimize query based on retrieval strategy.
-
-    Args:
-        query: Original query to optimize
-        strategy: Target retrieval strategy
-
-    Returns:
-        Optimized query string
-    """
-    if strategy == "graphrag":
-        # Add entity relationship terms
-        if not any(
-            word in query.lower() for word in ["relationship", "connect", "link"]
-        ):
-            return f"Find relationships and connections for: {query}"
-    elif strategy == "hybrid":
-        # Enhance for both semantic and keyword matching
-        if len(query.split()) < 3:
-            return f"Find comprehensive information about {query}"
-    elif strategy == "vector" and not query.endswith("?"):
-        # Optimize for semantic similarity
-        return f"What is {query}?"
-
-    return query
-
-
-def select_optimal_strategy(query: str, available_tools: dict[str, Any]) -> str:
-    """Select optimal retrieval strategy based on query and available tools.
-
-    Args:
-        query: Query to analyze
-        available_tools: Dictionary of available retrieval tools
-
-    Returns:
-        Optimal strategy: "vector", "hybrid", or "graphrag"
-    """
-    query_lower = query.lower()
-
-    # GraphRAG for relationship queries
-    if any(
-        word in query_lower for word in ["relationship", "connect", "link", "network"]
-    ) and available_tools.get("kg"):
-        return "graphrag"
-
-    # Hybrid for complex queries
-    if len(query.split()) > 10 or any(
-        word in query_lower for word in ["compare", "analyze", "comprehensive"]
-    ):
-        return "hybrid"
-
-    # Vector for simple queries
-    return "vector"
