@@ -1,3 +1,5 @@
+"""Integration tests ensuring RAGAS CLI outputs expected headers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,6 +9,7 @@ import pandas as pd
 
 
 def test_ragas_cli_writes_required_headers(tmp_path: Path) -> None:
+    """Ensure leaderboard CSV contains all required RAGAS metrics."""
     csv = tmp_path / "data.csv"
     pd.DataFrame({"question": ["q1"], "ground_truth": ["gt"]}).to_csv(csv, index=False)
 

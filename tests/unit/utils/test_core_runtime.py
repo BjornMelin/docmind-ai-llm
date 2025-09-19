@@ -1,4 +1,3 @@
-
 """Runtime-oriented tests for src.utils.core covering device resolution and clients."""
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ import pytest
 
 @pytest.mark.unit
 def test_resolve_device_parses_indices(monkeypatch):
+    """Verify resolve_device handles explicit CUDA indices correctly."""
     import src.utils.core as core
 
     dummy_torch = types.SimpleNamespace(
@@ -25,6 +25,7 @@ def test_resolve_device_parses_indices(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_falls_back_on_errors(monkeypatch):
+    """Ensure resolve_device returns the CPU tuple when selection fails."""
     import src.utils.core as core
 
     monkeypatch.setattr(core, "TORCH", types.SimpleNamespace(cuda=None))
@@ -38,6 +39,7 @@ def test_resolve_device_falls_back_on_errors(monkeypatch):
 
 @pytest.mark.unit
 def test_detect_hardware_reports_cuda(monkeypatch):
+    """Verify detect_hardware reports CUDA availability and device metadata."""
     import src.utils.core as core
 
     monkeypatch.setattr(core, "is_cuda_available", lambda: True)
@@ -59,22 +61,28 @@ def test_detect_hardware_reports_cuda(monkeypatch):
 
 @pytest.mark.unit
 def test_validate_startup_configuration_handles_qdrant(monkeypatch):
+    """Ensure startup validation closes Qdrant clients on success."""
     import src.utils.core as core
 
     class _Client:
+        """Minimal Qdrant client stub with tracked closed state."""
+
         def __init__(self, url: str) -> None:
             self.url = url
             self.closed = False
 
         def get_collections(self):  # pragma: no cover - simple stub
+            """Return an empty collection payload."""
             return {"collections": []}
 
         def close(self) -> None:
+            """Mark the stub as closed so tests can assert closure."""
             self.closed = True
 
     created = {}
 
     def _factory(url: str):
+        """Create and register a synchronous Qdrant client stub."""
         client = _Client(url)
         created["client"] = client
         return client
@@ -90,8 +98,10 @@ def test_validate_startup_configuration_handles_qdrant(monkeypatch):
     assert result["valid"] is True
     assert created["client"].closed is True
 
+
 @pytest.mark.unit
 def test_validate_startup_configuration_records_errors(monkeypatch):
+    """Ensure startup validation records errors when Qdrant is unreachable."""
     import src.utils.core as core
 
     def _factory(url: str):  # pragma: no cover - intentional failure
@@ -112,9 +122,12 @@ def test_validate_startup_configuration_records_errors(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_managed_async_qdrant_client_closes(monkeypatch):
+    """Validate that managed_async_qdrant_client closes the async client."""
     import src.utils.core as core
 
     class _AsyncClient:
+        """Async Qdrant client stub used to verify context manager behavior."""
+
         def __init__(self, url: str) -> None:
             self.url = url
             self.closed = False
@@ -136,10 +149,13 @@ async def test_managed_async_qdrant_client_closes(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_async_timer_logs(monkeypatch):
+    """Ensure the async_timer decorator logs the completion time."""
     import src.utils.core as core
 
     calls: list[tuple[str, float]] = []
-    monkeypatch.setattr(core.logger, "info", lambda msg, *args: calls.append((msg, args[0])))
+    monkeypatch.setattr(
+        core.logger, "info", lambda msg, *args: calls.append((msg, args[0]))
+    )
 
     @core.async_timer
     async def _do_work():
@@ -147,4 +163,5 @@ async def test_async_timer_logs(monkeypatch):
 
     result = await _do_work()
     assert result == "done"
-    assert calls and calls[0][0] == "%s completed in %.2fs"
+    assert calls
+    assert calls[0][0] == "%s completed in %.2fs"

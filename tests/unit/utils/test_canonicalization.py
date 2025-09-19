@@ -17,6 +17,7 @@ from src.utils.canonicalization import (
 
 @pytest.fixture
 def canonical_config() -> CanonicalizationConfig:
+    """Create a canonicalization configuration suitable for tests."""
     hashing_defaults = HashingConfig()
     secret_source = os.environ.get(
         "DOCMIND_HASH_SECRET", hashing_defaults.hmac_secret
@@ -34,6 +35,7 @@ def canonical_config() -> CanonicalizationConfig:
 
 
 def test_canonicalize_document_stable(canonical_config: CanonicalizationConfig) -> None:
+    """Ensure canonicalization emits identical payloads for identical input."""
     content = "Résumé\r\n\r\nHello\u200b world".encode()
     metadata = {
         "content_type": "text/plain",
@@ -50,6 +52,7 @@ def test_canonicalize_document_stable(canonical_config: CanonicalizationConfig) 
 
 
 def test_compute_hashes_consistent(canonical_config: CanonicalizationConfig) -> None:
+    """Verify compute_hashes returns stable results on repeated invocations."""
     content = b"abc123"
     metadata = {"content_type": "text/plain"}
     bundle = compute_hashes(content, metadata, canonical_config)
@@ -62,6 +65,7 @@ def test_compute_hashes_consistent(canonical_config: CanonicalizationConfig) -> 
 def test_compute_hashes_changes_with_content(
     canonical_config: CanonicalizationConfig,
 ) -> None:
+    """Confirm compute_hashes output changes when the content bytes differ."""
     metadata = {"content_type": "text/plain"}
     bundle_a = compute_hashes(b"abc", metadata, canonical_config)
     bundle_b = compute_hashes(b"abcd", metadata, canonical_config)

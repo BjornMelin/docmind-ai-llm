@@ -50,20 +50,25 @@ def test_setup_tracing_configures_provider(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(otel, "TracerProvider", DummyProvider)
     monkeypatch.setattr(otel, "BatchSpanProcessor", DummyProcessor)
-    monkeypatch.setattr(otel, "trace", SimpleNamespace(set_tracer_provider=_set_tracer_provider))
+    monkeypatch.setattr(
+        otel, "trace", SimpleNamespace(set_tracer_provider=_set_tracer_provider)
+    )
     monkeypatch.setattr(otel, "ParentBased", lambda sampler: ("parent", sampler))
     monkeypatch.setattr(otel, "TraceIdRatioBased", lambda ratio: ("ratio", ratio))
     monkeypatch.setattr(otel, "_create_span_exporter", lambda obs: "exporter")
     monkeypatch.setattr(otel, "_build_resource", lambda settings: "resource")
 
     settings = SimpleNamespace(
-        observability=SimpleNamespace(enabled=True, sampling_ratio=0.5, instrument_llamaindex=False),
+        observability=SimpleNamespace(
+            enabled=True, sampling_ratio=0.5, instrument_llamaindex=False
+        ),
         app_version="test",
     )
 
     otel.setup_tracing(settings)
 
-    assert stored_provider and stored_provider[0] is captured["provider"]
+    assert stored_provider
+    assert stored_provider[0] is captured["provider"]
     assert captured["processor"].exporter == "exporter"
     assert captured["resource"] == "resource"
     assert captured["sampler"] == ("parent", ("ratio", 0.5))
@@ -81,7 +86,9 @@ def test_record_graph_export_metric(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, bucket: str) -> None:
             self.bucket = bucket
 
-        def record(self, value: float, attributes: dict[str, str] | None = None) -> None:
+        def record(
+            self, value: float, attributes: dict[str, str] | None = None
+        ) -> None:
             records[self.bucket].append((value, attributes))
 
     class DummyMeter:

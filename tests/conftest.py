@@ -25,9 +25,11 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
             self._collections: dict[str, dict[str, object]] = {}
 
         def collection_exists(self, name: str) -> bool:
+            """Return True when the named collection is present in the stub."""
             return name in self._collections
 
         def get_collection(self, name: str) -> SimpleNamespace:
+            """Return a SimpleNamespace emulating Qdrant's collection response."""
             cfg = self._collections.get(name)
             if cfg is None:
                 cfg = {
@@ -45,21 +47,26 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
             return SimpleNamespace(config=SimpleNamespace(params=params))
 
         def create_collection(self, collection_name: str, **kwargs) -> None:
+            """Record a collection configuration in the stub registry."""
             self._collections[collection_name] = {
                 "vectors_config": kwargs.get("vectors_config", {}),
                 "sparse_vectors_config": kwargs.get("sparse_vectors_config", {}),
             }
 
         def update_collection(self, *args, **kwargs) -> None:  # pragma: no cover
+            """No-op update to mirror Qdrant client interface."""
             return None
 
         def recreate_collection(self, *args, **kwargs) -> None:  # pragma: no cover
+            """No-op recreate used by tests that expect the method to exist."""
             return None
 
         def query_points(self, **kwargs):  # pragma: no cover - tests patch dynamically
+            """Return an empty points payload for compatibility with retriever."""
             return SimpleNamespace(points=[])
 
         def close(self) -> None:  # pragma: no cover - simple stub
+            """Provide close so tests can assert graceful shutdown."""
             return None
 
     monkeypatch.setattr(
@@ -118,26 +125,25 @@ def lightweight_embedding_model():
     return _MiniLM()
 
 
-
 @pytest.fixture(autouse=True)
 def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent external LLM initialization during tests."""
-    from llama_index.core.llms.mock import MockLLM
     from llama_index.core import Settings
+    from llama_index.core.llms.mock import MockLLM
+
     from src.config import integrations as integrations_module
 
-    monkeypatch.setattr(integrations_module, "build_llm", lambda *_args, **_kwargs: MockLLM())
+    monkeypatch.setattr(
+        integrations_module, "build_llm", lambda *_args, **_kwargs: MockLLM()
+    )
     monkeypatch.setattr(Settings, "_llm", MockLLM(), raising=False)
-
-
-
-
 
 
 @pytest.fixture(autouse=True)
 def _stub_router_postprocessor_builders(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub postprocessor builders to work with lightweight test doubles."""
     from types import SimpleNamespace
+
     from src.retrieval import postprocessor_utils as pu
 
     def _vector(index, post, **kwargs):
@@ -197,10 +203,11 @@ def _stub_router_postprocessor_builders(monkeypatch: pytest.MonkeyPatch) -> None
 def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Provide lightweight stubs for router factory dependencies."""
     from types import SimpleNamespace
-    from src.retrieval import router_factory as rf
-    from src.retrieval import postprocessor_utils as pu
-    from src.retrieval import hybrid as hybrid_module
+
     from src.retrieval import graph_config as gc
+    from src.retrieval import hybrid as hybrid_module
+    from src.retrieval import postprocessor_utils as pu
+    from src.retrieval import router_factory as rf
 
     class _ToolMetadata:
         def __init__(self, name: str, description: str) -> None:
@@ -213,7 +220,14 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             self.metadata = metadata
 
     class _RouterQueryEngine:
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False, llm=None, **kwargs):
+        def __init__(
+            self,
+            selector=None,
+            query_engine_tools=None,
+            verbose=False,
+            llm=None,
+            **kwargs,
+        ):
             self.selector = selector
             self.query_engine_tools = list(query_engine_tools or [])
             self.verbose = verbose
@@ -245,7 +259,9 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         include_text = kwargs.get("include_text", True)
         path_depth = kwargs.get("path_depth", 1)
         try:
-            retriever = pg_index.as_retriever(include_text=include_text, path_depth=path_depth)
+            retriever = pg_index.as_retriever(
+                include_text=include_text, path_depth=path_depth
+            )
         except TypeError:
             retriever = pg_index.as_retriever()
         try:
@@ -260,7 +276,9 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def _retriever(retriever, post, llm=None, engine_cls=None, **kwargs):
         engine = engine_cls or _RetrieverQueryEngine
-        return engine.from_args(retriever=retriever, llm=llm, node_postprocessors=post, **kwargs)
+        return engine.from_args(
+            retriever=retriever, llm=llm, node_postprocessors=post, **kwargs
+        )
 
     class _StubHybrid:
         def __init__(self, *_args, **_kwargs) -> None:
@@ -275,9 +293,13 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(rf, "QueryEngineTool", _QueryEngineTool, raising=False)
     monkeypatch.setattr(rf, "ToolMetadata", _ToolMetadata, raising=False)
     monkeypatch.setattr(rf, "RouterQueryEngine", _RouterQueryEngine, raising=False)
-    monkeypatch.setattr(rf, "RetrieverQueryEngine", _RetrieverQueryEngine, raising=False)
+    monkeypatch.setattr(
+        rf, "RetrieverQueryEngine", _RetrieverQueryEngine, raising=False
+    )
     monkeypatch.setattr(pu, "build_vector_query_engine", _vector, raising=False)
     monkeypatch.setattr(pu, "build_pg_query_engine", _graph, raising=False)
     monkeypatch.setattr(pu, "build_retriever_query_engine", _retriever, raising=False)
     monkeypatch.setattr(gc, "build_graph_query_engine", _graph, raising=False)
-    monkeypatch.setattr(hybrid_module, "ServerHybridRetriever", _StubHybrid, raising=False)
+    monkeypatch.setattr(
+        hybrid_module, "ServerHybridRetriever", _StubHybrid, raising=False
+    )

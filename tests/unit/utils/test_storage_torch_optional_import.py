@@ -10,6 +10,7 @@ import importlib
 
 
 def test_cpu_only_paths_safe(monkeypatch):  # type: ignore[no-untyped-def]
+    """Verify storage helpers remain safe when torch is absent."""
     # Simulate torch not available
     monkeypatch.setitem(importlib.sys.modules, "torch", None)
     # Reload module to apply import-time optional behavior
@@ -30,6 +31,7 @@ def test_cpu_only_paths_safe(monkeypatch):  # type: ignore[no-untyped-def]
 
 
 def test_safe_cuda_operation_handles_import_error(monkeypatch):  # type: ignore[no-untyped-def]
+    """Ensure safe_cuda_operation returns the default when ImportError occurs."""
     mod = importlib.import_module("src.utils.storage")
 
     def _op():  # simulate torch access raising ImportError
