@@ -14,6 +14,7 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FTimeoutError
 from functools import cache
+from pickle import PicklingError
 from typing import Any
 
 from llama_index.core.postprocessor import SentenceTransformerRerank
@@ -32,21 +33,33 @@ from src.utils.telemetry import log_jsonl
 def _text_timeout_ms() -> int:
     try:
         return int(settings.retrieval.text_rerank_timeout_ms)
-    except Exception:  # pragma: no cover - defensive default
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):  # pragma: no cover - defensive default
         return 250
 
 
 def _siglip_timeout_ms() -> int:
     try:
         return int(settings.retrieval.siglip_timeout_ms)
-    except Exception:  # pragma: no cover - defensive default
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):  # pragma: no cover - defensive default
         return 150
 
 
 def _colpali_timeout_ms() -> int:
     try:
         return int(settings.retrieval.colpali_timeout_ms)
-    except Exception:  # pragma: no cover - defensive default
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):  # pragma: no cover - defensive default
         return 400
 
 
@@ -82,7 +95,13 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
                 executor = ProcessPoolExecutor(max_workers=1)
                 executors.append(executor)
                 fut = executor.submit(fn)
-            except Exception as exc:  # pragma: no cover - pickling/env edge cases
+            except (
+                OSError,
+                ValueError,
+                RuntimeError,
+                PicklingError,
+                AttributeError,
+            ) as exc:  # pragma: no cover - pickling/env edge cases
                 logger.warning(
                     "Process executor unsupported; falling back to thread: {}",
                     exc,
@@ -94,7 +113,12 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
             executor = ThreadPoolExecutor(max_workers=1)
             executors.append(executor)
             fut = executor.submit(fn)
-    except Exception as exc:  # defensive: ensure we have an executor
+    except (
+        OSError,
+        ValueError,
+        RuntimeError,
+        AttributeError,
+    ) as exc:  # defensive: ensure we have an executor
         logger.warning(
             "Executor initialization failed: {} — using thread fallback", exc
         )
@@ -159,7 +183,7 @@ def _compute_siglip_scores(
     """Batched SigLIP cosine scores with timeout guard."""
     try:
         import torch  # type: ignore
-    except Exception:  # pragma: no cover - torch optional in CI
+    except ImportError:  # pragma: no cover - torch optional in CI
         return [float("-inf")] * len(images)
 
     feats: list[float] = [float("-inf")] * len(images)
@@ -365,7 +389,7 @@ def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRe
         return _build_text_reranker_cached(k)
     except OSError as exc:  # offline HF hub in CI or local
         logger.warning("Text reranker offline; using NoOpTextReranker: {}", exc)
-    except Exception as exc:  # pragma: no cover - defensive
+    except (RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
         logger.warning("Text reranker init failed; using NoOpTextReranker: {}", exc)
 
     class NoOpTextReranker:  # minimal LlamaIndex-like interface
@@ -375,6 +399,7 @@ def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRe
         def postprocess_nodes(
             self, nodes: list[NodeWithScore], **_: Any
         ) -> list[NodeWithScore]:
+            """Return the first ``top_n`` nodes unchanged."""
             return nodes[: self.top_n]
 
     return NoOpTextReranker(k)  # type: ignore[return-value]
@@ -394,7 +419,7 @@ def _build_visual_reranker_cached(top_n: int) -> Any:
         from llama_index.postprocessor.colpali_rerank import (
             ColPaliRerank,  # type: ignore
         )
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except ImportError as exc:
         raise ValueError("ColPaliRerank not available") from exc
     return ColPaliRerank(model="vidore/colpali-v1.2", top_n=top_n)
 
@@ -585,7 +610,7 @@ class MultimodalReranker(BaseNodePostprocessor):
             # simple score stats
             try:
                 scores = [float(n.score or 0.0) for n in out]
-            except Exception:  # pragma: no cover - defensive
+            except (TypeError, ValueError):  # pragma: no cover - defensive
                 scores = []
             score_mean = float(sum(scores) / len(scores)) if scores else 0.0
             score_max = float(max(scores)) if scores else 0.0

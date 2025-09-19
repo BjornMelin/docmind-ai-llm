@@ -248,6 +248,7 @@ class MultiAgentCoordinator:
             logger.error("Failed to setup coordinator: %s", e)
             return False
 
+    # pylint: disable=too-many-branches,too-many-statements
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with agent orchestration."""
         try:
@@ -268,14 +269,15 @@ class MultiAgentCoordinator:
                 ),
             )
 
-            agents: dict[str, Any] = {}
-            for name, tool_loader in agent_specs:
-                agents[name] = create_react_agent(
+            agents: dict[str, Any] = {
+                name: create_react_agent(
                     self.llm,
                     tools=tool_loader(),
                     state_schema=MultiAgentState,
                     name=name,
                 )
+                for name, tool_loader in agent_specs
+            }
 
             # Create supervisor system prompt
             system_prompt = self._create_supervisor_prompt()

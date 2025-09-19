@@ -275,7 +275,12 @@ def export_graph_jsonl(
     try:
         nodes = list(store.get(ids=seed_ids))
         rel_paths = list(store.get_rel_map(nodes, depth=depth))
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        AttributeError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+    ) as exc:  # pragma: no cover - defensive
         logger.warning("JSONL export failed to build rel_map: %s", exc)
         return
 
@@ -333,7 +338,12 @@ def export_graph_parquet(
     try:
         nodes = list(store.get(ids=seed_ids))
         rel_paths = list(store.get_rel_map(nodes, depth=depth))
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        AttributeError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+    ) as exc:  # pragma: no cover - defensive
         logger.warning("Parquet export failed to build rel_map: %s", exc)
         return
 

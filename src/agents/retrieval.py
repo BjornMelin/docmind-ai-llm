@@ -4,15 +4,27 @@ This module intentionally mirrors the lightweight patterns recommended in the
 official LangGraph tutorials and the ``langgraph-supervisor-py`` reference
 implementation. The agent simply orchestrates the shared
 ``retrieve_documents`` tool through ``create_react_agent`` and only contains
-small amounts of glue code for metrics and result normalisation.
+small amounts of glue code for metrics and result normalization.
 """
 
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from typing import Any
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import BaseMessage, HumanMessage
+from langgraph.errors import (
+    EmptyChannelError,
+    EmptyInputError,
+    GraphBubbleUp,
+    GraphInterrupt,
+    GraphRecursionError,
+    InvalidUpdateError,
+    NodeInterrupt,
+    TaskNotFound,
+)
 from langgraph.prebuilt import create_react_agent
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
@@ -28,6 +40,85 @@ LOW_DOC_BONUS = 0.1
 STRATEGY_BONUS = 0.1
 DSPY_BONUS = 0.05
 TARGET_LATENCY_S = 0.150
+
+
+AGENT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    ValidationError,
+    ValueError,
+    RuntimeError,  # LangGraph surfaces recursion and hook errors as RuntimeError
+    OutputParserException,
+    EmptyChannelError,
+    EmptyInputError,
+    GraphBubbleUp,
+    GraphInterrupt,
+    GraphRecursionError,
+    InvalidUpdateError,
+    NodeInterrupt,
+    TaskNotFound,
+)
+
+TOOL_FALLBACK_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    RuntimeError,
+    ValueError,
+    AttributeError,
+    ValidationError,
+    OutputParserException,
+)
+
+
+def _resolve_tool_callable(tool: Any) -> Callable[..., Any]:
+    """Return a Callable interface for the retrieval tool or raise clearly."""
+    invoke = getattr(tool, "invoke", None)
+    if callable(invoke):
+        return invoke
+    func = getattr(tool, "func", None)
+    if callable(func):
+        return func
+    if callable(tool):
+        return tool
+    raise TypeError(
+        "retrieve_documents tool must expose an 'invoke' method or be directly callable"
+    )
+
+
+class RetrievalPayloadParser:
+    """Utility to convert LangGraph outputs into ``RetrievalPayload`` objects."""
+
+    def parse_response(self, response: Any) -> RetrievalPayload:
+        """Convert a LangGraph agent response into a ``RetrievalPayload``."""
+        if not isinstance(response, dict):
+            raise ValueError("Agent response must be a dictionary")
+        messages = response.get("messages", [])
+        content = self._extract_message_content(messages)
+        return self.parse_raw(content)
+
+    def parse_raw(self, raw: Any) -> RetrievalPayload:
+        """Deserialize a raw payload (JSON string or dict) into structured data."""
+        if isinstance(raw, dict):
+            return RetrievalPayload(**raw)
+        serialised = raw if isinstance(raw, str) else str(raw)
+        try:
+            return RetrievalPayload.model_validate_json(serialised)
+        except ValidationError as exc:
+            logger.debug("Malformed retrieval payload", exc_info=False)
+            raise ValueError("Malformed tool payload") from exc
+
+    def _extract_message_content(self, messages: list[BaseMessage] | list[Any]) -> str:
+        """Return the textual payload from the final agent message."""
+        if not messages:
+            raise ValueError("Agent produced no messages")
+        last_message = messages[-1]
+        content = getattr(last_message, "content", last_message)
+        if isinstance(content, list):
+            parts: list[str] = []
+            for chunk in content:
+                if isinstance(chunk, dict) and "text" in chunk:
+                    parts.append(str(chunk["text"]))
+                else:
+                    parts.append(str(chunk))
+            content = "".join(parts)
+        return str(content)
 
 
 class RetrievalPayload(BaseModel):
@@ -54,11 +145,11 @@ class RetrievalResult(BaseModel):
     )
     strategy_used: str = Field(description="Actual retrieval strategy used")
     query_original: str = Field(description="Original search query")
-    query_optimized: str = Field(description="Optimised query after DSPy")
+    query_optimized: str = Field(description="Optimized query after DSPy")
     document_count: int = Field(description="Number of documents retrieved")
     processing_time_ms: float = Field(description="Time taken for retrieval")
     dspy_used: bool = Field(
-        default=False, description="Whether DSPy optimisation was used"
+        default=False, description="Whether DSPy optimization was used"
     )
     graphrag_used: bool = Field(default=False, description="Whether GraphRAG was used")
     confidence_score: float = Field(
@@ -71,7 +162,7 @@ class RetrievalAgent:
     """Thin wrapper around ``retrieve_documents`` using LangGraph."""
 
     def __init__(self, llm: Any, tools_data: dict[str, Any]):
-        """Initialise the agent with its language model and shared tool state.
+        """Initialize the agent with its language model and shared tool state.
 
         Args:
             llm: Large language model provided to ``create_react_agent``.
@@ -92,8 +183,9 @@ class RetrievalAgent:
             tools=[retrieve_documents],
             name="retrieval_agent",
         )
-        self._tool_func = getattr(retrieve_documents, "func", retrieve_documents)
-        logger.info("RetrievalAgent initialised")
+        self._tool_callable = _resolve_tool_callable(retrieve_documents)
+        self._parser = RetrievalPayloadParser()
+        logger.info("RetrievalAgent initialized")
 
     def retrieve_documents(
         self,
@@ -109,12 +201,12 @@ class RetrievalAgent:
         Args:
             query: Natural-language query describing the information need.
             strategy: Preferred retrieval strategy requested by the caller.
-            use_dspy: Whether DSPy optimisation should be applied when supported.
+            use_dspy: Whether DSPy optimization should be applied when supported.
             use_graphrag: Whether GraphRAG augmentation should be requested.
             context: Optional chat history forwarded to the agent for grounding.
 
         Returns:
-            RetrievalResult: Normalised retrieval output for downstream agents.
+            RetrievalResult: Normalized retrieval output for downstream agents.
         """
         start_time = time.perf_counter()
         self.total_retrievals += 1
@@ -122,14 +214,11 @@ class RetrievalAgent:
         agent_failed = False
         try:
             payload = self._invoke_agent(query, strategy, context)
-        except (
-            OSError,
-            RuntimeError,
-            ValueError,
-            AttributeError,
-            ValidationError,
-        ) as exc:
-            logger.warning("Agent retrieval failed; falling back to tool: %s", exc)
+        except AGENT_RECOVERABLE_ERRORS as exc:
+            logger.warning(
+                "Agent retrieval failed; invoking fallback tool (%s)",
+                exc,
+            )
             payload = self._call_tool_directly(
                 query,
                 strategy,
@@ -192,72 +281,7 @@ class RetrievalAgent:
             payload,
             config={"recursion_limit": RECURSION_LIMIT},
         )
-        return self._payload_from_response(response)
-
-    def _payload_from_response(self, response: Any) -> RetrievalPayload:
-        """Convert the LangGraph response into a retrieval payload.
-
-        Args:
-            response: Raw result returned by ``create_react_agent``.
-
-        Returns:
-            RetrievalPayload: Structured payload parsed from the agent output.
-
-        Raises:
-            ValueError: If the response is not a dictionary or lacks messages.
-        """
-        if not isinstance(response, dict):
-            raise ValueError("Agent response must be a dictionary")
-        messages = response.get("messages", [])
-        content = self._extract_message_content(messages)
-        return self._payload_from_raw(content)
-
-    def _extract_message_content(self, messages: list[BaseMessage] | list[Any]) -> str:
-        """Return the textual payload from the final agent message.
-
-        Args:
-            messages: Sequence of messages returned by the agent call.
-
-        Returns:
-            str: Textual body holding the retrieval payload.
-
-        Raises:
-            ValueError: If the agent emitted no messages.
-        """
-        if not messages:
-            raise ValueError("Agent produced no messages")
-        last_message = messages[-1]
-        content = getattr(last_message, "content", last_message)
-        if isinstance(content, list):
-            parts: list[str] = []
-            for chunk in content:
-                if isinstance(chunk, dict) and "text" in chunk:
-                    parts.append(str(chunk["text"]))
-                else:
-                    parts.append(str(chunk))
-            content = "".join(parts)
-        return str(content)
-
-    def _payload_from_raw(self, raw: Any) -> RetrievalPayload:
-        """Parse the raw payload emitted by the tool into structured data.
-
-        Args:
-            raw: Raw payload, typically JSON or a dictionary.
-
-        Returns:
-            RetrievalPayload: Structured payload matching ``RetrievalPayload``.
-
-        Raises:
-            ValueError: If the payload cannot be deserialised or validated.
-        """
-        if isinstance(raw, dict):
-            return RetrievalPayload(**raw)
-        serialised = raw if isinstance(raw, str) else str(raw)
-        try:
-            return RetrievalPayload.model_validate_json(serialised)
-        except ValidationError as exc:
-            logger.debug("Malformed retrieval payload", exc_info=False)
-            raise ValueError("Malformed tool payload") from exc
+        return self._parser.parse_response(response)
 
     def _call_tool_directly(
         self,
@@ -272,23 +296,34 @@ class RetrievalAgent:
         Args:
             query: Natural-language query issued by the caller.
             strategy: Retrieval strategy originally requested.
-            use_dspy: Whether DSPy optimisation should be used when supported.
+            use_dspy: Whether DSPy optimization should be used when supported.
             use_graphrag: Whether GraphRAG augmentation should be requested.
 
         Returns:
             RetrievalPayload: Structured payload returned by the fallback tool.
         """
-        raw = self._tool_func(
-            query=query,
-            strategy=strategy,
-            use_dspy=use_dspy,
-            use_graphrag=use_graphrag,
-            state={"tools_data": self.tools_data},
-        )
         try:
-            return self._payload_from_raw(raw)
-        except ValueError:
-            logger.error("Direct tool returned malformed payload", exc_info=False)
+            raw = self._tool_callable(
+                query=query,
+                strategy=strategy,
+                use_dspy=use_dspy,
+                use_graphrag=use_graphrag,
+                state={"tools_data": self.tools_data},
+            )
+        except TOOL_FALLBACK_ERRORS as exc:
+            logger.error("Direct tool invocation failed: %s", exc)
+            return RetrievalPayload(
+                documents=[],
+                query_original=query,
+                query_optimized=query,
+                strategy_used=f"{strategy}_failed",
+                error=str(exc),
+            )
+
+        try:
+            return self._parser.parse_raw(raw)
+        except ValueError as exc:
+            logger.error("Direct tool returned malformed payload: %s", exc)
             return RetrievalPayload(
                 documents=[],
                 query_original=query,
@@ -313,12 +348,12 @@ class RetrievalAgent:
             payload: Structured payload returned by the retrieval tool.
             original_query: Query string issued by the user.
             requested_strategy: Strategy that the caller initially requested.
-            use_dspy: Whether DSPy optimisation was requested.
+            use_dspy: Whether DSPy optimization was requested.
             use_graphrag: Whether GraphRAG augmentation was requested.
             processing_time: Runtime of the full retrieval call in seconds.
 
         Returns:
-            RetrievalResult: Normalised result object for downstream consumers.
+            RetrievalResult: Normalized result object for downstream consumers.
         """
         documents = payload.documents
         strategy_used = payload.strategy_used or requested_strategy
@@ -392,7 +427,7 @@ class RetrievalAgent:
         Args:
             payload: Structured payload returned by the retrieval tool.
             requested_strategy: Retrieval strategy the caller requested.
-            use_dspy: Whether DSPy optimisation was requested by the caller.
+            use_dspy: Whether DSPy optimization was requested by the caller.
             use_graphrag: Whether GraphRAG augmentation was requested.
 
         Returns:
@@ -413,7 +448,7 @@ class RetrievalAgent:
         steps.append(f"Retrieved {len(payload.documents)} documents")
 
         if use_dspy and payload.dspy_used:
-            steps.append("Applied DSPy optimisation")
+            steps.append("Applied DSPy optimization")
         if use_graphrag and payload.graphrag_used:
             steps.append("Included GraphRAG context")
 
@@ -433,14 +468,14 @@ class RetrievalAgent:
         if agent_failed or "fallback" in strategy or "failed" in strategy:
             self.strategy_usage["fallback"] += 1
             return
-        normalised = strategy.split("_", 1)[0]
-        if normalised in self.strategy_usage:
-            self.strategy_usage[normalised] += 1
+        normalized = strategy.split("_", 1)[0]
+        if normalized in self.strategy_usage:
+            self.strategy_usage[normalized] += 1
         else:
             self.strategy_usage["fallback"] += 1
 
     def get_performance_stats(self) -> dict[str, Any]:
-        """Summarise latency samples and strategy usage for observability.
+        """Summarize latency samples and strategy usage for observability.
 
         Returns:
             dict[str, Any]: Aggregated latency and strategy metrics.
@@ -461,7 +496,7 @@ class RetrievalAgent:
             "avg_retrieval_time_ms": round(avg_time * 1000, 2),
             "max_retrieval_time_ms": round(max(self._durations) * 1000, 2),
             "min_retrieval_time_ms": round(min(self._durations) * 1000, 2),
-            "performance_target_met": avg_time <= TARGET_LATENCY_S,
+            "performance_target_met": avg_time < TARGET_LATENCY_S,
             "strategy_usage": self.strategy_usage,
         }
 

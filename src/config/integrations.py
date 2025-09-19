@@ -135,18 +135,21 @@ def startup_init(cfg: "settings.__class__" = settings) -> None:
         # Observability: log config highlights
         try:
             from loguru import logger as _logger
-
-            _logger.info(
-                "Startup: backend=%s base_url=%s timeout=%s hybrid=%s fusion=%s",
-                cfg.llm_backend,
-                getattr(cfg, "backend_base_url_normalized", None),
-                getattr(cfg, "llm_request_timeout_seconds", None),
-                bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
-                str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
-            )
-        except Exception as exc:  # pragma: no cover - logging must not fail
-            logger.debug("Startup logging failed: %s", exc)
-    except Exception as exc:  # pragma: no cover - defensive
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            logger.debug("Loguru unavailable for startup logging: %s", exc)
+        else:
+            try:
+                _logger.info(
+                    "Startup: backend=%s base_url=%s timeout=%s hybrid=%s fusion=%s",
+                    cfg.llm_backend,
+                    getattr(cfg, "backend_base_url_normalized", None),
+                    getattr(cfg, "llm_request_timeout_seconds", None),
+                    bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
+                    str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
+                )
+            except (ValueError, TypeError, RuntimeError) as exc:  # pragma: no cover
+                logger.debug("Startup logging failed: %s", exc)
+    except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
         # Do not crash app on startup side-effects; callers may retry/log
         logger.warning("startup_init encountered error: %s", exc)
         return

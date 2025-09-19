@@ -175,7 +175,7 @@ def canonicalize_document(
     """
     try:
         text = content.decode("utf-8", errors="replace")
-    except Exception:  # pragma: no cover - defensive
+    except (AttributeError, UnicodeDecodeError):  # pragma: no cover - defensive
         text = str(content)
 
     normalised_text = _normalise_text(text)

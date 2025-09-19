@@ -40,7 +40,7 @@ from src.persistence.snapshot_writer import (
 
 try:  # pragma: no cover - optional monitoring dependencies
     from src.utils.monitoring import log_performance
-except Exception:  # pragma: no cover - defensive fallback
+except ImportError:  # pragma: no cover - defensive fallback
 
     def log_performance(*_args: Any, **_kwargs: Any) -> None:
         """No-op performance logger when monitoring stack is unavailable."""
@@ -194,10 +194,13 @@ def begin_snapshot(base_dir: Path | None = None) -> Path:
     _ACTIVE_LOCK = lock
     try:
         workspace = start_workspace(paths.base_dir)
-    except Exception:
+    except OSError:
         try:
             _release_active_lock()
-        except Exception as release_error:  # pragma: no cover - defensive
+        except (
+            SnapshotLockError,
+            OSError,
+        ) as release_error:  # pragma: no cover - defensive
             logger.warning(
                 "Failed to release snapshot lock after workspace error: %s",
                 release_error,
@@ -231,7 +234,7 @@ def write_manifest(tmp_dir: Path, manifest_meta: dict[str, Any]) -> None:
     with _tracer.start_as_current_span("snapshot.write_manifest"):
         try:
             _writer_write_manifest(workspace, manifest_meta)
-        except Exception as exc:  # pragma: no cover - defensive
+        except (OSError, ValueError) as exc:  # pragma: no cover - defensive
             _emit_snapshot_log(
                 "write_manifest",
                 status="failure",

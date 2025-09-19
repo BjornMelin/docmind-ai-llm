@@ -92,7 +92,7 @@ class TestRunner:
         """Return True when pytest-xdist is available."""
         try:
             return importlib.util.find_spec("xdist") is not None
-        except Exception:
+        except (ImportError, AttributeError, ValueError):
             return False
 
     def clean_artifacts(self) -> None:

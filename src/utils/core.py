@@ -36,7 +36,7 @@ def is_cuda_available() -> bool:
         return bool(
             TORCH and getattr(TORCH, "cuda", None) and TORCH.cuda.is_available()
         )  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover - conservative
+    except (AttributeError, RuntimeError):  # pragma: no cover - conservative
         return False
 
 
@@ -46,7 +46,7 @@ def _is_mps_available() -> bool:
         backends = getattr(TORCH, "backends", None)
         mps = getattr(backends, "mps", None) if backends else None
         return bool(mps) and bool(getattr(mps, "is_available", lambda: False)())
-    except Exception:  # pragma: no cover - conservative
+    except (AttributeError, RuntimeError):  # pragma: no cover - conservative
         return False
 
 
@@ -63,7 +63,12 @@ def get_vram_gb(device_index: int = 0) -> float | None:
         total_bytes = TORCH.cuda.get_device_properties(int(device_index)).total_memory
         divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
         return round(total_bytes / divisor, 1)
-    except Exception:  # pragma: no cover - conservative
+    except (
+        OSError,
+        AttributeError,
+        RuntimeError,
+        ValueError,
+    ):  # pragma: no cover - conservative
         return None
 
 
@@ -82,7 +87,7 @@ def resolve_device(prefer: str = "auto") -> tuple[str, int | None]:
         if p.startswith("cuda:"):
             try:
                 idx = int(p.split(":", 1)[1])
-            except Exception:
+            except (TypeError, ValueError):
                 idx = 0
             return (f"cuda:{idx}", idx)
         # Use existing selection logic
@@ -92,13 +97,13 @@ def resolve_device(prefer: str = "auto") -> tuple[str, int | None]:
             try:
                 # type: ignore[attr-defined]
                 idx = int(TORCH.cuda.current_device()) if TORCH else 0
-            except Exception:
+            except (AttributeError, RuntimeError, ValueError):
                 idx = 0
             return (f"cuda:{idx}", idx)
         if dev == "mps":
             return ("mps", None)
         return ("cpu", None)
-    except Exception:
+    except (AttributeError, ValueError, RuntimeError):
         return ("cpu", None)
 
 

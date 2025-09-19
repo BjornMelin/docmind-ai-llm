@@ -71,7 +71,7 @@ def ensure_v1(url: str | None) -> str | None:
         if not path.endswith("/v1"):
             path = f"{path}/v1"
         return parsed._replace(path=path).geturl()
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return url
 
 
@@ -712,7 +712,7 @@ class DocMindSettings(BaseSettings):
             value = getattr(self, field, None)
             if value is None:
                 continue
-            with suppress(Exception):
+            with suppress(TypeError, ValueError, AttributeError):
                 setattr(target, attr, caster(value))
 
     def _map_hybrid_to_retrieval(self) -> None:
@@ -720,7 +720,11 @@ class DocMindSettings(BaseSettings):
             self.retrieval.enable_server_hybrid = bool(self.hybrid.server_side)
             self.retrieval.rrf_k = int(self.hybrid.rrf_k)
             self.retrieval.fusion_mode = str(self.hybrid.method)
-        except Exception as exc:  # pragma: no cover - defensive
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - defensive
             logger.warning(
                 "Failed to sync hybrid config into retrieval settings: %s", exc
             )

@@ -23,6 +23,7 @@ from collections.abc import Iterable
 from typing import Any, Literal
 
 import numpy as np
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 try:  # Optional torch for normalization and device checks
@@ -113,7 +114,7 @@ def _select_device(explicit: str | None = None) -> str:
         from src.utils.core import select_device as _sd
 
         return _sd("auto")
-    except Exception:  # pragma: no cover - conservative fallback
+    except (ImportError, AttributeError, RuntimeError):  # pragma: no cover - fallback
         # Robust fallback using local TORCH checks when core import fails
         try:
             if (
@@ -126,7 +127,8 @@ def _select_device(explicit: str | None = None) -> str:
             if mps is not None and getattr(mps, "is_available", lambda: False)():
                 return "mps"
             return "cpu"
-        except Exception:  # pragma: no cover - final guard
+        except (AttributeError, RuntimeError) as exc:  # pragma: no cover - final guard
+            logger.debug("Device probe fallback failed: %s", exc)
             return "cpu"
 
 

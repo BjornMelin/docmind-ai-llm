@@ -167,7 +167,11 @@ def _build_vector_index(nodes: list[Any]) -> Any | None:
             show_progress=False,
         )
         return index
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        RuntimeError,
+        ValueError,
+        ImportError,
+    ) as exc:  # pragma: no cover - defensive
         _LOG.warning("Vector index creation failed: %s", exc)
         return None
 
@@ -178,7 +182,7 @@ def _build_property_graph(documents: list[Any]) -> Any | None:
         return None
     try:
         return PropertyGraphIndex.from_documents(documents, show_progress=False)
-    except Exception as exc:  # pragma: no cover - defensive
+    except (RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
         logger.warning("PropertyGraphIndex build failed: %s", exc)
         return None
 

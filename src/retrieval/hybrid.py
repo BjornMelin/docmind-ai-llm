@@ -275,7 +275,11 @@ class ServerHybridRetriever:
                 qdrant_timeout_s = int(
                     getattr(_settings.database, "qdrant_timeout", 60)
                 )
-            except Exception:  # pragma: no cover - defensive
+            except (
+                AttributeError,
+                TypeError,
+                ValueError,
+            ):  # pragma: no cover - defensive
                 rrf_k_val = 60
                 qdrant_timeout_s = 60
             dropped = max(0, input_count - unique_count)

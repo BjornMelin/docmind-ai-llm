@@ -157,7 +157,11 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
 
     try:
         setup_llamaindex(force_embed=True)
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        RuntimeError,
+        ValueError,
+        ImportError,
+    ) as exc:  # pragma: no cover - defensive
         logger.debug("setup_llamaindex(force_embed=True) failed: %s", exc)
     return get_settings_embed_model()
 

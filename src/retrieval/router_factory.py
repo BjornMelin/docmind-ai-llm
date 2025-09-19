@@ -55,7 +55,7 @@ def build_router_engine(
     # Unified gating flag (DRY): resolve once
     try:
         use_rerank_flag = bool(getattr(cfg.retrieval, "use_reranking", True))
-    except Exception:  # pragma: no cover - defensive
+    except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
         use_rerank_flag = True
     the_llm = llm if llm is not None else None
 
@@ -225,7 +225,7 @@ def build_router_engine(
     # Expose public tool list for downstream introspection
     try:
         router.query_engine_tools = tools
-    except Exception:  # pragma: no cover - defensive
+    except AttributeError:  # pragma: no cover - defensive
         logger.debug("Router engine lacks public tool attribute", exc_info=True)
     logger.info(
         "Router engine built (kg_present=%s)",

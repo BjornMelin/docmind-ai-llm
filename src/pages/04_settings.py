@@ -289,9 +289,7 @@ def main() -> None:
 
             new_v = clear_caches(settings)
             st.success(f"Caches cleared. Cache version bumped to {new_v}.")
-        except (
-            Exception
-        ) as e:  # pragma: no cover  # pylint: disable=broad-exception-caught
+        except (RuntimeError, OSError, ValueError) as e:  # pragma: no cover
             st.error(f"Failed to clear caches: {e}")
 
 
