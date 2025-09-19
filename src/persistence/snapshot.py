@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from loguru import logger
@@ -37,6 +37,15 @@ from src.persistence.snapshot_writer import (
 from src.persistence.snapshot_writer import (
     write_manifest as _writer_write_manifest,
 )
+
+try:  # pragma: no cover - optional monitoring dependencies
+    from src.utils.monitoring import log_performance
+except ImportError:  # pragma: no cover - defensive fallback
+
+    def log_performance(*_args: Any, **_kwargs: Any) -> None:
+        """No-op performance logger when monitoring stack is unavailable."""
+        return None
+
 
 try:  # pragma: no cover - optional instrumentation
     from opentelemetry import trace
@@ -148,10 +157,11 @@ def _append_error_record(base_dir: Path, payload: dict[str, Any]) -> None:
 
 def _pulse_lock() -> None:
     """Refresh the active snapshot lock heartbeat, ignoring failures."""
-    if _ACTIVE_LOCK is None:
+    lock = _get_active_lock()
+    if lock is None:
         return
     with suppress(SnapshotLockError):
-        _ACTIVE_LOCK.refresh()
+        lock.refresh()
 
 
 def _manifest_path(snapshot_dir: Path) -> Path:
@@ -162,13 +172,22 @@ def _manifest_checksum_path(snapshot_dir: Path) -> Path:
     return snapshot_dir / "manifest.checksum"
 
 
-_ACTIVE_LOCK: SnapshotLock | None = None
+_LOCK_STATE: dict[str, SnapshotLock | None] = {"active": None}
+
+
+def _get_active_lock() -> SnapshotLock | None:
+    """Return the currently active snapshot lock, if any."""
+    return cast(SnapshotLock | None, _LOCK_STATE.get("active"))
+
+
+def _set_active_lock(lock: SnapshotLock | None) -> None:
+    """Update the active lock reference."""
+    _LOCK_STATE["active"] = lock
 
 
 def begin_snapshot(base_dir: Path | None = None) -> Path:
     """Create a locked workspace for snapshot persistence."""
-    global _ACTIVE_LOCK
-    if _ACTIVE_LOCK is not None:
+    if _get_active_lock() is not None:
         raise RuntimeError("Snapshot lock already held; finalize or cleanup first.")
 
     paths = _snapshot_paths(base_dir)
@@ -182,13 +201,13 @@ def begin_snapshot(base_dir: Path | None = None) -> Path:
         grace_seconds=grace,
     )
     lock.acquire()
-    _ACTIVE_LOCK = lock
+    _set_active_lock(lock)
     try:
         workspace = start_workspace(paths.base_dir)
-    except Exception:
+    except (OSError, RuntimeError, ValueError, PermissionError):
         try:
             _release_active_lock()
-        except Exception as release_error:  # pragma: no cover - defensive
+        except SnapshotLockError as release_error:  # pragma: no cover - defensive
             logger.warning(
                 "Failed to release snapshot lock after workspace error: %s",
                 release_error,
@@ -199,11 +218,11 @@ def begin_snapshot(base_dir: Path | None = None) -> Path:
 
 def _release_active_lock() -> None:
     """Release the active snapshot lock when held."""
-    global _ACTIVE_LOCK
-    if _ACTIVE_LOCK is None:
+    lock = _get_active_lock()
+    if lock is None:
         return
-    _ACTIVE_LOCK.release()
-    _ACTIVE_LOCK = None
+    lock.release()
+    _set_active_lock(None)
 
 
 def cleanup_tmp(tmp_dir: Path) -> None:
@@ -222,7 +241,11 @@ def write_manifest(tmp_dir: Path, manifest_meta: dict[str, Any]) -> None:
     with _tracer.start_as_current_span("snapshot.write_manifest"):
         try:
             _writer_write_manifest(workspace, manifest_meta)
-        except Exception as exc:  # pragma: no cover - defensive
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - defensive
             _emit_snapshot_log(
                 "write_manifest",
                 status="failure",
@@ -278,8 +301,6 @@ def _garbage_collect(paths: SnapshotPaths) -> None:
 
 def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
     """Rename workspace to versioned snapshot and update ``CURRENT``."""
-    from src.utils.monitoring import log_performance  # local import to avoid heavy deps
-
     start = time.perf_counter()
     paths = _snapshot_paths(base_dir)
     if not tmp_dir.exists():  # pragma: no cover - defensive
@@ -314,7 +335,12 @@ def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
             _pulse_lock()
             logger.info("Snapshot finalized at %s", destination)
             return destination
-        except Exception as exc:  # pragma: no cover - defensive
+        except (
+            OSError,
+            SnapshotError,
+            RuntimeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - defensive
             duration = time.perf_counter() - start
             log_performance(
                 operation="snapshot_finalize",

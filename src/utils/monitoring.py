@@ -123,17 +123,23 @@ def performance_timer(
     """Context manager for timing operations.
 
     Args:
-        operation: Name of the operation being timed
-        **context: Additional context to log
+        operation: Name of the operation being timed.
+        **context: Additional context to log alongside metrics.
 
     Yields:
-        Dictionary to store additional metrics during operation
+        Dict[str, Any]: Mutable metrics mapping updated during the operation.
     """
     start_time = time.perf_counter()
-    process = psutil.Process()
-    start_memory = (
-        process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
-    )  # MB
+    process = None
+    start_memory = 0.0
+    try:
+        process = psutil.Process()
+        start_memory = (
+            process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+        )
+    except (OSError, psutil.Error):
+        process = None
+        start_memory = 0.0
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -141,15 +147,20 @@ def performance_timer(
     try:
         yield metrics
         success = True
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         success = False
-        metrics["error"] = str(e)
+        metrics["error"] = str(exc)
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = (
-            process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
-        )  # MB
+        end_memory = start_memory
+        if process is not None:
+            try:
+                end_memory = (
+                    process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+                )
+            except (OSError, psutil.Error):
+                end_memory = start_memory
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
@@ -172,17 +183,23 @@ async def async_performance_timer(
     """Async context manager for timing operations.
 
     Args:
-        operation: Name of the operation being timed
-        **context: Additional context to log
+        operation: Name of the async operation being timed.
+        **context: Additional context to log alongside metrics.
 
     Yields:
-        Dictionary to store additional metrics during operation
+        Dict[str, Any]: Mutable metrics mapping updated during the operation.
     """
     start_time = time.perf_counter()
-    process = psutil.Process()
-    start_memory = (
-        process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
-    )  # MB
+    process = None
+    start_memory = 0.0
+    try:
+        process = psutil.Process()
+        start_memory = (
+            process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+        )
+    except (OSError, psutil.Error):
+        process = None
+        start_memory = 0.0
 
     metrics = {"operation": operation}
     metrics.update(context)
@@ -190,15 +207,20 @@ async def async_performance_timer(
     try:
         yield metrics
         success = True
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         success = False
-        metrics["error"] = str(e)
+        metrics["error"] = str(exc)
         raise
     finally:
         end_time = time.perf_counter()
-        end_memory = (
-            process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
-        )  # MB
+        end_memory = start_memory
+        if process is not None:
+            try:
+                end_memory = (
+                    process.memory_info().rss / settings.monitoring.bytes_to_mb_divisor
+                )
+            except (OSError, psutil.Error):
+                end_memory = start_memory
 
         duration = end_time - start_time
         memory_delta = end_memory - start_memory

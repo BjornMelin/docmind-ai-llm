@@ -125,11 +125,11 @@ def test_vllm_top_level_overrides_and_api_base_precedence(
 
 
 def test_lmstudio_url_must_end_with_v1() -> None:
-    """LM Studio base URL must end with /v1; validation should raise."""
-    with pytest.raises(ValueError, match="LM Studio base URL must end with /v1"):
-        DocMindSettings(
-            llm_backend="lmstudio", lmstudio_base_url="http://localhost:1234"
-        )
+    """LM Studio base URL is normalized to include /v1."""
+    settings = DocMindSettings(
+        llm_backend="lmstudio", lmstudio_base_url="http://localhost:1234"
+    )
+    assert settings.lmstudio_base_url.rstrip("/").endswith("/v1")
 
 
 def test_llamacpp_local_uses_gpu_layers_and_context(

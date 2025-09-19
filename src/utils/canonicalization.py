@@ -11,8 +11,8 @@ The design mirrors the guidance captured in the ingestion refactor plan:
 * Normalize Unicode text to NFKC and collapse redundant whitespace.
 * Strip zero-width characters and control codes that often vary between OCR
   runs.
-* Include a curated set of metadata fields (content type, language, tenant,
-  source) sorted deterministically.
+* Include a curated set of metadata fields (content type, language, source,
+  source_path) sorted deterministically.
 * Version all canonicalization and HMAC secrets to support rotations without
   breaking determinism guarantees.
 
@@ -50,7 +50,6 @@ DEFAULT_METADATA_KEYS: tuple[str, ...] = (
     "language",
     "source",
     "source_path",
-    "tenant_id",
 )
 
 
@@ -83,7 +82,11 @@ class HashBundle:
     hmac_secret_version: str
 
     def as_dict(self) -> dict[str, str]:
-        """Return a serialisable representation used by Pydantic models."""
+        """Return a serialisable representation for downstream models.
+
+        Returns:
+            dict[str, str]: Mapping of the bundle fields suitable for dumps.
+        """
         return {
             "raw_sha256": self.raw_sha256,
             "canonical_hmac_sha256": self.canonical_hmac_sha256,
@@ -95,9 +98,12 @@ class HashBundle:
 def _normalise_text(text: str) -> str:
     """Normalise textual content for deterministic hashing.
 
-    The transformation applies Unicode NFKC, removes zero-width glyphs and
-    control characters, canonicalises line endings, and collapses repeated
-    whitespace into single spaces while preserving paragraph boundaries.
+    Args:
+        text: Raw document text decoded from bytes.
+
+    Returns:
+        str: Normalised text with Unicode, whitespace, and control characters
+        cleaned for stable hashing.
     """
     normalised = unicodedata.normalize("NFKC", text)
     normalised = normalised.replace("\r\n", "\n").replace("\r", "\n")
@@ -122,9 +128,13 @@ def _filter_metadata(
 ) -> MutableMapping[str, Any]:
     """Select a stable subset of metadata fields.
 
-    The function emits values only for keys listed in ``allowed_keys`` and
-    discards ``None`` entries. Complex structures (lists/dicts) are normalised
-    by sorting keys to maintain determinism.
+    Args:
+        metadata: Original metadata mapping.
+        allowed_keys: Ordered keys retained in the canonical payload.
+
+    Returns:
+        dict[str, Any]: Filtered metadata with nested collections sorted for
+        deterministic serialisation.
     """
     result: dict[str, Any] = {}
     for key in allowed_keys:
@@ -143,7 +153,15 @@ def _filter_metadata(
 
 
 def _sort_nested_dict(data: Mapping[str, Any]) -> dict[str, Any]:
-    """Recursively sort dictionary keys for deterministic JSON dumps."""
+    """Recursively sort dictionary keys for deterministic JSON dumps.
+
+    Args:
+        data: Arbitrary nested mapping to sort.
+
+    Returns:
+        dict[str, Any]: Mapping with keys sorted depth-first; nested lists/sets
+        are converted to sorted lists for stability.
+    """
     return {
         key: (
             _sort_nested_dict(value)
@@ -176,7 +194,7 @@ def canonicalize_document(
     """
     try:
         text = content.decode("utf-8", errors="replace")
-    except Exception:  # pragma: no cover - defensive
+    except UnicodeDecodeError:  # pragma: no cover - defensive
         text = str(content)
 
     normalised_text = _normalise_text(text)

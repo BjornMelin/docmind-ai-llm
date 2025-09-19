@@ -8,6 +8,7 @@ KG tool without raising exceptions.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from types import SimpleNamespace
 
 

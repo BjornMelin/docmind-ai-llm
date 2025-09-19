@@ -7,6 +7,8 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ## [Unreleased]
 
 ### Added
+- Optional llama-index adapter with lazy availability checks and install guidance (`src/retrieval/llama_index_adapter.py`).
+- Coverage for OCR policy, canonicalization, image I/O, router fallbacks, and UI ingestion flows (new unit tests under `tests/unit`).
 - Canonical ingestion models and hashing helpers powering the library-first ingestion pipeline (`src/models/processing.py`, `src/persistence/hashing.py`).
 - LlamaIndex-based ingestion pipeline, DuckDB-backed cache/docstore wiring, AES-GCM page-image exports, and OpenTelemetry spans (`src/processing/ingestion_pipeline.py`).
 - Snapshot lock and writer modules with heartbeat/takeover metadata, atomic promotion, tri-file manifest, and timestamped graph export metadata (`src/persistence/lockfile.py`, `src/persistence/snapshot_writer.py`).
@@ -40,6 +42,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   - Doc id mapping persisted to `doc_mapping.json` per run.
 
 ### Changed
+- Streamlit ingestion adapter now re-checks embeddings after ingestion and logs when vector index is skipped or built.
+- Ingestion pipeline elevates embedding auto-setup failures to warnings and logs plaintext fallbacks for Unstructured reader errors.
+- CI now runs base and llama profiles with optional `llama` extra to enforce optional dependency coverage.
 - Snapshot manifest/schema now records `complete`, `schema_version`, `persist_format_version`, graph export metadata, and enforces `_tmp-` workspace plus `CURRENT` pointer discipline.
 - Guard snapshot workspace initialization to release file locks if creation fails (`src/persistence/snapshot.py`).
 - Router, UI, and telemetry layers consistently emit OpenTelemetry spans/metrics for ingestion, snapshot promotion, GraphRAG selection, and export flows.

@@ -13,6 +13,8 @@ from typing import Any
 from llama_index.core import StorageContext, VectorStoreIndex
 from loguru import logger
 
+from src.config import setup_llamaindex
+from src.config.integrations import get_settings_embed_model
 from src.config.settings import settings
 from src.models.processing import IngestionConfig, IngestionInput
 from src.processing.ingestion_pipeline import ingest_documents_sync
@@ -43,6 +45,9 @@ def ingest_files(
     Returns:
         Mapping containing ingestion metadata and constructed indices.
     """
+    setup_llamaindex(force_embed=False)
+    embed_model_before = get_settings_embed_model()
+
     if not files:
         return {
             "count": 0,
@@ -52,6 +57,11 @@ def ingest_files(
             "exports": [],
             "duration_ms": 0.0,
         }
+
+    if embed_model_before is None:
+        _LOG.debug(
+            "Embedding missing before ingestion; deferring vector index decision"
+        )
 
     configure_observability(settings)
 
@@ -77,7 +87,21 @@ def ingest_files(
     cfg = _build_ingestion_config(encrypt_images)
     result = ingest_documents_sync(cfg, saved_inputs)
 
-    vector_index = _build_vector_index(result.nodes)
+    embed_model_after = get_settings_embed_model()
+    if embed_model_after is None:
+        if embed_model_before is None:
+            _LOG.warning(
+                "No embedding configured; vector index creation will be skipped"
+            )
+    else:
+        if embed_model_before is None:
+            _LOG.info(
+                "Embedding configured during ingestion; vector index will be built"
+            )
+
+    vector_index = (
+        _build_vector_index(result.nodes) if embed_model_after is not None else None
+    )
     pg_index = _build_property_graph(result.documents) if enable_graphrag else None
 
     return {

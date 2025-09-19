@@ -71,7 +71,7 @@ def ensure_v1(url: str | None) -> str | None:
         if not path.endswith("/v1"):
             path = f"{path}/v1"
         return parsed._replace(path=path).geturl()
-    except Exception:
+    except (ValueError, AttributeError, TypeError):
         return url
 
 
@@ -212,10 +212,7 @@ class ObservabilityConfig(BaseModel):
     )
     endpoint: str | None = Field(
         default=None,
-        description=(
-            "Optional OTLP endpoint override. Use 'console' to emit metrics to"
-            " stdout during development."
-        ),
+        description=("Optional OTLP endpoint override for telemetry exporters."),
     )
     protocol: Literal["grpc", "http/protobuf"] = Field(
         default="http/protobuf",
@@ -413,7 +410,6 @@ class HashingConfig(BaseModel):
             "language",
             "source",
             "source_path",
-            "tenant_id",
         ],
         description="Ordered metadata keys included in canonical payloads.",
     )
@@ -716,15 +712,23 @@ class DocMindSettings(BaseSettings):
             value = getattr(self, field, None)
             if value is None:
                 continue
-            with suppress(Exception):
+            with suppress(AttributeError, TypeError, ValueError):
                 setattr(target, attr, caster(value))
 
     def _map_hybrid_to_retrieval(self) -> None:
         try:
-            self.retrieval.enable_server_hybrid = bool(self.hybrid.server_side)
-            self.retrieval.rrf_k = int(self.hybrid.rrf_k)
-            self.retrieval.fusion_mode = str(self.hybrid.method)
-        except Exception as exc:  # pragma: no cover - defensive
+            fields_set = getattr(self.retrieval, "model_fields_set", set())
+            if "enable_server_hybrid" not in fields_set:
+                self.retrieval.enable_server_hybrid = bool(self.hybrid.server_side)
+            if "rrf_k" not in fields_set:
+                self.retrieval.rrf_k = int(self.hybrid.rrf_k)
+            if "fusion_mode" not in fields_set:
+                self.retrieval.fusion_mode = str(self.hybrid.method)
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - defensive
             logger.warning(
                 "Failed to sync hybrid config into retrieval settings: %s", exc
             )

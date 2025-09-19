@@ -33,8 +33,17 @@ def test_setup_tracing_disabled() -> None:
     assert otel._TRACE_PROVIDER is None
 
 
-def test_setup_tracing_enabled() -> None:
+def test_setup_tracing_enabled(monkeypatch) -> None:
     """Tracing provider is configured once when enabled."""
+    monkeypatch.setattr(otel, "_TRACE_PROVIDER", None)
+    recorded_trace = {}
+
+    def _set_tracer_provider(provider):
+        recorded_trace["provider"] = provider
+        trace._TRACER_PROVIDER = provider  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(trace, "set_tracer_provider", _set_tracer_provider)
+    monkeypatch.setattr(trace, "_TRACER_PROVIDER", None, raising=False)
     enabled_settings = settings.model_copy(
         update={
             "observability": settings.observability.model_copy(
@@ -48,13 +57,22 @@ def test_setup_tracing_enabled() -> None:
         }
     )
     otel.setup_tracing(enabled_settings)
-    provider = trace.get_tracer_provider()
+    provider = recorded_trace.get("provider")
     assert isinstance(provider, TracerProvider)
     assert otel._TRACE_PROVIDER is provider
 
 
-def test_setup_metrics_enabled() -> None:
+def test_setup_metrics_enabled(monkeypatch) -> None:
     """Metrics provider is configured with periodic exporter when enabled."""
+    monkeypatch.setattr(otel, "_METER_PROVIDER", None)
+    recorded_meter = {}
+
+    def _set_meter_provider(provider):
+        recorded_meter["provider"] = provider
+        metrics._METER_PROVIDER = provider  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(metrics, "set_meter_provider", _set_meter_provider)
+    monkeypatch.setattr(metrics, "_METER_PROVIDER", None, raising=False)
     enabled_settings = settings.model_copy(
         update={
             "observability": settings.observability.model_copy(
@@ -68,7 +86,7 @@ def test_setup_metrics_enabled() -> None:
         }
     )
     otel.setup_metrics(enabled_settings)
-    provider = metrics.get_meter_provider()
+    provider = recorded_meter.get("provider")
     assert isinstance(provider, MeterProvider)
     assert otel._METER_PROVIDER is provider
 

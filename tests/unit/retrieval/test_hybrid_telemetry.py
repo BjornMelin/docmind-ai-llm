@@ -55,6 +55,15 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
 
     monkeypatch.setattr(hmod, "log_jsonl", _cap)
 
+    class _Embed:
+        def get_text_embedding(self, text: str) -> list[float]:  # type: ignore[no-untyped-def]
+            return [0.1, 0.2]
+
+        def get_query_embedding(self, text: str) -> list[float]:  # type: ignore[no-untyped-def]
+            return [0.1, 0.2]
+
+    monkeypatch.setattr(hmod, "get_settings_embed_model", lambda: _Embed())
+
     params = hmod._HybridParams(  # pylint: disable=protected-access
         collection="c",
         fused_top_k=5,
@@ -71,7 +80,7 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
     assert events, "No telemetry events captured"
     e = events[-1]
     assert e.get("retrieval.backend") == "qdrant"
-    assert e.get("qdrant.timeout_s") == 42
+    assert e.get("retrieval.qdrant_timeout_s") == 42
     assert e.get("retrieval.fusion_mode") == "rrf"
     assert isinstance(e.get("retrieval.return_count"), int)
     assert isinstance(e.get("retrieval.latency_ms"), int)

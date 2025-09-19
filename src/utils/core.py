@@ -33,10 +33,9 @@ from src.config.settings import DocMindSettings
 def is_cuda_available() -> bool:
     """Return True when CUDA is available via torch."""
     try:
-        return bool(
-            TORCH and getattr(TORCH, "cuda", None) and TORCH.cuda.is_available()
-        )  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover - conservative
+        cuda_mod = getattr(TORCH, "cuda", None)
+        return bool(cuda_mod and cuda_mod.is_available())
+    except (AttributeError, RuntimeError, TypeError):  # pragma: no cover - conservative
         return False
 
 
@@ -46,7 +45,7 @@ def _is_mps_available() -> bool:
         backends = getattr(TORCH, "backends", None)
         mps = getattr(backends, "mps", None) if backends else None
         return bool(mps) and bool(getattr(mps, "is_available", lambda: False)())
-    except Exception:  # pragma: no cover - conservative
+    except (AttributeError, RuntimeError, TypeError):  # pragma: no cover - conservative
         return False
 
 
@@ -59,11 +58,18 @@ def get_vram_gb(device_index: int = 0) -> float | None:
     if not is_cuda_available():
         return None
     try:
-        # type: ignore[attr-defined]
-        total_bytes = TORCH.cuda.get_device_properties(int(device_index)).total_memory
+        cuda_mod = getattr(TORCH, "cuda", None)
+        if not cuda_mod:
+            return None
+        total_bytes = cuda_mod.get_device_properties(int(device_index)).total_memory
         divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
         return round(total_bytes / divisor, 1)
-    except Exception:  # pragma: no cover - conservative
+    except (
+        RuntimeError,
+        AttributeError,
+        TypeError,
+        ValueError,
+    ):  # pragma: no cover - conservative
         return None
 
 
@@ -82,7 +88,7 @@ def resolve_device(prefer: str = "auto") -> tuple[str, int | None]:
         if p.startswith("cuda:"):
             try:
                 idx = int(p.split(":", 1)[1])
-            except Exception:
+            except (ValueError, TypeError):
                 idx = 0
             return (f"cuda:{idx}", idx)
         # Use existing selection logic
@@ -90,15 +96,15 @@ def resolve_device(prefer: str = "auto") -> tuple[str, int | None]:
         if dev == "cuda":
             # Derive an index; prefer current device
             try:
-                # type: ignore[attr-defined]
-                idx = int(TORCH.cuda.current_device()) if TORCH else 0
-            except Exception:
+                cuda_mod = getattr(TORCH, "cuda", None)
+                idx = int(cuda_mod.current_device()) if cuda_mod else 0
+            except (RuntimeError, AttributeError, TypeError, ValueError):
                 idx = 0
             return (f"cuda:{idx}", idx)
         if dev == "mps":
             return ("mps", None)
         return ("cpu", None)
-    except Exception:
+    except (RuntimeError, AttributeError, TypeError, ValueError):
         return ("cpu", None)
 
 
@@ -118,8 +124,10 @@ def detect_hardware() -> dict[str, Any]:
         cuda_ok = is_cuda_available()
         hardware_info["cuda_available"] = cuda_ok
         if cuda_ok:
-            # type: ignore[attr-defined]
-            hardware_info["gpu_name"] = TORCH.cuda.get_device_name(0)
+            cuda_mod = getattr(TORCH, "cuda", None)
+            hardware_info["gpu_name"] = (
+                cuda_mod.get_device_name(0) if cuda_mod else "Unknown"
+            )
             vram = get_vram_gb()
             hardware_info["vram_total_gb"] = vram
 
@@ -148,8 +156,10 @@ def has_cuda_vram(min_gb: float, device_index: int = 0) -> bool:
         if not is_cuda_available():
             return False
         # Compare using raw bytes to avoid rounding edge cases
-        # type: ignore[attr-defined]
-        props = TORCH.cuda.get_device_properties(int(device_index))
+        cuda_mod = getattr(TORCH, "cuda", None)
+        if not cuda_mod:
+            return False
+        props = cuda_mod.get_device_properties(int(device_index))
         total_bytes = float(getattr(props, "total_memory", 0.0))
         divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
         required_bytes = float(min_gb) * divisor
@@ -224,8 +234,8 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
     if app_settings.enable_gpu_acceleration:
         try:
             if is_cuda_available():
-                # type: ignore[attr-defined]
-                gpu_name = TORCH.cuda.get_device_name(0)
+                cuda_mod = getattr(TORCH, "cuda", None)
+                gpu_name = cuda_mod.get_device_name(0) if cuda_mod else "Unknown"
                 results["info"].append(f"GPU available: {gpu_name}")
             else:
                 results["warnings"].append(
@@ -250,10 +260,10 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
         yield
     finally:
         if is_cuda_available():
-            # type: ignore[attr-defined]
-            TORCH.cuda.synchronize()
-            # type: ignore[attr-defined]
-            TORCH.cuda.empty_cache()
+            cuda_mod = getattr(TORCH, "cuda", None)
+            if cuda_mod:
+                cuda_mod.synchronize()
+                cuda_mod.empty_cache()
         gc.collect()
 
 
