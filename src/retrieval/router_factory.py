@@ -10,24 +10,38 @@ is missing or unhealthy.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from llama_index.core.query_engine import (
-    RetrieverQueryEngine as _RetrieverQueryEngine,
-)
-from llama_index.core.query_engine import RouterQueryEngine
-from llama_index.core.selectors import LLMSingleSelector
-from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
 from src.config.settings import settings as default_settings
 from src.retrieval.graph_config import build_graph_query_engine
+from src.retrieval.llama_index_adapter import (
+    LlamaIndexAdapterProtocol,
+    MissingLlamaIndexError,
+    get_llama_index_adapter,
+)
 from src.retrieval.postprocessor_utils import (
     build_retriever_query_engine,
     build_vector_query_engine,
 )
 
-RetrieverQueryEngine = _RetrieverQueryEngine
+if TYPE_CHECKING:  # pragma: no cover - typing aid only
+    from llama_index.core.query_engine import RouterQueryEngine as RouterQueryEngineType
+else:
+    RouterQueryEngineType = Any
+
+
+def _resolve_adapter(
+    adapter: LlamaIndexAdapterProtocol | None,
+) -> LlamaIndexAdapterProtocol:
+    """Return an adapter, raising a helpful error when llama_index is absent."""
+    if adapter is not None:
+        return adapter
+    try:
+        return get_llama_index_adapter()
+    except MissingLlamaIndexError as exc:
+        raise MissingLlamaIndexError() from exc
 
 
 def build_router_engine(
@@ -37,7 +51,8 @@ def build_router_engine(
     llm: Any | None = None,
     *,
     enable_hybrid: bool | None = None,
-) -> RouterQueryEngine:
+    adapter: LlamaIndexAdapterProtocol | None = None,
+) -> RouterQueryEngineType:
     """Create a router engine with vector and optional KG tools.
 
     Args:
@@ -47,33 +62,56 @@ def build_router_engine(
         llm: Optional LLM override for the router.
         enable_hybrid: When True, include server-side hybrid tool; defaults to
             settings.retrieval.enable_server_hybrid when None.
+        adapter: LlamaIndex adapter (real or stub). Tests inject fakes to keep
+            the module importable without the third-party dependency.
 
     Returns:
         RouterQueryEngine: Configured router engine.
     """
     cfg = settings or default_settings
-    # Unified gating flag (DRY): resolve once
+    adapter = _resolve_adapter(adapter)
+
+    def _coerce_top_k(value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            try:
+                return int(str(value))
+            except (TypeError, ValueError):
+                return None
+
+    raw_top_k = getattr(getattr(cfg, "retrieval", cfg), "reranking_top_k", None)
+    normalized_top_k = _coerce_top_k(raw_top_k)
+    router_query_engine_cls = adapter.RouterQueryEngine
+    retriever_query_engine_cls = adapter.RetrieverQueryEngine
+    query_engine_tool_cls = adapter.QueryEngineTool
+    tool_metadata_cls = adapter.ToolMetadata
+    llm_single_selector_cls = adapter.LLMSingleSelector
+    get_pydantic_selector = adapter.get_pydantic_selector
+
     try:
         use_rerank_flag = bool(getattr(cfg.retrieval, "use_reranking", True))
     except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
         use_rerank_flag = True
     the_llm = llm if llm is not None else None
 
-    # Vector semantic tool
     try:
         from src.retrieval.reranking import get_postprocessors as _get_pp
 
-        _v_post = _get_pp("vector", use_reranking=use_rerank_flag)
+        _v_post = _get_pp(
+            "vector", use_reranking=use_rerank_flag, top_n=normalized_top_k
+        )
         v_engine = build_vector_query_engine(
             vector_index, _v_post, similarity_top_k=cfg.retrieval.top_k
         )
     except (TypeError, AttributeError, ValueError, ImportError):
-        # Last-resort default
         v_engine = vector_index.as_query_engine()
 
-    vector_tool = QueryEngineTool(
+    vector_tool = query_engine_tool_cls(
         query_engine=v_engine,
-        metadata=ToolMetadata(
+        metadata=tool_metadata_cls(
             name="semantic_search",
             description=(
                 "Semantic vector search over the document corpus. Best for general "
@@ -83,15 +121,12 @@ def build_router_engine(
     )
     tools = [vector_tool]
 
-    # Hybrid search tool via Qdrant Query API (behind flag)
     try:
         if enable_hybrid is not None:
             hybrid_ok = bool(enable_hybrid)
         else:
-            # Single authoritative flag per ADR-024
             hybrid_ok = bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
         if hybrid_ok:
-            # Import retriever on-demand to avoid heavy imports at module load.
             from src.retrieval.hybrid import (
                 ServerHybridRetriever as _shr,  # noqa: N813
             )
@@ -110,19 +145,21 @@ def build_router_engine(
             retr = _shr(params)
             from src.retrieval.reranking import get_postprocessors as _get_pp
 
-            _h_post = _get_pp("hybrid", use_reranking=use_rerank_flag)
+            _h_post = _get_pp(
+                "hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k
+            )
             h_engine = build_retriever_query_engine(
                 retr,
                 _h_post,
                 llm=the_llm,
                 response_mode="compact",
                 verbose=False,
-                engine_cls=RetrieverQueryEngine,
+                engine_cls=retriever_query_engine_cls,
             )
             tools.append(
-                QueryEngineTool(
+                query_engine_tool_cls(
                     query_engine=h_engine,
-                    metadata=ToolMetadata(
+                    metadata=tool_metadata_cls(
                         name="hybrid_search",
                         description=(
                             "Hybrid search via Qdrant Query API (dense+sparse fusion)"
@@ -130,11 +167,14 @@ def build_router_engine(
                     ),
                 )
             )
-    # pragma: no cover - defensive
-    except (ValueError, TypeError, AttributeError, ImportError) as e:
+    except (
+        ValueError,
+        TypeError,
+        AttributeError,
+        ImportError,
+    ) as e:  # pragma: no cover - defensive
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    # Optional graph tool (GraphRAG)
     try:
         if (
             pg_index is not None
@@ -148,9 +188,7 @@ def build_router_engine(
             from src.retrieval.reranking import get_postprocessors as _get_pp
 
             graph_post = _get_pp(
-                "kg",
-                use_reranking=use_rerank_flag,
-                top_n=int(getattr(cfg.retrieval, "reranking_top_k", 5)),
+                "kg", use_reranking=use_rerank_flag, top_n=normalized_top_k
             )
             artifacts = build_graph_query_engine(
                 pg_index,
@@ -161,9 +199,9 @@ def build_router_engine(
                 node_postprocessors=graph_post,
             )
             tools.append(
-                QueryEngineTool(
+                query_engine_tool_cls(
                     query_engine=artifacts.query_engine,
-                    metadata=ToolMetadata(
+                    metadata=tool_metadata_cls(
                         name="knowledge_graph",
                         description=(
                             "Knowledge graph traversal for relationship-centric queries"
@@ -179,59 +217,66 @@ def build_router_engine(
     ) as exc:  # pragma: no cover - defensive
         logger.debug(f"Graph tool construction skipped: {exc}")
 
-    # No-op LLM stub to prevent LlamaIndex from resolving Settings.llm
     class _NoOpLLM:
-        """Minimal no-op LLM stub for router defaults.
+        """Minimal no-op LLM stub for router defaults."""
 
-        Provides required attributes and methods so that LlamaIndex router
-        construction does not attempt to implicitly resolve ``Settings.llm``.
-        """
-
-        def __init__(self):
+        def __init__(self) -> None:
+            """Provide basic metadata expected by the router."""
             self.metadata = type(
                 "_MD", (), {"context_window": 2048, "num_output": 256}
             )()
 
         def predict(self, *_args: Any, **_kwargs: Any) -> str:
-            """No-op predict."""
+            """Return an empty response for predict calls."""
             return ""
 
         def complete(self, *_args: Any, **_kwargs: Any) -> str:
-            """No-op complete."""
+            """Return an empty response for completion calls."""
             return ""
 
-    # Selector: prefer PydanticSingleSelector when available, else LLM selector
-    try:
-        from llama_index.core.selectors import PydanticSingleSelector
-
-        selector = PydanticSingleSelector.from_defaults(llm=the_llm)
-    except (ImportError, AttributeError):
-        selector = LLMSingleSelector.from_defaults(llm=the_llm or _NoOpLLM())
+    selector = get_pydantic_selector(the_llm)
+    if selector is None:
+        selector = llm_single_selector_cls.from_defaults(llm=the_llm or _NoOpLLM())
 
     try:
-        router = RouterQueryEngine(
+        router = router_query_engine_cls(
             selector=selector,
             query_engine_tools=tools,
             verbose=False,
             llm=the_llm or _NoOpLLM(),
         )
     except TypeError:
-        router = RouterQueryEngine(
+        router = router_query_engine_cls(
             selector=selector,
             query_engine_tools=tools,
             verbose=False,
         )
-    # Expose both public and private tool lists for compatibility across LI versions
-    # Expose public tool list for downstream introspection
+
     try:
         router.query_engine_tools = tools
-    except AttributeError:  # pragma: no cover - defensive
-        logger.debug("Router engine lacks public tool attribute", exc_info=True)
+    except (AttributeError, TypeError):  # pragma: no cover - defensive
+        logger.debug(
+            "Router engine lacks public tool attribute",
+            exc_info=True,
+        )
+
     logger.info(
         "Router engine built (kg_present=%s)",
         any(t.metadata.name == "knowledge_graph" for t in tools),
     )
     return router
+
+
+try:
+    adapter_cls = get_llama_index_adapter()
+    RetrieverQueryEngine = adapter_cls.RetrieverQueryEngine  # type: ignore[assignment]
+except MissingLlamaIndexError:
+
+    class _MissingRetriever:
+        def __init__(self, *_a: Any, **_k: Any) -> None:
+            raise MissingLlamaIndexError()
+
+    RetrieverQueryEngine = _MissingRetriever  # type: ignore[assignment]
 
 
 __all__ = ["RetrieverQueryEngine", "build_router_engine"]

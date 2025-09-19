@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
+import os
+
 import pytest
 
 """Top-level pytest configuration for shared fixtures.
@@ -8,9 +11,97 @@ Loads the shared fixtures module so fixtures like `supervisor_stream_shim` are
 available across test tiers without explicit imports in each test file.
 """
 
+_REQUIRE_REAL_LLAMA = os.getenv("REQUIRE_REAL_LLAMA", "").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+
 pytest_plugins = [
     "tests.shared_fixtures",
 ]
+
+
+def _llama_available() -> bool:
+    """Return True when the real llama_index dependency is importable."""
+    return importlib.util.find_spec("llama_index.core") is not None
+
+
+def pytest_configure(config) -> None:
+    """Register custom markers for this test suite."""
+    config.addinivalue_line(
+        "markers",
+        (
+            "requires_llama: mark tests that must run with the real "
+            "llama_index.core dependency."
+        ),
+    )
+
+
+def pytest_runtest_setup(item) -> None:
+    """Handle requires_llama marks with skip/fail behavior."""
+    if "requires_llama" not in item.keywords or _llama_available():
+        return
+    if _REQUIRE_REAL_LLAMA:
+        pytest.fail(
+            "llama_index.core is required for this test but is not installed",
+            pytrace=False,
+        )
+    pytest.skip("llama_index.core not installed")
+
+
+@pytest.fixture(autouse=True)
+def _reset_otel_providers() -> None:
+    """Ensure OpenTelemetry providers reset between tests."""
+    from src.telemetry import opentelemetry as otel_module
+
+    otel_module.shutdown_metrics()
+    otel_module.shutdown_tracing()
+
+
+@pytest.fixture(autouse=True)
+def _reset_telemetry_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reset telemetry globals and environment overrides between tests."""
+    from pathlib import Path
+
+    from src.utils import telemetry as telem
+
+    monkeypatch.setattr(
+        telem, "_TELEM_PATH", Path("./logs/telemetry.jsonl"), raising=False
+    )
+    telem.set_request_id(None)
+    monkeypatch.delenv("DOCMIND_TELEMETRY_DISABLED", raising=False)
+    monkeypatch.delenv("DOCMIND_TELEMETRY_SAMPLE", raising=False)
+    monkeypatch.delenv("DOCMIND_TELEMETRY_ROTATE_BYTES", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _stub_embed_model(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """Provide a lightweight embedding model for hybrid retrieval tests."""
+    module_name = getattr(request.module, "__name__", "")
+    if module_name.startswith("tests.unit.config"):
+        return
+    from src.config import integrations as integrations_module
+
+    class _Embed:
+        def get_query_embedding(self, _text: str) -> list[float]:
+            return [0.0, 0.1, 0.2]
+
+    monkeypatch.setattr(
+        integrations_module,
+        "get_settings_embed_model",
+        lambda: _Embed(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.get_settings_embed_model",
+        lambda: _Embed(),
+        raising=False,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -25,11 +116,9 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
             self._collections: dict[str, dict[str, object]] = {}
 
         def collection_exists(self, name: str) -> bool:
-            """Return True when the named collection is present in the stub."""
             return name in self._collections
 
         def get_collection(self, name: str) -> SimpleNamespace:
-            """Return a SimpleNamespace emulating Qdrant's collection response."""
             cfg = self._collections.get(name)
             if cfg is None:
                 cfg = {
@@ -47,26 +136,21 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
             return SimpleNamespace(config=SimpleNamespace(params=params))
 
         def create_collection(self, collection_name: str, **kwargs) -> None:
-            """Record a collection configuration in the stub registry."""
             self._collections[collection_name] = {
                 "vectors_config": kwargs.get("vectors_config", {}),
                 "sparse_vectors_config": kwargs.get("sparse_vectors_config", {}),
             }
 
         def update_collection(self, *args, **kwargs) -> None:  # pragma: no cover
-            """No-op update to mirror Qdrant client interface."""
             return None
 
         def recreate_collection(self, *args, **kwargs) -> None:  # pragma: no cover
-            """No-op recreate used by tests that expect the method to exist."""
             return None
 
         def query_points(self, **kwargs):  # pragma: no cover - tests patch dynamically
-            """Return an empty points payload for compatibility with retriever."""
             return SimpleNamespace(points=[])
 
         def close(self) -> None:  # pragma: no cover - simple stub
-            """Provide close so tests can assert graceful shutdown."""
             return None
 
     monkeypatch.setattr(
@@ -140,8 +224,13 @@ def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _stub_router_postprocessor_builders(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stub_router_postprocessor_builders(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
     """Stub postprocessor builders to work with lightweight test doubles."""
+    module_name = getattr(request.module, "__name__", "")
+    if module_name.endswith("test_postprocessor_utils_builders"):
+        return
     from types import SimpleNamespace
 
     from src.retrieval import postprocessor_utils as pu
@@ -200,14 +289,33 @@ def _stub_router_postprocessor_builders(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.fixture(autouse=True)
-def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
+def _router_factory_stubs(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+):
     """Provide lightweight stubs for router factory dependencies."""
     from types import SimpleNamespace
 
     from src.retrieval import graph_config as gc
-    from src.retrieval import hybrid as hybrid_module
     from src.retrieval import postprocessor_utils as pu
     from src.retrieval import router_factory as rf
+    from src.retrieval.llama_index_adapter import set_llama_index_adapter
+
+    if "requires_llama" in request.keywords:
+        set_llama_index_adapter(None)
+        try:
+            yield
+        finally:
+            set_llama_index_adapter(None)
+        return
+
+    module_name = getattr(request.module, "__name__", "")
+    if module_name.endswith("test_postprocessor_utils_builders"):
+        set_llama_index_adapter(None)
+        try:
+            yield
+        finally:
+            set_llama_index_adapter(None)
+        return
 
     class _ToolMetadata:
         def __init__(self, name: str, description: str) -> None:
@@ -215,7 +323,7 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             self.description = description
 
     class _QueryEngineTool:
-        def __init__(self, query_engine, metadata):
+        def __init__(self, query_engine, metadata) -> None:
             self.query_engine = query_engine
             self.metadata = metadata
 
@@ -227,7 +335,7 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             verbose=False,
             llm=None,
             **kwargs,
-        ):
+        ) -> None:
             self.selector = selector
             self.query_engine_tools = list(query_engine_tools or [])
             self.verbose = verbose
@@ -241,8 +349,16 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     class _RetrieverQueryEngine:
         @classmethod
         def from_args(cls, retriever, llm=None, **kwargs):
-            obj = SimpleNamespace(retriever=retriever, llm=llm, kwargs=kwargs)
-            return obj
+            return SimpleNamespace(retriever=retriever, llm=llm, kwargs=kwargs)
+
+    class _LLMSingleSelector:
+        def __init__(self, llm=None) -> None:
+            self.llm = llm
+            self.kind = "llm_selector"
+
+        @classmethod
+        def from_defaults(cls, llm=None):
+            return cls(llm=llm)
 
     def _vector(index, post, **kwargs):
         try:
@@ -255,7 +371,7 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             qe.kwargs = {"node_postprocessors": post, **kwargs}
         return qe
 
-    def _graph(pg_index, post, **kwargs):
+    def _graph(pg_index, node_postprocessors=None, **kwargs):
         include_text = kwargs.get("include_text", True)
         path_depth = kwargs.get("path_depth", 1)
         try:
@@ -264,14 +380,18 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             )
         except TypeError:
             retriever = pg_index.as_retriever()
+        except AttributeError:
+            retriever = SimpleNamespace(kwargs={})
         try:
-            qe = pg_index.as_query_engine(node_postprocessors=post)
+            qe = pg_index.as_query_engine(node_postprocessors=node_postprocessors)
         except TypeError:
             qe = pg_index.as_query_engine()
+        except AttributeError:
+            qe = SimpleNamespace(kwargs={})
         if hasattr(qe, "kwargs"):
-            qe.kwargs = {"node_postprocessors": post}
+            qe.kwargs = {"node_postprocessors": node_postprocessors}
         if hasattr(retriever, "kwargs"):
-            retriever.kwargs = {"node_postprocessors": post}
+            retriever.kwargs = {"node_postprocessors": node_postprocessors}
         return SimpleNamespace(query_engine=qe, retriever=retriever)
 
     def _retriever(retriever, post, llm=None, engine_cls=None, **kwargs):
@@ -280,15 +400,17 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             retriever=retriever, llm=llm, node_postprocessors=post, **kwargs
         )
 
-    class _StubHybrid:
-        def __init__(self, *_args, **_kwargs) -> None:
-            self._closed = False
+    adapter = SimpleNamespace(
+        RouterQueryEngine=_RouterQueryEngine,
+        RetrieverQueryEngine=_RetrieverQueryEngine,
+        QueryEngineTool=_QueryEngineTool,
+        ToolMetadata=_ToolMetadata,
+        LLMSingleSelector=_LLMSingleSelector,
+        get_pydantic_selector=lambda llm: None,
+        __is_stub__=True,
+    )
 
-        def retrieve(self, _query):
-            return []
-
-        def close(self) -> None:
-            self._closed = True
+    set_llama_index_adapter(adapter)
 
     monkeypatch.setattr(rf, "QueryEngineTool", _QueryEngineTool, raising=False)
     monkeypatch.setattr(rf, "ToolMetadata", _ToolMetadata, raising=False)
@@ -299,7 +421,12 @@ def _router_factory_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pu, "build_vector_query_engine", _vector, raising=False)
     monkeypatch.setattr(pu, "build_pg_query_engine", _graph, raising=False)
     monkeypatch.setattr(pu, "build_retriever_query_engine", _retriever, raising=False)
+    monkeypatch.setattr(rf, "build_vector_query_engine", _vector, raising=False)
+    monkeypatch.setattr(rf, "build_pg_query_engine", _graph, raising=False)
+    monkeypatch.setattr(rf, "build_retriever_query_engine", _retriever, raising=False)
     monkeypatch.setattr(gc, "build_graph_query_engine", _graph, raising=False)
-    monkeypatch.setattr(
-        hybrid_module, "ServerHybridRetriever", _StubHybrid, raising=False
-    )
+    monkeypatch.setattr(rf, "build_graph_query_engine", _graph, raising=False)
+    try:
+        yield
+    finally:
+        set_llama_index_adapter(None)

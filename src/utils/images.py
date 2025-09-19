@@ -14,10 +14,17 @@ from contextlib import contextmanager
 
 @contextmanager
 def open_image_encrypted(path: str):
-    """Open an image path that may be encrypted ("*.enc").
+    """Yield an image handle for plaintext or ``*.enc`` inputs.
 
-    Yields a PIL.Image.Image opened in read-only mode. Any temporary file
-    created by decryption will be removed when the context exits.
+    Args:
+        path: Filesystem path to the image. ``*.enc`` inputs are decrypted via
+            :func:`src.utils.security.decrypt_file` when available.
+
+    Yields:
+        PIL.Image.Image: Image opened in read-only mode.
+
+    Raises:
+        ImportError: If Pillow is not installed.
     """
     try:
         from PIL import Image  # type: ignore

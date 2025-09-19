@@ -140,9 +140,9 @@ class OcrController:
                         return True
         except (
             ImportError,
-            OSError,
             RuntimeError,
             ValueError,
+            OSError,
         ) as exc:  # pragma: no cover - fallback path
             logger.debug("native text probe failed for %s: %s", file_path, exc)
         return False
@@ -164,9 +164,9 @@ class OcrController:
                 return doc.page_count
         except (
             ImportError,
-            OSError,
             RuntimeError,
             ValueError,
+            OSError,
         ) as exc:  # pragma: no cover - fallback path
             logger.debug("page count probe failed for %s: %s", file_path, exc)
             return None

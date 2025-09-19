@@ -10,7 +10,6 @@ writing the response in small chunks to the UI for better perceived latency.
 from __future__ import annotations
 
 import contextlib
-import logging
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -217,14 +216,10 @@ def _load_latest_snapshot_into_session() -> None:
                 _hydrate_router_from_snapshot(snap_dir)
         except (
             OSError,
-            ValueError,
             RuntimeError,
-            KeyError,
-        ) as exc:  # pragma: no cover - defensive
-            logging.getLogger(__name__).debug(
-                "Snapshot hydration skipped due to error: %s",
-                exc,
-            )
+            ValueError,
+            TypeError,
+        ):  # pragma: no cover - defensive
             return
     else:  # pinned (skip staleness)
         _hydrate_router_from_snapshot(snap_dir)
@@ -244,9 +239,16 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
         st.caption(
             f"Autoloaded snapshot: {snap_dir.name} (graph={'yes' if kg else 'no'})"
         )
-    except (RuntimeError, ValueError, OSError) as exc:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        RuntimeError,
+        OSError,
+        TypeError,
+    ):  # pragma: no cover - defensive
+        # No router created; keep vector/graph in session for manual wiring
+        import logging
+
         logging.getLogger(__name__).debug(
-            "Failed to build router from snapshot; continuing without wiring: %s",
-            exc,
+            "Failed to build router from snapshot; continuing without wiring",
             exc_info=True,
         )

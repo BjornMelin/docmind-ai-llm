@@ -35,7 +35,7 @@ from .settings import settings
 # NOTE: Avoid heavy imports at module import-time. The embedding constructor
 # symbol is bound lazily inside setup_llamaindex(). Callers may patch the module
 # attribute HuggingFaceEmbedding; we preserve a stable module-level name for this.
-HuggingFaceEmbedding = None  # type: ignore  # pylint: disable=invalid-name
+HuggingFaceEmbedding: type[BaseEmbedding] | None = None  # type: ignore[assignment]
 _HF_EMBED_LOCK = threading.Lock()
 
 # Keep text embeddings defaulting to HuggingFaceEmbedding (BGE-M3) for
@@ -135,21 +135,28 @@ def startup_init(cfg: "settings.__class__" = settings) -> None:
         # Observability: log config highlights
         try:
             from loguru import logger as _logger
-        except ImportError as exc:  # pragma: no cover - optional dependency
-            logger.debug("Loguru unavailable for startup logging: %s", exc)
-        else:
-            try:
-                _logger.info(
-                    "Startup: backend=%s base_url=%s timeout=%s hybrid=%s fusion=%s",
-                    cfg.llm_backend,
-                    getattr(cfg, "backend_base_url_normalized", None),
-                    getattr(cfg, "llm_request_timeout_seconds", None),
-                    bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
-                    str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
-                )
-            except (ValueError, TypeError, RuntimeError) as exc:  # pragma: no cover
-                logger.debug("Startup logging failed: %s", exc)
-    except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
+
+            _logger.info(
+                "Startup: backend=%s base_url=%s timeout=%s hybrid=%s fusion=%s",
+                cfg.llm_backend,
+                getattr(cfg, "backend_base_url_normalized", None),
+                getattr(cfg, "llm_request_timeout_seconds", None),
+                bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
+                str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
+            )
+        except (
+            ImportError,
+            AttributeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - logging must not fail
+            logger.debug("Startup logging failed: %s", exc)
+    except (
+        OSError,
+        AttributeError,
+        TypeError,
+        ValueError,
+    ) as exc:  # pragma: no cover - defensive
         # Do not crash app on startup side-effects; callers may retry/log
         logger.warning("startup_init encountered error: %s", exc)
         return
@@ -293,18 +300,21 @@ def _configure_embeddings() -> None:
         model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
         device = emb_cfg.get("device", "cpu")
 
-        global HuggingFaceEmbedding
-        if HuggingFaceEmbedding is None:  # type: ignore
+        embedding_cls = globals().get("HuggingFaceEmbedding")
+        if embedding_cls is None:
             with _HF_EMBED_LOCK:
-                if HuggingFaceEmbedding is None:  # type: ignore
+                embedding_cls = globals().get("HuggingFaceEmbedding")
+                if embedding_cls is None:
                     from llama_index.embeddings import (
                         huggingface as _hf,
                     )  # local import
 
-                    HuggingFaceEmbedding = (  # type: ignore[attr-defined]
-                        _hf.HuggingFaceEmbedding
-                    )
-        Settings.embed_model = HuggingFaceEmbedding(
+                    embedding_cls = _hf.HuggingFaceEmbedding
+                    globals()["HuggingFaceEmbedding"] = embedding_cls
+        if embedding_cls is None:  # pragma: no cover - defensive
+            raise RuntimeError("HuggingFaceEmbedding class unavailable")
+
+        Settings.embed_model = embedding_cls(
             model_name=model_name,
             device=device,
             trust_remote_code=emb_cfg.get("trust_remote_code", False),

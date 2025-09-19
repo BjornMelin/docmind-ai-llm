@@ -10,7 +10,6 @@ import pytest
 
 @pytest.mark.unit
 def test_resolve_device_parses_indices(monkeypatch):
-    """Verify resolve_device handles explicit CUDA indices correctly."""
     import src.utils.core as core
 
     dummy_torch = types.SimpleNamespace(
@@ -25,7 +24,6 @@ def test_resolve_device_parses_indices(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_falls_back_on_errors(monkeypatch):
-    """Ensure resolve_device returns the CPU tuple when selection fails."""
     import src.utils.core as core
 
     monkeypatch.setattr(core, "TORCH", types.SimpleNamespace(cuda=None))
@@ -39,7 +37,6 @@ def test_resolve_device_falls_back_on_errors(monkeypatch):
 
 @pytest.mark.unit
 def test_detect_hardware_reports_cuda(monkeypatch):
-    """Verify detect_hardware reports CUDA availability and device metadata."""
     import src.utils.core as core
 
     monkeypatch.setattr(core, "is_cuda_available", lambda: True)
@@ -61,28 +58,22 @@ def test_detect_hardware_reports_cuda(monkeypatch):
 
 @pytest.mark.unit
 def test_validate_startup_configuration_handles_qdrant(monkeypatch):
-    """Ensure startup validation closes Qdrant clients on success."""
     import src.utils.core as core
 
     class _Client:
-        """Minimal Qdrant client stub with tracked closed state."""
-
         def __init__(self, url: str) -> None:
             self.url = url
             self.closed = False
 
         def get_collections(self):  # pragma: no cover - simple stub
-            """Return an empty collection payload."""
             return {"collections": []}
 
         def close(self) -> None:
-            """Mark the stub as closed so tests can assert closure."""
             self.closed = True
 
     created = {}
 
     def _factory(url: str):
-        """Create and register a synchronous Qdrant client stub."""
         client = _Client(url)
         created["client"] = client
         return client
@@ -101,7 +92,6 @@ def test_validate_startup_configuration_handles_qdrant(monkeypatch):
 
 @pytest.mark.unit
 def test_validate_startup_configuration_records_errors(monkeypatch):
-    """Ensure startup validation records errors when Qdrant is unreachable."""
     import src.utils.core as core
 
     def _factory(url: str):  # pragma: no cover - intentional failure
@@ -122,12 +112,9 @@ def test_validate_startup_configuration_records_errors(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_managed_async_qdrant_client_closes(monkeypatch):
-    """Validate that managed_async_qdrant_client closes the async client."""
     import src.utils.core as core
 
     class _AsyncClient:
-        """Async Qdrant client stub used to verify context manager behavior."""
-
         def __init__(self, url: str) -> None:
             self.url = url
             self.closed = False
@@ -149,7 +136,6 @@ async def test_managed_async_qdrant_client_closes(monkeypatch):
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_async_timer_logs(monkeypatch):
-    """Ensure the async_timer decorator logs the completion time."""
     import src.utils.core as core
 
     calls: list[tuple[str, float]] = []
@@ -165,3 +151,32 @@ async def test_async_timer_logs(monkeypatch):
     assert result == "done"
     assert calls
     assert calls[0][0] == "%s completed in %.2fs"
+
+
+@pytest.mark.unit
+def test_has_cuda_vram_returns_false_without_cuda(monkeypatch):
+    import src.utils.core as core
+
+    monkeypatch.setattr(core, "is_cuda_available", lambda: False)
+    assert core.has_cuda_vram(8.0) is False
+
+
+@pytest.mark.unit
+def test_select_device_prefers_mps_when_available(monkeypatch):
+    import src.utils.core as core
+
+    monkeypatch.setattr(core, "is_cuda_available", lambda: False)
+    monkeypatch.setattr(core, "_is_mps_available", lambda: True)
+    assert core.select_device("auto") == "mps"
+    assert core.select_device("mps") == "mps"
+
+
+@pytest.mark.unit
+def test_select_device_handles_invalid_inputs(monkeypatch):
+    import src.utils.core as core
+
+    def _broken(*_a, **_k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(core, "is_cuda_available", _broken)
+    assert core.select_device("auto") == "cpu"

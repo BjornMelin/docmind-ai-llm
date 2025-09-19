@@ -22,12 +22,18 @@ from llama_index.core.extractors import TitleExtractor
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
 from llama_index.core.storage.docstore import SimpleDocumentStore
+from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
 try:
     from llama_index.readers.file import UnstructuredReader
 except ImportError:  # pragma: no cover - optional dependency
     UnstructuredReader = None  # type: ignore
-from llama_index.storage.kvstore.duckdb import DuckDBKVStore
+
+try:
+    from llama_index.core.base.embeddings.base import BaseEmbedding
+except ImportError:  # pragma: no cover - optional dependency
+    BaseEmbedding = Any  # type: ignore
+
 from opentelemetry import trace
 
 from src.config import settings as app_settings
@@ -42,12 +48,6 @@ from src.models.processing import (
 )
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.processing.pdf_pages import save_pdf_page_images
-
-try:
-    from llama_index.core.base.embeddings.base import BaseEmbedding
-except ImportError:  # pragma: no cover - optional dependency
-    BaseEmbedding = Any  # type: ignore
-
 
 _TRACER = trace.get_tracer("docmind.ingestion")
 logger = logging.getLogger(__name__)
@@ -162,8 +162,18 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
         ValueError,
         ImportError,
     ) as exc:  # pragma: no cover - defensive
-        logger.debug("setup_llamaindex(force_embed=True) failed: %s", exc)
-    return get_settings_embed_model()
+        logger.warning(
+            "Embedding auto-setup failed; continuing without embedding: %s", exc
+        )
+        return get_settings_embed_model()
+
+    resolved = get_settings_embed_model()
+    if resolved is None:
+        logger.warning(
+            "Embedding unavailable after auto-setup; "
+            "pipeline will run without embeddings"
+        )
+    return resolved
 
 
 def _document_from_input(
@@ -191,6 +201,11 @@ def _document_from_input(
             RuntimeError,
         ) as exc:  # pragma: no cover
             logger.debug("UnstructuredReader failed: %s", exc)
+            logger.info(
+                "Falling back to plain-text read for %s due to UnstructuredReader "
+                "failure",
+                item.source_path,
+            )
             text = Path(item.source_path).read_text(encoding="utf-8", errors="ignore")
             docs = [Document(text=text, doc_id=item.document_id)]
     elif item.source_path is not None:

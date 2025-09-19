@@ -2,94 +2,111 @@
 
 from __future__ import annotations
 
-import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
-
-@pytest.fixture(autouse=True)
-def _stub_li_modules(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Stub llama_index modules used by router_factory
-    qe_mod = ModuleType("llama_index.core.query_engine")
-    sel_mod = ModuleType("llama_index.core.selectors")
-    tools_mod = ModuleType("llama_index.core.tools")
-
-    class _RetrieverQueryEngine:
-        @classmethod
-        def from_args(cls, retriever, llm=None, response_mode=None, verbose=False):  # type: ignore[override]
-            return SimpleNamespace(kind="retriever_engine", retriever=retriever)
-
-    class _RouterQueryEngine:
-        def __init__(self, selector, query_engine_tools, verbose=False):  # type: ignore[override]
-            self.selector = selector
-            self.tools = query_engine_tools
-
-    class _LLMSingleSelector:
-        @classmethod
-        def from_defaults(cls, llm=None):  # type: ignore[override]
-            return SimpleNamespace(kind="llm_selector")
-
-    class _QueryEngineTool:
-        def __init__(self, query_engine, metadata):  # type: ignore[override]
-            self.query_engine = query_engine
-            self.metadata = metadata
-
-    class _ToolMetadata:
-        def __init__(self, name, description):  # type: ignore[override]
-            self.name = name
-            self.description = description
-
-    qe_mod.RetrieverQueryEngine = _RetrieverQueryEngine
-    qe_mod.RouterQueryEngine = _RouterQueryEngine
-    sel_mod.LLMSingleSelector = _LLMSingleSelector
-    tools_mod.QueryEngineTool = _QueryEngineTool
-    tools_mod.ToolMetadata = _ToolMetadata
-
-    monkeypatch.setitem(sys.modules, "llama_index.core.query_engine", qe_mod)
-    monkeypatch.setitem(sys.modules, "llama_index.core.selectors", sel_mod)
-    monkeypatch.setitem(sys.modules, "llama_index.core.tools", tools_mod)
+from src.retrieval.router_factory import build_router_engine
 
 
-def test_router_includes_hybrid_tool(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Stub ServerHybridRetriever to avoid dependencies
-    hyr_mod = ModuleType("src.retrieval.hybrid")
+class _VecIndex:
+    def as_query_engine(self, **_kwargs):  # type: ignore[no-untyped-def]
+        return MagicMock(name="vector_qe")
 
-    class _DummyHybridRetriever:
-        def __init__(self, *_args, **_kwargs) -> None:
-            pass
 
-    class _Params:
-        def __init__(self, *_args, **_kwargs) -> None:
-            pass
+class _HealthyStore:
+    def get_nodes(self):  # pragma: no cover - unused branch helper
+        yield {"id": "n1"}
 
-    hyr_mod.ServerHybridRetriever = _DummyHybridRetriever
-    hyr_mod._HybridParams = _Params  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.retrieval.hybrid", hyr_mod)
 
-    from src.config.settings import settings as _settings
-    from src.retrieval.router_factory import build_router_engine
+class _PgIndex:
+    def __init__(self) -> None:
+        self.property_graph_store = _HealthyStore()
 
-    _settings.retrieval.top_k = 5
+    def as_query_engine(self, include_text=True):  # type: ignore[no-untyped-def]
+        del include_text
+        return MagicMock(name="graph_qe")
 
-    class _VecIdx:
-        def as_query_engine(self, *_, **__):
-            return SimpleNamespace(kind="vector_engine")
 
-    class _PgIdx:
-        def as_retriever(self, include_text=False, path_depth=1):  # type: ignore[override]
-            return SimpleNamespace(kind="kg_retriever")
+def test_hybrid_params_respected(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Hybrid retriever receives parameters derived from settings."""
+    captured: dict[str, SimpleNamespace] = {}
 
-        @property
-        def property_graph_store(self):
-            return object()
+    class _DummyHybrid:
+        def __init__(self, params):  # type: ignore[no-untyped-def]
+            captured["params"] = params
 
-    router = build_router_engine(_VecIdx(), _PgIdx(), _settings)
-    # Ensure three tools present: semantic_search, hybrid_search, knowledge_graph
-    tools_attr = getattr(router, "query_engine_tools", None) or getattr(
-        router, "_query_engine_tools", []
+    monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
+
+    vec = _VecIndex()
+    pg = _PgIndex()
+    cfg = SimpleNamespace(
+        enable_graphrag=True,
+        retrieval=SimpleNamespace(
+            top_k=5,
+            use_reranking=True,
+            enable_server_hybrid=False,
+            fused_top_k=37,
+            prefetch_sparse_limit=222,
+            prefetch_dense_limit=111,
+            fusion_mode="rrf",
+            dedup_key="doc_id",
+            reranking_top_k=3,
+        ),
+        graphrag_cfg=SimpleNamespace(default_path_depth=1),
+        database=SimpleNamespace(qdrant_collection="col"),
     )
-    names = [t.metadata.name for t in tools_attr]
-    assert "semantic_search" in names
-    assert "hybrid_search" in names
-    assert "knowledge_graph" in names
+
+    build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
+
+    params = captured["params"]
+    assert params.fused_top_k == 37
+    assert params.prefetch_sparse == 222
+    assert params.prefetch_dense == 111
+    assert params.dedup_key == "doc_id"
+
+
+@pytest.mark.parametrize("use_rerank", [True, False])
+def test_hybrid_rerank_flag_propagation(monkeypatch, use_rerank: bool) -> None:  # type: ignore[no-untyped-def]
+    """Hybrid path toggles node_postprocessors when reranking is enabled."""
+    last_kwargs: dict[str, object] = {}
+
+    class _DummyHybrid:
+        def __init__(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            pass
+
+    class _RecordingRQE:
+        @classmethod
+        def from_args(cls, **kwargs):  # type: ignore[no-untyped-def]
+            last_kwargs.update(kwargs)
+            return SimpleNamespace(qe=True, kwargs=kwargs)
+
+    monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_retriever_query_engine",
+        lambda retriever, post, **kwargs: _RecordingRQE.from_args(
+            retriever=retriever, node_postprocessors=post, **kwargs
+        ),
+    )
+
+    vec = _VecIndex()
+    pg = _PgIndex()
+    cfg = SimpleNamespace(
+        enable_graphrag=True,
+        retrieval=SimpleNamespace(
+            top_k=5,
+            use_reranking=use_rerank,
+            enable_server_hybrid=False,
+            reranking_top_k=2,
+        ),
+        graphrag_cfg=SimpleNamespace(default_path_depth=1),
+        database=SimpleNamespace(qdrant_collection="col"),
+    )
+
+    build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
+
+    if use_rerank:
+        assert last_kwargs.get("node_postprocessors") is not None
+    else:
+        assert last_kwargs.get("node_postprocessors") is None

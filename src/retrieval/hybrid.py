@@ -276,6 +276,7 @@ class ServerHybridRetriever:
                     getattr(_settings.database, "qdrant_timeout", 60)
                 )
             except (
+                ImportError,
                 AttributeError,
                 TypeError,
                 ValueError,

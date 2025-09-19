@@ -41,7 +41,7 @@ def test_siglip_uses_padding_max_length(monkeypatch):
 
     monkeypatch.setattr(rr, "_load_siglip", fake_load)
 
-    out = rr._siglip_rescore("hello", nodes, rr.SIGLIP_TIMEOUT_MS)
+    out = rr._siglip_rescore("hello", nodes, rr._siglip_timeout_ms())
     assert out
     # Ensure padding was provided
     assert calls["all"]

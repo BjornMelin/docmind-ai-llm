@@ -289,7 +289,12 @@ def main() -> None:
 
             new_v = clear_caches(settings)
             st.success(f"Caches cleared. Cache version bumped to {new_v}.")
-        except (RuntimeError, OSError, ValueError) as e:  # pragma: no cover
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ) as e:  # pragma: no cover - defensive UI feedback
             st.error(f"Failed to clear caches: {e}")
 
 

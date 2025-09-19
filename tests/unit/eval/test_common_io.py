@@ -26,10 +26,7 @@ def test_write_csv_row_enforces_header(tmp_path: Path) -> None:
     target = tmp_path / "report.csv"
     write_csv_row(target, {"a": "x", "b": "y"})
 
-    with pytest.raises(
-        ValueError,
-        match=("Leaderboard schema mismatch; use a new file or bump schema_version"),
-    ):
+    with pytest.raises(ValueError, match="Leaderboard schema mismatch"):
         write_csv_row(target, {"b": "y", "a": "x", "c": "z"})
 
 

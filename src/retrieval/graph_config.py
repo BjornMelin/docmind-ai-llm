@@ -135,7 +135,12 @@ def build_graph_query_engine(
 
     try:
         query_engine = RetrieverQueryEngine.from_args(**engine_kwargs)
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        TypeError,
+        AttributeError,
+        RuntimeError,
+        ValueError,
+    ) as exc:  # pragma: no cover - defensive
         raise ValueError(f"Failed to build graph query engine: {exc}") from exc
 
     return GraphQueryArtifacts(retriever=retriever, query_engine=query_engine)
@@ -276,10 +281,10 @@ def export_graph_jsonl(
         nodes = list(store.get(ids=seed_ids))
         rel_paths = list(store.get_rel_map(nodes, depth=depth))
     except (
-        AttributeError,
         RuntimeError,
         ValueError,
         TypeError,
+        AttributeError,
     ) as exc:  # pragma: no cover - defensive
         logger.warning("JSONL export failed to build rel_map: %s", exc)
         return
@@ -339,10 +344,10 @@ def export_graph_parquet(
         nodes = list(store.get(ids=seed_ids))
         rel_paths = list(store.get_rel_map(nodes, depth=depth))
     except (
-        AttributeError,
         RuntimeError,
         ValueError,
         TypeError,
+        AttributeError,
     ) as exc:  # pragma: no cover - defensive
         logger.warning("Parquet export failed to build rel_map: %s", exc)
         return

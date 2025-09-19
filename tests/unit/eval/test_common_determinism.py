@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import random
 import sys
-from types import SimpleNamespace
 
 import pytest
 
@@ -32,46 +31,52 @@ def test_set_determinism_handles_optional_modules(
 ) -> None:
     calls: dict[str, list] = {"torch": [], "numpy": []}
 
-    def _record_numpy(value: int) -> None:
-        calls["numpy"].append(value)
+    class DummyNumpy:
+        class Random:
+            @staticmethod
+            def seed(value: int) -> None:
+                calls["numpy"].append(value)
 
-    dummy_numpy = SimpleNamespace(
-        random=SimpleNamespace(seed=_record_numpy),
-        seed=_record_numpy,
-    )
+        random = Random()
 
-    def _cuda_is_available() -> bool:
-        return True
+        @staticmethod
+        def seed(value: int) -> None:
+            calls["numpy"].append(value)
 
-    def _cuda_manual_seed_all(value: int) -> None:
-        calls.setdefault("cuda", []).append(value)
+    class DummyCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
 
-    dummy_cuda = SimpleNamespace(
-        is_available=_cuda_is_available,
-        manual_seed_all=_cuda_manual_seed_all,
-    )
+        @staticmethod
+        def manual_seed_all(value: int) -> None:
+            calls.setdefault("cuda", []).append(value)
 
-    dummy_cudnn = SimpleNamespace(deterministic=False, benchmark=True)
+    class DummyBackends:
+        class CudnnBackend:  # type: ignore[assignment]
+            deterministic = False
+            benchmark = True
 
-    def _torch_manual_seed(value: int) -> None:
-        calls["torch"].append(value)
+        cudnn = CudnnBackend()
 
-    def _torch_set_num_threads(value: int) -> None:
-        calls.setdefault("threads", []).append(value)
+    class DummyTorch:
+        cuda = DummyCuda()
+        backends = DummyBackends()
 
-    def _torch_use_deterministic(flag: bool) -> None:
-        calls.setdefault("deterministic", []).append(flag)
+        @staticmethod
+        def manual_seed(value: int) -> None:
+            calls["torch"].append(value)
 
-    dummy_torch = SimpleNamespace(
-        cuda=dummy_cuda,
-        backends=SimpleNamespace(cudnn=dummy_cudnn),
-        manual_seed=_torch_manual_seed,
-        set_num_threads=_torch_set_num_threads,
-        use_deterministic_algorithms=_torch_use_deterministic,
-    )
+        @staticmethod
+        def set_num_threads(value: int) -> None:
+            calls.setdefault("threads", []).append(value)
 
-    monkeypatch.setitem(sys.modules, "numpy", dummy_numpy)
-    monkeypatch.setitem(sys.modules, "torch", dummy_torch)
+        @staticmethod
+        def use_deterministic_algorithms(flag: bool) -> None:
+            calls.setdefault("deterministic", []).append(flag)
+
+    monkeypatch.setitem(sys.modules, "numpy", DummyNumpy())
+    monkeypatch.setitem(sys.modules, "torch", DummyTorch())
 
     set_determinism(seed=11, threads=2)
 

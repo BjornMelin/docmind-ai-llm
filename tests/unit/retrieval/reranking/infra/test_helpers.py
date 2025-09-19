@@ -52,7 +52,7 @@ def test_should_enable_colpali_policy_and_override(monkeypatch):
     )
 
     # Ensure VRAM check returns True
-    monkeypatch.setattr(rr, "_has_cuda_vram", lambda *_: True)
+    monkeypatch.setattr(rr, "has_cuda_vram", lambda *_, **__: True)
 
     # Build lists with visual fraction >= 0.4
     text_nodes = [
@@ -70,5 +70,5 @@ def test_should_enable_colpali_policy_and_override(monkeypatch):
 
     # Ops override forces True even if VRAM returns False and fraction is low
     rr.settings.retrieval.enable_colpali = True
-    monkeypatch.setattr(rr, "_has_cuda_vram", lambda *_: False)
+    monkeypatch.setattr(rr, "has_cuda_vram", lambda *_, **__: False)
     assert rr.MultimodalReranker._should_enable_colpali([], [text_nodes]) is True

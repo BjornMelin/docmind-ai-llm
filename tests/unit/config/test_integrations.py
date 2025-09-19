@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -129,3 +130,88 @@ def test_setup_llamaindex_invokes_helpers(monkeypatch):
         mock_emb.assert_called_once_with()
         mock_ctx.assert_called_once_with()
         mock_struct.assert_called_once_with()
+
+
+@pytest.mark.unit
+def test_setup_vllm_env_sets_missing_only(monkeypatch):
+    from src.config import integrations as integ
+
+    mock_settings = MagicMock()
+    mock_settings.get_vllm_env_vars.return_value = {
+        "VLLM_FP8_OPT": "1",
+        "VLLM_EXISTING": "value",
+    }
+    monkeypatch.setattr("src.config.integrations.settings", mock_settings)
+    monkeypatch.setenv("VLLM_EXISTING", "keep")
+    monkeypatch.delenv("VLLM_FP8_OPT", raising=False)
+
+    integ.setup_vllm_env()
+
+    assert os.environ["VLLM_FP8_OPT"] == "1"
+    assert os.environ["VLLM_EXISTING"] == "keep"
+
+
+@pytest.mark.unit
+def test_get_vllm_server_command_includes_chunked_prefill(monkeypatch):
+    from src.config import integrations as integ
+
+    mock_settings = SimpleNamespace(
+        vllm=SimpleNamespace(
+            model="qwen",
+            context_window=8192,
+            kv_cache_dtype="fp8",
+            gpu_memory_utilization=0.8,
+            max_num_seqs=8,
+            max_num_batched_tokens=512,
+            enable_chunked_prefill=True,
+        )
+    )
+    monkeypatch.setattr("src.config.integrations.settings", mock_settings)
+
+    cmd = integ.get_vllm_server_command()
+
+    assert cmd[:3] == ["vllm", "serve", "qwen"]
+    assert "--enable-chunked-prefill" in cmd
+
+
+@pytest.mark.unit
+def test_startup_init_creates_directories(monkeypatch, tmp_path):
+    from src.config import integrations as integ
+
+    cfg = SimpleNamespace(
+        data_dir=tmp_path / "data",
+        cache_dir=tmp_path / "cache",
+        log_file=tmp_path / "logs" / "app.log",
+        database=SimpleNamespace(sqlite_db_path=tmp_path / "db" / "doc.db"),
+        telemetry_enabled=False,
+        observability=SimpleNamespace(enabled=False, endpoint=None, sampling_ratio=1.0),
+        llm_backend="vllm",
+        backend_base_url_normalized="http://localhost",
+        llm_request_timeout_seconds=30,
+        retrieval=SimpleNamespace(enable_server_hybrid=False, fusion_mode="rrf"),
+    )
+    tracer = MagicMock()
+    metrics = MagicMock()
+    monkeypatch.setattr("src.config.integrations.setup_tracing", tracer)
+    monkeypatch.setattr("src.config.integrations.setup_metrics", metrics)
+    monkeypatch.setattr("loguru.logger", MagicMock())
+
+    integ.startup_init(cfg)
+
+    assert (tmp_path / "data").exists()
+    assert (tmp_path / "cache").exists()
+    assert os.environ["DOCMIND_TELEMETRY_DISABLED"] == "true"
+    tracer.assert_called_once_with(cfg)
+    metrics.assert_called_once_with(cfg)
+
+
+@pytest.mark.unit
+def test_get_settings_embed_model_handles_attribute_error(monkeypatch):
+    from src.config import integrations as integ
+
+    class _WeirdSettings:
+        def __getattr__(self, name: str):  # pragma: no cover - simple stub
+            raise AttributeError(name)
+
+    monkeypatch.setattr("src.config.integrations.Settings", _WeirdSettings())
+    assert integ.get_settings_embed_model() is None

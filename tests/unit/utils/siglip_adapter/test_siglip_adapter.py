@@ -99,6 +99,7 @@ def test_siglip_adapter_dim_inference_from_config(monkeypatch):
     def _fake_ensure():
         s._model = _Model()
         s._proc = _Proc()
+        s._dim = getattr(s._model.config, "projection_dim", None)
 
     monkeypatch.setattr(s, "_ensure_loaded", _fake_ensure)
     _ = s.get_image_embedding(image=None)

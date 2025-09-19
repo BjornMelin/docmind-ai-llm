@@ -6,6 +6,7 @@ Ensures KG tool is only registered when a shallow probe returns results.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from types import SimpleNamespace
 
 
@@ -59,6 +60,11 @@ def test_kg_tool_absent_when_probe_empty(monkeypatch):  # type: ignore[no-untype
 
     monkeypatch.setattr(rf, "QueryEngineTool", _QET)
     monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
+    monkeypatch.setattr(
+        rf,
+        "build_graph_query_engine",
+        lambda *_a, **_k: (_ for _ in ()).throw(ValueError("probe empty")),
+    )
 
     class _Cfg:
         class retrieval:  # noqa: N801
@@ -113,6 +119,13 @@ def test_kg_tool_present_when_probe_ok(monkeypatch):  # type: ignore[no-untyped-
     monkeypatch.setattr(rf, "QueryEngineTool", _QET)
     monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
     monkeypatch.setattr(rf, "RetrieverQueryEngine", _RQE)
+    monkeypatch.setattr(
+        rf,
+        "build_graph_query_engine",
+        lambda *_a, **_k: SimpleNamespace(
+            query_engine=SimpleNamespace(), retriever=SimpleNamespace()
+        ),
+    )
 
     class _Cfg:
         class retrieval:  # noqa: N801

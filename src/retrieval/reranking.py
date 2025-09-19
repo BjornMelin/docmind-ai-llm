@@ -14,7 +14,6 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FTimeoutError
 from functools import cache
-from pickle import PicklingError
 from typing import Any
 
 from llama_index.core.postprocessor import SentenceTransformerRerank
@@ -97,10 +96,8 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
                 fut = executor.submit(fn)
             except (
                 OSError,
-                ValueError,
                 RuntimeError,
-                PicklingError,
-                AttributeError,
+                ValueError,
             ) as exc:  # pragma: no cover - pickling/env edge cases
                 logger.warning(
                     "Process executor unsupported; falling back to thread: {}",
@@ -115,9 +112,8 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
             fut = executor.submit(fn)
     except (
         OSError,
-        ValueError,
         RuntimeError,
-        AttributeError,
+        ValueError,
     ) as exc:  # defensive: ensure we have an executor
         logger.warning(
             "Executor initialization failed: {} — using thread fallback", exc
@@ -128,12 +124,12 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
     try:
         return fut.result(timeout=max(0.0, timeout_ms) / 1000.0)
     except FTimeoutError:
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(RuntimeError):
             fut.cancel()
         return None
     finally:
         for ex in executors:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(RuntimeError, OSError):
                 ex.shutdown(wait=False, cancel_futures=True)
 
 
@@ -183,7 +179,10 @@ def _compute_siglip_scores(
     """Batched SigLIP cosine scores with timeout guard."""
     try:
         import torch  # type: ignore
-    except ImportError:  # pragma: no cover - torch optional in CI
+    except (
+        ImportError,
+        ModuleNotFoundError,
+    ):  # pragma: no cover - torch optional in CI
         return [float("-inf")] * len(images)
 
     feats: list[float] = [float("-inf")] * len(images)
@@ -393,13 +392,16 @@ def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRe
         logger.warning("Text reranker init failed; using NoOpTextReranker: {}", exc)
 
     class NoOpTextReranker:  # minimal LlamaIndex-like interface
+        """Fallback reranker that returns the first ``top_n`` nodes."""
+
         def __init__(self, top_n: int) -> None:
+            """Store the number of nodes to retain."""
             self.top_n = int(top_n)
 
         def postprocess_nodes(
             self, nodes: list[NodeWithScore], **_: Any
         ) -> list[NodeWithScore]:
-            """Return the first ``top_n`` nodes unchanged."""
+            """Return the leading ``top_n`` nodes unchanged."""
             return nodes[: self.top_n]
 
     return NoOpTextReranker(k)  # type: ignore[return-value]
@@ -419,7 +421,7 @@ def _build_visual_reranker_cached(top_n: int) -> Any:
         from llama_index.postprocessor.colpali_rerank import (
             ColPaliRerank,  # type: ignore
         )
-    except ImportError as exc:
+    except (ImportError, AttributeError, RuntimeError) as exc:
         raise ValueError("ColPaliRerank not available") from exc
     return ColPaliRerank(model="vidore/colpali-v1.2", top_n=top_n)
 

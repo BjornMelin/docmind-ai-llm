@@ -13,7 +13,6 @@ from src.utils.siglip_adapter import SiglipEmbedding
 
 @pytest.mark.unit
 def test_ensure_loaded_prefers_unified_loader(monkeypatch):
-    """Ensure SiglipEmbedding uses the unified loader when available."""
     sentinel_model = object()
     sentinel_proc = object()
 
@@ -32,7 +31,6 @@ def test_ensure_loaded_prefers_unified_loader(monkeypatch):
 
 @pytest.mark.unit
 def test_ensure_loaded_falls_back_to_transformers(monkeypatch):
-    """Verify SiglipEmbedding falls back to transformers when unified fails."""
     stub = types.SimpleNamespace(
         load_siglip=lambda *_: (_ for _ in ()).throw(RuntimeError("fail"))
     )
@@ -56,7 +54,6 @@ def test_ensure_loaded_falls_back_to_transformers(monkeypatch):
 
 @pytest.mark.unit
 def test_get_image_embedding_returns_zero_vector(monkeypatch):
-    """Confirm get_image_embedding returns zeros when model is unavailable."""
     emb = SiglipEmbedding(model_id="test", device="cpu")
     emb._dim = 256
 

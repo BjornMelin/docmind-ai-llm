@@ -15,6 +15,9 @@ def test_beir_cli_smoke(tmp_path: Path) -> None:
         patch("tools.eval.run_beir.GenericDataLoader") as gdl,
         patch("tools.eval.run_beir.EvaluateRetrieval") as er,
         patch("tools.eval.run_beir.ServerHybridRetriever.retrieve") as retr,
+        patch("tools.eval.run_beir.QdrantClient") as _qdrant,
+        patch("src.retrieval.hybrid.QdrantClient") as _hybrid_qdrant,
+        patch("src.retrieval.hybrid.ensure_hybrid_collection") as _ensure_hybrid,
     ):
         # Minimal dataset
         gdl.return_value.load.return_value = (

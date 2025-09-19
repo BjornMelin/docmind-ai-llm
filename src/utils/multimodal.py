@@ -54,8 +54,15 @@ async def generate_image_embeddings(clip: Any, image: Any) -> np.ndarray:
 def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
     """Return approximate VRAM delta (GB) for a tiny embedding run.
 
-    Uses direct torch CUDA checks to remain easily patchable in tests.
-    Returns 0.0 when CUDA is unavailable or on errors.
+    Args:
+        clip: Model exposing ``get_image_embedding``. Only used when ``images``
+            are supplied.
+        images: Optional list of images to embed. When provided the helper
+            measures VRAM before and after the calls.
+
+    Returns:
+        float: Delta in gigabytes. ``0.0`` when CUDA is unavailable or any
+        error occurs.
     """
     try:
         import torch  # type: ignore
@@ -63,10 +70,13 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
         return 0.0
 
     try:
-        if not getattr(torch, "cuda", None) or not torch.cuda.is_available():  # type: ignore[attr-defined]
+        cuda_iface = getattr(torch, "cuda", None)
+        if not cuda_iface:
+            return 0.0
+        if not cuda_iface.is_available():  # type: ignore[attr-defined]
             return 0.0
 
-        before = float(torch.cuda.memory_allocated())  # type: ignore[attr-defined]
+        before = float(cuda_iface.memory_allocated())  # type: ignore[attr-defined]
         if images:
             for img in images[:MAX_TEST_IMAGES]:
                 try:
@@ -74,9 +84,9 @@ def validate_vram_usage(clip: Any, images: list[Any] | None = None) -> float:
                 except (RuntimeError, ValueError, TypeError):  # pragma: no cover
                     break
 
-        after = float(torch.cuda.memory_allocated())  # type: ignore[attr-defined]
+        after = float(cuda_iface.memory_allocated())  # type: ignore[attr-defined]
         with contextlib.suppress(RuntimeError, AttributeError):
-            torch.cuda.empty_cache()  # type: ignore[attr-defined]
+            cuda_iface.empty_cache()  # type: ignore[attr-defined]
         return max(0.0, (after - before) / (1024**3))
     except (AttributeError, RuntimeError):
         return 0.0
@@ -89,13 +99,21 @@ def batch_process_images(
     batch_size: int | None = None,
     output_dim: int | None = None,
 ) -> np.ndarray:
-    """Process images in batches and return a (N, D) matrix.
+    """Process images in batches and return a ``(N, D)`` matrix.
 
-    - When ``output_dim`` is provided, validates that produced embeddings
-      match the expected dimension and raises ``ValueError`` on mismatch.
-    - Otherwise, errors for individual images are logged and converted to
-      zero vectors with a default dimension.
-    - When ``images`` is empty, returns ``np.array([])``.
+    Args:
+        clip: Model exposing ``get_image_embedding``.
+        images: Input images to embed.
+        batch_size: Optional batch size; defaults to ``len(images)``.
+        output_dim: Optional strict embedding dimension; mismatches raise an
+            error.
+
+    Returns:
+        numpy.ndarray: Stacked embeddings with shape ``(N, D)`` where ``D`` is
+        either ``output_dim`` or :data:`EMBEDDING_DIMENSIONS`.
+
+    Raises:
+        ValueError: If ``output_dim`` is set and the model output size differs.
     """
     if not images:
         return np.array([])
@@ -138,9 +156,17 @@ async def cross_modal_search(
     search_type: str = "text_to_image",
     top_k: int = 5,
 ) -> list[dict[str, Any]]:
-    """Tiny facade around common index interfaces used in tests.
+    """Query a mocked index for multimodal search results.
 
-    Returns a list of result dicts with stable keys for downstream consumers.
+    Args:
+        index: Object exposing ``as_query_engine`` or ``as_retriever``.
+        query: Text query for ``text_to_image`` searches.
+        query_image: Image-like payload for ``image_to_image`` searches.
+        search_type: Either ``"text_to_image"`` or ``"image_to_image"``.
+        top_k: Maximum number of results to return.
+
+    Returns:
+        list[dict[str, Any]]: Normalised search results with stable keys.
     """
     results: list[dict[str, Any]] = []
     if search_type == "text_to_image" and query is not None:
@@ -189,9 +215,15 @@ async def cross_modal_search(
 def create_image_documents(
     image_paths: Iterable[str], metadata: dict[str, Any] | None = None
 ) -> list[ImageDocument]:
-    """Create ``ImageDocument`` entries for paths, skipping failures.
+    """Create ``ImageDocument`` entries while skipping failures.
 
-    Errors constructing individual documents are logged and skipped.
+    Args:
+        image_paths: Iterable of filesystem paths pointing to images.
+        metadata: Optional metadata dictionary shared by all documents. When
+            omitted a default ``{"source": "multimodal"}`` entry is used.
+
+    Returns:
+        list[ImageDocument]: Successfully constructed document records.
     """
     docs: list[ImageDocument] = []
     meta = metadata or {"source": "multimodal"}
@@ -210,10 +242,18 @@ async def validate_end_to_end_pipeline(
     property_graph: Any,
     llm: Any,
 ) -> dict[str, Any]:
-    """Lightweight end-to-end validation used by validation flows.
+    """Run a lightweight multimodal validation pipeline.
 
-    This stitches together image embedding, a toy entity relationship summary,
-    and a final response string that references key components.
+    Args:
+        query: Text query describing the user request.
+        query_image: Reference image passed to the embedding model.
+        clip: Model exposing ``get_image_embedding``; mocked in tests.
+        property_graph: Placeholder graph object (unused but kept for future expansion).
+        llm: Placeholder LLM client (unused, mocked in tests).
+
+    Returns:
+        dict[str, Any]: Summary containing the final response, entity metadata,
+        similarity metrics, and execution timing.
     """
     # Image embedding (normalized) drives a dummy similarity metric
     import time

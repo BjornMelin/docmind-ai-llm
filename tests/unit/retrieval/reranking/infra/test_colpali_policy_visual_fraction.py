@@ -20,7 +20,7 @@ def test_colpali_visual_fraction_true_when_high_and_vram_ok(monkeypatch):
     rr = importlib.import_module("src.retrieval.reranking")
 
     # Make VRAM check pass
-    monkeypatch.setattr(rr, "_has_cuda_vram", lambda *_a, **_k: True)
+    monkeypatch.setattr(rr, "has_cuda_vram", lambda *_a, **_k: True)
     # Ensure top-k <= MAX
     monkeypatch.setattr(rr.settings.retrieval, "reranking_top_k", rr.COLPALI_TOPK_MAX)
     # No ops_force override path
@@ -37,7 +37,7 @@ def test_colpali_visual_fraction_false_when_low_even_with_vram(monkeypatch):
     """Does not enable when visual fraction < 0.4, even with VRAM OK and topk OK."""
     rr = importlib.import_module("src.retrieval.reranking")
 
-    monkeypatch.setattr(rr, "_has_cuda_vram", lambda *_a, **_k: True)
+    monkeypatch.setattr(rr, "has_cuda_vram", lambda *_a, **_k: True)
     monkeypatch.setattr(rr.settings.retrieval, "reranking_top_k", rr.COLPALI_TOPK_MAX)
     monkeypatch.setattr(rr.settings.retrieval, "enable_colpali", False, raising=False)
 
