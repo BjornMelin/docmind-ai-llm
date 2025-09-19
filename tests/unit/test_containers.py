@@ -11,6 +11,7 @@ import src.containers as containers
 
 @pytest.mark.unit
 def test_get_embedding_model_returns_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get embedding model returns mapping."""
     # Provide a minimal get_embedding_config on settings
     monkeypatch.setattr(
         containers,
@@ -27,6 +28,7 @@ def test_get_embedding_model_returns_mapping(monkeypatch: pytest.MonkeyPatch) ->
 def test_get_multi_agent_coordinator_constructs_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test get multi agent coordinator constructs instance."""
     # Provide a minimal model configuration
     monkeypatch.setattr(
         containers,

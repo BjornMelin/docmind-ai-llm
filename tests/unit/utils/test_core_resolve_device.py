@@ -13,6 +13,7 @@ import pytest
 
 @pytest.mark.unit
 def test_resolve_device_auto_cpu_when_no_accelerator(monkeypatch):
+    """Test resolve device auto cpu when no accelerator."""
     import src.utils.core as core
 
     dummy_torch = types.SimpleNamespace(
@@ -27,6 +28,7 @@ def test_resolve_device_auto_cpu_when_no_accelerator(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_auto_cuda_uses_current_device(monkeypatch):
+    """Test resolve device auto cuda uses current device."""
     import src.utils.core as core
 
     class _Cuda:
@@ -48,6 +50,7 @@ def test_resolve_device_auto_cuda_uses_current_device(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_explicit_cuda_index(monkeypatch):
+    """Test resolve device explicit cuda index."""
     import src.utils.core as core
 
     dev, idx = core.resolve_device("cuda:2")
@@ -57,6 +60,7 @@ def test_resolve_device_explicit_cuda_index(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_mps(monkeypatch):
+    """Test resolve device mps."""
     import src.utils.core as core
 
     class _MPS:

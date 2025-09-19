@@ -46,6 +46,8 @@ def test_router_tools_and_rerank_toggle(monkeypatch):  # type: ignore[no-untyped
     import src.retrieval.hybrid as hy
 
     class _StubRetriever:
+        """Test router tools and rerank toggle."""
+
         def __init__(self, *_a: Any, **_k: Any):
             pass
 

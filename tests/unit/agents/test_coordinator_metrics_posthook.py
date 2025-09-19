@@ -11,6 +11,7 @@ from src.agents.coordinator import MultiAgentCoordinator
 
 @pytest.mark.unit
 def test_post_model_hook_attaches_metrics_without_structured_mode():
+    """Test post model hook attaches metrics without structured mode."""
     coord = MultiAgentCoordinator()
     hook = coord._create_post_model_hook()
     state = {

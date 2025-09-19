@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 def test_log_jsonl_includes_request_id(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """Ensure telemetry log lines include the active request ID."""
     tmod = importlib.import_module("src.utils.telemetry")
     # Redirect telemetry path
     monkeypatch.setattr(
@@ -32,6 +33,7 @@ def test_log_jsonl_includes_request_id(tmp_path, monkeypatch):  # type: ignore[n
 
 
 def test_log_jsonl_sampling_disables_output(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """Confirm telemetry sampling of 0 suppresses all log output."""
     tmod = importlib.import_module("src.utils.telemetry")
     monkeypatch.setattr(
         tmod, "_TELEM_PATH", Path(tmp_path / "telemetry.jsonl"), raising=False

@@ -15,6 +15,8 @@ import src.ui_helpers as ui
 
 
 class _Sidebar:
+    """Record-only sidebar stub replacing Streamlit's sidebar component."""
+
     def __init__(self) -> None:
         self.markdown_calls: list[str] = []
         self.write_calls: list[str] = []
@@ -27,6 +29,8 @@ class _Sidebar:
 
 
 class _StreamlitStub:
+    """Simple Streamlit replacement used to capture UI helper output."""
+
     def __init__(self) -> None:
         self.sidebar = _Sidebar()
         self.infos: list[str] = []
@@ -39,6 +43,7 @@ class _StreamlitStub:
 def test_build_reranker_controls_renders_without_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test build reranker controls renders without errors."""
     stub = _StreamlitStub()
     monkeypatch.setattr(ui, "st", stub, raising=True)
 

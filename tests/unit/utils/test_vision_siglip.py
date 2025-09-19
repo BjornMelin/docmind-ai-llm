@@ -12,6 +12,7 @@ from src.utils import vision_siglip
 
 @pytest.mark.unit
 def test_load_siglip_uses_cached_loader(monkeypatch):
+    """Verify load_siglip caches model/processor instances per model id."""
     call_count = {"model": 0, "processor": 0}
 
     def _select(device: str) -> str:
