@@ -1,13 +1,17 @@
-"""Test KG tool health gate via shallow probe.
-
-Ensures KG tool is only registered when a shallow probe returns results.
-"""
+"""Test KG tool health gate via shallow probe using lightweight adapter."""
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 from types import SimpleNamespace
+
+import pytest
+
+from src.retrieval import router_factory as rf
+
+pytest.importorskip(
+    "llama_index.program.openai",
+    reason="requires llama_index.program.openai",
+)
 
 
 def _count_tools(router) -> int:  # type: ignore[no-untyped-def]
@@ -24,13 +28,63 @@ def _has_tool(router, name: str) -> bool:  # type: ignore[no-untyped-def]
         if tools is None:
             continue
         for t in tools:
-            if getattr(getattr(t, "metadata", SimpleNamespace()), "name", "") == name:
+            metadata = getattr(t, "metadata", SimpleNamespace())
+            if getattr(metadata, "name", "") == name:
                 return True
     return False
 
 
+def _make_adapter():
+    class _ToolMetadata:
+        def __init__(self, name: str, description: str) -> None:
+            self.name = name
+            self.description = description
+
+    class _QueryEngineTool:
+        def __init__(self, query_engine, metadata):
+            self.query_engine = query_engine
+            self.metadata = metadata
+
+    class _RouterQueryEngine:
+        def __init__(
+            self,
+            *,
+            selector=None,
+            query_engine_tools=None,
+            verbose=False,
+            llm=None,
+            **kwargs,
+        ) -> None:
+            self.selector = selector
+            self.query_engine_tools = list(query_engine_tools or [])
+            self.verbose = verbose
+            self.llm = llm
+            self.kwargs = kwargs
+
+        @classmethod
+        def from_args(cls, **kwargs):  # type: ignore[no-untyped-def]
+            return cls(**kwargs)
+
+    class _LLMSingleSelector:
+        @classmethod
+        def from_defaults(cls, llm=None):
+            return SimpleNamespace(llm=llm)
+
+    return SimpleNamespace(
+        RouterQueryEngine=_RouterQueryEngine,
+        RetrieverQueryEngine=_RouterQueryEngine,
+        QueryEngineTool=_QueryEngineTool,
+        ToolMetadata=_ToolMetadata,
+        LLMSingleSelector=_LLMSingleSelector,
+        get_pydantic_selector=lambda _llm: None,
+        __is_stub__=False,
+        supports_graphrag=True,
+        graphrag_disabled_reason="",
+    )
+
+
 def test_kg_tool_absent_when_probe_empty(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
+    adapter = _make_adapter()
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -47,25 +101,6 @@ def test_kg_tool_absent_when_probe_empty(monkeypatch):  # type: ignore[no-untype
         def as_retriever(self, **_):  # type: ignore[no-untyped-def]
             return _ProbeRetr()
 
-    class _QET:
-        def __init__(self, query_engine, metadata):
-            self.query_engine = query_engine
-            self.metadata = metadata
-
-    class _RQE:
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
-            self.selector = selector
-            self.query_engine_tools = query_engine_tools or []
-            self.verbose = verbose
-
-    monkeypatch.setattr(rf, "QueryEngineTool", _QET)
-    monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
-    monkeypatch.setattr(
-        rf,
-        "build_graph_query_engine",
-        lambda *_a, **_k: (_ for _ in ()).throw(ValueError("probe empty")),
-    )
-
     class _Cfg:
         class retrieval:  # noqa: N801
             top_k = 5
@@ -76,15 +111,19 @@ def test_kg_tool_absent_when_probe_empty(monkeypatch):  # type: ignore[no-untype
             default_path_depth = 1
 
     router = rf.build_router_engine(
-        _Vec(), _Pg(), settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
+        _Vec(),
+        _Pg(),
+        settings=_Cfg,
+        llm=SimpleNamespace(),
+        enable_hybrid=False,
+        adapter=adapter,
     )
-    # Only vector tool should be present when probe is empty
     assert _count_tools(router) == 1
     assert _has_tool(router, "knowledge_graph") is False
 
 
 def test_kg_tool_present_when_probe_ok(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
+    adapter = _make_adapter()
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -101,32 +140,6 @@ def test_kg_tool_present_when_probe_ok(monkeypatch):  # type: ignore[no-untyped-
         def as_retriever(self, **_):  # type: ignore[no-untyped-def]
             return _ProbeRetr()
 
-    class _QET:
-        def __init__(self, query_engine, metadata):
-            self.query_engine = query_engine
-            self.metadata = metadata
-
-    class _RQE:
-        @classmethod
-        def from_args(cls, **kwargs):  # type: ignore[no-untyped-def]
-            return SimpleNamespace(qe=True, kwargs=kwargs)
-
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
-            self.selector = selector
-            self.query_engine_tools = query_engine_tools or []
-            self.verbose = verbose
-
-    monkeypatch.setattr(rf, "QueryEngineTool", _QET)
-    monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
-    monkeypatch.setattr(rf, "RetrieverQueryEngine", _RQE)
-    monkeypatch.setattr(
-        rf,
-        "build_graph_query_engine",
-        lambda *_a, **_k: SimpleNamespace(
-            query_engine=SimpleNamespace(), retriever=SimpleNamespace()
-        ),
-    )
-
     class _Cfg:
         class retrieval:  # noqa: N801
             top_k = 5
@@ -136,9 +149,24 @@ def test_kg_tool_present_when_probe_ok(monkeypatch):  # type: ignore[no-untyped-
         class graphrag_cfg:  # noqa: N801
             default_path_depth = 1
 
-    router = rf.build_router_engine(
-        _Vec(), _Pg(), settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
+    class _Artifacts:
+        def __init__(self):
+            self.query_engine = SimpleNamespace(kind="kg")
+            self.retriever = SimpleNamespace()
+
+    monkeypatch.setattr(
+        rf,
+        "build_graph_query_engine",
+        lambda *_a, **_k: _Artifacts(),
     )
-    # vector + KG
+
+    router = rf.build_router_engine(
+        _Vec(),
+        _Pg(),
+        settings=_Cfg,
+        llm=SimpleNamespace(),
+        enable_hybrid=False,
+        adapter=adapter,
+    )
     assert _count_tools(router) == 2
     assert _has_tool(router, "knowledge_graph") is True

@@ -10,7 +10,8 @@ is missing or unhealthy.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, Self, cast
 
 from loguru import logger
 
@@ -26,10 +27,91 @@ from src.retrieval.postprocessor_utils import (
     build_vector_query_engine,
 )
 
+GRAPH_DEPENDENCY_HINT = (
+    "GraphRAG disabled: install optional extras 'docmind_ai_llm[llama]' and "
+    "'llama-index-program-openai' to enable knowledge graph retrieval."
+)
+
+
 if TYPE_CHECKING:  # pragma: no cover - typing aid only
     from llama_index.core.query_engine import RouterQueryEngine as RouterQueryEngineType
 else:
     RouterQueryEngineType = Any
+
+
+def _build_stub_adapter() -> LlamaIndexAdapterProtocol:
+    """Return a minimal adapter when llama_index is unavailable."""
+
+    class _ToolMetadata:
+        """Lightweight metadata stub compatible with QueryEngineTool."""
+
+        def __init__(self, name: str, description: str) -> None:
+            self.name = name
+            self.description = description
+
+    class _QueryEngineTool:
+        """Minimal tool wrapper exposing query engine and metadata."""
+
+        def __init__(self, query_engine: Any, metadata: Any) -> None:
+            self.query_engine = query_engine
+            self.metadata = metadata
+
+    class _RouterQueryEngine:
+        """Subset of RouterQueryEngine surface used inside router_factory."""
+
+        def __init__(
+            self,
+            *,
+            selector: Any = None,
+            query_engine_tools: list[Any] | None = None,
+            verbose: bool = False,
+            llm: Any = None,
+            **kwargs: Any,
+        ) -> None:
+            self.selector = selector
+            self.query_engine_tools = list(query_engine_tools or [])
+            self.verbose = verbose
+            self.llm = llm
+            self.kwargs = kwargs
+
+        @classmethod
+        def from_args(cls, **kwargs: Any) -> Self:
+            """Construct router engine from keyword arguments."""
+            return cls(**kwargs)
+
+    class _RetrieverQueryEngine:
+        """Lightweight RetrieverQueryEngine stub supporting from_args."""
+
+        @classmethod
+        def from_args(cls, **kwargs: Any) -> SimpleNamespace:
+            """Return a simple namespace capturing provided kwargs."""
+            return SimpleNamespace(**kwargs)
+
+    class _LLMSingleSelector:
+        """Minimal selector stub exposing ``from_defaults`` API."""
+
+        def __init__(self, llm: Any = None) -> None:
+            self.llm = llm
+
+        @classmethod
+        def from_defaults(cls, llm: Any = None) -> Self:
+            """Return selector instance storing the supplied LLM."""
+            return cls(llm=llm)
+
+    def _get_pydantic_selector(_llm: Any) -> Any | None:
+        return None
+
+    return SimpleNamespace(
+        RouterQueryEngine=_RouterQueryEngine,
+        RetrieverQueryEngine=_RetrieverQueryEngine,
+        QueryEngineTool=_QueryEngineTool,
+        ToolMetadata=_ToolMetadata,
+        LLMSingleSelector=_LLMSingleSelector,
+        get_pydantic_selector=_get_pydantic_selector,
+        __is_stub__=True,
+        supports_graphrag=False,
+        graphrag_disabled_reason=GRAPH_DEPENDENCY_HINT,
+    )
 
 
 def _resolve_adapter(
@@ -40,9 +122,10 @@ def _resolve_adapter(
         return adapter
     try:
         return get_llama_index_adapter()
-    except MissingLlamaIndexError as exc:
-        raise MissingLlamaIndexError() from exc
+    except MissingLlamaIndexError:
+        return _build_stub_adapter()
 
+# pylint: disable=too-many-statements
 
 def build_router_engine(
     vector_index: Any,
@@ -70,6 +153,8 @@ def build_router_engine(
     """
     cfg = settings or default_settings
     adapter = _resolve_adapter(adapter)
+    adapter_is_stub = bool(getattr(adapter, "__is_stub__", False))
+    supports_graphrag = bool(getattr(adapter, "supports_graphrag", not adapter_is_stub))
 
     def _coerce_top_k(value: Any) -> int | None:
         if value is None:
@@ -103,8 +188,13 @@ def build_router_engine(
         _v_post = _get_pp(
             "vector", use_reranking=use_rerank_flag, top_n=normalized_top_k
         )
-        v_engine = build_vector_query_engine(
-            vector_index, _v_post, similarity_top_k=cfg.retrieval.top_k
+        v_engine = cast(
+            Any,
+            build_vector_query_engine(
+                vector_index,
+                _v_post,
+                similarity_top_k=cfg.retrieval.top_k,  # type: ignore[arg-type]
+            ),
         )
     except (TypeError, AttributeError, ValueError, ImportError):
         v_engine = vector_index.as_query_engine()
@@ -148,13 +238,16 @@ def build_router_engine(
             _h_post = _get_pp(
                 "hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k
             )
-            h_engine = build_retriever_query_engine(
-                retr,
-                _h_post,
-                llm=the_llm,
-                response_mode="compact",
-                verbose=False,
-                engine_cls=retriever_query_engine_cls,
+            h_engine = cast(
+                Any,
+                build_retriever_query_engine(
+                    retr,
+                    _h_post,
+                    llm=the_llm,
+                    response_mode="compact",  # type: ignore[arg-type]
+                    verbose=False,  # type: ignore[arg-type]
+                    engine_cls=retriever_query_engine_cls,
+                ),
             )
             tools.append(
                 query_engine_tool_cls(
@@ -175,12 +268,16 @@ def build_router_engine(
     ) as e:  # pragma: no cover - defensive
         logger.debug(f"Hybrid tool construction skipped: {e}")
 
-    try:
-        if (
-            pg_index is not None
-            and getattr(pg_index, "property_graph_store", None) is not None
-            and bool(getattr(cfg, "enable_graphrag", True))
-        ):
+    graph_requested = (
+        pg_index is not None
+        and getattr(pg_index, "property_graph_store", None) is not None
+        and bool(getattr(cfg, "enable_graphrag", True))
+    )
+    if graph_requested and not supports_graphrag:
+        reason = getattr(adapter, "graphrag_disabled_reason", GRAPH_DEPENDENCY_HINT)
+        logger.warning(reason)
+    elif graph_requested:
+        try:
             graph_depth = int(
                 getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
             )
@@ -209,13 +306,14 @@ def build_router_engine(
                     ),
                 )
             )
-    except (
-        ValueError,
-        TypeError,
-        AttributeError,
-        ImportError,
-    ) as exc:  # pragma: no cover - defensive
-        logger.debug(f"Graph tool construction skipped: {exc}")
+        except (
+            ValueError,
+            TypeError,
+            AttributeError,
+            ImportError,
+            MissingLlamaIndexError,
+        ) as exc:  # pragma: no cover - defensive
+            logger.debug(f"Graph tool construction skipped: {exc}")
 
     class _NoOpLLM:
         """Minimal no-op LLM stub for router defaults."""
@@ -265,6 +363,8 @@ def build_router_engine(
         any(t.metadata.name == "knowledge_graph" for t in tools),
     )
     return router
+
+# pylint: enable=too-many-statements
 
 
 try:

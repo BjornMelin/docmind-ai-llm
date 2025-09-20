@@ -19,6 +19,7 @@ def test_real_adapter_surface() -> None:
     set_llama_index_adapter(None)
     adapter = get_llama_index_adapter(force_reload=True)
     assert not adapter.__is_stub__
+    assert adapter.supports_graphrag is True
     for attr in (
         "RouterQueryEngine",
         "RetrieverQueryEngine",

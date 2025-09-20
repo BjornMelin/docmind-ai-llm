@@ -233,6 +233,7 @@ def _stub_router_postprocessor_builders(
         return
     from types import SimpleNamespace
 
+    from src.retrieval import graph_config as gc
     from src.retrieval import postprocessor_utils as pu
 
     def _vector(index, post, **kwargs):
@@ -246,7 +247,8 @@ def _stub_router_postprocessor_builders(
             qe.kwargs = {"node_postprocessors": post, **kwargs}
         return qe
 
-    def _graph(pg_index, post, **kwargs):
+    def _graph(pg_index, post=None, **kwargs):
+        post = kwargs.pop("node_postprocessors", post)
         try:
             retriever = pg_index.as_retriever(
                 include_text=kwargs.pop("include_text", True),
@@ -260,11 +262,15 @@ def _stub_router_postprocessor_builders(
             qe = pg_index.as_query_engine()
         if hasattr(pg_index, "kwargs"):
             pg_index.kwargs = {"node_postprocessors": post}
+        effective_kwargs = {"node_postprocessors": post}
         if hasattr(qe, "kwargs"):
-            qe.kwargs = {"node_postprocessors": post}
+            qe.kwargs = effective_kwargs
         if hasattr(retriever, "kwargs"):
-            retriever.kwargs = {"node_postprocessors": post}
-        return SimpleNamespace(query_engine=qe, retriever=retriever)
+            retriever.kwargs = effective_kwargs
+        out = SimpleNamespace(
+            query_engine=qe, retriever=retriever, kwargs=effective_kwargs
+        )
+        return out
 
     def _retriever(retriever, post, llm=None, engine_cls=None, **kwargs):
         engine = engine_cls or SimpleNamespace
@@ -277,15 +283,28 @@ def _stub_router_postprocessor_builders(
             )
         except AttributeError:
             out = SimpleNamespace(retriever=retriever, llm=llm, kwargs=kwargs)
+        effective_kwargs = {"node_postprocessors": post, **kwargs}
         if hasattr(retriever, "kwargs"):
-            retriever.kwargs = {"node_postprocessors": post, **kwargs}
+            retriever.kwargs = effective_kwargs
         if hasattr(out, "kwargs"):
-            out.kwargs = {"node_postprocessors": post, **kwargs}
+            out.kwargs = effective_kwargs
         return out
+
+    class _GraphRetrieverEngine:
+        @staticmethod
+        def from_args(**kwargs):
+            return SimpleNamespace(**kwargs)
 
     monkeypatch.setattr(pu, "build_vector_query_engine", _vector, raising=False)
     monkeypatch.setattr(pu, "build_pg_query_engine", _graph, raising=False)
     monkeypatch.setattr(pu, "build_retriever_query_engine", _retriever, raising=False)
+    monkeypatch.setattr(
+        gc,
+        "RetrieverQueryEngine",
+        _GraphRetrieverEngine,
+        raising=False,
+    )
+    monkeypatch.setattr(gc, "_require_llamaindex", lambda: None, raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -388,11 +407,14 @@ def _router_factory_stubs(
             qe = pg_index.as_query_engine()
         except AttributeError:
             qe = SimpleNamespace(kwargs={})
+        effective_kwargs = {"node_postprocessors": node_postprocessors}
         if hasattr(qe, "kwargs"):
-            qe.kwargs = {"node_postprocessors": node_postprocessors}
+            qe.kwargs = effective_kwargs
         if hasattr(retriever, "kwargs"):
-            retriever.kwargs = {"node_postprocessors": node_postprocessors}
-        return SimpleNamespace(query_engine=qe, retriever=retriever)
+            retriever.kwargs = effective_kwargs
+        return SimpleNamespace(
+            query_engine=qe, retriever=retriever, kwargs=effective_kwargs
+        )
 
     def _retriever(retriever, post, llm=None, engine_cls=None, **kwargs):
         engine = engine_cls or _RetrieverQueryEngine
@@ -408,6 +430,8 @@ def _router_factory_stubs(
         LLMSingleSelector=_LLMSingleSelector,
         get_pydantic_selector=lambda llm: None,
         __is_stub__=True,
+        supports_graphrag=False,
+        graphrag_disabled_reason=rf.GRAPH_DEPENDENCY_HINT,
     )
 
     set_llama_index_adapter(adapter)
@@ -426,7 +450,77 @@ def _router_factory_stubs(
     monkeypatch.setattr(rf, "build_retriever_query_engine", _retriever, raising=False)
     monkeypatch.setattr(gc, "build_graph_query_engine", _graph, raising=False)
     monkeypatch.setattr(rf, "build_graph_query_engine", _graph, raising=False)
+    monkeypatch.setattr(
+        gc,
+        "RetrieverQueryEngine",
+        _RetrieverQueryEngine,
+        raising=False,
+    )
+    monkeypatch.setattr(gc, "_require_llamaindex", lambda: None, raising=False)
     try:
         yield
     finally:
         set_llama_index_adapter(None)
+
+    class _StubToolMetadata:
+        def __init__(self, name: str, description: str) -> None:
+            self.name = name
+            self.description = description
+
+    class _StubQueryEngineTool:
+        def __init__(self, query_engine, metadata) -> None:
+            self.query_engine = query_engine
+            self.metadata = metadata
+
+    class _StubRouterQueryEngine:
+        def __init__(
+            self,
+            *,
+            selector=None,
+            query_engine_tools=None,
+            verbose=False,
+            llm=None,
+            **kwargs,
+        ) -> None:
+            self.selector = selector
+            self.query_engine_tools = list(query_engine_tools or [])
+            self.verbose = verbose
+            self.llm = llm
+            self.kwargs = kwargs
+
+        @classmethod
+        def from_args(cls, **kwargs):
+            return cls(**kwargs)
+
+    class _StubRetrieverQueryEngine:
+        @classmethod
+        def from_args(cls, **kwargs):
+            return SimpleNamespace(**kwargs)
+
+    class _StubLLMSingleSelector:
+        def __init__(self, llm=None) -> None:
+            self.llm = llm
+
+        @classmethod
+        def from_defaults(cls, llm=None):
+            return cls(llm=llm)
+
+    def _get_pydantic_selector(_llm):
+        return None
+
+    adapter = SimpleNamespace(
+        RouterQueryEngine=_StubRouterQueryEngine,
+        RetrieverQueryEngine=_StubRetrieverQueryEngine,
+        QueryEngineTool=_StubQueryEngineTool,
+        ToolMetadata=_StubToolMetadata,
+        LLMSingleSelector=_StubLLMSingleSelector,
+        get_pydantic_selector=_get_pydantic_selector,
+        __is_stub__=True,
+        supports_graphrag=False,
+        graphrag_disabled_reason=rf.GRAPH_DEPENDENCY_HINT,
+    )
+
+    def _resolved(adapter_arg):
+        return adapter if adapter_arg is None else adapter_arg
+
+    monkeypatch.setattr(rf, "_resolve_adapter", _resolved, raising=False)

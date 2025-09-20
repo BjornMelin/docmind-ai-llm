@@ -2,13 +2,15 @@
 
 Verifies that when reranking is enabled, the hybrid tool receives
 node_postprocessors via ``RetrieverQueryEngine.from_args``; and when disabled,
-no node_postprocessors are passed.
+no node_postprocessors are passed. Uses a lightweight adapter to avoid
+importing llama_index during unit tests.
 """
 
 from __future__ import annotations
 
-import importlib
 from types import SimpleNamespace
+
+from src.retrieval import router_factory as rf
 
 
 def _tool_count(router) -> int:  # type: ignore[no-untyped-def]
@@ -19,15 +21,7 @@ def _tool_count(router) -> int:  # type: ignore[no-untyped-def]
     return 0
 
 
-def test_hybrid_rerank_injection_toggle(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
-
-    class _DummyHybrid:
-        def __init__(self, *_a, **_k):  # type: ignore[no-untyped-def]
-            pass
-
-    monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
-
+def _make_adapter():
     class _RQE:
         last_kwargs = None  # type: ignore[var-annotated]
 
@@ -36,10 +30,20 @@ def test_hybrid_rerank_injection_toggle(monkeypatch):  # type: ignore[no-untyped
             cls.last_kwargs = kwargs
             return SimpleNamespace(qe=True, kwargs=kwargs)
 
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
+        def __init__(
+            self,
+            *,
+            selector=None,
+            query_engine_tools=None,
+            verbose=False,
+            llm=None,
+            **kwargs,
+        ) -> None:
             self.selector = selector
             self.query_engine_tools = list(query_engine_tools or [])
             self.verbose = verbose
+            self.llm = llm
+            self.kwargs = kwargs
 
     class _QET:
         def __init__(self, query_engine, metadata):
@@ -56,23 +60,27 @@ def test_hybrid_rerank_injection_toggle(monkeypatch):  # type: ignore[no-untyped
         def from_defaults(cls, llm=None):
             return SimpleNamespace(llm=llm)
 
-    adapter = SimpleNamespace(
+    return SimpleNamespace(
         RouterQueryEngine=_RQE,
         RetrieverQueryEngine=_RQE,
         QueryEngineTool=_QET,
         ToolMetadata=_ToolMetadata,
         LLMSingleSelector=_LLMSingleSelector,
-        get_pydantic_selector=lambda llm: None,
-        __is_stub__=True,
+        get_pydantic_selector=lambda _llm: None,
+        __is_stub__=False,
+        supports_graphrag=True,
+        graphrag_disabled_reason="",
     )
 
-    monkeypatch.setattr(
-        rf,
-        "build_graph_query_engine",
-        lambda *_a, **_k: SimpleNamespace(
-            query_engine=SimpleNamespace(), retriever=SimpleNamespace()
-        ),
-    )
+
+def test_hybrid_rerank_injection_toggle(monkeypatch):  # type: ignore[no-untyped-def]
+    adapter = _make_adapter()
+
+    class _DummyHybrid:
+        def __init__(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            pass
+
+    monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -110,11 +118,11 @@ def test_hybrid_rerank_injection_toggle(monkeypatch):  # type: ignore[no-untyped
         adapter=adapter,
     )
     assert _tool_count(router) == 3
-    assert _RQE.last_kwargs is not None
-    assert "node_postprocessors" in _RQE.last_kwargs
+    assert adapter.RouterQueryEngine.last_kwargs is not None
+    assert adapter.RouterQueryEngine.last_kwargs.get("node_postprocessors") is not None
 
     _Cfg.retrieval.use_reranking = False
-    _RQE.last_kwargs = None
+    adapter.RouterQueryEngine.last_kwargs = None
     vec2 = _Vec()
     pg2 = _Pg()
     router2 = rf.build_router_engine(
@@ -126,5 +134,5 @@ def test_hybrid_rerank_injection_toggle(monkeypatch):  # type: ignore[no-untyped
         adapter=adapter,
     )
     assert _tool_count(router2) == 3
-    assert _RQE.last_kwargs is not None
-    assert _RQE.last_kwargs.get("node_postprocessors") is None
+    assert adapter.RouterQueryEngine.last_kwargs is not None
+    assert adapter.RouterQueryEngine.last_kwargs.get("node_postprocessors") is None

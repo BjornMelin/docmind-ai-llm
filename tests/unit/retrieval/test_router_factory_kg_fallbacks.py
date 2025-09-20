@@ -1,15 +1,10 @@
-"""RouterFactory KG fallbacks when node_postprocessors unsupported.
-
-Asserts that when PG index methods reject node_postprocessors (TypeError),
-router_factory falls back to calls without that argument and still registers
-KG tool without raising exceptions.
-"""
+"""RouterFactory KG fallbacks when node_postprocessors unsupported."""
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 from types import SimpleNamespace
+
+from src.retrieval import router_factory as rf
 
 
 def _count_tools(router) -> int:  # type: ignore[no-untyped-def]
@@ -20,8 +15,59 @@ def _count_tools(router) -> int:  # type: ignore[no-untyped-def]
     return 0
 
 
-def test_router_factory_kg_as_query_engine_fallback(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
+def _make_adapter(fail_on_post: bool):
+    class _QueryEngineTool:
+        def __init__(self, query_engine, metadata):
+            self.query_engine = query_engine
+            self.metadata = metadata
+
+    class _RouterQueryEngine:
+        @classmethod
+        def from_args(cls, **kwargs):
+            if fail_on_post and "node_postprocessors" in kwargs:
+                raise TypeError("node_postprocessors unsupported")
+            return SimpleNamespace(qe=True, kwargs=kwargs)
+
+        def __init__(
+            self,
+            *,
+            selector=None,
+            query_engine_tools=None,
+            verbose=False,
+            llm=None,
+            **kwargs,
+        ) -> None:
+            self.selector = selector
+            self.query_engine_tools = query_engine_tools or []
+            self.verbose = verbose
+            self.llm = llm
+            self.kwargs = kwargs
+
+    class _ToolMetadata:
+        def __init__(self, name: str, description: str) -> None:
+            self.name = name
+            self.description = description
+
+    class _LLMSingleSelector:
+        @classmethod
+        def from_defaults(cls, llm=None):
+            return SimpleNamespace(llm=llm)
+
+    return SimpleNamespace(
+        RouterQueryEngine=_RouterQueryEngine,
+        RetrieverQueryEngine=_RouterQueryEngine,
+        QueryEngineTool=_QueryEngineTool,
+        ToolMetadata=_ToolMetadata,
+        LLMSingleSelector=_LLMSingleSelector,
+        get_pydantic_selector=lambda _llm: None,
+        __is_stub__=False,
+        supports_graphrag=True,
+        graphrag_disabled_reason="",
+    )
+
+
+def test_router_factory_kg_as_query_engine_fallback():  # type: ignore[no-untyped-def]
+    adapter = _make_adapter(fail_on_post=True)
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -32,23 +78,7 @@ def test_router_factory_kg_as_query_engine_fallback(monkeypatch):  # type: ignor
             self.property_graph_store = object()
 
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
-            if "node_postprocessors" in kwargs:
-                raise TypeError("node_postprocessors unsupported")
             return SimpleNamespace(qe=True, kwargs=kwargs)
-
-    class _QET:  # capture tools
-        def __init__(self, query_engine, metadata):
-            self.query_engine = query_engine
-            self.metadata = metadata
-
-    class _RQE:
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
-            self.selector = selector
-            self.query_engine_tools = query_engine_tools or []
-            self.verbose = verbose
-
-    monkeypatch.setattr(rf, "QueryEngineTool", _QET)
-    monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
 
     class _Cfg:
         class retrieval:  # noqa: N801
@@ -60,13 +90,18 @@ def test_router_factory_kg_as_query_engine_fallback(monkeypatch):  # type: ignor
             default_path_depth = 1
 
     router = rf.build_router_engine(
-        _Vec(), _Pg(), settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
+        _Vec(),
+        _Pg(),
+        settings=_Cfg,
+        llm=SimpleNamespace(),
+        enable_hybrid=False,
+        adapter=adapter,
     )
     assert _count_tools(router) == 2  # vector + kg
 
 
-def test_router_factory_kg_retriever_fallback(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
+def test_router_factory_kg_retriever_fallback():  # type: ignore[no-untyped-def]
+    adapter = _make_adapter(fail_on_post=True)
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -79,27 +114,6 @@ def test_router_factory_kg_retriever_fallback(monkeypatch):  # type: ignore[no-u
         def as_retriever(self, **kwargs):  # type: ignore[no-untyped-def]
             return SimpleNamespace(retriever=True)
 
-    class _QET:
-        def __init__(self, query_engine, metadata):
-            self.query_engine = query_engine
-            self.metadata = metadata
-
-    class _RQE:
-        @classmethod
-        def from_args(cls, **kwargs):  # type: ignore[no-untyped-def]
-            if "node_postprocessors" in kwargs:
-                raise TypeError("node_postprocessors unsupported")
-            return SimpleNamespace(qe=True, kwargs=kwargs)
-
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
-            self.selector = selector
-            self.query_engine_tools = query_engine_tools or []
-            self.verbose = verbose
-
-    monkeypatch.setattr(rf, "QueryEngineTool", _QET)
-    monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
-    monkeypatch.setattr(rf, "RetrieverQueryEngine", _RQE)
-
     class _Cfg:
         class retrieval:  # noqa: N801
             top_k = 5
@@ -110,6 +124,11 @@ def test_router_factory_kg_retriever_fallback(monkeypatch):  # type: ignore[no-u
             default_path_depth = 1
 
     router = rf.build_router_engine(
-        _Vec(), _Pg(), settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
+        _Vec(),
+        _Pg(),
+        settings=_Cfg,
+        llm=SimpleNamespace(),
+        enable_hybrid=False,
+        adapter=adapter,
     )
     assert _count_tools(router) == 2

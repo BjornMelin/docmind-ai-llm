@@ -36,6 +36,8 @@ class LlamaIndexAdapterProtocol(Protocol):
     ToolMetadata: Any
     LLMSingleSelector: Any
     __is_stub__: bool
+    supports_graphrag: bool
+    graphrag_disabled_reason: str
 
     def get_pydantic_selector(self, llm: Any | None) -> Any | None:
         """Return a ``PydanticSingleSelector`` built for ``llm`` when available."""
@@ -71,7 +73,10 @@ def _build_real_adapter() -> LlamaIndexAdapterProtocol:
         factory = getattr(selectors, "PydanticSingleSelector", None)
         if factory is None:
             return None
-        return factory.from_defaults(llm=llm)
+        try:
+            return factory.from_defaults(llm=llm)
+        except ImportError:
+            return None
 
     adapter = SimpleNamespace(
         RouterQueryEngine=query_engine.RouterQueryEngine,
@@ -81,6 +86,8 @@ def _build_real_adapter() -> LlamaIndexAdapterProtocol:
         LLMSingleSelector=selectors.LLMSingleSelector,
         get_pydantic_selector=_maybe_pydantic_selector,
         __is_stub__=False,
+        supports_graphrag=True,
+        graphrag_disabled_reason="",
     )
     return adapter  # type: ignore[return-value]
 
