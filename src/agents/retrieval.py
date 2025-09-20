@@ -10,8 +10,10 @@ small amounts of glue code for metrics and result normalization.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Mapping
+from contextlib import suppress
+from functools import wraps
+from typing import Any, cast
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -61,6 +63,7 @@ TOOL_FALLBACK_ERRORS: tuple[type[Exception], ...] = (
     OSError,
     RuntimeError,
     ValueError,
+    TypeError,
     AttributeError,
     ValidationError,
     OutputParserException,
@@ -68,15 +71,63 @@ TOOL_FALLBACK_ERRORS: tuple[type[Exception], ...] = (
 
 
 def _resolve_tool_callable(tool: Any) -> Callable[..., Any]:
-    """Return a Callable interface for the retrieval tool or raise clearly."""
+    """Return a callable interface for the retrieval tool.
+
+    The adapter normalises LangChain-style tools so the agent can treat every
+    tool like a plain callable. Each wrapped callable exposes an
+    ``expects_payload_dict`` flag used by the direct fallback path to decide
+    whether to pass keyword arguments or a single payload mapping.
+    """
+
+    def _tag_callable(
+        fn: Callable[..., Any], expects_payload: bool
+    ) -> Callable[..., Any]:
+        # Some callables (e.g., C extensions) do not allow new attributes.
+        with suppress(AttributeError, TypeError):
+            cast(Any, fn).expects_payload_dict = expects_payload
+        return fn
+
     invoke = getattr(tool, "invoke", None)
     if callable(invoke):
-        return invoke
+
+        @wraps(invoke)
+        def _wrapped_invoke(*args: Any, **kwargs: Any) -> Any:
+            """Call ``tool.invoke`` using either a payload dict or keyword args.
+
+            LangChain tools expose ``invoke`` that accepts a single payload
+            dictionary. The retrieval agent convenience layer expects a
+            standard callable interface, so this adapter accepts either a
+            positional payload mapping or keyword arguments and forwards the
+            resulting dictionary to ``invoke``.
+            """
+            config = kwargs.pop("config", None)
+            if args and kwargs:
+                raise TypeError(
+                    "Tool invocation wrapper cannot mix positional payload with kwargs"
+                )
+            if args:
+                if len(args) != 1:
+                    raise TypeError(
+                        "Tool invocation wrapper accepts a single positional payload"
+                    )
+                payload = args[0]
+                if not isinstance(payload, Mapping):
+                    raise TypeError(
+                        "Positional payload must be a mapping for tool invocation"
+                    )
+                payload = dict(payload)
+            else:
+                payload = dict(kwargs)
+            if config is not None:
+                return invoke(payload, config=config)
+            return invoke(payload)
+
+        return _tag_callable(_wrapped_invoke, True)
     func = getattr(tool, "func", None)
     if callable(func):
-        return func
+        return _tag_callable(func, False)
     if callable(tool):
-        return tool
+        return _tag_callable(tool, False)
     raise TypeError(
         "retrieve_documents tool must expose an 'invoke' method or be directly callable"
     )
@@ -302,14 +353,34 @@ class RetrievalAgent:
         Returns:
             RetrievalPayload: Structured payload returned by the fallback tool.
         """
-        try:
-            raw = self._tool_callable(
-                query=query,
-                strategy=strategy,
-                use_dspy=use_dspy,
-                use_graphrag=use_graphrag,
-                state={"tools_data": self.tools_data},
+        tool_payload = {
+            "query": query,
+            "strategy": strategy,
+            "use_dspy": use_dspy,
+            "use_graphrag": use_graphrag,
+            "state": {"tools_data": self.tools_data},
+        }
+
+        def _invoke_direct_tool() -> Any:
+            expects_payload = bool(
+                getattr(self._tool_callable, "expects_payload_dict", False)
             )
+            if expects_payload:
+                return self._tool_callable(tool_payload)
+            last_error: TypeError | None = None
+            try:
+                return self._tool_callable(**tool_payload)
+            except TypeError as exc:
+                last_error = exc
+            try:
+                return self._tool_callable(tool_payload)
+            except TypeError as exc:  # pragma: no cover - defensive branch
+                if last_error is not None:
+                    raise last_error from exc
+                raise exc
+
+        try:
+            raw = _invoke_direct_tool()
         except TOOL_FALLBACK_ERRORS as exc:
             logger.error("Direct tool invocation failed: %s", exc)
             return RetrievalPayload(
