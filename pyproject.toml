@@ -256,17 +256,11 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
-    "--strict-config", 
+    "--strict-config",
     "--tb=short",
     "-ra",
     "-v",
     "--import-mode=importlib",
-    "--cov=src",
-    "--cov-report=term-missing",
-    "--cov-report=html:htmlcov",
-    "--cov-report=xml:coverage.xml", 
-    "--cov-report=json:coverage.json",
-    "--cov-branch",
     "--durations=10",
     "--durations-min=0.01",
     "--maxfail=10",

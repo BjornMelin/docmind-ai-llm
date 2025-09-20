@@ -14,11 +14,10 @@ from contextlib import suppress
 from importlib import metadata
 from typing import Any, cast
 
-LlamaIndexOpenTelemetry: Any
 try:
     from llama_index.observability.otel import LlamaIndexOpenTelemetry
 except ImportError:  # pragma: no cover - optional dependency
-    LlamaIndexOpenTelemetry = None  # type: ignore[assignment]
+    LlamaIndexOpenTelemetry = cast(Any, None)
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
