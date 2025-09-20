@@ -14,6 +14,7 @@ from contextlib import suppress
 from importlib import metadata
 from typing import Any, cast
 
+LlamaIndexOpenTelemetry: Any
 try:
     from llama_index.observability.otel import LlamaIndexOpenTelemetry
 except ImportError:  # pragma: no cover - optional dependency
@@ -52,12 +53,22 @@ def _set_trace_provider(provider: TracerProvider | None) -> None:
     _OTEL_STATE["trace_provider"] = provider
 
 
+def get_trace_provider() -> TracerProvider | None:
+    """Return the active tracer provider if tracing is configured."""
+    return _get_trace_provider()
+
+
 def _get_meter_provider() -> MeterProvider | None:
     return cast(MeterProvider | None, _OTEL_STATE.get("meter_provider"))
 
 
 def _set_meter_provider(provider: MeterProvider | None) -> None:
     _OTEL_STATE["meter_provider"] = provider
+
+
+def get_meter_provider() -> MeterProvider | None:
+    """Return the active meter provider if metrics are configured."""
+    return _get_meter_provider()
 
 
 def _get_instrumentor() -> Any:
@@ -68,6 +79,11 @@ def _set_instrumentor(instrumentor: Any | None) -> None:
     _OTEL_STATE["instrumentor"] = instrumentor
 
 
+def get_llamaindex_instrumentor() -> Any | None:
+    """Return the configured LlamaIndex instrumentor if present."""
+    return _get_instrumentor()
+
+
 def _get_graph_metric(name: str) -> Any:
     graph_metrics = cast(dict[str, Any], _OTEL_STATE["graph_metrics"])
     return graph_metrics.get(name)
@@ -76,6 +92,12 @@ def _get_graph_metric(name: str) -> Any:
 def _set_graph_metric(name: str, value: Any) -> None:
     graph_metrics = cast(dict[str, Any], _OTEL_STATE["graph_metrics"])
     graph_metrics[name] = value
+
+
+def _reset_graph_metrics() -> None:
+    graph_metrics = cast(dict[str, Any], _OTEL_STATE["graph_metrics"])
+    for key in graph_metrics:
+        graph_metrics[key] = None
 
 
 def setup_tracing(app_settings: DocMindSettings) -> None:
@@ -156,6 +178,7 @@ def shutdown_metrics() -> None:
     provider.shutdown()
     _set_meter_provider(None)
     metrics.set_meter_provider(metrics.NoOpMeterProvider())
+    _reset_graph_metrics()
 
 
 def record_graph_export_metric(

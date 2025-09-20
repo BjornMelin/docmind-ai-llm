@@ -13,13 +13,12 @@ from src.telemetry import opentelemetry as otel
 def reset_globals() -> None:
     otel.shutdown_tracing()
     otel.shutdown_metrics()
-    otel._LLAMA_INDEX_INSTRUMENTOR = None  # type: ignore[attr-defined]
-    otel._TRACE_PROVIDER = None  # type: ignore[attr-defined]
-    otel._METER_PROVIDER = None  # type: ignore[attr-defined]
-    otel._GRAPH_EXPORT_COUNTER = None  # type: ignore[attr-defined]
-    otel._GRAPH_EXPORT_DURATION = None  # type: ignore[attr-defined]
-    otel._GRAPH_EXPORT_SEEDS = None  # type: ignore[attr-defined]
-    otel._GRAPH_EXPORT_BYTES = None  # type: ignore[attr-defined]
+    state = otel._OTEL_STATE  # type: ignore[attr-defined]
+    state["trace_provider"] = None
+    state["meter_provider"] = None
+    state["instrumentor"] = None
+    for key in state["graph_metrics"]:
+        state["graph_metrics"][key] = None
 
 
 @pytest.mark.unit
@@ -124,3 +123,62 @@ def test_record_graph_export_metric(monkeypatch: pytest.MonkeyPatch) -> None:
     assert records["duration"] == [(12.5, {"export_type": "graph", "context": "unit"})]
     assert records["seeds"] == [(4.0, {"export_type": "graph", "context": "unit"})]
     assert records["bytes"] == [(1024.0, {"export_type": "graph", "context": "unit"})]
+
+
+@pytest.mark.unit
+def test_record_graph_export_metric_without_meter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gracefully skip metric recording when no meter provider is configured."""
+    monkeypatch.setattr(otel, "metrics", None)
+    otel.record_graph_export_metric("graph", duration_ms=1.0)
+
+    graph_metrics = otel._OTEL_STATE["graph_metrics"]  # type: ignore[attr-defined]
+    assert all(value is None for value in graph_metrics.values())
+
+
+@pytest.mark.unit
+def test_shutdown_metrics_clears_cached_instruments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shutting down metrics should drop cached histograms and counters."""
+
+    class DummyCounter:
+        def add(self, *_args, **_kwargs) -> None:
+            pass
+
+    class DummyMeter:
+        def __init__(self) -> None:
+            self.counter = DummyCounter()
+
+        def create_counter(self, *_args, **_kwargs) -> DummyCounter:
+            return self.counter
+
+    class DummyMetrics:
+        def __init__(self) -> None:
+            self.meter = DummyMeter()
+
+        def get_meter(self, *_args, **_kwargs) -> DummyMeter:
+            return self.meter
+
+        def set_meter_provider(self, *_args, **_kwargs) -> None:
+            pass
+
+        class NoOpMeterProvider:  # pragma: no cover - simple stub
+            pass
+
+    monkeypatch.setattr(otel, "metrics", DummyMetrics())
+    otel.record_graph_export_metric("graph")
+
+    state = otel._OTEL_STATE  # type: ignore[attr-defined]
+    assert any(state["graph_metrics"].values())
+
+    class DummyProvider:
+        def shutdown(self) -> None:
+            pass
+
+    monkeypatch.setattr(otel, "_get_meter_provider", lambda: DummyProvider())
+    monkeypatch.setattr(otel, "metrics", DummyMetrics())
+    otel.shutdown_metrics()
+
+    assert all(value is None for value in state["graph_metrics"].values())
