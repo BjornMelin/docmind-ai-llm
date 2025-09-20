@@ -50,7 +50,12 @@ def test_jsonl_export(tmp_path: Path) -> None:
     """Export minimal relation path to JSONL and validate schema."""
     idx = _PgIndex()
     out = tmp_path / "graph.jsonl"
-    export_graph_jsonl(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_jsonl(
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
+    )  # type: ignore[arg-type]
     lines = out.read_text(encoding="utf-8").strip().splitlines()
     assert lines
     row = json.loads(lines[0])
@@ -64,7 +69,10 @@ def test_parquet_export_conditional(tmp_path: Path) -> None:
     idx = _PgIndex()
     out = tmp_path / "graph.parquet"
     export_graph_parquet(  # type: ignore[arg-type]
-        idx, out, seed_ids=["A", "B"], depth=1
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
     )
     # Parquet may or may not be present; assert no exception and best-effort file
     # When pyarrow exists, file should exist

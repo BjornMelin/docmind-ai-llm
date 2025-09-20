@@ -216,9 +216,17 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
         out = _timestamped_export_path(out_dir, extension)
         start = time.perf_counter()
         if extension == "jsonl":
-            export_graph_jsonl(pg_index, out, seeds)
+            export_graph_jsonl(
+                property_graph_index=pg_index,
+                output_path=out,
+                seed_node_ids=seeds,
+            )
         else:
-            export_graph_parquet(pg_index, out, seeds)
+            export_graph_parquet(
+                property_graph_index=pg_index,
+                output_path=out,
+                seed_node_ids=seeds,
+            )
         duration_ms = (time.perf_counter() - start) * 1000.0
         st.success(f"Exported {extension.upper()} to {out}")
         _log_export_event(
@@ -344,14 +352,22 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
         if graph_store is not None and pg_index is not None:
             jsonl_path = _timestamped_export_path(graph_dir, "jsonl")
             start_json = time.perf_counter()
-            export_graph_jsonl(pg_index, jsonl_path, seeds)
+            export_graph_jsonl(
+                property_graph_index=pg_index,
+                output_path=jsonl_path,
+                seed_node_ids=seeds,
+            )
             _record_export(
                 jsonl_path, "jsonl", (time.perf_counter() - start_json) * 1000.0
             )
 
             parquet_path = _timestamped_export_path(graph_dir, "parquet")
             start_parquet = time.perf_counter()
-            export_graph_parquet(pg_index, parquet_path, seeds)
+            export_graph_parquet(
+                property_graph_index=pg_index,
+                output_path=parquet_path,
+                seed_node_ids=seeds,
+            )
             _record_export(
                 parquet_path, "parquet", (time.perf_counter() - start_parquet) * 1000.0
             )

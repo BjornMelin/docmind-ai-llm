@@ -19,7 +19,11 @@ print(response)
 from src.retrieval.graph_config import export_graph_jsonl, get_export_seed_ids
 
 seeds = get_export_seed_ids(pg_index, vector_index, cap=32)
-export_graph_jsonl(pg_index, "./exports/graph.jsonl", seeds)
+export_graph_jsonl(
+    property_graph_index=pg_index,
+    output_path="./exports/graph.jsonl",
+    seed_node_ids=seeds,
+)
 ```
 
 See also:

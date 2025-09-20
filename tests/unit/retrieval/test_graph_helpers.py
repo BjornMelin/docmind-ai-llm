@@ -44,7 +44,12 @@ class _PgIndex:
 def test_export_jsonl_schema(tmp_path: Path) -> None:
     idx = _PgIndex()
     out = tmp_path / "graph.jsonl"
-    export_graph_jsonl(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_jsonl(
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
+    )  # type: ignore[arg-type]
     lines = out.read_text(encoding="utf-8").strip().splitlines()
     assert lines
     row = json.loads(lines[0])
@@ -72,7 +77,12 @@ def test_export_parquet_optional(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(builtins, "__import__", _fake_import)
     idx = _PgIndex()
     out = tmp_path / "graph.parquet"
-    export_graph_parquet(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_parquet(
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
+    )  # type: ignore[arg-type]
     # Should not raise; and file should not exist
     assert not out.exists()
 
@@ -95,7 +105,12 @@ def test_export_jsonl_preserves_relation_label(tmp_path: Path) -> None:
 
     idx = _PgIndexLabel()
     out = tmp_path / "graph.jsonl"
-    export_graph_jsonl(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_jsonl(
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
+    )  # type: ignore[arg-type]
     line = out.read_text(encoding="utf-8").strip().splitlines()[0]
     row = json.loads(line)
     assert row["relation"] == "USES"

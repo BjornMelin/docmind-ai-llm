@@ -6,7 +6,10 @@ providing tiered fallbacks to maintain tool creation compatibility.
 
 from typing import Any
 
-from llama_index.core.query_engine import RetrieverQueryEngine
+try:  # pragma: no cover - optional dependency path
+    from llama_index.core.query_engine import RetrieverQueryEngine
+except ImportError:  # pragma: no cover - optional dependency path
+    RetrieverQueryEngine = None
 
 from src.utils.telemetry import log_jsonl
 
@@ -63,6 +66,8 @@ def build_retriever_query_engine(
 ) -> Any:
     """Build retriever query engine with fallback if postprocessors fail."""
     engine = engine_cls or RetrieverQueryEngine
+    if engine is None:
+        raise ImportError("llama-index is required to build retriever query engines")
 
     if llm is None:
 
