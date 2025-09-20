@@ -9,7 +9,14 @@ from typing import Any
 
 import pytest
 
+pytest.importorskip("llama_index.core", reason="requires llama_index.core")
+pytest.importorskip(
+    "llama_index.program.openai", reason="requires llama_index.program.openai"
+)
+
 from src.retrieval.router_factory import build_router_engine
+
+pytestmark = pytest.mark.requires_llama
 
 
 class _VecIndex:

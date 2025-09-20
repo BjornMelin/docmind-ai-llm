@@ -20,6 +20,7 @@ def teardown_function() -> None:
 
 def test_setup_tracing_disabled() -> None:
     """Tracing remains untouched when feature flag is disabled."""
+    otel.shutdown_tracing()
     base_provider = trace.get_tracer_provider()
     disabled_settings = settings.model_copy(
         update={
@@ -30,19 +31,19 @@ def test_setup_tracing_disabled() -> None:
     )
     otel.setup_tracing(disabled_settings)
     assert trace.get_tracer_provider() is base_provider
-    assert otel._TRACE_PROVIDER is None
+    assert otel.get_trace_provider() is None
 
 
 def test_setup_tracing_enabled(monkeypatch) -> None:
     """Tracing provider is configured once when enabled."""
-    monkeypatch.setattr(otel, "_TRACE_PROVIDER", None)
-    recorded_trace = {}
+    otel.shutdown_tracing()
+    recorded_trace: dict[str, TracerProvider] = {}
 
-    def _set_tracer_provider(provider):
+    def _record_provider(provider: TracerProvider) -> None:
         recorded_trace["provider"] = provider
         trace._TRACER_PROVIDER = provider  # type: ignore[attr-defined]
 
-    monkeypatch.setattr(trace, "set_tracer_provider", _set_tracer_provider)
+    monkeypatch.setattr(trace, "set_tracer_provider", _record_provider)
     monkeypatch.setattr(trace, "_TRACER_PROVIDER", None, raising=False)
     enabled_settings = settings.model_copy(
         update={
@@ -57,21 +58,24 @@ def test_setup_tracing_enabled(monkeypatch) -> None:
         }
     )
     otel.setup_tracing(enabled_settings)
-    provider = recorded_trace.get("provider")
+    provider = otel.get_trace_provider()
     assert isinstance(provider, TracerProvider)
-    assert otel._TRACE_PROVIDER is provider
+    assert recorded_trace["provider"] is provider
+
+    otel.setup_tracing(enabled_settings)
+    assert otel.get_trace_provider() is provider
 
 
 def test_setup_metrics_enabled(monkeypatch) -> None:
     """Metrics provider is configured with periodic exporter when enabled."""
-    monkeypatch.setattr(otel, "_METER_PROVIDER", None)
-    recorded_meter = {}
+    otel.shutdown_metrics()
+    recorded_meter: dict[str, MeterProvider] = {}
 
-    def _set_meter_provider(provider):
+    def _record_meter(provider: MeterProvider) -> None:
         recorded_meter["provider"] = provider
         metrics._METER_PROVIDER = provider  # type: ignore[attr-defined]
 
-    monkeypatch.setattr(metrics, "set_meter_provider", _set_meter_provider)
+    monkeypatch.setattr(metrics, "set_meter_provider", _record_meter)
     monkeypatch.setattr(metrics, "_METER_PROVIDER", None, raising=False)
     enabled_settings = settings.model_copy(
         update={
@@ -86,9 +90,12 @@ def test_setup_metrics_enabled(monkeypatch) -> None:
         }
     )
     otel.setup_metrics(enabled_settings)
-    provider = recorded_meter.get("provider")
+    provider = otel.get_meter_provider()
     assert isinstance(provider, MeterProvider)
-    assert otel._METER_PROVIDER is provider
+    assert recorded_meter["provider"] is provider
+
+    otel.setup_metrics(enabled_settings)
+    assert otel.get_meter_provider() is provider
 
 
 def test_configure_observability_instruments_llamaindex(monkeypatch) -> None:
@@ -118,7 +125,8 @@ def test_configure_observability_instruments_llamaindex(monkeypatch) -> None:
         }
     )
     otel.configure_observability(enabled_settings)
-    assert isinstance(otel._LLAMA_INDEX_INSTRUMENTOR, DummyInstrumentor)
+    instrumentor = otel.get_llamaindex_instrumentor()
+    assert isinstance(instrumentor, DummyInstrumentor)
     assert calls == {"init": 1, "started": 1}
 
     # Idempotent configuration should not instantiate additional instrumentors
@@ -127,4 +135,4 @@ def test_configure_observability_instruments_llamaindex(monkeypatch) -> None:
 
     otel.shutdown_tracing()
     assert calls.get("shutdown") == 1
-    assert otel._LLAMA_INDEX_INSTRUMENTOR is None
+    assert otel.get_llamaindex_instrumentor() is None
