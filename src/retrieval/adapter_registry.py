@@ -17,6 +17,11 @@ class MissingGraphAdapterError(RuntimeError):
 
 _REGISTRY: dict[str, AdapterFactoryProtocol] = {}
 
+GRAPH_DEPENDENCY_HINT = (
+    "GraphRAG disabled: install optional extras 'docmind_ai_llm[graphrag]' "
+    "to enable knowledge graph retrieval."
+)
+
 
 def register_adapter(factory: AdapterFactoryProtocol) -> None:
     """Register an adapter factory by name."""
@@ -66,10 +71,25 @@ def ensure_default_adapter() -> None:
 ensure_default_adapter()
 
 
+def get_default_adapter_health() -> tuple[bool, str, str]:
+    """Return a tuple of (supported, adapter_name, guidance)."""
+    ensure_default_adapter()
+    try:
+        adapter = get_adapter()
+    except MissingGraphAdapterError:
+        return False, "unavailable", GRAPH_DEPENDENCY_HINT
+    supports = bool(getattr(adapter, "supports_graphrag", False))
+    name = getattr(adapter, "name", "unknown")
+    hint = getattr(adapter, "dependency_hint", GRAPH_DEPENDENCY_HINT)
+    return supports, name, hint
+
+
 __all__ = [
+    "GRAPH_DEPENDENCY_HINT",
     "MissingGraphAdapterError",
     "ensure_default_adapter",
     "get_adapter",
+    "get_default_adapter_health",
     "list_adapters",
     "register_adapter",
     "unregister_adapter",

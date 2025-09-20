@@ -15,6 +15,7 @@ import streamlit as st
 
 from src.config.integrations import initialize_integrations
 from src.config.settings import settings
+from src.retrieval.adapter_registry import get_default_adapter_health
 from src.ui.components.provider_badge import provider_badge
 
 
@@ -198,6 +199,21 @@ def main() -> None:
             max_value=10000,
             value=int(getattr(settings.retrieval, "colpali_timeout_ms", 400)),
         )
+
+    st.subheader("GraphRAG")
+    supports, adapter_name, hint = get_default_adapter_health()
+    st.text_input(
+        "Adapter",
+        value=adapter_name,
+        disabled=True,
+    )
+    st.text_input(
+        "GraphRAG status",
+        value="enabled" if supports else "disabled",
+        disabled=True,
+    )
+    if not supports:
+        st.info(hint)
     with col4t:
         t_total = st.number_input(
             "Total rerank budget (ms)",

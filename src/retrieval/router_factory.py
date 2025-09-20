@@ -11,6 +11,7 @@ from loguru import logger
 
 from src.config.settings import settings as default_settings
 from src.retrieval.adapter_registry import (
+    GRAPH_DEPENDENCY_HINT,
     MissingGraphAdapterError,
     ensure_default_adapter,
     get_adapter,
@@ -24,11 +25,21 @@ from src.retrieval.postprocessor_utils import (
     build_retriever_query_engine,
     build_vector_query_engine,
 )
-
-GRAPH_DEPENDENCY_HINT = (
-    "GraphRAG disabled: install optional extras 'docmind_ai_llm[graphrag]' "
-    "to enable knowledge graph retrieval."
+from src.telemetry.opentelemetry import (
+    record_router_selection,
+    router_build_span,
 )
+
+_WARNING_FLAGS: dict[str, bool] = {"hybrid": False, "graph": False}
+
+
+def _warn_once(key: str, message: str, *, reason: str) -> None:
+    """Emit a warning once, downgrade to debug on subsequent occurrences."""
+    if not _WARNING_FLAGS.get(key, False):
+        logger.warning("%s (reason=%s)", message, reason)
+        _WARNING_FLAGS[key] = True
+    else:
+        logger.debug("%s (reason=%s)", message, reason)
 
 
 @dataclass(frozen=True)
@@ -77,7 +88,7 @@ def _load_router_components() -> _RouterComponents:
                 self.llm = llm
 
             @classmethod
-            def from_args(cls, **kwargs: Any):
+            def from_args(cls, **kwargs: Any) -> "_RouterQueryEngine":
                 """Construct a fallback router query engine."""
                 return cls(**kwargs)
 
@@ -86,7 +97,9 @@ def _load_router_components() -> _RouterComponents:
                 self.llm = llm
 
             @classmethod
-            def from_defaults(cls, llm: Any | None = None):
+            def from_defaults(
+                cls, llm: Any | None = None
+            ) -> "_LLMSingleSelector":
                 """Return a fallback selector storing the provided LLM."""
                 return cls(llm=llm)
 
@@ -201,14 +214,16 @@ def build_router_engine(
     )
     tools = [vector_tool]
 
-    # Optional hybrid tool (requires llama_index retriever query engine)
+    hybrid_requested = (
+        bool(enable_hybrid)
+        if enable_hybrid is not None
+        else bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
+    )
+    hybrid_tool_added = False
+
     if components.retriever_query_engine_cls is not None:
         try:
-            if enable_hybrid is not None:
-                hybrid_ok = bool(enable_hybrid)
-            else:
-                hybrid_ok = bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
-            if hybrid_ok:
+            if hybrid_requested:
                 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
                 from src.retrieval.reranking import get_postprocessors as _get_pp
 
@@ -248,98 +263,132 @@ def build_router_engine(
                         ),
                     )
                 )
+                hybrid_tool_added = True
         except Exception as exc:  # pragma: no cover - hybrid optional
-            logger.debug("Hybrid tool construction skipped: %s", exc)
+            _warn_once(
+                "hybrid",
+                "Hybrid retrieval disabled; continuing without fused search",
+                reason=str(exc),
+            )
 
-    # Optional knowledge graph tool
     graph_requested = (
         adapter_available
         and pg_index is not None
         and getattr(pg_index, "property_graph_store", None) is not None
         and bool(getattr(cfg, "enable_graphrag", True))
     )
-    if graph_requested:
-        try:
-            graph_depth = int(
-                getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
-            )
-        except Exception:
-            graph_depth = 1
-        try:
-            graph_top_k = int(getattr(cfg.retrieval, "top_k", 10))
-        except Exception:
-            graph_top_k = 10
-        try:
-            from src.retrieval.reranking import get_postprocessors as _get_pp
 
-            graph_post = _get_pp(
-                "kg", use_reranking=use_rerank_flag, top_n=normalized_top_k
-            )
-        except Exception:  # pragma: no cover - reranker optional
-            graph_post = None
+    if (
+        pg_index is not None
+        and getattr(pg_index, "property_graph_store", None) is not None
+        and not adapter_available
+    ):
+        _warn_once(
+            "graph",
+            "Knowledge graph retrieval disabled due to missing adapter",
+            reason=GRAPH_DEPENDENCY_HINT,
+        )
 
-        try:
-            artifacts: GraphQueryArtifacts = build_graph_query_engine(
-                pg_index,
-                llm=llm,
-                include_text=True,
-                path_depth=graph_depth,
-                similarity_top_k=graph_top_k,
-                node_postprocessors=graph_post,
-                adapter=adapter,
-            )
-            tools.append(
-                query_engine_tool_cls(
-                    query_engine=artifacts.query_engine,
-                    metadata=tool_metadata_cls(
-                        name="knowledge_graph",
-                        description=(
-                            "Knowledge graph traversal for relationship-centric queries"
-                        ),
-                    ),
+    adapter_name = getattr(adapter, "name", "unavailable") if adapter else "unavailable"
+    graph_tool_added = False
+
+    with router_build_span(
+        adapter_name=adapter_name,
+        kg_requested=graph_requested,
+        hybrid_requested=hybrid_requested,
+    ) as router_span:
+        if graph_requested:
+            try:
+                graph_depth = int(
+                    getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
                 )
-            )
-        except (MissingGraphAdapterError, ValueError) as exc:
-            logger.debug("Graph tool construction skipped: %s", exc)
+            except Exception:
+                graph_depth = 1
+            try:
+                graph_top_k = int(getattr(cfg.retrieval, "top_k", 10))
+            except Exception:
+                graph_top_k = 10
+            try:
+                from src.retrieval.reranking import get_postprocessors as _get_pp
 
-    # Build router instance
-    router_query_engine_cls = components.router_query_engine_cls
-    llm_single_selector_cls = components.llm_single_selector_cls
-    get_pydantic_selector = components.get_pydantic_selector
+                graph_post = _get_pp(
+                    "kg", use_reranking=use_rerank_flag, top_n=normalized_top_k
+                )
+            except Exception:  # pragma: no cover - reranker optional
+                graph_post = None
 
-    class _NoOpLLM:
-        def __init__(self) -> None:
-            self.metadata = type(
-                "_MD", (), {"context_window": 2048, "num_output": 256}
-            )()
+            try:
+                artifacts: GraphQueryArtifacts = build_graph_query_engine(
+                    pg_index,
+                    llm=llm,
+                    include_text=True,
+                    path_depth=graph_depth,
+                    similarity_top_k=graph_top_k,
+                    node_postprocessors=graph_post,
+                    adapter=adapter,
+                )
+                tools.append(
+                    query_engine_tool_cls(
+                        query_engine=artifacts.query_engine,
+                        metadata=tool_metadata_cls(
+                            name="knowledge_graph",
+                            description=(
+                                "Knowledge graph traversal for "
+                                "relationship-centric queries"
+                            ),
+                        ),
+                    )
+                )
+                graph_tool_added = True
+            except (MissingGraphAdapterError, ValueError) as exc:
+                _warn_once(
+                    "graph",
+                    "Knowledge graph tool unavailable; falling back to vector/hybrid",
+                    reason=str(exc),
+                )
 
-        def predict(self, *_args: Any, **_kwargs: Any) -> str:
-            return ""
+        router_query_engine_cls = components.router_query_engine_cls
+        llm_single_selector_cls = components.llm_single_selector_cls
+        get_pydantic_selector = components.get_pydantic_selector
 
-        def complete(self, *_args: Any, **_kwargs: Any) -> str:
-            return ""
+        class _NoOpLLM:
+            def __init__(self) -> None:
+                self.metadata = type(
+                    "_MD", (), {"context_window": 2048, "num_output": 256}
+                )()
 
-    selector = get_pydantic_selector(llm)
-    if selector is None:
-        selector = llm_single_selector_cls.from_defaults(llm=llm or _NoOpLLM())
+            def predict(self, *_args: Any, **_kwargs: Any) -> str:
+                return ""
 
-    router_kwargs = {
-        "selector": selector,
-        "query_engine_tools": tools,
-        "verbose": False,
-        "llm": llm or _NoOpLLM(),
-    }
+            def complete(self, *_args: Any, **_kwargs: Any) -> str:
+                return ""
 
-    try:
-        router = router_query_engine_cls(**router_kwargs)
-    except TypeError:
-        router_kwargs.pop("llm", None)
-        router = router_query_engine_cls(**router_kwargs)
+        selector = get_pydantic_selector(llm)
+        if selector is None:
+            selector = llm_single_selector_cls.from_defaults(llm=llm or _NoOpLLM())
 
-    logger.info(
-        "Router engine built (kg_present=%s)",
-        any(getattr(t.metadata, "name", "") == "knowledge_graph" for t in tools),
-    )
+        router_kwargs = {
+            "selector": selector,
+            "query_engine_tools": tools,
+            "verbose": False,
+            "llm": llm or _NoOpLLM(),
+        }
+
+        try:
+            router = router_query_engine_cls(**router_kwargs)
+        except TypeError:
+            router_kwargs.pop("llm", None)
+            router = router_query_engine_cls(**router_kwargs)
+
+        tool_names = [getattr(tool.metadata, "name", "") for tool in tools]
+        router_span.set_attribute("router.hybrid_enabled", bool(hybrid_tool_added))
+        record_router_selection(
+            router_span,
+            tool_names=tool_names,
+            kg_enabled=graph_tool_added,
+        )
+
+    logger.info("Router engine built (kg_present=%s)", graph_tool_added)
     return router
 
 

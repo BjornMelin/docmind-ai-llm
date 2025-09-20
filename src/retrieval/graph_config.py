@@ -19,6 +19,10 @@ from src.retrieval.adapters.protocols import (
     GraphQueryArtifacts,
     GraphRetrieverProtocol,
 )
+from src.telemetry.opentelemetry import (
+    graph_export_span,
+    record_graph_export_event,
+)
 
 __all__ = [
     "GraphQueryArtifacts",
@@ -159,12 +163,25 @@ def export_graph_jsonl(
         )
     rel_map = store.get_rel_map(node_ids=node_ids, depth=depth)
     path_obj = Path(output_path)
-    path_obj.write_text("\n".join(rel_map), encoding="utf-8")
-    telemetry = _resolve_adapter(adapter).get_telemetry_hooks()
-    telemetry.graph_exported(
-        adapter_name=_resolve_adapter(adapter).name,
+    active_adapter = _resolve_adapter(adapter)
+    with graph_export_span(
+        adapter_name=active_adapter.name,
         fmt="jsonl",
-        bytes_written=path_obj.stat().st_size,
+        depth=depth,
+        seed_count=len(node_ids),
+    ) as span:
+        path_obj.write_text("\n".join(rel_map), encoding="utf-8")
+        bytes_written = path_obj.stat().st_size
+        record_graph_export_event(
+            span,
+            path=path_obj,
+            bytes_written=bytes_written,
+        )
+    telemetry = active_adapter.get_telemetry_hooks()
+    telemetry.graph_exported(
+        adapter_name=active_adapter.name,
+        fmt="jsonl",
+        bytes_written=bytes_written,
         depth=depth,
         seed_count=len(node_ids),
     )
@@ -196,12 +213,25 @@ def export_graph_parquet(
         )
     df = store.store_rel_map_df(node_ids=node_ids, depth=depth)
     path_obj = Path(output_path)
-    df.to_parquet(path_obj)
-    telemetry = _resolve_adapter(adapter).get_telemetry_hooks()
-    telemetry.graph_exported(
-        adapter_name=_resolve_adapter(adapter).name,
+    active_adapter = _resolve_adapter(adapter)
+    with graph_export_span(
+        adapter_name=active_adapter.name,
         fmt="parquet",
-        bytes_written=path_obj.stat().st_size,
+        depth=depth,
+        seed_count=len(node_ids),
+    ) as span:
+        df.to_parquet(path_obj)
+        bytes_written = path_obj.stat().st_size
+        record_graph_export_event(
+            span,
+            path=path_obj,
+            bytes_written=bytes_written,
+        )
+    telemetry = active_adapter.get_telemetry_hooks()
+    telemetry.graph_exported(
+        adapter_name=active_adapter.name,
+        fmt="parquet",
+        bytes_written=bytes_written,
         depth=depth,
         seed_count=len(node_ids),
     )
