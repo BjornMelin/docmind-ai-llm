@@ -214,19 +214,23 @@ def export_graph_parquet(
     df = store.store_rel_map_df(node_ids=node_ids, depth=depth)
     path_obj = Path(output_path)
     active_adapter = _resolve_adapter(adapter)
-    with graph_export_span(
-        adapter_name=active_adapter.name,
-        fmt="parquet",
-        depth=depth,
-        seed_count=len(node_ids),
-    ) as span:
-        df.to_parquet(path_obj)
-        bytes_written = path_obj.stat().st_size
-        record_graph_export_event(
-            span,
-            path=path_obj,
-            bytes_written=bytes_written,
-        )
+    try:
+        with graph_export_span(
+            adapter_name=active_adapter.name,
+            fmt="parquet",
+            depth=depth,
+            seed_count=len(node_ids),
+        ) as span:
+            df.to_parquet(path_obj)
+            bytes_written = path_obj.stat().st_size
+            record_graph_export_event(
+                span,
+                path=path_obj,
+                bytes_written=bytes_written,
+            )
+    except ImportError as exc:  # pragma: no cover - optional dependency path
+        logger.debug("Parquet export skipped: %s", exc)
+        return
     telemetry = active_adapter.get_telemetry_hooks()
     telemetry.graph_exported(
         adapter_name=active_adapter.name,

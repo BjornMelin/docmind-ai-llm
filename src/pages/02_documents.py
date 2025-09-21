@@ -12,6 +12,7 @@ from typing import Any
 
 import streamlit as st
 from llama_index.core import VectorStoreIndex
+from loguru import logger
 
 from src.config.settings import settings
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
@@ -296,16 +297,26 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
     mgr = SnapshotManager(storage_dir)
     workspace = mgr.begin_snapshot()
     try:
+        if vector_index is None:
+            raise TypeError("rebuild_snapshot requires a vector_index instance")
         mgr.persist_vector_index(vector_index, workspace)
         graph_store = getattr(pg_index, "property_graph_store", None)
         if graph_store is not None:
             mgr.persist_graph_store(graph_store, workspace)
+        storage_context = getattr(pg_index, "storage_context", None)
+        can_export_graph = (
+            pg_index is not None
+            and graph_store is not None
+            and storage_context is not None
+        )
         export_cap = int(
             getattr(
                 getattr(settings_obj, "graphrag_cfg", object()), "export_seed_cap", 32
             )
         )
-        seeds: list[str] = get_export_seed_ids(pg_index, vector_index, cap=export_cap)
+        seeds: list[str] = []
+        if can_export_graph:
+            seeds = get_export_seed_ids(pg_index, vector_index, cap=export_cap)
         graph_dir = workspace / "graph"
         graph_dir.mkdir(parents=True, exist_ok=True)
         exports_meta: list[dict[str, Any]] = []
@@ -349,27 +360,41 @@ def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Pat
                 context="snapshot",
             )
 
-        if graph_store is not None and pg_index is not None:
-            jsonl_path = _timestamped_export_path(graph_dir, "jsonl")
-            start_json = time.perf_counter()
-            export_graph_jsonl(
-                property_graph_index=pg_index,
-                output_path=jsonl_path,
-                seed_node_ids=seeds,
-            )
-            _record_export(
-                jsonl_path, "jsonl", (time.perf_counter() - start_json) * 1000.0
-            )
+        if can_export_graph:
+            try:
+                jsonl_path = _timestamped_export_path(graph_dir, "jsonl")
+                start_json = time.perf_counter()
+                export_graph_jsonl(
+                    property_graph_index=pg_index,
+                    output_path=jsonl_path,
+                    seed_node_ids=seeds,
+                )
+                _record_export(
+                    jsonl_path,
+                    "jsonl",
+                    (time.perf_counter() - start_json) * 1000.0,
+                )
 
-            parquet_path = _timestamped_export_path(graph_dir, "parquet")
-            start_parquet = time.perf_counter()
-            export_graph_parquet(
-                property_graph_index=pg_index,
-                output_path=parquet_path,
-                seed_node_ids=seeds,
-            )
-            _record_export(
-                parquet_path, "parquet", (time.perf_counter() - start_parquet) * 1000.0
+                parquet_path = _timestamped_export_path(graph_dir, "parquet")
+                start_parquet = time.perf_counter()
+                export_graph_parquet(
+                    property_graph_index=pg_index,
+                    output_path=parquet_path,
+                    seed_node_ids=seeds,
+                )
+                _record_export(
+                    parquet_path,
+                    "parquet",
+                    (time.perf_counter() - start_parquet) * 1000.0,
+                )
+            except Exception as exc:  # pragma: no cover - telemetry/log only
+                logger.opt(exception=exc).debug("Graph export skipped during snapshot")
+        elif graph_store is not None:
+            logger.debug(
+                "Skipping graph export; pg=%s graph=%s storage=%s",
+                pg_index is not None,
+                graph_store is not None,
+                storage_context is not None,
             )
 
         uploads_dir = settings_obj.data_dir / "uploads"

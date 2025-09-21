@@ -9,10 +9,10 @@ development/testing.
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from importlib import metadata
-from typing import Any, Generator, cast
+from typing import Any, cast
 
 try:
     from llama_index.observability.otel import LlamaIndexOpenTelemetry
@@ -232,6 +232,8 @@ def record_graph_export_metric(
     context: str | None = None,
 ) -> None:
     """Record OpenTelemetry metrics for graph exports when meters are configured."""
+    if metrics is None:
+        return
     meter = metrics.get_meter(__name__)
     counter = _get_graph_metric("counter")
     if counter is None:
