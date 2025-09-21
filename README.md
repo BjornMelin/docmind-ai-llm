@@ -226,8 +226,7 @@
    #   DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
    ```
 
-For a complete overview (including a Local vs Cloud matrix), see
-`docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
+    For a complete overview (including a Local vs Cloud matrix), see `docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
 
 5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
 
@@ -1057,7 +1056,7 @@ Contributions are welcome! Please follow these steps:
    # Fast tiered validation (unit + integration)
    uv run python scripts/run_tests.py --fast
 
-   # Optional GraphRAG lane (skips when extras missing)
+   # Optional multimodal lane (skips when extras missing)
    uv run python scripts/run_tests.py --extras
    ```
 
@@ -1089,7 +1088,7 @@ Quick local commands:
 # Fast unit + integration sweep (offline)
 uv run python scripts/run_tests.py --fast
 
-# Extras (GraphRAG) lane — skips automatically when optional deps missing
+# Extras (multimodal) lane — skips automatically when optional deps missing
 uv run python scripts/run_tests.py --extras
 
 # Full coverage gate (unit + integration)

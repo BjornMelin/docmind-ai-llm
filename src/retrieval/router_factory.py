@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Callable, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
@@ -88,7 +89,7 @@ def _load_router_components() -> _RouterComponents:
                 self.llm = llm
 
             @classmethod
-            def from_args(cls, **kwargs: Any) -> "_RouterQueryEngine":
+            def from_args(cls, **kwargs: Any) -> _RouterQueryEngine:
                 """Construct a fallback router query engine."""
                 return cls(**kwargs)
 
@@ -97,9 +98,7 @@ def _load_router_components() -> _RouterComponents:
                 self.llm = llm
 
             @classmethod
-            def from_defaults(
-                cls, llm: Any | None = None
-            ) -> "_LLMSingleSelector":
+            def from_defaults(cls, llm: Any | None = None) -> _LLMSingleSelector:
                 """Return a fallback selector storing the provided LLM."""
                 return cls(llm=llm)
 
@@ -120,9 +119,12 @@ def _load_router_components() -> _RouterComponents:
         factory = getattr(selectors, "PydanticSingleSelector", None)
         if factory is None:
             return None
+        metadata_obj = getattr(llm, "metadata", None)
+        if not getattr(metadata_obj, "is_function_calling_model", False):
+            return None
         try:
             return factory.from_defaults(llm=llm)
-        except ImportError:  # pragma: no cover - defensive
+        except (ImportError, ValueError):  # pragma: no cover - defensive
             return None
 
     return _RouterComponents(
@@ -354,7 +356,14 @@ def build_router_engine(
         class _NoOpLLM:
             def __init__(self) -> None:
                 self.metadata = type(
-                    "_MD", (), {"context_window": 2048, "num_output": 256}
+                    "_MD",
+                    (),
+                    {
+                        "context_window": 2048,
+                        "num_output": 256,
+                        "is_function_calling_model": False,
+                        "model_name": "docmind-fallback",
+                    },
                 )()
 
             def predict(self, *_args: Any, **_kwargs: Any) -> str:
@@ -363,7 +372,13 @@ def build_router_engine(
             def complete(self, *_args: Any, **_kwargs: Any) -> str:
                 return ""
 
-        selector = get_pydantic_selector(llm)
+        def _supports_function_calling(candidate: Any | None) -> bool:
+            metadata_obj = getattr(candidate, "metadata", None)
+            return bool(getattr(metadata_obj, "is_function_calling_model", False))
+
+        selector = None
+        if llm is not None and _supports_function_calling(llm):
+            selector = get_pydantic_selector(llm)
         if selector is None:
             selector = llm_single_selector_cls.from_defaults(llm=llm or _NoOpLLM())
 
@@ -379,6 +394,11 @@ def build_router_engine(
         except TypeError:
             router_kwargs.pop("llm", None)
             router = router_query_engine_cls(**router_kwargs)
+
+        with suppress(AttributeError, TypeError):
+            router.query_engine_tools = tools
+        with suppress(AttributeError, TypeError):
+            router._query_engine_tools = tools
 
         tool_names = [getattr(tool.metadata, "name", "") for tool in tools]
         router_span.set_attribute("router.hybrid_enabled", bool(hybrid_tool_added))

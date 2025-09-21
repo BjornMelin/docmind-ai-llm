@@ -883,6 +883,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "flagembedding" },
     { name = "hypothesis" },
+    { name = "kuzu" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "langgraph" },
@@ -893,12 +894,12 @@ dependencies = [
     { name = "llama-index-embeddings-fastembed" },
     { name = "llama-index-embeddings-huggingface" },
     { name = "llama-index-embeddings-openai" },
+    { name = "llama-index-graph-stores-kuzu" },
     { name = "llama-index-llms-llama-cpp" },
     { name = "llama-index-llms-ollama" },
     { name = "llama-index-llms-openai" },
     { name = "llama-index-llms-openai-like" },
     { name = "llama-index-llms-vllm" },
-    { name = "llama-index-postprocessor-colpali-rerank" },
     { name = "llama-index-readers-file" },
     { name = "llama-index-storage-kvstore-duckdb" },
     { name = "llama-index-vector-stores-duckdb" },
@@ -947,8 +948,15 @@ gpu = [
     { name = "ninja" },
     { name = "vllm" },
 ]
-llama = [
-    { name = "llama-index-core" },
+graph = [
+    { name = "kuzu" },
+    { name = "llama-index" },
+    { name = "llama-index-graph-stores-kuzu" },
+    { name = "llama-index-vector-stores-duckdb" },
+]
+multimodal = [
+    { name = "colpali-engine" },
+    { name = "llama-index-postprocessor-colpali-rerank" },
 ]
 observability = [
     { name = "llama-index-observability-otel" },
@@ -1006,6 +1014,7 @@ test = [
 requires-dist = [
     { name = "beir", marker = "extra == 'eval'", specifier = ">=2.0.0,<3.0.0" },
     { name = "cmake", marker = "extra == 'gpu'", specifier = ">=3.26.4" },
+    { name = "colpali-engine", marker = "extra == 'multimodal'", specifier = ">=0.3.12" },
     { name = "dspy-ai", specifier = ">=2.5.0" },
     { name = "duckdb", specifier = ">=0.10.0" },
     { name = "fastembed-gpu", marker = "extra == 'gpu'", specifier = ">=0.7.0" },
@@ -1013,27 +1022,32 @@ requires-dist = [
     { name = "flashinfer-python", marker = "extra == 'gpu'", specifier = ">=0.2.11" },
     { name = "hypothesis", specifier = ">=6.137.2" },
     { name = "hypothesis", marker = "extra == 'test'", specifier = ">=6.137.1" },
+    { name = "kuzu", specifier = ">=0.10.0" },
+    { name = "kuzu", marker = "extra == 'graph'", specifier = ">=0.10.0" },
     { name = "langchain-core", specifier = ">=0.3.75" },
     { name = "langchain-openai", specifier = ">=0.3.32" },
     { name = "langgraph", specifier = ">=0.6.6" },
     { name = "langgraph-supervisor", specifier = ">=0.0.29" },
     { name = "llama-cpp-python", specifier = ">=0.3.0,<0.4.0" },
-    { name = "llama-index", specifier = "==0.13.4" },
-    { name = "llama-index-core", marker = "extra == 'llama'", specifier = ">=0.13.4,<0.14.0" },
+    { name = "llama-index", specifier = ">=0.13.4,<0.14.0" },
+    { name = "llama-index", marker = "extra == 'graph'", specifier = ">=0.13.4,<0.14.0" },
     { name = "llama-index-embeddings-clip" },
     { name = "llama-index-embeddings-fastembed" },
     { name = "llama-index-embeddings-huggingface" },
     { name = "llama-index-embeddings-openai" },
+    { name = "llama-index-graph-stores-kuzu", specifier = ">=0.9.0,<1.0.0" },
+    { name = "llama-index-graph-stores-kuzu", marker = "extra == 'graph'", specifier = ">=0.9.0,<1.0.0" },
     { name = "llama-index-llms-llama-cpp" },
     { name = "llama-index-llms-ollama" },
     { name = "llama-index-llms-openai" },
     { name = "llama-index-llms-openai-like" },
     { name = "llama-index-llms-vllm" },
     { name = "llama-index-observability-otel", marker = "extra == 'observability'", specifier = ">=0.2.1" },
-    { name = "llama-index-postprocessor-colpali-rerank", specifier = "==0.3.0" },
+    { name = "llama-index-postprocessor-colpali-rerank", marker = "extra == 'multimodal'", specifier = "==0.3.0" },
     { name = "llama-index-readers-file" },
     { name = "llama-index-storage-kvstore-duckdb", specifier = ">=0.2.0" },
-    { name = "llama-index-vector-stores-duckdb", specifier = ">=0.4.6" },
+    { name = "llama-index-vector-stores-duckdb", specifier = ">=0.5.0,<0.6.0" },
+    { name = "llama-index-vector-stores-duckdb", marker = "extra == 'graph'", specifier = ">=0.5.0,<0.6.0" },
     { name = "llama-index-vector-stores-qdrant" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "ninja", marker = "extra == 'gpu'", specifier = ">=1.11.1" },
@@ -1079,7 +1093,7 @@ requires-dist = [
     { name = "unstructured-ingest", specifier = ">=0.2.1" },
     { name = "vllm", marker = "extra == 'gpu'", specifier = ">=0.6.3,<0.10.0" },
 ]
-provides-extras = ["gpu", "llama", "test", "observability", "eval"]
+provides-extras = ["gpu", "test", "graph", "observability", "multimodal", "eval"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2140,6 +2154,19 @@ wheels = [
 ]
 
 [[package]]
+name = "kuzu"
+version = "0.11.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/fd/adbd05ccf81e6ad2674fcd3849d5d6ffeaf2141a9b8d1c1c4e282e923e1f/kuzu-0.11.2.tar.gz", hash = "sha256:9f224ec218ab165a18acaea903695779780d70335baf402d9b7f59ba389db0bd", size = 4902887, upload-time = "2025-08-21T05:17:00.152Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/14/8ae2c52657b93715052ecf47d70232f2c8d9ffe2d1ec3527c8e9c3cb2df5/kuzu-0.11.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:bf53b4f321a4c05882b14cef96d39a1e90fa993bab88a1554fb1565367553b8c", size = 3704177, upload-time = "2025-08-21T05:16:02.354Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/7a/bce7bb755e16f9ca855f76a3acc6cfa9fae88c4d6af9df3784c50b2120a5/kuzu-0.11.2-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:2d749883b74f5da5ff4a4b0635a98f6cc5165743995828924321d2ca797317cb", size = 4102372, upload-time = "2025-08-21T05:16:04.249Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/12/f5b1d51fcb78a86c078fb85cc53184ce962a3e86852d47d30e287a932e3f/kuzu-0.11.2-cp311-cp311-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:632507e5982928ed24fbb5e70ad143d7970bc4059046e77e0522707efbad303b", size = 6212492, upload-time = "2025-08-21T05:16:05.99Z" },
+    { url = "https://files.pythonhosted.org/packages/81/96/d6e57af6ccf9e0697812ad3039c80b87b768cf2674833b0b23d317ea3427/kuzu-0.11.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d5211884601f8f08ae97ba25006d0facde24077c5333411d944282b8a2068ab4", size = 6992888, upload-time = "2025-08-21T05:16:07.896Z" },
+    { url = "https://files.pythonhosted.org/packages/40/ee/1f275ac5679a3f615ce0d9cf8c79001fdb535ccc8bc344e49b14484c7cd7/kuzu-0.11.2-cp311-cp311-win_amd64.whl", hash = "sha256:82a6c8bfe1278dc1010790e398bf772683797ef5c16052fa0f6f78bacbc59aa3", size = 4304064, upload-time = "2025-08-21T05:16:10.163Z" },
+]
+
+[[package]]
 name = "langchain"
 version = "0.3.27"
 source = { registry = "https://pypi.org/simple" }
@@ -2422,7 +2449,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/e4/b4/c8cd17629ced0b964
 
 [[package]]
 name = "llama-index"
-version = "0.13.4"
+version = "0.13.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "llama-index-cli" },
@@ -2434,9 +2461,9 @@ dependencies = [
     { name = "llama-index-readers-llama-parse" },
     { name = "nltk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5f/58/4b11748ebacffe18891168fbfd8b4f1e8b63874ce774c528ee6116e7fda5/llama_index-0.13.4.tar.gz", hash = "sha256:dda2705ac3de7a710de64dbfb3704d1ffad0e2656852745fd7ccf21793cb38bc", size = 8029, upload-time = "2025-09-02T05:09:01.05Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/09/7b2efb5b90ffdee126188dfcbf02e14f4acf37031efff26a32c5ffd7b245/llama_index-0.13.6.tar.gz", hash = "sha256:53764954568ab7253108b5ed6817af935696e3cfd345b7fd929b2a991d2180f9", size = 8027, upload-time = "2025-09-07T04:57:14.602Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/97/3bc6f14d0a8d5ead11378785407efeb6862f86c2ebb8ba318137714ec2af/llama_index-0.13.4-py3-none-any.whl", hash = "sha256:f7708d8e92ace28fa7efd1281b1c7fe00ef59e5da531fb1f8c47110a6d3ec433", size = 7027, upload-time = "2025-09-02T05:08:59.483Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/0b/62af20e8c5ac4d7608d15ee4f812b9fa88daa0c477ee64adb18674563d87/llama_index-0.13.6-py3-none-any.whl", hash = "sha256:a65c74cb4f734ac38edf6421a159c92468b4d3623fe40639dbfe123bba884e16", size = 7030, upload-time = "2025-09-07T04:57:12.741Z" },
 ]
 
 [[package]]
@@ -2455,7 +2482,7 @@ wheels = [
 
 [[package]]
 name = "llama-index-core"
-version = "0.13.4"
+version = "0.13.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2486,9 +2513,9 @@ dependencies = [
     { name = "typing-inspect" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a6/77/dbd2f7263e2f409022a0fc6bcee5669ce5313c5dff35c131612a84cb1a68/llama_index_core-0.13.4.tar.gz", hash = "sha256:c71f4c1713ad7b2122b8fd2a894db78a0d08e26077d515fc5fc47c65a10c015f", size = 7231772, upload-time = "2025-09-02T04:38:47.917Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2d/f8/4f6e2bbc34ec6586456727a644960a1ff2d9db60b92071e213ad9d160456/llama_index_core-0.13.6.tar.gz", hash = "sha256:80315a6bd1f9804f48c1870eff1a0315bf9fe5a413747d53eb88a8ebb2602b97", size = 7232179, upload-time = "2025-09-07T03:27:26.544Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/6f/b507ec3bf3319c23cd3049c0385509671bf1d4166d670b598372f97a5f22/llama_index_core-0.13.4-py3-none-any.whl", hash = "sha256:dd08d35c9049f0fe142c98cf96e78bd441e5f2355f398986397cd4d690f2b373", size = 7574953, upload-time = "2025-09-02T04:38:42.497Z" },
+    { url = "https://files.pythonhosted.org/packages/35/23/7e497216ece6e041c6a271f2b7952e5609729da0dcdf09dd3f25a4efc1b9/llama_index_core-0.13.6-py3-none-any.whl", hash = "sha256:67bec3c06a8105cd82d83db0f8c3122f4e4d8a4b9c7a2768cced6a2686ddb331", size = 7575324, upload-time = "2025-09-07T03:27:19.243Z" },
 ]
 
 [[package]]
@@ -2541,6 +2568,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/26/6a/80ed46993c6827786cdec4f6b553f3f4e5fc8741c31e8903c694833d24bf/llama_index_embeddings_openai-0.5.0.tar.gz", hash = "sha256:ac587839a111089ea8a6255f9214016d7a813b383bbbbf9207799be1100758eb", size = 7019, upload-time = "2025-07-30T19:55:05.699Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/01/21/65f13a385292d7d573dfde472da7daff5f779345d60c5c3e274142ec8ba2/llama_index_embeddings_openai-0.5.0-py3-none-any.whl", hash = "sha256:d817edb22e3ff475e8cd1833faf1147028986bc1d688f7894ef947558864b728", size = 7009, upload-time = "2025-07-30T19:55:04.86Z" },
+]
+
+[[package]]
+name = "llama-index-graph-stores-kuzu"
+version = "0.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "kuzu" },
+    { name = "llama-index-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cd/3c/1f0775d36e2b8e8d35dcb05e2bf572ff4d441ca5125121400d3b26162a2e/llama_index_graph_stores_kuzu-0.9.1.tar.gz", hash = "sha256:3cadf595aa04f46dc758ca782294dba1a8cff33f20eb95ef09ab8bdcb655f39e", size = 11917, upload-time = "2025-09-08T20:44:25.007Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/34/27b0d91154937c743f65eeba91b150acef3eceb3a5ab635bc535bef9ea49/llama_index_graph_stores_kuzu-0.9.1-py3-none-any.whl", hash = "sha256:619f08541bbbfb4da8f01ab7df3bec9089181cd3f81ca30491184bd412ca3207", size = 12689, upload-time = "2025-09-08T20:44:24.254Z" },
 ]
 
 [[package]]

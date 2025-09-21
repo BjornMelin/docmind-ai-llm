@@ -27,11 +27,13 @@ See `src/retrieval/adapters/protocols.py` for exact type signatures.
 ## LlamaIndex Reference Implementation
 
 `LlamaIndexAdapterFactory` (`src/retrieval/llama_index_adapter.py`) lazily imports
-LlamaIndex modules and validates a minimum version of `0.10.0`. It instantiates
-`KnowledgeGraphRAGRetriever` and `RetrieverQueryEngine.from_args(...)` as
-recommended in the official GraphRAG guides. Missing dependencies raise
-`MissingLlamaIndexError` with actionable install hints
-(`pip install docmind_ai_llm[graphrag]`).
+LlamaIndex modules and validates the version shipped with the core package. It
+builds a `PropertyGraphIndex` backed by the embedded Kùzu graph store and a
+DuckDB vector store, instantiating `KnowledgeGraphRAGRetriever` plus
+`RetrieverQueryEngine.from_args(...)` as recommended by the official
+documentation. Missing dependencies now surface as `MissingLlamaIndexError`
+with actionable guidance, although the default installation already bundles the
+required packages.
 
 Telemetry hooks default to a no-op implementation and will be extended in
 Phase B for OpenTelemetry spans.
@@ -39,8 +41,8 @@ Phase B for OpenTelemetry spans.
 ## Registry
 
 `src/retrieval/adapter_registry.py` provides a lightweight in-memory registry.
-It registers the LlamaIndex adapter eagerly when dependencies are present and
-falls back to vector-only routing otherwise.
+On import it eagerly registers the Kùzu-backed LlamaIndex adapter and falls
+back to vector-only routing only when the adapter health check fails.
 
 Key helpers:
 
