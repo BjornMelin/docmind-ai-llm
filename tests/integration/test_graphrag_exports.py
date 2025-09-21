@@ -31,13 +31,34 @@ class _Store:
             _Node("B", source_id="b"),
         ]
 
-    def get_rel_map(self, nodes, depth=1):
+    def get_rel_map(self, node_ids=None, depth=1, **_kwargs):
         """Return a minimal relation path from the given nodes."""
-        del depth
-        items = list(nodes)
+        depth_value = int(depth)
+        items = list(node_ids or [])
         if len(items) < 2:
             return []
-        return [[items[0], items[1]]]
+        return [
+            json.dumps(
+                {
+                    "subject": items[0],
+                    "relation": "related",
+                    "object": items[1],
+                    "depth": depth_value,
+                }
+            )
+        ]
+
+    class _Frame:
+        def __init__(self, rows: list[str]) -> None:
+            self._rows = rows
+
+        def to_parquet(self, path: Path) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"PAR1")
+
+    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs):
+        rows = self.get_rel_map(node_ids=node_ids, depth=depth)
+        return self._Frame(rows)
 
 
 class _PgIndex:

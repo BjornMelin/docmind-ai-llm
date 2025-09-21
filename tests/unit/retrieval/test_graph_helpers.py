@@ -27,12 +27,39 @@ class _Store:
         del properties
         return [_Node(str(i), source_id=f"src-{i}") for i in ids or []]
 
-    def get_rel_map(self, nodes, depth=1):
-        del depth
-        items = list(nodes)
+    def get_rel_map(self, node_ids=None, depth=1, **_kwargs):
+        items = list(node_ids or [])
         if len(items) < 2:
             return []
-        return [[items[0], items[1]]]
+        return [
+            json.dumps(
+                {
+                    "subject": items[0],
+                    "relation": "related",
+                    "object": items[1],
+                    "depth": depth,
+                    "path_id": 0,
+                    "source_ids": [f"src-{items[0]}", f"src-{items[1]}"]
+                    if items
+                    else [],
+                }
+            )
+        ]
+
+    class _Frame:
+        def __init__(self, rows: list[str]) -> None:
+            self._rows = rows
+
+        def to_parquet(self, path: Path) -> None:
+            try:
+                import pyarrow  # type: ignore  # noqa: F401
+            except ImportError as exc:
+                raise ImportError("pyarrow missing") from exc
+            Path(path).write_bytes(b"parquet-stub")
+
+    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs):
+        rows = self.get_rel_map(node_ids=node_ids, depth=depth)
+        return self._Frame(rows)
 
 
 class _PgIndex:
@@ -93,11 +120,22 @@ def test_export_jsonl_preserves_relation_label(tmp_path: Path) -> None:
             self.label = label
 
     class _StoreWithLabels(_Store):
-        def get_rel_map(self, nodes, depth=1):  # type: ignore[override]
-            del depth
-            items = list(nodes)
-            # Return a triplet [node, relation, node]
-            return [[items[0], _Rel("USES"), items[1]]]
+        def get_rel_map(self, node_ids=None, depth=1, **_kwargs):  # type: ignore[override]
+            items = list(node_ids or [])
+            if len(items) < 2:
+                return []
+            return [
+                json.dumps(
+                    {
+                        "subject": items[0],
+                        "relation": "USES",
+                        "object": items[1],
+                        "depth": depth,
+                        "path_id": 0,
+                        "source_ids": ["src-A", "src-B"],
+                    }
+                )
+            ]
 
     class _PgIndexLabel:
         def __init__(self) -> None:

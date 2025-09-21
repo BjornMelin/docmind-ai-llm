@@ -33,14 +33,30 @@ sys.modules.setdefault("src.retrieval", _stub_retrieval_pkg)
 _stub_graph = ModuleType("src.retrieval.graph_config")
 
 
-def _stub_export_jsonl(_pg_index, dest: Path, _seeds: list[str]) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text("[]", encoding="utf-8")
+def _stub_export_jsonl(
+    *,
+    property_graph_index: Any,
+    output_path: Path,
+    seed_node_ids: list[str],
+    depth: int = 1,
+    **_kwargs: Any,
+) -> None:
+    del property_graph_index, seed_node_ids, depth
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("[]", encoding="utf-8")
 
 
-def _stub_export_parquet(_pg_index, dest: Path, _seeds: list[str]) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(b"PAR1")
+def _stub_export_parquet(
+    *,
+    property_graph_index: Any,
+    output_path: Path,
+    seed_node_ids: list[str],
+    depth: int = 1,
+    **_kwargs: Any,
+) -> None:
+    del property_graph_index, seed_node_ids, depth
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(b"PAR1")
 
 
 def _stub_get_export_seed_ids(_pg_index, _vector_index, cap: int = 32) -> list[str]:
@@ -166,6 +182,28 @@ class _GraphStore:
         p.mkdir(parents=True, exist_ok=True)
         (p / "ok").write_text("1", encoding="utf-8")
 
+    def get_rel_map(self, node_ids=None, depth=1, **_kwargs):
+        """Return a deterministic relation list for tests."""
+        del depth
+        items = list(node_ids or [])
+        if len(items) < 2:
+            return []
+        return [
+            json.dumps({"subject": items[0], "object": items[1], "relation": "rel"})
+        ]
+
+    class _Frame:
+        def __init__(self, rows: list[str]) -> None:
+            self._rows = rows
+
+        def to_parquet(self, path: Path) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"PAR1")
+
+    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs):
+        rows = self.get_rel_map(node_ids=node_ids, depth=depth)
+        return self._Frame(rows)
+
 
 class _PgIndex:
     """Mock property graph index class for testing."""
@@ -173,6 +211,7 @@ class _PgIndex:
     def __init__(self) -> None:
         """Initialize with mock property graph store."""
         self.property_graph_store = _GraphStore()
+        self.storage_context = SimpleNamespace()
 
 
 @pytest.mark.unit
@@ -247,6 +286,36 @@ def test_rebuild_snapshot_writes_manifest(
     for evt in events:
         assert evt.get("context") == "snapshot"
         assert "duration_ms" in evt
+
+
+@pytest.mark.unit
+def test_rebuild_snapshot_skips_exports_without_storage_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Snapshot rebuild omits exports when the graph index lacks storage context."""
+    settings_obj = SimpleNamespace(
+        data_dir=tmp_path,
+        retrieval=SimpleNamespace(router="auto", enable_server_hybrid=True),
+        processing=SimpleNamespace(chunk_size=512, chunk_overlap=64),
+        database=SimpleNamespace(vector_store_type="qdrant"),
+        app_version="x",
+    )
+    events: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        docs_page, "_log_export_event", lambda payload: events.append(payload.copy())
+    )
+
+    class _PgIndexNoStorage:
+        def __init__(self) -> None:
+            self.property_graph_store = _GraphStore()
+
+    final = docs_page.rebuild_snapshot(_VecIndex(), _PgIndexNoStorage(), settings_obj)
+    payload = json.loads((final / "manifest.meta.json").read_text(encoding="utf-8"))
+    assert payload.get("graph_exports") in (None, [])
+    graph_dir = final / "graph"
+    assert not any(graph_dir.glob("graph_export-*.jsonl"))
+    assert not any(graph_dir.glob("graph_export-*.parquet"))
+    assert not events
 
 
 def teardown_module(module) -> None:

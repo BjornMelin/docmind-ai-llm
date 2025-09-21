@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import os
+from contextlib import suppress
 
 import pytest
 
@@ -87,6 +89,8 @@ def _stub_embed_model(
         return
     from src.config import integrations as integrations_module
 
+    hybrid_module = importlib.import_module("src.retrieval.hybrid")
+
     class _Embed:
         def get_query_embedding(self, _text: str) -> list[float]:
             return [0.0, 0.1, 0.2]
@@ -98,7 +102,8 @@ def _stub_embed_model(
         raising=False,
     )
     monkeypatch.setattr(
-        "src.retrieval.hybrid.get_settings_embed_model",
+        hybrid_module,
+        "get_settings_embed_model",
         lambda: _Embed(),
         raising=False,
     )
@@ -153,15 +158,22 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
         def close(self) -> None:  # pragma: no cover - simple stub
             return None
 
+    hybrid_module = importlib.import_module("src.retrieval.hybrid")
     monkeypatch.setattr(
-        "src.retrieval.hybrid.QdrantClient",
-        lambda *args, **kwargs: _FakeQdrantClient(*args, **kwargs),
-    )
-    monkeypatch.setattr(
-        "tools.eval.run_beir.QdrantClient",
+        hybrid_module,
+        "QdrantClient",
         lambda *args, **kwargs: _FakeQdrantClient(*args, **kwargs),
         raising=False,
     )
+    with suppress(ImportError):
+        from tools.eval import run_beir as beir_module
+
+        monkeypatch.setattr(
+            beir_module,
+            "QdrantClient",
+            lambda *args, **kwargs: _FakeQdrantClient(*args, **kwargs),
+            raising=False,
+        )
     monkeypatch.setattr(
         "src.utils.storage.QdrantClient",
         _FakeQdrantClient,
@@ -233,8 +245,11 @@ def _stub_router_postprocessor_builders(
         return
     from types import SimpleNamespace
 
-    from src.retrieval import graph_config as gc
-    from src.retrieval import postprocessor_utils as pu
+    try:
+        gc = importlib.import_module("src.retrieval.graph_config")
+        pu = importlib.import_module("src.retrieval.postprocessor_utils")
+    except ModuleNotFoundError:
+        return
 
     def _vector(index, post, **kwargs):
         try:
@@ -314,10 +329,16 @@ def _router_factory_stubs(
     """Provide lightweight stubs for router factory dependencies."""
     from types import SimpleNamespace
 
-    from src.retrieval import graph_config as gc
-    from src.retrieval import postprocessor_utils as pu
-    from src.retrieval import router_factory as rf
-    from src.retrieval.llama_index_adapter import set_llama_index_adapter
+    try:
+        gc = importlib.import_module("src.retrieval.graph_config")
+        pu = importlib.import_module("src.retrieval.postprocessor_utils")
+        rf = importlib.import_module("src.retrieval.router_factory")
+        adapter_mod = importlib.import_module("src.retrieval.llama_index_adapter")
+    except ModuleNotFoundError:
+        yield
+        return
+
+    set_llama_index_adapter = adapter_mod.set_llama_index_adapter
 
     if "requires_llama" in request.keywords:
         set_llama_index_adapter(None)
