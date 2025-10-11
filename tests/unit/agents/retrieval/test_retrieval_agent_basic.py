@@ -227,6 +227,33 @@ def test_retrieval_agent_direct_tool_invoke_wrapper(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.unit
+def test_retrieval_agent_direct_tool_unwrapped_invoke(monkeypatch: pytest.MonkeyPatch):
+    """Fallback should pass payload dicts even if tagging fails."""
+    from src.agents import retrieval as mod
+
+    payload = {
+        "documents": [],
+        "strategy_used": "vector",
+        "query_original": "q",
+        "query_optimized": "q",
+    }
+
+    tool = _InvokeOnlyTool(payload)
+
+    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "retrieve_documents", tool)
+
+    agent = mod.RetrievalAgent(llm=None, tools_data={})
+    # Simulate an environment where the tagging attribute is missing.
+    agent._tool_callable = tool.invoke  # type: ignore[method-assign]
+
+    result = agent.retrieve_documents("q", strategy="vector", use_dspy=False)
+
+    assert result.strategy_used == "vector"
+    assert tool.calls
+
+
+@pytest.mark.unit
 def test_retrieval_agent_direct_tool_malformed_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

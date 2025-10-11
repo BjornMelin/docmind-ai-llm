@@ -362,18 +362,19 @@ class RetrievalAgent:
         }
 
         def _invoke_direct_tool() -> Any:
-            expects_payload = bool(
-                getattr(self._tool_callable, "expects_payload_dict", False)
+            expects_payload = getattr(
+                self._tool_callable, "expects_payload_dict", None
             )
             if expects_payload:
                 return self._tool_callable(tool_payload)
+
             last_error: TypeError | None = None
             try:
-                return self._tool_callable(**tool_payload)
+                return self._tool_callable(tool_payload)
             except TypeError as exc:
                 last_error = exc
             try:
-                return self._tool_callable(tool_payload)
+                return self._tool_callable(**tool_payload)
             except TypeError as exc:  # pragma: no cover - defensive branch
                 if last_error is not None:
                     raise last_error from exc
