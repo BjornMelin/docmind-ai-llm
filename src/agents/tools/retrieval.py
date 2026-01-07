@@ -168,7 +168,7 @@ def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
 
             optimized = DSPyLlamaIndexRetriever.optimize_query(query)
             logger.debug(
-                "DSPy optimization: '%s' -> '%s'",
+                "DSPy optimization: '{}' -> '{}'",
                 _safe_query_for_log(query),
                 _safe_query_for_log(optimized["refined"]),
             )

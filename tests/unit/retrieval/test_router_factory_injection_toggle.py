@@ -68,7 +68,7 @@ def test_router_factory_injects_postprocessors_toggle(
     router = rf.build_router_engine(vec, pg_index=pg, settings=cfg, enable_hybrid=False)
     assert len(get_router_tool_names(router)) == 2
     assert vec.kwargs is not None
-    assert vec.kwargs.get("node_postprocessors") is not None
+    assert vec.kwargs.get("node_postprocessors") == ["pp"]
     assert captured_graph.get("node_postprocessors") == ["pp"]
 
     cfg.retrieval.use_reranking = False

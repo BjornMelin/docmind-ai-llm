@@ -207,7 +207,7 @@ def _build_property_graph(documents: list[Any]) -> Any | None:
         ImportError,
         AttributeError,
     ) as exc:  # pragma: no cover - defensive
-        logger.warning("PropertyGraphIndex build failed: %s", exc)
+        logger.warning("PropertyGraphIndex build failed: {}", exc)
         return None
 
 

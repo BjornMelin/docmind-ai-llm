@@ -97,7 +97,6 @@ def test_router_engine_warns_when_graph_disabled(
         logger.remove(token)
 
     assert get_router_tool_names(router) == ["semantic_search"]
-    assert any(
-        "GraphRAG is disabled" in message or GRAPH_DEPENDENCY_HINT in message
-        for message in captured
+    assert any(GRAPH_DEPENDENCY_HINT in message for message in captured), (
+        f"Expected warning containing '{GRAPH_DEPENDENCY_HINT}', got: {captured}"
     )

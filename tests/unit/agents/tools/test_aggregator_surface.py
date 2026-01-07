@@ -17,8 +17,8 @@ from src.agents.tools.validation import validate_response
 pytestmark = pytest.mark.unit
 
 
-def test_submodules_importable() -> None:
-    """Smoke check that tool functions are importable from submodules."""
+def test_submodules_importable_and_invokable() -> None:
+    """Smoke check that tool functions are importable and invokable."""
 
     def _invokable(obj: object) -> bool:
         """Return True when obj is callable or exposes a callable invoke method."""

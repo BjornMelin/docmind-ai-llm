@@ -54,3 +54,11 @@ def test_siglip_loader_device_and_cache(monkeypatch):
     assert p2
     assert dev2 == "cuda"
     assert vision._cached.cache_info().currsize == 2  # pylint: disable=protected-access
+
+    # Verify cache hit: third call with same availability should reuse cached entry.
+    m3, p3, dev3 = rr._load_siglip()  # pylint: disable=protected-access
+    assert m3
+    assert p3
+    assert dev3 == "cuda"
+    assert vision._cached.cache_info().currsize == 2  # Cache size unchanged
+    assert m3 is m2  # Same model instance from cache

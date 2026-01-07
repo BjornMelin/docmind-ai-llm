@@ -35,7 +35,7 @@ def test_open_image_encrypted_plaintext(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_open_image_encrypted_with_decrypt(monkeypatch: pytest.MonkeyPatch) -> None:
-    removed = []
+    removed: list[str] = []
 
     @contextmanager
     def fake_open(path: str):
