@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from llama_index.core import StorageContext, VectorStoreIndex
-from loguru import logger
 
 from src.config import setup_llamaindex
 from src.config.integrations import get_settings_embed_model
@@ -207,7 +206,7 @@ def _build_property_graph(documents: list[Any]) -> Any | None:
         ImportError,
         AttributeError,
     ) as exc:  # pragma: no cover - defensive
-        logger.warning("PropertyGraphIndex build failed: {}", exc)
+        _LOG.warning("PropertyGraphIndex build failed: %s", exc)
         return None
 
 

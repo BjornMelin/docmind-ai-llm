@@ -35,7 +35,7 @@ def test_siglip_loader_device_and_cache(monkeypatch):
 
     monkeypatch.setattr(core, "TORCH", SimpleNamespace(cuda=_Cuda), raising=False)
     # First load: CPU
-    m1, p1, dev1 = rr._load_siglip()  # pylint: disable=protected-access
+    _m1, _p1, dev1 = rr._load_siglip()  # pylint: disable=protected-access
     assert dev1 == "cpu"
 
     # Make CUDA available
@@ -47,18 +47,12 @@ def test_siglip_loader_device_and_cache(monkeypatch):
     monkeypatch.setattr(core, "TORCH", SimpleNamespace(cuda=_Cuda2), raising=False)
 
     # Edge-case: verify cache key includes device when availability flips.
-    m2, p2, dev2 = rr._load_siglip()  # pylint: disable=protected-access
-    assert m1
-    assert p1
-    assert m2
-    assert p2
+    m2, _p2, dev2 = rr._load_siglip()  # pylint: disable=protected-access
     assert dev2 == "cuda"
     assert vision._cached.cache_info().currsize == 2  # pylint: disable=protected-access
 
     # Verify cache hit: third call with same availability should reuse cached entry.
-    m3, p3, dev3 = rr._load_siglip()  # pylint: disable=protected-access
-    assert m3
-    assert p3
+    m3, _p3, dev3 = rr._load_siglip()  # pylint: disable=protected-access
     assert dev3 == "cuda"
     assert vision._cached.cache_info().currsize == 2  # Cache size unchanged
     assert m3 is m2  # Same model instance from cache

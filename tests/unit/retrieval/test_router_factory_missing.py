@@ -89,7 +89,9 @@ def test_router_engine_warns_when_graph_disabled(
 
     captured: list[str] = []
     token = logger.add(
-        lambda message: captured.append(message.rstrip("\n")), level="WARNING"
+        lambda message: captured.append(message.rstrip("\n")),
+        format="{message}",
+        level="WARNING",
     )
     try:
         router = build_router_engine(_VecIndex(), pg_index=_PgIndex(), settings=cfg)

@@ -51,7 +51,7 @@ def test_router_factory_injects_postprocessors_toggle(
     monkeypatch.setattr(
         "src.retrieval.reranking.get_postprocessors",
         _fake_get_postprocessors,
-        raising=False,
+        raising=True,
     )
 
     cfg = SimpleNamespace(
@@ -67,7 +67,6 @@ def test_router_factory_injects_postprocessors_toggle(
     pg = _FakePG()
     router = rf.build_router_engine(vec, pg_index=pg, settings=cfg, enable_hybrid=False)
     assert len(get_router_tool_names(router)) == 2
-    assert vec.kwargs is not None
     assert vec.kwargs.get("node_postprocessors") == ["pp"]
     assert captured_graph.get("node_postprocessors") == ["pp"]
 
@@ -78,6 +77,5 @@ def test_router_factory_injects_postprocessors_toggle(
         vec2, pg_index=_FakePG(), settings=cfg, enable_hybrid=False
     )
     assert len(get_router_tool_names(router2)) == 2
-    assert vec2.kwargs is not None
     assert vec2.kwargs.get("node_postprocessors") is None
     assert captured_graph.get("node_postprocessors") is None
