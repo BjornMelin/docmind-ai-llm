@@ -885,7 +885,7 @@ class DocMindSettings(BaseSettings):
         ):
             c = self.graphrag_cfg
             return {
-                "enabled": c.enabled,
+                "enabled": self.is_graphrag_enabled(),
                 "relationship_extraction": c.relationship_extraction,
                 "entity_resolution": c.entity_resolution,
                 "max_hops": c.max_hops,
@@ -893,13 +893,29 @@ class DocMindSettings(BaseSettings):
                 "chunk_size": c.chunk_size,
             }
         return {
-            "enabled": self.enable_graphrag,
+            "enabled": self.is_graphrag_enabled(),
             "relationship_extraction": self.graphrag_relationship_extraction,
             "entity_resolution": self.graphrag_entity_resolution,
             "max_hops": self.graphrag_max_hops,
             "max_triplets": self.graphrag_max_triplets,
             "chunk_size": self.graphrag_chunk_size,
         }
+
+    def is_graphrag_enabled(self) -> bool:
+        """Return True when both the global and nested GraphRAG flags allow it."""
+        base_flag = bool(getattr(self, "enable_graphrag", False))
+        if not base_flag:
+            return False
+        try:
+            graphrag_cfg = getattr(self, "graphrag_cfg", None)
+        except (AttributeError, TypeError):
+            return base_flag
+        if graphrag_cfg is None:
+            return base_flag
+        try:
+            return base_flag and bool(getattr(graphrag_cfg, "enabled", True))
+        except (AttributeError, TypeError, ValueError):
+            return base_flag
 
     # === Validation helpers ===
     def _validate_endpoints_security(self) -> None:

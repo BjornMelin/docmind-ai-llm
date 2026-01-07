@@ -440,10 +440,22 @@ uv run python -m pytest tests/integration/ -v --timeout=300
 uv run python scripts/run_tests.py --unit --integration
 uv run python scripts/run_tests.py --fast  # Unit + Integration only
 
+# Optional dependency lane (GraphRAG / multimodal / other optional extras)
+# Runs: pytest -m requires_llama
+# Skips automatically when optional dependencies are not installed.
+uv run python scripts/run_tests.py --extras
+
 # With coverage
 uv run python -m pytest tests/unit/ tests/integration/ \
   --cov=src --cov-report=term-missing --cov-report=html
 ```
+
+Notes:
+
+- Mark tests that require optional LlamaIndex extras with `@pytest.mark.requires_llama`
+  so they can run in the `--extras` lane.
+- For GraphRAG adapter/registry details and install-state behavior, see
+  `docs/developers/guides/graphrag-adapters.md`.
 
 #### Performance and System Testing
 

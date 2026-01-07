@@ -77,9 +77,11 @@ Telemetry requirements (local JSONL; PII-safe, bounded, sampled):
 Amendment (GraphRAG flags):
 
 ```env
-DOCMIND_GRAPHRAG__ENABLED=false
-DOCMIND_GRAPHRAG__SUBRETRIEVERS=false
-DOCMIND_GRAPHRAG__DEFAULT_PATH_DEPTH=1
+# Global GraphRAG feature flag (used by router + UI)
+DOCMIND_ENABLE_GRAPHRAG=false
+
+# Advanced GraphRAG tuning (nested GraphRAG config model)
+DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 ```
 
 Expose these in UI with safe defaults (toggle; read‑only path depth 1 unless advanced settings enabled). See ADR‑038.
@@ -455,7 +457,8 @@ DOCMIND_ANALYSIS__MODE=auto
 DOCMIND_ANALYSIS__MAX_WORKERS=4
 
 # GraphRAG (ADR-019)
-DOCMIND_GRAPHRAG__ENABLED=false
+DOCMIND_ENABLE_GRAPHRAG=false
+DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 ```
 
 ## Testing

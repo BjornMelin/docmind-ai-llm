@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -105,6 +106,17 @@ class DefaultToolRegistry:
 
     def _resolve_graphrag_flag(self) -> bool:
         """Derive the GraphRAG enablement flag with defensive guards."""
+        if hasattr(self.app_settings, "is_graphrag_enabled"):
+            try:
+                return bool(self.app_settings.is_graphrag_enabled())
+            except (AttributeError, TypeError, ValueError):
+                # Log suppressed exceptions for debugging.
+                logging.getLogger(__name__).debug(
+                    "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed); "
+                    "skipping legacy enablement paths",
+                    exc_info=True,
+                )
+                return False
         base_flag = bool(getattr(self.app_settings, "enable_graphrag", False))
         if not base_flag and hasattr(self.app_settings, "get_graphrag_config"):
             try:

@@ -23,6 +23,7 @@ This directory contains comprehensive, consolidated documentation for DocMind AI
 | **[Architecture Overview](architecture-overview.md)** | Executive technical summary with performance specs | Technical leads, architects |
 | **[Cache Implementation Guide](cache.md)** | Wiring, configuration, operations, troubleshooting | Developers integrating cache |
 | **[Configuration Usage Guide](configuration-usage-guide.md)** | Practical how-to for env vars and settings helpers | Developers, DevOps |
+| **[GraphRAG Adapters Guide](guides/graphrag-adapters.md)** | Adapter protocol, registry wiring, and optional dependency lanes | Developers extending GraphRAG |
 | **[Testing Guide](../testing/testing-guide.md)** | Canonical testing strategy and commands | QA engineers, developers writing tests |
 | **[CI/CD Pipeline](ci-cd-pipeline.md)** | Continuous integration and deployment workflows | DevOps engineers, release managers |
 

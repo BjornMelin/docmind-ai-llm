@@ -30,7 +30,11 @@ def current_config_dict(settings_obj: Any | None = None) -> dict[str, Any]:
     return {
         "router": s.retrieval.router,
         "hybrid": s.retrieval.enable_server_hybrid,
-        "graph_enabled": bool(getattr(s, "enable_graphrag", False)),
+        "graph_enabled": bool(
+            s.is_graphrag_enabled()
+            if hasattr(s, "is_graphrag_enabled")
+            else getattr(s, "enable_graphrag", False)
+        ),
         "chunk_size": s.processing.chunk_size,
         "chunk_overlap": s.processing.chunk_overlap,
     }
