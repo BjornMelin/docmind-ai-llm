@@ -28,7 +28,8 @@ or adapters are unavailable.
 GraphRAG enablement is a combination of **config**, **adapter availability**,
 and **index presence**:
 
-- Config gate: `DOCMIND_ENABLE_GRAPHRAG=true|false` (top-level feature flag).
+- Config gate: `DOCMIND_ENABLE_GRAPHRAG=true|false` (top-level feature flag; gates router/UI).
+- GraphRAG config: `DOCMIND_GRAPHRAG_CFG__ENABLED=true|false` plus tuning fields (keep in sync with the top-level flag).
 - Adapter gate: `src/retrieval/adapter_registry.py` tries to register a default
   adapter and exposes health via `get_default_adapter_health()`.
 - Index gate: router construction only adds the `knowledge_graph` tool when a
@@ -48,7 +49,7 @@ Adapters are expected to implement (directly or via thin wrappers):
 
 - `GraphIndexBuilderProtocol`: optional factory for constructing a property
   graph index from documents (used by ingestion paths).
-- `GraphRetrieverProtocol`: `retrieve(query, ...) -> Sequence[...]`.
+- `GraphRetrieverProtocol`: `retrieve(query, …) → Sequence[…]`.
 - `GraphQueryEngineProtocol`: `query()` and `aquery()` for sync/async queries.
 - `GraphExporterProtocol`: optional export surface (`export_jsonl`,
   `export_parquet`) used by snapshot/export flows.
@@ -106,7 +107,7 @@ Highlights:
 2. Provide a clear `dependency_hint` that tells contributors how to install the
    required extras or system dependencies.
 3. Register the adapter with `register_adapter(factory)` during app startup
-   (or expose a helper that callers can invoke prior to resolution).
+   (or expose a helper that callers can invoke before resolution).
 4. Add tests:
    - If tests require optional deps, mark them with `@pytest.mark.requires_llama`
      so they can run in the optional dependency lane.
@@ -126,4 +127,3 @@ uv run python scripts/run_tests.py --extras
 `--extras` currently gates execution on the presence of
 `llama_index.program.openai` and will automatically skip when it is not
 installed.
-
