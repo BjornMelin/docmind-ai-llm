@@ -33,3 +33,15 @@ def test_graphrag_enablement_requires_both_flags() -> None:
     cfg.enable_graphrag = True
     cfg.graphrag_cfg.enabled = True
     assert cfg.is_graphrag_enabled() is True
+
+
+def test_graphrag_enablement_fallback_when_nested_config_missing() -> None:
+    """Fallback to the global flag when graphrag_cfg is missing."""
+    cfg = DocMindSettings()
+    cfg.graphrag_cfg = None
+
+    cfg.enable_graphrag = True
+    assert cfg.is_graphrag_enabled() is True
+
+    cfg.enable_graphrag = False
+    assert cfg.is_graphrag_enabled() is False
