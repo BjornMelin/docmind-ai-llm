@@ -45,7 +45,11 @@ def main() -> None:  # pragma: no cover - Streamlit page
         with col_opts[0]:
             use_graphrag = st.checkbox(
                 "Build GraphRAG (beta)",
-                value=bool(getattr(settings, "enable_graphrag", True)),
+                value=bool(
+                    settings.is_graphrag_enabled()
+                    if hasattr(settings, "is_graphrag_enabled")
+                    else getattr(settings, "enable_graphrag", True)
+                ),
             )
         with col_opts[1]:
             encrypt_images = st.checkbox(

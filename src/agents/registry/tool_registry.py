@@ -105,6 +105,11 @@ class DefaultToolRegistry:
 
     def _resolve_graphrag_flag(self) -> bool:
         """Derive the GraphRAG enablement flag with defensive guards."""
+        if hasattr(self.app_settings, "is_graphrag_enabled"):
+            try:
+                return bool(self.app_settings.is_graphrag_enabled())
+            except (AttributeError, TypeError, ValueError):
+                return False
         base_flag = bool(getattr(self.app_settings, "enable_graphrag", False))
         if not base_flag and hasattr(self.app_settings, "get_graphrag_config"):
             try:

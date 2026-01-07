@@ -136,7 +136,12 @@ def build_router_engine(
         else bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
     )
 
-    kg_requested = bool(pg_index is not None and getattr(cfg, "enable_graphrag", True))
+    if hasattr(cfg, "is_graphrag_enabled"):
+        kg_requested = bool(pg_index is not None and cfg.is_graphrag_enabled())
+    else:
+        kg_requested = bool(
+            pg_index is not None and getattr(cfg, "enable_graphrag", True)
+        )
 
     with router_build_span(
         adapter_name=getattr(adapter, "__class__", type("A", (), {})).__name__,
@@ -194,7 +199,11 @@ def build_router_engine(
         if (
             pg_index is not None
             and getattr(pg_index, "property_graph_store", None) is not None
-            and bool(getattr(cfg, "enable_graphrag", True))
+            and (
+                bool(cfg.is_graphrag_enabled())
+                if hasattr(cfg, "is_graphrag_enabled")
+                else bool(getattr(cfg, "enable_graphrag", True))
+            )
         ):
             try:
                 graph_depth = int(
