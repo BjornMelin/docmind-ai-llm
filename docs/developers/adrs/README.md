@@ -27,6 +27,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Modality-aware reranking; ColPali for visuals, BGE v2‑m3 for text
 - **[ADR-019 — Optional GraphRAG Module](ADR-019-optional-graphrag.md)**  
   Scope: Property graph/graph retrieval integrations
+- **[ADR-038 — GraphRAG Persistence and Router Integration](ADR-038-graphrag-persistence-and-router.md)**  
+  Scope: Router composition (vector+graph), snapshot persistence, exports, and UI staleness
 - **[ADR-034 — Idempotent Indexing & Embedding Reuse](ADR-034-idempotent-indexing-and-embedding-reuse.md)**  
   Scope: Idempotent ingestion and reusable embeddings
 

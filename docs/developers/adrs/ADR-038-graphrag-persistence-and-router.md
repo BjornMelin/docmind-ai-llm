@@ -112,9 +112,11 @@ flowchart LR
 ### Configuration
 
 ```env
-DOCMIND_GRAPHRAG__ENABLED=false
-DOCMIND_GRAPHRAG__SUBRETRIEVERS=false
-DOCMIND_GRAPHRAG__DEFAULT_PATH_DEPTH=1
+# Global GraphRAG feature flag (used by router + UI)
+DOCMIND_ENABLE_GRAPHRAG=false
+
+# Advanced GraphRAG tuning (nested GraphRAG config model)
+DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 ```
 
 ## Testing

@@ -1,5 +1,7 @@
 # Specs Index
 
+- [requirements.md](./requirements.md)
+- [traceability.md](./traceability.md)
 - [spec-001-llm-runtime.md](./spec-001-llm-runtime.md)
 - [spec-002-ingestion-pipeline.md](./spec-002-ingestion-pipeline.md)
 - [spec-003-embeddings.md](./spec-003-embeddings.md)
@@ -13,3 +15,5 @@
 - [spec-011-security-privacy.md](./spec-011-security-privacy.md)
 - [spec-012-observability.md](./spec-012-observability.md)
 - [spec-013-packaging-model-download.md](./spec-013-packaging-model-download.md)
+- [spec-014-index-persistence-snapshots.md](./spec-014-index-persistence-snapshots.md)
+- [spec-020-prompt-template-system.md](./spec-020-prompt-template-system.md)

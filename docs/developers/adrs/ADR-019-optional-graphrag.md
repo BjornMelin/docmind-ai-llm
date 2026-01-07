@@ -93,7 +93,11 @@ graph TD
 ### Configuration
 
 ```env
-DOCMIND_GRAPHRAG__ENABLED=true
+# Global GraphRAG feature flag (used by router + UI)
+DOCMIND_ENABLE_GRAPHRAG=true
+
+# Advanced GraphRAG tuning (nested GraphRAG config model)
+DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 ```
 
 ## Testing
