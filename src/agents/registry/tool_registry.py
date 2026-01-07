@@ -109,6 +109,13 @@ class DefaultToolRegistry:
             try:
                 return bool(self.app_settings.is_graphrag_enabled())
             except (AttributeError, TypeError, ValueError):
+                # Log suppressed exceptions for debugging.
+                import logging
+
+                logging.getLogger(__name__).debug(
+                    "is_graphrag_enabled() raised exception; falling back to False",
+                    exc_info=True,
+                )
                 return False
         base_flag = bool(getattr(self.app_settings, "enable_graphrag", False))
         if not base_flag and hasattr(self.app_settings, "get_graphrag_config"):
