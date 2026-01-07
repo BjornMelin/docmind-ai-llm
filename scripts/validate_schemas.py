@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -87,7 +88,7 @@ def validate_file(path: Path) -> None:
                 if key.startswith(("ndcg@", "recall@", "mrr@")):
                     try:
                         out[key] = float(val)
-                    except Exception:
+                    except (TypeError, ValueError):
                         out[key] = 0.0
             return out
 
@@ -101,7 +102,7 @@ def validate_file(path: Path) -> None:
             ):
                 try:
                     out[key] = float(row.get(key, "nan"))
-                except Exception:
+                except (TypeError, ValueError):
                     out[key] = 0.0
             out["sample_count"] = int(row.get("sample_count", 0) or 0)
             return out
@@ -151,7 +152,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         try:
             validate_file(p)
             print(f"OK: {p}")
-        except Exception as exc:  # pragma: no cover - prints to help debugging
+        except (
+            OSError,
+            ValueError,
+            SchemaError,
+        ) as exc:  # pragma: no cover - prints to help debugging
             ok = False
             print(f"ERROR: {p}: {exc}", file=sys.stderr)
     return 0 if ok else 2

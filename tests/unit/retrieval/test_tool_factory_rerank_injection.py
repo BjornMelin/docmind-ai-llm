@@ -7,6 +7,12 @@ settings.retrieval.use_reranking is True, and omitted when False.
 import importlib
 from types import SimpleNamespace
 
+import pytest
+
+pytest.importorskip("llama_index.core", reason="requires llama_index.core")
+
+pytestmark = pytest.mark.requires_llama
+
 
 class _FakeIndex:
     def __init__(self):

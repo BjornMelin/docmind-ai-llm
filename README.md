@@ -226,8 +226,7 @@
    #   DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
    ```
 
-For a complete overview (including a Local vs Cloud matrix), see
-`docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
+    For a complete overview (including a Local vs Cloud matrix), see `docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
 
 5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
 
@@ -1054,11 +1053,11 @@ Contributions are welcome! Please follow these steps:
    ruff format . && ruff check .
    uv run pylint -j 0 -sn --rcfile=pyproject.toml src tests/unit
 
-   # Unit tests with coverage
-   uv run pytest tests/unit -m unit --cov=src -q
+   # Fast tiered validation (unit + integration)
+   uv run python scripts/run_tests.py --fast
 
-   # Integration tests (offline; no coverage gating)
-   uv run pytest tests/integration -m integration --no-cov -q
+   # Optional multimodal lane (skips when extras missing)
+   uv run python scripts/run_tests.py --extras
    ```
 
 5. **Submit a pull request** with clear description of changes
@@ -1089,12 +1088,19 @@ Quick local commands:
 # Fast unit + integration sweep (offline)
 uv run python scripts/run_tests.py --fast
 
+# Extras (multimodal) lane — skips automatically when optional deps missing
+uv run python scripts/run_tests.py --extras
+
 # Full coverage gate (unit + integration)
 uv run python scripts/run_tests.py --coverage
 
 # Targeted module or pattern
 uv run python scripts/run_tests.py tests/unit/persistence/test_snapshot_manager.py
 ```
+
+Default `pytest` invocations now run without implicit coverage gates. Use the
+scripted `--coverage` workflow (or run `coverage report`) when you need HTML,
+XML, or JSON artifacts for CI or local analysis.
 
 CI pipeline mirrors this flow using `uv run python scripts/run_tests.py --fast` as a quick gate followed by `--coverage` for the full report. This keeps coverage thresholds stable while still surfacing integration regressions early. See ADR‑014 for quality gates/validation and ADR‑029 for the boundary‑first testing strategy.
 

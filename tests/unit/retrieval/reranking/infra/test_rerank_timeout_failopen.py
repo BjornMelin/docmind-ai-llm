@@ -10,11 +10,19 @@ def test_text_rerank_true_cancellation(monkeypatch):
     nodes = [NodeWithScore(node=TextNode(text=f"t{i}"), score=0.0) for i in range(5)]
     bundle = QueryBundle(query_str="hello")
 
-    # Force timeout by using a blocking function longer than TEXT_RERANK_TIMEOUT_MS
+    timeout_ms = 250
+    monkeypatch.setattr(
+        rr.settings.retrieval,
+        "text_rerank_timeout_ms",
+        timeout_ms,
+        raising=False,
+    )
+
+    # Force timeout by using a blocking function longer than the configured timeout.
     def very_slow_post(nodes, query_str):  # pylint: disable=unused-argument
         import time as _t
 
-        _t.sleep((rr._text_timeout_ms() + 50) / 1000.0)
+        _t.sleep((timeout_ms + 50) / 1000.0)
         return list(nodes)
 
     class _Dummy:
@@ -34,6 +42,14 @@ def test_text_rerank_timeout_fail_open(monkeypatch):
     nodes = [NodeWithScore(node=TextNode(text=f"t{i}"), score=0.0) for i in range(5)]
     bundle = QueryBundle(query_str="hello")
 
+    timeout_ms = 250
+    monkeypatch.setattr(
+        rr.settings.retrieval,
+        "text_rerank_timeout_ms",
+        timeout_ms,
+        raising=False,
+    )
+
     # Force timeout by monkeypatching _now_ms to simulate elapsed time
     start = rr._now_ms()
     calls = {"n": 0}
@@ -42,7 +58,7 @@ def test_text_rerank_timeout_fail_open(monkeypatch):
         # After first call for text stage, advance beyond timeout
         calls["n"] += 1
         if calls["n"] > 2:
-            return start + rr._text_timeout_ms() + 5
+            return start + timeout_ms + 5
         return start
 
     monkeypatch.setattr(rr, "_now_ms", fake_now)

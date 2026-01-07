@@ -61,6 +61,11 @@ def test_build_router_engine_settings_fallback(monkeypatch, flag: bool) -> None:
             pass
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_graph_query_engine",
+        lambda *_a, **_k: SimpleNamespace(query_engine=MagicMock(name="graph_qe")),
+        raising=True,
+    )
 
     vec = _VecIndex()
     pg = _PgIndex()

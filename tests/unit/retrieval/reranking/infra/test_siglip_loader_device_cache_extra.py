@@ -9,6 +9,7 @@ from types import SimpleNamespace
 def test_siglip_loader_device_and_cache(monkeypatch):
     rr = importlib.import_module("src.retrieval.reranking")
     vision = importlib.import_module("src.utils.vision_siglip")
+    core = importlib.import_module("src.utils.core")
 
     # Fake transformers with stable class identities
     class _M:
@@ -26,16 +27,16 @@ def test_siglip_loader_device_and_cache(monkeypatch):
     # Clear cache to avoid interference
     vision._cached.cache_clear()  # pylint: disable=protected-access
 
-    # Patch torch cuda availability toggles via sys.modules fake
+    # Patch torch cuda availability via core.TORCH (used by select_device())
     class _Cuda:
         @staticmethod
         def is_available():
             return False
 
-    monkeypatch.setitem(importlib.sys.modules, "torch", SimpleNamespace(cuda=_Cuda))
+    monkeypatch.setattr(core, "TORCH", SimpleNamespace(cuda=_Cuda), raising=False)
     # First load: CPU
-    m1, p1, dev1 = rr._load_siglip()  # pylint: disable=protected-access
-    assert dev1 in {"cpu", "cuda"}
+    m1, _p1, dev1 = rr._load_siglip()  # pylint: disable=protected-access
+    assert dev1 == "cpu"
 
     # Make CUDA available
     class _Cuda2:
@@ -43,12 +44,16 @@ def test_siglip_loader_device_and_cache(monkeypatch):
         def is_available():
             return True
 
-    monkeypatch.setitem(importlib.sys.modules, "torch", SimpleNamespace(cuda=_Cuda2))
+    monkeypatch.setattr(core, "TORCH", SimpleNamespace(cuda=_Cuda2), raising=False)
 
-    # Second call should still hit cache (same classes+id), preserving cached device str
-    m2, p2, dev2 = rr._load_siglip()  # pylint: disable=protected-access
-    assert m1
-    assert p1
-    assert m2
-    assert p2
-    assert dev2 in {"cpu", "cuda"}
+    # Edge-case: verify cache key includes device when availability flips.
+    m2, _p2, dev2 = rr._load_siglip()  # pylint: disable=protected-access
+    assert dev2 == "cuda"
+    assert vision._cached.cache_info().currsize == 2  # pylint: disable=protected-access
+    assert m2 is not m1  # Device change should create a new cache entry
+
+    # Verify cache hit: third call with same availability should reuse cached entry.
+    m3, _p3, dev3 = rr._load_siglip()  # pylint: disable=protected-access
+    assert dev3 == "cuda"
+    assert vision._cached.cache_info().currsize == 2  # Cache size unchanged
+    assert m3 is m2  # Same model instance from cache

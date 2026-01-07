@@ -300,17 +300,18 @@ def _configure_embeddings() -> None:
         model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
         device = emb_cfg.get("device", "cpu")
 
-        embedding_cls = globals().get("HuggingFaceEmbedding")
+        global HuggingFaceEmbedding
+        embedding_cls = HuggingFaceEmbedding
         if embedding_cls is None:
             with _HF_EMBED_LOCK:
-                embedding_cls = globals().get("HuggingFaceEmbedding")
+                embedding_cls = HuggingFaceEmbedding
                 if embedding_cls is None:
                     from llama_index.embeddings import (
                         huggingface as _hf,
                     )  # local import
 
-                    embedding_cls = _hf.HuggingFaceEmbedding
-                    globals()["HuggingFaceEmbedding"] = embedding_cls
+                    HuggingFaceEmbedding = _hf.HuggingFaceEmbedding
+                    embedding_cls = HuggingFaceEmbedding
         if embedding_cls is None:  # pragma: no cover - defensive
             raise RuntimeError("HuggingFaceEmbedding class unavailable")
 

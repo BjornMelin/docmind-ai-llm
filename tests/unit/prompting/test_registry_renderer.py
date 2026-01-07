@@ -41,7 +41,9 @@ def test_render_prompt_and_messages() -> None:
     assert msgs, "Expected at least one chat message"
 
 
-def test_render_raises_on_missing_required_vars(monkeypatch) -> None:
+def test_render_raises_on_missing_required_vars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from src.prompting import registry as registry_module
     from src.prompting.models import TemplateMeta, TemplateSpec
 

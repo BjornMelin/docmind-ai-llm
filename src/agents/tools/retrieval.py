@@ -18,6 +18,20 @@ from .constants import (
     VARIANT_QUERY_LIMIT,
 )
 
+_LOG_QUERY_MAX_LEN = 160
+
+
+def _safe_query_for_log(query: str, *, max_len: int = _LOG_QUERY_MAX_LEN) -> str:
+    """Return a normalized, truncated query string for logs.
+
+    Queries can contain sensitive user content. Keep logs useful while reducing
+    exposure by collapsing whitespace and truncating to a bounded length.
+    """
+    collapsed = " ".join(str(query).split())
+    if len(collapsed) <= max_len:
+        return collapsed
+    return f"{collapsed[:max_len]}…"
+
 
 @tool
 def retrieve_documents(
@@ -153,7 +167,11 @@ def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
             from src.dspy_integration import DSPyLlamaIndexRetriever
 
             optimized = DSPyLlamaIndexRetriever.optimize_query(query)
-            logger.debug("DSPy optimization: '%s' -> '%s'", query, optimized["refined"])
+            logger.debug(
+                "DSPy optimization: '{}' -> '{}'",
+                _safe_query_for_log(query),
+                _safe_query_for_log(optimized["refined"]),
+            )
         except ImportError:
             logger.warning(
                 "DSPy integration not available - using fallback optimization"
@@ -185,10 +203,14 @@ def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
             logger.debug(
-                "GraphRAG retrieved {} documents for query: {}", len(new_docs), q
+                "GraphRAG retrieved {} documents for query: {}",
+                len(new_docs),
+                _safe_query_for_log(q),
             )
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            logger.warning("GraphRAG failed for query '{}': {}", q, e)
+            logger.warning(
+                "GraphRAG failed for query '{}': {}", _safe_query_for_log(q), e
+            )
             fallback = True
             break
     return documents, fallback
@@ -241,7 +263,7 @@ def _run_vector_hybrid(
                 "{} retrieved {} documents for query: {}",
                 strategy_used,
                 len(new_docs),
-                q,
+                _safe_query_for_log(q),
             )
             # If this is the primary query and hybrid returned empty, fallback to vector
             if (
@@ -266,12 +288,14 @@ def _run_vector_hybrid(
                             log_event(
                                 "hybrid_fallback",
                                 reason="empty_results",
-                                query=primary_query,
+                                query=_safe_query_for_log(primary_query),
                             )
                 except (OSError, RuntimeError, ValueError, AttributeError) as fe:
                     logger.warning("Vector fallback failed: {}", fe)
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Retrieval failed for query '{}': {}", q, e)
+            logger.error(
+                "Retrieval failed for query '{}': {}", _safe_query_for_log(q), e
+            )
     return documents, strategy_used, None
 
 

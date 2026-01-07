@@ -20,23 +20,28 @@ def test_qdrant_prefetch_fusionquery_telemetry(monkeypatch):  # type: ignore[no-
 
     # Minimal fake Qdrant response
     class _Point:
-        def __init__(self, i: int):
+        """Minimal Qdrant point stub with predictable payload."""
+
+        def __init__(self, i: int) -> None:
             self.id = i
             self.score = 0.9 - (i * 0.01)
             self.payload = {"page_id": f"p{i}", "text": f"chunk {i}"}
 
     class _Res:
-        def __init__(self):
+        """Container for the stubbed Qdrant response."""
+
+        def __init__(self) -> None:
             self.points = [_Point(i) for i in range(6)]
 
     class _Client:
+        """Stubbed Qdrant client capturing query parameters."""
+
         def query_points(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
-            # Validate prefetch and limit presence in kwargs
             assert "prefetch" in _kwargs
             assert "limit" in _kwargs
             return _Res()
 
-        def close(self):  # type: ignore[no-untyped-def]
+        def close(self) -> None:  # type: ignore[no-untyped-def]
             return None
 
     # Capture telemetry

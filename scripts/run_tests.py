@@ -92,7 +92,7 @@ class TestRunner:
         """Return True when pytest-xdist is available."""
         try:
             return importlib.util.find_spec("xdist") is not None
-        except Exception:
+        except (ImportError, AttributeError, ValueError):
             return False
 
     def clean_artifacts(self) -> None:
@@ -270,6 +270,45 @@ class TestRunner:
         return self.run_command(
             command, "Integration Tests (Tier 2 - Lightweight models)"
         )
+
+    def run_extras_tests(self) -> TestResult:
+        """Run tests that require optional llama_index extras."""
+        description = "Extras Tests (llama_index extras)"
+        try:
+            has_extras = (
+                importlib.util.find_spec("llama_index.program.openai") is not None
+            )
+        except ModuleNotFoundError:
+            has_extras = False
+
+        if not has_extras:
+            print(f"\n{'=' * 60}")
+            print(f"TEST: {description}")
+            print("=" * 60)
+            print(
+                "SKIP: llama_index.program.openai not installed; extras tests will be "
+                "skipped."
+            )
+            result = TestResult()
+            result.command = "pytest -m requires_llama (skipped - dependency missing)"
+            result.exit_code = 0
+            result.skipped = 1
+            result.output = "Dependencies missing; skipped extras test lane."
+            self.results.append(result)
+            return result
+
+        command = [
+            "uv",
+            "run",
+            "pytest",
+            "tests/",
+            "-v",
+            "--tb=short",
+            "--no-cov",
+            "-m",
+            "requires_llama",
+        ]
+        return self.run_command(command, description)
 
     def run_performance_tests(self) -> TestResult:
         """Run performance and benchmark tests."""
@@ -574,7 +613,7 @@ else:
         print("   Re-run specific tests: uv run pytest tests/test_<name>.py -v")
 
 
-def main():
+def main():  # pylint: disable=too-many-branches,too-many-statements
     """Main entry point for tiered test runner."""
     parser = argparse.ArgumentParser(
         description="DocMind AI Tiered Test Runner",
@@ -617,6 +656,11 @@ Examples:
         "--gpu",
         action="store_true",
         help="Run GPU-required tests with hardware validation",
+    )
+    parser.add_argument(
+        "--extras",
+        action="store_true",
+        help="Run tests that require optional llama_index extras",
     )
     parser.add_argument(
         "--smoke",
@@ -675,6 +719,8 @@ Examples:
             runner.run_unit_tests()
         elif args.integration:
             runner.run_integration_tests()
+        elif args.extras:
+            runner.run_extras_tests()
         elif args.fast:
             runner.run_fast_tests()
         elif args.performance:
@@ -692,6 +738,9 @@ Examples:
             print("   --integration: Lightweight models (PR validation)")
             print("   --gpu: Manual GPU smoke tests (staging/release)")
             print("   --fast: Unit + Integration only")
+            print(
+                "   --extras: Optional-dependency tests (requires llama_index extras)"
+            )
 
             runner.validate_imports()
             runner.run_tiered_tests()
@@ -704,6 +753,7 @@ Examples:
                     args.fast,
                     args.unit,
                     args.integration,
+                    args.extras,
                     args.performance,
                     args.gpu,
                     args.smoke,

@@ -262,8 +262,14 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
         if is_cuda_available():
             cuda_mod = getattr(TORCH, "cuda", None)
             if cuda_mod:
-                cuda_mod.synchronize()
-                cuda_mod.empty_cache()
+                try:
+                    cuda_mod.synchronize()
+                except RuntimeError as exc:
+                    logger.debug("GPU synchronize failed during cleanup: %s", exc)
+                try:
+                    cuda_mod.empty_cache()
+                except RuntimeError as exc:
+                    logger.debug("GPU cache clear failed during cleanup: %s", exc)
         gc.collect()
 
 

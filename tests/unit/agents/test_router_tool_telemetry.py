@@ -16,17 +16,20 @@ from src.agents.tools.router_tool import router_tool
 
 class _FakeResponse:
     def __init__(self, text: str, selected: str | None = None):
+        """Store response text and optional selector metadata."""
         self.response = text
         self.metadata = {"selector_result": selected} if selected else {}
 
 
 class _FakeRouterKG:
     def query(self, q: str):
+        """Return a fake response with a knowledge_graph route selection."""
         return _FakeResponse(f"ok: {q}", selected="knowledge_graph")
 
 
 @pytest.mark.unit
 def test_router_tool_emits_traversal_depth_on_kg_route(monkeypatch):
+    """Test router tool emits traversal depth on kg route."""
     # Capture telemetry events
     events: list[dict] = []
 
@@ -34,6 +37,7 @@ def test_router_tool_emits_traversal_depth_on_kg_route(monkeypatch):
     rt_mod = importlib.import_module("src.agents.tools.router_tool")
 
     def _capture(evt: dict):
+        """Capture telemetry event for verification."""
         events.append(evt)
 
     monkeypatch.setattr(rt_mod, "log_jsonl", _capture)

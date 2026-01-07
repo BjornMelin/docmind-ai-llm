@@ -42,7 +42,8 @@ __all__ = [
 # Regex patterns used during normalization. The patterns intentionally avoid
 # expensive Unicode categories to keep runtime predictable.
 _ZERO_WIDTH_RE = re.compile(r"[\u200B\u200C\u200D\uFEFF]")
-_CONTROL_CHAR_RE = re.compile(r"[\u0000-\u001F\u007F]")
+# Preserve tab/newline for whitespace normalization later, strip other controls.
+_CONTROL_CHAR_RE = re.compile(r"[\u0000-\u0008\u000B-\u001F\u007F]")
 _MULTI_WHITESPACE_RE = re.compile(r"\s+")
 
 DEFAULT_METADATA_KEYS: tuple[str, ...] = (
@@ -192,10 +193,7 @@ def canonicalize_document(
     Returns:
         UTF-8 encoded canonical payload bytes.
     """
-    try:
-        text = content.decode("utf-8", errors="replace")
-    except UnicodeDecodeError:  # pragma: no cover - defensive
-        text = str(content)
+    text = content.decode("utf-8", errors="replace")
 
     normalised_text = _normalise_text(text)
     filtered_metadata = _filter_metadata(metadata, config.metadata_keys)

@@ -27,12 +27,39 @@ class _Store:
         del properties
         return [_Node(str(i), source_id=f"src-{i}") for i in ids or []]
 
-    def get_rel_map(self, nodes, depth=1):
-        del depth
-        items = list(nodes)
+    def get_rel_map(self, node_ids=None, depth=1, **_kwargs):
+        items = list(node_ids or [])
         if len(items) < 2:
             return []
-        return [[items[0], items[1]]]
+        return [
+            json.dumps(
+                {
+                    "subject": items[0],
+                    "relation": "related",
+                    "object": items[1],
+                    "depth": depth,
+                    "path_id": 0,
+                    "source_ids": [f"src-{items[0]}", f"src-{items[1]}"]
+                    if items
+                    else [],
+                }
+            )
+        ]
+
+    class _Frame:
+        def __init__(self, rows: list[str]) -> None:
+            self._rows = rows
+
+        def to_parquet(self, path: Path) -> None:
+            try:
+                import pyarrow  # type: ignore  # noqa: F401
+            except ImportError as exc:
+                raise ImportError("pyarrow missing") from exc
+            Path(path).write_bytes(b"parquet-stub")
+
+    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs):
+        rows = self.get_rel_map(node_ids=node_ids, depth=depth)
+        return self._Frame(rows)
 
 
 class _PgIndex:
@@ -44,7 +71,12 @@ class _PgIndex:
 def test_export_jsonl_schema(tmp_path: Path) -> None:
     idx = _PgIndex()
     out = tmp_path / "graph.jsonl"
-    export_graph_jsonl(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_jsonl(
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
+    )  # type: ignore[arg-type]
     lines = out.read_text(encoding="utf-8").strip().splitlines()
     assert lines
     row = json.loads(lines[0])
@@ -72,7 +104,12 @@ def test_export_parquet_optional(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(builtins, "__import__", _fake_import)
     idx = _PgIndex()
     out = tmp_path / "graph.parquet"
-    export_graph_parquet(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_parquet(
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
+    )  # type: ignore[arg-type]
     # Should not raise; and file should not exist
     assert not out.exists()
 
@@ -83,11 +120,22 @@ def test_export_jsonl_preserves_relation_label(tmp_path: Path) -> None:
             self.label = label
 
     class _StoreWithLabels(_Store):
-        def get_rel_map(self, nodes, depth=1):  # type: ignore[override]
-            del depth
-            items = list(nodes)
-            # Return a triplet [node, relation, node]
-            return [[items[0], _Rel("USES"), items[1]]]
+        def get_rel_map(self, node_ids=None, depth=1, **_kwargs):  # type: ignore[override]
+            items = list(node_ids or [])
+            if len(items) < 2:
+                return []
+            return [
+                json.dumps(
+                    {
+                        "subject": items[0],
+                        "relation": "USES",
+                        "object": items[1],
+                        "depth": depth,
+                        "path_id": 0,
+                        "source_ids": ["src-A", "src-B"],
+                    }
+                )
+            ]
 
     class _PgIndexLabel:
         def __init__(self) -> None:
@@ -95,7 +143,12 @@ def test_export_jsonl_preserves_relation_label(tmp_path: Path) -> None:
 
     idx = _PgIndexLabel()
     out = tmp_path / "graph.jsonl"
-    export_graph_jsonl(idx, out, seed_ids=["A", "B"], depth=1)  # type: ignore[arg-type]
+    export_graph_jsonl(
+        property_graph_index=idx,
+        output_path=out,
+        seed_node_ids=["A", "B"],
+        depth=1,
+    )  # type: ignore[arg-type]
     line = out.read_text(encoding="utf-8").strip().splitlines()[0]
     row = json.loads(line)
     assert row["relation"] == "USES"

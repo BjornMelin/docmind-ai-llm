@@ -6,9 +6,12 @@ Settings pages per SPEC-001 and SPEC-008.
 
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 from src.config.settings import DocMindSettings
+from src.retrieval.adapter_registry import get_default_adapter_health
 
 
 def provider_badge(cfg: DocMindSettings) -> None:
@@ -37,11 +40,21 @@ def provider_badge(cfg: DocMindSettings) -> None:
                 str(getattr(vllm_cfg, "llamacpp_model_path", "")) if vllm_cfg else None
             )
 
+    supports_graphrag, adapter_name, hint = get_default_adapter_health()
+    status_label = "enabled" if supports_graphrag else "disabled"
+    tooltip = html.escape(hint, quote=True)
+    adapter_name_escaped = html.escape(adapter_name, quote=False)
+    graphrag_html = (
+        f" · GraphRAG: <span title='{tooltip}'><b>{status_label}</b>"
+        f" ({adapter_name_escaped})</span>"
+    )
+
     badge = (
-        f"<span style='padding:4px 8px;border-radius:12px;"
-        f"background:#eef;border:1px solid #aac'>"
+        "<span style='padding:4px 8px;border-radius:12px;"
+        "background:#eef;border:1px solid #aac'>"
         f"Provider: <b>{provider}</b> · Model: <code>{model}</code>"
         + (f" · <small>{base_url}</small>" if base_url else "")
+        + graphrag_html
         + "</span>"
     )
     st.markdown(badge, unsafe_allow_html=True)

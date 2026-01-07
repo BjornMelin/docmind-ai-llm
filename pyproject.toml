@@ -44,9 +44,9 @@ dependencies = [
     # Vector Databases & Clients
     "qdrant-client==1.15.1",             # Qdrant client
     # LlamaIndex (meta + selected integrations)
-    "llama-index==0.13.4",
+    "llama-index>=0.13.4,<0.14.0",
     "llama-index-vector-stores-qdrant",
-    "llama-index-vector-stores-duckdb>=0.4.6", # DuckDB vector-store
+    "llama-index-vector-stores-duckdb>=0.5.0,<0.6.0", # DuckDB vector-store
     "llama-index-storage-kvstore-duckdb>=0.2.0", # DuckDB KV store (cache)
     "llama-index-llms-vllm",
     "llama-index-llms-openai",
@@ -55,7 +55,6 @@ dependencies = [
     "llama-index-llms-openai-like",
     "llama-index-embeddings-huggingface",
     "llama-index-embeddings-clip",
-    "llama-index-postprocessor-colpali-rerank==0.3.0",
     "llama-index-embeddings-fastembed",
     "llama-index-embeddings-openai",
     "llama-index-readers-file",
@@ -111,12 +110,20 @@ test = [
     "hypothesis>=6.137.1",
     "pytest-timeout>=2.3.1",
 ]
+graph = [
+    "llama-index-graph-stores-kuzu>=0.9.0,<1.0.0",
+    "kuzu>=0.10.0",
+]
 observability = [
     "opentelemetry-sdk>=1.28.2",
     "opentelemetry-exporter-otlp-proto-http>=1.28.2",
     "opentelemetry-exporter-otlp-proto-grpc>=1.28.2",
     "portalocker>=3.2.0",
     "llama-index-observability-otel>=0.2.1",
+]
+multimodal = [
+    "llama-index-postprocessor-colpali-rerank==0.3.0",
+    "colpali-engine>=0.3.12",
 ]
 eval = [
     "ragas>=0.2.10,<0.4.0",              # RAG evaluation toolkit (Pydantic v2 compatible)
@@ -256,17 +263,11 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
-    "--strict-config", 
+    "--strict-config",
     "--tb=short",
     "-ra",
     "-v",
     "--import-mode=importlib",
-    "--cov=src",
-    "--cov-report=term-missing",
-    "--cov-report=html:htmlcov",
-    "--cov-report=xml:coverage.xml", 
-    "--cov-report=json:coverage.json",
-    "--cov-branch",
     "--durations=10",
     "--durations-min=0.01",
     "--maxfail=10",
