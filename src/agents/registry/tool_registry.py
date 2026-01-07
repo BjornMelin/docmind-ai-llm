@@ -112,7 +112,8 @@ class DefaultToolRegistry:
             except (AttributeError, TypeError, ValueError):
                 # Log suppressed exceptions for debugging.
                 logging.getLogger(__name__).debug(
-                    "is_graphrag_enabled() raised exception; falling back to False",
+                    "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed); "
+                    "skipping legacy enablement paths",
                     exc_info=True,
                 )
                 return False
