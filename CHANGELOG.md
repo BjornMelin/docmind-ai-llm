@@ -42,9 +42,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   - Doc id mapping persisted to `doc_mapping.json` per run.
 
 ### Changed
+- Dependency stack now adds the maintained Kùzu property-graph and DuckDB vector-store integrations, replaces the obsolete `llama-index-graph-stores-duckdb` package, and installs the `kuzu` runtime by default.
+- ColPali reranker packages now live in an optional `multimodal` extra so the core install can track LlamaIndex 0.14 without version pin conflicts.
 - Streamlit ingestion adapter now re-checks embeddings after ingestion and logs when vector index is skipped or built.
 - Ingestion pipeline elevates embedding auto-setup failures to warnings and logs plaintext fallbacks for Unstructured reader errors.
-- CI now runs base and llama profiles with optional `llama` extra to enforce optional dependency coverage.
+- CI now runs base and llama profiles with optional `graph` extra to enforce optional dependency coverage.
 - Snapshot manifest/schema now records `complete`, `schema_version`, `persist_format_version`, graph export metadata, and enforces `_tmp-` workspace plus `CURRENT` pointer discipline.
 - Guard snapshot workspace initialization to release file locks if creation fails (`src/persistence/snapshot.py`).
 - Router, UI, and telemetry layers consistently emit OpenTelemetry spans/metrics for ingestion, snapshot promotion, GraphRAG selection, and export flows.
@@ -72,6 +74,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Removed short-lived re-exports from `src/app.py` (e.g., LlamaIndex classes, loader helpers) to maintain strict production/test separation.
 
 ### Removed
+
 - Legacy ingestion/analytics modules (document processor, cache manager, legacy telemetry instrumentation) and associated compatibility shims/tests.
 - Legacy `openai_like_*` fields from settings and corresponding env keys from `.env.example`.
 - Legacy `retrieval.hybrid_enabled` and `retrieval.dbsf_enabled`; tests updated accordingly.
@@ -80,6 +83,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Removed legacy helpers from `src/app.py`; app remains a thin multipage shell.
 
 ### Tests
+
 - Rebuilt unit/integration suites for ingestion, snapshot locking, GraphRAG seed policy, Streamlit pages, and observability helpers (`tests/unit/processing/test_ingestion_pipeline.py`, `tests/unit/persistence/test_snapshot_*`, `tests/unit/retrieval/test_graph_seed_policy.py`, `tests/unit/ui/test_documents_snapshot_utils.py`, `tests/unit/observability/test_config.py`, integration UI tests).
 - Coverage workflow consolidated under `scripts/run_tests.py --coverage` with HTML/JSON/XML artifacts.
 - Updated unit and integration tests for new openai.*, security.*, and unified hybrid policy.
@@ -105,6 +109,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   - Updated/removed legacy integration tests; examples now use `router_factory`
 
 ### Docs
+
 - SPEC-014, SPEC-006, SPEC-012, requirements, traceability matrix, README, overview, PRD, and ADR-031/033/019 updated to describe the new ingestion pipeline, snapshot/lock semantics, GraphRAG workflow, and observability configuration.
 - ADR-024 amended with OpenAI-compatible servers and openai.* group; documented idempotent `/v1` base URL policy and linked to the canonical configuration guide.
 - Configuration Reference updated with a canonical “OpenAI-Compatible Local Servers” section and a Local vs Cloud configuration matrix.
@@ -115,26 +120,31 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Docs updated: README and system-architecture examples use `MultiAgentCoordinator` directly instead of removed helpers.
 
 ### Tooling
+
 - CI workflow pins `uv sync --extra observability --extra test --frozen`, runs Ruff/pylint/test gates, and enforces updated formatting/lint rules.
 - Developer documentation references the new extras, commands, and smoke scripts for ingestion and telemetry verification.
 
 ### Reranking/Multimodal Consolidation
+
 - Centralized device and VRAM policy via `src/utils/core` (`select_device`, `has_cuda_vram`) and delegated usage in embeddings and multimodal helpers.
 - Unified SigLIP loader (`src/utils/vision_siglip.py`) reused by adapter for consistent caching and device placement.
 - Enforced minimal reranking telemetry schema (stage, topk, latency_ms, timeout) with deterministic sorting and RRF tie-breakers.
 
 ### Fixed
+
 - Read-only settings panel simplified; no longer references removed `reranker_mode`.
 - README updated with offline predownload steps and new envs.
 - `validate_startup_configuration` handles Qdrant `ResponseHandlingException`/`UnexpectedResponse` as connectivity failures with structured results (production-safe, test-friendly behavior).
 
 ### Security
+
 - Hardened endpoint allowlist validation in `src/config/settings.py` to validate parsed hostnames/IPs and block spoofed `localhost` and malformed URLs.
 - Router telemetry test stability: patch `log_jsonl` on the module object via `importlib` to account for LangChain `StructuredTool` wrapper.
 - Security: `validate_export_path` error messages aligned with tests and documentation (egress/traversal vs. outside project root).
 - Deleted legacy model predownload script: `scripts/model_prep/predownload_models.py`.
 - Removed monolithic UI blocks from `src/app.py` (chat/ingestion/analytics).
 - Removed legacy/custom router code and tests; all retrieval routes via `router_factory`. No backwards compatibility retained.
+
 ## [1.3.0] - 2025-09-08
 
 ### Breaking

@@ -10,6 +10,15 @@ import importlib
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
+pytest.importorskip("llama_index.core", reason="requires llama_index.core")
+pytest.importorskip(
+    "llama_index.program.openai", reason="requires llama_index.program.openai"
+)
+
+pytestmark = pytest.mark.requires_llama
+
 
 def _run_router_with_capture(
     monkeypatch, *, rerank_top_k: Any, enable_hybrid: bool = True

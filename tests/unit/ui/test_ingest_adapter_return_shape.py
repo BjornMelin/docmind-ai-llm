@@ -15,10 +15,14 @@ from src.ui import _ingest_adapter_impl as adapter
 from src.ui.ingest_adapter import ingest_files
 
 
+def _noop(**_: Any) -> None:
+    return None
+
+
 def test_ingest_files_empty_returns_zero_and_no_pg(monkeypatch) -> None:
     """When no files are provided, returns count=0 and no pg_index."""
-    monkeypatch.setattr(adapter, "setup_llamaindex", lambda **_: None)
-    monkeypatch.setattr(adapter, "get_settings_embed_model", lambda: object())
+    monkeypatch.setattr(adapter, "setup_llamaindex", _noop)
+    monkeypatch.setattr(adapter, "get_settings_embed_model", object)
     out = ingest_files([], enable_graphrag=True)
     assert isinstance(out, dict)
     assert out.get("count") == 0
@@ -57,8 +61,8 @@ def test_ingest_files_builds_vector_and_optional_graph(monkeypatch, tmp_path):
     monkeypatch.setattr(adapter.settings.database, "vector_store_type", "qdrant")
     monkeypatch.setattr(adapter.settings.retrieval, "enable_server_hybrid", False)
     monkeypatch.setattr(adapter.settings, "app_version", "1.0.0")
-    monkeypatch.setattr(adapter, "setup_llamaindex", lambda **_: None)
-    monkeypatch.setattr(adapter, "get_settings_embed_model", lambda: object())
+    monkeypatch.setattr(adapter, "setup_llamaindex", _noop)
+    monkeypatch.setattr(adapter, "get_settings_embed_model", object)
 
     fake_result = IngestionResult(
         nodes=[object()],
@@ -118,7 +122,7 @@ def test_ingest_files_skips_vector_index_without_embedding(
     monkeypatch.setattr(adapter.settings.database, "qdrant_collection", "test")
     monkeypatch.setattr(adapter.settings.database, "vector_store_type", "qdrant")
     monkeypatch.setattr(adapter.settings, "app_version", "1.0.0")
-    monkeypatch.setattr(adapter, "setup_llamaindex", lambda **_: None)
+    monkeypatch.setattr(adapter, "setup_llamaindex", _noop)
     monkeypatch.setattr(adapter, "get_settings_embed_model", lambda: None)
 
     fake_result = IngestionResult(
@@ -165,7 +169,7 @@ def test_ingest_files_rechecks_embedding_after_ingestion(monkeypatch, tmp_path, 
     monkeypatch.setattr(adapter.settings.database, "vector_store_type", "qdrant")
     monkeypatch.setattr(adapter.settings.retrieval, "enable_server_hybrid", False)
     monkeypatch.setattr(adapter.settings, "app_version", "1.0.0")
-    monkeypatch.setattr(adapter, "setup_llamaindex", lambda **_: None)
+    monkeypatch.setattr(adapter, "setup_llamaindex", _noop)
 
     embed_value = object()
     state = {"calls": 0}

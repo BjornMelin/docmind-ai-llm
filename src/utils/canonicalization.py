@@ -192,10 +192,7 @@ def canonicalize_document(
     Returns:
         UTF-8 encoded canonical payload bytes.
     """
-    try:
-        text = content.decode("utf-8", errors="replace")
-    except UnicodeDecodeError:  # pragma: no cover - defensive
-        text = str(content)
+    text = content.decode("utf-8", errors="replace")
 
     normalised_text = _normalise_text(text)
     filtered_metadata = _filter_metadata(metadata, config.metadata_keys)

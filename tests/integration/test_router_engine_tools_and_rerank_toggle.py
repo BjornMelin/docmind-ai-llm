@@ -46,6 +46,11 @@ def test_router_tools_and_rerank_toggle(monkeypatch):  # type: ignore[no-untyped
     import src.retrieval.hybrid as hy
 
     class _StubRetriever:
+        """Stub `ServerHybridRetriever` to avoid real Qdrant connections.
+
+        Implements the minimal `retrieve()` surface used by the router factory.
+        """
+
         def __init__(self, *_a: Any, **_k: Any):
             pass
 

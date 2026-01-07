@@ -15,6 +15,7 @@ import streamlit as st
 
 from src.config.integrations import initialize_integrations
 from src.config.settings import settings
+from src.retrieval.adapter_registry import get_default_adapter_health
 from src.ui.components.provider_badge import provider_badge
 
 
@@ -205,6 +206,21 @@ def main() -> None:
             max_value=20000,
             value=int(getattr(settings.retrieval, "total_rerank_budget_ms", 800)),
         )
+
+    st.subheader("GraphRAG")
+    supports, adapter_name, hint = get_default_adapter_health()
+    st.text_input(
+        "Adapter",
+        value=adapter_name,
+        disabled=True,
+    )
+    st.text_input(
+        "GraphRAG status",
+        value="enabled" if supports else "disabled",
+        disabled=True,
+    )
+    if not supports:
+        st.info(hint)
 
     # Basic validation rules
     if lmstudio_url and not lmstudio_url.rstrip("/").endswith("/v1"):

@@ -248,62 +248,42 @@ class MultiAgentCoordinator:
             logger.error("Failed to setup coordinator: %s", e)
             return False
 
+    # pylint: disable=too-many-branches,too-many-statements
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with agent orchestration."""
         try:
-            router_tools = list(self.tool_registry.get_router_tools())
-            planner_tools = list(self.tool_registry.get_planner_tools())
-            retrieval_tools = list(self.tool_registry.get_retrieval_tools())
-            synthesis_tools = list(self.tool_registry.get_synthesis_tools())
-            validation_tools = list(self.tool_registry.get_validation_tools())
-
-            # Create individual agents with proper naming and tools
-            router_agent = create_react_agent(
-                self.llm,
-                tools=router_tools,
-                state_schema=MultiAgentState,
-                name="router_agent",
+            agent_specs: tuple[tuple[str, Callable[[], list[Any]]], ...] = (
+                ("router_agent", lambda: list(self.tool_registry.get_router_tools())),
+                ("planner_agent", lambda: list(self.tool_registry.get_planner_tools())),
+                (
+                    "retrieval_agent",
+                    lambda: list(self.tool_registry.get_retrieval_tools()),
+                ),
+                (
+                    "synthesis_agent",
+                    lambda: list(self.tool_registry.get_synthesis_tools()),
+                ),
+                (
+                    "validation_agent",
+                    lambda: list(self.tool_registry.get_validation_tools()),
+                ),
             )
 
-            planner_agent = create_react_agent(
-                self.llm,
-                tools=planner_tools,
-                state_schema=MultiAgentState,
-                name="planner_agent",
-            )
-
-            retrieval_agent = create_react_agent(
-                self.llm,
-                tools=retrieval_tools,
-                state_schema=MultiAgentState,
-                name="retrieval_agent",
-            )
-
-            synthesis_agent = create_react_agent(
-                self.llm,
-                tools=synthesis_tools,
-                state_schema=MultiAgentState,
-                name="synthesis_agent",
-            )
-
-            validation_agent = create_react_agent(
-                self.llm,
-                tools=validation_tools,
-                state_schema=MultiAgentState,
-                name="validation_agent",
-            )
+            agents: dict[str, Any] = {
+                name: create_react_agent(
+                    self.llm,
+                    tools=tool_loader(),
+                    state_schema=MultiAgentState,
+                    name=name,
+                )
+                for name, tool_loader in agent_specs
+            }
 
             # Create supervisor system prompt
             system_prompt = self._create_supervisor_prompt()
 
-            # Create list of agents for supervisor
-            agents = [
-                router_agent,
-                planner_agent,
-                retrieval_agent,
-                synthesis_agent,
-                validation_agent,
-            ]
+            # Create list of agents for supervisor preserving definition order
+            supervisor_agents = [agents[name] for name, _ in agent_specs]
 
             # Create forward message tool for direct communication
             forward_tool = create_forward_message_tool("supervisor")
@@ -313,7 +293,7 @@ class MultiAgentCoordinator:
             # - add_handoff_messages: True (handoff propagation)
             # - include forward message tool in tools list
             self.graph = create_supervisor(
-                agents=agents,
+                agents=supervisor_agents,
                 model=self.llm,
                 prompt=system_prompt,
                 parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
@@ -325,13 +305,7 @@ class MultiAgentCoordinator:
             )
 
             # Store agents for reference
-            self.agents = {
-                "router_agent": router_agent,
-                "planner_agent": planner_agent,
-                "retrieval_agent": retrieval_agent,
-                "synthesis_agent": synthesis_agent,
-                "validation_agent": validation_agent,
-            }
+            self.agents = agents
 
             # Compile graph with memory
             self.compiled_graph = self.graph.compile(checkpointer=self.memory)

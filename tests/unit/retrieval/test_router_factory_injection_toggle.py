@@ -1,96 +1,86 @@
 """RouterFactory rerank injection toggle tests.
 
-Asserts that when DOCMIND_RETRIEVAL__USE_RERANKING (via settings) is True,
-router_factory injects node_postprocessors for vector and KG tools; and omits
-them when False. We stub RouterQueryEngine and QueryEngineTool to avoid LLM
-resolution and capture constructed engines.
+Validates that node_postprocessors are injected when reranking is enabled and
+omitted otherwise.
 """
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 from types import SimpleNamespace
+
+import pytest
+
+from src.retrieval import router_factory as rf
 
 
 class _FakeVector:
     def __init__(self) -> None:
-        self.kwargs = None
+        self.kwargs: dict[str, object] | None = None
 
     def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
         self.kwargs = kwargs
         return SimpleNamespace(qe=True, kwargs=kwargs)
 
 
-class _FakeKG:
+class _FakePG:
     def __init__(self) -> None:
         self.property_graph_store = object()
-        self.kwargs = None
-
-    def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
-        self.kwargs = kwargs
-        return SimpleNamespace(qe=True, kwargs=kwargs)
 
 
-def _count_tools(router) -> int:  # type: ignore[no-untyped-def]
-    for attr in ("query_engine_tools", "_query_engine_tools"):
-        tools = getattr(router, attr, None)
-        if tools is not None:
-            return len(list(tools))
-    return 0
+def _tool_count(router) -> int:  # type: ignore[no-untyped-def]
+    tools = getattr(router, "query_engine_tools", [])
+    return len(list(tools))
 
 
-def test_router_factory_injects_postprocessors_toggle(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
+@pytest.mark.unit
+def test_router_factory_injects_postprocessors_toggle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_graph: dict[str, object] = {}
 
-    captured = []
+    def _fake_build_graph_query_engine(pg_index, **kwargs):  # type: ignore[no-untyped-def]
+        del pg_index
+        captured_graph.update(kwargs)
+        return SimpleNamespace(query_engine=SimpleNamespace())
 
-    class _QET:  # minimal QueryEngineTool stub
-        def __init__(self, query_engine, metadata):
-            captured.append(query_engine)
-            self.query_engine = query_engine
-            self.metadata = metadata
+    def _fake_get_postprocessors(_kind: str, *, use_reranking: bool, **_kwargs: object):
+        return ["pp"] if use_reranking else None
 
-    class _RQE:  # minimal RouterQueryEngine stub
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
-            self.selector = selector
-            self.query_engine_tools = query_engine_tools or []
-            self.verbose = verbose
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_graph_query_engine",
+        _fake_build_graph_query_engine,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "src.retrieval.reranking.get_postprocessors",
+        _fake_get_postprocessors,
+        raising=False,
+    )
 
-    monkeypatch.setattr(rf, "QueryEngineTool", _QET)
-    monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
-
-    # Build with reranking enabled
-    class _Cfg:
-        class retrieval:  # noqa: N801
-            top_k = 5
-            use_reranking = True
-            reranking_top_k = 3
-
-        class graphrag_cfg:  # noqa: N801
-            default_path_depth = 1
+    cfg = SimpleNamespace(
+        enable_graphrag=True,
+        retrieval=SimpleNamespace(
+            top_k=5, use_reranking=True, reranking_top_k=3, enable_server_hybrid=False
+        ),
+        graphrag_cfg=SimpleNamespace(default_path_depth=1),
+        database=SimpleNamespace(qdrant_collection="col"),
+    )
 
     vec = _FakeVector()
-    kg = _FakeKG()
-    router = rf.build_router_engine(
-        vec, kg, settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
-    )
-    assert _count_tools(router) == 2
-    # Ensure vector and KG engines include node_postprocessors
+    pg = _FakePG()
+    router = rf.build_router_engine(vec, pg_index=pg, settings=cfg, enable_hybrid=False)
+    assert _tool_count(router) == 2
     assert vec.kwargs is not None
     assert vec.kwargs.get("node_postprocessors") is not None
-    assert kg.kwargs is not None
-    assert kg.kwargs.get("node_postprocessors") is not None
+    assert captured_graph.get("node_postprocessors") == ["pp"]
 
-    # Now disable reranking and rebuild
-    _Cfg.retrieval.use_reranking = False
+    cfg.retrieval.use_reranking = False
+    captured_graph.clear()
     vec2 = _FakeVector()
-    kg2 = _FakeKG()
     router2 = rf.build_router_engine(
-        vec2, kg2, settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
+        vec2, pg_index=_FakePG(), settings=cfg, enable_hybrid=False
     )
-    assert _count_tools(router2) == 2
+    assert _tool_count(router2) == 2
     assert vec2.kwargs is not None
     assert vec2.kwargs.get("node_postprocessors") is None
-    assert kg2.kwargs is not None
-    assert kg2.kwargs.get("node_postprocessors") is None
+    assert captured_graph.get("node_postprocessors") is None

@@ -49,4 +49,4 @@ def test_canonicalize_handles_paths_and_sets(tmp_path: Path) -> None:
     assert canonical["flags"] == ["a", "b"]
     assert canonical["path"].endswith("sample.txt")
     assert canonical["nested"] == [1, 2, 3]
-    assert canonical["ratio"] == float(f"{payload['ratio']:.12g}")
+    assert canonical["ratio"] == 0.123456789012

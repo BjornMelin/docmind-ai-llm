@@ -23,3 +23,20 @@ def test_settings_page_renders_and_has_hybrid_toggle() -> None:
     assert any(
         str(label).lower() == "server-side hybrid enabled" for label in labels
     ), "Expected server-side hybrid retrieval field to be present in Settings page"
+
+    field = next(
+        (
+            inp
+            for inp in at.text_input
+            if str(getattr(inp, "label", "")).lower() == "server-side hybrid enabled"
+        ),
+        None,
+    )
+    assert field is not None
+    value = str(getattr(field, "value", "")).strip().lower()
+    assert value in {"true", "false"}, f"Unexpected field value: {value!r}"
+
+    checkbox_labels = [str(getattr(cb, "label", "")).lower() for cb in at.checkbox]
+    assert not any("server-side hybrid" in lbl for lbl in checkbox_labels), (
+        "Expected server-side hybrid to be displayed as read-only text, not a checkbox"
+    )

@@ -1,4 +1,8 @@
-"""Tests for the OCR controller rules."""
+"""Behavioral tests for the OCR controller rules.
+
+These are higher-level sanity checks for common inputs. For exact reason code /
+details policy assertions, see `test_ocr_controller_policy.py`.
+"""
 
 from __future__ import annotations
 

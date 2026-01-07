@@ -969,7 +969,7 @@ class DocMindSettings(BaseSettings):
             ``/v1`` as required by the API.
         """
         if self.lmstudio_base_url and not self.lmstudio_base_url.rstrip("/").endswith(
-            "v1"
+            "/v1"
         ):
             raise ValueError("LM Studio base URL must end with /v1")
 

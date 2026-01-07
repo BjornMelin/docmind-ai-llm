@@ -13,6 +13,7 @@ import pytest
 
 @pytest.mark.unit
 def test_resolve_device_auto_cpu_when_no_accelerator(monkeypatch):
+    """Verify auto selection falls back to CPU when no accelerator is available."""
     import src.utils.core as core
 
     dummy_torch = types.SimpleNamespace(
@@ -27,6 +28,7 @@ def test_resolve_device_auto_cpu_when_no_accelerator(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_auto_cuda_uses_current_device(monkeypatch):
+    """Verify auto selection uses the active CUDA device index when available."""
     import src.utils.core as core
 
     class _Cuda:
@@ -48,6 +50,7 @@ def test_resolve_device_auto_cuda_uses_current_device(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_explicit_cuda_index(monkeypatch):
+    """Verify explicit `cuda:N` input is returned unchanged."""
     import src.utils.core as core
 
     dev, idx = core.resolve_device("cuda:2")
@@ -57,6 +60,7 @@ def test_resolve_device_explicit_cuda_index(monkeypatch):
 
 @pytest.mark.unit
 def test_resolve_device_mps(monkeypatch):
+    """Verify auto selection prefers MPS when CUDA is unavailable."""
     import src.utils.core as core
 
     class _MPS:

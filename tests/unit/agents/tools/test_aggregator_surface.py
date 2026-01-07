@@ -19,12 +19,16 @@ pytestmark = pytest.mark.unit
 
 def test_submodules_importable() -> None:
     """Smoke check that tool functions are importable from submodules."""
-    assert callable(router_tool)
-    assert callable(route_query)
-    assert callable(plan_query)
-    assert callable(retrieve_documents)
-    assert callable(synthesize_results)
-    assert callable(validate_response)
+
+    def _invokable(obj: object) -> bool:
+        return callable(obj) or callable(getattr(obj, "invoke", None))
+
+    assert _invokable(router_tool)
+    assert _invokable(route_query)
+    assert _invokable(plan_query)
+    assert _invokable(retrieve_documents)
+    assert _invokable(synthesize_results)
+    assert _invokable(validate_response)
 
 
 def test_patch_points_present() -> None:

@@ -1,115 +1,59 @@
-"""RouterFactory KG fallbacks when node_postprocessors unsupported.
-
-Asserts that when PG index methods reject node_postprocessors (TypeError),
-router_factory falls back to calls without that argument and still registers
-KG tool without raising exceptions.
-"""
+"""RouterFactory KG fallbacks when node_postprocessors are unsupported."""
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 from types import SimpleNamespace
 
+import pytest
 
-def _count_tools(router) -> int:  # type: ignore[no-untyped-def]
-    for attr in ("query_engine_tools", "_query_engine_tools"):
-        tools = getattr(router, attr, None)
-        if tools is not None:
-            return len(list(tools))
-    return 0
+from src.retrieval import router_factory as rf
+
+from .conftest import get_router_tool_names
 
 
-def test_router_factory_kg_as_query_engine_fallback(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
+@pytest.mark.unit
+def test_router_factory_retries_kg_without_postprocessors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Graph tool construction retries without node_postprocessors on TypeError."""
+    calls: list[object] = []
+
+    def _fake_build_graph_query_engine(_pg, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(kwargs.get("node_postprocessors"))
+        if kwargs.get("node_postprocessors") is not None:
+            raise TypeError("node_postprocessors unsupported")
+        return SimpleNamespace(query_engine=SimpleNamespace(kind="kg"))
+
+    monkeypatch.setattr(
+        "src.retrieval.router_factory.build_graph_query_engine",
+        _fake_build_graph_query_engine,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "src.retrieval.reranking.get_postprocessors",
+        lambda *_a, **_k: ["pp"],
+        raising=False,
+    )
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
             return SimpleNamespace(qe=True, kwargs=kwargs)
 
     class _Pg:
-        def __init__(self):
+        def __init__(self) -> None:
             self.property_graph_store = object()
 
-        def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
-            if "node_postprocessors" in kwargs:
-                raise TypeError("node_postprocessors unsupported")
-            return SimpleNamespace(qe=True, kwargs=kwargs)
-
-    class _QET:  # capture tools
-        def __init__(self, query_engine, metadata):
-            self.query_engine = query_engine
-            self.metadata = metadata
-
-    class _RQE:
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
-            self.selector = selector
-            self.query_engine_tools = query_engine_tools or []
-            self.verbose = verbose
-
-    monkeypatch.setattr(rf, "QueryEngineTool", _QET)
-    monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
-
-    class _Cfg:
-        class retrieval:  # noqa: N801
-            top_k = 5
-            use_reranking = True
-            reranking_top_k = 3
-
-        class graphrag_cfg:  # noqa: N801
-            default_path_depth = 1
+    cfg = SimpleNamespace(
+        enable_graphrag=True,
+        retrieval=SimpleNamespace(
+            top_k=3, use_reranking=True, reranking_top_k=2, enable_server_hybrid=False
+        ),
+        graphrag_cfg=SimpleNamespace(default_path_depth=1),
+        database=SimpleNamespace(qdrant_collection="col"),
+    )
 
     router = rf.build_router_engine(
-        _Vec(), _Pg(), settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
+        _Vec(), pg_index=_Pg(), settings=cfg, enable_hybrid=False
     )
-    assert _count_tools(router) == 2  # vector + kg
-
-
-def test_router_factory_kg_retriever_fallback(monkeypatch):  # type: ignore[no-untyped-def]
-    rf = importlib.import_module("src.retrieval.router_factory")
-
-    class _Vec:
-        def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
-            return SimpleNamespace(qe=True, kwargs=kwargs)
-
-    class _Pg:
-        def __init__(self):
-            self.property_graph_store = object()
-
-        def as_retriever(self, **kwargs):  # type: ignore[no-untyped-def]
-            return SimpleNamespace(retriever=True)
-
-    class _QET:
-        def __init__(self, query_engine, metadata):
-            self.query_engine = query_engine
-            self.metadata = metadata
-
-    class _RQE:
-        @classmethod
-        def from_args(cls, **kwargs):  # type: ignore[no-untyped-def]
-            if "node_postprocessors" in kwargs:
-                raise TypeError("node_postprocessors unsupported")
-            return SimpleNamespace(qe=True, kwargs=kwargs)
-
-        def __init__(self, selector=None, query_engine_tools=None, verbose=False):
-            self.selector = selector
-            self.query_engine_tools = query_engine_tools or []
-            self.verbose = verbose
-
-    monkeypatch.setattr(rf, "QueryEngineTool", _QET)
-    monkeypatch.setattr(rf, "RouterQueryEngine", _RQE)
-    monkeypatch.setattr(rf, "RetrieverQueryEngine", _RQE)
-
-    class _Cfg:
-        class retrieval:  # noqa: N801
-            top_k = 5
-            use_reranking = True
-            reranking_top_k = 3
-
-        class graphrag_cfg:  # noqa: N801
-            default_path_depth = 1
-
-    router = rf.build_router_engine(
-        _Vec(), _Pg(), settings=_Cfg, llm=SimpleNamespace(), enable_hybrid=False
-    )
-    assert _count_tools(router) == 2
+    assert "knowledge_graph" in get_router_tool_names(router)
+    assert calls == [["pp"], None]

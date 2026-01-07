@@ -1,18 +1,11 @@
-"""GraphRAG helpers using documented LlamaIndex APIs.
+"""GraphRAG helpers orchestrated through the adapter registry.
 
-This module intentionally keeps the surface area small:
+This module keeps GraphRAG integration dependency-light:
 
-* ``build_graph_retriever``/``build_graph_query_engine`` wrap
-  ``PropertyGraphIndex`` helpers exposed by LlamaIndex to construct
-  retrievers/query engines without any custom behaviour.
-* ``get_export_seed_ids`` derives export seeds using library retrievers with
-  deterministic fallback.
-* ``export_graph_jsonl`` and ``export_graph_parquet`` serialize relation paths
-  via ``property_graph_store.get_rel_map`` for reproducible snapshot exports.
-
-All functions include Google-style docstrings and avoid bespoke state. When
-LlamaIndex is unavailable, helper functions raise ``ValueError`` so callers can
-fail fast instead of silently degrading behaviour.
+- Runtime graph capabilities are provided by an ``AdapterFactoryProtocol``
+  implementation (defaulting to LlamaIndex when installed).
+- Snapshot exports support both newer store APIs that accept ``node_ids=...``
+  and older store APIs that accept a list of nodes (via ``store.get``).
 """
 
 from __future__ import annotations
@@ -20,16 +13,22 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
 
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from llama_index.core import PropertyGraphIndex
-    from llama_index.core.query_engine import RetrieverQueryEngine
-else:  # Library is optional during import; runtime checks guard usage.
-    PropertyGraphIndex = Any  # type: ignore
-    RetrieverQueryEngine = Any  # type: ignore
+from src.retrieval.adapter_registry import (
+    resolve_adapter,
+)
+from src.retrieval.adapters.protocols import (
+    AdapterFactoryProtocol,
+    GraphQueryArtifacts,
+    GraphRetrieverProtocol,
+)
+from src.telemetry.opentelemetry import (
+    graph_export_span,
+    record_graph_export_event,
+)
 
 __all__ = [
     "GraphQueryArtifacts",
@@ -41,54 +40,8 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True)
-class GraphQueryArtifacts:
-    """Container holding graph retriever and query engine instances."""
-
-    retriever: Any
-    query_engine: Any
-
-
-def _require_llamaindex() -> None:
-    """Raise ValueError when LlamaIndex components are unavailable."""
-    if RetrieverQueryEngine is Any:  # type: ignore[str-bytes-safe]
-        raise ValueError(
-            "LlamaIndex is required for GraphRAG operations but is not installed"
-        )
-
-
-def build_graph_retriever(
-    pg_index: Any,
-    *,
-    include_text: bool = True,
-    similarity_top_k: int = 10,
-    path_depth: int = 1,
-) -> Any:
-    """Return a graph-aware retriever using documented LlamaIndex APIs.
-
-    Args:
-        pg_index: ``PropertyGraphIndex`` instance.
-        include_text: Whether retrieved nodes should include source text.
-        similarity_top_k: Number of nodes to retrieve per query.
-        path_depth: Maximum relation depth to traverse.
-
-    Returns:
-        Retriever instance produced by ``PropertyGraphIndex.as_retriever``.
-
-    Raises:
-        ValueError: If ``pg_index`` does not expose the expected API.
-    """
-    if pg_index is None or not hasattr(pg_index, "as_retriever"):
-        raise ValueError("PropertyGraphIndex with as_retriever is required")
-    return pg_index.as_retriever(
-        include_text=include_text,
-        similarity_top_k=similarity_top_k,
-        path_depth=path_depth,
-    )
-
-
 def build_graph_query_engine(
-    pg_index: Any,
+    property_graph_index: Any,
     *,
     llm: Any | None = None,
     include_text: bool = True,
@@ -96,112 +49,97 @@ def build_graph_query_engine(
     path_depth: int = 1,
     node_postprocessors: Sequence[Any] | None = None,
     response_mode: str = "compact",
+    adapter: AdapterFactoryProtocol | None = None,
 ) -> GraphQueryArtifacts:
-    """Construct a ``RetrieverQueryEngine`` for GraphRAG queries.
-
-    Args:
-        pg_index: ``PropertyGraphIndex`` instance.
-        llm: Optional LLM override passed to the query engine.
-        include_text: Whether retrieved nodes should include source text.
-        similarity_top_k: Number of nodes to retrieve.
-        path_depth: Maximum relation depth to traverse.
-        node_postprocessors: Optional node postprocessors to pass to
-            ``RetrieverQueryEngine.from_args``.
-        response_mode: Response mode forwarded to the query engine.
-
-    Returns:
-        GraphQueryArtifacts containing the retriever and query engine.
-
-    Raises:
-        ValueError: If LlamaIndex is unavailable or the supplied index lacks the
-            required API surface (``as_retriever``).
-    """
-    _require_llamaindex()
-    retriever = build_graph_retriever(
-        pg_index,
+    """Construct graph retriever/query engine via the active adapter."""
+    factory = resolve_adapter(adapter)
+    return factory.build_graph_artifacts(
+        property_graph_index=property_graph_index,
+        llm=llm,
         include_text=include_text,
         similarity_top_k=similarity_top_k,
         path_depth=path_depth,
+        node_postprocessors=node_postprocessors,
+        response_mode=response_mode,
     )
 
-    engine_kwargs: dict[str, Any] = {
-        "retriever": retriever,
-        "llm": llm,
-        "response_mode": response_mode,
-        "verbose": False,
-    }
-    if node_postprocessors:
-        engine_kwargs["node_postprocessors"] = list(node_postprocessors)
 
-    try:
-        query_engine = RetrieverQueryEngine.from_args(**engine_kwargs)
-    except (
-        TypeError,
-        AttributeError,
-        RuntimeError,
-        ValueError,
-    ) as exc:  # pragma: no cover - defensive
-        raise ValueError(f"Failed to build graph query engine: {exc}") from exc
+def build_graph_retriever(
+    property_graph_index: Any,
+    *,
+    include_text: bool = True,
+    similarity_top_k: int = 10,
+    path_depth: int = 1,
+    adapter: AdapterFactoryProtocol | None = None,
+) -> GraphRetrieverProtocol:
+    """Return the graph retriever from the configured adapter."""
+    artifacts = build_graph_query_engine(
+        property_graph_index,
+        include_text=include_text,
+        similarity_top_k=similarity_top_k,
+        path_depth=path_depth,
+        adapter=adapter,
+    )
+    return artifacts.retriever
 
-    return GraphQueryArtifacts(retriever=retriever, query_engine=query_engine)
+
+@dataclass(frozen=True)
+class _ExportContext:
+    adapter_name: str
+    telemetry: Any
+
+
+def _export_context(adapter: AdapterFactoryProtocol | None) -> _ExportContext:
+    factory = resolve_adapter(adapter)
+    telemetry = factory.get_telemetry_hooks()
+    return _ExportContext(adapter_name=factory.name, telemetry=telemetry)
 
 
 def get_export_seed_ids(
-    pg_index: Any | None,
+    property_graph_index: Any | None,
     vector_index: Any | None,
     *,
     cap: int = 32,
+    adapter: AdapterFactoryProtocol | None = None,
 ) -> list[str]:
-    """Derive seed IDs for exports via documented retrievers.
-
-    Order of preference:
-    1) ``PropertyGraphIndex.as_retriever`` (graph seeds)
-    2) ``VectorStoreIndex.as_retriever`` (semantic seeds)
-    3) Deterministic fallback ``["0", "1", ...]``
-    """
+    """Derive export seeds via adapter retrievers with vector fallback."""
     try:
-        if pg_index is not None and hasattr(pg_index, "as_retriever"):
-            retr = pg_index.as_retriever(
-                include_text=False, path_depth=1, similarity_top_k=cap
-            )
-            nodes = retr.retrieve("seed")
+        if property_graph_index is not None:
+            retriever = build_graph_retriever(property_graph_index, adapter=adapter)
+            nodes = retriever.retrieve("seed")
             out: list[str] = []
             seen: set[str] = set()
-            for nws in nodes:
-                nid = str(
-                    getattr(getattr(nws, "node", object()), "id_", None)
-                    or getattr(getattr(nws, "node", object()), "id", "")
-                )
-                if nid and nid not in seen:
-                    out.append(nid)
-                    seen.add(nid)
+            for node_with_score in nodes:
+                node = getattr(node_with_score, "node", None)
+                node_id = str(getattr(node, "id_", getattr(node, "id", "")))
+                if node_id and node_id not in seen:
+                    out.append(node_id)
+                    seen.add(node_id)
                 if len(out) >= cap:
                     return out
             if out:
                 return out
-    except (RuntimeError, ValueError, TypeError, AttributeError):  # pragma: no cover
-        logger.debug("Failed deriving seed IDs from property graph", exc_info=True)
+    except (AttributeError, RuntimeError, TypeError, ValueError):  # pragma: no cover
+        logger.debug("Graph retriever failed to provide export seeds", exc_info=True)
 
     try:
         if vector_index is not None and hasattr(vector_index, "as_retriever"):
             retr = vector_index.as_retriever(similarity_top_k=cap)
             nodes = retr.retrieve("seed")
             out = []
-            seen: set[str] = set()
-            for nws in nodes:
-                nid = str(
-                    getattr(getattr(nws, "node", object()), "id_", None)
-                    or getattr(getattr(nws, "node", object()), "id", "")
-                )
-                if nid and nid not in seen:
-                    out.append(nid)
-                    seen.add(nid)
+            seen_vec: set[str] = set()
+            for node_with_score in nodes:
+                node = getattr(node_with_score, "node", None)
+                node_id = str(getattr(node, "id_", getattr(node, "id", "")))
+                if node_id and node_id not in seen_vec:
+                    out.append(node_id)
+                    seen_vec.add(node_id)
                 if len(out) >= cap:
                     return out
             if out:
                 return out
-    except (RuntimeError, ValueError, TypeError, AttributeError):  # pragma: no cover
-        logger.debug("Failed deriving seed IDs from vector index", exc_info=True)
+    except (AttributeError, RuntimeError, TypeError, ValueError):  # pragma: no cover
+        logger.debug("Vector retriever failed to provide export seeds", exc_info=True)
 
     return [str(i) for i in range(max(0, int(cap)))]
 
@@ -251,114 +189,181 @@ def _iter_edges(
             j += 1
 
 
-def export_graph_jsonl(
-    index: Any,
-    path: Path,
-    seed_ids: list[str] | None = None,
-    depth: int = 1,
-) -> None:
-    """Export relation paths to newline-delimited JSON.
+def _render_rel_map_jsonl(
+    *,
+    store: Any,
+    seed_node_ids: Sequence[str],
+    depth: int,
+) -> list[str]:
+    """Best-effort conversion of store rel_map to JSONL lines."""
+    # Newer API: store.get_rel_map(node_ids=[...], depth=n) returning JSON strings.
+    if hasattr(store, "get_rel_map"):
+        try:
+            rel_map = store.get_rel_map(node_ids=list(seed_node_ids), depth=depth)
+            if isinstance(rel_map, list) and rel_map and isinstance(rel_map[0], str):
+                return [line for line in rel_map if str(line).strip()]
+        except TypeError:
+            pass
+        except (
+            AttributeError,
+            RuntimeError,
+            ValueError,
+        ):  # pragma: no cover
+            logger.debug("get_rel_map(node_ids=...) failed", exc_info=True)
 
-    Args:
-        index: Property graph index instance.
-        path: Destination JSONL file.
-        seed_ids: Optional list of node identifiers to seed traversal.
-        depth: Maximum traversal depth.
-    """
+    # Older API:
+    # nodes = store.get(ids=[...]); rel_paths = store.get_rel_map(nodes, depth=n)
+    if not (hasattr(store, "get") and hasattr(store, "get_rel_map")):
+        return []
+    try:
+        nodes = list(store.get(ids=list(seed_node_ids)))
+        rel_paths = list(store.get_rel_map(nodes, depth=depth))
+    except (AttributeError, RuntimeError, TypeError, ValueError):  # pragma: no cover
+        logger.debug("Legacy get_rel_map(nodes, depth=...) failed", exc_info=True)
+        return []
+
     import json
 
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    store = getattr(index, "property_graph_store", None)
-    if store is None or not seed_ids:
-        logger.warning("JSONL export skipped: missing store or seeds")
-        return
-    if not hasattr(store, "get") or not hasattr(store, "get_rel_map"):
-        out.write_text("[]\n", encoding="utf-8")
-        return
-
-    try:
-        nodes = list(store.get(ids=seed_ids))
-        rel_paths = list(store.get_rel_map(nodes, depth=depth))
-    except (
-        RuntimeError,
-        ValueError,
-        TypeError,
-        AttributeError,
-    ) as exc:  # pragma: no cover - defensive
-        logger.warning("JSONL export failed to build rel_map: %s", exc)
-        return
-
-    with out.open("w", encoding="utf-8") as handle:
-        for path_idx, rel_path in enumerate(rel_paths):
-            try:
-                for head, tail, maybe_edge, path_depth in _iter_edges(rel_path, depth):
-                    relation = (
-                        _relation_label(maybe_edge)
-                        if maybe_edge is not None
-                        else "related"
-                    )
-                    sources = list({*(_source_ids(head) + _source_ids(tail))})
-                    row = {
-                        "subject": _node_identifier(head),
-                        "relation": relation,
-                        "object": _node_identifier(tail),
-                        "depth": path_depth,
-                        "path_id": path_idx,
-                        "source_ids": sources,
-                    }
-                    handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-            except TypeError:  # pragma: no cover - defensive
-                continue
-
-
-def export_graph_parquet(
-    index: Any,
-    path: Path,
-    seed_ids: list[str] | None = None,
-    depth: int = 1,
-) -> None:
-    """Export relation paths to Parquet.
-
-    Args:
-        index: Property graph index instance.
-        path: Destination Parquet file.
-        seed_ids: Optional list of node identifiers to seed traversal.
-        depth: Maximum traversal depth.
-    """
-    try:
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-    except ImportError as exc:  # pragma: no cover - optional dependency
-        logger.warning("PyArrow not available, skipping Parquet export: %s", exc)
-        return
-
-    store = getattr(index, "property_graph_store", None)
-    if store is None or not seed_ids:
-        logger.warning("Parquet export skipped: missing store or seeds")
-        return
-    if not hasattr(store, "get") or not hasattr(store, "get_rel_map"):
-        return
-
-    try:
-        nodes = list(store.get(ids=seed_ids))
-        rel_paths = list(store.get_rel_map(nodes, depth=depth))
-    except (
-        RuntimeError,
-        ValueError,
-        TypeError,
-        AttributeError,
-    ) as exc:  # pragma: no cover - defensive
-        logger.warning("Parquet export failed to build rel_map: %s", exc)
-        return
-
-    rows: list[dict[str, Any]] = []
+    lines: list[str] = []
     for path_idx, rel_path in enumerate(rel_paths):
         try:
             for head, tail, maybe_edge, path_depth in _iter_edges(rel_path, depth):
                 relation = (
                     _relation_label(maybe_edge) if maybe_edge is not None else "related"
                 )
+                sources = list({*(_source_ids(head) + _source_ids(tail))})
+                row = {
+                    "subject": _node_identifier(head),
+                    "relation": relation,
+                    "object": _node_identifier(tail),
+                    "depth": path_depth,
+                    "path_id": path_idx,
+                    "source_ids": sources,
+                }
+                lines.append(json.dumps(row, ensure_ascii=False))
+        except TypeError:  # pragma: no cover - defensive
+            continue
+    return lines
+
+
+def export_graph_jsonl(
+    property_graph_index: Any,
+    *,
+    output_path: Path | str,
+    depth: int = 2,
+    seed_node_ids: Sequence[str] | None = None,
+    adapter: AdapterFactoryProtocol | None = None,
+) -> None:
+    """Serialize the graph to JSON Lines using adapter-friendly store APIs."""
+    store = getattr(property_graph_index, "property_graph_store", None)
+    if store is None:
+        raise ValueError("property_graph_index must expose property_graph_store")
+    node_ids = list(seed_node_ids or [])
+    if not node_ids:
+        node_ids = get_export_seed_ids(
+            property_graph_index, None, cap=32, adapter=adapter
+        )
+    ctx = _export_context(adapter)
+
+    lines = _render_rel_map_jsonl(store=store, seed_node_ids=node_ids, depth=int(depth))
+    path_obj = Path(output_path)
+    path_obj.parent.mkdir(parents=True, exist_ok=True)
+    with graph_export_span(
+        adapter_name=ctx.adapter_name,
+        fmt="jsonl",
+        depth=int(depth),
+        seed_count=len(node_ids),
+    ) as span:
+        path_obj.write_text(
+            "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8"
+        )
+        bytes_written = path_obj.stat().st_size if path_obj.exists() else 0
+        record_graph_export_event(span, path=path_obj, bytes_written=bytes_written)
+    ctx.telemetry.graph_exported(
+        adapter_name=ctx.adapter_name,
+        fmt="jsonl",
+        bytes_written=bytes_written,
+        depth=int(depth),
+        seed_count=len(node_ids),
+    )
+
+
+def export_graph_parquet(
+    property_graph_index: Any,
+    *,
+    output_path: Path | str,
+    depth: int = 2,
+    seed_node_ids: Sequence[str] | None = None,
+    adapter: AdapterFactoryProtocol | None = None,
+) -> None:
+    """Serialize the graph to Parquet when PyArrow is available."""
+    store = getattr(property_graph_index, "property_graph_store", None)
+    if store is None:
+        raise ValueError("property_graph_index must expose property_graph_store")
+    node_ids = list(seed_node_ids or [])
+    if not node_ids:
+        node_ids = get_export_seed_ids(
+            property_graph_index, None, cap=32, adapter=adapter
+        )
+    ctx = _export_context(adapter)
+
+    path_obj = Path(output_path)
+    path_obj.parent.mkdir(parents=True, exist_ok=True)
+
+    # Newer API: store.store_rel_map_df(node_ids=[...], depth=n) -> df with to_parquet()
+    if hasattr(store, "store_rel_map_df"):
+        try:
+            df = store.store_rel_map_df(node_ids=node_ids, depth=int(depth))
+        except TypeError:
+            df = store.store_rel_map_df(node_ids, int(depth))
+        try:
+            with graph_export_span(
+                adapter_name=ctx.adapter_name,
+                fmt="parquet",
+                depth=int(depth),
+                seed_count=len(node_ids),
+            ) as span:
+                df.to_parquet(path_obj)
+                bytes_written = path_obj.stat().st_size if path_obj.exists() else 0
+                record_graph_export_event(
+                    span, path=path_obj, bytes_written=bytes_written
+                )
+            ctx.telemetry.graph_exported(
+                adapter_name=ctx.adapter_name,
+                fmt="parquet",
+                bytes_written=bytes_written,
+                depth=int(depth),
+                seed_count=len(node_ids),
+            )
+            return
+        except ImportError as exc:  # pragma: no cover - optional dependency path
+            logger.debug("Parquet export skipped: {}", exc)
+            return
+
+    # Legacy fallback:
+    # build rows from rel_paths and write Parquet via pyarrow if present.
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError:  # pragma: no cover - optional dependency
+        return
+
+    if not (hasattr(store, "get") and hasattr(store, "get_rel_map")):
+        return
+    try:
+        nodes = list(store.get(ids=node_ids))
+        rel_paths = list(store.get_rel_map(nodes, depth=int(depth)))
+    except Exception:  # pragma: no cover - defensive
+        return
+
+    rows: list[dict[str, Any]] = []
+    for path_idx, rel_path in enumerate(rel_paths):
+        try:
+            for head, tail, maybe_edge, path_depth in _iter_edges(rel_path, int(depth)):
+                relation = (
+                    _relation_label(maybe_edge) if maybe_edge is not None else "related"
+                )
+                sources = list({*(_source_ids(head) + _source_ids(tail))})
                 rows.append(
                     {
                         "subject": _node_identifier(head),
@@ -366,16 +371,29 @@ def export_graph_parquet(
                         "object": _node_identifier(tail),
                         "depth": path_depth,
                         "path_id": path_idx,
+                        "source_ids": sources,
                     }
                 )
         except TypeError:  # pragma: no cover - defensive
             continue
 
     if not rows:
-        logger.warning("No edges produced for Parquet export")
         return
 
-    table = pa.Table.from_pylist(rows)
-    out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(table, str(out))
+    with graph_export_span(
+        adapter_name=ctx.adapter_name,
+        fmt="parquet",
+        depth=int(depth),
+        seed_count=len(node_ids),
+    ) as span:
+        table = pa.Table.from_pylist(rows)
+        pq.write_table(table, str(path_obj))
+        bytes_written = path_obj.stat().st_size if path_obj.exists() else 0
+        record_graph_export_event(span, path=path_obj, bytes_written=bytes_written)
+    ctx.telemetry.graph_exported(
+        adapter_name=ctx.adapter_name,
+        fmt="parquet",
+        bytes_written=bytes_written,
+        depth=int(depth),
+        seed_count=len(node_ids),
+    )

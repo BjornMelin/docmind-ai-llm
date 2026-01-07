@@ -1,4 +1,9 @@
-"""Policy tests for ``OcrController`` decision logic."""
+"""Policy-level tests for ``OcrController`` decision logic.
+
+This module asserts the exact reason codes / details produced by the decision
+policy. It intentionally overlaps with `test_ocr_controller.py`, which focuses
+on higher-level behavioral coverage.
+"""
 
 from __future__ import annotations
 
@@ -49,7 +54,7 @@ def test_pdf_native_text_short_circuit(
     controller: OcrController, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     features = _make_features(has_native_text=None)
-    monkeypatch.setattr(controller, "_detect_pdf_native_text", lambda path: True)
+    monkeypatch.setattr(controller, "_detect_pdf_native_text", lambda _path: True)
     decision = controller.decide(features)
     assert decision.strategy is ProcessingStrategy.FAST
     assert decision.reason_code == "PDF_NATIVE_TEXT"
@@ -59,8 +64,8 @@ def test_pdf_scanned_hi_res_threshold(
     controller: OcrController, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     features = _make_features(has_native_text=False, page_count=None)
-    monkeypatch.setattr(controller, "_detect_pdf_native_text", lambda path: False)
-    monkeypatch.setattr(controller, "_count_pdf_pages", lambda path: 42)
+    monkeypatch.setattr(controller, "_detect_pdf_native_text", lambda _path: False)
+    monkeypatch.setattr(controller, "_count_pdf_pages", lambda _path: 42)
     decision = controller.decide(features)
     assert decision.strategy is ProcessingStrategy.HI_RES
     assert decision.reason_code == "PDF_LARGE_SCANNED"
@@ -70,8 +75,8 @@ def test_pdf_scanned_default(
     controller: OcrController, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     features = _make_features(has_native_text=False, page_count=None)
-    monkeypatch.setattr(controller, "_detect_pdf_native_text", lambda path: False)
-    monkeypatch.setattr(controller, "_count_pdf_pages", lambda path: 2)
+    monkeypatch.setattr(controller, "_detect_pdf_native_text", lambda _path: False)
+    monkeypatch.setattr(controller, "_count_pdf_pages", lambda _path: 2)
     decision = controller.decide(features)
     assert decision.strategy is ProcessingStrategy.OCR_ONLY
     assert decision.reason_code == "PDF_SCANNED"

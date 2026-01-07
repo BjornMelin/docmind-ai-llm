@@ -13,6 +13,8 @@ from src.utils.storage import ensure_hybrid_collection
 
 
 class _ClientFake:
+    """Lightweight Qdrant client stub used to simulate collection states."""
+
     def __init__(self, exists: bool = True, raise_on: str | None = None) -> None:
         self._exists = exists
         self._raise_on = raise_on
@@ -37,6 +39,7 @@ class _ClientFake:
 
 @pytest.mark.unit
 def test_ensure_hybrid_collection_idempotent() -> None:
+    """Ensure ensure_hybrid_collection is a no-op when collection exists."""
     client = _ClientFake(exists=True)
     # Should not raise and not create
     ensure_hybrid_collection(client, "col")
@@ -46,6 +49,7 @@ def test_ensure_hybrid_collection_idempotent() -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize("phase", ["exists", "create", "update"])
 def test_ensure_hybrid_collection_defensive_no_raise(phase: str) -> None:
+    """Confirm ensure_hybrid_collection swallows client errors for each phase."""
     client = _ClientFake(exists=False, raise_on=phase)
     # Should not raise even if client methods raise
     ensure_hybrid_collection(client, "col")

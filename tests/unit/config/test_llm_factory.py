@@ -124,12 +124,22 @@ def test_vllm_top_level_overrides_and_api_base_precedence(
     assert getattr(llm, "timeout", None) == 42.0
 
 
-def test_lmstudio_url_must_end_with_v1() -> None:
-    """LM Studio base URL is normalized to include /v1."""
-    settings = DocMindSettings(
-        llm_backend="lmstudio", lmstudio_base_url="http://localhost:1234"
-    )
-    assert settings.lmstudio_base_url.rstrip("/").endswith("/v1")
+@pytest.mark.parametrize(
+    ("input_url", "expected_url"),
+    [
+        ("http://localhost:1234", "http://localhost:1234/v1"),
+        ("http://localhost:1234/v1", "http://localhost:1234/v1"),
+        ("http://localhost:1234/v1/", "http://localhost:1234/v1"),
+        ("http://localhost:1234///", "http://localhost:1234/v1"),
+    ],
+)
+def test_lmstudio_url_normalized_to_include_v1(
+    input_url: str,
+    expected_url: str,
+) -> None:
+    """LM Studio base URL is normalized to include a single /v1 segment."""
+    settings = DocMindSettings(llm_backend="lmstudio", lmstudio_base_url=input_url)
+    assert settings.lmstudio_base_url.rstrip("/") == expected_url
 
 
 def test_llamacpp_local_uses_gpu_layers_and_context(

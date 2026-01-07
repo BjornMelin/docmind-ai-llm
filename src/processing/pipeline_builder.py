@@ -71,8 +71,9 @@ class PipelineBuilder:
             cache=cache,
             docstore=docstore,
         )
-        # Attach pipeline metadata for debugging/telemetry; LlamaIndex does not
-        # use it directly but keeping reference simplifies validation.
+        # Attach pipeline metadata for debugging/telemetry. This is a dynamic
+        # attribute (not part of the public LlamaIndex API); LlamaIndex does not
+        # use it directly but keeping reference simplifies validation/tests.
         pipeline.docmind_metadata = self._metadata | {
             "strategy": strategy.value,
         }

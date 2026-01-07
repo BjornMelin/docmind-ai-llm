@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ "**" ]
+    branches: ["**"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ base, llama ]
+        profile: [base, llama]
     env:
       HF_HUB_OFFLINE: '1'
       TRANSFORMERS_OFFLINE: '1'
@@ -37,7 +37,7 @@ jobs:
       - name: Sync environment (matrix aware)
         run: |
           if [ "${{ matrix.profile }}" = "llama" ]; then
-            uv sync --extra test --extra observability --extra llama --group quality --frozen
+            uv sync --extra test --extra observability --extra graph --group quality --frozen
           else
             uv sync --extra test --extra observability --group quality --frozen
           fi
