@@ -14,9 +14,13 @@ from .conftest import get_router_tool_names
 @pytest.mark.unit
 def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """Graph tool is omitted when build_graph_query_engine raises."""
+
+    def _broken_graph_builder(*_a: object, **_k: object) -> None:
+        raise ValueError("broken graph index")
+
     monkeypatch.setattr(
         "src.retrieval.router_factory.build_graph_query_engine",
-        lambda *_a, **_k: (_ for _ in ()).throw(ValueError("broken graph index")),
+        _broken_graph_builder,
         raising=True,
     )
 

@@ -21,7 +21,7 @@ def test_hybrid_rerank_injection_toggle(monkeypatch: pytest.MonkeyPatch) -> None
 
     class _DummyHybrid:
         def __init__(self, *_a: object, **_k: object) -> None:
-            return None
+            pass
 
     def _fake_build_retriever_query_engine(retriever, post, **kwargs):  # type: ignore[no-untyped-def]
         del retriever

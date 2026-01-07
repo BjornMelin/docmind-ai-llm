@@ -69,7 +69,7 @@ def build_retriever_query_engine(
     if engine is None:
         raise ImportError(
             "llama_index.core is required to build retriever query engines. "
-            "Install it via: pip install docmind_ai_llm[llama]"
+            "Install it via: pip install docmind_ai_llm[graph]"
         )
 
     if llm is None:

@@ -49,7 +49,7 @@ def test_resolve_device_auto_cuda_uses_current_device(monkeypatch):
 
 
 @pytest.mark.unit
-def test_resolve_device_explicit_cuda_index(monkeypatch):
+def test_resolve_device_explicit_cuda_index():
     """Verify explicit `cuda:N` input is returned unchanged."""
     import src.utils.core as core
 

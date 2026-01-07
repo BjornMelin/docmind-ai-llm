@@ -291,7 +291,7 @@ class RetrievalAgent:
         )
         self._record_strategy(payload, agent_failed)
         logger.info(
-            "Retrieved %d documents via %s (%.1fms)",
+            "Retrieved {} documents via {} ({:.1f}ms)",
             result.document_count,
             result.strategy_used,
             result.processing_time_ms,
@@ -368,11 +368,11 @@ class RetrievalAgent:
 
             last_error: TypeError | None = None
             try:
-                return self._tool_callable(tool_payload)
+                return self._tool_callable(**tool_payload)
             except TypeError as exc:
                 last_error = exc
             try:
-                return self._tool_callable(**tool_payload)
+                return self._tool_callable(tool_payload)
             except TypeError as exc:  # pragma: no cover - defensive branch
                 if last_error is not None:
                     raise last_error from exc

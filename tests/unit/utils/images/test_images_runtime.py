@@ -48,12 +48,36 @@ def test_open_image_encrypted_with_decrypt(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setitem(sys.modules, "src.utils.security", sec_mod)
     monkeypatch.setattr(
         "src.utils.images.os.remove",
-        lambda _path: removed.append(_path),
+        lambda path: removed.append(path),
     )
 
     with open_image_encrypted("sample.png.enc") as handle:
         assert handle.path == "decrypted.png"
     assert removed == ["decrypted.png"]
+
+
+def test_open_image_encrypted_same_path_decrypt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    removed: list[str] = []
+
+    @contextmanager
+    def fake_open(path: str):
+        yield SimpleNamespace(path=path)
+
+    _install_pil(monkeypatch, fake_open)
+
+    sec_mod = ModuleType("src.utils.security")
+    sec_mod.decrypt_file = lambda path: path
+    monkeypatch.setitem(sys.modules, "src.utils.security", sec_mod)
+    monkeypatch.setattr(
+        "src.utils.images.os.remove",
+        lambda path: removed.append(path),
+    )
+
+    with open_image_encrypted("sample.png.enc") as handle:
+        assert handle.path == "sample.png.enc"
+    assert removed == []
 
 
 def test_open_image_encrypted_missing_decryptor(

@@ -12,6 +12,8 @@ import pytest
 
 from src.retrieval import router_factory as rf
 
+from .conftest import get_router_tool_names
+
 
 class _FakeVector:
     def __init__(self) -> None:
@@ -25,11 +27,6 @@ class _FakeVector:
 class _FakePG:
     def __init__(self) -> None:
         self.property_graph_store = object()
-
-
-def _tool_count(router) -> int:  # type: ignore[no-untyped-def]
-    tools = getattr(router, "query_engine_tools", [])
-    return len(list(tools))
 
 
 @pytest.mark.unit
@@ -69,7 +66,7 @@ def test_router_factory_injects_postprocessors_toggle(
     vec = _FakeVector()
     pg = _FakePG()
     router = rf.build_router_engine(vec, pg_index=pg, settings=cfg, enable_hybrid=False)
-    assert _tool_count(router) == 2
+    assert len(get_router_tool_names(router)) == 2
     assert vec.kwargs is not None
     assert vec.kwargs.get("node_postprocessors") is not None
     assert captured_graph.get("node_postprocessors") == ["pp"]
@@ -80,7 +77,7 @@ def test_router_factory_injects_postprocessors_toggle(
     router2 = rf.build_router_engine(
         vec2, pg_index=_FakePG(), settings=cfg, enable_hybrid=False
     )
-    assert _tool_count(router2) == 2
+    assert len(get_router_tool_names(router2)) == 2
     assert vec2.kwargs is not None
     assert vec2.kwargs.get("node_postprocessors") is None
     assert captured_graph.get("node_postprocessors") is None

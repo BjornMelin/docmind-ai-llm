@@ -21,6 +21,7 @@ def test_submodules_importable() -> None:
     """Smoke check that tool functions are importable from submodules."""
 
     def _invokable(obj: object) -> bool:
+        """Return True when obj is callable or exposes a callable invoke method."""
         return callable(obj) or callable(getattr(obj, "invoke", None))
 
     assert _invokable(router_tool)

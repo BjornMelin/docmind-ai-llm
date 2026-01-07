@@ -64,11 +64,12 @@ def test_router_engine_warns_when_graph_disabled(
         def __init__(self) -> None:
             self.property_graph_store = object()
 
+    def _raise_graph_error(*_a: object, **_k: object) -> None:
+        raise MissingGraphAdapterError(GRAPH_DEPENDENCY_HINT)
+
     monkeypatch.setattr(
         "src.retrieval.router_factory.build_graph_query_engine",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            MissingGraphAdapterError(GRAPH_DEPENDENCY_HINT)
-        ),
+        _raise_graph_error,
         raising=True,
     )
 

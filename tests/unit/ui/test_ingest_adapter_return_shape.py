@@ -16,7 +16,7 @@ from src.ui.ingest_adapter import ingest_files
 
 
 def _noop(**_: Any) -> None:
-    return None
+    """No-op stub for monkeypatching."""
 
 
 def test_ingest_files_empty_returns_zero_and_no_pg(monkeypatch) -> None:

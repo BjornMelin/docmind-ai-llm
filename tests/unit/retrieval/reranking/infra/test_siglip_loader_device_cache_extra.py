@@ -46,7 +46,7 @@ def test_siglip_loader_device_and_cache(monkeypatch):
 
     monkeypatch.setattr(core, "TORCH", SimpleNamespace(cuda=_Cuda2), raising=False)
 
-    # Second call uses a different cache key because device changes.
+    # Edge-case: verify cache key includes device when availability flips.
     m2, p2, dev2 = rr._load_siglip()  # pylint: disable=protected-access
     assert m1
     assert p1

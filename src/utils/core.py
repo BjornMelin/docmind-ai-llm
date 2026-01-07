@@ -10,7 +10,7 @@ This module provides the most essential utilities needed by the application:
 import gc
 import time
 from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from functools import wraps
 from typing import Any
 
@@ -262,10 +262,14 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
         if is_cuda_available():
             cuda_mod = getattr(TORCH, "cuda", None)
             if cuda_mod:
-                with suppress(RuntimeError):
+                try:
                     cuda_mod.synchronize()
-                with suppress(RuntimeError):
+                except RuntimeError as exc:
+                    logger.debug("GPU synchronize failed during cleanup: %s", exc)
+                try:
                     cuda_mod.empty_cache()
+                except RuntimeError as exc:
+                    logger.debug("GPU cache clear failed during cleanup: %s", exc)
         gc.collect()
 
 

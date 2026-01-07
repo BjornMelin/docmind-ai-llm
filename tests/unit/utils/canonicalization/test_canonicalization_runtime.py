@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from pathlib import Path
 
 from src.utils.canonicalization import (
@@ -56,8 +58,15 @@ def test_canonicalize_document_stable(tmp_path: Path) -> None:
 def test_compute_hashes_returns_bundle(tmp_path: Path) -> None:
     content = b"Hello"
     metadata = {"source": "web", "source_path": str(tmp_path / "doc.txt")}
-    bundle = compute_hashes(content, metadata, _config(), {"parser": "1.0"})
+    config = _config()
+    model_versions = {"parser": "1.0"}
+    bundle = compute_hashes(content, metadata, config, model_versions)
     assert isinstance(bundle, HashBundle)
     expected_raw = "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
     assert bundle.raw_sha256 == expected_raw
-    assert "canonical_hmac_sha256" in bundle.as_dict()
+    canonical_payload = canonicalize_document(content, metadata, config, model_versions)
+    expected_canonical = hmac.new(
+        config.hmac_secret, canonical_payload, hashlib.sha256
+    ).hexdigest()
+    assert bundle.canonical_hmac_sha256 == expected_canonical
+    assert bundle.as_dict()["canonical_hmac_sha256"] == expected_canonical
