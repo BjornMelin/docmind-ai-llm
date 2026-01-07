@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -110,8 +111,6 @@ class DefaultToolRegistry:
                 return bool(self.app_settings.is_graphrag_enabled())
             except (AttributeError, TypeError, ValueError):
                 # Log suppressed exceptions for debugging.
-                import logging
-
                 logging.getLogger(__name__).debug(
                     "is_graphrag_enabled() raised exception; falling back to False",
                     exc_info=True,
