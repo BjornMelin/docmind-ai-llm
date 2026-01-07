@@ -98,6 +98,32 @@ class _DictOnlyTool:
         return json.dumps({"documents": [], "strategy_used": payload["strategy"]})
 
 
+class _PositionalQueryTool:
+    """Callable that accepts a positional query and optional state.
+
+    This mirrors the underlying signature of ``@tool`` wrapped functions. If
+    called with a single positional mapping, it will *not* raise, but will drop
+    ``state`` and break the fallback retrieval path. The direct invocation
+    helper must therefore prioritise keyword arguments.
+    """
+
+    def __init__(self) -> None:
+        self.received_query: object | None = None
+        self.received_state: object | None = None
+
+    def __call__(  # pylint: disable=too-many-positional-arguments
+        self,
+        query: str,
+        strategy: str = "hybrid",
+        use_dspy: bool = True,  # pylint: disable=unused-argument
+        use_graphrag: bool = False,  # pylint: disable=unused-argument
+        state: dict | None = None,
+    ) -> str:
+        self.received_query = query
+        self.received_state = state
+        return json.dumps({"documents": [], "strategy_used": strategy})
+
+
 def _set_tool(agent: Any, tool: Callable[..., object]) -> None:
     """Inject the provided tool into the agent instance for direct invocation tests."""
     agent._tool_callable = tool  # type: ignore[attr-defined]
@@ -325,6 +351,29 @@ def test_direct_tool_invocation_prioritises_kwargs(
 
     assert kw_tool.received is not None
     assert kw_tool.received["query"] == "q"
+    assert result.strategy_used == "hybrid"
+
+
+@pytest.mark.unit
+def test_direct_tool_invocation_supplies_state_for_positional_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Direct invocation must not drop state when tools accept positional query."""
+    from src.agents import retrieval as mod
+
+    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    tools_data = {"vector": "v"}
+    agent = mod.RetrievalAgent(llm=None, tools_data=tools_data)
+
+    tool = _PositionalQueryTool()
+    _set_tool(agent, tool)
+
+    result = agent._call_tool_directly(
+        "q", strategy="hybrid", use_dspy=True, use_graphrag=False
+    )
+
+    assert tool.received_query == "q"
+    assert tool.received_state == {"tools_data": tools_data}
     assert result.strategy_used == "hybrid"
 
 
