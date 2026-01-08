@@ -716,6 +716,12 @@ class MultiAgentCoordinator:
                     result = cast(dict[str, Any], state)
                 else:
                     model_dump = getattr(state, "model_dump", None)
+                    if not callable(model_dump):
+                        logger.debug(
+                            "Unexpected state type %s without model_dump; "
+                            "using empty dict",
+                            type(state).__name__,
+                        )
                     result = cast(
                         dict[str, Any], model_dump() if callable(model_dump) else {}
                     )
