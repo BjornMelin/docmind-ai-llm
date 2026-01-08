@@ -27,7 +27,7 @@ This section provides concrete steps and configuration for deploying and operati
 # 1. Clone and install
 git clone https://github.com/BjornMelin/docmind-ai-llm.git
 cd docmind-ai-llm
-uv sync --extra gpu
+uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # 2. Production environment setup
 cp .env.example .env.production
@@ -198,7 +198,7 @@ COPY src/ ./src/
 COPY scripts/ ./scripts/
 
 # Install dependencies
-RUN uv sync --extra gpu --extra prod
+RUN uv sync --extra gpu --extra prod --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Create non-root user for security
 RUN useradd -m -u 1000 docmind && chown -R docmind:docmind /app

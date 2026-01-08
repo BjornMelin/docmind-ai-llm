@@ -22,7 +22,7 @@ class GraphIndexBuilderProtocol(Protocol):
         **kwargs: Any,
     ) -> Any:
         """Return a property graph index (e.g. ``PropertyGraphIndex``)."""
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -31,7 +31,7 @@ class GraphRetrieverProtocol(Protocol):
 
     def retrieve(self, query: Any, /, *args: Any, **kwargs: Any) -> Sequence[Any]:
         """Return nodes for ``query``."""
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -40,11 +40,11 @@ class GraphQueryEngineProtocol(Protocol):
 
     def query(self, query: Any, /, *args: Any, **kwargs: Any) -> Any:
         """Execute a synchronous query."""
-        ...
+        raise NotImplementedError
 
     async def aquery(self, query: Any, /, *args: Any, **kwargs: Any) -> Any:
         """Execute an asynchronous query."""
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -59,7 +59,7 @@ class GraphExporterProtocol(Protocol):
         depth: int,
     ) -> None:
         """Persist the graph to a JSON Lines file."""
-        ...
+        raise NotImplementedError
 
     def export_parquet(
         self,
@@ -69,7 +69,7 @@ class GraphExporterProtocol(Protocol):
         depth: int,
     ) -> None:
         """Persist the graph to a Parquet file."""
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -84,7 +84,7 @@ class TelemetryHooksProtocol(Protocol):
         tools: Sequence[str],
     ) -> None:
         """Record router construction details."""
-        ...
+        raise NotImplementedError
 
     def graph_exported(
         self,
@@ -96,7 +96,7 @@ class TelemetryHooksProtocol(Protocol):
         seed_count: int,
     ) -> None:
         """Record graph export metrics."""
-        ...
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -130,12 +130,12 @@ class AdapterFactoryProtocol(Protocol):
         response_mode: str = "compact",
     ) -> GraphQueryArtifacts:
         """Return runtime graph services for router integration."""
-        ...
+        raise NotImplementedError
 
     def get_index_builder(self) -> GraphIndexBuilderProtocol | None:
         """Return an optional index builder for ingestion paths."""
-        ...
+        raise NotImplementedError
 
     def get_telemetry_hooks(self) -> TelemetryHooksProtocol:
         """Return telemetry hooks for router/export instrumentation."""
-        ...
+        raise NotImplementedError

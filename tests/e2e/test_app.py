@@ -423,7 +423,9 @@ def test_app_renders_and_shows_chat(_mock_pull, app_test):  # noqa: PT019
 
 @patch("ollama.pull", return_value={"status": "success"})
 @patch("src.utils.core.load_documents_unstructured")
-def test_app_document_upload_workflow(mock_load_docs, _mock_pull, app_test, tmp_path):  # noqa: PT019
+def test_app_document_upload_workflow(
+    mock_load_docs, _mock_pull, app_test, tmp_path
+) -> None:
     """Validate upload and processing pipeline with boundary mocks."""
 
     # Mock successful document loading

@@ -15,7 +15,10 @@ import pytest
 
 @pytest.mark.integration
 @pytest.mark.retrieval
-def test_qdrant_prefetch_fusionquery_telemetry(monkeypatch):  # type: ignore[no-untyped-def]
+def test_qdrant_prefetch_fusionquery_telemetry(
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:  # type: ignore[no-untyped-def]
+    """Verify hybrid retrieval emits correct telemetry with Qdrant prefetch."""
     hmod = importlib.import_module("src.retrieval.hybrid")
 
     # Minimal fake Qdrant response
@@ -37,11 +40,13 @@ def test_qdrant_prefetch_fusionquery_telemetry(monkeypatch):  # type: ignore[no-
         """Stubbed Qdrant client capturing query parameters."""
 
         def query_points(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
+            """Execute a query and verify prefetch and limit parameters."""
             assert "prefetch" in _kwargs
             assert "limit" in _kwargs
             return _Res()
 
         def close(self) -> None:  # type: ignore[no-untyped-def]
+            """Close the client connection."""
             return None
 
     # Capture telemetry

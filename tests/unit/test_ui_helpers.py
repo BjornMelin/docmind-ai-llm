@@ -22,9 +22,11 @@ class _Sidebar:
         self.write_calls: list[str] = []
 
     def markdown(self, text: str) -> None:  # pragma: no cover - trivial
+        """Record markdown text call."""
         self.markdown_calls.append(text)
 
     def write(self, text: str) -> None:  # pragma: no cover - trivial
+        """Record write call."""
         self.write_calls.append(text)
 
 
@@ -36,6 +38,7 @@ class _StreamlitStub:
         self.infos: list[str] = []
 
     def info(self, text: str) -> None:  # pragma: no cover - trivial
+        """Record info message call."""
         self.infos.append(text)
 
 

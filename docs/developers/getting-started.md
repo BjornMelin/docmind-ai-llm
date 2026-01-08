@@ -105,7 +105,7 @@ cd docmind-ai-llm
 uv sync
 
 # Install with GPU support (recommended)
-uv sync --extra gpu
+uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Install with test dependencies
 uv sync --extra test
@@ -116,17 +116,17 @@ uv sync --extra test
 For optimal performance with RTX 4090:
 
 ```bash
-# Phase 1: Install PyTorch 2.7.0 with CUDA 12.8
-uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 \
+# Phase 1: Install PyTorch 2.7.1 with CUDA 12.8
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
     --extra-index-url https://download.pytorch.org/whl/cu128
 
 # Phase 2: Install vLLM and FlashInfer
-uv pip install "vllm>=0.9.1,<0.10.0" \
+uv pip install "vllm>=0.10.1,<0.11.0" \
     --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install flashinfer-python>=0.2.11
+uv pip install "flashinfer-python>=0.5.3,<0.6.0"
 
 # Phase 3: Install remaining dependencies
-uv sync --extra gpu
+uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 ```
 
 ### 3. Start Required Services
@@ -315,7 +315,7 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 
 ```bash
 # Reinstall PyTorch with correct CUDA version
-uv pip install torch==2.7.0 --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install torch==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
 ```
 
 ### vLLM Installation Issues
@@ -337,8 +337,8 @@ export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
 # Reinstall vLLM + FlashInfer (runtime pins)
-uv pip install --force-reinstall "vllm>=0.9.1,<0.10.0" --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install --force-reinstall flashinfer-python>=0.2.11
+uv pip install --force-reinstall "vllm>=0.10.1,<0.11.0" --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install --force-reinstall "flashinfer-python>=0.5.3,<0.6.0"
 ```
 
 ### Configuration Issues

@@ -11,7 +11,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -33,8 +32,8 @@ dependencies = [
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
     "spacy>=3.8.7,<4.0.0",               # NLP pipeline
     # ML/LLM Fundamentals
-    "torch==2.7.0",                      # PyTorch runtime (vLLM<0.10 compat)
-    "transformers>=4.53.1,<4.58.0",      # HF model interfaces (ColPali compat)
+    "torch==2.7.1",                      # PyTorch runtime (vLLM 0.10.x compat)
+    "transformers>=4.55.0,<4.58.0",      # HF model interfaces (vLLM 0.10.x + ColPali compat)
     "tiktoken==0.11.0",                  # Tokenization utilities
     "openai>=1.109.1,<2.0.0",            # OpenAI API client
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
@@ -70,7 +69,8 @@ dependencies = [
     "dspy-ai>=3.1.0,<4.0.0",             # DSPy optimizer
     "pyyaml>=6.0.3,<7.0.0",              # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
-    "duckdb>=1.3.2,<2.0.0",              # DuckDB engine
+    # Keep <1.4.0 because llama-index DuckDB integrations currently cap DuckDB <1.4.0.
+    "duckdb>=1.3.2,<1.4.0",              # DuckDB engine
     # Analytics & Visualization
     "pandas>=2.2,<3.0",                 # DataFrames (required by DuckDB .df())
     "plotly>=5.22,<6.0",                # Streamlit charts (px/go)
@@ -84,9 +84,9 @@ dependencies = [
 [project.optional-dependencies]
 gpu = [
     "fastembed-gpu>=0.7.4,<0.8.0",        # GPU-accelerated embeddings
-    # vLLM pinned below 0.10 to stay on the Torch 2.7.x line (newer vLLM
-    # versions require Torch 2.9+) while remaining compatible with ColPali.
-    "vllm>=0.9.1,<0.10.0",
+    # vLLM pinned to 0.10.x to stay on the Torch 2.7.x line (vLLM 0.11.x moves
+    # to Torch 2.8; newer vLLM versions move further).
+    "vllm>=0.10.1,<0.11.0",
     # FlashInfer runtime pinned explicitly (older vLLM may not expose [flashinfer] extra)
     "flashinfer-python>=0.5.3,<0.6.0",
     # Build tools for GPU libraries
@@ -137,8 +137,8 @@ constraint-dependencies = ["rapidfuzz>=3.14.1,<4.0.0"]
 [tool.docmind-ai]
 # CUDA Stack Requirements
 cuda_version = "12.8+"
-pytorch_version = "2.7.0"
-vllm_version = ">=0.9.1,<0.10.0"
+pytorch_version = "2.7.1"
+vllm_version = ">=0.10.1,<0.11.0"
 driver_version = "550.54.14+"
 
 # Hardware Requirements for Qwen3-4B-Instruct-2507-FP8
@@ -154,21 +154,21 @@ target_prefill_tps = [800, 1300]  # tokens per second
 # Installation Commands (documented in README.md)
 installation_notes = """
 Automated GPU Installation:
-uv sync --extra gpu --index-strategy=unsafe-best-match
+uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 Manual Installation Steps (if needed):
 1. Install PyTorch with CUDA 12.8:
-   uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
 
 2. Install vLLM (GPU) + FlashInfer:
-   uv pip install "vllm>=0.9.1,<0.10.0" --extra-index-url https://download.pytorch.org/whl/cu128
-   uv pip install flashinfer-python>=0.2.11
+   uv pip install "vllm>=0.10.1,<0.11.0" --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install "flashinfer-python>=0.5.3,<0.6.0"
 
 3. Install llama-cpp-python with CUDA:
    uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu128
 
 4. Install remaining GPU dependencies:
-   uv pip install fastembed-gpu>=0.7.0
+   uv pip install "fastembed-gpu>=0.7.4,<0.8.0"
 """
 
 [tool.ruff]

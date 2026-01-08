@@ -15,11 +15,13 @@ from src.utils.canonicalization import (
 
 
 def test_normalise_text_collapses_whitespace() -> None:
+    """Verify text normalization removes unicode artifacts and collapses whitespace."""
     raw = "\ufeffHello\u200b  World\r\n\nSecond\tLine  "
     assert _normalise_text(raw) == "Hello World Second Line"
 
 
 def test_filter_metadata_keeps_sorted_keys(tmp_path: Path) -> None:
+    """Verify metadata filtering preserves specified keys and sorts sets."""
     metadata = {
         "source": "web",
         "source_path": tmp_path / "doc.pdf",
@@ -44,6 +46,7 @@ def _config() -> CanonicalizationConfig:
 
 
 def test_canonicalize_document_stable(tmp_path: Path) -> None:
+    """Verify canonicalization produces identical results regardless of metadata key order."""
     content = b"Hello\nWorld"
     metadata_one = {"source": "web", "source_path": str(tmp_path / "a.txt")}
     metadata_two = {"source_path": str(tmp_path / "a.txt"), "source": "web"}
@@ -54,6 +57,7 @@ def test_canonicalize_document_stable(tmp_path: Path) -> None:
 
 
 def test_compute_hashes_returns_bundle(tmp_path: Path) -> None:
+    """Verify compute_hashes returns correct HashBundle with expected SHA256."""
     content = b"Hello"
     metadata = {"source": "web", "source_path": str(tmp_path / "doc.txt")}
     bundle = compute_hashes(content, metadata, _config(), {"parser": "1.0"})

@@ -152,7 +152,7 @@ class MultiAgentCoordinator:
             enable_fallback: Whether to fallback to basic RAG on agent failure
             max_agent_timeout: Maximum time for agent responses (seconds)
             tool_registry: Optional tool registry (primarily for testing)
-            use_shared_llm_client: Override for the shared retrying LLM flag
+            use_shared_llm_client: Override shared LlamaIndex LLM wrapper flag.
         """
         configure_observability(settings)
         self.model_path = model_path
@@ -160,6 +160,11 @@ class MultiAgentCoordinator:
         self.backend = backend
         self.enable_fallback = enable_fallback
         self.max_agent_timeout = max_agent_timeout
+        self.use_shared_llm_client = (
+            settings.agents.use_shared_llm_client
+            if use_shared_llm_client is None
+            else use_shared_llm_client
+        )
 
         self.tool_registry: ToolRegistry = tool_registry or DefaultToolRegistry()
 
@@ -220,7 +225,8 @@ class MultiAgentCoordinator:
 
             if Settings.llm is not None:
                 self.llamaindex_llm = Settings.llm
-                self._shared_llm_wrapper = _SharedLLMWrapper(self.llamaindex_llm)
+                if self.use_shared_llm_client:
+                    self._shared_llm_wrapper = _SharedLLMWrapper(self.llamaindex_llm)
                 logger.info("LlamaIndex LLM initialized from Settings")
             else:
                 # Raise error if LLM not properly configured
@@ -947,7 +953,7 @@ def create_multi_agent_coordinator(
         max_context_length: Maximum context in tokens
         enable_fallback: Whether to enable fallback to basic RAG
         tool_registry: Optional registry override for tool resolution
-        use_shared_llm_client: Override for shared LLM retry wrapper flag
+        use_shared_llm_client: Override shared LlamaIndex LLM wrapper flag.
 
     Returns:
         Configured MultiAgentCoordinator instance

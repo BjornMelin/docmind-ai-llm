@@ -20,11 +20,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 from llama_index.core import Settings
 
-if TYPE_CHECKING:  # pragma: no cover
-    from llama_index.core.base.embeddings.base import BaseEmbedding
-else:
-    BaseEmbedding = Any
-
 from src.config.llm_factory import build_llm
 from src.models.embeddings import (
     ImageEmbedder,
@@ -35,6 +30,11 @@ from src.models.embeddings import (
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
 
 from .settings import DocMindSettings, settings
+
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.core.base.embeddings.base import BaseEmbedding
+else:
+    BaseEmbedding = Any
 
 # Text embeddings default wrapper
 # NOTE: Avoid heavy imports at module import-time. The embedding constructor

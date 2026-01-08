@@ -21,23 +21,23 @@ def _raise_pending(feature: str) -> NoReturn:
 
 
 async def load_documents_unstructured(
-    file_paths: list[str | Path], settings: Any | None = None
+    _file_paths: list[str | Path], _settings: Any | None = None
 ) -> list[Any]:
     """Placeholder coroutine for the upcoming ingestion helpers."""
     _raise_pending("load_documents_unstructured")
 
 
 async def load_documents_from_directory(
-    directory_path: str | Path,
-    settings: Any | None = None,
-    recursive: bool = True,
-    supported_extensions: set[str] | None = None,
+    _directory_path: str | Path,
+    _settings: Any | None = None,
+    _recursive: bool = True,
+    _supported_extensions: set[str] | None = None,
 ) -> list[Any]:
     """Placeholder coroutine for directory ingestion."""
     _raise_pending("load_documents_from_directory")
 
 
-async def load_documents(file_paths: list[str | Path]) -> list[Any]:
+async def load_documents(_file_paths: list[str | Path]) -> list[Any]:
     """Convenience alias retained for compatibility with async callers."""
     _raise_pending("load_documents")
 

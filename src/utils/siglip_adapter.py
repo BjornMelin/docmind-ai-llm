@@ -61,7 +61,9 @@ class SiglipEmbedding:
         except (ImportError, AttributeError):  # pragma: no cover - conservative
             # Robust fallback using torch directly
             try:
-                if getattr(torch, "cuda", None) and torch.cuda.is_available():  # type: ignore[attr-defined]
+                if (
+                    getattr(torch, "cuda", None) and torch.cuda.is_available()  # type: ignore[attr-defined]
+                ):
                     return "cuda"
                 mps = getattr(getattr(torch, "backends", None), "mps", None)
                 if mps is not None and getattr(mps, "is_available", lambda: False)():

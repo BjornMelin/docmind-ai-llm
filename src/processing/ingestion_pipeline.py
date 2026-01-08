@@ -23,18 +23,12 @@ from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
+from opentelemetry import trace
 
 try:
     from llama_index.readers.file import UnstructuredReader
 except ImportError:  # pragma: no cover - optional dependency
     UnstructuredReader = None  # type: ignore
-
-if TYPE_CHECKING:  # pragma: no cover
-    from llama_index.core.base.embeddings.base import BaseEmbedding
-else:
-    BaseEmbedding = Any
-
-from opentelemetry import trace
 
 from src.config import settings as app_settings
 from src.config import setup_llamaindex
@@ -48,6 +42,11 @@ from src.models.processing import (
 )
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.processing.pdf_pages import save_pdf_page_images
+
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.core.base.embeddings.base import BaseEmbedding
+else:
+    BaseEmbedding = Any
 
 _TRACER = trace.get_tracer("docmind.ingestion")
 logger = logging.getLogger(__name__)
