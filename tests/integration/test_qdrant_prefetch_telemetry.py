@@ -39,20 +39,20 @@ def test_qdrant_prefetch_fusionquery_telemetry(
     class _Client:
         """Stubbed Qdrant client capturing query parameters."""
 
-        def query_points(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
+        def query_points(self, **_kwargs: Any) -> _Res:
             """Execute a query and verify prefetch and limit parameters."""
             assert "prefetch" in _kwargs
             assert "limit" in _kwargs
             return _Res()
 
-        def close(self) -> None:  # type: ignore[no-untyped-def]
+        def close(self) -> None:
             """Close the client connection."""
             return None
 
     # Capture telemetry
     events: list[dict[str, Any]] = []
 
-    def _cap(evt: dict[str, Any]) -> None:  # type: ignore[no-untyped-def]
+    def _cap(evt: dict[str, Any]) -> None:
         events.append(evt)
 
     monkeypatch.setattr(hmod, "log_jsonl", _cap)

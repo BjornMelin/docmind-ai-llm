@@ -16,13 +16,13 @@ import pytest
 class _StubIndex:
     """Minimal index stub exposing as_query_engine used by router factory."""
 
-    def as_query_engine(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
+    def as_query_engine(self, **_kwargs: Any) -> Any:
         """Return a stub query engine."""
 
         class _QE:
             """Stub query engine."""
 
-            def query(self, *_a: Any, **_k: Any):  # type: ignore[no-untyped-def]
+            def query(self, *_a: Any, **_k: Any) -> str:
                 """Execute a query and return stub result."""
                 return "ok"
 
@@ -65,7 +65,7 @@ def test_router_tools_and_rerank_toggle(monkeypatch: pytest.MonkeyPatch) -> None
             """Close the retriever connection."""
             return None
 
-        def retrieve(self, *_a: Any, **_k: Any) -> list[object]:
+        def retrieve(self, *_a: Any, **_k: Any) -> list[Any]:
             """Retrieve documents matching the query."""
             return []
 
