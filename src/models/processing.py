@@ -60,15 +60,15 @@ class IngestionConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate(cls, values: IngestionConfig) -> IngestionConfig:  # noqa: N805  # pylint: disable=no-self-argument
+    def _validate(self) -> IngestionConfig:
         """Ensure overlap < chunk size and observability fields are consistent."""
-        if values.chunk_overlap >= values.chunk_size:
+        if self.chunk_overlap >= self.chunk_size:
             msg = "chunk_overlap must be strictly less than chunk_size"
             raise ValueError(msg)
-        if values.enable_observability and not values.span_exporter_endpoint:
+        if self.enable_observability and not self.span_exporter_endpoint:
             msg = "span_exporter_endpoint required when observability is enabled"
             raise ValueError(msg)
-        return values
+        return self
 
 
 class IngestionInput(BaseModel):
@@ -92,16 +92,16 @@ class IngestionInput(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_payload(cls, values: IngestionInput) -> IngestionInput:  # noqa: N805  # pylint: disable=no-self-argument
+    def _validate_payload(self) -> IngestionInput:
         """Validate mutual exclusivity of payload fields and normalise paths."""
-        has_path = values.source_path is not None
-        has_bytes = values.payload_bytes is not None
+        has_path = self.source_path is not None
+        has_bytes = self.payload_bytes is not None
         if has_path == has_bytes:
             msg = "Provide exactly one of source_path or payload_bytes"
             raise ValueError(msg)
-        if values.source_path is not None:
-            values.source_path = values.source_path.expanduser()
-        return values
+        if self.source_path is not None:
+            self.source_path = self.source_path.expanduser()
+        return self
 
 
 class ExportArtifact(BaseModel):
@@ -121,10 +121,10 @@ class ExportArtifact(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _resolve_path(cls, values: ExportArtifact) -> ExportArtifact:  # noqa: N805  # pylint: disable=no-self-argument
+    def _resolve_path(self) -> ExportArtifact:
         """Ensure ``path`` is always stored as a resolved ``Path`` instance."""
-        values.path = Path(values.path)
-        return values
+        self.path = Path(self.path)
+        return self
 
 
 class ManifestSummary(BaseModel):

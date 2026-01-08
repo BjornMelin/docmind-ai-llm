@@ -49,14 +49,19 @@ class _Store:
         ]
 
     class _Frame:
+        """Stub DataFrame for export tests."""
+
         def __init__(self, rows: list[str]) -> None:
+            """Initialize with row data."""
             self._rows = rows
 
         def to_parquet(self, path: Path) -> None:
+            """Write stub parquet file."""
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"PAR1")
 
-    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs):
+    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs: object) -> _Frame:
+        """Get relationship map as a frame."""
         rows = self.get_rel_map(node_ids=node_ids, depth=depth)
         return self._Frame(rows)
 

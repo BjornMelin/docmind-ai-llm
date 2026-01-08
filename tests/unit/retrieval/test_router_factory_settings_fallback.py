@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.retrieval.router_factory import build_router_engine
+from src.retrieval import router_factory as rf
 
 
 class _VecIndex:
@@ -62,7 +62,8 @@ def test_build_router_engine_settings_fallback(monkeypatch, flag: bool) -> None:
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_graph_query_engine",
+        rf,
+        "build_graph_query_engine",
         lambda *_a, **_k: SimpleNamespace(query_engine=MagicMock(name="graph_qe")),
         raising=True,
     )
@@ -81,7 +82,7 @@ def test_build_router_engine_settings_fallback(monkeypatch, flag: bool) -> None:
         database=SimpleNamespace(qdrant_collection="col"),
     )
 
-    router = build_router_engine(vec, pg, settings=cfg, enable_hybrid=None)
+    router = rf.build_router_engine(vec, pg, settings=cfg, enable_hybrid=None)
     count = _tool_count(router)
     expected = 3 if flag else 2  # vector + graph + optional hybrid
     assert count == expected, f"expected {expected} tools, got {count}"

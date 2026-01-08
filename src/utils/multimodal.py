@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -44,7 +44,7 @@ async def generate_image_embeddings(clip: Any, image: Any) -> np.ndarray:
     """
     raw = await asyncio.to_thread(clip.get_image_embedding, image)
     if hasattr(raw, "cpu") and callable(raw.cpu):  # torch tensor path
-        vec = raw.cpu().numpy()
+        vec = cast(Any, raw).cpu().numpy()
     else:
         vec = np.asarray(raw, dtype=np.float32)
     norm = np.linalg.norm(vec)
@@ -127,7 +127,7 @@ def batch_process_images(
             try:
                 emb = clip.get_image_embedding(img)
                 if hasattr(emb, "cpu") and callable(emb.cpu):  # torch tensor
-                    arr = emb.cpu().numpy()
+                    arr = cast(Any, emb).cpu().numpy()
                 else:
                     arr = np.asarray(emb)
                 # Optional strict validation of output dimensionality
@@ -269,6 +269,8 @@ async def validate_end_to_end_pipeline(
     relationships = max(0, len(entities) - RANK_ADJUSTMENT)
 
     # Compose a final response string (LLM mocked in tests)
+    # TODO(multimodal-phase-2): Integrate property graph traversal and LLM
+    # summarization once those components are wired into the multimodal flow.
     _ = property_graph, llm  # boundaries mocked; kept for future expansion
     final = (
         f"Query '{query}' processed with visual similarity={similarity:.2f}. "

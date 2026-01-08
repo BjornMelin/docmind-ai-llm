@@ -11,12 +11,13 @@ import contextlib
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import fitz  # PyMuPDF
 import numpy as np
 from llama_index.core.schema import ImageDocument
 from PIL import Image  # type: ignore
+from PIL.Image import Resampling  # type: ignore
 
 from src.config import settings
 from src.utils.security import encrypt_file
@@ -32,7 +33,7 @@ def _phash(img: Image.Image, hash_size: int = 8) -> str:
     Returns:
         str: Hex-encoded average hash suitable for duplicate detection hints.
     """
-    gray = img.convert("L").resize((hash_size, hash_size), Image.LANCZOS)
+    gray = img.convert("L").resize((hash_size, hash_size), Resampling.LANCZOS)
     arr = np.asarray(gray, dtype=np.float32)
     avg = arr.mean()
     bits = (arr > avg).astype(np.uint8).flatten()
@@ -65,7 +66,7 @@ def _save_with_format(
 
     # Convert to PIL Image from raw samples
     mode = "RGB" if pix.n < 4 else "RGBA"
-    img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
+    img = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
     # Strip EXIF/metadata explicitly
     if hasattr(img, "info"):
         img.info.pop("exif", None)
@@ -75,7 +76,7 @@ def _save_with_format(
     # Resize to long-edge ~2000 px
     long_edge = max(img.width, img.height)
     if long_edge > 2000:
-        img.thumbnail((2000, 2000), Image.LANCZOS)
+        img.thumbnail((2000, 2000), Resampling.LANCZOS)
 
     # Try WebP first
     webp_path = target_stem.with_suffix(".webp")
@@ -124,8 +125,10 @@ def _render_pdf_pages(
     with fitz.open(pdf_path) as doc:
         zoom = dpi / 72.0
         mat = fitz.Matrix(zoom, zoom)
-        for idx, page in enumerate(doc, start=1):
-            img_stem = f"{pdf_path.stem}__page-{idx}"
+        for idx in range(doc.page_count):
+            page_num = idx + 1
+            page = doc.load_page(idx)
+            img_stem = f"{pdf_path.stem}__page-{page_num}"
             # Paths depend on chosen format; compute stem only here
             img_path = out_dir / (img_stem + ".webp")
 
@@ -138,7 +141,7 @@ def _render_pdf_pages(
                     needs_render = True
 
             if needs_render:
-                pix = page.get_pixmap(matrix=mat)
+                pix = cast(Any, page).get_pixmap(matrix=mat)
                 # Save as WebP or JPEG fallback
                 img_path, phash = _save_with_format(
                     pix, out_dir / img_stem, encrypt=encrypt
@@ -147,7 +150,7 @@ def _render_pdf_pages(
                 # set the image mtime to at least the source PDF's mtime.
                 with contextlib.suppress(OSError):
                     os.utime(img_path, (pdf_mtime, pdf_mtime))
-                results.append((idx, img_path, page.rect, phash))
+                results.append((page_num, img_path, page.rect, phash))
             else:
                 # If not re-rendered, recompute phash on the fly for metadata.
                 # Handle encrypted images by decrypting to a temporary file.
@@ -164,7 +167,7 @@ def _render_pdf_pages(
                     if tmp:
                         with contextlib.suppress(Exception):
                             os.remove(tmp)
-                results.append((idx, img_path, page.rect, ph))
+                results.append((page_num, img_path, page.rect, ph))
 
     return results
 

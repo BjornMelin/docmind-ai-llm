@@ -58,8 +58,12 @@ def get_multi_agent_coordinator(
       MultiAgentCoordinator: Configured coordinator instance.
     """
     model_cfg = settings.get_model_config()
-    selected_model = model_path or model_cfg.get("model_name")
-    selected_ctx = max_context_length or model_cfg.get("context_window")
+    selected_model = model_path or model_cfg.get("model_name") or settings.vllm.model
+    selected_ctx = (
+        max_context_length
+        if max_context_length is not None
+        else model_cfg.get("context_window") or settings.vllm.context_window
+    )
 
     return MultiAgentCoordinator(
         model_path=str(selected_model),

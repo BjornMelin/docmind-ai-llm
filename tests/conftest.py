@@ -83,17 +83,21 @@ def _stub_embed_model(
 
     class _Embed:
         def get_query_embedding(self, _text: str) -> list[float]:
+            """Return a fixed embedding vector for testing."""
             return [0.0, 0.1, 0.2]
+
+    def _get_embed_model() -> _Embed:
+        return _Embed()
 
     monkeypatch.setattr(
         integrations_module,
         "get_settings_embed_model",
-        lambda: _Embed(),
+        _get_embed_model,
         raising=False,
     )
     monkeypatch.setattr(
         "src.retrieval.hybrid.get_settings_embed_model",
-        lambda: _Embed(),
+        _get_embed_model,
         raising=False,
     )
 
@@ -108,9 +112,11 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
             self._collections: dict[str, dict[str, object]] = {}
 
         def collection_exists(self, name: str) -> bool:
+            """Check if a collection exists."""
             return name in self._collections
 
         def get_collection(self, name: str) -> SimpleNamespace:
+            """Get collection configuration and metadata."""
             cfg = self._collections.get(name)
             if cfg is None:
                 cfg = {
@@ -128,6 +134,7 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
             return SimpleNamespace(config=SimpleNamespace(params=params))
 
         def create_collection(self, collection_name: str, **kwargs: object) -> None:
+            """Create a new collection with the given configuration."""
             self._collections[collection_name] = {
                 "vectors_config": kwargs.get("vectors_config", {}),
                 "sparse_vectors_config": kwargs.get("sparse_vectors_config", {}),
@@ -136,22 +143,29 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
         def update_collection(
             self, *args: object, **kwargs: object
         ) -> None:  # pragma: no cover
+            """Update collection configuration."""
             return None
 
         def recreate_collection(
             self, *args: object, **kwargs: object
         ) -> None:  # pragma: no cover
+            """Recreate an existing collection."""
             return None
 
         def query_points(self, **kwargs: object) -> SimpleNamespace:  # pragma: no cover
+            """Query points from the collection."""
             return SimpleNamespace(points=[])
 
         def close(self) -> None:  # pragma: no cover
+            """Close the client connection."""
             return None
+
+    def _create_fake_qdrant(*args: object, **kwargs: object) -> _FakeQdrantClient:
+        return _FakeQdrantClient(*args, **kwargs)
 
     monkeypatch.setattr(
         "src.retrieval.hybrid.QdrantClient",
-        lambda *args, **kwargs: _FakeQdrantClient(*args, **kwargs),
+        _create_fake_qdrant,
         raising=False,
     )
     with suppress(ImportError):
@@ -160,7 +174,7 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             beir_module,
             "QdrantClient",
-            lambda *args, **kwargs: _FakeQdrantClient(*args, **kwargs),
+            _create_fake_qdrant,
             raising=False,
         )
     monkeypatch.setattr(
@@ -193,6 +207,7 @@ def lightweight_embedding_model():
 
     class _MiniLM:
         def encode(self, items: list[str]):
+            """Encode text items to fixed embeddings for testing."""
             return np.zeros((len(items), 384), dtype=np.float32)
 
     return _MiniLM()
@@ -208,7 +223,10 @@ def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
 
     from src.config import integrations as integrations_module
 
-    monkeypatch.setattr(integrations_module, "build_llm", lambda *_a, **_k: MockLLM())
+    def _build_mock_llm(*_a: object, **_k: object) -> MockLLM:
+        return MockLLM()
+
+    monkeypatch.setattr(integrations_module, "build_llm", _build_mock_llm)
     monkeypatch.setattr(Settings, "_llm", MockLLM(), raising=False)
 
 
@@ -226,16 +244,24 @@ def _router_factory_stubs(request: pytest.FixtureRequest) -> None:
         return
 
     class _ToolMetadata:
+        """Stub for tool metadata."""
+
         def __init__(self, name: str, description: str) -> None:
+            """Initialize tool metadata."""
             self.name = name
             self.description = description
 
     class _QueryEngineTool:
+        """Stub for query engine tool."""
+
         def __init__(self, query_engine: object, metadata: _ToolMetadata) -> None:
+            """Initialize query engine tool."""
             self.query_engine = query_engine
             self.metadata = metadata
 
     class _RouterQueryEngine:
+        """Stub for router query engine."""
+
         def __init__(
             self,
             selector: object | None = None,
@@ -244,6 +270,7 @@ def _router_factory_stubs(request: pytest.FixtureRequest) -> None:
             llm: object | None = None,
             **kwargs: object,
         ) -> None:
+            """Initialize router query engine."""
             self.selector = selector
             self.query_engine_tools = list(query_engine_tools or [])
             self.verbose = verbose
@@ -252,21 +279,32 @@ def _router_factory_stubs(request: pytest.FixtureRequest) -> None:
 
         @classmethod
         def from_args(cls, **kwargs: object) -> _RouterQueryEngine:
+            """Create instance from keyword arguments."""
             return cls(**kwargs)
 
     class _RetrieverQueryEngine:
+        """Stub for retriever query engine."""
+
         @classmethod
         def from_args(cls, **kwargs: object) -> SimpleNamespace:
+            """Create instance from keyword arguments."""
             return SimpleNamespace(**kwargs)
 
     class _LLMSingleSelector:
+        """Stub for LLM single selector."""
+
         def __init__(self, llm: object | None = None) -> None:
+            """Initialize LLM single selector."""
             self.llm = llm
             self.kind = "llm_selector"
 
         @classmethod
         def from_defaults(cls, llm: object | None = None) -> _LLMSingleSelector:
+            """Create instance with default settings."""
             return cls(llm=llm)
+
+    def _get_pydantic_selector(_llm: object) -> None:
+        return None
 
     adapter = SimpleNamespace(
         RouterQueryEngine=_RouterQueryEngine,
@@ -274,7 +312,7 @@ def _router_factory_stubs(request: pytest.FixtureRequest) -> None:
         QueryEngineTool=_QueryEngineTool,
         ToolMetadata=_ToolMetadata,
         LLMSingleSelector=_LLMSingleSelector,
-        get_pydantic_selector=lambda _llm: None,
+        get_pydantic_selector=_get_pydantic_selector,
         __is_stub__=True,
     )
     set_llama_index_adapter(adapter)

@@ -11,8 +11,10 @@ Features:
 - Performance monitoring and quality metrics
 """
 
+from __future__ import annotations
+
 import time
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -37,6 +39,8 @@ try:
     DSPY_AVAILABLE = True
 except ImportError:
     logger.warning("DSPy not available - falling back to basic query processing")
+    dspy = None  # type: ignore[assignment]
+    BootstrapFewShot = None  # type: ignore[assignment]
     DSPY_AVAILABLE = False
 
 # Module-local cache for testability and reuse in unit tests (no globals)
@@ -57,21 +61,33 @@ class QueryOptimizationResult(BaseModel):
     )
 
 
-class QueryRefiner(dspy.Signature if DSPY_AVAILABLE else object):
-    """Refine a query for better document retrieval."""
+if dspy is not None:
 
-    if DSPY_AVAILABLE:
+    class QueryRefiner(dspy.Signature):  # type: ignore[misc]
+        """Refine a query for better document retrieval."""
+
         query = dspy.InputField(desc="Original user query")
         refined_query = dspy.OutputField(desc="Optimized query for better retrieval")
 
+else:
 
-class QueryVariantGenerator(dspy.Signature if DSPY_AVAILABLE else object):
-    """Generate query variants for comprehensive retrieval."""
+    class QueryRefiner:  # pragma: no cover - fallback stub
+        """Fallback signature stub used when DSPy is unavailable."""
 
-    if DSPY_AVAILABLE:
+
+if dspy is not None:
+
+    class QueryVariantGenerator(dspy.Signature):  # type: ignore[misc]
+        """Generate query variants for comprehensive retrieval."""
+
         query = dspy.InputField(desc="Base query")
         variant1 = dspy.OutputField(desc="First query variant")
         variant2 = dspy.OutputField(desc="Second query variant")
+
+else:
+
+    class QueryVariantGenerator:  # pragma: no cover - fallback stub
+        """Fallback signature stub used when DSPy is unavailable."""
 
 
 class DSPyLlamaIndexRetriever:
@@ -92,14 +108,16 @@ class DSPyLlamaIndexRetriever:
         self.max_variants = max_variants
         self.optimization_enabled = DSPY_AVAILABLE
 
-        if DSPY_AVAILABLE and llm:
+        if DSPY_AVAILABLE and llm and dspy is not None:
             try:
                 # Configure DSPy with provided LLM
                 dspy.configure(lm=self._wrap_llm_for_dspy(llm))
 
                 # Initialize optimization modules
-                self.query_refiner = dspy.ChainOfThought(QueryRefiner)
-                self.variant_generator = dspy.ChainOfThought(QueryVariantGenerator)
+                self.query_refiner = dspy.ChainOfThought(cast(Any, QueryRefiner))
+                self.variant_generator = dspy.ChainOfThought(
+                    cast(Any, QueryVariantGenerator)
+                )
 
                 logger.info("DSPy integration initialized successfully")
 
@@ -278,6 +296,8 @@ class DSPyLlamaIndexRetriever:
         if not self.optimization_enabled:
             logger.warning("DSPy not available - returning original retriever")
             return retriever
+        if dspy is None or BootstrapFewShot is None:  # pragma: no cover - defensive
+            return retriever
 
         try:
             # Create training examples
@@ -286,7 +306,7 @@ class DSPyLlamaIndexRetriever:
                 examples.append(dspy.Example(query=query).with_inputs("query"))
 
             # Bootstrap optimization
-            optimizer = BootstrapFewShot(max_bootstrapped_demos=num_examples)
+            optimizer = cast(Any, BootstrapFewShot)(max_bootstrapped_demos=num_examples)
             optimized_refiner = optimizer.compile(self.query_refiner, trainset=examples)
 
             # Update instance

@@ -142,6 +142,8 @@ class ToolFactory:
         Note: Uses index.as_query_engine as a placeholder keyword retriever to
         avoid new vendor dependencies. Registration behind flag only.
         """
+        # TODO(retrieval-phase-2): Swap in a real BM25/keyword retriever once a
+        # dependency is selected and wired.
         post = None
         try:
             if bool(getattr(settings.retrieval, "use_reranking", True)):

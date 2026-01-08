@@ -141,14 +141,14 @@ def performance_timer(
         process = None
         start_memory = 0.0
 
-    metrics = {"operation": operation}
+    metrics: dict[str, Any] = {"operation": operation}
     metrics.update(context)
 
+    success = False
     try:
         yield metrics
         success = True
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        success = False
         metrics["error"] = str(exc)
         raise
     finally:
@@ -165,15 +165,13 @@ def performance_timer(
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
 
-        metrics.update(
-            {
-                "duration_seconds": round(duration, 3),
-                "memory_delta_mb": round(memory_delta, 2),
-                "success": success,
-            }
-        )
+        metrics["duration_seconds"] = round(duration, 3)
+        metrics["memory_delta_mb"] = round(memory_delta, 2)
+        metrics["success"] = success
 
-        log_performance(**metrics)
+        excluded = {"operation", "duration_seconds"}
+        extra = {k: v for k, v in metrics.items() if k not in excluded}
+        log_performance(operation=operation, duration_seconds=duration, **extra)
 
 
 @asynccontextmanager
@@ -201,14 +199,14 @@ async def async_performance_timer(
         process = None
         start_memory = 0.0
 
-    metrics = {"operation": operation}
+    metrics: dict[str, Any] = {"operation": operation}
     metrics.update(context)
 
+    success = False
     try:
         yield metrics
         success = True
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        success = False
         metrics["error"] = str(exc)
         raise
     finally:
@@ -225,15 +223,13 @@ async def async_performance_timer(
         duration = end_time - start_time
         memory_delta = end_memory - start_memory
 
-        metrics.update(
-            {
-                "duration_seconds": round(duration, 3),
-                "memory_delta_mb": round(memory_delta, 2),
-                "success": success,
-            }
-        )
+        metrics["duration_seconds"] = round(duration, 3)
+        metrics["memory_delta_mb"] = round(memory_delta, 2)
+        metrics["success"] = success
 
-        log_performance(**metrics)
+        excluded = {"operation", "duration_seconds"}
+        extra = {k: v for k, v in metrics.items() if k not in excluded}
+        log_performance(operation=operation, duration_seconds=duration, **extra)
 
 
 def get_memory_usage() -> dict[str, float]:

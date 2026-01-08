@@ -6,11 +6,21 @@ to passthrough when cryptography is unavailable.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import contextlib
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
+
+try:  # pragma: no cover - optional dependency
+    from cryptography.exceptions import InvalidTag as InvalidTagError  # type: ignore
+except ImportError:
+
+    class InvalidTagError(Exception):  # type: ignore[no-redef]
+        """Fallback when cryptography is unavailable."""
+
 
 _ALG = "AES-256-GCM"
 _ENV_KEY = "DOCMIND_IMG_AES_KEY_BASE64"
@@ -22,6 +32,7 @@ def redact_pii(text: str) -> str:
 
     Implement real patterns/rules as needed per deployment.
     """
+    # TODO(privacy-hardening): Implement PII detection/redaction rules.
     return text
 
 
@@ -30,9 +41,6 @@ def _get_key() -> bytes | None:
     if not b64:
         return None
     try:
-        import base64
-        import binascii
-
         raw = base64.b64decode(b64)
         if len(raw) not in (16, 24, 32):
             return None
@@ -83,17 +91,6 @@ def decrypt_file(path: str) -> str:
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # type: ignore
 
-        try:
-            from cryptography.exceptions import InvalidTag  # type: ignore
-        except Exception:  # pylint: disable=broad-exception-caught
-
-            class _InvalidTagError(Exception):  # type: ignore
-                pass
-
-            invalid_tag_cls = _InvalidTagError
-        else:
-            invalid_tag_cls = InvalidTag  # type: ignore
-
         p = Path(path)
         blob = p.read_bytes()
         nonce, ct = blob[:12], blob[12:]
@@ -105,7 +102,7 @@ def decrypt_file(path: str) -> str:
         tmp = Path(name)
         tmp.write_bytes(pt)
         return str(tmp)
-    except (OSError, ValueError, RuntimeError, ImportError, invalid_tag_cls):
+    except (OSError, ValueError, RuntimeError, ImportError, InvalidTagError):
         return path
 
 
@@ -143,12 +140,12 @@ def validate_export_path(base_or_dest: Path | str, dest_rel: str | None = None):
             AttributeError,
         ):  # pragma: no cover - fallback for missing config or attribute
             base_dir = Path(".")
-        rel = base_or_dest
+        rel = str(base_or_dest)
     else:
         base_dir = Path(base_or_dest)  # type: ignore[arg-type]
         if dest_rel is None:
             raise AssertionError("destination relative path not computed")
-        rel = dest_rel
+        rel = str(dest_rel)
 
     # Absolute path input: accept as-is with symlink and parent checks
     if Path(rel).is_absolute():

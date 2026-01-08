@@ -121,7 +121,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Tooling
 
-- CI workflow pins `uv sync --extra observability --extra test --frozen`, runs Ruff/pylint/test gates, and enforces updated formatting/lint rules.
+- CI workflow pins `uv sync --extra observability --group test --frozen`, runs Ruff/pylint/test gates, and enforces updated formatting/lint rules.
 - Developer documentation references the new extras, commands, and smoke scripts for ingestion and telemetry verification.
 
 ### Reranking/Multimodal Consolidation

@@ -16,9 +16,14 @@ import pytest
 class _StubIndex:
     """Minimal index stub exposing as_query_engine used by router factory."""
 
-    def as_query_engine(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
+    def as_query_engine(self, **_kwargs: Any) -> Any:
+        """Return a stub query engine."""
+
         class _QE:
-            def query(self, *_a: Any, **_k: Any):  # type: ignore[no-untyped-def]
+            """Stub query engine."""
+
+            def query(self, *_a: Any, **_k: Any) -> str:
+                """Execute a query and return stub result."""
                 return "ok"
 
         return _QE()
@@ -26,7 +31,8 @@ class _StubIndex:
 
 @pytest.mark.integration
 @pytest.mark.retrieval
-def test_router_tools_and_rerank_toggle(monkeypatch):  # type: ignore[no-untyped-def]
+def test_router_tools_and_rerank_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify router tool registration respects hybrid and rerank toggles."""
     rfac = importlib.import_module("src.retrieval.router_factory")
 
     # Configure settings toggles
@@ -51,13 +57,16 @@ def test_router_tools_and_rerank_toggle(monkeypatch):  # type: ignore[no-untyped
         Implements the minimal `retrieve()` surface used by the router factory.
         """
 
-        def __init__(self, *_a: Any, **_k: Any):
+        def __init__(self, *_a: Any, **_k: Any) -> None:
+            """Initialize stub retriever."""
             pass
 
         def close(self) -> None:
+            """Close the retriever connection."""
             return None
 
-        def retrieve(self, *_a: Any, **_k: Any):
+        def retrieve(self, *_a: Any, **_k: Any) -> list[Any]:
+            """Retrieve documents matching the query."""
             return []
 
     monkeypatch.setattr(hy, "ServerHybridRetriever", _StubRetriever, raising=False)

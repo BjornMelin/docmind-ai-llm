@@ -61,7 +61,9 @@ class SiglipEmbedding:
         except (ImportError, AttributeError):  # pragma: no cover - conservative
             # Robust fallback using torch directly
             try:
-                if getattr(torch, "cuda", None) and torch.cuda.is_available():  # type: ignore[attr-defined]
+                if (
+                    getattr(torch, "cuda", None) and torch.cuda.is_available()  # type: ignore[attr-defined]
+                ):
                     return "cuda"
                 mps = getattr(getattr(torch, "backends", None), "mps", None)
                 if mps is not None and getattr(mps, "is_available", lambda: False)():
@@ -74,7 +76,7 @@ class SiglipEmbedding:
         """Direct transformers-based SigLIP loading as a compatibility path."""
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-        model = SiglipModel.from_pretrained(self.model_id)
+        model: Any = SiglipModel.from_pretrained(self.model_id)
         if self.device in ("cuda", "mps"):
             model = model.to(self.device)
         proc = SiglipProcessor.from_pretrained(self.model_id)

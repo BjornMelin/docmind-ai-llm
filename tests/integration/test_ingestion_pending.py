@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("llama_index")
-
 from src.models.processing import IngestionConfig, IngestionInput
 from src.processing.ingestion_pipeline import ingest_documents_sync
+
+pytest.importorskip("llama_index")
 
 
 @pytest.mark.integration

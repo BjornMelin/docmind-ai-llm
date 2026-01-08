@@ -171,7 +171,8 @@ class AgentConfig(BaseModel):
     use_shared_llm_client: bool = Field(
         default=True,
         description=(
-            "Wrap the shared LLM in a retry-aware client for agent workflows."
+            "Enable retries for the shared LlamaIndex LLM used by agent workflows "
+            "(native retries when available; wrapper fallback otherwise)."
         ),
     )
     enable_deadline_propagation: bool = Field(
@@ -723,7 +724,7 @@ class DocMindSettings(BaseSettings):
             if "rrf_k" not in fields_set:
                 self.retrieval.rrf_k = int(self.hybrid.rrf_k)
             if "fusion_mode" not in fields_set:
-                self.retrieval.fusion_mode = str(self.hybrid.method)
+                self.retrieval.fusion_mode = self.hybrid.method
         except (
             AttributeError,
             TypeError,
@@ -931,6 +932,9 @@ class DocMindSettings(BaseSettings):
         if self.security.allow_remote_endpoints:
             return
 
+        def _normalize_host(host: str) -> str:
+            return (host or "").strip().lower().rstrip(".")
+
         def _is_allowed(url: str | None) -> bool:
             if not url:
                 return True
@@ -940,7 +944,7 @@ class DocMindSettings(BaseSettings):
                 if not parsed.scheme or not parsed.netloc:
                     return False
 
-                host = (parsed.hostname or "").lower()
+                host = _normalize_host(parsed.hostname or "")
                 # Always accept explicit loopback hosts
                 if host in {"localhost", "127.0.0.1", "::1"}:
                     return True
@@ -953,10 +957,11 @@ class DocMindSettings(BaseSettings):
                         continue
                     ep = urlparse(e)
                     if ep.hostname:
-                        allowed_hosts.add(ep.hostname.lower())
+                        entry_host = _normalize_host(ep.hostname)
                     else:
                         # Fallback: if an entry is just a hostname
-                        allowed_hosts.add(e.split("/")[0].lower())
+                        entry_host = _normalize_host(e.split("/")[0].split(":")[0])
+                    allowed_hosts.add(entry_host)
 
                 return host in allowed_hosts
             except (ValueError, TypeError):  # pragma: no cover - defensive

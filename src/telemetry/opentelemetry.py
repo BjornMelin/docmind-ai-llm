@@ -8,16 +8,18 @@ development/testing.
 
 from __future__ import annotations
 
+import importlib
 import os
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from importlib import metadata
 from typing import Any, cast
 
-try:
-    from llama_index.observability.otel import LlamaIndexOpenTelemetry
-except ImportError:  # pragma: no cover - optional dependency
-    LlamaIndexOpenTelemetry = cast(Any, None)
+try:  # pragma: no cover - optional dependency
+    _otel_mod = importlib.import_module("llama_index.observability.otel")
+    LlamaIndexOpenTelemetry = cast(Any, _otel_mod.LlamaIndexOpenTelemetry)
+except (ImportError, AttributeError):
+    LlamaIndexOpenTelemetry = None
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider

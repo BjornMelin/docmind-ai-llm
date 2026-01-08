@@ -10,7 +10,9 @@ import pytest
 from src.config.settings import DocMindSettings
 
 
-def test_retrieval_timeouts_defaults_and_env(monkeypatch):  # type: ignore[no-untyped-def]
+def test_retrieval_timeouts_defaults_and_env(
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
     """Assert defaults and env override behavior for timeout fields."""
     # Defaults via clean instance (no .env)
     s = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
@@ -33,7 +35,9 @@ def test_retrieval_timeouts_defaults_and_env(monkeypatch):  # type: ignore[no-un
     assert s2.retrieval.total_rerank_budget_ms == 1234
 
 
-def test_retrieval_timeouts_invalid_values(monkeypatch):  # type: ignore[no-untyped-def]
+def test_retrieval_timeouts_invalid_values(
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
     """Negative or zero timeout values should trigger validation errors."""
     monkeypatch.setenv("DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS", "-1")
     with pytest.raises(ValueError, match="greater than or equal to 50"):

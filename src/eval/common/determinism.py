@@ -68,11 +68,14 @@ def set_determinism(seed: int | None = None, threads: int | None = None) -> None
                 _b.cudnn.benchmark = False  # type: ignore[attr-defined]
 
     # Thread env caps for BLAS libraries & tokenizers
-    os.environ.setdefault("OMP_NUM_THREADS", str(threads))
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", str(threads))
-    os.environ.setdefault("MKL_NUM_THREADS", str(threads))
-    os.environ.setdefault("NUMEXPR_NUM_THREADS", str(threads))
-    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    #
+    # Set these explicitly (not via setdefault) so callers can reliably override
+    # existing process-level defaults when they request deterministic behavior.
+    os.environ["OMP_NUM_THREADS"] = str(threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(threads)
+    os.environ["MKL_NUM_THREADS"] = str(threads)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(threads)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 __all__ = ["set_determinism"]

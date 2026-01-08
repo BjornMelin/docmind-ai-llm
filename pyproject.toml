@@ -11,119 +11,106 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     # Application & Configuration (core runtime utilities)
     "python-dotenv==1.1.1",             # Environment variable loading
-    "loguru>=0.7.3",                     # Structured logging
-    "tenacity>=9.1.2",                   # Robust retries
+    "loguru>=0.7.3,<1.0.0",              # Structured logging
+    "tenacity>=9.1.2,<10.0.0",           # Robust retries
     "pydantic==2.11.7",                  # Data validation & settings
     "pydantic-settings==2.10.1",         # Settings management
     # UI / App Framework
-    "streamlit>=1.48.0",                 # Local app UI
+    "streamlit>=1.52.2,<2.0.0",          # Local app UI
     # Document Processing & NLP
-    "unstructured[all-docs]>=0.18.11",   # Multiformat parsing (PDF, DOCX, HTML, etc.)
-    "unstructured-ingest>=0.2.1",        # Ingestion utilities
+    "unstructured[all-docs]>=0.18.26,<0.19.0",  # Multiformat parsing (PDF, DOCX, HTML, etc.)
+    "unstructured-ingest>=1.2.32,<2.0.0",       # Ingestion utilities
     "pymupdf==1.26.4",                   # PDF rendering/text extraction
     "python-docx==1.2.0",                # DOCX parsing
     "pillow>=11.0.0,<12.0.0",            # Image handling
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
-    "spacy==3.8.7",                      # NLP pipeline
+    "spacy>=3.8.7,<4.0.0",               # NLP pipeline
     # ML/LLM Fundamentals
-    "torch==2.7.0",                      # PyTorch runtime (vLLM<0.10 compat)
-    "transformers>=4.53.1,<4.54.0",      # HF model interfaces (ColPali compat)
+    "torch==2.7.1",                      # PyTorch runtime (vLLM 0.10.x compat)
+    "transformers>=4.55.0,<4.58.0",      # HF model interfaces (vLLM 0.10.x + ColPali compat)
     "tiktoken==0.11.0",                  # Tokenization utilities
-    "openai>=1.98.0,<2.0.0",             # OpenAI API client
+    "openai>=1.109.1,<2.0.0",            # OpenAI API client
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
     "ollama==0.5.3",                     # Ollama client
-    "llama-cpp-python>=0.3.0,<0.4.0",   # llama.cpp bindings (CPU variant)
+    "llama-cpp-python>=0.3.16,<0.4.0",   # llama.cpp bindings (CPU variant)
     # Vector Databases & Clients
-    "qdrant-client==1.15.1",             # Qdrant client
+    "qdrant-client>=1.15.1,<2.0.0",      # Qdrant client
     # LlamaIndex (meta + selected integrations)
-    "llama-index>=0.13.4,<0.14.0",
-    "llama-index-vector-stores-qdrant",
-    "llama-index-vector-stores-duckdb>=0.5.0,<0.6.0", # DuckDB vector-store
-    "llama-index-storage-kvstore-duckdb>=0.2.0", # DuckDB KV store (cache)
-    "llama-index-llms-vllm",
-    "llama-index-llms-openai",
-    "llama-index-llms-ollama",
-    "llama-index-llms-llama-cpp",
-    "llama-index-llms-openai-like",
-    "llama-index-embeddings-huggingface",
-    "llama-index-embeddings-clip",
-    "llama-index-embeddings-fastembed",
-    "llama-index-embeddings-openai",
-    "llama-index-readers-file",
+    "llama-index>=0.14.12,<0.15.0",
+    "llama-index-vector-stores-qdrant>=0.9.0,<0.10.0",
+    "llama-index-vector-stores-duckdb>=0.5.1,<0.6.0",  # DuckDB vector-store
+    "llama-index-storage-kvstore-duckdb>=0.2.1,<0.3.0",  # DuckDB KV store (cache)
+    "llama-index-llms-vllm>=0.6.1,<0.7.0",
+    "llama-index-llms-openai>=0.6.12,<0.7.0",
+    "llama-index-llms-ollama>=0.9.1,<1.0.0",
+    "llama-index-llms-llama-cpp>=0.5.1,<0.6.0",
+    "llama-index-llms-openai-like>=0.5.1,<0.6.0",
+    "llama-index-embeddings-huggingface>=0.6.1,<0.7.0",
+    "llama-index-embeddings-clip>=0.5.1,<0.6.0",
+    "llama-index-embeddings-fastembed>=0.5.0,<0.6.0",
+    "llama-index-embeddings-openai>=0.5.1,<0.6.0",
+    "llama-index-readers-file>=0.5.6,<0.6.0",
     # Agentic Orchestration
-    "langgraph>=0.6.6",                  # Graph-based orchestration
-    "langgraph-supervisor>=0.0.29",      # Multi-agent supervisor
-    "langchain-core>=0.3.75",            # Shared interfaces
-    "langchain-openai>=0.3.32",          # LangChain OpenAI bindings
+    "langgraph>=1.0.5,<2.0.0",           # Graph-based orchestration
+    "langgraph-supervisor>=0.0.31,<0.1.0",  # Multi-agent supervisor
+    "langchain-core>=1.2.6,<2.0.0",      # Shared interfaces
+    "langchain-openai>=1.1.6,<2.0.0",    # LangChain OpenAI bindings
     # Retrieval & Reranking Extras
-    "FlagEmbedding>=1.3.5",              # BGE-M3 unified embeddings
-    "sentence-transformers>=5.1.0",      # CrossEncoder reranking
+    "FlagEmbedding>=1.3.5,<2.0.0",       # BGE-M3 unified embeddings
+    "sentence-transformers>=5.2.0,<6.0.0",  # CrossEncoder reranking
     # Prompt Optimization
-    "dspy-ai>=2.5.0",                    # DSPy optimizer
-    "pyyaml>=6.0",                       # YAML parser for prompt templates
+    "dspy-ai>=3.1.0,<4.0.0",             # DSPy optimizer
+    "pyyaml>=6.0.3,<7.0.0",              # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
-    "duckdb>=0.10.0",                    # DuckDB engine
+    # Keep <1.4.0 because llama-index DuckDB integrations currently cap DuckDB <1.4.0.
+    "duckdb>=1.3.2,<1.4.0",              # DuckDB engine
     # Analytics & Visualization
     "pandas>=2.2,<3.0",                 # DataFrames (required by DuckDB .df())
     "plotly>=5.22,<6.0",                # Streamlit charts (px/go)
     # Observability
-    "opentelemetry-sdk>=1.28.2",         # OTEL tracing/metrics SDK
-    "opentelemetry-exporter-otlp-proto-http>=1.28.2",  # OTLP HTTP exporters
-    "opentelemetry-exporter-otlp-proto-grpc>=1.28.2",  # OTLP gRPC exporters
-    "portalocker>=3.2.0",                # Cross-platform snapshot locking
-    # Testing Support (runtime-level perf/property tests if invoked)
-    "pytest-benchmark>=5.1.0",           # Benchmark harness
-    "hypothesis>=6.137.2",               # Property-based tests
-    # Transitive dep override: 3.14.0 was yanked for debugpy crash
-    "rapidfuzz>=3.14.1",                 # Avoid yanked 3.14.0
+    "opentelemetry-sdk>=1.39.1,<2.0.0",  # OTEL tracing/metrics SDK
+    "opentelemetry-exporter-otlp-proto-http>=1.39.1,<2.0.0",  # OTLP HTTP exporters
+    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1,<2.0.0",  # OTLP gRPC exporters
+    "portalocker>=3.2.0,<4.0.0",         # Cross-platform snapshot locking
 ]
 
+# Optional runtime features published as extras (PEP 621).
 [project.optional-dependencies]
 gpu = [
-    "fastembed-gpu>=0.7.0",               # GPU-accelerated embeddings
-    # vLLM pinned below 0.10 to avoid hard transformers>=4.55 requirement
-    # Ensures compatibility with ColPali (transformers <4.54)
-    "vllm>=0.6.3,<0.10.0",
+    "fastembed-gpu>=0.7.4,<0.8.0",        # GPU-accelerated embeddings
+    # vLLM pinned to 0.10.x to stay on the Torch 2.7.x line (vLLM 0.11.x moves
+    # to Torch 2.8; newer vLLM versions move further).
+    "vllm>=0.10.1,<0.11.0",
     # FlashInfer runtime pinned explicitly (older vLLM may not expose [flashinfer] extra)
-    "flashinfer-python>=0.2.11",
+    "flashinfer-python>=0.5.3,<0.6.0",
     # Build tools for GPU libraries
     "ninja>=1.11.1",                      # Build acceleration
     "cmake>=3.26.4",                      # Required for CUDA builds
 ]
 llama = [
-    "llama-index-core>=0.13.4,<0.14.0",    # Core llama-index dependency
-]
-test = [
-    "pytest>=8.1,<9",
-    "pytest-asyncio>=1.1.0",
-    "pytest-cov>=6.2.0",
-    "pytest-mock>=3.14.0",
-    "pytest-benchmark>=5.0.0",
-    "hypothesis>=6.137.1",
-    "pytest-timeout>=2.3.1",
+    "llama-index-core>=0.14.12,<0.15.0",    # Core llama-index dependency
 ]
 graph = [
-    "llama-index-graph-stores-kuzu>=0.9.0,<1.0.0",
-    "kuzu>=0.10.0",
+    "llama-index-graph-stores-kuzu>=0.9.1,<1.0.0",
+    "kuzu>=0.11.3,<1.0.0",
 ]
 observability = [
-    "opentelemetry-sdk>=1.28.2",
-    "opentelemetry-exporter-otlp-proto-http>=1.28.2",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.28.2",
-    "portalocker>=3.2.0",
-    "llama-index-observability-otel>=0.2.1",
+    "opentelemetry-sdk>=1.39.1,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.39.1,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1,<2.0.0",
+    "portalocker>=3.2.0,<4.0.0",
+    "llama-index-observability-otel>=0.2.1,<0.3.0",
 ]
 multimodal = [
-    "llama-index-postprocessor-colpali-rerank==0.3.0",
-    "colpali-engine>=0.3.12",
+    "llama-index-postprocessor-colpali-rerank==0.3.1",
+    "colpali-engine>=0.3.13,<0.4.0",
 ]
 eval = [
     "ragas>=0.2.10,<0.4.0",              # RAG evaluation toolkit (Pydantic v2 compatible)
@@ -142,13 +129,17 @@ Repository = "https://github.com/BjornMelin/docmind-ai"
 Documentation = "https://github.com/BjornMelin/docmind-ai-llm/tree/main/docs"
 "GPU Setup Guide" = "https://github.com/BjornMelin/docmind-ai-llm/blob/main/docs/developers/gpu-setup.md"
 
+[tool.uv]
+# Transitive dep override: rapidfuzz 3.14.0 was yanked for a debugpy crash; keep resolver away.
+constraint-dependencies = ["rapidfuzz>=3.14.1,<4.0.0"]
+
 
 
 [tool.docmind-ai]
 # CUDA Stack Requirements
 cuda_version = "12.8+"
 pytorch_version = "2.7.1"
-vllm_version = ">=0.9.1,<0.10.0"
+vllm_version = ">=0.10.1,<0.11.0"
 driver_version = "550.54.14+"
 
 # Hardware Requirements for Qwen3-4B-Instruct-2507-FP8
@@ -164,26 +155,27 @@ target_prefill_tps = [800, 1300]  # tokens per second
 # Installation Commands (documented in README.md)
 installation_notes = """
 Automated GPU Installation:
-uv sync --extra gpu --index-strategy=unsafe-best-match
+uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 Manual Installation Steps (if needed):
 1. Install PyTorch with CUDA 12.8:
-   uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
 
-2. Install vLLM (GPU) + FlashInfer:
-   uv pip install "vllm>=0.9.1,<0.10.0" --extra-index-url https://download.pytorch.org/whl/cu128
-   uv pip install flashinfer-python>=0.2.11
+2. Install vLLM (GPU) + FlashInfer (mirror [project.optional-dependencies].gpu):
+   uv pip install "vllm>=0.10.1,<0.11.0" --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install "flashinfer-python>=0.5.3,<0.6.0"
 
-3. Install llama-cpp-python with CUDA:
-   uv pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu128
+3. Install llama-cpp-python with CUDA (CUDA-enabled variant of core dependency):
+   uv pip install "llama-cpp-python>=0.3.16,<0.4.0" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu128
 
-4. Install remaining GPU dependencies:
-   uv pip install fastembed-gpu>=0.7.0
+4. Install remaining GPU dependencies (mirror [project.optional-dependencies].gpu):
+   uv pip install "fastembed-gpu>=0.7.4,<0.8.0"
 """
 
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+extend-exclude = ["opensrc"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D", "RUF"]
@@ -316,29 +308,31 @@ markers = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
+# Development-only dependency groups (PEP 735); not published as package metadata.
 [dependency-groups]
 dev = [
-    "ruff==0.13.0",
-    "pytest==8.3.1",
-    "pytest-cov>=6.2.1",
-    "pytest-asyncio>=1.1.0",
-    "pytest-benchmark>=5.0.0",
-    "hypothesis>=6.137.1",
-    "bandit>=1.8.6",
-    "mypy>=1.17.1",
+    "ruff>=0.13.0,<0.14.0",
+    "pylint>=3.3.8,<3.4.0",
+    "pyright[nodejs]>=1.1.407,<1.2.0",
+    "pytest>=8.3.1,<9.0.0",
+    "pytest-asyncio>=1.3.0,<2.0.0",
+    "pytest-cov>=7.0.0,<8.0.0",
+    "pytest-benchmark>=5.2.3,<6.0.0",
+    "hypothesis>=6.150.0,<7.0.0",
+    "bandit>=1.8.6,<2.0.0",
+    "mypy>=1.19.1,<2.0.0",
     "pytest-mock>=3.14.1",
     "responses>=0.25.8",
     "pytest-httpx>=0.35.0",
     "testcontainers>=4.12.0",
     "coverage-badge>=1.1.2",
-    "pylint==3.3.8",
     "tomli>=2.2.1",
 ]
 test = [
-    "pytest==8.3.1",
-    "pytest-asyncio>=1.1.0",
-    "pytest-cov>=6.2.1",
-    "moviepy==2.2.1",  # Only needed for video processing tests
+    "pytest>=8.3.1,<9.0.0",
+    "pytest-asyncio>=1.3.0,<2.0.0",
+    "pytest-cov>=7.0.0,<8.0.0",
+    "moviepy>=2.2.1,<3.0.0",  # Only needed for video processing tests
 ]
 performance = [
     "numba>=0.61.0",  # Optional JIT compilation for performance

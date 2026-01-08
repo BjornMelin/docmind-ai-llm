@@ -15,7 +15,7 @@ import os
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llama_index.core import Document
 from llama_index.core.extractors import TitleExtractor
@@ -23,18 +23,17 @@ from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
+from opentelemetry import trace
 
 try:
     from llama_index.readers.file import UnstructuredReader
 except ImportError:  # pragma: no cover - optional dependency
     UnstructuredReader = None  # type: ignore
 
-try:
-    from llama_index.core.base.embeddings.base import BaseEmbedding
-except ImportError:  # pragma: no cover - optional dependency
-    BaseEmbedding = Any  # type: ignore
-
-from opentelemetry import trace
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.readers.file import UnstructuredReader as ReaderType
+else:
+    ReaderType = Any
 
 from src.config import settings as app_settings
 from src.config import setup_llamaindex
@@ -48,6 +47,11 @@ from src.models.processing import (
 )
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.processing.pdf_pages import save_pdf_page_images
+
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.core.base.embeddings.base import BaseEmbedding
+else:
+    BaseEmbedding = Any
 
 _TRACER = trace.get_tracer("docmind.ingestion")
 logger = logging.getLogger(__name__)
@@ -177,7 +181,7 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
 
 
 def _document_from_input(
-    reader: UnstructuredReader | None, item: IngestionInput
+    reader: ReaderType | None, item: IngestionInput
 ) -> list[Document]:
     """Convert an ingestion input into LlamaIndex ``Document`` objects.
 
@@ -190,9 +194,10 @@ def _document_from_input(
     """
     if item.source_path is not None and reader is not None:
         try:
+            source_path = Path(item.source_path)
             docs = reader.load_data(  # type: ignore[call-arg]
-                file=str(item.source_path),
-                unstructured_kwargs={"filename": str(item.source_path)},
+                file=source_path,
+                unstructured_kwargs={"filename": str(source_path)},
             )
         except (
             TypeError,
@@ -338,7 +343,7 @@ async def ingest_documents(
         nodes = await pipeline.arun(documents=documents)
     duration_ms = (time.perf_counter() - start) * 1000.0
 
-    if docstore_path is not None:
+    if docstore_path is not None and pipeline.docstore is not None:
         pipeline.docstore.persist(str(docstore_path))
 
     corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
@@ -362,7 +367,7 @@ async def ingest_documents(
     }
 
     return IngestionResult(
-        nodes=nodes,
+        nodes=list(nodes),
         documents=documents,
         manifest=manifest,
         exports=exports,

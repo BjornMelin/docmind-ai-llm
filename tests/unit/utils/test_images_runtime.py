@@ -20,10 +20,12 @@ def _install_pil(monkeypatch: pytest.MonkeyPatch, opener):
 
 
 def test_open_image_encrypted_plaintext(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify plaintext images open without decryption."""
     opened = {}
 
     @contextmanager
     def fake_open(path: str):
+        """Stub image opener."""
         opened["path"] = path
         yield SimpleNamespace(path=path)
 
@@ -35,18 +37,28 @@ def test_open_image_encrypted_plaintext(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_open_image_encrypted_with_decrypt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify encrypted images are decrypted and temporary file is removed."""
     removed = []
 
     @contextmanager
     def fake_open(path: str):
+        """Stub image opener."""
         yield SimpleNamespace(path=path)
+
+    def _decrypt_file(path: str) -> str:
+        """Stub decryption function."""
+        return "decrypted.png"
+
+    def _remove_file(path: str) -> None:
+        """Record file removal."""
+        removed.append(path)
 
     _install_pil(monkeypatch, fake_open)
 
     sec_mod = ModuleType("src.utils.security")
-    sec_mod.decrypt_file = lambda path: "decrypted.png"
+    sec_mod.decrypt_file = _decrypt_file
     monkeypatch.setitem(sys.modules, "src.utils.security", sec_mod)
-    monkeypatch.setattr("src.utils.images.os.remove", lambda path: removed.append(path))
+    monkeypatch.setattr("src.utils.images.os.remove", _remove_file)
 
     with open_image_encrypted("sample.png.enc") as handle:
         assert handle.path == "decrypted.png"
@@ -56,8 +68,11 @@ def test_open_image_encrypted_with_decrypt(monkeypatch: pytest.MonkeyPatch) -> N
 def test_open_image_encrypted_missing_decryptor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify encrypted images open as-is when decryption is unavailable."""
+
     @contextmanager
     def fake_open(path: str):
+        """Stub image opener."""
         yield SimpleNamespace(path=path)
 
     _install_pil(monkeypatch, fake_open)

@@ -193,6 +193,7 @@ docs/specs/.archived/
 docs/specs/prompts/
 all-specs-adrs.xml
 .cursorignore
+opensrc/
 
 # Snapshot persistence artifacts
 storage/

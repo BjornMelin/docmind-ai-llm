@@ -20,7 +20,7 @@ Notes:
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -276,13 +276,14 @@ class TextEmbedder:
 
 
 # ===== Images: OpenCLIP / SigLIP (tiered) =====
-_BackboneName = Literal[
+BackboneName = Literal[
     "auto",
     "openclip_vitl14",
     "openclip_vith14",
     "siglip_base",
     "bge_visualized",
 ]
+_BackboneName = BackboneName
 
 
 class ImageEmbedder:
@@ -298,7 +299,7 @@ class ImageEmbedder:
     def __init__(
         self,
         *,
-        backbone: _BackboneName = "auto",
+        backbone: BackboneName = "auto",
         device: str | None = None,
         default_batch_size: int = 8,
         seed: int = 42,
@@ -321,7 +322,7 @@ class ImageEmbedder:
         self._dim: int | None = None
 
     # --- Backend loading helpers ---
-    def _choose_auto_backbone(self) -> _BackboneName:
+    def _choose_auto_backbone(self) -> BackboneName:
         # Centralized device/VRAM policy via src.utils.core
         if self.device == "cpu" or TORCH is None or not getattr(TORCH, "cuda", None):
             return "openclip_vitl14"
@@ -377,24 +378,6 @@ class ImageEmbedder:
         except (AttributeError, ValueError, TypeError):  # pragma: no cover
             dim = None
 
-        # Fallback probe: pass a single dummy image through encode_image
-        if dim is None and TORCH is not None:  # pragma: no cover - heavy path
-            try:
-                from PIL import Image as _PilImage  # type: ignore
-
-                dummy = _PilImage.fromarray(np.zeros((224, 224, 3), dtype=np.uint8))
-                t = self._preprocess(dummy) if callable(self._preprocess) else None
-                if t is not None:
-                    if self.device == "cuda":
-                        t = t.to("cuda")
-                    elif self.device == "mps":
-                        t = t.to("mps")
-                    with TORCH.no_grad():
-                        f = model.encode_image(t.unsqueeze(0))
-                        dim = int(f.shape[-1])
-            except (RuntimeError, ValueError, TypeError):
-                dim = None
-
         self._dim = dim or (1024 if ("H-14" in model_name) else 768)
 
     def _load_siglip(self) -> None:
@@ -424,7 +407,7 @@ class ImageEmbedder:
         model_id = "google/siglip-base-patch16-224"
         model = SiglipModel.from_pretrained(model_id, device_map=None)
         if self.device in ("cuda", "mps"):
-            model = model.to(self.device)
+            model = cast(Any, model).to(self.device)
         processor = SiglipProcessor.from_pretrained(model_id)
         self._backend = model
         self._preprocess = processor
@@ -436,7 +419,7 @@ class ImageEmbedder:
             "Enable explicitly with proper GPUs and dependencies."
         )
 
-    def _ensure_loaded(self, override: _BackboneName | None = None) -> None:
+    def _ensure_loaded(self, override: BackboneName | None = None) -> None:
         if self._backend is not None:
             return
         name = override or self.backbone or "auto"
@@ -459,7 +442,7 @@ class ImageEmbedder:
         self,
         images: list[Any],  # PIL.Image.Image or array-like
         *,
-        backbone: _BackboneName | None = None,
+        backbone: BackboneName | None = None,
         batch_size: int | None = None,
         normalize: bool = True,
         device: str | None = None,
@@ -489,15 +472,20 @@ class ImageEmbedder:
         bs = int(batch_size or self.default_batch_size)
         feats: list[np.ndarray] = []
 
+        backend = self._backend
+        preprocess = self._preprocess
+
         # OpenCLIP path exposes a torchvision-like preprocess
         if (
-            self._preprocess
-            and callable(self._preprocess)
-            and hasattr(self._backend, "encode_image")
+            backend is not None
+            and preprocess is not None
+            and callable(preprocess)
+            and hasattr(backend, "encode_image")
         ):
+            backend_any = cast(Any, backend)
             for i in range(0, len(images), bs):
                 batch = images[i : i + bs]
-                tensors = [self._preprocess(img) for img in batch]
+                tensors = [cast(Any, preprocess)(img) for img in batch]
                 # Stack to [B, C, H, W]
                 if TORCH is None:  # pragma: no cover - explicit failure in prod
                     raise RuntimeError(
@@ -509,7 +497,7 @@ class ImageEmbedder:
                 elif self.device == "mps":
                     x = x.to("mps")
                 with TORCH.no_grad():
-                    f = self._backend.encode_image(x)
+                    f = backend_any.encode_image(x)
                     f = f / f.norm(dim=-1, keepdim=True) if normalize else f
                     feats.append(f.detach().cpu().numpy().astype(np.float32))
 
@@ -520,9 +508,14 @@ class ImageEmbedder:
             )
 
         # SigLIP path via HF processors
-        if self._preprocess and hasattr(self._backend, "get_image_features"):
+        if (
+            backend is not None
+            and preprocess is not None
+            and hasattr(backend, "get_image_features")
+        ):
+            backend_any = cast(Any, backend)
             # Processor returns dict with pixel_values
-            proc = self._preprocess
+            proc = cast(Any, preprocess)
             out_list: list[np.ndarray] = []
             for i in range(0, len(images), bs):
                 batch = images[i : i + bs]
@@ -530,14 +523,16 @@ class ImageEmbedder:
                     raise RuntimeError(
                         "SigLIP image feature extraction requires torch."
                     )
-                inputs = proc(images=batch, return_tensors="pt")
+                inputs = cast(dict[str, Any], proc(images=batch, return_tensors="pt"))
                 pix = inputs.get("pixel_values")
+                if pix is None:  # pragma: no cover - defensive
+                    raise RuntimeError("SigLIP processor returned no pixel_values")
                 if self.device == "cuda":
                     pix = pix.to("cuda")
                 elif self.device == "mps":
                     pix = pix.to("mps")
                 with TORCH.no_grad():
-                    f = self._backend.get_image_features(pixel_values=pix)
+                    f = backend_any.get_image_features(pixel_values=pix)
                     if normalize:
                         f = f / f.norm(dim=-1, keepdim=True)
                     out_list.append(f.detach().cpu().numpy().astype(np.float32))

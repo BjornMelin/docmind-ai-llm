@@ -725,9 +725,13 @@ DocMind AI implements a comprehensive three-tier testing strategy:
 
 ### Testing Framework Setup
 
+Testing dependencies are managed as dependency groups (`[dependency-groups]`, PEP 735).
+Optional runtime features stay in `project.optional-dependencies` (PEP 621) and are installed
+with `--extra` when needed.
+
 ```bash
 # Install test dependencies
-uv sync --extra test
+uv sync --group test
 
 # Run tests by tier
 pytest tests/unit/ -v                    # Tier 1: Fast unit tests (<5s each)

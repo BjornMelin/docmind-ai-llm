@@ -237,19 +237,20 @@
    nvcc --version  # Should show CUDA 12.8+
    nvidia-smi     # Verify RTX 4090 detection
 
-   # Phase 2: Install PyTorch 2.7.1 with CUDA 12.8 (DEFINITIVE - TESTED APPROACH)
+   # Phase 2: Install PyTorch 2.7.1 with CUDA 12.8 (recommended for this repo)
    uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
        --extra-index-url https://download.pytorch.org/whl/cu128
 
-   # Phase 3: Install vLLM with FlashInfer support (includes FlashInfer automatically)
-   uv pip install "vllm[flashinfer]>=0.10.1" \
+   # Phase 3: Install vLLM 0.10.x + FlashInfer (this repo pins vLLM <0.11)
+   uv pip install "vllm>=0.10.1,<0.11.0" \
        --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install "flashinfer-python>=0.5.3,<0.6.0"
 
    # Phase 4: Install remaining GPU dependencies
-   uv sync --extra gpu
+	   uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
    
    # Phase 5: Verify installation
-   python -c "import vllm; import torch; print(f'vLLM: {vllm.__version__}, PyTorch: {torch.__version__}')"
+   uv run python -c "import vllm; import torch; print(f'vLLM: {vllm.__version__}, PyTorch: {torch.__version__}')"
    ```
 
    **Hardware Requirements:**
@@ -271,7 +272,7 @@
    uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
        --extra-index-url https://download.pytorch.org/whl/cu128
    uv pip install vllm --extra-index-url https://download.pytorch.org/whl/cu128
-   uv sync --extra gpu
+	   uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
    ```
 
    See [GPU Setup Guide](docs/developers/archived/gpu-setup.md) for detailed configuration and troubleshooting.
@@ -906,7 +907,7 @@ ollama serve
 ```bash
 
 # Install GPU dependencies
-uv sync --extra gpu
+uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Verify CUDA installation
 nvidia-smi
@@ -954,8 +955,9 @@ nvidia-smi     # Should show RTX 4090 and compatible driver
 uv pip uninstall torch torchvision torchaudio vllm flashinfer-python -y
 uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
     --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install "vllm[flashinfer]>=0.10.1" \
+uv pip install "vllm>=0.10.1,<0.11.0" \
     --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install "flashinfer-python>=0.5.3,<0.6.0"
 
 # Test FlashInfer availability
 python -c "import vllm; print('vLLM with FlashInfer imported successfully')"
@@ -963,15 +965,15 @@ python -c "import vllm; print('vLLM with FlashInfer imported successfully')"
 
 #### 7. PyTorch 2.7.1 Compatibility Issues
 
-**RESOLVED**: PyTorch 2.7.1 compatibility was confirmed in vLLM v0.10.0+ (July 2025). Current project uses vLLM>=0.10.1.
+This repo pins **vLLM 0.10.x** (and **PyTorch 2.7.1**) to keep a stable CUDA stack and avoid major vLLM/Torch jumps (vLLM 0.11.x moves to Torch 2.8).
 
 ```bash
 # Verify versions
-python -c "import torch; print(f'PyTorch: {torch.__version__}')"
-python -c "import vllm; print(f'vLLM: {vllm.__version__}')"
+uv run python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+uv run python -c "import vllm; print(f'vLLM: {vllm.__version__}')"
 
-# If using older vLLM, upgrade:
-uv pip install --upgrade "vllm[flashinfer]>=0.10.1"
+# If you intentionally move to newer vLLM versions, expect Torch/Transformers
+# constraints to change (e.g., vLLM 0.13.x requires Torch 2.9.0).
 ```
 
 #### 8. GPU Memory Issues (16GB RTX 4090)

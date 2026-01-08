@@ -32,12 +32,14 @@ def test_hybrid_rerank_injection_toggle(monkeypatch: pytest.MonkeyPatch) -> None
         "src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid, raising=False
     )
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_retriever_query_engine",
+        rf,
+        "build_retriever_query_engine",
         _fake_build_retriever_query_engine,
         raising=True,
     )
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_graph_query_engine",
+        rf,
+        "build_graph_query_engine",
         lambda *_a, **_k: SimpleNamespace(query_engine=SimpleNamespace()),
         raising=True,
     )

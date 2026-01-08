@@ -222,7 +222,7 @@ def _read_bytes(file_obj: Any) -> bytes:
             file_obj.seek(0)
     if not isinstance(data, (bytes, bytearray)):
         data = bytes(data)
-    return data
+    return bytes(data)
 
 
 __all__ = ["ingest_files", "save_uploaded_file"]

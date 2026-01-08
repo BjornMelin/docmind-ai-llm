@@ -17,21 +17,27 @@ class ToolRegistry(Protocol):
         self, overrides: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Return the ``tools_data`` payload injected into agent state."""
+        ...
 
     def get_router_tools(self) -> Sequence[Any]:
         """Return tool callables for the router agent."""
+        ...
 
     def get_planner_tools(self) -> Sequence[Any]:
         """Return tool callables for the planner agent."""
+        ...
 
     def get_retrieval_tools(self) -> Sequence[Any]:
         """Return tool callables for the retrieval agent."""
+        ...
 
     def get_synthesis_tools(self) -> Sequence[Any]:
         """Return tool callables for the synthesis agent."""
+        ...
 
     def get_validation_tools(self) -> Sequence[Any]:
         """Return tool callables for the validation agent."""
+        ...
 
 
 @dataclass(slots=True)

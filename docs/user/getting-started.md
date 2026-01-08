@@ -82,12 +82,12 @@ nvidia-smi  # Should show your GPU
 nvcc --version  # Should show CUDA 12.8+
 
 # Install GPU-optimized dependencies
-uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 \
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
     --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install "vllm>=0.9.1,<0.10.0" \
+uv pip install "vllm>=0.10.1,<0.11.0" \
     --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install flashinfer-python>=0.2.11
-uv sync --extra gpu
+uv pip install "flashinfer-python>=0.5.3,<0.6.0"
+uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 ```
 
 **Verify GPU setup:**
