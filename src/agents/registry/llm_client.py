@@ -37,7 +37,7 @@ class RetryLLMClient:
         max_backoff_seconds: float = 8.0,
         retryable_exceptions: tuple[type[BaseException], ...] = (
             TimeoutError,
-            OSError,
+            ConnectionError,
         ),
     ) -> None:
         """Instantiate the retry wrapper.
