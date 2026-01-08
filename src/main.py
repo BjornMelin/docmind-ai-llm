@@ -27,7 +27,7 @@ BASIC_VALIDATION_SCORE = 0.8
 class _DocumentProcessor(Protocol):
     async def process_document_async(self, file_path: Path) -> dict[str, Any]:
         """Process a document file asynchronously."""
-        raise NotImplementedError
+        ...
 
 
 class DocMindApplication:
