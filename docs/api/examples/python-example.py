@@ -248,7 +248,8 @@ if __name__ == "__main__":
     print("")
     print("Next steps:")
     print(
-        "1. Install dependencies: uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match"
+        "1. Install dependencies: uv sync --extra gpu --index "
+        "https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match"
     )
     print("2. Configure environment: cp .env.example .env")
     print("3. Start services: ollama serve")

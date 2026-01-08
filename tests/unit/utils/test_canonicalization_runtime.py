@@ -46,7 +46,10 @@ def _config() -> CanonicalizationConfig:
 
 
 def test_canonicalize_document_stable(tmp_path: Path) -> None:
-    """Verify canonicalization produces identical results regardless of metadata key order."""
+    """Verify canonicalization produces identical results.
+
+    Confirms stability regardless of metadata key order.
+    """
     content = b"Hello\nWorld"
     metadata_one = {"source": "web", "source_path": str(tmp_path / "a.txt")}
     metadata_two = {"source_path": str(tmp_path / "a.txt"), "source": "web"}
