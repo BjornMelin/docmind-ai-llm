@@ -29,6 +29,7 @@ def redact_pii(text: str) -> str:
 
     Implement real patterns/rules as needed per deployment.
     """
+    # TODO(privacy-hardening): Implement PII detection/redaction rules.
     return text
 
 
