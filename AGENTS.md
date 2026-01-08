@@ -19,7 +19,7 @@ with the current codebase, pyproject.toml, scripts, and docs/specs/ADRs.
 - `docs/specs/` and `docs/developers/adrs/`: specs and ADRs
 - `scripts/`, `tools/`: run and utility scripts (tests, performance, model pull)
 
-```
+```text
 /
 |-- src/
 |   |-- agents/
@@ -47,7 +47,7 @@ with the current codebase, pyproject.toml, scripts, and docs/specs/ADRs.
 - Setup: `uv sync && cp .env.example .env`
 - Run app: `streamlit run src/app.py`
 - Run app with port env: `./scripts/run_app.sh`
-- Lint/format: `ruff format . && ruff check . --fix && uv run pylint --fail-under=9.5 $(fd -e py src tests scripts)`
+- Lint/format: `ruff format . && ruff check . --fix && uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 - Tests (fast tier): `uv run python scripts/run_tests.py --fast`
 - Tests (all): `uv run python scripts/run_tests.py`
 - Coverage: `uv run python scripts/run_tests.py --coverage`

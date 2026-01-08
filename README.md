@@ -153,20 +153,20 @@ Design goals:
 
 3. **Install spaCy language model:**
 
-spaCy is bundled for optional NLP/GraphRAG workflows. Install a language model if you plan to use spaCy-based extraction:
+   spaCy is bundled for optional NLP/GraphRAG workflows. Install a language model if you plan to use spaCy-based extraction:
 
-```bash
-# Install the small English model (recommended, ~15MB)
-uv run python -m spacy download en_core_web_sm
+   ```bash
+   # Install the small English model (recommended, ~15MB)
+   uv run python -m spacy download en_core_web_sm
 
-# Optional: Install larger models for better accuracy
-# Medium model (~50MB): uv run python -m spacy download en_core_web_md
-# Large model (~560MB): uv run python -m spacy download en_core_web_lg
-```
+   # Optional: Install larger models for better accuracy
+   # Medium model (~50MB): uv run python -m spacy download en_core_web_md
+   # Large model (~560MB): uv run python -m spacy download en_core_web_lg
+   ```
 
-**Note:** spaCy models are downloaded and cached locally. The app does not auto-download models; install them explicitly for offline use.
+   **Note:** spaCy models are downloaded and cached locally. The app does not auto-download models; install them explicitly for offline use.
 
-1. **Set up environment configuration:**
+4. **Set up environment configuration:**
 
    Copy the example environment file and configure your settings:
 
@@ -213,7 +213,7 @@ uv run python -m spacy download en_core_web_sm
 
    For a complete overview (including a Local vs Cloud matrix), see `docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
 
-2. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
+5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
 
    **RECOMMENDED: vLLM FlashInfer Stack** for Qwen3-4B-Instruct-2507-FP8 with 128K context:
 
@@ -259,7 +259,7 @@ uv run python -m spacy download en_core_web_sm
    uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
    ```
 
-   See [GPU Setup Guide](docs/developers/archived/gpu-setup.md) for detailed configuration and troubleshooting.
+   See [GPU Setup Guide](docs/developers/hardware_policy.md) for detailed configuration and troubleshooting.
 
 ### Running the App
 
@@ -841,7 +841,7 @@ Contributions are welcome! Please follow these steps:
    ```bash
    # Lint & format
    ruff format . && ruff check . --fix
-   uv run pylint --fail-under=9.5 $(fd -e py src tests scripts)
+   uv run pylint --fail-under=9.5 src/ tests/ scripts/
 
    # Fast tiered validation (unit + integration)
    uv run python scripts/run_tests.py --fast
