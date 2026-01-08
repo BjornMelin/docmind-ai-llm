@@ -99,6 +99,16 @@ class DocMindApplication:
             if use_agents and self.agent_coordinator:
                 # Use multi-agent coordination
                 logger.info("Processing query with multi-agent system")
+                if context is not None and not isinstance(context, ChatMemoryBuffer):
+                    ctx_keys = (
+                        list(context.keys()) if isinstance(context, dict) else None
+                    )
+                    logger.warning(
+                        "Multi-agent mode requires ChatMemoryBuffer context; "
+                        "%s context was provided and will be ignored%s",
+                        type(context).__name__,
+                        f" (keys={ctx_keys})" if ctx_keys else "",
+                    )
                 memory_context = (
                     context if isinstance(context, ChatMemoryBuffer) else None
                 )

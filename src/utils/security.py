@@ -17,7 +17,10 @@ from typing import Any
 try:  # pragma: no cover - optional dependency
     from cryptography.exceptions import InvalidTag as InvalidTagError  # type: ignore
 except ImportError:
-    InvalidTagError = Exception  # type: ignore[assignment]
+
+    class InvalidTagError(Exception):  # type: ignore[no-redef]
+        """Fallback when cryptography is unavailable."""
+
 
 _ALG = "AES-256-GCM"
 _ENV_KEY = "DOCMIND_IMG_AES_KEY_BASE64"
