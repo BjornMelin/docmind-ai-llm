@@ -92,28 +92,28 @@ class RetryLlamaIndexLLM:
         for attempt in self._sync_retry():
             with attempt:
                 return self.inner.complete(prompt, **kwargs)
-        raise RuntimeError("Retry loop failed to return a result")
+        # Unreachable: reraise=True propagates the last exception.
 
     async def acomplete(self, prompt: str, **kwargs: Any) -> Any:
         """Call ``inner.acomplete`` with retry semantics."""
         async for attempt in self._async_retry():
             with attempt:
                 return await self.inner.acomplete(prompt, **kwargs)
-        raise RuntimeError("Async retry loop failed to return a result")
+        # Unreachable: reraise=True propagates the last exception.
 
     def chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> Any:
         """Call ``inner.chat`` with retry semantics."""
         for attempt in self._sync_retry():
             with attempt:
                 return self.inner.chat(messages, **kwargs)
-        raise RuntimeError("Retry loop failed to return a result")
+        # Unreachable: reraise=True propagates the last exception.
 
     async def achat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> Any:
         """Call ``inner.achat`` with retry semantics."""
         async for attempt in self._async_retry():
             with attempt:
                 return await self.inner.achat(messages, **kwargs)
-        raise RuntimeError("Async retry loop failed to return a result")
+        # Unreachable: reraise=True propagates the last exception.
 
     def stream_complete(self, prompt: str, **kwargs: Any) -> Any:
         """Delegate to ``inner.stream_complete`` (no retries)."""

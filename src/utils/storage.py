@@ -596,6 +596,7 @@ def persist_image_metadata(
         system errors.
     """
     try:
+        # qdrant-client 1.15.x exposes update_payload (deprecated); 1.16.0+ uses set_payload.
         update_payload = getattr(client, "update_payload", None)
         if callable(update_payload):
             cast(Any, update_payload)(
