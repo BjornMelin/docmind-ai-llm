@@ -10,7 +10,8 @@ APIs are intentionally generic to support upcoming OCR stages and cache layers.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any, cast
+from typing import Any
+from weakref import WeakKeyDictionary
 
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.schema import TransformComponent
@@ -25,6 +26,8 @@ DocstoreFactory = Callable[[], BaseDocumentStore | None]
 
 class PipelineBuilder:
     """Construct ingestion pipelines using dependency injection."""
+
+    _pipeline_metadata: WeakKeyDictionary[object, dict[str, Any]] = WeakKeyDictionary()
 
     def __init__(
         self,
@@ -71,10 +74,9 @@ class PipelineBuilder:
             cache=cache,
             docstore=docstore,
         )
-        # Attach pipeline metadata for debugging/telemetry. This is a dynamic
-        # attribute (not part of the public LlamaIndex API); LlamaIndex does not
-        # use it directly but keeping reference simplifies validation/tests.
-        cast(Any, pipeline).docmind_metadata = self._metadata | {
+        # Attach pipeline metadata for debugging/telemetry without mutating
+        # LlamaIndex objects; use a weak registry to avoid leaks.
+        PipelineBuilder._pipeline_metadata[pipeline] = self._metadata | {
             "strategy": strategy.value,
         }
         return pipeline

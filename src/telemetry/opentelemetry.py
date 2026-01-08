@@ -18,7 +18,7 @@ try:  # pragma: no cover - optional dependency
     _otel_mod = importlib.import_module("llama_index.observability.otel")
     LlamaIndexOpenTelemetry = cast(Any, _otel_mod.LlamaIndexOpenTelemetry)
 except (ImportError, AttributeError):
-    LlamaIndexOpenTelemetry = cast(Any, None)
+    LlamaIndexOpenTelemetry = None
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider

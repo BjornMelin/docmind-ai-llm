@@ -48,6 +48,9 @@ def test_pipeline_builder_composes_factories(monkeypatch):
     ]
     assert pipeline.cache.kind == "cache"
     assert pipeline.docstore.kind == "docstore"
-    assert pipeline.docmind_metadata == {"unit": "test", "strategy": "fast"}
+    assert PipelineBuilder._pipeline_metadata[pipeline] == {
+        "unit": "test",
+        "strategy": "fast",
+    }
     # Ensure factory outputs captured by stub
     assert recorded["cache"].strategy == "fast"
