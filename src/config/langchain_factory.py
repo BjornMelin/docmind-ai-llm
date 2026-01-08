@@ -22,6 +22,8 @@ def build_chat_model(cfg: DocMindSettings) -> ChatOpenAI:
     For Ollama, we assume an OpenAI-compatible endpoint is available at ``/v1``.
     """
     model_name = cfg.model or cfg.vllm.model
+    if not model_name:
+        raise ValueError("No model name configured for LangChain model")
     timeout_s = float(
         getattr(cfg, "llm_request_timeout_seconds", cfg.ui.request_timeout_seconds)
     )
@@ -34,7 +36,7 @@ def build_chat_model(cfg: DocMindSettings) -> ChatOpenAI:
 
     return ChatOpenAI(
         model=model_name,
-        api_key=(lambda: (cfg.openai.api_key or "not-needed")),
+        api_key=cfg.openai.api_key or "not-needed",
         base_url=base_url,
         timeout=timeout_s,
         max_retries=int(cfg.agents.max_retries),

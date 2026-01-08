@@ -235,7 +235,8 @@ class MultiAgentCoordinator:
                     "Please ensure LlamaIndex Settings are initialized."
                 )
 
-            # LangGraph requires a LangChain-compatible model runnable.
+            # LangGraph requires a LangChain-compatible model runnable; keep it
+            # separate from the LlamaIndex LLM used by DSPy.
             base_chat_model = build_chat_model(settings)
             # ChatOpenAI already supports built-in retries via `max_retries`.
             self.llm = base_chat_model
@@ -690,6 +691,11 @@ class MultiAgentCoordinator:
 
             if result is not None:
                 return result
+            logger.warning(
+                "Agent workflow produced no result; returning initial state "
+                "(thread_id=%s)",
+                thread_id,
+            )
             return initial_state.model_dump()
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:

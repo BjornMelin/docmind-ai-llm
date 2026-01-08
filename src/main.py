@@ -184,6 +184,7 @@ class DocMindApplication:
             if process_async:
                 result = await self.document_processor.process_document_async(file_path)
             else:
+                # TODO(Phase 2): Add sync processing path when process_async is False.
                 result = await self.document_processor.process_document_async(file_path)
 
             logger.info("Document ingested successfully: %s", file_path)

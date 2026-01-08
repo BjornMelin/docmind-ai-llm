@@ -8,15 +8,13 @@ development/testing.
 
 from __future__ import annotations
 
+import importlib
 import os
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from importlib import metadata
 from typing import Any, cast
 
 try:  # pragma: no cover - optional dependency
-    import importlib
-
     _otel_mod = importlib.import_module("llama_index.observability.otel")
     LlamaIndexOpenTelemetry = cast(Any, _otel_mod.LlamaIndexOpenTelemetry)
 except (ImportError, AttributeError):
@@ -343,8 +341,8 @@ def _build_resource(app_settings: DocMindSettings) -> Resource:
     attributes: dict[str, Any] = {
         "service.name": obs.service_name,
     }
-    with suppress(metadata.PackageNotFoundError):
-        attributes["service.version"] = metadata.version("docmind_ai_llm")
+    with suppress(importlib.metadata.PackageNotFoundError):
+        attributes["service.version"] = importlib.metadata.version("docmind_ai_llm")
     if environment := os.getenv("DOCMIND_ENVIRONMENT"):
         attributes["deployment.environment"] = environment
     return Resource.create(attributes)

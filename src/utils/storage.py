@@ -596,15 +596,11 @@ def persist_image_metadata(
         system errors.
     """
     try:
-        if hasattr(client, "set_payload"):
-            client.set_payload(
-                collection_name=collection_name,
-                points=[point_id],
-                payload=metadata,
-            )
-        else:
-            # Older qdrant-client versions expose `update_payload`.
-            client.update_payload(collection_name, [point_id], metadata)  # type: ignore[attr-defined]
+        client.set_payload(
+            collection_name=collection_name,
+            points=[point_id],
+            payload=metadata,
+        )
         return True
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
         logger.warning("persist_image_metadata failed for %s: %s", point_id, exc)

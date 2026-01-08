@@ -16,8 +16,8 @@ import pytest
 @pytest.mark.integration
 @pytest.mark.retrieval
 def test_qdrant_prefetch_fusionquery_telemetry(
-    monkeypatch,  # type: ignore[no-untyped-def]
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify hybrid retrieval emits correct telemetry with Qdrant prefetch."""
     hmod = importlib.import_module("src.retrieval.hybrid")
 

@@ -30,6 +30,11 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     UnstructuredReader = None  # type: ignore
 
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.readers.file import UnstructuredReader as ReaderType
+else:
+    ReaderType = Any
+
 from src.config import settings as app_settings
 from src.config import setup_llamaindex
 from src.config.integrations import get_settings_embed_model
@@ -175,7 +180,9 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
     return resolved
 
 
-def _document_from_input(reader: Any | None, item: IngestionInput) -> list[Document]:
+def _document_from_input(
+    reader: ReaderType | None, item: IngestionInput
+) -> list[Document]:
     """Convert an ingestion input into LlamaIndex ``Document`` objects.
 
     Args:
@@ -335,10 +342,8 @@ async def ingest_documents(
         nodes = await pipeline.arun(documents=documents)
     duration_ms = (time.perf_counter() - start) * 1000.0
 
-    if docstore_path is not None:
-        docstore = getattr(pipeline, "docstore", None)
-        if docstore is not None:
-            docstore.persist(str(docstore_path))
+    if docstore_path is not None and pipeline.docstore is not None:
+        pipeline.docstore.persist(str(docstore_path))
 
     corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
     base_dir: Path | None = None

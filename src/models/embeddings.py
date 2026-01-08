@@ -276,13 +276,14 @@ class TextEmbedder:
 
 
 # ===== Images: OpenCLIP / SigLIP (tiered) =====
-_BackboneName = Literal[
+BackboneName = Literal[
     "auto",
     "openclip_vitl14",
     "openclip_vith14",
     "siglip_base",
     "bge_visualized",
 ]
+_BackboneName = BackboneName
 
 
 class ImageEmbedder:
@@ -298,7 +299,7 @@ class ImageEmbedder:
     def __init__(
         self,
         *,
-        backbone: _BackboneName = "auto",
+        backbone: BackboneName = "auto",
         device: str | None = None,
         default_batch_size: int = 8,
         seed: int = 42,
@@ -321,7 +322,7 @@ class ImageEmbedder:
         self._dim: int | None = None
 
     # --- Backend loading helpers ---
-    def _choose_auto_backbone(self) -> _BackboneName:
+    def _choose_auto_backbone(self) -> BackboneName:
         # Centralized device/VRAM policy via src.utils.core
         if self.device == "cpu" or TORCH is None or not getattr(TORCH, "cuda", None):
             return "openclip_vitl14"
@@ -418,7 +419,7 @@ class ImageEmbedder:
             "Enable explicitly with proper GPUs and dependencies."
         )
 
-    def _ensure_loaded(self, override: _BackboneName | None = None) -> None:
+    def _ensure_loaded(self, override: BackboneName | None = None) -> None:
         if self._backend is not None:
             return
         name = override or self.backbone or "auto"
@@ -441,7 +442,7 @@ class ImageEmbedder:
         self,
         images: list[Any],  # PIL.Image.Image or array-like
         *,
-        backbone: _BackboneName | None = None,
+        backbone: BackboneName | None = None,
         batch_size: int | None = None,
         normalize: bool = True,
         device: str | None = None,

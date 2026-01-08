@@ -31,8 +31,8 @@ class _StubIndex:
 
 @pytest.mark.integration
 @pytest.mark.retrieval
-def test_router_tools_and_rerank_toggle(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """Verify router tool registration respects enable_server_hybrid and rerank toggles."""
+def test_router_tools_and_rerank_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify router tool registration respects hybrid and rerank toggles."""
     rfac = importlib.import_module("src.retrieval.router_factory")
 
     # Configure settings toggles

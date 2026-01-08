@@ -22,10 +22,10 @@ from llama_index.core import Settings
 
 from src.config.llm_factory import build_llm
 from src.models.embeddings import (
+    BackboneName,
     ImageEmbedder,
     TextEmbedder,
     UnifiedEmbedder,
-    _BackboneName,
 )
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
 
@@ -216,7 +216,7 @@ def get_unified_embedder():  # pragma: no cover - simple factory
 
 
 def get_image_embedder(
-    backbone: _BackboneName = "siglip_base",
+    backbone: BackboneName = "siglip_base",
 ) -> ImageEmbedder:  # pragma: no cover - simple factory
     """Return an ImageEmbedder with the requested backbone.
 
@@ -322,8 +322,8 @@ def _configure_embeddings() -> None:
 
         Settings.embed_model = cast(Any, embedding_cls)(
             model_name=model_name,
-            device=str(device),
-            trust_remote_code=bool(emb_cfg.get("trust_remote_code", False)),
+            device=device,
+            trust_remote_code=emb_cfg.get("trust_remote_code", False),
         )
         logger.info(
             "Embedding model configured: %s %s (device=%s)",
