@@ -161,13 +161,11 @@ class DocMindApplication:
     async def ingest_document(
         self,
         file_path: Path,
-        process_async: bool = True,
     ) -> dict[str, Any]:
         """Ingest a document into the system.
 
         Args:
             file_path: Path to document file.
-            process_async: Process asynchronously.
 
         Returns:
             Ingestion results metadata.
@@ -181,11 +179,7 @@ class DocMindApplication:
                     "Complete Phase 2 of the ingestion refactor before ingesting."
                 )
 
-            if process_async:
-                result = await self.document_processor.process_document_async(file_path)
-            else:
-                # TODO(Phase 2): Add sync processing path when process_async is False.
-                result = await self.document_processor.process_document_async(file_path)
+            result = await self.document_processor.process_document_async(file_path)
 
             logger.info("Document ingested successfully: %s", file_path)
             return result
