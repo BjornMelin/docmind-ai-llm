@@ -298,13 +298,6 @@ def setup_external_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "src.containers", mock_containers)
 
 
-@pytest.fixture(name="mock_pull")
-def mock_pull_fixture():
-    """Patch ollama.pull for tests that only need the side effect."""
-    with patch("ollama.pull", return_value={"status": "success"}) as mock:
-        yield mock
-
-
 @pytest.fixture(name="app_test")
 def fixture_app_test(tmp_path, monkeypatch):
     """Create an AppTest instance for testing the main application.
@@ -396,7 +389,6 @@ def fixture_app_test(tmp_path, monkeypatch):
         )
 
 
-@pytest.mark.usefixtures("mock_pull")
 def test_app_hardware_detection(app_test) -> None:
     """Test hardware detection display and model suggestions in the application.
 
@@ -414,7 +406,6 @@ def test_app_hardware_detection(app_test) -> None:
     assert hasattr(app, "sidebar")
 
 
-@pytest.mark.usefixtures("mock_pull")
 def test_app_renders_and_shows_chat(app_test) -> None:
     """Verify app renders and the chat section is present."""
     app = app_test.run()
@@ -424,7 +415,6 @@ def test_app_renders_and_shows_chat(app_test) -> None:
 
 
 @patch("src.utils.core.load_documents_unstructured")
-@pytest.mark.usefixtures("mock_pull")
 def test_app_document_upload_workflow(mock_load_docs, app_test, tmp_path) -> None:
     """Validate upload and processing pipeline with boundary mocks."""
 
