@@ -5,11 +5,13 @@ Keeping the exports lightweight allows callers to import registry components
 without bringing in heavyweight dependencies during module discovery.
 """
 
+from .llamaindex_llm_client import RetryLlamaIndexLLM
 from .llm_client import RetryLLMClient
 from .tool_registry import DefaultToolRegistry, ToolRegistry
 
 __all__ = [
     "DefaultToolRegistry",
     "RetryLLMClient",
+    "RetryLlamaIndexLLM",
     "ToolRegistry",
 ]

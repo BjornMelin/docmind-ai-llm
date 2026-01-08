@@ -48,7 +48,7 @@ from opentelemetry import metrics, trace
 # Note: tool imports are performed lazily inside _setup_agent_graph to avoid
 # importing heavy dependencies at module import time (improves Streamlit tests
 # that stub LlamaIndex modules).
-from src.agents.registry import DefaultToolRegistry, ToolRegistry
+from src.agents.registry import DefaultToolRegistry, RetryLlamaIndexLLM, ToolRegistry
 from src.config import settings
 from src.config.langchain_factory import build_chat_model
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
@@ -112,11 +112,10 @@ CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
 
 
-class _SharedLLMWrapper:
-    """Minimal wrapper exposing `.inner` for the underlying LlamaIndex LLM."""
-
-    def __init__(self, inner: Any) -> None:
-        self.inner = inner
+def _shared_llm_attempts() -> int:
+    """Return configured retry attempts for the shared LlamaIndex LLM."""
+    retries = int(getattr(settings.agents, "max_retries", 0))
+    return max(1, retries + 1)
 
 
 class MultiAgentCoordinator:
@@ -197,7 +196,7 @@ class MultiAgentCoordinator:
         # Initialize components
         self.llm = None
         self.llamaindex_llm = None
-        self._shared_llm_wrapper: _SharedLLMWrapper | None = None
+        self._shared_llm_wrapper: RetryLlamaIndexLLM | None = None
         self.dspy_retriever = None
         self.compiled_graph = None
         self.graph = None
@@ -226,7 +225,11 @@ class MultiAgentCoordinator:
             if Settings.llm is not None:
                 self.llamaindex_llm = Settings.llm
                 if self.use_shared_llm_client:
-                    self._shared_llm_wrapper = _SharedLLMWrapper(self.llamaindex_llm)
+                    self._shared_llm_wrapper = RetryLlamaIndexLLM(
+                        self.llamaindex_llm,
+                        max_attempts=_shared_llm_attempts(),
+                    )
+                    self.llamaindex_llm = self._shared_llm_wrapper
                 logger.info("LlamaIndex LLM initialized from Settings")
             else:
                 # Raise error if LLM not properly configured
