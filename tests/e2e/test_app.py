@@ -430,9 +430,7 @@ def test_app_renders_and_shows_chat(_mock_pull, app_test):  # noqa: PT019
 
 @patch("src.utils.core.load_documents_unstructured")
 @pytest.mark.usefixtures("mock_pull")
-def test_app_document_upload_workflow(
-    mock_load_docs, app_test, tmp_path
-) -> None:
+def test_app_document_upload_workflow(mock_load_docs, app_test, tmp_path) -> None:
     """Validate upload and processing pipeline with boundary mocks."""
 
     # Mock successful document loading
