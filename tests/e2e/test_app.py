@@ -298,6 +298,13 @@ def setup_external_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "src.containers", mock_containers)
 
 
+@pytest.fixture(name="mock_pull")
+def mock_pull_fixture():
+    """Patch ollama.pull for tests that only need the side effect."""
+    with patch("ollama.pull", return_value={"status": "success"}) as mock:
+        yield mock
+
+
 @pytest.fixture(name="app_test")
 def fixture_app_test(tmp_path, monkeypatch):
     """Create an AppTest instance for testing the main application.
@@ -421,11 +428,11 @@ def test_app_renders_and_shows_chat(_mock_pull, app_test):  # noqa: PT019
     assert "Chat with Documents" in app_str or hasattr(app, "chat_input")
 
 
-@patch("ollama.pull", return_value={"status": "success"})
 @patch("src.utils.core.load_documents_unstructured")
+@pytest.mark.usefixtures("mock_pull")
 def test_app_document_upload_workflow(
-    mock_load_docs, _mock_pull, app_test, tmp_path
-) -> None:  # noqa: PT019
+    mock_load_docs, app_test, tmp_path
+) -> None:
     """Validate upload and processing pipeline with boundary mocks."""
 
     # Mock successful document loading
@@ -442,7 +449,6 @@ def test_app_document_upload_workflow(
     ]
     mock_load_docs.return_value = mock_documents
 
-    assert _mock_pull is not None
     app = app_test.run()
 
     # Verify app loaded successfully
