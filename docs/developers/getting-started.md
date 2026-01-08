@@ -108,8 +108,12 @@ uv sync
 uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Install with test dependencies
-uv sync --extra test
+uv sync --group test
 ```
+
+Note: development and test tooling live in dependency groups (`[dependency-groups]`, PEP 735) and
+are installed with `--group`. Optional runtime features are published as extras
+(`project.optional-dependencies`, PEP 621) and are installed with `--extra`.
 
 #### GPU-Optimized Installation (Recommended)
 

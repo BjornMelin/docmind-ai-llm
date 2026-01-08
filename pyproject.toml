@@ -81,6 +81,7 @@ dependencies = [
     "portalocker>=3.2.0,<4.0.0",         # Cross-platform snapshot locking
 ]
 
+# Optional runtime features published as extras (PEP 621).
 [project.optional-dependencies]
 gpu = [
     "fastembed-gpu>=0.7.4,<0.8.0",        # GPU-accelerated embeddings
@@ -307,6 +308,7 @@ markers = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
+# Development-only dependency groups (PEP 735); not published as package metadata.
 [dependency-groups]
 dev = [
     "ruff>=0.13.0,<0.14.0",
