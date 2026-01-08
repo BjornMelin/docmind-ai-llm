@@ -119,6 +119,12 @@ class DocMindApplication:
             else:
                 # Use basic RAG pipeline
                 logger.info("Processing query with basic RAG pipeline")
+                if context is not None and not isinstance(context, dict):
+                    logger.warning(
+                        "Basic RAG mode expects dict context; "
+                        "%s context was provided and will be ignored",
+                        type(context).__name__,
+                    )
                 basic_context = context if isinstance(context, dict) else None
                 response = await self._process_basic_rag(query, basic_context)
 
