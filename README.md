@@ -11,7 +11,7 @@
 [![GitHub](https://img.shields.io/badge/GitHub-BjornMelin-181717?logo=github)](https://github.com/BjornMelin)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Bjorn%20Melin-0077B5?logo=linkedin)](https://www.linkedin.com/in/bjorn-melin/)
 
-**DocMind AI** provides local document analysis with zero cloud dependency. It combines hybrid retrieval (dense + sparse), optional knowledge graph extraction (GraphRAG), and a 5-agent coordinator to analyze PDFs, Office docs, HTML/Markdown, and image-rich PDFs. Built on LlamaIndex pipelines with LangGraph supervisor orchestration, the default vLLM profile targets Qwen/Qwen3-4B-Instruct-2507-FP8 (128K context window) and runs entirely on your hardware with optional GPU acceleration.
+**DocMind AI** provides local document analysis with zero cloud dependency. It combines hybrid retrieval (dense + sparse), optional knowledge graph extraction (GraphRAG), and a 5-agent coordinator to analyze PDFs, Office docs, HTML/Markdown, and image-rich PDFs. Built on LlamaIndex pipelines with LangGraph supervisor orchestration, the default vLLM profile targets Qwen/Qwen3-4B-Instruct-2507-FP8 (128 K context window) and runs entirely on your hardware with optional GPU acceleration.
 
 **Architecture**: Traditional document analysis tools either send your data to the cloud (privacy risk) or provide basic keyword search (limited intelligence). DocMind AI keeps everything local while still supporting complex, multi-step queries, entity/relationship extraction (GraphRAG), and agent-coordinated synthesis.
 
@@ -87,7 +87,7 @@ Design goals:
       - [5. Document Processing Errors](#5-document-processing-errors)
       - [6. vLLM FlashInfer Installation Issues](#6-vllm-flashinfer-installation-issues)
       - [7. PyTorch 2.7.1 Compatibility Issues](#7-pytorch-271-compatibility-issues)
-      - [8. GPU Memory Issues (16GB RTX 4090)](#8-gpu-memory-issues-16gb-rtx-4090)
+      - [8. GPU Memory Issues (16 GB RTX 4090)](#8-gpu-memory-issues-16-gb-rtx-4090)
       - [9. Performance Validation](#9-performance-validation)
     - [Performance Optimization](#performance-optimization)
     - [Getting Help](#getting-help)
@@ -96,7 +96,7 @@ Design goals:
     - [Development Guidelines](#development-guidelines)
       - [Tests and CI](#tests-and-ci)
   - [License](#license)
-  - [Observability](#observability)
+  - [Observability](#observability).
 
 ## Getting Started with DocMind AI
 
@@ -108,7 +108,7 @@ Design goals:
 
 - (Optional) Docker and Docker Compose for containerized deployment.
 
-- (Optional) NVIDIA GPU (e.g., RTX 4090 Laptop) with at least 16GB VRAM for 128K context (vLLM) and accelerated performance.
+- (Optional) NVIDIA GPU (e.g., RTX 4090 Laptop) with at least 16 GB VRAM for 128 K context (vLLM) and accelerated performance.
 
 ### Installation
 
@@ -149,7 +149,7 @@ Design goals:
    - **LlamaIndex Embeddings FastEmbed (>=0.5.0,<0.6.0)**: Sparse query encoding (optional fastembed-gpu >=0.7.4,<0.8.0)
    - **Tenacity (>=9.1.2,<10.0.0)**: Retry strategies with exponential backoff
    - **Loguru (>=0.7.3,<1.0.0)**: Structured logging
-   - **Pydantic (2.11.7)**: Data validation and settings
+   - **Pydantic (2.11.7)**: Data validation and settings.
 
 3. **Install spaCy language model:**
 
@@ -212,11 +212,11 @@ Design goals:
    #   DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
    ```
 
-   For a complete overview (including a Local vs Cloud matrix), see `docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
+   For a complete overview (including a Local vs Cloud matrix), see `docs/developers/configuration-reference.md`. The relevant section is `openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
 
 5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
 
-   **RECOMMENDED: vLLM FlashInfer Stack** for Qwen3-4B-Instruct-2507-FP8 with 128K context:
+   **RECOMMENDED: vLLM FlashInfer Stack** for Qwen3-4B-Instruct-2507-FP8 with 128 K context:
 
    ```bash
    # Phase 1: Verify CUDA installation
@@ -241,7 +241,7 @@ Design goals:
 
    **Hardware Guidance:**
 
-   - CUDA-capable GPU (16GB VRAM recommended for 128K context)
+   - CUDA-capable GPU (16 GB VRAM recommended for 128 K context)
    - CUDA Toolkit 12.8+
    - Driver compatible with CUDA 12.8
 
@@ -642,7 +642,7 @@ DocMind AI is designed for complete offline operation:
 2. **Pull required models:**
 
    ```bash
-   ollama pull qwen3-4b-instruct-2507  # Recommended for 128K context
+   ollama pull qwen3-4b-instruct-2507  # Recommended for 128 K context
    ollama pull qwen2:7b  # Alternative lightweight model
    ```
 
@@ -716,7 +716,7 @@ uv run python -c "import torch; print(torch.cuda.is_available())"
 ```bash
 
 # Pull models manually
-ollama pull qwen3-4b-instruct-2507  # For 128K context
+ollama pull qwen3-4b-instruct-2507  # For 128 K context
 ollama pull qwen2:7b  # Alternative
 ollama list  # Verify installation
 ```
@@ -771,7 +771,7 @@ uv run python -c "import vllm; print(f'vLLM: {vllm.__version__}')"
 # follow vLLM release notes and adjust versions together.
 ```
 
-#### 8. GPU Memory Issues (16GB RTX 4090)
+#### 8. GPU Memory Issues (16 GB RTX 4090)
 
 ```bash
 # Reduce GPU memory utilization in .env
