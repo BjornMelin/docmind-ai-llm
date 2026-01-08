@@ -10,7 +10,8 @@ from contextlib import contextmanager
 
 import spacy
 from loguru import logger
-from spacy.cli import download
+from spacy.cli.download import download
+from spacy.language import Language
 from spacy.util import is_package
 
 
@@ -28,10 +29,10 @@ class SpacyManager:
         """Initialize the SpaCy manager with an empty model cache."""
         import threading
 
-        self._models: dict[str, spacy.Language] = {}
+        self._models: dict[str, Language] = {}
         self._lock = threading.RLock()
 
-    def ensure_model(self, model_name: str = "en_core_web_sm") -> spacy.Language:
+    def ensure_model(self, model_name: str = "en_core_web_sm") -> Language:
         """Ensure a specific spaCy language model is available and loaded.
 
         Downloads the model if not already installed, and caches it for future use.
@@ -42,7 +43,7 @@ class SpacyManager:
                 Defaults to "en_core_web_sm" (small English model).
 
         Returns:
-            spacy.Language: The loaded spaCy language model.
+            Language: The loaded spaCy language model.
 
         Raises:
             subprocess.CalledProcessError: If model download fails.
@@ -71,7 +72,7 @@ class SpacyManager:
     @contextmanager
     def memory_optimized_processing(
         self, model_name: str = "en_core_web_sm"
-    ) -> Generator[spacy.Language, None, None]:
+    ) -> Generator[Language, None, None]:
         """Create a context manager for memory-optimized spaCy text processing.
 
         Uses spaCy's memory_zone() to manage memory during language model processing.
@@ -81,7 +82,7 @@ class SpacyManager:
                 Defaults to "en_core_web_sm" (small English model).
 
         Yields:
-            spacy.Language: A spaCy language model within an optimized memory context.
+            Language: A spaCy language model within an optimized memory context.
 
         Example:
             with spacy_manager.memory_optimized_processing() as nlp:

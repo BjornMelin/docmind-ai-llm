@@ -121,12 +121,15 @@ def validate_response(
         )
 
 
-def _parse_sources(sources: str):
+def _parse_sources(sources: str) -> list[object]:
     try:
         src = json.loads(sources) if isinstance(sources, str) else sources
         if isinstance(src, dict) and "documents" in src:
-            return src["documents"]
-        return src or []
+            docs = src.get("documents")
+            return list(docs) if isinstance(docs, list | tuple) else []
+        if isinstance(src, list | tuple):
+            return list(src)
+        return []
     except json.JSONDecodeError:
         return []
 

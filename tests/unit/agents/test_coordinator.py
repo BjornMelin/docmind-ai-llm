@@ -272,7 +272,7 @@ class TestMultiAgentCoordinator:
             assert coordinator._shared_llm_wrapper.inner == mock_llm
             assert coordinator.compiled_graph == mock_compiled
             mock_setup.assert_called_once()
-            mock_dspy.assert_called_once_with(llm=coordinator.llm)
+            mock_dspy.assert_called_once_with(llm=coordinator.llamaindex_llm)
             assert mock_react.call_count == 5
 
     @patch("src.config.setup_llamaindex")

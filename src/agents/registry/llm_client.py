@@ -95,7 +95,7 @@ class RetryLLMClient:
         for attempt in self._sync_retry():
             with attempt:
                 result = self._llm.invoke(payload, **kwargs)
-            self._update_retry_state(attempt)
+            self._update_retry_state(attempt.retry_state)
             return result
         raise RuntimeError("Retry loop failed to return a result")
 
@@ -104,7 +104,7 @@ class RetryLLMClient:
         async for attempt in self._async_retry():
             with attempt:
                 result = await self._llm.ainvoke(payload, **kwargs)
-            self._update_retry_state(attempt)
+            self._update_retry_state(attempt.retry_state)
             return result
         raise RuntimeError("Async retry loop failed to return a result")
 
@@ -125,8 +125,11 @@ class RetryLLMClient:
         return self._llm.stream(payload, **kwargs)
 
     async def astream(self, payload: Any, **kwargs: Any) -> Any:
-        """Async streaming passthrough to the wrapped LLM."""
-        return await self._llm.astream(payload, **kwargs)
+        """Async streaming passthrough to the wrapped LLM.
+
+        LangChain's `astream` returns an async iterator; it is not awaitable.
+        """
+        return self._llm.astream(payload, **kwargs)
 
     def __getattr__(self, name: str) -> Any:
         """Delegate attribute access to the wrapped LLM."""

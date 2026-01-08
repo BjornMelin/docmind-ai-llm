@@ -596,14 +596,18 @@ def persist_image_metadata(
         system errors.
     """
     try:
-        client.update_payload(
-            collection_name=collection_name,
-            points=[point_id],
-            payload=metadata,
-        )
+        if hasattr(client, "set_payload"):
+            client.set_payload(
+                collection_name=collection_name,
+                points=[point_id],
+                payload=metadata,
+            )
+        else:
+            # Older qdrant-client versions expose `update_payload`.
+            client.update_payload(collection_name, [point_id], metadata)  # type: ignore[attr-defined]
         return True
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
-        logger.warning("update_payload failed for %s: %s", point_id, exc)
+        logger.warning("persist_image_metadata failed for %s: %s", point_id, exc)
         return False
 
 
@@ -994,21 +998,25 @@ def get_safe_gpu_info() -> dict[str, Any]:
     }
 
     try:
-        info["cuda_available"] = bool(torch is not None and torch.cuda.is_available())
+        t = torch
+        if t is None:
+            return info
+
+        info["cuda_available"] = bool(t.cuda.is_available())
 
         if info["cuda_available"]:
             info["device_count"] = safe_cuda_operation(
-                torch.cuda.device_count, "device count", 0
+                t.cuda.device_count, "device count", 0
             )
 
             if info["device_count"] > 0:
                 info["device_name"] = safe_cuda_operation(
-                    lambda: torch.cuda.get_device_name(0), "device name", "Unknown"
+                    lambda: t.cuda.get_device_name(0), "device name", "Unknown"
                 )
 
                 # Get device properties safely
                 props = safe_cuda_operation(
-                    lambda: torch.cuda.get_device_properties(0),
+                    lambda: t.cuda.get_device_properties(0),
                     "device properties",
                     None,
                 )
@@ -1020,7 +1028,7 @@ def get_safe_gpu_info() -> dict[str, Any]:
                     )
 
                 info["allocated_memory_gb"] = safe_cuda_operation(
-                    lambda: torch.cuda.memory_allocated(0)
+                    lambda: t.cuda.memory_allocated(0)
                     / settings.monitoring.bytes_to_gb_divisor,
                     "allocated memory",
                     0.0,

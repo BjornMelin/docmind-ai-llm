@@ -16,20 +16,25 @@ import logging
 import os
 import threading
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from llama_index.core import Settings
 
-try:
+if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
-except ImportError:  # pragma: no cover - optional dependency
-    BaseEmbedding = Any  # type: ignore
+else:
+    BaseEmbedding = Any
 
 from src.config.llm_factory import build_llm
-from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
+from src.models.embeddings import (
+    ImageEmbedder,
+    TextEmbedder,
+    UnifiedEmbedder,
+    _BackboneName,
+)
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
 
-from .settings import settings
+from .settings import DocMindSettings, settings
 
 # Text embeddings default wrapper
 # NOTE: Avoid heavy imports at module import-time. The embedding constructor
@@ -114,7 +119,7 @@ def get_vllm_server_command() -> list[str]:
     return cmd
 
 
-def startup_init(cfg: "settings.__class__" = settings) -> None:
+def startup_init(cfg: "DocMindSettings" = settings) -> None:
     """Perform explicit startup initialization without import-time side effects.
 
     Ensures required directories exist, logs configuration highlights, and
@@ -211,7 +216,7 @@ def get_unified_embedder():  # pragma: no cover - simple factory
 
 
 def get_image_embedder(
-    backbone: str = "siglip_base",
+    backbone: _BackboneName = "siglip_base",
 ) -> ImageEmbedder:  # pragma: no cover - simple factory
     """Return an ImageEmbedder with the requested backbone.
 
@@ -315,10 +320,10 @@ def _configure_embeddings() -> None:
         if embedding_cls is None:  # pragma: no cover - defensive
             raise RuntimeError("HuggingFaceEmbedding class unavailable")
 
-        Settings.embed_model = embedding_cls(
+        Settings.embed_model = cast(Any, embedding_cls)(
             model_name=model_name,
-            device=device,
-            trust_remote_code=emb_cfg.get("trust_remote_code", False),
+            device=str(device),
+            trust_remote_code=bool(emb_cfg.get("trust_remote_code", False)),
         )
         logger.info(
             "Embedding model configured: %s %s (device=%s)",

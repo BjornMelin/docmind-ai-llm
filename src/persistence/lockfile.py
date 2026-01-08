@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Final
+from typing import Any, Final, cast
 
 from loguru import logger
 
@@ -58,7 +58,7 @@ class _LockMetadata:
     schema_version: int = SCHEMA_VERSION
 
     @classmethod
-    def from_json(cls, data: dict[str, object]) -> _LockMetadata:
+    def from_json(cls, data: dict[str, Any]) -> _LockMetadata:
         """Create metadata from a raw JSON dictionary."""
         try:
             created = datetime.fromisoformat(str(data["created_at"]))
@@ -108,7 +108,7 @@ class SnapshotLock:
     timeout: float
     ttl_seconds: float = 30.0
     grace_seconds: float = 0.0
-    _lock: portalocker.Lock | None = field(init=False, default=None)
+    _lock: Any | None = field(init=False, default=None)
     _handle: object | None = field(init=False, default=None)
     _metadata: _LockMetadata | None = field(init=False, default=None)
     _pending_takeover_count: int = field(init=False, default=0)
@@ -165,7 +165,8 @@ class SnapshotLock:
                 continue
             try:
                 if self._use_portalocker:
-                    lock = portalocker.Lock(
+                    portalocker_mod = cast(Any, portalocker)
+                    lock = portalocker_mod.Lock(
                         str(self.path), mode="a+", timeout=remaining
                     )
                     handle = lock.acquire()

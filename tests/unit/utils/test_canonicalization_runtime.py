@@ -16,7 +16,7 @@ from src.utils.canonicalization import (
 
 def test_normalise_text_collapses_whitespace() -> None:
     raw = "\ufeffHello\u200b  World\r\n\nSecond\tLine  "
-    assert _normalise_text(raw) == "Hello WorldSecondLine"
+    assert _normalise_text(raw) == "Hello World Second Line"
 
 
 def test_filter_metadata_keeps_sorted_keys(tmp_path: Path) -> None:

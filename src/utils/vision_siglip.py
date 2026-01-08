@@ -16,7 +16,7 @@ from src.utils.core import select_device
 def _cached(model_id: str, device: str) -> tuple[Any, Any, str]:
     from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-    model = SiglipModel.from_pretrained(model_id)
+    model: Any = SiglipModel.from_pretrained(model_id)
     if device == "cuda" and hasattr(model, "to"):
         model = model.to("cuda")
     processor = SiglipProcessor.from_pretrained(model_id)

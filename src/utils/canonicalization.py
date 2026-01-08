@@ -110,17 +110,9 @@ def _normalise_text(text: str) -> str:
     normalised = normalised.replace("\r\n", "\n").replace("\r", "\n")
     normalised = _ZERO_WIDTH_RE.sub("", normalised)
     normalised = _CONTROL_CHAR_RE.sub("", normalised)
-    # Collapse whitespace but keep single newlines by first splitting on lines.
-    lines = [
-        _MULTI_WHITESPACE_RE.sub(" ", line).strip() for line in normalised.split("\n")
-    ]
-    # Remove empty lines at head/tail but preserve intentional blank lines in
-    # between paragraphs for stability.
-    while lines and not lines[0]:
-        lines.pop(0)
-    while lines and not lines[-1]:
-        lines.pop()
-    return "\n".join(lines)
+    # Collapse whitespace and treat line breaks as layout noise for hashing.
+    normalised = normalised.replace("\n", " ").replace("\t", " ")
+    return _MULTI_WHITESPACE_RE.sub(" ", normalised).strip()
 
 
 def _filter_metadata(

@@ -15,7 +15,7 @@ import os
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llama_index.core import Document
 from llama_index.core.extractors import TitleExtractor
@@ -29,10 +29,10 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     UnstructuredReader = None  # type: ignore
 
-try:
+if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
-except ImportError:  # pragma: no cover - optional dependency
-    BaseEmbedding = Any  # type: ignore
+else:
+    BaseEmbedding = Any
 
 from opentelemetry import trace
 
@@ -176,9 +176,7 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
     return resolved
 
 
-def _document_from_input(
-    reader: UnstructuredReader | None, item: IngestionInput
-) -> list[Document]:
+def _document_from_input(reader: Any | None, item: IngestionInput) -> list[Document]:
     """Convert an ingestion input into LlamaIndex ``Document`` objects.
 
     Args:
@@ -339,7 +337,9 @@ async def ingest_documents(
     duration_ms = (time.perf_counter() - start) * 1000.0
 
     if docstore_path is not None:
-        pipeline.docstore.persist(str(docstore_path))
+        docstore = getattr(pipeline, "docstore", None)
+        if docstore is not None:
+            docstore.persist(str(docstore_path))
 
     corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
     base_dir: Path | None = None
@@ -362,7 +362,7 @@ async def ingest_documents(
     }
 
     return IngestionResult(
-        nodes=nodes,
+        nodes=list(nodes),
         documents=documents,
         manifest=manifest,
         exports=exports,

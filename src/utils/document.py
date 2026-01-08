@@ -9,12 +9,12 @@ until the new LlamaIndex-first pipeline lands in later phases.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from loguru import logger
 
 
-def _raise_pending(feature: str) -> None:
+def _raise_pending(feature: str) -> NoReturn:
     raise NotImplementedError(
         f"{feature} is unavailable until the ingestion pipeline rewrite is complete."
     )

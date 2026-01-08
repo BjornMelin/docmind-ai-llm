@@ -418,12 +418,13 @@ def _build_visual_reranker_cached(top_n: int) -> Any:
         ColPaliRerank: Configured visual reranker instance.
     """
     try:
-        from llama_index.postprocessor.colpali_rerank import (
-            ColPaliRerank,  # type: ignore
-        )
+        import importlib
+
+        mod = importlib.import_module("llama_index.postprocessor.colpali_rerank")
+        colpali_rerank_cls = mod.ColPaliRerank
     except (ImportError, AttributeError, RuntimeError) as exc:
         raise ValueError("ColPaliRerank not available") from exc
-    return ColPaliRerank(model="vidore/colpali-v1.2", top_n=top_n)
+    return colpali_rerank_cls(model="vidore/colpali-v1.2", top_n=top_n)
 
 
 def build_visual_reranker(top_n: int | str | None = None) -> Any:

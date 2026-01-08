@@ -10,7 +10,7 @@ APIs are intentionally generic to support upcoming OCR stages and cache layers.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any
+from typing import Any, cast
 
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.schema import TransformComponent
@@ -74,7 +74,7 @@ class PipelineBuilder:
         # Attach pipeline metadata for debugging/telemetry. This is a dynamic
         # attribute (not part of the public LlamaIndex API); LlamaIndex does not
         # use it directly but keeping reference simplifies validation/tests.
-        pipeline.docmind_metadata = self._metadata | {
+        cast(Any, pipeline).docmind_metadata = self._metadata | {
             "strategy": strategy.value,
         }
         return pipeline

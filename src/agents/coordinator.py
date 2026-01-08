@@ -30,9 +30,10 @@ import asyncio
 import contextlib
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
@@ -47,8 +48,9 @@ from opentelemetry import metrics, trace
 # Note: tool imports are performed lazily inside _setup_agent_graph to avoid
 # importing heavy dependencies at module import time (improves Streamlit tests
 # that stub LlamaIndex modules).
-from src.agents.registry import DefaultToolRegistry, RetryLLMClient, ToolRegistry
+from src.agents.registry import DefaultToolRegistry, ToolRegistry
 from src.config import settings
+from src.config.langchain_factory import build_chat_model
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 from src.telemetry.opentelemetry import configure_observability
 
@@ -76,8 +78,9 @@ class ContextManager:
 
         total_chars = 0
         for msg in messages:
-            if hasattr(msg, "content"):
-                content = str(msg.content)
+            content_attr = getattr(msg, "content", None)
+            if content_attr is not None:
+                content = str(content_attr)
             elif isinstance(msg, dict) and "content" in msg:
                 content = str(msg["content"])
             else:
@@ -107,6 +110,13 @@ class ContextManager:
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
+
+
+class _SharedLLMWrapper:
+    """Minimal wrapper exposing `.inner` for the underlying LlamaIndex LLM."""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
 
 
 class MultiAgentCoordinator:
@@ -152,13 +162,6 @@ class MultiAgentCoordinator:
         self.max_agent_timeout = max_agent_timeout
 
         self.tool_registry: ToolRegistry = tool_registry or DefaultToolRegistry()
-        if use_shared_llm_client is None:
-            self._use_shared_llm_client = bool(
-                getattr(settings.agents, "use_shared_llm_client", False)
-            )
-        else:
-            self._use_shared_llm_client = use_shared_llm_client
-        self._shared_llm_wrapper: RetryLLMClient | None = None
 
         # vLLM Configuration with unified settings
         env_vars = settings.get_vllm_env_vars()
@@ -188,6 +191,8 @@ class MultiAgentCoordinator:
 
         # Initialize components
         self.llm = None
+        self.llamaindex_llm = None
+        self._shared_llm_wrapper: _SharedLLMWrapper | None = None
         self.dspy_retriever = None
         self.compiled_graph = None
         self.graph = None
@@ -214,16 +219,9 @@ class MultiAgentCoordinator:
             from llama_index.core import Settings
 
             if Settings.llm is not None:
-                base_llm = Settings.llm
-                if self._use_shared_llm_client and not isinstance(
-                    base_llm, RetryLLMClient
-                ):
-                    self._shared_llm_wrapper = RetryLLMClient(base_llm)
-                    self.llm = self._shared_llm_wrapper
-                    logger.info("LLM initialized with shared retry wrapper")
-                else:
-                    self.llm = base_llm
-                    logger.info("LLM initialized from LlamaIndex Settings")
+                self.llamaindex_llm = Settings.llm
+                self._shared_llm_wrapper = _SharedLLMWrapper(self.llamaindex_llm)
+                logger.info("LlamaIndex LLM initialized from Settings")
             else:
                 # Raise error if LLM not properly configured
                 raise RuntimeError(
@@ -231,9 +229,15 @@ class MultiAgentCoordinator:
                     "Please ensure LlamaIndex Settings are initialized."
                 )
 
+            # LangGraph requires a LangChain-compatible model runnable.
+            base_chat_model = build_chat_model(settings)
+            # ChatOpenAI already supports built-in retries via `max_retries`.
+            self.llm = base_chat_model
+            logger.info("LangChain chat model initialized from unified settings")
+
             # Initialize DSPy integration (ADR-018)
             if is_dspy_available():
-                self.dspy_retriever = DSPyLlamaIndexRetriever(llm=self.llm)
+                self.dspy_retriever = DSPyLlamaIndexRetriever(llm=self.llamaindex_llm)
                 logger.info("Real DSPy integration initialized")
             else:
                 logger.warning("DSPy not available - using fallback optimization")
@@ -252,6 +256,10 @@ class MultiAgentCoordinator:
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with agent orchestration."""
         try:
+            if self.llm is None:
+                raise RuntimeError("LangChain chat model is not initialized")
+            model = self.llm
+
             agent_specs: tuple[tuple[str, Callable[[], list[Any]]], ...] = (
                 ("router_agent", lambda: list(self.tool_registry.get_router_tools())),
                 ("planner_agent", lambda: list(self.tool_registry.get_planner_tools())),
@@ -271,7 +279,7 @@ class MultiAgentCoordinator:
 
             agents: dict[str, Any] = {
                 name: create_react_agent(
-                    self.llm,
+                    model,
                     tools=tool_loader(),
                     state_schema=MultiAgentState,
                     name=name,
@@ -294,7 +302,7 @@ class MultiAgentCoordinator:
             # - include forward message tool in tools list
             self.graph = create_supervisor(
                 agents=supervisor_agents,
-                model=self.llm,
+                model=model,
                 prompt=system_prompt,
                 parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
                 output_mode="last_message",
@@ -639,6 +647,9 @@ class MultiAgentCoordinator:
         wall-clock exceeds the configured decision timeout.
         """
         try:
+            if self.compiled_graph is None:
+                raise RuntimeError("Agent graph is not compiled")
+
             # Ensure an event loop exists
             try:
                 asyncio.get_event_loop()
@@ -646,14 +657,20 @@ class MultiAgentCoordinator:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-            config = {"configurable": {"thread_id": thread_id}}
+            config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
             result: dict[str, Any] | None = None
             for state in self.compiled_graph.stream(
                 initial_state,
                 config=config,
                 stream_mode="values",
             ):
-                result = state
+                if isinstance(state, dict):
+                    result = cast(dict[str, Any], state)
+                else:
+                    model_dump = getattr(state, "model_dump", None)
+                    result = cast(
+                        dict[str, Any], model_dump() if callable(model_dump) else {}
+                    )
                 elapsed = time.perf_counter() - initial_state.total_start_time
                 if elapsed > self.max_agent_timeout:
                     logger.warning("Agent workflow timeout after %.2fs", elapsed)
@@ -665,7 +682,9 @@ class MultiAgentCoordinator:
                         logger.debug("Failed to mark timeout flag on state: %s", exc)
                     break
 
-            return result or initial_state
+            if result is not None:
+                return result
+            return initial_state.model_dump()
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
             logger.error("Agent workflow execution failed: %s", e)

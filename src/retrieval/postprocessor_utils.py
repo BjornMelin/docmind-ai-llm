@@ -14,9 +14,7 @@ except ImportError:  # pragma: no cover - optional dependency path
 from src.utils.telemetry import log_jsonl
 
 
-def build_vector_query_engine(
-    index: Any, post: list | None, **kwargs: dict[str, Any]
-) -> Any:
+def build_vector_query_engine(index: Any, post: list | None, **kwargs: Any) -> Any:
     """Build vector query engine with fallback if postprocessors fail."""
     if post:
         try:
@@ -35,9 +33,7 @@ def build_vector_query_engine(
         return index.as_query_engine()
 
 
-def build_pg_query_engine(
-    pg_index: Any, post: list | None, **kwargs: dict[str, Any]
-) -> Any:
+def build_pg_query_engine(pg_index: Any, post: list | None, **kwargs: Any) -> Any:
     """Build PG query engine with fallback if postprocessors fail."""
     if post:
         try:
@@ -62,7 +58,7 @@ def build_retriever_query_engine(
     *,
     llm: Any | None = None,
     engine_cls: Any | None = None,
-    **kwargs: dict[str, Any],
+    **kwargs: Any,
 ) -> Any:
     """Build retriever query engine with fallback if postprocessors fail."""
     engine = engine_cls or RetrieverQueryEngine

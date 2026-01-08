@@ -44,7 +44,8 @@ def test_router_factory_injects_postprocessors_toggle(
         return ["pp"] if use_reranking else None
 
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_graph_query_engine",
+        rf,
+        "build_graph_query_engine",
         _fake_build_graph_query_engine,
         raising=True,
     )

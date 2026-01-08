@@ -29,11 +29,11 @@ def _reset_router_and_graph_modules() -> Iterator[None]:
     try:
         yield
     finally:
-        # Do not restore to keep later tests from seeing a partially patched module
+        # Restore the pre-test import state so UI tests can't contaminate other
+        # test modules that imported these symbols during collection.
         for name in targets:
-            if name in sys.modules:
-                continue
-            # leave cleared; next importer will load a fresh module
-            if saved.get(name) is not None:
-                # ensure previous reference can't leak
-                del saved[name]
+            original = saved.get(name)
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original

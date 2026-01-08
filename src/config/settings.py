@@ -723,7 +723,7 @@ class DocMindSettings(BaseSettings):
             if "rrf_k" not in fields_set:
                 self.retrieval.rrf_k = int(self.hybrid.rrf_k)
             if "fusion_mode" not in fields_set:
-                self.retrieval.fusion_mode = str(self.hybrid.method)
+                self.retrieval.fusion_mode = self.hybrid.method
         except (
             AttributeError,
             TypeError,

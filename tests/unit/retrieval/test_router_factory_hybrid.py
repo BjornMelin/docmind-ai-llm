@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.retrieval.router_factory import build_router_engine
+from src.retrieval import router_factory as rf
 
 
 class _VecIndex:
@@ -58,7 +58,7 @@ def test_hybrid_params_respected(monkeypatch) -> None:  # type: ignore[no-untype
         database=SimpleNamespace(qdrant_collection="col"),
     )
 
-    build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
+    rf.build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
 
     params = captured["params"]
     assert params.fused_top_k == 37
@@ -84,9 +84,12 @@ def test_hybrid_rerank_flag_propagation(monkeypatch, use_rerank: bool) -> None: 
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_retriever_query_engine",
+        rf,
+        "build_retriever_query_engine",
         lambda retriever, post, **kwargs: _RecordingRQE.from_args(
-            retriever=retriever, node_postprocessors=post, **kwargs
+            retriever=retriever,
+            node_postprocessors=post,
+            **kwargs,
         ),
     )
 
@@ -104,7 +107,7 @@ def test_hybrid_rerank_flag_propagation(monkeypatch, use_rerank: bool) -> None: 
         database=SimpleNamespace(qdrant_collection="col"),
     )
 
-    build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
+    rf.build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
 
     if use_rerank:
         assert last_kwargs.get("node_postprocessors") is not None

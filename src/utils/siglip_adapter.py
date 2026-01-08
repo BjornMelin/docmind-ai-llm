@@ -74,7 +74,7 @@ class SiglipEmbedding:
         """Direct transformers-based SigLIP loading as a compatibility path."""
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-        model = SiglipModel.from_pretrained(self.model_id)
+        model: Any = SiglipModel.from_pretrained(self.model_id)
         if self.device in ("cuda", "mps"):
             model = model.to(self.device)
         proc = SiglipProcessor.from_pretrained(self.model_id)

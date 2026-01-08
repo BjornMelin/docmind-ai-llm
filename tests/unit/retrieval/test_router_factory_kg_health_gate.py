@@ -19,7 +19,8 @@ def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> 
         raise ValueError("broken graph index")
 
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_graph_query_engine",
+        rf,
+        "build_graph_query_engine",
         _broken_graph_builder,
         raising=True,
     )
@@ -51,7 +52,8 @@ def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> 
 def test_kg_tool_present_when_builder_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Graph tool is present when build_graph_query_engine succeeds."""
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_graph_query_engine",
+        rf,
+        "build_graph_query_engine",
         lambda *_a, **_k: SimpleNamespace(query_engine=SimpleNamespace(kind="kg")),
         raising=True,
     )

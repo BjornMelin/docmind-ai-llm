@@ -20,10 +20,15 @@ def _mock_spacy_modules(monkeypatch):
     """
     mock_spacy = MagicMock()
     mock_cli = MagicMock()
+    mock_cli_download = MagicMock()
     mock_util = MagicMock()
+    mock_language = MagicMock()
+    mock_language.Language = MagicMock()
     monkeypatch.setitem(sys.modules, "spacy", mock_spacy)
     monkeypatch.setitem(sys.modules, "spacy.cli", mock_cli)
+    monkeypatch.setitem(sys.modules, "spacy.cli.download", mock_cli_download)
     monkeypatch.setitem(sys.modules, "spacy.util", mock_util)
+    monkeypatch.setitem(sys.modules, "spacy.language", mock_language)
 
 
 @pytest.mark.unit

@@ -6,9 +6,10 @@ orchestration, document processing, and retrieval capabilities.
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from dotenv import load_dotenv
+from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
 
 from src.agents.coordinator import MultiAgentCoordinator
@@ -21,6 +22,10 @@ load_dotenv()
 # Constants
 AGENT_TIMEOUT_DIVISOR = 1000.0
 BASIC_VALIDATION_SCORE = 0.8
+
+
+class _DocumentProcessor(Protocol):
+    async def process_document_async(self, file_path: Path) -> dict[str, Any]: ...
 
 
 class DocMindApplication:
@@ -48,12 +53,13 @@ class DocMindApplication:
     def _initialize_components(self) -> None:
         """Initialize application components."""
         # Document ingestion pipeline will be reintroduced in Phase 2.
-        self.document_processor = None
+        self.document_processor: _DocumentProcessor | None = None
 
         # Initialize retrieval components (handled through agents)
         # Retrieval is managed through the multi-agent coordinator
 
         # Multi-agent coordinator if enabled
+        self.agent_coordinator: MultiAgentCoordinator | None = None
         if self.enable_multi_agent:
             self.agent_coordinator = MultiAgentCoordinator(
                 model_path=self.settings.vllm.model,
@@ -63,13 +69,11 @@ class DocMindApplication:
                 max_agent_timeout=self.settings.agents.decision_timeout
                 / AGENT_TIMEOUT_DIVISOR,
             )
-        else:
-            self.agent_coordinator = None
 
     async def process_query(
         self,
         query: str,
-        context: dict[str, Any] | None = None,
+        context: ChatMemoryBuffer | dict[str, Any] | None = None,
         use_multi_agent: bool | None = None,
     ) -> AgentResponse:
         """Process a user query through the appropriate pipeline.
@@ -93,14 +97,18 @@ class DocMindApplication:
             if use_agents and self.agent_coordinator:
                 # Use multi-agent coordination
                 logger.info("Processing query with multi-agent system")
+                memory_context = (
+                    context if isinstance(context, ChatMemoryBuffer) else None
+                )
                 response = self.agent_coordinator.process_query(
                     query=query,
-                    context=context,
+                    context=memory_context,
                 )
             else:
                 # Use basic RAG pipeline
                 logger.info("Processing query with basic RAG pipeline")
-                response = await self._process_basic_rag(query, context)
+                basic_context = context if isinstance(context, dict) else None
+                response = await self._process_basic_rag(query, basic_context)
 
             return response
 
@@ -174,9 +182,7 @@ class DocMindApplication:
             if process_async:
                 result = await self.document_processor.process_document_async(file_path)
             else:
-                result = asyncio.run(
-                    self.document_processor.process_document_async(file_path)
-                )
+                result = await self.document_processor.process_document_async(file_path)
 
             logger.info("Document ingested successfully: %s", file_path)
             return result

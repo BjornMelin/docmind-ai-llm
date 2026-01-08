@@ -15,23 +15,6 @@ from typing import Any
 
 import pytest
 
-_MODULE_TARGETS = [
-    "src.retrieval",
-    "src.retrieval.graph_config",
-    "src.retrieval.router_factory",
-    "src.retrieval.hybrid",
-    "src.retrieval.reranking",
-    "src.utils.storage",
-    "src.utils.monitoring",
-]
-_ORIGINAL_MODULES = {name: sys.modules.get(name) for name in _MODULE_TARGETS}
-
-_stub_retrieval_pkg = ModuleType("src.retrieval")
-_stub_retrieval_pkg.__path__ = []  # type: ignore[attr-defined]
-sys.modules.setdefault("src.retrieval", _stub_retrieval_pkg)
-
-_stub_graph = ModuleType("src.retrieval.graph_config")
-
 
 def _stub_export_jsonl(
     *,
@@ -87,39 +70,69 @@ def _stub_build_graph_query_engine(*_args: Any, **_kwargs: Any) -> _GraphQueryAr
     )
 
 
-_stub_graph.GraphQueryArtifacts = _GraphQueryArtifacts  # type: ignore[attr-defined]
-_stub_graph.build_graph_retriever = _stub_build_graph_retriever  # type: ignore[attr-defined]
-_stub_graph.build_graph_query_engine = _stub_build_graph_query_engine  # type: ignore[attr-defined]
-_stub_graph.export_graph_jsonl = _stub_export_jsonl  # type: ignore[attr-defined]
-_stub_graph.export_graph_parquet = _stub_export_parquet  # type: ignore[attr-defined]
-_stub_graph.get_export_seed_ids = _stub_get_export_seed_ids  # type: ignore[attr-defined]
+@pytest.fixture
+def docs_page(monkeypatch: pytest.MonkeyPatch):
+    """Import the documents page with isolated module stubs.
 
-sys.modules.setdefault("src.retrieval.graph_config", _stub_graph)
+    Important: pytest imports modules during test collection. Avoid patching
+    ``sys.modules`` at module import time because it can leak stubs into other
+    test modules. This fixture installs stubs only for the duration of tests
+    that need to import the documents page.
+    """
+    module_targets = [
+        "src.retrieval",
+        "src.retrieval.graph_config",
+        "src.retrieval.router_factory",
+        "src.retrieval.hybrid",
+        "src.retrieval.reranking",
+        "src.utils.storage",
+        "src.utils.monitoring",
+    ]
+    originals = {name: sys.modules.get(name) for name in module_targets}
 
-_stub_router = ModuleType("src.retrieval.router_factory")
-_stub_router.build_router_engine = _stub_noop  # type: ignore[attr-defined]
-sys.modules.setdefault("src.retrieval.router_factory", _stub_router)
+    stub_retrieval_pkg = ModuleType("src.retrieval")
+    stub_retrieval_pkg.__path__ = []  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "src.retrieval", stub_retrieval_pkg)
 
-_stub_hybrid = ModuleType("src.retrieval.hybrid")
-_stub_hybrid.ServerHybridRetriever = object  # type: ignore[attr-defined]
-sys.modules.setdefault("src.retrieval.hybrid", _stub_hybrid)
+    stub_graph = ModuleType("src.retrieval.graph_config")
+    stub_graph.GraphQueryArtifacts = _GraphQueryArtifacts  # type: ignore[attr-defined]
+    stub_graph.build_graph_retriever = _stub_build_graph_retriever  # type: ignore[attr-defined]
+    stub_graph.build_graph_query_engine = _stub_build_graph_query_engine  # type: ignore[attr-defined]
+    stub_graph.export_graph_jsonl = _stub_export_jsonl  # type: ignore[attr-defined]
+    stub_graph.export_graph_parquet = _stub_export_parquet  # type: ignore[attr-defined]
+    stub_graph.get_export_seed_ids = _stub_get_export_seed_ids  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "src.retrieval.graph_config", stub_graph)
 
-_stub_rerank = ModuleType("src.retrieval.reranking")
-_stub_rerank.MultimodalReranker = object  # type: ignore[attr-defined]
-_stub_rerank.build_text_reranker = _stub_noop  # type: ignore[attr-defined]
-_stub_rerank.build_visual_reranker = _stub_noop  # type: ignore[attr-defined]
-sys.modules.setdefault("src.retrieval.reranking", _stub_rerank)
+    stub_router = ModuleType("src.retrieval.router_factory")
+    stub_router.build_router_engine = _stub_noop  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "src.retrieval.router_factory", stub_router)
 
-_stub_storage = ModuleType("src.utils.storage")
-_stub_storage.create_vector_store = _stub_noop  # type: ignore[attr-defined]
-sys.modules.setdefault("src.utils.storage", _stub_storage)
+    stub_hybrid = ModuleType("src.retrieval.hybrid")
+    stub_hybrid.ServerHybridRetriever = object  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "src.retrieval.hybrid", stub_hybrid)
 
-_stub_monitoring = ModuleType("src.utils.monitoring")
-_stub_monitoring.log_performance = lambda *_, **__: None
-sys.modules.setdefault("src.utils.monitoring", _stub_monitoring)
+    stub_rerank = ModuleType("src.retrieval.reranking")
+    stub_rerank.MultimodalReranker = object  # type: ignore[attr-defined]
+    stub_rerank.build_text_reranker = _stub_noop  # type: ignore[attr-defined]
+    stub_rerank.build_visual_reranker = _stub_noop  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "src.retrieval.reranking", stub_rerank)
 
-docs_page = importlib.import_module("src.pages.02_documents")
-get_export_seed_ids = _stub_graph.get_export_seed_ids  # type: ignore
+    stub_storage = ModuleType("src.utils.storage")
+    stub_storage.create_vector_store = _stub_noop  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "src.utils.storage", stub_storage)
+
+    stub_monitoring = ModuleType("src.utils.monitoring")
+    stub_monitoring.log_performance = lambda *_, **__: None
+    monkeypatch.setitem(sys.modules, "src.utils.monitoring", stub_monitoring)
+
+    page = importlib.import_module("src.pages.02_documents")
+    yield page
+
+    for name, original in originals.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
 
 
 class _Node:
@@ -221,7 +234,7 @@ def test_collect_seed_ids_caps_to_32() -> None:
     Ensures that when no indices are provided, the fallback path still
     enforces the cap limit of 32 seed IDs.
     """
-    seeds = get_export_seed_ids(None, None, cap=32)
+    seeds = _stub_get_export_seed_ids(None, None, cap=32)
     assert len(seeds) == 32
     assert seeds[0] == "0"
     assert seeds[-1] == "31"
@@ -229,7 +242,7 @@ def test_collect_seed_ids_caps_to_32() -> None:
 
 @pytest.mark.unit
 def test_rebuild_snapshot_writes_manifest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, docs_page
 ) -> None:
     """Snapshot rebuild packages exports and manifests metadata."""
     settings_obj = SimpleNamespace(
@@ -290,7 +303,7 @@ def test_rebuild_snapshot_writes_manifest(
 
 @pytest.mark.unit
 def test_rebuild_snapshot_skips_exports_without_storage_context(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, docs_page
 ) -> None:
     """Snapshot rebuild omits exports when the graph index lacks storage context."""
     settings_obj = SimpleNamespace(
@@ -316,12 +329,3 @@ def test_rebuild_snapshot_skips_exports_without_storage_context(
     assert not any(graph_dir.glob("graph_export-*.jsonl"))
     assert not any(graph_dir.glob("graph_export-*.parquet"))
     assert not events
-
-
-def teardown_module(module) -> None:
-    """Restore original modules patched at import time."""
-    for name, original in _ORIGINAL_MODULES.items():
-        if original is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = original

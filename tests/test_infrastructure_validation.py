@@ -150,8 +150,12 @@ def test_session_scoped_fixtures_available():
     from tests.shared_fixtures import session_query_scenarios, session_test_documents
 
     # Verify they are fixture functions
-    assert hasattr(session_test_documents, "_pytestfixturefunction")
-    assert hasattr(session_query_scenarios, "_pytestfixturefunction")
+    assert hasattr(session_test_documents, "_fixture_function") or hasattr(
+        session_test_documents, "_pytestfixturefunction"
+    )
+    assert hasattr(session_query_scenarios, "_fixture_function") or hasattr(
+        session_query_scenarios, "_pytestfixturefunction"
+    )
 
 
 @pytest.mark.integration
@@ -183,9 +187,15 @@ def test_conftest_hierarchy():
     from tests.unit.conftest import sample_image_base64
 
     # All should be fixture functions
-    assert hasattr(sample_image_base64, "_pytestfixturefunction")
-    assert hasattr(mock_vector_index, "_pytestfixturefunction")
-    assert hasattr(mock_llm_for_routing, "_pytestfixturefunction")
+    assert hasattr(sample_image_base64, "_fixture_function") or hasattr(
+        sample_image_base64, "_pytestfixturefunction"
+    )
+    assert hasattr(mock_vector_index, "_fixture_function") or hasattr(
+        mock_vector_index, "_pytestfixturefunction"
+    )
+    assert hasattr(mock_llm_for_routing, "_fixture_function") or hasattr(
+        mock_llm_for_routing, "_pytestfixturefunction"
+    )
 
 
 @pytest.mark.unit

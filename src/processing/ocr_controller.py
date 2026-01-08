@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from loguru import logger
 
@@ -135,7 +136,8 @@ class OcrController:
             with fitz.open(file_path) as doc:
                 sample_count = min(doc.page_count, self._pdf_sample_pages)
                 for index in range(sample_count):
-                    text = doc.load_page(index).get_text().strip()
+                    page = doc.load_page(index)
+                    text = cast(Any, page).get_text().strip()
                     if text:
                         return True
         except (

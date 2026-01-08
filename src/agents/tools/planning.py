@@ -95,15 +95,12 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
     if isinstance(state, dict) and state.get("reset_context_on_error"):
         state["context"] = ChatMemoryBuffer.from_defaults()
 
-    if (
-        context
-        and hasattr(context, "chat_history")
-        and isinstance(context.chat_history, list)
-    ):
+    history = getattr(context, "chat_history", None) if context else None
+    if isinstance(history, list):
         try:
             return [
                 getattr(msg, "content", str(msg))
-                for msg in context.chat_history[-RECENT_CHAT_HISTORY_LIMIT:]
+                for msg in history[-RECENT_CHAT_HISTORY_LIMIT:]
             ]
         except Exception:  # pylint: disable=broad-exception-caught
             return []

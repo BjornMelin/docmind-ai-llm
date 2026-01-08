@@ -7,11 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.retrieval import router_factory as rf
 from src.retrieval.llama_index_adapter import (
     MissingLlamaIndexError,
     set_llama_index_adapter,
 )
-from src.retrieval.router_factory import GRAPH_DEPENDENCY_HINT, build_router_engine
 
 from .conftest import get_router_tool_names
 
@@ -49,7 +49,7 @@ def test_router_engine_requires_llama(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     with pytest.raises(MissingLlamaIndexError) as exc_info:
-        build_router_engine(_VecIndex(), pg_index=None, settings=cfg)
+        rf.build_router_engine(_VecIndex(), pg_index=None, settings=cfg)
     assert "pip install docmind_ai_llm[llama]" in str(exc_info.value)
 
 
@@ -65,10 +65,11 @@ def test_router_engine_warns_when_graph_disabled(
             self.property_graph_store = object()
 
     def _raise_graph_error(*_a: object, **_k: object) -> None:
-        raise MissingGraphAdapterError(GRAPH_DEPENDENCY_HINT)
+        raise MissingGraphAdapterError(rf.GRAPH_DEPENDENCY_HINT)
 
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_graph_query_engine",
+        rf,
+        "build_graph_query_engine",
         _raise_graph_error,
         raising=True,
     )
@@ -94,11 +95,11 @@ def test_router_engine_warns_when_graph_disabled(
         level="WARNING",
     )
     try:
-        router = build_router_engine(_VecIndex(), pg_index=_PgIndex(), settings=cfg)
+        router = rf.build_router_engine(_VecIndex(), pg_index=_PgIndex(), settings=cfg)
     finally:
         logger.remove(token)
 
     assert get_router_tool_names(router) == ["semantic_search"]
-    assert any(GRAPH_DEPENDENCY_HINT in message for message in captured), (
-        f"Expected warning containing '{GRAPH_DEPENDENCY_HINT}', got: {captured}"
+    assert any(rf.GRAPH_DEPENDENCY_HINT in message for message in captured), (
+        f"Expected warning containing '{rf.GRAPH_DEPENDENCY_HINT}', got: {captured}"
     )
