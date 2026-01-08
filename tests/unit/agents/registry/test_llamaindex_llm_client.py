@@ -57,4 +57,3 @@ def test_complete_does_not_retry_non_transient_error() -> None:
     with pytest.raises(ValueError, match="nope"):
         wrapper.complete("prompt")
     assert inner.complete.call_count == 1
-

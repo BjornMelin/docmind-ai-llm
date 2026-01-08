@@ -194,9 +194,10 @@ def _document_from_input(
     """
     if item.source_path is not None and reader is not None:
         try:
+            source_path = Path(item.source_path)
             docs = reader.load_data(  # type: ignore[call-arg]
-                file=str(item.source_path),
-                unstructured_kwargs={"filename": str(item.source_path)},
+                file=source_path,
+                unstructured_kwargs={"filename": str(source_path)},
             )
         except (
             TypeError,

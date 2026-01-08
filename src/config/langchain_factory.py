@@ -10,6 +10,7 @@ settings.
 from __future__ import annotations
 
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from src.config.settings import DocMindSettings, ensure_v1
 
@@ -36,7 +37,7 @@ def build_chat_model(cfg: DocMindSettings) -> ChatOpenAI:
 
     return ChatOpenAI(
         model=model_name,
-        api_key=cfg.openai.api_key or "not-needed",
+        api_key=SecretStr(cfg.openai.api_key or "not-needed"),
         base_url=base_url,
         timeout=timeout_s,
         max_retries=int(cfg.agents.max_retries),

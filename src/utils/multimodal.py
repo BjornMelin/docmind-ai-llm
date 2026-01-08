@@ -269,6 +269,8 @@ async def validate_end_to_end_pipeline(
     relationships = max(0, len(entities) - RANK_ADJUSTMENT)
 
     # Compose a final response string (LLM mocked in tests)
+    # TODO(multimodal-phase-2): Integrate property graph traversal and LLM
+    # summarization once those components are wired into the multimodal flow.
     _ = property_graph, llm  # boundaries mocked; kept for future expansion
     final = (
         f"Query '{query}' processed with visual similarity={similarity:.2f}. "

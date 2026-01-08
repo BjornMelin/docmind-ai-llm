@@ -12,6 +12,7 @@ import importlib
 import os
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
+from importlib import metadata
 from typing import Any, cast
 
 try:  # pragma: no cover - optional dependency
@@ -341,8 +342,8 @@ def _build_resource(app_settings: DocMindSettings) -> Resource:
     attributes: dict[str, Any] = {
         "service.name": obs.service_name,
     }
-    with suppress(importlib.metadata.PackageNotFoundError):
-        attributes["service.version"] = importlib.metadata.version("docmind_ai_llm")
+    with suppress(metadata.PackageNotFoundError):
+        attributes["service.version"] = metadata.version("docmind_ai_llm")
     if environment := os.getenv("DOCMIND_ENVIRONMENT"):
         attributes["deployment.environment"] = environment
     return Resource.create(attributes)

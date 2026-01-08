@@ -171,7 +171,8 @@ class AgentConfig(BaseModel):
     use_shared_llm_client: bool = Field(
         default=True,
         description=(
-            "Wrap the shared LLM in a retry-aware client for agent workflows."
+            "Enable retries for the shared LlamaIndex LLM used by agent workflows "
+            "(native retries when available; wrapper fallback otherwise)."
         ),
     )
     enable_deadline_propagation: bool = Field(

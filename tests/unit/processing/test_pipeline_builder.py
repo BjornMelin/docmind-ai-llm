@@ -12,9 +12,17 @@ def test_pipeline_builder_composes_factories(monkeypatch):
     """Builder should compose transforms, cache, and metadata deterministically."""
     recorded: dict[str, object] = {}
 
+    class _Pipeline:
+        __slots__ = ("__weakref__", "cache", "docstore", "transformations")
+
+        def __init__(self, *, transformations, cache, docstore):
+            self.transformations = transformations
+            self.cache = cache
+            self.docstore = docstore
+
     def fake_ingestion_pipeline(**kwargs):
         recorded.update(kwargs)
-        return SimpleNamespace(**kwargs)
+        return _Pipeline(**kwargs)
 
     monkeypatch.setattr(
         "src.processing.pipeline_builder.IngestionPipeline",

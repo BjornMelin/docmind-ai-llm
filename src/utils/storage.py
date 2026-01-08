@@ -25,7 +25,7 @@ import asyncio
 import gc
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
-from typing import Any
+from typing import Any, cast
 
 try:  # Optional torch; CPU-only environments must not fail at import
     import torch  # type: ignore
@@ -596,11 +596,25 @@ def persist_image_metadata(
         system errors.
     """
     try:
-        client.set_payload(
-            collection_name=collection_name,
-            points=[point_id],
-            payload=metadata,
-        )
+        update_payload = getattr(client, "update_payload", None)
+        if callable(update_payload):
+            cast(Any, update_payload)(
+                collection_name=collection_name,
+                points=[point_id],
+                payload=metadata,
+            )
+        else:
+            set_payload = getattr(client, "set_payload", None)
+            if not callable(set_payload):
+                raise AttributeError(
+                    "Qdrant client lacks payload update methods "
+                    "(update_payload/set_payload)"
+                )
+            cast(Any, set_payload)(
+                collection_name=collection_name,
+                points=[point_id],
+                payload=metadata,
+            )
         return True
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
         logger.warning("persist_image_metadata failed for %s: %s", point_id, exc)

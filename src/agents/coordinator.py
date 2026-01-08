@@ -41,6 +41,7 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 
 # Import LlamaIndex Settings for context window access
 from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.core.utils import get_tokenizer
 from loguru import logger
 from opentelemetry import metrics, trace
 
@@ -70,13 +71,14 @@ class ContextManager:
         self.max_context_tokens = max_context_tokens
         self.trim_threshold = int(max_context_tokens * 0.9)  # 90% threshold
         self.kv_cache_memory_per_token = 1024  # bytes per token for FP8
+        self._tokenizer = get_tokenizer()
 
     def estimate_tokens(self, messages: list[dict] | list[Any]) -> int:
-        """Estimate token count for messages (4 chars per token average)."""
+        """Estimate token count for messages using the global tokenizer."""
         if not messages:
             return 0
 
-        total_chars = 0
+        total_tokens = 0
         for msg in messages:
             content_attr = getattr(msg, "content", None)
             if content_attr is not None:
@@ -85,9 +87,9 @@ class ContextManager:
                 content = str(msg["content"])
             else:
                 content = str(msg)
-            total_chars += len(content)
+            total_tokens += len(self._tokenizer(content))
 
-        return total_chars // 4  # 4 chars per token estimate
+        return total_tokens
 
     def calculate_kv_cache_usage(self, state: dict) -> float:
         """Calculate KV cache memory usage in GB."""
@@ -116,6 +118,25 @@ def _shared_llm_attempts() -> int:
     """Return configured retry attempts for the shared LlamaIndex LLM."""
     retries = int(getattr(settings.agents, "max_retries", 0))
     return max(1, retries + 1)
+
+
+def _shared_llm_retries() -> int:
+    """Return configured retry count for LlamaIndex LLMs that support it."""
+    return max(0, int(getattr(settings.agents, "max_retries", 0)))
+
+
+def _supports_native_llamaindex_retries(llm: Any) -> bool:
+    """Return True when the LLM exposes a real `max_retries` field.
+
+    Most LlamaIndex LLM implementations are pydantic models and declare
+    `max_retries` explicitly. Avoid treating mocks as supporting this by
+    checking for a concrete field map.
+    """
+    fields = getattr(llm, "model_fields", None)
+    if isinstance(fields, dict) and "max_retries" in fields:
+        return True
+    legacy_fields = getattr(llm, "__fields__", None)
+    return isinstance(legacy_fields, dict) and "max_retries" in legacy_fields
 
 
 class MultiAgentCoordinator:
@@ -225,11 +246,28 @@ class MultiAgentCoordinator:
             if Settings.llm is not None:
                 self.llamaindex_llm = Settings.llm
                 if self.use_shared_llm_client:
-                    self._shared_llm_wrapper = RetryLlamaIndexLLM(
-                        self.llamaindex_llm,
-                        max_attempts=_shared_llm_attempts(),
-                    )
-                    self.llamaindex_llm = self._shared_llm_wrapper
+                    retries = _shared_llm_retries()
+                    # Prefer native retry configuration when supported (e.g.,
+                    # OpenAI-like backends expose `max_retries`).
+                    if _supports_native_llamaindex_retries(self.llamaindex_llm):
+                        try:
+                            self.llamaindex_llm.max_retries = retries  # type: ignore[attr-defined]
+                            logger.info(
+                                "Configured shared LlamaIndex LLM retries: %d",
+                                retries,
+                            )
+                        except (AttributeError, TypeError, ValueError):
+                            self._shared_llm_wrapper = RetryLlamaIndexLLM(
+                                self.llamaindex_llm,
+                                max_attempts=_shared_llm_attempts(),
+                            )
+                            self.llamaindex_llm = self._shared_llm_wrapper
+                    else:
+                        self._shared_llm_wrapper = RetryLlamaIndexLLM(
+                            self.llamaindex_llm,
+                            max_attempts=_shared_llm_attempts(),
+                        )
+                        self.llamaindex_llm = self._shared_llm_wrapper
                 logger.info("LlamaIndex LLM initialized from Settings")
             else:
                 # Raise error if LLM not properly configured

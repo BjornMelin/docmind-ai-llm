@@ -9,7 +9,7 @@ and any LlamaIndex-side calls that use the shared LLM.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from tenacity import (
     AsyncRetrying,
@@ -19,12 +19,12 @@ from tenacity import (
     wait_random_exponential,
 )
 
-try:  # pragma: no cover - typing-only imports
-    from llama_index.core.base.llms.types import (  # type: ignore
-        ChatMessage,
-    )
-except Exception:  # pragma: no cover - defensive for optional llama-index extras
-    ChatMessage = Any  # type: ignore[assignment]
+if TYPE_CHECKING:  # pragma: no cover - typing-only imports
+    from llama_index.core.base.llms.types import ChatMessage as _ChatMessage
+
+    ChatMessage: TypeAlias = _ChatMessage
+else:  # pragma: no cover - runtime fallback for optional llama-index installs
+    ChatMessage: TypeAlias = Any
 
 
 class RetryLlamaIndexLLM:
