@@ -43,13 +43,13 @@ dependencies = [
     # Vector Databases & Clients
     "qdrant-client>=1.15.1,<2.0.0",      # Qdrant client
     # LlamaIndex (meta + selected integrations)
-    "llama-index>=0.13.6,<0.14.0",
-    "llama-index-vector-stores-qdrant>=0.8.8,<0.9.0",
+    "llama-index>=0.14.12,<0.15.0",
+    "llama-index-vector-stores-qdrant>=0.9.0,<0.10.0",
     "llama-index-vector-stores-duckdb>=0.5.1,<0.6.0",  # DuckDB vector-store
     "llama-index-storage-kvstore-duckdb>=0.2.1,<0.3.0",  # DuckDB KV store (cache)
     "llama-index-llms-vllm>=0.6.1,<0.7.0",
-    "llama-index-llms-openai>=0.5.6,<0.6.0",
-    "llama-index-llms-ollama>=0.7.4,<0.8.0",
+    "llama-index-llms-openai>=0.6.12,<0.7.0",
+    "llama-index-llms-ollama>=0.9.1,<1.0.0",
     "llama-index-llms-llama-cpp>=0.5.1,<0.6.0",
     "llama-index-llms-openai-like>=0.5.1,<0.6.0",
     "llama-index-embeddings-huggingface>=0.6.1,<0.7.0",
@@ -95,7 +95,7 @@ gpu = [
     "cmake>=3.26.4",                      # Required for CUDA builds
 ]
 llama = [
-    "llama-index-core>=0.13.6,<0.14.0",    # Core llama-index dependency
+    "llama-index-core>=0.14.12,<0.15.0",    # Core llama-index dependency
 ]
 graph = [
     "llama-index-graph-stores-kuzu>=0.9.1,<1.0.0",
