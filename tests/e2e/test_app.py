@@ -396,20 +396,16 @@ def fixture_app_test(tmp_path, monkeypatch):
         )
 
 
-@patch("ollama.pull", return_value={"status": "success"})
-def test_app_hardware_detection(_mock_pull, app_test):  # noqa: PT019
+@pytest.mark.usefixtures("mock_pull")
+def test_app_hardware_detection(app_test) -> None:
     """Test hardware detection display and model suggestions in the application.
 
     Validates that hardware detection works correctly and appropriate model
     suggestions are displayed based on available hardware.
 
     Args:
-        mock_detect: Mock hardware detection function.
-        mock_pull: Mock ollama.pull function.
         app_test: Streamlit app test fixture.
     """
-    # Mark patched object as used to satisfy lint rules
-    assert _mock_pull is not None
     app = app_test.run()
 
     # Verify no critical exceptions occurred
@@ -418,10 +414,9 @@ def test_app_hardware_detection(_mock_pull, app_test):  # noqa: PT019
     assert hasattr(app, "sidebar")
 
 
-@patch("ollama.pull", return_value={"status": "success"})
-def test_app_renders_and_shows_chat(_mock_pull, app_test):  # noqa: PT019
+@pytest.mark.usefixtures("mock_pull")
+def test_app_renders_and_shows_chat(app_test) -> None:
     """Verify app renders and the chat section is present."""
-    assert _mock_pull is not None
     app = app_test.run()
     assert not app.exception, f"App failed with exception: {app.exception}"
     app_str = str(app)
