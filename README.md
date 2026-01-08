@@ -177,6 +177,7 @@ Design goals:
    # Model names are backend-specific:
    #   - Ollama: use the local tag (e.g., qwen3-4b-instruct-2507)
    #   - vLLM/LM Studio/llama.cpp: use the served model name
+   # NOTE: DOCMIND_MODEL (top-level) overrides backend-specific model vars such as DOCMIND_VLLM__MODEL at runtime.
 
    # Example - Ollama (local, default):
    #   DOCMIND_LLM_BACKEND=ollama
@@ -464,7 +465,7 @@ flowchart TD
 - **Unified Text Embeddings:** BGE-M3 (BAAI/bge-m3) via LlamaIndex for dense vectors (1024D); sparse query vectors via FastEmbed BM42/BM25 when available.
 - **Multimodal:** SigLIP visual scoring by default; OpenCLIP optional. ColPali visual reranking is optional (multimodal extra).
 - **Fusion:** Server-side RRF via Qdrant Query API when `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true` (DBSF optional).
-- **De‑duplication:** Configurable key via `DOCMIND_RETRIEVAL__DEDUP_KEY` (page_id|doc_id); default = `page_id`.
+- **Deduplication:** Configurable key via `DOCMIND_RETRIEVAL__DEDUP_KEY` (page_id|doc_id); default = `page_id`.
 - **Router composition:** See `src/retrieval/router_factory.py` (tools: `semantic_search`, `hybrid_search`, `knowledge_graph`). Selector preference: `PydanticSingleSelector` (preferred) → `LLMSingleSelector` fallback. The `knowledge_graph` tool is activated only when a PropertyGraphIndex is present and healthy; otherwise the router uses vector/hybrid only.
 
 - **Storage:** Qdrant vector database with metadata filtering and concurrent access
@@ -477,11 +478,11 @@ flowchart TD
 
   - **Query Router:** Analyzes query complexity and determines optimal retrieval strategy
   - **Query Planner:** Decomposes complex queries into manageable sub-tasks for better processing
-  - **Retrieval Expert:** Executes optimized retrieval with server‑side hybrid (Qdrant) and optional GraphRAG; supports optional DSPy query optimization when enabled
+  - **Retrieval Expert:** Executes optimized retrieval with server-side hybrid (Qdrant) and optional GraphRAG; supports optional DSPy query optimization when enabled
   - **Result Synthesizer:** Combines and reconciles results from multiple retrieval passes with deduplication
   - **Response Validator:** Validates response quality, accuracy, and completeness before final output
 
-- **Enhanced Capabilities:** Optional GraphRAG for multi‑hop reasoning and optional DSPy query optimization for query rewriting
+- **Enhanced Capabilities:** Optional GraphRAG for multi-hop reasoning and optional DSPy query optimization for query rewriting
 
 - **Workflow Coordination:** Supervisor routes between agents; coordination overhead is tracked with a 200ms target threshold.
 - **Session State:** Streamlit session state holds chat history; snapshots persist retrieval artifacts to disk.
@@ -569,7 +570,7 @@ DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
 
 Notes:
 
-- DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library‑first (server‑side hybrid via Qdrant + reranking).
+- DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library-first (server-side hybrid via Qdrant + reranking).
 - DSPy ships with the default dependencies; if it is unavailable or the flag is false, the system falls back gracefully to standard retrieval.
 
 ### Additional Configuration
@@ -611,10 +612,10 @@ maxUploadSize = 200
 
 ### Retrieval & Reranking Defaults
 
-- Hybrid retrieval uses Qdrant named vectors `text-dense` (1024D COSINE; BGE‑M3) and `text-sparse` (FastEmbed BM42/BM25 + IDF) when `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`.
+- Hybrid retrieval uses Qdrant named vectors `text-dense` (1024D COSINE; BGE-M3) and `text-sparse` (FastEmbed BM42/BM25 + IDF) when `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`.
 - Default fusion is RRF; DBSF is available with `DOCMIND_RETRIEVAL__FUSION_MODE=dbsf`.
 - Prefetch defaults: dense 200, sparse 400; `fused_top_k=60`; `page_id` de-dup.
-- Reranking is enabled by default: BGE v2‑m3 (text) + SigLIP (visual), with optional ColPali; timeouts are enforced and fail open.
+- Reranking is enabled by default: BGE v2-m3 (text) + SigLIP (visual), with optional ColPali; timeouts are enforced and fail open.
 - Feature flags (hybrid, reranking) are env-only; RRF K and timeouts are adjustable in the Settings page.
 - Router parity: RouterQueryEngine tools (vector/hybrid/KG) apply the same reranking policy via `node_postprocessors` behind `DOCMIND_RETRIEVAL__USE_RERANKING`.
 
@@ -666,7 +667,7 @@ DocMind snapshots persist indices atomically for reproducible retrieval.
 
 - `manifest.meta.json` fields include `schema_version`, `persist_format_version`, `complete`, `created_at`, `index_id`, `graph_store_type`, `vector_store_type`, `corpus_hash`, `config_hash`, `versions`, and `graph_exports` when present.
 - Hashing: `corpus_hash` computed with POSIX relpaths relative to a stable base dir (the Documents UI uses `uploads/`) for OS-agnostic stability.
-- Chat autoload: the Chat page loads the latest non‑stale snapshot when available; otherwise it shows a staleness badge and offers to rebuild.
+- Chat autoload: the Chat page loads the latest non-stale snapshot when available; otherwise it shows a staleness badge and offers to rebuild.
 
 ### GraphRAG Exports & Seeds
 
@@ -872,7 +873,7 @@ Contributions are welcome! Please follow these steps:
 We use a tiered test strategy and keep everything offline by default:
 
 - Unit (fast, offline): mocks only; no network/GPU.
-- Integration (offline): component interactions; router uses a session‑autouse MockLLM fixture in `tests/integration/conftest.py`, preventing any Ollama/remote calls.
+- Integration (offline): component interactions; router uses a session-autouse MockLLM fixture in `tests/integration/conftest.py`, preventing any Ollama/remote calls.
 - System/E2E (optional): heavier flows beyond the PR quality gates.
 
 Quick local commands:
@@ -881,7 +882,7 @@ Quick local commands:
 # Fast unit + integration sweep (offline)
 uv run python scripts/run_tests.py --fast
 
-# Extras (multimodal) lane — skips automatically when optional deps missing
+# Extras (multimodal) lane - skips automatically when optional deps missing
 uv run python scripts/run_tests.py --extras
 
 # Full coverage gate (unit + integration)
@@ -895,13 +896,13 @@ Default `pytest` invocations now run without implicit coverage gates. Use the
 scripted `--coverage` workflow (or run `coverage report`) when you need HTML,
 XML, or JSON artifacts for CI or local analysis.
 
-CI pipeline mirrors this flow using `uv run python scripts/run_tests.py --fast` as a quick gate followed by `--coverage` for the full report. This keeps coverage thresholds stable while still surfacing integration regressions early. See ADR‑014 for quality gates/validation and ADR‑029 for the boundary‑first testing strategy.
+CI pipeline mirrors this flow using `uv run python scripts/run_tests.py --fast` as a quick gate followed by `--coverage` for the full report. This keeps coverage thresholds stable while still surfacing integration regressions early. See ADR-014 for quality gates/validation and ADR-029 for the boundary-first testing strategy.
 
 See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed guidelines. For an overview of the unit test layout and fixture strategy, see tests/README.md.
 
 ## License
 
-This project is licensed under the MIT License—see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Observability
 
