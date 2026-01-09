@@ -2,6 +2,44 @@
 
 Implements `ADR-041` + `SPEC-022`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Use skill:** `$streamlit-master-architect`
+
+Load and follow its workflows for:
+- rerun discipline + `st.session_state` correctness
+- AppTest patterns
+- security-by-default (no unsafe HTML)
+
+Skill references to consult (as needed):
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md`
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/widget_keys_and_reruns.md`
+
+**Streamlit preflight (version + docs + audit):**
+
+```bash
+uv run python -c "import streamlit as st; print(st.__version__)"
+uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
+uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
+```
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan the UI + tests steps.
+2. Context7 API verification:
+   - `functions.mcp__context7__resolve-library-id` → `streamlit`, `pydantic`, `python-dotenv`
+   - `functions.mcp__context7__query-docs` → `st.badge`, `st.form_submit_button`, `st.session_state`, dotenv `set_key/unset_key`
+3. Exa (official docs only) for Streamlit forms + best practices if uncertain.
+4. `functions.mcp__zen__secaudit` → validate no new injection/logging sinks.
+
+**opensrc (only if subtle behavior):**
+
+```bash
+cat opensrc/sources.json | rg -n "python-dotenv|streamlit|pydantic" || true
+npx opensrc pypi:python-dotenv
+```
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

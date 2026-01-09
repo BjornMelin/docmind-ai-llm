@@ -2,6 +2,33 @@
 
 Implements `ADR-044` + `SPEC-025`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Primary tools to leverage:**
+
+- `rg` for local code search and call-site discovery.
+- Context7 + Exa for Qdrant/LlamaIndex API verification (especially sparse vectors / named vectors).
+- `functions.mcp__gh_grep__searchGitHub` for idiomatic sparse-only query patterns.
+- `opensrc/` for inspecting exact dependency behavior (Qdrant client + LlamaIndex) when in doubt.
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan: new retriever + tool wiring + tests.
+2. Context7:
+   - resolve `qdrant-client` and `llama-index`
+   - query docs for Query API / named vectors usage and payload formats
+3. Exa search for “Qdrant Query API prefetch sparse named vector text-sparse” (official sources preferred).
+4. `functions.mcp__gh_grep__searchGitHub` for patterns like `Prefetch(` / `FusionQuery(` / `SparseVector`.
+5. `functions.mcp__zen__secaudit` → confirm no query text/PII is logged in telemetry.
+
+**opensrc (recommended):**
+
+```bash
+cat opensrc/sources.json | rg -n "qdrant-client|llama-index" || true
+npx opensrc pypi:qdrant-client
+npx opensrc pypi:llama-index
+```
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

@@ -2,6 +2,27 @@
 
 Implements `ADR-051` + `SPEC-032`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+This is a cross-cutting refactor (UI → persistence boundary). Use analysis + review tools.
+
+**Use skill:** `$streamlit-master-architect` (for the Documents page wiring + AppTest), but keep the service boundary Streamlit-free.
+
+Skill references to consult (as needed):
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md`
+
+**Primary tools to leverage:**
+
+- `rg` to locate all snapshot rebuild/export code paths and tests.
+- Context7 for any subtle LlamaIndex persistence APIs (if needed).
+- `functions.mcp__zen__analyze` before refactor to avoid accidental behavior changes.
+- `functions.mcp__zen__codereview` after refactor to ensure the boundary is clean and tests moved correctly.
+
+**opensrc (optional):**
+
+Use only if you must understand LlamaIndex persistence internals; prefer repo code + tests first.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

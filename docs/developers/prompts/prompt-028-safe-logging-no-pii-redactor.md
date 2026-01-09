@@ -2,6 +2,21 @@
 
 Implements `ADR-047` + `SPEC-028`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+This is security-sensitive. Use structured security review tools.
+
+**Primary tools to leverage:**
+
+- `rg` to inventory logging call sites (`logger.*`, `loguru`, `logging`, `print`).
+- Context7/Exa only if you need authoritative guidance for log safety patterns (otherwise stay repo-local).
+- `functions.mcp__zen__secaudit` (mandatory) to review new helpers and any touched log statements.
+- `functions.mcp__zen__codereview` to ensure no accidental raw-content logging is introduced.
+
+**opensrc (optional):**
+
+Use only if you must confirm behavior of a logging dependency; otherwise avoid.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### FEATURE CONTEXT (FILLED)

@@ -2,6 +2,16 @@
 
 Implements `ADR-046` + `SPEC-027`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+This work is primarily repo hygiene; prefer local repo truth over web research.
+
+**Primary tools to leverage:**
+
+- `rg` to find imports/references and doc mentions.
+- `functions.mcp__zen__analyze` if unexpected coupling is found (imports from `src.main`).
+- `functions.mcp__zen__codereview` after deletion to ensure no dangling references remain.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### FEATURE CONTEXT (FILLED)

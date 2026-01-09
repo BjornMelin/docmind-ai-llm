@@ -4,6 +4,36 @@ Implements `ADR-042` + `SPEC-023`.
 
 Use the `$docker-architect` workflow patterns (multi-stage, non-root, .dockerignore).
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Use skill:** `$docker-architect`
+
+Mandatory workflow steps from the skill:
+
+```bash
+python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_inventory.py --root .
+python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_audit.py --root .
+docker buildx version
+```
+
+Skill references to consult (as needed):
+- `/home/bjorn/.codex/skills/docker-architect/references/security_hardening.md`
+- `/home/bjorn/.codex/skills/docker-architect/references/compose_patterns.md`
+- `/home/bjorn/.codex/skills/docker-architect/references/dockerfile_patterns.md`
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan Dockerfile/compose changes + smoke checks.
+2. Exa search (official sources) for:
+   - Python 3.11 base image tags
+   - Streamlit container best practices (ports, health checks)
+3. Context7 for `uv` and Streamlit entrypoint behavior if uncertain.
+4. `functions.mcp__zen__secaudit` → container hardening checklist (non-root, secrets, .dockerignore).
+
+**opensrc (optional):**
+
+Use only if container behavior depends on packaging internals (rare). Prefer repo scripts and `pyproject.toml` truth.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

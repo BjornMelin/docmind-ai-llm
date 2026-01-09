@@ -2,6 +2,21 @@
 
 Implements `ADR-048` + `SPEC-029`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+Docs drift is best solved with repo-local tooling + grep first.
+
+**Primary tools to leverage:**
+
+- `rg` for finding stale references and validating replacements.
+- Prefer `opensrc/` only when a doc claim depends on library internals (rare).
+- Exa/Context7 only when a doc section references subtle library behavior that must be correct.
+
+**MCP tool sequence (optional):**
+
+1. `functions.mcp__zen__planner` → scope the doc drift changes + drift-checker script changes.
+2. `functions.mcp__zen__codereview` → sanity check after drift checker is added (avoid false positives).
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### FEATURE CONTEXT (FILLED)

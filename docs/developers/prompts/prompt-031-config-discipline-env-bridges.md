@@ -2,6 +2,25 @@
 
 Implements `ADR-050` + `SPEC-031`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+This is security-sensitive config work. Prefer repo truth and run structured audits.
+
+**Primary tools to leverage:**
+
+- `rg` to inventory every `os.getenv` call and ensure all are removed from core modules.
+- Context7 for authoritative Pydantic Settings v2 patterns and typing (nested env parsing).
+- `opensrc/` for Pydantic internals only when behavior is surprising (prefer docs first).
+- `functions.mcp__zen__secaudit` (mandatory) after changes: confirm no secret logging and no new egress surfaces.
+- `functions.mcp__zen__codereview` for final correctness gate.
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan settings schema + refactors + tests.
+2. Context7:
+   - resolve `pydantic` (and `pydantic-settings`) and query docs for env mapping and nested keys.
+3. Exa search (official pydantic docs) if a validator/SettingsConfigDict behavior is unclear.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### FEATURE CONTEXT (FILLED)

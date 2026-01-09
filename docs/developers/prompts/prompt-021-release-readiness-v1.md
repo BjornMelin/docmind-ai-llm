@@ -2,6 +2,43 @@
 
 Use this prompt to implement **every** work package defined in `docs/specs/spec-021-release-readiness-v1.md`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Skills to load during execution (by package):**
+
+- `$streamlit-master-architect` for any Streamlit page/UI work (WP01, WP03, WP11–WP13).
+- `$docker-architect` for container/compose work (WP02).
+
+**Mandatory preflight in each new session:**
+
+```bash
+cd /home/bjorn/repos/agents/docmind-ai-llm
+rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools || true
+uv run python -c "import streamlit as st; print(st.__version__)"
+```
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan the current WP only.
+2. `functions.list_mcp_resources` → discover preloaded docs/indexes; `functions.read_mcp_resource` to load any relevant ones.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API signatures/snippets (Streamlit, Pydantic, LlamaIndex, Qdrant, DuckDB, OpenTelemetry).
+4. `functions.mcp__exa__web_search_exa` (+ `functions.mcp__exa__crawling_exa`) → official docs/changelogs when behavior is subtle or “latest” matters.
+5. `functions.mcp__gh_grep__searchGitHub` → real-world usage patterns for tricky APIs.
+6. `functions.mcp__zen__analyze` → architecture sanity check before cross-cutting refactors.
+7. `functions.mcp__zen__secaudit` → security audit for new/changed surfaces (config, path handling, logging, network).
+8. `functions.mcp__zen__codereview` → final quality gate after each WP.
+
+**opensrc usage (dependency internals, repo-truth):**
+
+- Inspect `opensrc/sources.json` and fetch missing sources only when needed:
+
+```bash
+cat opensrc/sources.json | rg -n "\"name\": \"(pypi:)?(llama-index|streamlit|qdrant-client|duckdb|python-dotenv|opentelemetry)\"" || true
+npx opensrc pypi:python-dotenv
+npx opensrc pypi:llama-index
+npx opensrc open-telemetry/opentelemetry-python
+```
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

@@ -2,6 +2,20 @@
 
 Implements `ADR-054` + `SPEC-035`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+This is config + docs truth work; keep it minimal and test-backed.
+
+**Primary tools to leverage:**
+
+- `rg` to confirm each knob is truly unused (no runtime imports or env mappings).
+- Context7 for Pydantic Settings v2 behaviors (unknown env vars, nested keys) if needed.
+- `functions.mcp__zen__codereview` after pruning to ensure no accidental breakage.
+
+**Security note:**
+
+Removing knobs is a behavior change. If a knob relates to backup/security/egress, run `functions.mcp__zen__secaudit` after implementation.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

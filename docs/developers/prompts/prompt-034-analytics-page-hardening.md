@@ -2,6 +2,35 @@
 
 Implements `ADR-053` + `SPEC-034`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Use skill:** `$streamlit-master-architect` (page import discipline, AppTest patterns)
+
+Skill references to consult (as needed):
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
+
+**Preflight:**
+
+```bash
+uv run python -c "import streamlit as st; print(st.__version__)"
+rg -n "duckdb\\.connect|__import__\\(" src/pages/03_analytics.py
+```
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan: DB lifecycle + telemetry parser + tests.
+2. Context7:
+   - resolve `duckdb` and query docs for connection lifecycle and `.df()` usage.
+3. `functions.mcp__zen__secaudit` → ensure telemetry parsing is bounded and no secrets are logged.
+
+**opensrc (optional):**
+
+```bash
+cat opensrc/sources.json | rg -n "duckdb" || true
+npx opensrc pypi:duckdb
+```
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

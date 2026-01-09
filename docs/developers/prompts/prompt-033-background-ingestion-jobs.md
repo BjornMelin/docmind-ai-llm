@@ -2,6 +2,32 @@
 
 Implements `ADR-052` + `SPEC-033`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Use skill:** `$streamlit-master-architect`
+
+Mandatory Streamlit evergreen steps:
+
+```bash
+uv run python -c "import streamlit as st; print(st.__version__)"
+uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
+uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
+```
+
+Skill references to consult (as needed):
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md` (fragments + reruns)
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md` (threading + unsafe patterns)
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/e2e_playwright_mcp.md` (optional E2E smoke)
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → concurrency design + test plan.
+2. Context7:
+   - resolve `streamlit` and query docs for `st.fragment`, reruns, and threading guidance.
+3. `functions.mcp__gh_grep__searchGitHub` → search for `st.fragment(run_every=` patterns in real repos.
+4. `functions.mcp__zen__secaudit` → verify no unsafe thread/UI interactions; no path/secret leaks in progress events.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

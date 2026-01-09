@@ -2,6 +2,36 @@
 
 Implements `ADR-043` + `SPEC-024`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Use skill:** `$streamlit-master-architect` (Streamlit reruns, AppTest, session state discipline)
+
+Skill references to consult (as needed):
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
+- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
+
+**Preflight:**
+
+```bash
+uv run python -c "import streamlit as st; print(st.__version__)"
+rg -n "st\\.session_state\\.|st\\.chat_" src/pages/01_chat.py
+```
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan persistence wiring + tests.
+2. Context7:
+   - resolve `llama-index` and query docs for `SimpleChatStore` + `ChatMemoryBuffer` usage patterns.
+3. `functions.mcp__gh_grep__searchGitHub` → confirm real-world `SimpleChatStore` JSON persistence patterns (if behavior unclear).
+4. `functions.mcp__zen__secaudit` → path validation + no message-content logging.
+
+**opensrc (only if subtle LlamaIndex behavior):**
+
+```bash
+cat opensrc/sources.json | rg -n "llama-index" || true
+npx opensrc pypi:llama-index
+```
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

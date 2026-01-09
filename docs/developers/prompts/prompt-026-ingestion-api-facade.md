@@ -2,6 +2,31 @@
 
 Implements `ADR-045` + `SPEC-026`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+**Primary tools to leverage:**
+
+- `rg` for placeholder/legacy discovery (TODOs, NotImplemented stubs, old doc references).
+- Context7 for authoritative API signatures (LlamaIndex IngestionPipeline, UnstructuredReader, Pydantic models).
+- Exa for official LlamaIndex ingestion guidance if behavior is unclear.
+- `opensrc/` to confirm internal behavior (LlamaIndex + unstructured) when subtle (caching, docstore persist).
+
+**MCP tool sequence (use when it adds signal):**
+
+1. `functions.mcp__zen__planner` → plan: new canonical API + facade + tests + doc updates.
+2. Context7:
+   - resolve `llama-index` (and optionally `unstructured`) and query docs for ingestion pipeline + readers
+3. `functions.mcp__zen__secaudit` → file/path traversal protection + symlink blocking (directory ingestion).
+4. `functions.mcp__zen__codereview` after implementation to ensure the facade is thin and no legacy paths remain.
+
+**opensrc (recommended):**
+
+```bash
+cat opensrc/sources.json | rg -n "llama-index|unstructured" || true
+npx opensrc pypi:llama-index
+npx opensrc pypi:unstructured
+```
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE

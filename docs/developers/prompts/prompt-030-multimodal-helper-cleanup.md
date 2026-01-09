@@ -2,6 +2,16 @@
 
 Implements `ADR-049` + `SPEC-030`.
 
+## Tooling & Skill Strategy (fresh Codex sessions)
+
+This is a deletion/cleanup task. Prefer local repo truth.
+
+**Primary tools to leverage:**
+
+- `rg` for finding all references (production and tests).
+- `functions.mcp__zen__analyze` if references look indirect or dynamic.
+- `functions.mcp__zen__codereview` after deletion to ensure no dangling imports.
+
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### FEATURE CONTEXT (FILLED)
