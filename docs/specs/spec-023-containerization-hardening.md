@@ -9,7 +9,7 @@ related_requirements:
   - NFR-PORT-003: Docker/compose artifacts run and are reproducible from uv.lock.
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.
   - NFR-MAINT-002: Pylint score ≥9.5; Ruff passes.
-related_adrs: ["ADR-042", "ADR-024", "ADR-015"]
+related_adrs: ["ADR-042", "ADR-024"]
 ---
 
 ## Objective

@@ -4,11 +4,13 @@ title: Configuration Surface Pruning (Remove Unused/No-op Knobs)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Superseded
 related_requirements:
   - NFR-MAINT-003: No drift between docs/specs/RTM and shipped code
 related_adrs: ["ADR-054", "ADR-024"]
 ---
+
+> Status notice (2026-01-09): This spec is superseded. The current direction is to implement the existing configuration surface (analysis modes, backups, semantic cache, ops DB) rather than pruning it.
 
 ## Goals
 
@@ -30,6 +32,9 @@ Remove from `src/config/settings.py` (and any docs/UI references):
 - `AnalysisConfig` and `DocMindSettings.analysis`
 - `AgentConfig.enable_deadline_propagation`
 - `AgentConfig.enable_router_injection`
+- `ChatConfig.sqlite_path`
+- `DatabaseConfig.sqlite_db_path`
+- `DatabaseConfig.enable_wal_mode`
 
 ## Design
 

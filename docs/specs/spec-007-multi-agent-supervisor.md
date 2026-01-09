@@ -1,10 +1,10 @@
 ---
 spec: SPEC-007
 title: LangGraph Supervisor Orchestrator with Deterministic JSON-Schema Outputs
-version: 1.0.0
-date: 2025-09-05
+version: 1.0.1
+date: 2026-01-09
 owners: ["ai-arch"]
-status: Final
+status: Revised
 related_requirements:
   - FR-AGENT-001: Use langgraph-supervisor-py to coordinate specialized agents.
   - FR-AGENT-002: Enforce JSON schema outputs where backend supports structured decoding.
@@ -30,12 +30,12 @@ from src.retrieval.router_factory import build_router_engine
 
 ### CREATE
 
-- `src/agents/supervisor.py`: supervisor factory with config flags.
-- `src/agents/tools/router_tool.py`, `retrieval.py`, `synthesis.py`, `validation.py` already exist; ensure registration with supervisor.
+- `src/agents/coordinator.py`: supervisor coordinator using `langgraph-supervisor` and registered tools.
+- Agent tools live under `src/agents/tools/` and are registered via the tool registry/factory.
 
 ### UPDATE
 
-- `src/app.py` and `src/pages/chat.py`: send queries via supervisor; stream responses.
+- `src/app.py` and `src/pages/01_chat.py`: send queries via the coordinator; stream responses.
 
 ## Acceptance Criteria
 

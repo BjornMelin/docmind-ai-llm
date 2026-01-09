@@ -9,7 +9,7 @@ related_requirements:
   - FR-022: Chat history persists locally across refresh/restart.
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.
   - NFR-SEC-002: Local data remains on device; logging excludes sensitive content.
-related_adrs: ["ADR-043","ADR-012"]
+related_adrs: ["ADR-043", "ADR-024", "ADR-047"]
 ---
 
 ## Objective

@@ -8,7 +8,7 @@ status: Draft
 related_requirements:
   - NFR-PORT-001: Single definitive architecture; no prod/local forks.
   - NFR-MAINT-003: No placeholder/dead entrypoints.
-related_adrs: ["ADR-046", "ADR-012", "ADR-024"]
+related_adrs: ["ADR-046", "ADR-013", "ADR-024"]
 ---
 
 ## Objective

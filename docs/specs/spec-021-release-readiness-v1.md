@@ -11,6 +11,9 @@ related_requirements:
   - NFR-MAINT-003: No placeholder APIs; docs/specs/RTM must match code.
   - NFR-PORT-003: Docker/compose artifacts run and are reproducible from uv.lock.
 related_adrs:
+  - "ADR-023"
+  - "ADR-033"
+  - "ADR-035"
   - "ADR-041"
   - "ADR-042"
   - "ADR-043"
@@ -24,18 +27,21 @@ related_adrs:
   - "ADR-051"
   - "ADR-052"
   - "ADR-053"
-  - "ADR-054"
+  - "ADR-055"
+  - "ADR-056"
 ---
 
 ## Objective
 
-Define the **minimum complete set of work packages** required to ship the first finished DocMind AI release with:
+Define the **complete set of work packages** required to ship the first finished DocMind AI release with:
 
 - runnable local Streamlit app
 - runnable container artifacts
 - offline-first posture preserved
 - documentation + RTM consistency restored
 - no TODO/NotImplemented placeholders left in production modules
+- advanced, opt-in capabilities shipped (semantic cache, analysis modes, backups) without violating local-first posture
+- correctness hardening shipped (ops metadata store, cooperative deadline propagation) without adding new remote surfaces
 
 This SPEC is the umbrella “release plan” and links to the individual ADR/SPEC/prompts for each package.
 
@@ -68,21 +74,30 @@ Each work package MUST ship with:
 | 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md` |
 | 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | `docs/developers/prompts/prompt-033-background-ingestion-jobs.md` |
 | 13 | Analytics page hardening (DuckDB + telemetry parsing) | ADR-053 | SPEC-034 | `docs/developers/prompts/prompt-034-analytics-page-hardening.md` |
-| 14 | Config surface pruning (remove unused/no-op knobs) | ADR-054 | SPEC-035 | `docs/developers/prompts/prompt-035-config-surface-pruning-unused-knobs.md` |
+| 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | `docs/developers/prompts/prompt-036-document-analysis-modes.md` |
+| 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | `docs/developers/prompts/prompt-037-local-backup-and-retention.md` |
+| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md` |
+| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
+| 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md` |
 
 ## Execution order and dependencies
 
 Recommended dependency order (minimizes churn):
 
 1. WP01 → fixes UI security sink and prevents invalid persisted config.
-2. WP05/WP04 → stabilizes ingestion + retrieval tool surfaces used by agents/docs.
-3. WP11 → moves snapshot rebuild/export into a testable service boundary (enables WP12).
-4. WP12 → adds background ingestion UX on top of the stable service boundary.
-5. WP03 → adds persistence UX (depends on stable settings/data_dir).
-6. WP06/WP07/WP10/WP14 → eliminates legacy debt, strengthens config discipline, and removes unused config knobs.
-7. WP13 → hardens Analytics and telemetry parsing (best after WP10 if telemetry path moves into settings).
-8. WP09/WP08 → removes remaining TODOs and aligns docs/RTM.
-9. WP02 (Docker/Compose) → can be done anytime, but should be validated before release.
+2. WP10 → stabilizes config discipline (reduce `os.getenv` sprawl; unify settings).
+3. WP05/WP04 → stabilizes ingestion + retrieval tool surfaces used by agents/docs.
+4. WP18 → restores retrieval tool contract and aligns per-call timeouts to the supervisor decision budget.
+5. WP11 → moves snapshot rebuild/export into a testable service boundary (enables WP12).
+6. WP17 → adds transactional ops metadata needed for background job reliability and restart recovery.
+7. WP12 → adds background ingestion UX on top of the stable service boundary (writes to ops DB).
+8. WP03 → adds chat persistence UX (depends on stable settings/data_dir).
+9. WP14 → adds analysis modes on top of stable retrieval + chat UX.
+10. WP16 → adds semantic cache (optional; default-off; strict invalidation).
+11. WP15 → adds local backup/retention once data layout is stable (uses snapshots/cache dirs).
+12. WP06/WP07/WP13 → eliminates legacy entrypoints, strengthens logging safety, and hardens Analytics.
+13. WP09/WP08 → removes remaining TODOs and aligns docs/RTM.
+14. WP02 (Docker/Compose) → can be done anytime, but should be validated before release.
 
 ## Release quality gates (commands)
 
