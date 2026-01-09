@@ -47,7 +47,7 @@ with the current codebase, pyproject.toml, scripts, and docs/specs/ADRs.
 - Setup: `uv sync && cp .env.example .env`
 - Run app: `streamlit run src/app.py`
 - Run app with port env: `./scripts/run_app.sh`
-- Lint/format: `ruff format . && ruff check . --fix && uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+- Lint/format: `uv run ruff format . && uv run ruff check . --fix && uv run pyright`
 - Tests (fast tier): `uv run python scripts/run_tests.py --fast`
 - Tests (all): `uv run python scripts/run_tests.py`
 - Coverage: `uv run python scripts/run_tests.py --coverage`
@@ -239,6 +239,25 @@ DSPy (optional):
   - `DOCMIND_TELEMETRY_DISABLED`
   - `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0`
   - `DOCMIND_TELEMETRY_ROTATE_BYTES=<int>`
+
+## opensrc Reference Library
+
+`opensrc/` contains **dependency source snapshots** for deeper internals/edge cases (see `opensrc/sources.json`).
+
+Guidelines:
+
+- Treat `opensrc/` as read-only.
+- Prefer repo-truth (local code + official docs) first; use `opensrc/` when documentation is ambiguous or behavior is subtle.
+- When you rely on internals, cite the exact `opensrc/...` path + version in notes/PR descriptions.
+
+Fetch additional sources as needed:
+
+```bash
+npx opensrc <package>           # npm package (e.g., npx opensrc zod)
+npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
+npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
+npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+```
 
 Analytics:
 
