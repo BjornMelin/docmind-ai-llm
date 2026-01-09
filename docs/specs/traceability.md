@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix (RTM)
 
 | ID | Title | Source | ADR(s) | Code file(s) | Test(s) | Verification | Status |
-|----|-------|--------|--------|--------------|---------|--------------|--------|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | FR-001 | Unstructured ingest auto+OCR | ADR-002 | 002 | src/processing/ingestion_pipeline.py; src/processing/pdf_pages.py; src/models/processing.py | tests/unit/processing/test_ingestion_pipeline.py; tests/unit/processing/test_pdf_pages_helpers.py; tests/integration/imaging/test_pdf_images_encrypt.py | test | Implemented |
 | FR-002 | LlamaIndex pipeline cache | ADR-010 | 010 | src/processing/ingestion_pipeline.py; src/models/processing.py | tests/unit/processing/test_ingestion_pipeline.py; tests/unit/cache/test_ingestion_cache.py | test+analysis | Implemented |
 | FR-003 | Deterministic IDs + pdf_page_image | ADR-002 | 002 | src/processing/ingestion_pipeline.py; src/processing/pdf_pages.py; src/models/processing.py | tests/unit/processing/test_ingestion_pipeline.py; tests/unit/processing/test_pdf_pages_helpers.py | test | Implemented |
@@ -20,8 +20,17 @@
 | FR-009.4 | Export seeds deterministic, deduped, cap=32 | SPEC-006 | 006 | src/retrieval/graph_config.py | tests/unit/retrieval/test_graph_seed_policy.py | test | Implemented |
 | FR-009.5 | Export path security (non-egress; sanitize; symlink block) | SPEC-011 | 011 | src/utils/security.py | tests/unit/security/test_export_path_validation.py; tests/unit/utils/test_security.py | test | Implemented |
 | FR-009.6 | Telemetry events: router_selected, snapshot_stale_detected, export_performed, traversal_depth | SPEC-012 | 012 | src/telemetry/opentelemetry.py; src/utils/telemetry.py; src/agents/tools/router_tool.py; src/pages/01_chat.py; src/pages/02_documents.py | tests/unit/telemetry/test_observability_config.py; tests/unit/telemetry/test_telemetry_schema_assertions.py; tests/unit/agents/test_router_tool_telemetry.py; tests/unit/ui/test_documents_snapshot_utils.py | test | Implemented |
-| FR‑SEC‑NET‑001 | Offline-first allowlist; OpenAI-like /v1 normalization; local-only default | SPEC-011; ADR-024 | 011, 024 | src/config/settings.py; src/pages/04_settings.py; src/config/llm_factory.py | tests/integration/test_settings_page.py; tests/unit/config/* | test | Implemented |
-| FR-010 | Streamlit multipage | ADR-012 | 012 | src/app.py; src/pages/04_settings.py | tests/unit/config/test_integrations_runtime.py; tests/integration/test_settings_page.py | inspection | Completed |
+| FR‑SEC‑NET‑001 | Offline-first allowlist; OpenAI-like /v1 normalization; local-only default | SPEC-011; ADR-024 | 011, 024 | src/config/settings.py; src/pages/04_settings.py; src/config/llm_factory.py | tests/integration/test_settings_page.py; tests/unit/config/\* | test | Implemented |
+| FR-010 | Streamlit multipage | ADR-012 | 012 | src/app.py; src/pages/01_chat.py; src/pages/02_documents.py; src/pages/03_analytics.py; src/pages/04_settings.py | tests/integration/test_pages_smoke.py; tests/integration/test_settings_page.py | inspection | Completed |
 | FR-012 | Multi-provider UI | ADR-009 | 009 | src/config/llm_factory.py; src/pages/04_settings.py | tests/unit/config/test_llm_factory.py; tests/unit/config/test_llm_factory_empty_model_defaulting.py; tests/unit/config/test_integrations_runtime.py; tests/integration/test_settings_page.py | test | Completed |
-| FR-014 | LangGraph supervisor | ADR-001 | 001 | src/agents/* | tests_agents/* | test | In repo |
-| FR-020 | Prompt Template System (RichPromptTemplate, file-based) | ADR‑020 | 020 | src/prompting/*; templates/prompts/*; templates/presets/* | tests/unit/prompting/*; tests/integration/test_prompt_registry.py; tests/e2e/test_prompt_system.py | test | Completed |
+| FR-014 | LangGraph supervisor | ADR-001 | 001 | src/agents/\* | tests_agents/\* | test | In repo |
+| FR-020 | Prompt Template System (RichPromptTemplate, file-based) | ADR‑020 | 020 | src/prompting/\*; templates/prompts/\*; templates/presets/\* | tests/unit/prompting/\*; tests/integration/test_prompt_registry.py; tests/e2e/test_prompt_system.py | test | Completed |
+| FR-021 | Settings pre-validation + safe badge | SPEC-022 | 041 | src/pages/04_settings.py; src/ui/components/provider_badge.py | tests/integration/test_settings_page.py | test | Planned |
+| FR-022 | Chat persistence (SimpleChatStore) | SPEC-024 | 043 | src/pages/01_chat.py; src/ui/chat_persistence.py | tests/integration/ui/_; tests/unit/ui/_ | test | Planned |
+| FR-023 | Keyword tool (sparse-only Qdrant) | SPEC-025 | 044 | src/retrieval/keyword.py; src/agents/tool_factory.py | tests/unit/agents/test_tool_factory_keyword.py; tests/unit/retrieval/\* | test | Planned |
+| FR-024 | Programmatic ingestion API + legacy facade | SPEC-026 | 045 | src/processing/ingestion_api.py; src/utils/document.py; src/processing/**init**.py | tests/unit/processing/_; tests/unit/utils/document/_ | test | Planned |
+| FR-025 | Background ingestion jobs (progress + cancel) | SPEC-033 | 052 | src/ui/background_jobs.py; src/pages/02_documents.py | tests/unit/ui/test_background_jobs.py; tests/integration/ui/test_documents_ingestion_job.py | test | Planned |
+| NFR-PORT-003 | Docker/compose runnable + reproducible | SPEC-023 | 042 | Dockerfile; docker-compose.yml; .dockerignore | N/A | inspection/manual run | Planned |
+| NFR-SEC-002 | Safe logging (metadata only; no stub redactor) | SPEC-028 | 047 | src/utils/security.py; src/utils/log_safety.py | tests/unit/utils/security/\* | test | Planned |
+| NFR-SEC-004 | No unsafe HTML/JS in Streamlit UI | SPEC-022 | 041 | src/ui/components/provider_badge.py | tests/integration/test_settings_page.py | test+inspection | Planned |
+| NFR-MAINT-003 | No placeholders; docs/specs/RTM match code | SPEC-021; SPEC-029 | 046,048 | docs/specs/_; docs/developers/_; scripts/\* | scripts/\* (health/drift checks) | quality gates | Planned |

@@ -1,6 +1,6 @@
 # DocMind AI — Software Requirements Specification (SRS)
 
-Version: 1.3.0 • Date: 2025-09-16 • Owner: Eng/Arch
+Version: 1.4.0 • Date: 2026-01-09 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -53,6 +53,11 @@ FR-015 The system **shall** persist ingestion cache via DuckDBKV and operational
 FR-016 The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR) and E2E (RAGAS) runnable offline. Source: ADR‑011; Accept: AC‑FR‑016.  
 FR-017 The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. (Status: Implemented)
 FR-020 The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets (tones/roles/lengths). It SHALL expose minimal APIs to list templates, get metadata, render text prompts, and format chat messages, and SHALL fully replace legacy `src/prompts.py` constants without back‑compat shims. Source: ADR‑020/SPEC‑020; Accept: AC‑FR‑020.
+FR-021 The system **shall** pre-validate Settings UI configuration before persisting changes and must not use unsafe HTML rendering in UI elements. Source: SPEC‑022/ADR‑041; Accept: AC‑FR‑021.
+FR-022 The system **shall** persist Chat history locally across refresh/restart and provide a per-session “clear chat” action. Source: SPEC‑024/ADR‑043; Accept: AC‑FR‑022.
+FR-023 The system **shall** provide a keyword/lexical retrieval tool for exact term lookups (gated by config; disabled by default). Source: SPEC‑025/ADR‑044; Accept: AC‑FR‑023.
+FR-024 The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs and maintain a thin legacy facade for documentation compatibility. Source: SPEC‑026/ADR‑045; Accept: AC‑FR‑024.
+FR-025 The system **shall** support background ingestion and snapshot rebuild jobs in the Documents UI with progress reporting and best-effort cancellation (no partial snapshot publication). Source: SPEC‑033/ADR‑052; Accept: AC‑FR‑025.
 
 ## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010
 
@@ -76,11 +81,17 @@ NFR‑PERF‑003 Qdrant hybrid query p50 ≤120–200 ms for fused_top_k=60 on l
 
 NFR‑USE‑001 Streamlit UI navigable with keyboard; forms avoid unnecessary reruns. Verification: inspection.  
 
+### Observability
+
+NFR‑OBS‑001 The app **shall** emit structured, local-first telemetry events (JSONL) for key actions (router selection, staleness detection, exports, job lifecycle) with sampling/rotation controls. Verification: test.
+NFR‑OBS‑002 The app **shall** support optional OpenTelemetry tracing and metrics export when explicitly enabled; disabled by default and safe for offline operation. Verification: test.
+
 ### Security
 
 NFR‑SEC‑001 Default egress disabled; only local endpoints allowed unless explicitly configured. Verification: inspection.  
 NFR‑SEC‑002 Local data **shall** remain on device; logging excludes sensitive content.
 NFR‑SEC‑003 Optional AES‑GCM encryption‑at‑rest available; off by default. Verification: test.
+NFR-SEC-004 Streamlit UI **shall not** execute unsafe HTML/JS; `unsafe_allow_html=True` is prohibited in production UI. Verification: inspection+test.
 
 ### Compatibility
 
@@ -90,10 +101,13 @@ NFR‑COMP‑001 Windows/macOS/Linux supported; Apple Metal via llama.cpp; AMD R
 
 NFR‑MAINT‑001 Library‑first: app code **shall not** re‑implement features available in LlamaIndex/Qdrant/Streamlit. Verification: inspection.  
 NFR‑MAINT‑002 Pylint score ≥9.5; Ruff passes.
+NFR-MAINT-003 No placeholder APIs (TODO/NotImplemented) in shipped production modules; docs/specs/RTM must match code. Verification: inspection+quality gates.
 
 ### Portability
 
 NFR‑PORT‑001 Single definitive architecture; no prod/local forks; configuration via settings/UI only. Verification: inspection.
+NFR-PORT-002 Cross-platform paths and cache env overrides supported for local packaging and model predownload workflows. Verification: inspection.
+NFR-PORT-003 Docker/compose artifacts **shall** run out-of-the-box for local deployments and be reproducible from `uv.lock`. Verification: manual run+inspection.
 
 ## 4. Data and Interface Requirements
 

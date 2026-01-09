@@ -6,10 +6,10 @@ date: 2025-09-05
 owners: ["ai-arch"]
 status: Final
 related_requirements:
-  - FR-UI-001: Use st.Page/st.navigation for multipage nav.
-  - FR-UI-002: Use st.chat_message/input and st.write_stream for chat.
-  - FR-UI-003: Provide Settings form for providers, models, retrieval knobs.
-  - FR-UI-004: Documents page to ingest files and show status/progress.
+  - FR-010: Streamlit multipage navigation.
+  - FR-011: Native chat streaming.
+  - FR-012: Multi-provider settings in UI.
+  - FR-001: Documents ingestion flows surfaced in UI.
 related_adrs: ["ADR-012","ADR-016","ADR-013"]
 ---
 

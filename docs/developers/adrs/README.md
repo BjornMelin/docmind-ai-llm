@@ -116,5 +116,23 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 
 Latest additions:
 
-- **ADR-035 (Accepted, v1.1.0)** — Application-level semantic cache with GPTCache (SQLite + FAISS)
-- **ADR-037 (Accepted, v1.2)** — Multimodal reranking (SigLIP default, optional ColPali)
+- **ADR-039 (Accepted)** — Offline evaluation CLIs
+- **ADR-040 (Accepted)** — Model predownload CLI
+- **ADR-041–ADR-054 (Proposed)** — Release Readiness v1 work packages
+
+## Release Readiness v1 (2026-01-09)
+
+- **[ADR-041 — Settings UI Hardening: Pre-validation, Safe Badges, and .env Persistence](ADR-041-settings-ui-hardening-and-safe-badges.md)**
+- **[ADR-042 — Containerization Hardening](ADR-042-containerization-hardening.md)**
+- **[ADR-043 — Chat Persistence (SimpleChatStore JSON)](ADR-043-chat-persistence-simplechatstore.md)**
+- **[ADR-044 — Keyword Tool (Sparse-only Qdrant)](ADR-044-keyword-tool-sparse-only-qdrant.md)**
+- **[ADR-045 — Programmatic Ingestion API + Legacy Facade](ADR-045-ingestion-api-and-legacy-facade.md)**
+- **[ADR-046 — Remove Legacy `src/main.py` Entrypoint](ADR-046-remove-legacy-main-entrypoint.md)**
+- **[ADR-047 — Safe Logging Policy (No PII Redactor Stub)](ADR-047-safe-logging-policy-no-pii-redactor.md)**
+- **[ADR-048 — Docs Consistency Pass](ADR-048-docs-consistency-pass.md)**
+- **[ADR-049 — Multimodal Helper Cleanup](ADR-049-multimodal-helper-cleanup.md)**
+- **[ADR-050 — Config Discipline (Remove `os.getenv` Sprawl)](ADR-050-config-discipline-env-bridges.md)**
+- **[ADR-051 — Documents Snapshot Service Boundary](ADR-051-documents-snapshot-service-boundary.md)**
+- **[ADR-052 — Background Ingestion Jobs (Threads + Fragments)](ADR-052-background-ingestion-jobs.md)**
+- **[ADR-053 — Analytics Page Hardening](ADR-053-analytics-page-hardening.md)**
+- **[ADR-054 — Config Surface Pruning (Unused Knobs)](ADR-054-config-surface-pruning-unused-knobs.md)**
