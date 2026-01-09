@@ -203,6 +203,7 @@ Security policy:
   (`settings.retrieval.*_timeout_ms`).
 
 DSPy (optional):
+
 - DSPy query optimization is gated by `DOCMIND_ENABLE_DSPY_OPTIMIZATION=true`.
 - Guard imports and fail open when DSPy is unavailable.
 
@@ -240,6 +241,7 @@ DSPy (optional):
   - `DOCMIND_TELEMETRY_ROTATE_BYTES=<int>`
 
 Analytics:
+
 - Optional Analytics page is gated by `DOCMIND_ANALYTICS_ENABLED=true` and reads
   from `data/analytics/analytics.duckdb`.
 
@@ -272,6 +274,8 @@ Analytics:
 - ADRs: `docs/developers/adrs/` (configuration, persistence, testing, GraphRAG).
 - When behavior changes, update README and relevant spec/ADR.
 
+<!-- opensrc:start -->
+
 ## opensrc Reference Library
 
 - `opensrc/` contains dependency source snapshots (see `opensrc/sources.json`).
@@ -283,3 +287,24 @@ npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:request
 npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
 npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 ```
+
+## Source Code Reference
+
+Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
+
+See `opensrc/sources.json` for the list of available packages and their versions.
+
+Use this source code when you need to understand how a package works internally, not just its types/interface.
+
+### Fetching Additional Source Code
+
+To fetch source code for a package or repository you need to understand, run:
+
+```bash
+npx opensrc <package>           # npm package (e.g., npx opensrc zod)
+npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
+npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
+npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+```
+
+<!-- opensrc:end -->
