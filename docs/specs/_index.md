@@ -20,7 +20,6 @@
 - [spec-021-release-readiness-v1.md](./spec-021-release-readiness-v1.md)
 - [spec-022-settings-ui-hardening.md](./spec-022-settings-ui-hardening.md)
 - [spec-023-containerization-hardening.md](./spec-023-containerization-hardening.md)
-- [spec-024-chat-persistence-simplechatstore.md](./spec-024-chat-persistence-simplechatstore.md)
 - [spec-025-keyword-tool-sparse-only.md](./spec-025-keyword-tool-sparse-only.md)
 - [spec-026-ingestion-api-facade.md](./spec-026-ingestion-api-facade.md)
 - [spec-027-remove-legacy-main-entrypoint.md](./spec-027-remove-legacy-main-entrypoint.md)
@@ -36,4 +35,5 @@
 - [spec-038-semantic-cache-qdrant.md](./spec-038-semantic-cache-qdrant.md)
 - [spec-039-operational-metadata-sqlite-wal.md](./spec-039-operational-metadata-sqlite-wal.md)
 - [spec-040-agent-deadline-propagation-and-router-injection.md](./spec-040-agent-deadline-propagation-and-router-injection.md)
+- [spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md](./spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md)
 - [superseded/](./superseded/)

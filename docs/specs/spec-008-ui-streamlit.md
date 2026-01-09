@@ -10,7 +10,7 @@ related_requirements:
   - FR-011: Native chat streaming.
   - FR-012: Multi-provider settings in UI.
   - FR-001: Documents ingestion flows surfaced in UI.
-related_adrs: ["ADR-013","ADR-016","ADR-041","ADR-043"]
+related_adrs: ["ADR-013","ADR-016","ADR-041","ADR-057"]
 ---
 
 

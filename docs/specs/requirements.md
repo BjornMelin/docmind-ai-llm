@@ -1,6 +1,6 @@
 # DocMind AI — Software Requirements Specification (SRS)
 
-Version: 1.4.0 • Date: 2026-01-09 • Owner: Eng/Arch
+Version: 1.5.0 • Date: 2026-01-09 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -54,7 +54,7 @@ FR-016 The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR)
 FR-017 The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. (Status: Implemented)<br>
 FR-020 The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets (tones/roles/lengths). It SHALL expose minimal APIs to list templates, get metadata, render text prompts, and format chat messages, and SHALL fully replace legacy `src/prompts.py` constants without back‑compat shims. Source: ADR‑020/SPEC‑020; Accept: AC‑FR‑020.<br>
 FR-021 The system **shall** pre-validate Settings UI configuration before persisting changes and must not use unsafe HTML rendering in UI elements. Source: SPEC‑022/ADR‑041; Accept: AC‑FR‑021.<br>
-FR-022 The system **shall** persist Chat history locally across refresh/restart and provide a per-session “clear chat” action. Source: SPEC‑024/ADR‑043; Accept: AC‑FR‑022.<br>
+FR-022 The system **shall** persist Chat history locally across refresh/restart and provide per-session “clear/purge” actions. Source: SPEC‑041/ADR‑057; Accept: AC‑FR‑022.<br>
 FR-023 The system **shall** provide a keyword/lexical retrieval tool for exact term lookups (gated by config; disabled by default). Source: SPEC‑025/ADR‑044; Accept: AC‑FR‑023.<br>
 FR-024 The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs and maintain a thin legacy facade for documentation compatibility. Source: SPEC‑026/ADR‑045; Accept: AC‑FR‑024.<br>
 FR-025 The system **shall** support background ingestion and snapshot rebuild jobs in the Documents UI with progress reporting and best-effort cancellation (no partial snapshot publication). Source: SPEC‑033/ADR‑052; Accept: AC‑FR‑025.<br>
@@ -62,6 +62,9 @@ FR-026 The system **shall** support an optional semantic response cache with str
 FR-027 The system **shall** support manual local backups (snapshots + cache + optional uploads/analytics) with retention/rotation and documented restore steps. Source: SPEC‑037/ADR‑033; Accept: AC‑FR‑027.<br>
 FR-028 The system **shall** support document analysis modes `auto | separate | combined` with deterministic, offline-safe execution and best-effort cancellation. Source: SPEC‑036/ADR‑023; Accept: AC‑FR‑028.<br>
 FR-029 The system **shall** enforce and propagate an agent decision timeout budget so nested tool/LLM calls cannot exceed it, and it SHALL fail gracefully when the deadline is exceeded. Source: SPEC‑040/ADR‑056; Accept: AC‑FR‑029.<br>
+FR-030 The system **shall** provide multi-session Chat management (create/rename/delete/select) and store session metadata locally. Source: SPEC‑041/ADR‑057; Accept: AC‑FR‑030.<br>
+FR-031 The system **shall** support branching/time travel for Chat sessions: list checkpoints, fork from a checkpoint, and resume execution from the fork while preserving history. Source: SPEC‑041/ADR‑057; Accept: AC‑FR‑031.<br>
+FR-032 The system **shall** support long-term memory (facts/preferences) with metadata-filtered recall and user-visible review/purge controls. Source: SPEC‑041/ADR‑057; Accept: AC‑FR‑032.<br>
 
 ## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010
 

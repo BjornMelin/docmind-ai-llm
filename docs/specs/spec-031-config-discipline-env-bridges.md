@@ -7,7 +7,7 @@ owners: ["ai-arch"]
 status: Draft
 related_requirements:
   - NFR-MAINT-001: Library-first; no bespoke config layers.
-  - NFR-MAINT-002: Quality gates (ruff/pyright/pylint) must pass.
+  - NFR-MAINT-002: Quality gates (ruff/pyright) must pass (ruff enforces pylint-equivalent rules).
   - NFR-MAINT-003: Single source of truth for config; no ADR-XXX markers.
 related_adrs: ["ADR-050", "ADR-024"]
 ---

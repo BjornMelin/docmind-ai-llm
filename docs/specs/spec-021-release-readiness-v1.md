@@ -7,7 +7,7 @@ owners: ["ai-arch"]
 status: Draft
 related_requirements:
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.
-  - NFR-MAINT-002: Pylint score ≥9.5; Ruff passes.
+  - NFR-MAINT-002: Ruff/pyright pass (ruff enforces pylint-equivalent rules).
   - NFR-MAINT-003: No placeholder APIs; docs/specs/RTM must match code.
   - NFR-PORT-003: Docker/compose artifacts run and are reproducible from uv.lock.
 related_adrs:
@@ -16,7 +16,7 @@ related_adrs:
   - "ADR-035"
   - "ADR-041"
   - "ADR-042"
-  - "ADR-043"
+  - "ADR-057"
   - "ADR-044"
   - "ADR-045"
   - "ADR-046"
@@ -63,7 +63,7 @@ Each work package MUST ship with:
 | ---: | --- | --- | --- | --- |
 | 01 | Settings UI hardening + safe provider badge | ADR-041 | SPEC-022 | `docs/developers/prompts/prompt-022-settings-ui-hardening.md` |
 | 02 | Containerization hardening (Dockerfile + compose) | ADR-042 | SPEC-023 | `docs/developers/prompts/prompt-023-containerization-hardening.md` |
-| 03 | Chat persistence (SimpleChatStore JSON) | ADR-043 | SPEC-024 | `docs/developers/prompts/prompt-024-chat-persistence-simplechatstore.md` |
+| 03 | Chat persistence + hybrid agentic memory (LangGraph SQLite) | ADR-057 | SPEC-041 | `docs/developers/prompts/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` |
 | 04 | Keyword tool: sparse-only Qdrant retriever | ADR-044 | SPEC-025 | `docs/developers/prompts/prompt-025-keyword-tool-sparse-only.md` |
 | 05 | Ingestion API + legacy facade cleanup (`src.utils.document`) | ADR-045 | SPEC-026 | `docs/developers/prompts/prompt-026-ingestion-api-facade.md` |
 | 06 | Remove legacy `src/main.py` entrypoint | ADR-046 | SPEC-027 | `docs/developers/prompts/prompt-027-remove-legacy-main-entrypoint.md` |
@@ -91,7 +91,7 @@ Recommended dependency order (minimizes churn):
 5. WP11 → moves snapshot rebuild/export into a testable service boundary (enables WP12).
 6. WP17 → adds transactional ops metadata needed for background job reliability and restart recovery.
 7. WP12 → adds background ingestion UX on top of the stable service boundary (writes to ops DB).
-8. WP03 → adds chat persistence UX (depends on stable settings/data_dir).
+8. WP03 → ships chat persistence + time travel + hybrid memory UX (depends on stable settings/data_dir and stable supervisor wiring).
 9. WP14 → adds analysis modes on top of stable retrieval + chat UX.
 10. WP16 → adds semantic cache (optional; default-off; strict invalidation).
 11. WP15 → adds local backup/retention once data layout is stable (uses snapshots/cache dirs).
@@ -108,7 +108,6 @@ uv sync
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
 uv run python scripts/run_tests.py
 uv run python scripts/run_quality_gates.py --ci --report

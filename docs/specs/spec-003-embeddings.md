@@ -65,7 +65,7 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
 
 6) Quality gates
 
-   - All modules must pass `ruff` (format+lint) and `pylint --fail-under=9.5`.
+   - All modules must pass `ruff` (format+lint). Ruff enforces pylint-equivalent rules via `PL*` selectors in `pyproject.toml`.
    - No legacy/duplicate code remains; no deprecation notes or back‑compat toggles.
 
 ## Acceptance Criteria (updated)
@@ -105,7 +105,7 @@ Feature: Embedding stack
 - Phase 2: Completed — callers migrated; imports updated; tests no longer import legacy symbols; SigLIP default enforced.
 - Phase 3: Completed — ad‑hoc CLIP helpers removed; LI ClipEmbedding used; image dims derived at runtime.
 - Phase 4: Completed — removed `src/retrieval/embeddings.py` and all references.
-- Phase 5: Completed — docs updated; ruff/pylint gates green.
+- Phase 5: Completed — docs updated; ruff gates green.
 
 ## References
 

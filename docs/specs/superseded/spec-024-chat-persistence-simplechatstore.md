@@ -4,13 +4,15 @@ title: Chat Persistence — SimpleChatStore JSON + ChatMemoryBuffer in Streamlit
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Superseded
 related_requirements:
   - FR-022: Chat history persists locally across refresh/restart.
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.
   - NFR-SEC-002: Local data remains on device; logging excludes sensitive content.
-related_adrs: ["ADR-043", "ADR-024", "ADR-047"]
+related_adrs: ["ADR-043", "ADR-024", "ADR-047", "ADR-057"]
 ---
+
+> Status notice (2026-01-09): Superseded by SPEC-041 / ADR-057 (LangGraph SQLite checkpointer + store with time travel + hybrid long-term memory).
 
 ## Objective
 
