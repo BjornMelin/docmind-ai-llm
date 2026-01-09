@@ -1,0 +1,62 @@
+# Implementation Prompt — Multimodal Helper Cleanup
+
+Implements `ADR-049` + `SPEC-030`.
+
+## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+
+### FEATURE CONTEXT (FILLED)
+
+**Primary Task:** Remove `src/utils/multimodal.py` and its tests if it is not used by production code, eliminating TODO placeholders and dead code.
+
+**Why now:** The module is a test-only “toy pipeline” with TODOs, which is not acceptable for v1 release readiness.
+
+**Definition of Done (DoD):**
+
+- `src/utils/multimodal.py` removed (or moved out of production package) and no production imports remain.
+- Tests referencing it are removed/updated.
+- Docs/architecture maps updated to remove references (or ticketed under WP08 if explicitly deferred).
+- Quality gates pass.
+
+**In-scope modules/files (initial):**
+
+- `src/utils/multimodal.py` (delete)
+- `tests/unit/utils/multimodal/` (delete/update)
+- `docs/specs/traceability.md`
+- `docs/developers/system-architecture.md` (if referenced)
+
+**Out-of-scope (explicit):**
+
+- Building a real multimodal pipeline.
+
+---
+
+### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+1. [ ] Confirm unused in production: `rg "src\\.utils\\.multimodal" src/`.
+2. [ ] Delete `src/utils/multimodal.py`.
+3. [ ] Delete/update `tests/unit/utils/multimodal/*`.
+4. [ ] Update docs references if present (or coordinate with WP08).
+5. [ ] Update RTM row and run quality gates.
+
+Commands:
+
+```bash
+uv sync
+uv run ruff format .
+uv run ruff check . --fix
+uv run pyright
+uv run pylint --fail-under=9.5 src/ tests/ scripts/
+uv run python scripts/run_tests.py --fast
+```
+
+---
+
+### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+
+| Requirement | Status | Proof / Notes                       |
+| ----------- | ------ | ----------------------------------- |
+| Dead code   |        | no unused multimodal helper in prod |
+| Tests       |        | suite green                         |
+| Docs        |        | references removed or updated       |
+
+**EXECUTE UNTIL COMPLETE.**
