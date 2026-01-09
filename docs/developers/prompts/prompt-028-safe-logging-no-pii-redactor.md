@@ -6,12 +6,48 @@ Implements `ADR-047` + `SPEC-028`.
 
 This is security-sensitive. Use structured security review tools.
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` to inventory logging call sites (`logger.*`, `loguru`, `logging`, `print`).
 - Context7/Exa only if you need authoritative guidance for log safety patterns (otherwise stay repo-local).
 - `functions.mcp__zen__secaudit` (mandatory) to review new helpers and any touched log statements.
 - `functions.mcp__zen__codereview` to ensure no accidental raw-content logging is introduced.
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Inventory logging sinks and current redaction usage:
+  - `rg -n \"\\bredact_pii\\b\" -S src tests`
+  - `rg -n \"\\blogger\\.|\\bloguru\\b|\\bprint\\(\" -S src`
+  - `rg -n \"telemetry\\.jsonl|log_jsonl\" -S src`
+- Read in parallel:
+  - `src/utils/security.py`
+  - `src/utils/telemetry.py` and/or `src/utils/telemetry.py` (where JSONL logging is emitted)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → read any local “security/logging/PII” resources before web search.
+
+**API verification (Context7, only when needed):**
+
+- `functions.mcp__context7__resolve-library-id` → `loguru` (and optionally `opentelemetry-sdk` if touched)
+- `functions.mcp__context7__query-docs` → confirm any logging API details if you introduce wrappers.
+
+**Security gate (required):**
+
+- Run `functions.mcp__zen__secaudit` with focus:
+  - threat_level: high (because logs can exfiltrate PII)
+  - ensure helpers never accept raw content without hashing/fingerprinting
+  - ensure URLs are sanitized (no embedding API keys)
+
+**Review gate (recommended):**
+
+- Run `functions.mcp__zen__codereview` to ensure no accidental raw-content logging slipped in.
 
 **opensrc (optional):**
 

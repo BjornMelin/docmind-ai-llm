@@ -6,11 +6,14 @@ Use the `$docker-architect` workflow patterns (multi-stage, non-root, .dockerign
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Use skill:** `$docker-architect`
 
 Mandatory workflow steps from the skill:
 
 ```bash
+uv sync
 python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_inventory.py --root .
 python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_audit.py --root .
 docker buildx version
@@ -21,7 +24,53 @@ Skill references to consult (as needed):
 - `/home/bjorn/.codex/skills/docker-architect/references/compose_patterns.md`
 - `/home/bjorn/.codex/skills/docker-architect/references/dockerfile_patterns.md`
 
-**MCP tool sequence (use when it adds signal):**
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Repo truth scan:
+  - `ls -la Dockerfile docker-compose.yml || true`
+  - `rg -n \"(FROM|USER|EXPOSE|HEALTHCHECK|CMD|ENTRYPOINT)\" Dockerfile docker-compose.yml || true`
+  - `rg -n \"DOCMIND_|OLLAMA_|LMSTUDIO_|VLLM_\" docker-compose.yml .env.example docs -S || true`
+- Run skill scripts in parallel with reading docker artifacts:
+  - `/home/bjorn/.codex/skills/docker-architect/scripts/docker_inventory.py`
+  - `/home/bjorn/.codex/skills/docker-architect/scripts/docker_audit.py`
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for Docker/Compose/Streamlit resources (rare but cheap to check).
+- `functions.read_mcp_resource` → prefer local docs if present.
+
+**Time-sensitive facts (prefer web tools):**
+
+- Use `functions.mcp__exa__web_search_exa` (or `web.run` when you need citations/dates) for:
+  - current `python:3.11-*` tag conventions
+  - Streamlit container best practices (ports, healthchecks)
+
+**Long-running docker flows (use `functions.write_stdin`):**
+
+- For `docker compose up` / `docker compose logs -f`, keep sessions alive and stream output via `functions.write_stdin` instead of restarting.
+
+**Security gate (required):**
+
+- Run `functions.mcp__zen__secaudit` scoped to container hardening (secrets, non-root, `.dockerignore`, exposed ports).
+
+**Review gate (recommended):**
+
+- Run `functions.mcp__zen__codereview` for Dockerfile/compose changes (blast radius is large).
+
+**Python-side verification still matters:**
+
+- After container changes, run repo quality gates on host:
+  - `uv run ruff format .`
+  - `uv run ruff check . --fix`
+  - `uv run pyright`
+  - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+  - `uv run python scripts/run_tests.py --fast`
+
+### MCP tool sequence (use when it adds signal)
 
 1. `functions.mcp__zen__planner` → plan Dockerfile/compose changes + smoke checks.
 2. Exa search (official sources) for:

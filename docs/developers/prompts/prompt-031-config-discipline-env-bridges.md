@@ -6,13 +6,58 @@ Implements `ADR-050` + `SPEC-031`.
 
 This is security-sensitive config work. Prefer repo truth and run structured audits.
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` to inventory every `os.getenv` call and ensure all are removed from core modules.
+- Use `multi_tool_use.parallel` for independent inventories (env reads, doc references, tests).
 - Context7 for authoritative Pydantic Settings v2 patterns and typing (nested env parsing).
 - `opensrc/` for Pydantic internals only when behavior is surprising (prefer docs first).
 - `functions.mcp__zen__secaudit` (mandatory) after changes: confirm no secret logging and no new egress surfaces.
 - `functions.mcp__zen__codereview` for final correctness gate.
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Inventory env reads + config drift:
+  - `rg -n \"os\\.getenv\\(\" -S src`
+  - `rg -n \"DOCMIND_(TELEMETRY|IMG|ENVIRONMENT)\" -S src docs tests .env.example`
+  - `rg -n \"ADR-XXX\" -S src docs || true`
+- Read in parallel:
+  - `src/config/settings.py`
+  - `src/utils/telemetry.py`
+  - `src/processing/pdf_pages.py`
+  - `src/telemetry/opentelemetry.py`
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for Pydantic settings resources; read them before web search.
+
+**API verification (Context7):**
+
+- `functions.mcp__context7__resolve-library-id` → `pydantic`, `pydantic-settings`
+- `functions.mcp__context7__query-docs` → confirm:
+  - nested env parsing and precedence rules
+  - how to represent `SecretStr` or sensitive fields safely (if used)
+
+**opensrc (only when behavior is surprising):**
+
+- Check first: `cat opensrc/sources.json | rg -n \"pydantic\"`
+- Only fetch if missing and you must confirm an edge case; treat `opensrc/` as read-only.
+
+**Security gate (required):**
+
+- Run `functions.mcp__zen__secaudit` after refactor:
+  - confirm secrets are not logged
+  - confirm any OTLP exporters remain gated/off by default
+
+**Review gate (required if broad changes):**
+
+- Run `functions.mcp__zen__codereview` after tests pass.
 
 **MCP tool sequence (use when it adds signal):**
 

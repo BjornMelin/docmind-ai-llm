@@ -4,6 +4,8 @@ Implements `ADR-043` + `SPEC-024`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Use skill:** `$streamlit-master-architect` (Streamlit reruns, AppTest, session state discipline)
 
 Skill references to consult (as needed):
@@ -13,11 +15,54 @@ Skill references to consult (as needed):
 **Preflight:**
 
 ```bash
+uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
 rg -n "st\\.session_state\\.|st\\.chat_" src/pages/01_chat.py
 ```
 
-**MCP tool sequence (use when it adds signal):**
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Code search and scope discovery:
+  - `rg -n \"SimpleChatStore|ChatMemoryBuffer|chat_store\" -S src`
+  - `rg -n \"messages\\b|st\\.session_state\\b\" -S src/pages/01_chat.py src/ui`
+- Read in parallel:
+  - `src/pages/01_chat.py`
+  - `src/config/settings.py` (data_dir location)
+  - `src/utils/security.py` (path validation helpers, if any)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for LlamaIndex/storage/chat-store resources; read them before web search.
+
+**API verification (Context7):**
+
+- `functions.mcp__context7__resolve-library-id` → `llama-index`
+- `functions.mcp__context7__query-docs` → confirm the exact module paths/usage for:
+  - `SimpleChatStore` JSON persistence
+  - `ChatMemoryBuffer` wiring and how to persist updates deterministically
+
+**Real-world patterns (GitHub grep):**
+
+- `functions.mcp__gh_grep__searchGitHub` → confirm common patterns for “load/store JSON + chat memory buffer” and safe file IO boundaries.
+
+**Long-running UI validation (use native capabilities):**
+
+- If you run `streamlit run src/app.py`, keep the process alive; use `functions.write_stdin` to pull logs.
+- If you capture screenshots during manual verification, attach them with `functions.view_image`.
+- For E2E smoke, use the skill’s Playwright flow:
+  - `/home/bjorn/.codex/skills/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
+
+**Security gate (required):**
+
+- Run `functions.mcp__zen__secaudit` focused on:
+  - safe path handling under `settings.data_dir`
+  - no raw message-content logging
+
+### MCP tool sequence (use when it adds signal)
 
 1. `functions.mcp__zen__planner` → plan persistence wiring + tests.
 2. Context7:
@@ -29,6 +74,7 @@ rg -n "st\\.session_state\\.|st\\.chat_" src/pages/01_chat.py
 
 ```bash
 cat opensrc/sources.json | rg -n "llama-index" || true
+# Fetch only if missing and behavior is surprising; treat opensrc/ as read-only.
 npx opensrc pypi:llama-index
 ```
 

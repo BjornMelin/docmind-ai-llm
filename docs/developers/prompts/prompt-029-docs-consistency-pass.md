@@ -6,11 +6,40 @@ Implements `ADR-048` + `SPEC-029`.
 
 Docs drift is best solved with repo-local tooling + grep first.
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` for finding stale references and validating replacements.
+- Use `multi_tool_use.parallel` for independent drift scans across docs/specs/scripts.
 - Prefer `opensrc/` only when a doc claim depends on library internals (rare).
 - Exa/Context7 only when a doc section references subtle library behavior that must be correct.
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel drift scan (use `multi_tool_use.parallel`):**
+
+- Identify file references and drift hotspots:
+  - `rg -n \"src/[^\\s\\)\\]\\}]+\\.py\" docs -S`
+  - `rg -n \"(NotImplementedError|ingestion-phase-2|phase 2|placeholder)\" docs -S`
+  - `rg -n \"spec-012-observability|ObservabilityConfig\" docs src -S`
+- Use scripts where possible:
+  - `uv run python scripts/test_health.py` (if it already checks TODO/drift patterns)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → read any local docs indexes/templates for consistency policies.
+
+**API verification (only when needed):**
+
+- Context7 (`functions.mcp__context7__resolve-library-id` → `functions.mcp__context7__query-docs`) for subtle library behavior referenced by docs.
+- Web tools (`functions.mcp__exa__web_search_exa` / `web.run`) only if you must cite a current upstream behavior or changelog.
+
+**Review gate (recommended):**
+
+- `functions.mcp__zen__codereview` after drift checker wiring to reduce false positives/negatives.
 
 **MCP tool sequence (optional):**
 

@@ -9,16 +9,59 @@ Implements `ADR-052` + `SPEC-033`.
 Mandatory Streamlit evergreen steps:
 
 ```bash
+uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
 uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
 uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
 ```
+
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
 
 Skill references to consult (as needed):
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md` (fragments + reruns)
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md` (threading + unsafe patterns)
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/e2e_playwright_mcp.md` (optional E2E smoke)
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Identify current ingestion workflow and any import-time heavy work:
+  - `rg -n \"ingest|rebuild_snapshot|IngestionPipeline|Snapshot\" -S src/pages/02_documents.py src/processing src/persistence`
+  - `rg -n \"st\\.fragment\\(|ThreadPoolExecutor|threading\\.\" -S src`
+- Read in parallel:
+  - `src/pages/02_documents.py`
+  - `src/processing/ingestion_pipeline.py`
+  - `src/persistence/snapshot_service.py` (if WP07 already landed) or the current snapshot module used by Documents
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for Streamlit fragments/threading guidance; prefer local resources before web search.
+
+**API verification (Context7):**
+
+- `functions.mcp__context7__resolve-library-id` → `streamlit`
+- `functions.mcp__context7__query-docs` → confirm `st.fragment` and any caveats for reruns and thread safety on Streamlit `1.52.2`.
+
+**Long-running verification (use native capabilities):**
+
+- If you run `streamlit run src/app.py`, keep it alive and use `functions.write_stdin` to fetch logs and avoid rerunning startup.
+- Attach screenshots of progress/cancel states with `functions.view_image` if verification is visual.
+- Optional E2E smoke: use the skill’s Playwright script referenced above.
+
+**Security gate (required):**
+
+- `functions.mcp__zen__secaudit` must confirm:
+  - no `st.*` calls happen inside worker threads
+  - progress events do not include raw document content or secrets
+  - temp workspaces cannot escape allowed directories (no traversal)
+
+**Review gate (recommended):**
+
+- `functions.mcp__zen__codereview` after tests pass (threading + lifecycle correctness).
 
 **MCP tool sequence (use when it adds signal):**
 

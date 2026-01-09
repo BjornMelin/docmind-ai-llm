@@ -45,3 +45,58 @@ Before starting any prompt in a fresh Codex TUI session:
    - `functions.mcp__zen__planner` (plan)
    - `functions.mcp__zen__secaudit` (security)
    - `functions.mcp__zen__codereview` (quality gate)
+
+## Tool Inventory (required + usage guidance)
+
+This section is the *minimum* expected tool usage guidance for any prompt execution.
+
+### Shell/files/editing
+
+- `functions.exec_command` — run discovery/build/test commands; prefer `rg` for search and keep commands readable.
+- `functions.write_stdin` — interact with long-running commands (dev server, `docker compose up`, REPL) without restarting them.
+- `functions.apply_patch` — small, precise edits with clear diffs; avoid for lockfiles/generated outputs or bulk rewrites.
+- `multi_tool_use.parallel` — run independent tool calls concurrently (multiple searches, docs lookups, and shell reads).
+- `functions.view_image` — attach screenshots/diagrams for UI verification or debugging (when available).
+
+### Planning/progress
+
+- `functions.update_plan` — track multi-step changes; keep exactly one step `in_progress`.
+
+### Zen (analysis/review)
+
+- `functions.mcp__zen__analyze` — architecture/performance/system boundary analysis before non-trivial refactors.
+- `functions.mcp__zen__codereview` — structured code review as a quality gate on significant changes.
+- `functions.mcp__zen__secaudit` — security audit for auth, path handling, secrets, logging/PII, new egress surfaces.
+- `functions.mcp__zen__consensus` — major design/library selection only (must hit ≥9.0/10.0).
+- `functions.mcp__zen__listmodels` — discover available models before running consensus.
+- `functions.mcp__zen__version` — diagnose tool availability/config mismatches.
+
+### Docs/API reference
+
+- `functions.mcp__context7__resolve-library-id` — map library name → Context7 id.
+- `functions.mcp__context7__query-docs` — authoritative API references/snippets once you have the id.
+
+### Web
+
+- `web.run` — general browsing/search with citations when info is time-sensitive or uncertain.
+- `functions.mcp__exa__web_search_exa` — fast discovery search.
+- `functions.mcp__exa__deep_search_exa` — targeted deep research for niche/precise questions.
+- `functions.mcp__exa__crawling_exa` — extract full content from a known URL.
+
+### Real-world code examples
+
+- `functions.mcp__gh_grep__searchGitHub` — grep across GitHub repos for production patterns of an API/tool.
+
+### MCP resources
+
+- `functions.list_mcp_resources` — discover locally exposed resources (docs, indexes, schemas).
+- `functions.list_mcp_resource_templates` — discover parameterized resources (when templates exist).
+- `functions.read_mcp_resource` — read a specific resource by URI.
+
+### opensrc usage (Codex CLI)
+
+- Treat `opensrc/` as read-only dependency source for internals/edge cases; check `opensrc/sources.json` first and cite exact paths + versions when used.
+- Fetch npm sources with `npx opensrc <package>` or `npx opensrc <package>@<version>`; GitHub sources with `npx opensrc <owner>/<repo>[@tag]`.
+- List/remove sources via `npx opensrc list` and `npx opensrc remove <name>`.
+- Prefer non-interactive flags when available (for example `--modify=false`).
+- Refresh sources after dependency upgrades.

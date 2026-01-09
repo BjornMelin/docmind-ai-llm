@@ -6,6 +6,8 @@ Implements `ADR-053` + `SPEC-034`.
 
 **Use skill:** `$streamlit-master-architect` (page import discipline, AppTest patterns)
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 Skill references to consult (as needed):
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
@@ -13,9 +15,44 @@ Skill references to consult (as needed):
 **Preflight:**
 
 ```bash
+uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
 rg -n "duckdb\\.connect|__import__\\(" src/pages/03_analytics.py
 ```
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Locate DB usage + telemetry parsing:
+  - `rg -n \"duckdb\\.connect|\\.execute\\(|\\.df\\(\" -S src/pages/03_analytics.py src`
+  - `rg -n \"telemetry\\.jsonl|log_jsonl|rotate\" -S src/utils/telemetry.py src/telemetry`
+- Read in parallel:
+  - `src/pages/03_analytics.py`
+  - `src/utils/telemetry.py`
+  - any analytics storage modules under `src/persistence/` or `src/telemetry/`
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → read any local DuckDB/telemetry resources before web search.
+
+**API verification (Context7 + web):**
+
+- If available, use `functions.mcp__context7__resolve-library-id` → `duckdb` and `functions.mcp__context7__query-docs` for connection lifecycle patterns.
+- Otherwise, prefer Exa/web for DuckDB Python docs (time-sensitive and version-specific).
+
+**Long-running UI verification (use native capabilities):**
+
+- If you run `streamlit run src/app.py`, keep it alive and use `functions.write_stdin` for logs.
+- Attach screenshots of analytics charts/tables with `functions.view_image` if needed.
+
+**Security gate (required):**
+
+- Run `functions.mcp__zen__secaudit` focused on:
+  - bounded telemetry parsing (no full-file load)
+  - privacy defaults (no raw payload display)
 
 **MCP tool sequence (use when it adds signal):**
 
@@ -28,6 +65,7 @@ rg -n "duckdb\\.connect|__import__\\(" src/pages/03_analytics.py
 
 ```bash
 cat opensrc/sources.json | rg -n "duckdb" || true
+# Fetch only if missing and behavior is surprising; treat opensrc/ as read-only.
 npx opensrc pypi:duckdb
 ```
 

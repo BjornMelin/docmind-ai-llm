@@ -6,6 +6,8 @@ Implements `ADR-051` + `SPEC-032`.
 
 This is a cross-cutting refactor (UI → persistence boundary). Use analysis + review tools.
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Use skill:** `$streamlit-master-architect` (for the Documents page wiring + AppTest), but keep the service boundary Streamlit-free.
 
 Skill references to consult (as needed):
@@ -18,6 +20,38 @@ Skill references to consult (as needed):
 - Context7 for any subtle LlamaIndex persistence APIs (if needed).
 - `functions.mcp__zen__analyze` before refactor to avoid accidental behavior changes.
 - `functions.mcp__zen__codereview` after refactor to ensure the boundary is clean and tests moved correctly.
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Inventory call sites + tests:
+  - `rg -n \"rebuild_snapshot|SnapshotManager|manifest\\.jsonl|graph_exports\" -S src tests`
+  - `rg -n \"02_documents\\.py\" -S src tests docs`
+- Read in parallel:
+  - `src/pages/02_documents.py`
+  - `src/persistence/snapshot_manager.py` (and related persistence modules)
+  - `src/retrieval/graph_config.py` (exports packaging, if involved)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → read any local “persistence/snapshot” resources before web search.
+
+**Architecture gate (required):**
+
+- Run `functions.mcp__zen__analyze` before the refactor to document current behavior boundaries and identify duplication.
+
+**Long-running UI validation (use native capabilities):**
+
+- If you run `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs.
+- Attach screenshots of the Documents page state changes with `functions.view_image` if verification is visual.
+- Optional E2E smoke (skill script): `/home/bjorn/.codex/skills/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
+
+**Review gate (required):**
+
+- Run `functions.mcp__zen__codereview` after tests pass to ensure the service boundary is clean and Streamlit-free.
 
 **opensrc (optional):**
 

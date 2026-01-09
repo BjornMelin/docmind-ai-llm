@@ -17,6 +17,25 @@ rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools || true
 uv run python -c "import streamlit as st; print(st.__version__)"
 ```
 
+### Required tool inventory
+
+Use the repo’s tool inventory guidance:
+
+- `docs/developers/prompts/README.md` (tool inventory + opensrc rules)
+- `~/prompt_library/assistant/codex-inventory.md` (complete MCP + skill list)
+
+### Parallelization rules (mandatory)
+
+When you have independent discovery or research steps, batch them:
+
+- Use `multi_tool_use.parallel` for independent function calls (multiple searches, multiple Context7 resolves, multiple shell reads).
+- Avoid serial “one tool call at a time” loops when results don’t depend on each other.
+
+Examples of “parallel-safe” bundles (use as patterns):
+
+- `functions.exec_command` running `rg` searches + `functions.list_mcp_resources` + `functions.mcp__context7__resolve-library-id` (independent).
+- Multiple Exa searches (`functions.mcp__exa__web_search_exa`) for different libraries/pages (independent).
+
 **MCP tool sequence (use when it adds signal):**
 
 1. `functions.mcp__zen__planner` → plan the current WP only.
@@ -38,6 +57,10 @@ npx opensrc pypi:python-dotenv
 npx opensrc pypi:llama-index
 npx opensrc open-telemetry/opentelemetry-python
 ```
+
+### Long-running processes
+
+Use `functions.write_stdin` if you start long-running commands (examples: `streamlit run ...`, `docker compose up ...`) and need to interact or fetch more output without restarting.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 

@@ -4,6 +4,8 @@ Implements `ADR-041` + `SPEC-022`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Use skill:** `$streamlit-master-architect`
 
 Load and follow its workflows for:
@@ -19,12 +21,58 @@ Skill references to consult (as needed):
 **Streamlit preflight (version + docs + audit):**
 
 ```bash
+uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
 uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
 uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
 ```
 
-**MCP tool sequence (use when it adds signal):**
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel` for independent work):**
+
+- Repo truth scan:
+  - `rg -n "unsafe_allow_html=True" -S src/ui src/pages`
+  - `rg -n "(_persist_env|\\.env|set_key\\(|unset_key\\()" -S src/pages/04_settings.py src/config src/utils`
+- Read key files (in parallel): `src/pages/04_settings.py`, `src/ui/components/provider_badge.py`, `src/config/settings.py`, `src/config/integrations.py`.
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for Streamlit/Pydantic/python-dotenv references.
+- `functions.read_mcp_resource` → read any relevant local docs/indexes before web search.
+
+**API verification (Context7, only when uncertain):**
+
+- `functions.mcp__context7__resolve-library-id` → `streamlit`, `pydantic`, `python-dotenv`
+- `functions.mcp__context7__query-docs` → verify exact signatures/behavior for:
+  - `st.badge`, forms (`st.form`, `st.form_submit_button`), disabled buttons
+  - Pydantic v2: `model_validate`, `ValidationError` handling
+  - python-dotenv: `set_key`, `unset_key` quoting behavior
+
+**Time-sensitive facts (use web tools):**
+
+- Prefer `functions.mcp__exa__web_search_exa` for discovery; use `web.run` if you need citations or dates (Streamlit forms changes, dotenv quote options).
+
+**Long-running UI validation (use native capabilities):**
+
+- If you start `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs instead of restarting.
+- If you capture UI screenshots during verification, attach them with `functions.view_image`.
+- For user-critical E2E smoke, use the skill’s Playwright flow:
+  - `/home/bjorn/.codex/skills/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
+
+**Security gate (required):**
+
+- Run `functions.mcp__zen__secaudit` after implementation to confirm:
+  - no `unsafe_allow_html=True` sinks remain
+  - `.env` persistence rejects newline/control characters and does not log secrets
+
+**Final review gate (recommended):**
+
+- Run `functions.mcp__zen__codereview` after tests pass to catch layering regressions (UI vs domain).
+
+### MCP tool sequence (use when it adds signal)
 
 1. `functions.mcp__zen__planner` → plan the UI + tests steps.
 2. Context7 API verification:
@@ -37,6 +85,7 @@ uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_
 
 ```bash
 cat opensrc/sources.json | rg -n "python-dotenv|streamlit|pydantic" || true
+# Fetch only if missing and behavior is surprising; treat opensrc/ as read-only.
 npx opensrc pypi:python-dotenv
 ```
 

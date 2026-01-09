@@ -4,12 +4,51 @@ Implements `ADR-045` + `SPEC-026`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` for placeholder/legacy discovery (TODOs, NotImplemented stubs, old doc references).
 - Context7 for authoritative API signatures (LlamaIndex IngestionPipeline, UnstructuredReader, Pydantic models).
 - Exa for official LlamaIndex ingestion guidance if behavior is unclear.
 - `opensrc/` to confirm internal behavior (LlamaIndex + unstructured) when subtle (caching, docstore persist).
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Locate placeholders and call sites:
+  - `rg -n \"(NotImplementedError|ingestion-phase-2|load_documents_|clear_document_cache)\" -S src tests`
+  - `rg -n \"src\\.utils\\.document\" -S src tests`
+- Read in parallel:
+  - `src/utils/document.py`
+  - `src/processing/ingestion_pipeline.py`
+  - `src/ui/_ingest_adapter_impl.py` (if present; reuse stable patterns)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for LlamaIndex/unstructured docs resources.
+- `functions.read_mcp_resource` → prefer local resources before web search.
+
+**API verification (Context7):**
+
+- `functions.mcp__context7__resolve-library-id` → `llama-index` (and optionally `unstructured`)
+- `functions.mcp__context7__query-docs` → confirm:
+  - ingestion pipeline + file reader APIs you plan to use
+  - any recommended patterns for deterministic ingestion / caching
+
+**Security gate (required):**
+
+- `functions.mcp__zen__secaudit` must cover:
+  - path traversal and symlink escape prevention
+  - directory ingestion determinism
+  - offline-first posture (no implicit network calls)
+
+**Review gate (recommended):**
+
+- `functions.mcp__zen__codereview` after implementation to ensure one canonical ingestion API and no legacy code paths remain.
 
 **MCP tool sequence (use when it adds signal):**
 
@@ -23,6 +62,7 @@ Implements `ADR-045` + `SPEC-026`.
 
 ```bash
 cat opensrc/sources.json | rg -n "llama-index|unstructured" || true
+# Fetch only if missing and behavior is surprising; treat opensrc/ as read-only.
 npx opensrc pypi:llama-index
 npx opensrc pypi:unstructured
 ```

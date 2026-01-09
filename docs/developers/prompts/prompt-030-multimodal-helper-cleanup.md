@@ -6,11 +6,34 @@ Implements `ADR-049` + `SPEC-030`.
 
 This is a deletion/cleanup task. Prefer local repo truth.
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` for finding all references (production and tests).
+- Use `multi_tool_use.parallel` to scan `src/`, `tests/`, and `docs/` concurrently.
 - `functions.mcp__zen__analyze` if references look indirect or dynamic.
 - `functions.mcp__zen__codereview` after deletion to ensure no dangling imports.
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Confirm real usage:
+  - `rg -n \"\\bsrc\\.utils\\.multimodal\\b|\\bmultimodal\\.py\\b\" -S src tests docs`
+  - `rg -n \"TODO\\(multimodal-phase-2\\)\" -S src/utils/multimodal.py || true`
+- Read before delete:
+  - `sed -n '1,120p' src/utils/multimodal.py` (ensure no production exports are expected)
+
+**Architecture gate (optional but cheap):**
+
+- If you see dynamic imports or indirect references, run `functions.mcp__zen__analyze` to avoid deleting something required at runtime.
+
+**Editing discipline:**
+
+- Use `functions.apply_patch` with `*** Delete File: src/utils/multimodal.py` and delete/update test files in the same patch to keep diffs reviewable.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 

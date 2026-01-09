@@ -6,11 +6,35 @@ Implements `ADR-046` + `SPEC-027`.
 
 This work is primarily repo hygiene; prefer local repo truth over web research.
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` to find imports/references and doc mentions.
+- Use `multi_tool_use.parallel` for independent searches (imports + docs + configs) to minimize back-and-forth.
 - `functions.mcp__zen__analyze` if unexpected coupling is found (imports from `src.main`).
 - `functions.mcp__zen__codereview` after deletion to ensure no dangling references remain.
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Find code references:
+  - `rg -n \"\\bsrc/main\\.py\\b|\\bsrc\\.main\\b\" -S src tests`
+- Find docs/scripts references:
+  - `rg -n \"\\bsrc/main\\.py\\b|\\bsrc\\.main\\b\" -S docs scripts pyproject.toml README.md`
+- Read file before deletion:
+  - `sed -n '1,220p' src/main.py` (confirm no hidden exports used elsewhere)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → read any local “entrypoints/runbook” resources (if present).
+
+**Editing discipline:**
+
+- Use `functions.apply_patch` for small documentation updates and `*** Delete File: src/main.py` for the deletion.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 

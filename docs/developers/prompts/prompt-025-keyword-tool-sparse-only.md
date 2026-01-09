@@ -4,6 +4,8 @@ Implements `ADR-044` + `SPEC-025`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` for local code search and call-site discovery.
@@ -11,7 +13,45 @@ Implements `ADR-044` + `SPEC-025`.
 - `functions.mcp__gh_grep__searchGitHub` for idiomatic sparse-only query patterns.
 - `opensrc/` for inspecting exact dependency behavior (Qdrant client + LlamaIndex) when in doubt.
 
-**MCP tool sequence (use when it adds signal):**
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Find all current keyword tool references:
+  - `rg -n \"create_keyword_tool|keyword_search|keyword tool\" -S src/agents src/retrieval tests`
+  - `rg -n \"text-sparse|Sparse|BM25|BM42|fastembed\" -S src/retrieval src/config`
+- Read in parallel:
+  - `src/agents/tool_factory.py`
+  - `src/retrieval/sparse_query.py`
+  - any Qdrant client helpers (`src/retrieval/*qdrant*`, `src/config/*qdrant*`)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for Qdrant/LlamaIndex resources; read them before web search.
+
+**API correctness (Context7 + web):**
+
+- `functions.mcp__context7__resolve-library-id` → `qdrant-client`, `llama-index`
+- `functions.mcp__context7__query-docs` → confirm:
+  - named vector and sparse vector payload shapes
+  - Query API / `Prefetch` usage patterns (if used)
+- Use `functions.mcp__exa__deep_search_exa` (or `web.run` when you need citations/dates) for Qdrant “Query API sparse vector” docs and recent changes.
+
+**Real-world patterns (GitHub grep):**
+
+- `functions.mcp__gh_grep__searchGitHub` for patterns like `Prefetch(`, `SparseVector(`, `NamedVector`, `QueryRequest(`.
+
+**Architecture gate (recommended):**
+
+- Use `functions.mcp__zen__analyze` before implementing if you find multiple retrieval paths; keep one canonical sparse-query helper.
+
+**Security gate (required):**
+
+- `functions.mcp__zen__secaudit` must confirm no raw query text or document content is emitted to logs/telemetry.
+
+### MCP tool sequence (use when it adds signal)
 
 1. `functions.mcp__zen__planner` → plan: new retriever + tool wiring + tests.
 2. Context7:
@@ -25,6 +65,7 @@ Implements `ADR-044` + `SPEC-025`.
 
 ```bash
 cat opensrc/sources.json | rg -n "qdrant-client|llama-index" || true
+# Fetch only if missing and behavior is surprising; treat opensrc/ as read-only.
 npx opensrc pypi:qdrant-client
 npx opensrc pypi:llama-index
 ```

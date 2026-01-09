@@ -6,6 +6,8 @@ Implements `ADR-054` + `SPEC-035`.
 
 This is config + docs truth work; keep it minimal and test-backed.
 
+**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+
 **Primary tools to leverage:**
 
 - `rg` to confirm each knob is truly unused (no runtime imports or env mappings).
@@ -15,6 +17,34 @@ This is config + docs truth work; keep it minimal and test-backed.
 **Security note:**
 
 Removing knobs is a behavior change. If a knob relates to backup/security/egress, run `functions.mcp__zen__secaudit` after implementation.
+
+### Prompt-specific Tool Playbook (optimize tool usage)
+
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+
+**Parallel preflight (use `multi_tool_use.parallel`):**
+
+- Inventory candidate knobs and their usage:
+  - `rg -n \"class (Backup|SemanticCache|Analysis|Agent)Config|backup_|semantic_cache|analysis_mode\" -S src/config/settings.py`
+  - `rg -n \"DOCMIND_(BACKUP|SEMANTIC_CACHE|ANALYSIS|AGENT)\" -S src docs .env.example`
+  - `rg -n \"backup_|semantic_cache|analysis_mode|enable_deadline_propagation|enable_router_injection\" -S src tests docs`
+- Read in parallel:
+  - `src/config/settings.py`
+  - `docs/developers/configuration-reference.md`
+  - ADRs referenced by this prompt (so removals are documented correctly)
+
+**MCP resources first (when available):**
+
+- `functions.list_mcp_resources` → look for config/Settings resources; prefer local resources before web search.
+
+**API verification (Context7):**
+
+- `functions.mcp__context7__resolve-library-id` → `pydantic`, `pydantic-settings`
+- `functions.mcp__context7__query-docs` → confirm how “unknown env vars” are handled and how to keep startup tolerant.
+
+**Review gate (required):**
+
+- Run `functions.mcp__zen__codereview` after tests pass to confirm no knob removal breaks imports or docs guarantees.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
