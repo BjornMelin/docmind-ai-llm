@@ -81,9 +81,11 @@ uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE
+
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
 You will implement the feature described below end-to-end, including:
+
 - code changes
 - tests
 - documentation updates (ADR/SPEC/RTM)
@@ -94,11 +96,13 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### FEATURE CONTEXT
+
 **Primary Task:** Implement Document Analysis Modes (`auto | separate | combined`) with a domain service and Streamlit UI wiring, enabling per-document analysis in parallel with a safe UI presentation (tabs) and optional reduce/synthesis.
 
 **Why now:** Analysis-mode configuration exists but has no concrete implementation. This is a core “document analysis” capability expected in a finished release and must be testable and offline-first.
 
 **Definition of Done (DoD):**
+
 - `src/analysis/*` provides a typed, testable service for mode routing and execution.
 - Chat UI exposes analysis mode selection and renders:
   - Combined: single result
@@ -109,6 +113,7 @@ You must keep changes minimal, library-first, and maintainable.
 - `docs/specs/traceability.md` updated with `FR-028` mapping to code/tests.
 
 **In-scope modules/files (initial):**
+
 - `src/analysis/service.py` (new)
 - `src/analysis/models.py` (new)
 - `src/pages/01_chat.py`
@@ -120,6 +125,7 @@ You must keep changes minimal, library-first, and maintainable.
 - `docs/specs/traceability.md`
 
 **Out-of-scope (explicit):**
+
 - Introducing a new retrieval backend or index type.
 - Calling Streamlit APIs from background threads via `add_script_run_ctx()` (unsupported).
 
@@ -128,24 +134,29 @@ You must keep changes minimal, library-first, and maintainable.
 ### HARD RULES (EXECUTION)
 
 #### 1) Python + Packaging
+
 - Python version must remain **3.11.x** (respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
 
 #### 2) Style, Types, and Lint
+
 Your code must pass:
+
 - `uv run ruff format .`
 - `uv run ruff check .`
 - `uv run pyright`
 - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 
 Rules:
+
 - Prefer typed dataclasses / Pydantic models over untyped dicts.
 - Avoid `Any` unless you can justify it (and isolate it behind a narrow boundary).
 - No silent exception swallowing. Catch specific exceptions and log meaningfully.
 
 #### 3) Streamlit UI Discipline
+
 - `src/app.py` stays a thin shell (no business logic).
 - Pages in `src/pages/*` should:
   - keep UI concerns local
@@ -155,10 +166,12 @@ Rules:
 - Never call `st.*` from worker threads; collect results and update UI in the script thread.
 
 #### 4) Config Discipline (Pydantic Settings v2)
+
 - Configuration source of truth is `src/config/settings.py`.
 - Do not scatter `os.getenv` in domain code.
 
 #### 5) LlamaIndex + LangGraph Alignment
+
 - Prefer existing coordinator/retrieval wiring; do not re-implement agent logic.
 - Preserve offline-first operation:
   - do not add implicit network calls
@@ -167,6 +180,7 @@ Rules:
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN
+
 You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 1. [ ] Read ADR/SPEC/RTM/Requirements and map current chat flow + doc metadata.
@@ -217,18 +231,17 @@ Scan the feature scope and delete or refactor immediately if found:
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` |
-| **Types** |  | `uv run pyright` |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | no unsafe HTML; no new egress |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | no new import-time heavy work; parallelism bounded |
+| Requirement     | Status | Proof / Notes                                      |
+| --------------- | ------ | -------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                    |
+| **Formatting**  |        | `uv run ruff format .`                             |
+| **Lint**        |        | `uv run ruff check .`                              |
+| **Types**       |        | `uv run pyright`                                   |
+| **Pylint**      |        | meets threshold                                    |
+| **Tests**       |        | `uv run python scripts/run_tests.py --fast`        |
+| **Docs**        |        | ADR/SPEC/RTM updated                               |
+| **Security**    |        | no unsafe HTML; no new egress                      |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                         |
+| **Performance** |        | no new import-time heavy work; parallelism bounded |
 
 **EXECUTE UNTIL COMPLETE.**
-

@@ -168,17 +168,16 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `ruff format` |
-| **Lint** |  | `ruff check` clean |
-| **Types** |  | `pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `scripts/run_tests.py --fast` green |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | WAL + path validation + metadata-only |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
+| Requirement    | Status | Proof / Notes                         |
+| -------------- | ------ | ------------------------------------- |
+| **Packaging**  |        | `uv sync` clean                       |
+| **Formatting** |        | `ruff format`                         |
+| **Lint**       |        | `ruff check` clean                    |
+| **Types**      |        | `pyright` clean                       |
+| **Pylint**     |        | meets threshold                       |
+| **Tests**      |        | `scripts/run_tests.py --fast` green   |
+| **Docs**       |        | ADR/SPEC/RTM updated                  |
+| **Security**   |        | WAL + path validation + metadata-only |
+| **Tech Debt**  |        | zero TODO/FIXME introduced            |
 
 **EXECUTE UNTIL COMPLETE.**
-

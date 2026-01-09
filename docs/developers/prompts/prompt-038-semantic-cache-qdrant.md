@@ -61,9 +61,11 @@ Implements `ADR-035` + `SPEC-038`.
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE
+
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
 You will implement the feature described below end-to-end, including:
+
 - code changes
 - tests
 - documentation updates (ADR/SPEC/RTM)
@@ -74,6 +76,7 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### FEATURE CONTEXT
+
 **Primary Task:** Implement a Qdrant-backed semantic response cache with:
 
 - exact-match fast path (`prompt_key`)
@@ -85,6 +88,7 @@ You must keep changes minimal, library-first, and maintainable.
 **Why now:** The config surface for semantic caching exists, and performance optimizations are part of a “finished” offline-first app. We want caching without adding new services or heavy native deps.
 
 **Definition of Done (DoD):**
+
 - `SemanticCacheConfig.provider` supports `qdrant` and is documented.
 - New cache module provides a small protocol + a Qdrant implementation.
 - Cache is integrated at a single, well-defined boundary in the answer generation path.
@@ -93,6 +97,7 @@ You must keep changes minimal, library-first, and maintainable.
 - RTM updated with `FR-026` mapping to code/tests.
 
 **In-scope modules/files (initial):**
+
 - `src/utils/semantic_cache.py` (new)
 - `src/config/settings.py` (extend `SemanticCacheConfig` for qdrant provider + optional knobs)
 - One integration point (choose the narrowest viable boundary):
@@ -105,6 +110,7 @@ You must keep changes minimal, library-first, and maintainable.
 - `docs/specs/traceability.md`
 
 **Out-of-scope (explicit):**
+
 - LiteLLM proxy caching.
 - Adding GPTCache/FAISS dependencies as required runtime deps (may be a follow-up provider).
 
@@ -113,30 +119,36 @@ You must keep changes minimal, library-first, and maintainable.
 ### HARD RULES (EXECUTION)
 
 #### 1) Python + Packaging
+
 - Python version must remain **3.11.x** (respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
 
 #### 2) Style, Types, and Lint
+
 Your code must pass:
+
 - `uv run ruff format .`
 - `uv run ruff check .`
 - `uv run pyright`
 - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 
 #### 3) Security & Privacy
+
 - Never store raw prompts in any persisted cache.
 - Never log secrets.
 - Invalidate cache on corpus/config change; do not cross-hit across corpora.
 
 #### 4) Offline-first posture
+
 - Cache must be fully local and default-off.
 - No new remote endpoints are introduced by this feature.
 
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN
+
 You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 1. [ ] Read ADR/SPEC and locate the best cache insertion point in the LLM call path.
@@ -179,16 +191,15 @@ uv run python -m pytest -q
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` |
-| **Types** |  | `uv run pyright` |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python -m pytest -q` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | no raw prompts stored; strict invalidation |
-| **Offline-first** |  | default-off; no new egress |
+| Requirement       | Status | Proof / Notes                              |
+| ----------------- | ------ | ------------------------------------------ |
+| **Formatting**    |        | `uv run ruff format .`                     |
+| **Lint**          |        | `uv run ruff check .`                      |
+| **Types**         |        | `uv run pyright`                           |
+| **Pylint**        |        | meets threshold                            |
+| **Tests**         |        | `uv run python -m pytest -q`               |
+| **Docs**          |        | ADR/SPEC/RTM updated                       |
+| **Security**      |        | no raw prompts stored; strict invalidation |
+| **Offline-first** |        | default-off; no new egress                 |
 
 **EXECUTE UNTIL COMPLETE.**
-

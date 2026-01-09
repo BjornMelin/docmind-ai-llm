@@ -28,7 +28,7 @@ DocMind’s multi-agent coordinator currently:
 - defines config flags:
   - `agents.enable_deadline_propagation`
   - `agents.enable_router_injection`
-  but does not use them
+    but does not use them
 
 Additionally, there is a **retrieval wiring mismatch**:
 
@@ -66,12 +66,12 @@ This drift limits correctness (missing sources), makes timeouts less effective (
 
 ### Decision Framework (≥9.0)
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
-|---|---:|---:|---:|---:|---|
-| **A: Deadline propagation + router injection** | 8.8 | 9.2 | 9.6 | **9.16** | ✅ Selected |
-| B: Coordinator-only hard timeout | 7.5 | 7.0 | 7.5 | 7.35 | Rejected |
-| C: Full async cancellation refactor | 4.0 | 9.0 | 6.0 | 6.10 | Rejected |
-| D: Stop-flag/interrupt only | 6.5 | 7.5 | 7.0 | 6.95 | Rejected |
+| Option                                         | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total | Decision    |
+| ---------------------------------------------- | ---------------: | ---------: | --------------: | -------: | ----------- |
+| **A: Deadline propagation + router injection** |              8.8 |        9.2 |             9.6 | **9.16** | ✅ Selected |
+| B: Coordinator-only hard timeout               |              7.5 |        7.0 |             7.5 |     7.35 | Rejected    |
+| C: Full async cancellation refactor            |              4.0 |        9.0 |             6.0 |     6.10 | Rejected    |
+| D: Stop-flag/interrupt only                    |              6.5 |        7.5 |             7.0 |     6.95 | Rejected    |
 
 ## Decision
 
@@ -121,4 +121,3 @@ flowchart TD
 
 - Cooperative timeouts cannot force-cancel a call that ignores timeouts.
 - Slightly more complexity in tool wiring and state schema.
-

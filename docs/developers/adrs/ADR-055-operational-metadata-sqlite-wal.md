@@ -62,12 +62,12 @@ We need a transactional store that supports:
 
 ### Decision Framework (≥9.0)
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
-|---|---:|---:|---:|---:|---|
-| **A: SQLite WAL ops DB** | 9.5 | 9.0 | 9.5 | **9.35** | ✅ Selected |
-| B: DuckDB ops DB | 7.5 | 8.5 | 7.5 | 7.80 | Rejected |
-| C: JSON/JSONL | 6.0 | 6.0 | 5.5 | 5.85 | Rejected |
-| D: Reuse analytics DuckDB | 6.5 | 7.5 | 5.5 | 6.50 | Rejected |
+| Option                    | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total | Decision    |
+| ------------------------- | ---------------: | ---------: | --------------: | -------: | ----------- |
+| **A: SQLite WAL ops DB**  |              9.5 |        9.0 |             9.5 | **9.35** | ✅ Selected |
+| B: DuckDB ops DB          |              7.5 |        8.5 |             7.5 |     7.80 | Rejected    |
+| C: JSON/JSONL             |              6.0 |        6.0 |             5.5 |     5.85 | Rejected    |
+| D: Reuse analytics DuckDB |              6.5 |        7.5 |             5.5 |     6.50 | Rejected    |
 
 ## Decision
 
@@ -128,4 +128,3 @@ flowchart LR
 
 - Adds one more persisted file to manage (`docmind.db`) and basic migration discipline.
 - SQLite is single-writer; background writers must be serialized or use bounded retries.
-

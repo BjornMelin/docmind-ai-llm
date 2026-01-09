@@ -39,11 +39,11 @@ Flat vector search underperforms on complex queries, lacks hierarchical awarenes
 
 ### Decision Framework
 
-| Model / Option                     | Solution Leverage (30%) | Application Value (30%) | Maintenance (20%) | Adaptability (20%) | Total | Decision |
-| ---------------------------------- | ----------------------- | ----------------------- | ----------------- | ------------------ | ----- | -------- |
-| RAPTOR‑Lite + Router (Selected)    | 5                       | 4                       | 5                 | 5                  | 4.7   | ✅ Selected |
-| Flat Vector Only                   | 3                       | 2                       | 5                 | 2                  | 2.9   | Rejected |
-| Full RAPTOR                        | 4                       | 4                       | 2                 | 4                  | 3.6   | Rejected |
+| Model / Option                  | Solution Leverage (30%) | Application Value (30%) | Maintenance (20%) | Adaptability (20%) | Total | Decision    |
+| ------------------------------- | ----------------------- | ----------------------- | ----------------- | ------------------ | ----- | ----------- |
+| RAPTOR‑Lite + Router (Selected) | 5                       | 4                       | 5                 | 5                  | 4.7   | ✅ Selected |
+| Flat Vector Only                | 3                       | 2                       | 5                 | 2                  | 2.9   | Rejected    |
+| Full RAPTOR                     | 4                       | 4                       | 2                 | 4                  | 3.6   | Rejected    |
 
 ## Decision
 

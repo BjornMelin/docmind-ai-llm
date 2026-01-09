@@ -60,9 +60,11 @@ Implements `ADR-033` + `SPEC-037`.
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
 ### YOU ARE
+
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
 You will implement the feature described below end-to-end, including:
+
 - code changes
 - tests
 - documentation updates (ADR/SPEC/RTM)
@@ -73,6 +75,7 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### FEATURE CONTEXT
+
 **Primary Task:** Implement a manual, local-only backup mechanism with rotation, including:
 
 - cache DB
@@ -83,6 +86,7 @@ You must keep changes minimal, library-first, and maintainable.
 **Why now:** Backups are a core operational feature for a polished offline-first app; users need a predictable way to preserve and restore local state.
 
 **Definition of Done (DoD):**
+
 - `scripts/backup.py` implements `create-backup` and `prune-backups` with clear CLI flags.
 - Backups are stored under `data/backups/backup_<timestamp>/` by default, rotated to `settings.backup_keep_last`.
 - Qdrant snapshot step:
@@ -93,6 +97,7 @@ You must keep changes minimal, library-first, and maintainable.
 - Docs updated and RTM includes `FR-027` mapping.
 
 **In-scope modules/files (initial):**
+
 - `scripts/backup.py` (new)
 - `src/utils/security.py` (reuse path validation helpers; no traversal/symlink escapes)
 - `src/config/settings.py` (only if new knobs required)
@@ -103,6 +108,7 @@ You must keep changes minimal, library-first, and maintainable.
 - `docs/specs/traceability.md`
 
 **Out-of-scope (explicit):**
+
 - Remote backup targets (S3, Google Drive).
 - Background schedulers/cron integration.
 
@@ -111,19 +117,23 @@ You must keep changes minimal, library-first, and maintainable.
 ### HARD RULES (EXECUTION)
 
 #### 1) Python + Packaging
+
 - Python version must remain **3.11.x** (respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
 
 #### 2) Style, Types, and Lint
+
 Your code must pass:
+
 - `uv run ruff format .`
 - `uv run ruff check .`
 - `uv run pyright`
 - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 
 #### 3) Security & Offline-first
+
 - Validate filesystem paths (no traversal, no symlink escape).
 - Never log secrets (including `.env` contents).
 - Keep remote endpoints blocked by default; backup operates locally.
@@ -131,6 +141,7 @@ Your code must pass:
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN
+
 You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 1. [ ] Read ADR/SPEC/RTM and confirm data locations and existing snapshot retention code.
@@ -167,16 +178,15 @@ uv run python -m pytest -q
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` |
-| **Types** |  | `uv run pyright` |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python -m pytest -q` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | path validation; no secret logs |
-| **Offline-first** |  | no new network surfaces introduced |
+| Requirement       | Status | Proof / Notes                      |
+| ----------------- | ------ | ---------------------------------- |
+| **Formatting**    |        | `uv run ruff format .`             |
+| **Lint**          |        | `uv run ruff check .`              |
+| **Types**         |        | `uv run pyright`                   |
+| **Pylint**        |        | meets threshold                    |
+| **Tests**         |        | `uv run python -m pytest -q`       |
+| **Docs**          |        | ADR/SPEC/RTM updated               |
+| **Security**      |        | path validation; no secret logs    |
+| **Offline-first** |        | no new network surfaces introduced |
 
 **EXECUTE UNTIL COMPLETE.**
-

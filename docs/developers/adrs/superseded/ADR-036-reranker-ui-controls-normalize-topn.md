@@ -36,11 +36,11 @@ Reranking uses a CrossEncoder for text and ColPali for visual nodes (ADR‑037).
 
 ### Decision Framework (Superseded)
 
-| Model / Option                                 | Simplicity (40%) | Operator Value (30%) | Testability (20%) | Alignment (10%) | Total Score | Decision          |
-| ---------------------------------------------- | ---------------- | -------------------- | ----------------- | --------------- | ----------- | ----------------- |
-| **Always‑on (internal caps/timeouts)**         | 10               | 8                    | 9                 | 10              | **9.3**     | ✅ Superseding     |
-| Minimal three controls (historical selection)  | 8                | 8                    | 9                 | 8               | 8.3         | Historical (repl.) |
-| Full advanced panel                            | 5                | 9                    | 6                 | 7               | 6.6         | Rejected          |
+| Model / Option                                | Simplicity (40%) | Operator Value (30%) | Testability (20%) | Alignment (10%) | Total Score | Decision           |
+| --------------------------------------------- | ---------------- | -------------------- | ----------------- | --------------- | ----------- | ------------------ |
+| **Always‑on (internal caps/timeouts)**        | 10               | 8                    | 9                 | 10              | **9.3**     | ✅ Superseding     |
+| Minimal three controls (historical selection) | 8                | 8                    | 9                 | 8               | 8.3         | Historical (repl.) |
+| Full advanced panel                           | 5                | 9                    | 6                 | 7               | 6.6         | Rejected           |
 
 The minimal‑controls approach has been superseded by always‑on reranking with internal guardrails and telemetry. Any future UI exposure must be justified by measured operator value and retained simplicity.
 
