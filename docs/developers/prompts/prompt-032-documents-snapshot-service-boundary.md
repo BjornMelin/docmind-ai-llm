@@ -2,6 +2,17 @@
 
 Implements `ADR-051` + `SPEC-032`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-051-documents-snapshot-service-boundary.md`
+- SPEC: `docs/specs/spec-032-documents-snapshot-service-boundary.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.python.org/3/library/tempfile.html — Safe temporary workspace patterns.
+- https://docs.python.org/3/library/hashlib.html — SHA-256 hashing primitives (stable IDs/manifest hashes).
+- https://docs.llamaindex.ai/en/stable/ — LlamaIndex stable docs index (only if persistence behaviors are subtle).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 This is a cross-cutting refactor (UI → persistence boundary). Use analysis + review tools.
@@ -106,6 +117,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Identify the snapshot rebuild/export logic currently living in `src/pages/02_documents.py` and the tests that assert it.
 2. [ ] Implement `src/persistence/snapshot_service.py`:

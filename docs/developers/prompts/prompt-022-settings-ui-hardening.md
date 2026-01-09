@@ -2,6 +2,23 @@
 
 Implements `ADR-041` + `SPEC-022`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-041-settings-ui-hardening-and-safe-badges.md`
+- SPEC: `docs/specs/spec-022-settings-ui-hardening.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.streamlit.io/develop/api-reference/text/st.badge — Replace HTML badges with Streamlit-native badges.
+- https://docs.streamlit.io/develop/api-reference/execution-flow/st.form — Forms, submit behavior, and rerun semantics.
+- https://docs.streamlit.io/develop/api-reference/execution-flow/st.form_submit_button — Form submit button behavior (disabled gating, enter-to-submit).
+- https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state — Session state discipline (Streamlit reruns).
+- https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest — AppTest reference for integration tests.
+- https://docs.pydantic.dev/latest/concepts/models/ — `model_validate`, validation errors, and patterns.
+- https://docs.pydantic.dev/latest/concepts/pydantic_settings/ — Pydantic Settings v2 env mapping patterns.
+- https://bbc2.github.io/python-dotenv/reference/ — `set_key`/`unset_key` reference.
+- https://github.com/theskumar/python-dotenv — python-dotenv canonical project + usage examples.
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
@@ -165,6 +182,8 @@ Must pass:
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Baseline scan: confirm only `src/ui/components/provider_badge.py` uses `unsafe_allow_html=True`.
 

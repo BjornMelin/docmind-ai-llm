@@ -2,6 +2,16 @@
 
 Implements `ADR-049` + `SPEC-030`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-049-multimodal-helper-cleanup.md`
+- SPEC: `docs/specs/spec-030-multimodal-helper-cleanup.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.python.org/3/library/importlib.html — Import mechanics (useful if you find dynamic/indirect imports before deletion).
+- https://docs.python.org/3/library/pathlib.html — Filesystem/path handling patterns (if refactors touch file IO).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 This is a deletion/cleanup task. Prefer local repo truth.
@@ -97,6 +107,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Confirm unused in production: `rg "src\\.utils\\.multimodal" src/`.
 2. [ ] Delete `src/utils/multimodal.py`.

@@ -2,6 +2,19 @@
 
 Implements `ADR-045` + `SPEC-026`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-045-ingestion-api-and-legacy-facade.md`
+- SPEC: `docs/specs/spec-026-ingestion-api-facade.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/ — LlamaIndex ingestion pipeline overview.
+- https://docs.llamaindex.ai/en/stable/module_guides/loading/documents_and_nodes/ — Document/node concepts and file readers.
+- https://docs.unstructured.io/ — Unstructured docs (partitioning strategies; offline-first cautions).
+- https://pymupdf.readthedocs.io/ — PyMuPDF docs (PDF parsing/rendering primitives used by the repo).
+- https://docs.python.org/3/library/pathlib.html — `pathlib` path handling patterns (safe path joins, normalization).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
@@ -118,6 +131,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Inspect current ingestion pipeline (`src/processing/ingestion_pipeline.py`) and Streamlit adapter (`src/ui/_ingest_adapter_impl.py`) to reuse stable-ID and config patterns.
 2. [ ] Implement `src/processing/ingestion_api.py`:

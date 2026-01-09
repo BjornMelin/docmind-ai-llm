@@ -2,6 +2,17 @@
 
 Implements `ADR-047` + `SPEC-028`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-047-safe-logging-policy-no-pii-redactor.md`
+- SPEC: `docs/specs/spec-028-safe-logging-no-pii-redactor.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://loguru.readthedocs.io/ — Loguru logging docs (repo standard logger).
+- https://opentelemetry.io/docs/languages/python/ — OpenTelemetry Python docs (optional exporters; ensure default-off).
+- https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html — OWASP logging guidance (avoid sensitive data in logs).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 This is security-sensitive. Use structured security review tools.
@@ -127,6 +138,8 @@ Must pass:
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Identify all `redact_pii` references (`rg "redact_pii"`).
 2. [ ] Remove `redact_pii` from `src/utils/security.py` and update `__all__`.

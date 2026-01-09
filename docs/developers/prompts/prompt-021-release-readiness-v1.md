@@ -2,6 +2,26 @@
 
 Use this prompt to implement **every** work package defined in `docs/specs/spec-021-release-readiness-v1.md`.
 
+**Read first (repo truth):**
+- SPEC: `docs/specs/spec-021-release-readiness-v1.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.streamlit.io/develop/concepts/multipage-apps/overview — Streamlit multipage fundamentals and routing patterns.
+- https://docs.streamlit.io/develop/api-reference/execution-flow/st.navigation — Streamlit navigation API used by this repo.
+- https://docs.streamlit.io/develop/api-reference/execution-flow/st.page — Streamlit page definition API used by this repo.
+- https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest — Streamlit AppTest reference (for deterministic UI tests).
+- https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/ — LlamaIndex ingestion pipeline overview.
+- https://qdrant.tech/documentation/concepts/hybrid-queries/ — Qdrant hybrid query concepts (dense+sparse).
+- https://qdrant.tech/documentation/concepts/search/#query-points — Qdrant Query Points API reference (Prefetch/fusion patterns).
+- https://docs.astral.sh/uv/guides/integration/docker/ — `uv` Docker build guidance (reproducible installs).
+- https://docs.astral.sh/ruff/formatter/ — Ruff formatter reference (repo uses `ruff format`).
+- https://docs.astral.sh/ruff/linter/ — Ruff linter reference (repo uses `ruff check`).
+- https://github.com/microsoft/pyright/blob/main/docs/configuration.md — Pyright configuration reference.
+- https://docs.docker.com/build/building/best-practices/ — Docker build best practices.
+- https://opentelemetry.io/docs/languages/python/ — OpenTelemetry Python docs (optional in this repo).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Skills to load during execution (by package):**
@@ -177,6 +197,8 @@ Rules:
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
 
 You MUST produce a plan and keep exactly one step “in_progress” at a time.
+
+0. [ ] Read `docs/specs/spec-021-release-readiness-v1.md` + `docs/specs/traceability.md` and restate DoD in your plan.
 
 1. [ ] Load `docs/specs/spec-021-release-readiness-v1.md` and enumerate all work packages.
 2. [ ] Execute prompts in `docs/developers/prompts/README.md` order, one at a time.

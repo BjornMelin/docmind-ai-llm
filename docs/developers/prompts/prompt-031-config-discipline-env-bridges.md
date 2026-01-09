@@ -2,6 +2,18 @@
 
 Implements `ADR-050` + `SPEC-031`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-050-config-discipline-env-bridges.md`
+- SPEC: `docs/specs/spec-031-config-discipline-env-bridges.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.pydantic.dev/latest/concepts/pydantic_settings/ — Pydantic Settings v2 patterns (nested env parsing; precedence).
+- https://docs.pydantic.dev/latest/concepts/types/#secret-types — Secret handling types (`SecretStr`) and best practices.
+- https://opentelemetry.io/docs/languages/python/ — OpenTelemetry Python docs (resource/env configuration; exporters).
+- https://bbc2.github.io/python-dotenv/reference/ — python-dotenv reference (if `.env` persistence touches quoting semantics).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 This is security-sensitive config work. Prefer repo truth and run structured audits.
@@ -140,6 +152,8 @@ Must pass:
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Inventory env reads: `rg "os\\.getenv\\(" src/`.
 2. [ ] Add new settings groups and mappings in `src/config/settings.py`.

@@ -2,6 +2,19 @@
 
 Implements `ADR-044` + `SPEC-025`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-044-keyword-tool-sparse-only-qdrant.md`
+- SPEC: `docs/specs/spec-025-keyword-tool-sparse-only.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://qdrant.tech/documentation/concepts/search/#query-points — Qdrant Query Points API (sparse vectors, filters, payloads).
+- https://qdrant.tech/documentation/concepts/hybrid-queries/ — Hybrid query concepts (dense+sparse fusion).
+- https://python-client.qdrant.tech/ — Qdrant Python client docs (types, requests).
+- https://docs.llamaindex.ai/en/stable/api_reference/vector_stores/qdrant/ — LlamaIndex Qdrant vector store integration.
+- https://docs.llamaindex.ai/en/stable/module_guides/querying/retriever/ — LlamaIndex retriever patterns and contracts.
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
@@ -123,6 +136,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Inspect current placeholder implementation and tests.
 2. [ ] Implement `src/retrieval/keyword.py` sparse-only retriever.

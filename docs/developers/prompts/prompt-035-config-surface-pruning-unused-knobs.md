@@ -2,6 +2,16 @@
 
 Implements `ADR-054` + `SPEC-035`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-054-config-surface-pruning-unused-knobs.md`
+- SPEC: `docs/specs/spec-035-config-surface-pruning-unused-knobs.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.pydantic.dev/latest/concepts/pydantic_settings/ — Pydantic Settings v2 behavior (unknown env vars, nested keys).
+- https://docs.pydantic.dev/latest/concepts/config/ — Model config patterns (`extra`, strictness, etc.).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 This is config + docs truth work; keep it minimal and test-backed.
@@ -93,6 +103,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Identify unused settings fields (confirm no references in `src/`).
 2. [ ] Remove unused fields/models from `src/config/settings.py` and update exports.

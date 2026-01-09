@@ -2,6 +2,20 @@
 
 Implements `ADR-043` + `SPEC-024`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-043-chat-persistence-simplechatstore.md`
+- SPEC: `docs/specs/spec-024-chat-persistence-simplechatstore.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.streamlit.io/develop/api-reference/chat/st.chat_input — Chat input widget behavior.
+- https://docs.streamlit.io/develop/api-reference/chat/st.chat_message — Chat message rendering patterns.
+- https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state — Session state discipline on reruns.
+- https://docs.llamaindex.ai/en/stable/module_guides/storing/chat_stores/ — LlamaIndex chat stores overview.
+- https://docs.llamaindex.ai/en/stable/api_reference/storage/chat_store/simple/ — `SimpleChatStore` API reference.
+- https://docs.llamaindex.ai/en/stable/module_guides/deploying/chat_engines/memory/ — Memory patterns (note: older `ChatMemoryBuffer` may be deprecated).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
@@ -135,6 +149,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Inspect current chat page flow and how it stores messages in `st.session_state`.
 2. [ ] Add `src/ui/chat_persistence.py` helper:

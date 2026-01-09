@@ -2,6 +2,16 @@
 
 Implements `ADR-046` + `SPEC-027`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-046-remove-legacy-main-entrypoint.md`
+- SPEC: `docs/specs/spec-027-remove-legacy-main-entrypoint.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.streamlit.io/develop/get-started/run-your-app — Streamlit run command expectations (supported entrypoint patterns).
+- https://docs.streamlit.io/develop/concepts/multipage-apps/overview — Multipage app entrypoint patterns.
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 This work is primarily repo hygiene; prefer local repo truth over web research.
@@ -105,6 +115,8 @@ Must pass:
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Confirm nothing imports `src.main` (`rg "from src\\.main|import src\\.main"`).
 2. [ ] Delete `src/main.py`.

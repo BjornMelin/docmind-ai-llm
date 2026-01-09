@@ -2,6 +2,18 @@
 
 Implements `ADR-048` + `SPEC-029`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-048-docs-consistency-pass.md`
+- SPEC: `docs/specs/spec-029-docs-consistency-pass.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.streamlit.io/develop — Streamlit official docs index (use when docs reference Streamlit APIs).
+- https://docs.llamaindex.ai/en/stable/ — LlamaIndex stable docs index (use when docs reference ingestion/retrieval/memory).
+- https://qdrant.tech/documentation/ — Qdrant docs index (hybrid queries, query points API).
+- https://opentelemetry.io/docs/languages/python/ — OpenTelemetry Python docs (when aligning observability specs).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 Docs drift is best solved with repo-local tooling + grep first.
@@ -110,6 +122,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Identify drift: `rg "src/processing/document_processor.py|process_document\\(" docs/`.
 2. [ ] Update `docs/specs/spec-002-ingestion-pipeline.md` to match the canonical ingestion pipeline + API.

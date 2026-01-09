@@ -2,6 +2,18 @@
 
 Implements `ADR-053` + `SPEC-034`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-053-analytics-page-hardening.md`
+- SPEC: `docs/specs/spec-034-analytics-page-hardening.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://duckdb.org/docs/api/python/overview.html — DuckDB Python API overview (connections, results, `.df()` patterns).
+- https://duckdb.org/docs/guides/python/import_pandas.html — DuckDB ↔ pandas integration patterns.
+- https://docs.streamlit.io/develop/api-reference/charts — Streamlit charting APIs (rendering dataframes/charts).
+- https://docs.python.org/3/library/json.html — JSON parsing primitives (streaming JSONL parsing strategy).
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Use skill:** `$streamlit-master-architect` (page import discipline, AppTest patterns)
@@ -111,6 +123,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Implement telemetry parsing helper with caps (stream lines, ignore invalid JSON).
 2. [ ] Refactor `src/pages/03_analytics.py`:

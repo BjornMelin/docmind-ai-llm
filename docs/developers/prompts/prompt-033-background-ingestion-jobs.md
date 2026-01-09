@@ -2,6 +2,19 @@
 
 Implements `ADR-052` + `SPEC-033`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-052-background-ingestion-jobs.md`
+- SPEC: `docs/specs/spec-033-background-ingestion-jobs.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment — `st.fragment` polling and rerun semantics.
+- https://docs.streamlit.io/develop/api-reference/caching-and-state/st.cache_resource — Resource caching for singletons (JobManager).
+- https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state — Session state discipline for job ids/progress.
+- https://docs.python.org/3/library/concurrent.futures.html — `ThreadPoolExecutor` semantics and lifecycle.
+- https://docs.python.org/3/library/threading.html#threading.Event — Cooperative cancellation primitives.
+
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Use skill:** `$streamlit-master-architect`
@@ -131,6 +144,8 @@ You must keep changes minimal, library-first, and maintainable.
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Implement `src/ui/background_jobs.py`:
    - JobManager + JobState + ProgressEvent types

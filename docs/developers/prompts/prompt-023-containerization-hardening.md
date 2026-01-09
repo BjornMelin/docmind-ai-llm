@@ -2,6 +2,21 @@
 
 Implements `ADR-042` + `SPEC-023`.
 
+**Read first (repo truth):**
+- ADR: `docs/developers/adrs/ADR-042-containerization-hardening.md`
+- SPEC: `docs/specs/spec-023-containerization-hardening.md`
+- RTM: `docs/specs/traceability.md`
+
+## Official docs (research during implementation)
+
+- https://docs.docker.com/build/building/best-practices/ — Dockerfile best practices (multi-stage, caching, secrets).
+- https://docs.docker.com/compose/ — Docker Compose overview and workflows.
+- https://docs.docker.com/compose/compose-file/ — Compose file reference (ports, env, healthchecks).
+- https://docs.docker.com/reference/cli/docker/compose/config/ — `docker compose config` validation.
+- https://hub.docker.com/_/python — Official Python image tags and supported variants.
+- https://docs.astral.sh/uv/guides/integration/docker/ — `uv` Docker install guidance (`uv sync --frozen`).
+- https://docs.streamlit.io/deploy/tutorials/docker — Streamlit Docker deployment tutorial (ports, command).
+
 Use the `$docker-architect` workflow patterns (multi-stage, non-root, .dockerignore).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
@@ -157,6 +172,8 @@ After container changes, the repo must still pass:
 ---
 
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
+
+0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
 1. [ ] Run docker inventory/audit and capture baseline.
 
