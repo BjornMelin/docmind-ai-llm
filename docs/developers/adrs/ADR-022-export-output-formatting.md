@@ -36,11 +36,11 @@ Users need portable results (JSON) and readable docs (Markdown). We can leverage
 
 ### Decision Framework
 
-| Model / Option              | Type-Safety (35%) | Simplicity (35%) | Flexibility (20%) | Performance (10%) | Total | Decision      |
-| --------------------------- | ----------------- | ---------------- | ----------------- | ----------------- | ----- | ------------- |
-| Pydantic+Jinja2+Rich (Sel.) | 10                | 9                | 8                 | 8                 | **9.0** | ✅ Selected    |
-| Manual strings              | 3                 | 9                | 5                 | 9                 | 5.7   | Rejected      |
-| Heavy libs                  | 8                 | 5                | 9                 | 6                 | 6.9   | Rejected      |
+| Model / Option              | Type-Safety (35%) | Simplicity (35%) | Flexibility (20%) | Performance (10%) | Total   | Decision    |
+| --------------------------- | ----------------- | ---------------- | ----------------- | ----------------- | ------- | ----------- |
+| Pydantic+Jinja2+Rich (Sel.) | 10                | 9                | 8                 | 8                 | **9.0** | ✅ Selected |
+| Manual strings              | 3                 | 9                | 5                 | 9                 | 5.7     | Rejected    |
+| Heavy libs                  | 8                 | 5                | 9                 | 6                 | 6.9     | Rejected    |
 
 ## Decision
 

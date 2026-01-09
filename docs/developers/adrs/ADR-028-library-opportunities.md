@@ -32,11 +32,11 @@ Adopt “library‑first” reviews each milestone; remove custom layers when eq
 
 ## Decision Framework
 
-| Candidate Area     | Library Feature            | Simplicity (40%) | Risk (20%) | Gain (40%) | Total | Decision |
-|--------------------|----------------------------|------------------|------------|------------|-------|----------|
-| Embeddings         | FlagEmbedding BGEM3        | 9                | 8          | 9          | 8.9   | ✅ Sel.  |
-| Retrieval helpers  | LlamaIndex retrievers      | 9                | 8          | 9          | 8.9   | ✅ Sel.  |
-| Cache adapters     | IngestionCache + DuckDB     | 9                | 9          | 9          | 9.0   | ✅ Sel.  |
+| Candidate Area    | Library Feature         | Simplicity (40%) | Risk (20%) | Gain (40%) | Total | Decision |
+| ----------------- | ----------------------- | ---------------- | ---------- | ---------- | ----- | -------- |
+| Embeddings        | FlagEmbedding BGEM3     | 9                | 8          | 9          | 8.9   | ✅ Sel.  |
+| Retrieval helpers | LlamaIndex retrievers   | 9                | 8          | 9          | 8.9   | ✅ Sel.  |
+| Cache adapters    | IngestionCache + DuckDB | 9                | 9          | 9          | 9.0   | ✅ Sel.  |
 
 ## Consequences
 

@@ -9,7 +9,7 @@ Superseded-by:
 Related: 031, 038, 013, 016
 Tags: streamlit, persistence, snapshots, graphrag
 References:
-- https://docs.streamlit.io/develop/concepts/app-design/multithreading
+  - https://docs.streamlit.io/develop/concepts/app-design/multithreading
 ---
 
 ## Description
@@ -44,25 +44,25 @@ This violates UI/domain separation (ADR‑013/016), makes the behavior harder to
 
 Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total |
-|---|---:|---:|---:|---:|
-| **A: `src/persistence/snapshot_service.py`** | 9.0 | 9.5 | 9.5 | **9.3** |
-| B: keep in page | 8.5 | 9.5 | 6.5 | 8.2 |
-| C: move to `src/ui/` | 7.5 | 9.2 | 7.5 | 8.0 |
+| Option                                       | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
+| -------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
+| **A: `src/persistence/snapshot_service.py`** |              9.0 |        9.5 |             9.5 | **9.3** |
+| B: keep in page                              |              8.5 |        9.5 |             6.5 |     8.2 |
+| C: move to `src/ui/`                         |              7.5 |        9.2 |             7.5 |     8.0 |
 
 ## Decision
 
 We will:
 
-1) Add `src/persistence/snapshot_service.py` that owns snapshot rebuild/export packaging orchestration and returns a structured result.
+1. Add `src/persistence/snapshot_service.py` that owns snapshot rebuild/export packaging orchestration and returns a structured result.
 
-2) Refactor `src/pages/02_documents.py` to call the service and only:
+2. Refactor `src/pages/02_documents.py` to call the service and only:
 
-- gather UI inputs
-- update `st.session_state` with indices/router on success
-- render status/progress and user-facing errors
+   - gather UI inputs
+   - update `st.session_state` with indices/router on success
+   - render status/progress and user-facing errors
 
-3) Move the unit tests that currently validate snapshot rebuild behavior from the page module to the service module, and keep only a thin UI wiring test at the page level.
+3. Move the unit tests that currently validate snapshot rebuild behavior from the page module to the service module, and keep only a thin UI wiring test at the page level.
 
 ## High-Level Architecture
 
@@ -103,4 +103,3 @@ flowchart LR
 ## Changelog
 
 - 1.0 (2026-01-09): Proposed for v1 maintainability and correctness.
-

@@ -33,10 +33,10 @@ Earlier versions introduced custom SessionState/Cache managers. Streamlit provid
 
 ### Decision Framework
 
-| Model / Option            | Simplicity (40%) | Reliability (30%) | Integration (20%) | Maintenance (10%) | Total | Decision      |
-| ------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----- | ------------- |
-| Streamlit native (Sel.)   | 10               | 9                 | 9                 | 9                 | **9.5** | ✅ Selected    |
-| Custom layer              | 4                | 6                 | 7                 | 5                 | 5.5   | Rejected      |
+| Model / Option          | Simplicity (40%) | Reliability (30%) | Integration (20%) | Maintenance (10%) | Total   | Decision    |
+| ----------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ------- | ----------- |
+| Streamlit native (Sel.) | 10               | 9                 | 9                 | 9                 | **9.5** | ✅ Selected |
+| Custom layer            | 4                | 6                 | 7                 | 5                 | 5.5     | Rejected    |
 
 ## Decision
 

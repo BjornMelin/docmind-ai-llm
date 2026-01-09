@@ -41,12 +41,12 @@ The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), 
 
 ### Decision Framework
 
-| Model / Option                 | Simplicity (35%) | UX (30%) | Integration (20%) | Maintenance (15%) | Total Score | Decision      |
-| ------------------------------ | ---------------- | -------- | ----------------- | ----------------- | ----------- | ------------- |
-| Programmatic Streamlit (Sel.)  | 9                | 9        | 9                 | 9                 | **9.0**     | ✅ Selected    |
-| Directory‑based multipage      | 8                | 6        | 6                 | 7                 | 6.9         | Rejected      |
-| Gradio                         | 9                | 6        | 5                 | 8                 | 6.9         | Rejected      |
-| FastAPI + React                | 4                | 9        | 9                 | 5                 | 6.4         | Rejected      |
+| Model / Option                | Simplicity (35%) | UX (30%) | Integration (20%) | Maintenance (15%) | Total Score | Decision    |
+| ----------------------------- | ---------------- | -------- | ----------------- | ----------------- | ----------- | ----------- |
+| Programmatic Streamlit (Sel.) | 9                | 9        | 9                 | 9                 | **9.0**     | ✅ Selected |
+| Directory‑based multipage     | 8                | 6        | 6                 | 7                 | 6.9         | Rejected    |
+| Gradio                        | 9                | 6        | 5                 | 8                 | 6.9         | Rejected    |
+| FastAPI + React               | 4                | 9        | 9                 | 5                 | 6.4         | Rejected    |
 
 ## Decision
 

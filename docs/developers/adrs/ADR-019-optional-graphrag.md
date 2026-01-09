@@ -36,11 +36,11 @@ Vector‑only RAG struggles with multi‑hop and relationship queries. PropertyG
 
 ### Decision Framework
 
-| Model / Option              | Capability (40%) | Simplicity (30%) | Infra (20%) | Maintenance (10%) | Total | Decision      |
-| --------------------------- | ---------------- | ---------------- | ----------- | ----------------- | ----- | ------------- |
-| PropertyGraphIndex (Sel.)   | 8                | 9                | 10          | 9                 | **8.9** | ✅ Selected    |
-| Vector‑only                  | 5                | 10               | 10          | 10                | 7.5   | Rejected      |
-| Full GraphRAG               | 10               | 4                | 3           | 5                 | 6.6   | Rejected      |
+| Model / Option            | Capability (40%) | Simplicity (30%) | Infra (20%) | Maintenance (10%) | Total   | Decision    |
+| ------------------------- | ---------------- | ---------------- | ----------- | ----------------- | ------- | ----------- |
+| PropertyGraphIndex (Sel.) | 8                | 9                | 10          | 9                 | **8.9** | ✅ Selected |
+| Vector‑only               | 5                | 10               | 10          | 10                | 7.5     | Rejected    |
+| Full GraphRAG             | 10               | 4                | 3           | 5                 | 6.6     | Rejected    |
 
 ## Decision
 
@@ -101,6 +101,7 @@ DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 ```
 
 Notes:
+
 - `DOCMIND_ENABLE_GRAPHRAG` is the authoritative gate for router/UI behavior.
 - `DOCMIND_GRAPHRAG_CFG__ENABLED` controls the nested GraphRAG config helper; keep it in sync with the top-level flag.
 - Legacy `DOCMIND_GRAPHRAG__*` variables were used in early drafts and are deprecated in favor of the names above.

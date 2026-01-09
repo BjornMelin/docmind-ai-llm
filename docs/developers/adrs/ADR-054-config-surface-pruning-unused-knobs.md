@@ -42,27 +42,27 @@ Shipping these as-is creates a misleading public configuration surface and incre
 
 Weights: Complexity 40% · Risk Reduction 30% · Alignment 30% (10 = best)
 
-| Option | Complexity (40%) | Risk (30%) | Alignment (30%) | Total |
-|---|---:|---:|---:|---:|
-| **A: Remove + document scope** | 9.5 | 9.5 | 9.5 | **9.5** |
-| B: Implement features | 3.0 | 6.0 | 5.0 | 4.5 |
-| C: Keep no-op | 8.5 | 5.5 | 6.0 | 7.0 |
+| Option                         | Complexity (40%) | Risk (30%) | Alignment (30%) |   Total |
+| ------------------------------ | ---------------: | ---------: | --------------: | ------: |
+| **A: Remove + document scope** |              9.5 |        9.5 |             9.5 | **9.5** |
+| B: Implement features          |              3.0 |        6.0 |             5.0 |     4.5 |
+| C: Keep no-op                  |              8.5 |        5.5 |             6.0 |     7.0 |
 
 ## Decision
 
 We will:
 
-1) Remove the unused fields from `DocMindSettings` and nested models.
+1. Remove the unused fields from `DocMindSettings` and nested models.
 
-2) Update documentation to reflect v1 scope:
+2. Update documentation to reflect v1 scope:
 
-- configuration reference
-- ADR index / affected ADRs (mark as superseded/out-of-scope for v1)
+   - configuration reference
+   - ADR index / affected ADRs (mark as superseded/out-of-scope for v1)
 
-3) Preserve backward compatibility:
+3. Preserve backward compatibility:
 
-- `DocMindSettings` already sets `extra=\"ignore\"`, so unknown env vars do not break startup.
-- Add a single startup warning (optional) if deprecated env vars are detected, to avoid silent confusion.
+   - `DocMindSettings` already sets `extra=\"ignore\"`, so unknown env vars do not break startup.
+   - Add a single startup warning (optional) if deprecated env vars are detected, to avoid silent confusion.
 
 ## Security & Privacy
 
@@ -87,4 +87,3 @@ We will:
 ## Changelog
 
 - 1.0 (2026-01-09): Proposed for v1 coherence and maintainability.
-

@@ -16,13 +16,15 @@ References: <official docs and key sources as markdown links>
 [1–2 sentence executive summary]
 
 ## Context
-<!-- 
-This section describes the "why" behind the decision. 
+
+<!--
+This section describes the "why" behind the decision.
 - What is the problem or need being addressed?
 - What is the current state of the architecture?
 - What are the technical, business, or operational forces influencing this decision?
 - Include data, metrics, or analysis that supports the need for this change.
 -->
+
 [Problem, forces, constraints, prior decisions, key data points]
 
 ## Decision Drivers
@@ -39,21 +41,22 @@ This section describes the "why" behind the decision.
 
 ### Decision Framework
 
-<!-- 
+<!--
 Use a weighted scoring matrix to provide a quantitative justification for the decision. Adjust criteria and weights based on project priorities.
 -->
 
-| Model / Option         | [Criterion 1 (e.g., Solution Leverage)] (Weight: X%) | [Criterion 2 (e.g., Application Value)] (Weight: Y%) | [Criterion 3 (e.g., Maintenance)] (Weight: Z%) | [Criterion 4 (e.g., Adaptability)] (Weight: W%) | Total Score | Decision      |
-| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------- | ----------- | ------------- |
+| Model / Option         | [Criterion 1 (e.g., Solution Leverage)] (Weight: X%) | [Criterion 2 (e.g., Application Value)] (Weight: Y%) | [Criterion 3 (e.g., Maintenance)] (Weight: Z%) | [Criterion 4 (e.g., Adaptability)] (Weight: W%) | Total Score | Decision        |
+| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------- | ----------- | --------------- |
 | **[Chosen Solution]**  | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | **[Score]** | ✅ **Selected** |
-| [Alternative Option A] | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | [Score]     | Rejected      |
-| [Alternative Option B] | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | [Score]     | Rejected      |
+| [Alternative Option A] | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | [Score]     | Rejected        |
+| [Alternative Option B] | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | [Score]     | Rejected        |
 
 ## Decision
 
-<!-- 
+<!--
 State the decision clearly and unambiguously. This should be a direct statement of the chosen path.
 -->
+
 We will adopt **[Chosen Solution]** to address [the problem]. This involves using **[Specific Library/Pattern/Component]** configured with **[Key Parameters]**. This decision supersedes **[any previous ADRs or decisions, if applicable]**.
 
 ## High-Level Architecture
@@ -62,7 +65,7 @@ We will adopt **[Chosen Solution]** to address [the problem]. This involves usin
 
 ## Related Requirements
 
-<!-- 
+<!--
 This section outlines the specific requirements this ADR addresses. Be brief and clear.
 -->
 
@@ -89,7 +92,7 @@ This section outlines the specific requirements this ADR addresses. Be brief and
 
 ## Design
 
-<!-- 
+<!--
 This is the "how" section. Provide enough detail for another engineer to understand and implement the decision.
 -->
 
@@ -99,9 +102,10 @@ This is the "how" section. Provide enough detail for another engineer to underst
 
 ### Implementation Details
 
-<!-- 
+<!--
 Provide code snippets to illustrate the implementation. Show "before" and "after" if it helps clarify the change. Be specific about file paths and function names. Keep concise here with enough detail to implement the code in full correctly per the ADR. Full file should aim for ~600 lines max so keep that in mind.
 -->
+
 **In `src/utils/component_setup.py`:**
 
 ```python
@@ -121,6 +125,7 @@ def setup_new_component():
 ### Configuration
 
 <!-- Detail any new configuration settings, environment variables, or settings managed in a central place. -->
+
 **In `.env` or `settings.py`:**
 
 ```env
@@ -131,9 +136,10 @@ COMPONENT_TIMEOUT=60
 
 ## Testing
 
-<!-- 
+<!--
 Describe the strategy for testing this new architecture. Include code snippets for tests where appropriate. Keep as skeleton code to give enough detail/comments to implement the tests but do not write the full test suites here. Make sure to mention the `pytest` framework, mock dependencies, and the async/await patterns.  Full file should aim for ~600 lines max so keep that in mind.
 -->
+
 **In `tests/test_component.py`:**
 
 ```python
@@ -147,7 +153,7 @@ async def test_component_performance():
     start_time = time.monotonic()
     result = await new_functionality("test input")
     duration = time.monotonic() - start_time
-    
+
     # Assertions
     assert result is not None
     assert duration < 0.05 # 50ms latency target
@@ -160,7 +166,7 @@ def test_configuration_toggle():
 
 ## Consequences
 
-<!-- 
+<!--
 Analyze the results and impact of the decision.
 -->
 
@@ -184,7 +190,7 @@ Analyze the results and impact of the decision.
 
 - [e.g., "API rate limits and timeout values require quarterly review based on usage patterns"]
 - [e.g., "Monitor `fastapi` releases for breaking changes and test compatibility"]
-- [e.g., "Track response latency metrics and revisit caching if P95 exceeds 200ms"]  
+- [e.g., "Track response latency metrics and revisit caching if P95 exceeds 200ms"]
 - [e.g., "Authentication tokens expire every 90 days - coordinate renewals with DevOps"]
 - [e.g., "Update API docs when schemas change, maintain backward compatibility"]
 - [e.g., "Ensure 2+ team members understand async/await patterns via knowledge transfer"]

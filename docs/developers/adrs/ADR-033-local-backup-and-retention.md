@@ -36,11 +36,11 @@ Earlier designs discussed background services; the local-first architecture (ADR
 
 ### Decision Framework
 
-| Model / Option                 | Simplicity (40%) | Offline (30%) | Safety (20%) | Maintenance (10%) | Total Score | Decision      |
-| ------------------------------ | ---------------- | ------------- | ------------ | ----------------- | ----------- | ------------- |
-| Manual CLI + Rotation (Sel.)   | 10               | 10            | 9            | 9                 | **9.7**     | ✅ Selected    |
-| Background scheduler           | 5                | 9             | 8            | 6                 | 6.8         | Rejected      |
-| External service               | 6                | 2             | 9            | 7                 | 5.6         | Rejected      |
+| Model / Option               | Simplicity (40%) | Offline (30%) | Safety (20%) | Maintenance (10%) | Total Score | Decision    |
+| ---------------------------- | ---------------- | ------------- | ------------ | ----------------- | ----------- | ----------- |
+| Manual CLI + Rotation (Sel.) | 10               | 10            | 9            | 9                 | **9.7**     | ✅ Selected |
+| Background scheduler         | 5                | 9             | 8            | 6                 | 6.8         | Rejected    |
+| External service             | 6                | 2             | 9            | 7                 | 5.6         | Rejected    |
 
 ## Decision
 

@@ -38,11 +38,11 @@ Unify document‑processing cache on LlamaIndex IngestionCache with a local Duck
 
 ### Decision Framework
 
-| Model / Option         | Solution Leverage (35%) | Maintenance (30%) | Performance (25%) | Simplicity (10%) | Total Score | Decision      |
-| ---------------------- | ----------------------- | ----------------- | ----------------- | ---------------- | ----------- | ------------- |
-| B: Ingest+DuckDBKV     | 9.5                     | 9.0               | 9.0               | 9.0              | **9.2**     | ✅ Selected    |
-| A: Ingest+JSON         | 8.0                     | 8.5               | 6.0               | 10.0             | 7.9         | Rejected      |
-| C: Custom Wrapper      | 4.0                     | 3.0               | 6.0               | 5.0              | 4.3         | Rejected      |
+| Model / Option     | Solution Leverage (35%) | Maintenance (30%) | Performance (25%) | Simplicity (10%) | Total Score | Decision    |
+| ------------------ | ----------------------- | ----------------- | ----------------- | ---------------- | ----------- | ----------- |
+| B: Ingest+DuckDBKV | 9.5                     | 9.0               | 9.0               | 9.0              | **9.2**     | ✅ Selected |
+| A: Ingest+JSON     | 8.0                     | 8.5               | 6.0               | 10.0             | 7.9         | Rejected    |
+| C: Custom Wrapper  | 4.0                     | 3.0               | 6.0               | 5.0              | 4.3         | Rejected    |
 
 ## Decision
 
@@ -96,15 +96,15 @@ graph TD
 
 In `src/core/processing.py` (DocumentProcessor wiring):
 
-  ```python
-  from pathlib import Path
-  from llama_index.core.ingestion import IngestionCache
-  from llama_index.storage.kvstore.duckdb import DuckDBKVStore
+```python
+from pathlib import Path
+from llama_index.core.ingestion import IngestionCache
+from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
-  cache_db = Path(settings.cache_dir) / "docmind.duckdb"
-  kv = DuckDBKVStore(db_path=str(cache_db))
-  self.cache = IngestionCache(cache=kv, collection="docmind_processing")
-  ```
+cache_db = Path(settings.cache_dir) / "docmind.duckdb"
+kv = DuckDBKVStore(db_path=str(cache_db))
+self.cache = IngestionCache(cache=kv, collection="docmind_processing")
+```
 
 ### Configuration
 

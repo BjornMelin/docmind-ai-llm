@@ -9,7 +9,7 @@ Superseded-by:
 Related: 032, 013, 016
 Tags: streamlit, analytics, duckdb, telemetry
 References:
-- https://duckdb.org/docs/
+  - https://duckdb.org/docs/
 ---
 
 ## Description
@@ -44,22 +44,22 @@ This risks file handle leaks, unnecessary memory use, and drift from the telemet
 
 Weights: Complexity 40% · Perf 30% · Alignment 30% (10 = best)
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total |
-|---|---:|---:|---:|---:|
-| **B: Safe lifecycle + bounded parsing** | 9.5 | 9.0 | 9.5 | **9.35** |
-| A: status quo | 10.0 | 3.0 | 4.0 | 6.1 |
-| C: remove page | 6.0 | 10.0 | 5.0 | 6.9 |
+| Option                                  | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total |
+| --------------------------------------- | ---------------: | ---------: | --------------: | -------: |
+| **B: Safe lifecycle + bounded parsing** |              9.5 |        9.0 |             9.5 | **9.35** |
+| A: status quo                           |             10.0 |        3.0 |             4.0 |      6.1 |
+| C: remove page                          |              6.0 |       10.0 |             5.0 |      6.9 |
 
 ## Decision
 
 We will:
 
-1) Ensure DuckDB connections are closed deterministically (context manager or `try/finally`).
-2) Replace dynamic `__import__` with explicit `import pandas as pd` (Analytics already depends on pandas/plotly).
-3) Add a small telemetry parsing helper that:
+1. Ensure DuckDB connections are closed deterministically (context manager or `try/finally`).
+2. Replace dynamic `__import__` with explicit `import pandas as pd` (Analytics already depends on pandas/plotly).
+3. Add a small telemetry parsing helper that:
    - streams JSONL lines (no full-file `.read_text().splitlines()` for large files)
    - applies a max-bytes or max-lines cap
-4) Use a canonical telemetry path shared with the emitter (`src/utils/telemetry.py`), not a hardcoded duplicate.
+4. Use a canonical telemetry path shared with the emitter (`src/utils/telemetry.py`), not a hardcoded duplicate.
 
 ## Security & Privacy
 
@@ -74,4 +74,3 @@ We will:
 ## Changelog
 
 - 1.0 (2026-01-09): Proposed for v1 correctness and resource safety.
-

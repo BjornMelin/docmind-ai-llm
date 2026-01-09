@@ -38,11 +38,11 @@ We want to reduce cost/latency for repeated prompts while preserving offline det
 
 ### Decision Framework
 
-| Model / Option               | Simplicity (35%) | Offline CI (25%) | Ops Overhead (20%) | Library Fit (20%) | Total Score | Decision      |
-| ---------------------------- | ---------------- | ---------------- | ------------------ | ----------------- | ----------- | ------------- |
-| GPTCache (Selected)          | 9.5              | 10               | 9.5                | 8.5               | **9.4**     | ✅ Selected    |
-| Qdrant-backed                | 7.0              | 9.0              | 7.0                | 9.0               | 7.9         | Rejected      |
-| LiteLLM Proxy                | 5.5              | 3.0              | 4.0                | 8.0               | 5.1         | Rejected      |
+| Model / Option      | Simplicity (35%) | Offline CI (25%) | Ops Overhead (20%) | Library Fit (20%) | Total Score | Decision    |
+| ------------------- | ---------------- | ---------------- | ------------------ | ----------------- | ----------- | ----------- |
+| GPTCache (Selected) | 9.5              | 10               | 9.5                | 8.5               | **9.4**     | ✅ Selected |
+| Qdrant-backed       | 7.0              | 9.0              | 7.0                | 9.0               | 7.9         | Rejected    |
+| LiteLLM Proxy       | 5.5              | 3.0              | 4.0                | 8.0               | 5.1         | Rejected    |
 
 ## Decision
 

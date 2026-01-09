@@ -43,11 +43,11 @@ GraphRAG was accepted (ADR‑019) as an optional enhancement, but lacked standar
 
 ### Decision Framework
 
-| Option | Reliability (35%) | Maintainability (25%) | User Value (25%) | Complexity (15%) | Total | Decision |
-|-------|--------------------|-----------------------|------------------|------------------|-------|----------|
-| Router+Snapshot (Sel.) | 5 | 5 | 5 | 3 | 4.6 | ✅ Selected |
-| Vector‑only | 4 | 5 | 3 | 4 | 4.1 | Rejected |
-| Graph‑only | 3 | 3 | 4 | 3 | 3.3 | Rejected |
+| Option                 | Reliability (35%) | Maintainability (25%) | User Value (25%) | Complexity (15%) | Total | Decision    |
+| ---------------------- | ----------------- | --------------------- | ---------------- | ---------------- | ----- | ----------- |
+| Router+Snapshot (Sel.) | 5                 | 5                     | 5                | 3                | 4.6   | ✅ Selected |
+| Vector‑only            | 4                 | 5                     | 3                | 4                | 4.1   | Rejected    |
+| Graph‑only             | 3                 | 3                     | 4                | 3                | 3.3   | Rejected    |
 
 ## Decision
 

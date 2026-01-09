@@ -33,10 +33,10 @@ DocMind AI is a local app. Users should `docker compose up` and go. No multi‑s
 
 ### Decision Framework
 
-| Option           | Simplicity (50%) | Reliability (30%) | Flex (20%) | Total | Decision      |
-| ---------------- | ---------------- | ----------------- | ---------- | ----- | ------------- |
-| Single compose   | 10               | 9                 | 7          | 9.2   | ✅ Selected    |
-| Multi‑profile    | 5                | 7                 | 9          | 6.3   | Rejected      |
+| Option         | Simplicity (50%) | Reliability (30%) | Flex (20%) | Total | Decision    |
+| -------------- | ---------------- | ----------------- | ---------- | ----- | ----------- |
+| Single compose | 10               | 9                 | 7          | 9.2   | ✅ Selected |
+| Multi‑profile  | 5                | 7                 | 9          | 6.3   | Rejected    |
 
 ## Decision
 

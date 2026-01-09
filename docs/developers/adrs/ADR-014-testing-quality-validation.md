@@ -35,10 +35,10 @@ DocMind AI combines agentic flows, retrieval, and local LLMs. We need practical 
 
 ### Decision Framework
 
-| Option              | Simplicity (40%) | Capability (30%) | CI Fit (20%) | Effort (10%) | Total | Decision      |
-| ------------------- | ---------------- | ---------------- | ------------ | ------------ | ----- | ------------- |
-| DeepEval + pytest   | 9                | 9                | 9            | 9            | 9.0   | ✅ Selected    |
-| Custom harness      | 4                | 8                | 6            | 3            | 5.5   | Rejected      |
+| Option            | Simplicity (40%) | Capability (30%) | CI Fit (20%) | Effort (10%) | Total | Decision    |
+| ----------------- | ---------------- | ---------------- | ------------ | ------------ | ----- | ----------- |
+| DeepEval + pytest | 9                | 9                | 9            | 9            | 9.0   | ✅ Selected |
+| Custom harness    | 4                | 8                | 6            | 3            | 5.5   | Rejected    |
 
 ## Decision
 

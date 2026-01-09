@@ -37,11 +37,11 @@ Earlier designs mixed concerns and introduced multiple storage backends. To redu
 
 ### Decision Framework
 
-| Model / Option                             | Simplicity (30%) | Library Fit (30%) | Performance (25%) | Maintenance (15%) | Total Score | Decision      |
-| ------------------------------------------ | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ------------- |
-| Qdrant + IngestionCache/DuckDBKV (Selected)| 9                | 10                | 9                 | 9                 | **9.2**     | ✅ Selected    |
-| Redis-based                                | 5                | 6                 | 8.5               | 7                 | 6.4         | Rejected      |
-| Custom cache                               | 4                | 5                 | 7                 | 4                 | 5.1         | Rejected      |
+| Model / Option                              | Simplicity (30%) | Library Fit (30%) | Performance (25%) | Maintenance (15%) | Total Score | Decision    |
+| ------------------------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ----------- |
+| Qdrant + IngestionCache/DuckDBKV (Selected) | 9                | 10                | 9                 | 9                 | **9.2**     | ✅ Selected |
+| Redis-based                                 | 5                | 6                 | 8.5               | 7                 | 6.4         | Rejected    |
+| Custom cache                                | 4                | 5                 | 7                 | 4                 | 5.1         | Rejected    |
 
 ## Decision
 

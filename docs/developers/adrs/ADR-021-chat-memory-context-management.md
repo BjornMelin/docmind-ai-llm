@@ -35,11 +35,11 @@ Users expect persistent, context‑aware conversations across sessions. 128K win
 
 ### Decision Framework
 
-| Model / Option                 | UX (40%) | Simplicity (30%) | Performance (20%) | Maintenance (10%) | Total | Decision      |
-| ------------------------------ | -------- | ---------------- | ----------------- | ----------------- | ----- | ------------- |
-| Buffer + Store (Selected)      | 9        | 9                | 8                 | 9                 | **8.8** | ✅ Selected    |
-| Session‑only                   | 5        | 10               | 9                 | 10                | 7.3   | Rejected      |
-| Custom layer                   | 7        | 4                | 7                 | 5                 | 5.9   | Rejected      |
+| Model / Option            | UX (40%) | Simplicity (30%) | Performance (20%) | Maintenance (10%) | Total   | Decision    |
+| ------------------------- | -------- | ---------------- | ----------------- | ----------------- | ------- | ----------- |
+| Buffer + Store (Selected) | 9        | 9                | 8                 | 9                 | **8.8** | ✅ Selected |
+| Session‑only              | 5        | 10               | 9                 | 10                | 7.3     | Rejected    |
+| Custom layer              | 7        | 4                | 7                 | 5                 | 5.9     | Rejected    |
 
 ## Decision
 

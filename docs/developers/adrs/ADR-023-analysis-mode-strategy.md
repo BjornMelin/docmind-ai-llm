@@ -36,12 +36,12 @@ Users need document‑specific insights and cross‑document synthesis. Separate
 
 ### Decision Framework
 
-| Model / Option                            | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision      |
-| ----------------------------------------- | ---------------- | ----------------- | ---------------- | ----------------- | ----------- | ------------- |
-| D: QueryPipeline + routing (Selected)     | 9                | 9                 | 7                | 8                 | **8.6**     | ✅ Selected    |
-| B: Sequential individual                   | 6                | 4                 | 9                | 8                 | 6.2         | Rejected      |
-| A: Combined only                           | 4                | 6                 | 9                | 9                 | 5.8         | Rejected      |
-| C: Manual w/o optimization                 | 7                | 5                 | 7                | 7                 | 6.2         | Rejected      |
+| Model / Option                        | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision    |
+| ------------------------------------- | ---------------- | ----------------- | ---------------- | ----------------- | ----------- | ----------- |
+| D: QueryPipeline + routing (Selected) | 9                | 9                 | 7                | 8                 | **8.6**     | ✅ Selected |
+| B: Sequential individual              | 6                | 4                 | 9                | 8                 | 6.2         | Rejected    |
+| A: Combined only                      | 4                | 6                 | 9                | 9                 | 5.8         | Rejected    |
+| C: Manual w/o optimization            | 7                | 5                 | 7                | 7                 | 6.2         | Rejected    |
 
 ## Decision
 

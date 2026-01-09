@@ -36,11 +36,11 @@ Provide an optional, local-only DuckDB database for lightweight performance and 
 
 ### Decision Framework
 
-| Model / Option                  | Local-first (30%) | Simplicity (30%) | Separation (25%) | Maintenance (15%) | Total Score | Decision      |
-| --------------------------------| ----------------- | ---------------- | ---------------- | ----------------- | ----------- | ------------- |
-| Separate DuckDB (Selected)      | 10                | 9                | 10               | 9                 | **9.6**     | ✅ Selected    |
-| Couple with cache               | 9                 | 8                | 4                | 7                 | 7.2         | Rejected      |
-| External service                | 3                 | 6                | 7                | 6                 | 5.2         | Rejected      |
+| Model / Option             | Local-first (30%) | Simplicity (30%) | Separation (25%) | Maintenance (15%) | Total Score | Decision    |
+| -------------------------- | ----------------- | ---------------- | ---------------- | ----------------- | ----------- | ----------- |
+| Separate DuckDB (Selected) | 10                | 9                | 10               | 9                 | **9.6**     | ✅ Selected |
+| Couple with cache          | 9                 | 8                | 4                | 7                 | 7.2         | Rejected    |
+| External service           | 3                 | 6                | 7                | 6                 | 5.2         | Rejected    |
 
 ## Decision
 

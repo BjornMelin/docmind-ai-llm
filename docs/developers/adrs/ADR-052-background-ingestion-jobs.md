@@ -9,8 +9,8 @@ Superseded-by:
 Related: 013, 016, 031, 051
 Tags: streamlit, ingestion, concurrency, snapshots, ux
 References:
-- https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment
-- https://docs.streamlit.io/develop/concepts/app-design/multithreading
+  - https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment
+  - https://docs.streamlit.io/develop/concepts/app-design/multithreading
 ---
 
 ## Description
@@ -45,33 +45,33 @@ Streamlit’s execution model requires that UI commands be executed only on the 
 
 Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total |
-|---|---:|---:|---:|---:|
-| **A: Threads + `st.fragment(run_every=...)` polling** | 9.0 | 9.0 | 10.0 | **9.3** |
-| B: Processes + terminate | 5.5 | 8.5 | 6.5 | 6.7 |
-| C: synchronous | 10.0 | 3.0 | 7.0 | 6.7 |
+| Option                                                | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
+| ----------------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
+| **A: Threads + `st.fragment(run_every=...)` polling** |              9.0 |        9.0 |            10.0 | **9.3** |
+| B: Processes + terminate                              |              5.5 |        8.5 |             6.5 |     6.7 |
+| C: synchronous                                        |             10.0 |        3.0 |             7.0 |     6.7 |
 
 ## Decision
 
 We will implement Option A:
 
-1) Add a small job manager using stdlib `ThreadPoolExecutor`, cached via `st.cache_resource`, that owns:
+1. Add a small job manager using stdlib `ThreadPoolExecutor`, cached via `st.cache_resource`, that owns:
 
-- job registry: `{job_id -> JobState}`
-- `threading.Event` cancellation token per job
-- bounded `queue.Queue(maxsize=N)` for progress messages per job
-- job TTL and orphan cleanup
+   - job registry: `{job_id -> JobState}`
+   - `threading.Event` cancellation token per job
+   - bounded `queue.Queue(maxsize=N)` for progress messages per job
+   - job TTL and orphan cleanup
 
-2) Update the Documents page to:
+2. Update the Documents page to:
 
-- start ingestion/snapshot jobs on submit
-- render progress and status via an `@st.fragment(run_every="1s")` poller
-- allow cancel with cooperative semantics (`cancel_event.set()`)
+   - start ingestion/snapshot jobs on submit
+   - render progress and status via an `@st.fragment(run_every="1s")` poller
+   - allow cancel with cooperative semantics (`cancel_event.set()`)
 
-3) Enforce atomic publishing:
+3. Enforce atomic publishing:
 
-- snapshot writes are staged under `_tmp-*` workspace and only published via atomic rename (`SnapshotManager.finalize_snapshot`)
-- job completion only updates UI/session_state after snapshot is finalized
+   - snapshot writes are staged under `_tmp-*` workspace and only published via atomic rename (`SnapshotManager.finalize_snapshot`)
+   - job completion only updates UI/session_state after snapshot is finalized
 
 ## High-Level Architecture
 
@@ -127,4 +127,3 @@ flowchart TD
 ## Changelog
 
 - 1.0 (2026-01-09): Proposed thread+fragment job architecture for v1 UX.
-
