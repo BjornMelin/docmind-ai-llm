@@ -3,17 +3,18 @@
 Implements `ADR-044` + `SPEC-025`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-044-keyword-tool-sparse-only-qdrant.md`
 - SPEC: `docs/specs/spec-025-keyword-tool-sparse-only.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://qdrant.tech/documentation/concepts/search/#query-points — Qdrant Query Points API (sparse vectors, filters, payloads).
-- https://qdrant.tech/documentation/concepts/hybrid-queries/ — Hybrid query concepts (dense+sparse fusion).
-- https://python-client.qdrant.tech/ — Qdrant Python client docs (types, requests).
-- https://docs.llamaindex.ai/en/stable/api_reference/vector_stores/qdrant/ — LlamaIndex Qdrant vector store integration.
-- https://docs.llamaindex.ai/en/stable/module_guides/querying/retriever/ — LlamaIndex retriever patterns and contracts.
+- <https://qdrant.tech/documentation/concepts/search/#query-points> — Qdrant Query Points API (sparse vectors, filters, payloads).
+- <https://qdrant.tech/documentation/concepts/hybrid-queries/> — Hybrid query concepts (dense+sparse fusion).
+- <https://python-client.qdrant.tech/> — Qdrant Python client docs (types, requests).
+- <https://docs.llamaindex.ai/en/stable/api_reference/vector_stores/qdrant/> — LlamaIndex Qdrant vector store integration.
+- <https://docs.llamaindex.ai/en/stable/module_guides/querying/retriever/> — LlamaIndex retriever patterns and contracts.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -186,17 +187,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | RTM updated |
-| **Security** |  | no raw query logs/content; allowlist posture unchanged |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | no new import-time heavy work; bounded query payloads |
+| Requirement     | Status | Proof / Notes                                                                      |
+| --------------- | ------ | ---------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                    |
+| **Formatting**  |        | `uv run ruff format .`                                                             |
+| **Lint**        |        | `uv run ruff check .` clean                                                        |
+| **Types**       |        | `uv run pyright` clean                                                             |
+| **Pylint**      |        | meets threshold                                                                    |
+| **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | RTM updated                                                                        |
+| **Security**    |        | no raw query logs/content; allowlist posture unchanged                             |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Performance** |        | no new import-time heavy work; bounded query payloads                              |
 
 **EXECUTE UNTIL COMPLETE.**

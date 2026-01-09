@@ -3,21 +3,22 @@
 Implements `ADR-041` + `SPEC-022`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-041-settings-ui-hardening-and-safe-badges.md`
 - SPEC: `docs/specs/spec-022-settings-ui-hardening.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.streamlit.io/develop/api-reference/text/st.badge — Replace HTML badges with Streamlit-native badges.
-- https://docs.streamlit.io/develop/api-reference/execution-flow/st.form — Forms, submit behavior, and rerun semantics.
-- https://docs.streamlit.io/develop/api-reference/execution-flow/st.form_submit_button — Form submit button behavior (disabled gating, enter-to-submit).
-- https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state — Session state discipline (Streamlit reruns).
-- https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest — AppTest reference for integration tests.
-- https://docs.pydantic.dev/latest/concepts/models/ — `model_validate`, validation errors, and patterns.
-- https://docs.pydantic.dev/latest/concepts/pydantic_settings/ — Pydantic Settings v2 env mapping patterns.
-- https://bbc2.github.io/python-dotenv/reference/ — `set_key`/`unset_key` reference.
-- https://github.com/theskumar/python-dotenv — python-dotenv canonical project + usage examples.
+- <https://docs.streamlit.io/develop/api-reference/text/st.badge> — Replace HTML badges with Streamlit-native badges.
+- <https://docs.streamlit.io/develop/api-reference/execution-flow/st.form> — Forms, submit behavior, and rerun semantics.
+- <https://docs.streamlit.io/develop/api-reference/execution-flow/st.form_submit_button> — Form submit button behavior (disabled gating, enter-to-submit).
+- <https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state> — Session state discipline (Streamlit reruns).
+- <https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest> — AppTest reference for integration tests.
+- <https://docs.pydantic.dev/latest/concepts/models/> — `model_validate`, validation errors, and patterns.
+- <https://docs.pydantic.dev/latest/concepts/pydantic_settings/> — Pydantic Settings v2 env mapping patterns.
+- <https://bbc2.github.io/python-dotenv/reference/> — `set_key`/`unset_key` reference.
+- <https://github.com/theskumar/python-dotenv> — python-dotenv canonical project + usage examples.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -26,11 +27,13 @@ Implements `ADR-041` + `SPEC-022`.
 **Use skill:** `$streamlit-master-architect`
 
 Load and follow its workflows for:
+
 - rerun discipline + `st.session_state` correctness
 - AppTest patterns
 - security-by-default (no unsafe HTML)
 
 Skill references to consult (as needed):
+
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md`
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/widget_keys_and_reruns.md`
@@ -250,17 +253,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes                      |
-| ----------- | ------ | ---------------------------------- |
-| Packaging   |        | `uv sync` clean                    |
-| Formatting  |        | `ruff format`                      |
-| Lint        |        | `ruff check` clean                 |
-| Types       |        | `pyright` clean                    |
-| Pylint      |        | meets threshold                    |
+| Requirement | Status | Proof / Notes                                                                                            |
+| ----------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| Packaging   |        | `uv sync` clean                                                                                          |
+| Formatting  |        | `ruff format`                                                                                            |
+| Lint        |        | `ruff check` clean                                                                                       |
+| Types       |        | `pyright` clean                                                                                          |
+| Pylint      |        | meets threshold                                                                                          |
 | Tests       |        | settings tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| Docs        |        | ADR/SPEC/RTM updated               |
-| Security    |        | no unsafe HTML; allowlist enforced |
-| Tech Debt   |        | no TODO/FIXME introduced           |
-| Performance |        | no new import-time heavy work      |
+| Docs        |        | ADR/SPEC/RTM updated                                                                                     |
+| Security    |        | no unsafe HTML; allowlist enforced                                                                       |
+| Tech Debt   |        | no TODO/FIXME introduced                                                                                 |
+| Performance |        | no new import-time heavy work                                                                            |
 
 **EXECUTE UNTIL COMPLETE.**

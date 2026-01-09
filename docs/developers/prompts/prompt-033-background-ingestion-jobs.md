@@ -3,17 +3,18 @@
 Implements `ADR-052` + `SPEC-033`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-052-background-ingestion-jobs.md`
 - SPEC: `docs/specs/spec-033-background-ingestion-jobs.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment — `st.fragment` polling and rerun semantics.
-- https://docs.streamlit.io/develop/api-reference/caching-and-state/st.cache_resource — Resource caching for singletons (JobManager).
-- https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state — Session state discipline for job ids/progress.
-- https://docs.python.org/3/library/concurrent.futures.html — `ThreadPoolExecutor` semantics and lifecycle.
-- https://docs.python.org/3/library/threading.html#threading.Event — Cooperative cancellation primitives.
+- <https://docs.streamlit.io/develop/api-reference/execution-flow/st.fragment> — `st.fragment` polling and rerun semantics.
+- <https://docs.streamlit.io/develop/api-reference/caching-and-state/st.cache_resource> — Resource caching for singletons (JobManager).
+- <https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state> — Session state discipline for job ids/progress.
+- <https://docs.python.org/3/library/concurrent.futures.html> — `ThreadPoolExecutor` semantics and lifecycle.
+- <https://docs.python.org/3/library/threading.html#threading.Event> — Cooperative cancellation primitives.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -31,6 +32,7 @@ uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_
 **Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
 
 Skill references to consult (as needed):
+
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md` (fragments + reruns)
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md` (threading + unsafe patterns)
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
@@ -202,17 +204,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | JobManager + UI wiring green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | no Streamlit calls in threads; atomic finalize; no secret/content leaks |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | bounded queues; fragments don’t leak UI elements on reruns |
+| Requirement     | Status | Proof / Notes                                                                                                    |
+| --------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                                                  |
+| **Formatting**  |        | `uv run ruff format .`                                                                                           |
+| **Lint**        |        | `uv run ruff check .` clean                                                                                      |
+| **Types**       |        | `uv run pyright` clean                                                                                           |
+| **Pylint**      |        | meets threshold                                                                                                  |
+| **Tests**       |        | JobManager + UI wiring green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | ADR/SPEC/RTM updated                                                                                             |
+| **Security**    |        | no Streamlit calls in threads; atomic finalize; no secret/content leaks                                          |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                       |
+| **Performance** |        | bounded queues; fragments don’t leak UI elements on reruns                                                       |
 
 **EXECUTE UNTIL COMPLETE.**

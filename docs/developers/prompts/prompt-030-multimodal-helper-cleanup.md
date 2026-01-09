@@ -3,14 +3,15 @@
 Implements `ADR-049` + `SPEC-030`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-049-multimodal-helper-cleanup.md`
 - SPEC: `docs/specs/spec-030-multimodal-helper-cleanup.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.python.org/3/library/importlib.html — Import mechanics (useful if you find dynamic/indirect imports before deletion).
-- https://docs.python.org/3/library/pathlib.html — Filesystem/path handling patterns (if refactors touch file IO).
+- <https://docs.python.org/3/library/importlib.html> — Import mechanics (useful if you find dynamic/indirect imports before deletion).
+- <https://docs.python.org/3/library/pathlib.html> — Filesystem/path handling patterns (if refactors touch file IO).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -156,17 +157,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | references removed or updated |
-| **Security** |  | no security surfaces regressed by deletion |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | less import surface; no new heavy imports |
+| Requirement     | Status | Proof / Notes                                                                      |
+| --------------- | ------ | ---------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                    |
+| **Formatting**  |        | `uv run ruff format .`                                                             |
+| **Lint**        |        | `uv run ruff check .` clean                                                        |
+| **Types**       |        | `uv run pyright` clean                                                             |
+| **Pylint**      |        | meets threshold                                                                    |
+| **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | references removed or updated                                                      |
+| **Security**    |        | no security surfaces regressed by deletion                                         |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Performance** |        | less import surface; no new heavy imports                                          |
 
 **EXECUTE UNTIL COMPLETE.**

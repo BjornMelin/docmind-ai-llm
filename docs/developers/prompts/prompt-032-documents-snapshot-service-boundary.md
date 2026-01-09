@@ -3,15 +3,16 @@
 Implements `ADR-051` + `SPEC-032`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-051-documents-snapshot-service-boundary.md`
 - SPEC: `docs/specs/spec-032-documents-snapshot-service-boundary.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.python.org/3/library/tempfile.html — Safe temporary workspace patterns.
-- https://docs.python.org/3/library/hashlib.html — SHA-256 hashing primitives (stable IDs/manifest hashes).
-- https://docs.llamaindex.ai/en/stable/ — LlamaIndex stable docs index (only if persistence behaviors are subtle).
+- <https://docs.python.org/3/library/tempfile.html> — Safe temporary workspace patterns.
+- <https://docs.python.org/3/library/hashlib.html> — SHA-256 hashing primitives (stable IDs/manifest hashes).
+- <https://docs.llamaindex.ai/en/stable/> — LlamaIndex stable docs index (only if persistence behaviors are subtle).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -22,6 +23,7 @@ This is a cross-cutting refactor (UI → persistence boundary). Use analysis + r
 **Use skill:** `$streamlit-master-architect` (for the Documents page wiring + AppTest), but keep the service boundary Streamlit-free.
 
 Skill references to consult (as needed):
+
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md`
 
@@ -172,17 +174,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | snapshot writes remain atomic; no new write surfaces |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | service layer keeps Streamlit pages import-light |
+| Requirement     | Status | Proof / Notes                                                                                                 |
+| --------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                                               |
+| **Formatting**  |        | `uv run ruff format .`                                                                                        |
+| **Lint**        |        | `uv run ruff check .` clean                                                                                   |
+| **Types**       |        | `uv run pyright` clean                                                                                        |
+| **Pylint**      |        | meets threshold                                                                                               |
+| **Tests**       |        | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | ADR/SPEC/RTM updated                                                                                          |
+| **Security**    |        | snapshot writes remain atomic; no new write surfaces                                                          |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                    |
+| **Performance** |        | service layer keeps Streamlit pages import-light                                                              |
 
 **EXECUTE UNTIL COMPLETE.**

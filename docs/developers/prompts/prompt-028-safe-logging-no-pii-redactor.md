@@ -3,15 +3,16 @@
 Implements `ADR-047` + `SPEC-028`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-047-safe-logging-policy-no-pii-redactor.md`
 - SPEC: `docs/specs/spec-028-safe-logging-no-pii-redactor.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://loguru.readthedocs.io/ — Loguru logging docs (repo standard logger).
-- https://opentelemetry.io/docs/languages/python/ — OpenTelemetry Python docs (optional exporters; ensure default-off).
-- https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html — OWASP logging guidance (avoid sensitive data in logs).
+- <https://loguru.readthedocs.io/> — Loguru logging docs (repo standard logger).
+- <https://opentelemetry.io/docs/languages/python/> — OpenTelemetry Python docs (optional exporters; ensure default-off).
+- <https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html> — OWASP logging guidance (avoid sensitive data in logs).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -189,17 +190,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | SPEC/RTM updated |
-| **Security** |  | no raw prompt/doc/chat/model-output logs; no secret logs |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | logging remains constant-time/metadata-only |
+| Requirement     | Status | Proof / Notes                                                                      |
+| --------------- | ------ | ---------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                    |
+| **Formatting**  |        | `uv run ruff format .`                                                             |
+| **Lint**        |        | `uv run ruff check .` clean                                                        |
+| **Types**       |        | `uv run pyright` clean                                                             |
+| **Pylint**      |        | meets threshold                                                                    |
+| **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | SPEC/RTM updated                                                                   |
+| **Security**    |        | no raw prompt/doc/chat/model-output logs; no secret logs                           |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Performance** |        | logging remains constant-time/metadata-only                                        |
 
 **EXECUTE UNTIL COMPLETE.**

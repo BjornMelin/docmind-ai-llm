@@ -3,16 +3,17 @@
 Implements `ADR-050` + `SPEC-031`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-050-config-discipline-env-bridges.md`
 - SPEC: `docs/specs/spec-031-config-discipline-env-bridges.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.pydantic.dev/latest/concepts/pydantic_settings/ — Pydantic Settings v2 patterns (nested env parsing; precedence).
-- https://docs.pydantic.dev/latest/concepts/types/#secret-types — Secret handling types (`SecretStr`) and best practices.
-- https://opentelemetry.io/docs/languages/python/ — OpenTelemetry Python docs (resource/env configuration; exporters).
-- https://bbc2.github.io/python-dotenv/reference/ — python-dotenv reference (if `.env` persistence touches quoting semantics).
+- <https://docs.pydantic.dev/latest/concepts/pydantic_settings/> — Pydantic Settings v2 patterns (nested env parsing; precedence).
+- <https://docs.pydantic.dev/latest/concepts/types/#secret-types> — Secret handling types (`SecretStr`) and best practices.
+- <https://opentelemetry.io/docs/languages/python/> — OpenTelemetry Python docs (resource/env configuration; exporters).
+- <https://bbc2.github.io/python-dotenv/reference/> — python-dotenv reference (if `.env` persistence touches quoting semantics).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -205,17 +206,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | mapping tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | RTM updated |
-| **Security** |  | no secret logs; egress surfaces remain gated/off by default |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | no new import-time heavy work; settings load remains fast |
+| Requirement     | Status | Proof / Notes                                                                                           |
+| --------------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                                         |
+| **Formatting**  |        | `uv run ruff format .`                                                                                  |
+| **Lint**        |        | `uv run ruff check .` clean                                                                             |
+| **Types**       |        | `uv run pyright` clean                                                                                  |
+| **Pylint**      |        | meets threshold                                                                                         |
+| **Tests**       |        | mapping tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | RTM updated                                                                                             |
+| **Security**    |        | no secret logs; egress surfaces remain gated/off by default                                             |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                              |
+| **Performance** |        | no new import-time heavy work; settings load remains fast                                               |
 
 **EXECUTE UNTIL COMPLETE.**

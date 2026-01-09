@@ -3,14 +3,15 @@
 Implements `ADR-046` + `SPEC-027`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-046-remove-legacy-main-entrypoint.md`
 - SPEC: `docs/specs/spec-027-remove-legacy-main-entrypoint.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.streamlit.io/develop/get-started/run-your-app — Streamlit run command expectations (supported entrypoint patterns).
-- https://docs.streamlit.io/develop/concepts/multipage-apps/overview — Multipage app entrypoint patterns.
+- <https://docs.streamlit.io/develop/get-started/run-your-app> — Streamlit run command expectations (supported entrypoint patterns).
+- <https://docs.streamlit.io/develop/concepts/multipage-apps/overview> — Multipage app entrypoint patterns.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -165,17 +166,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | docs/scripts reference only `streamlit run src/app.py` |
-| **Security** |  | no new config bypasses introduced |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | no new import-time heavy work |
+| Requirement     | Status | Proof / Notes                                                                      |
+| --------------- | ------ | ---------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                    |
+| **Formatting**  |        | `uv run ruff format .`                                                             |
+| **Lint**        |        | `uv run ruff check .` clean                                                        |
+| **Types**       |        | `uv run pyright` clean                                                             |
+| **Pylint**      |        | meets threshold                                                                    |
+| **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | docs/scripts reference only `streamlit run src/app.py`                             |
+| **Security**    |        | no new config bypasses introduced                                                  |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Performance** |        | no new import-time heavy work                                                      |
 
 **EXECUTE UNTIL COMPLETE.**

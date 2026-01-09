@@ -3,14 +3,15 @@
 Implements `ADR-054` + `SPEC-035`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-054-config-surface-pruning-unused-knobs.md`
 - SPEC: `docs/specs/spec-035-config-surface-pruning-unused-knobs.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.pydantic.dev/latest/concepts/pydantic_settings/ — Pydantic Settings v2 behavior (unknown env vars, nested keys).
-- https://docs.pydantic.dev/latest/concepts/config/ — Model config patterns (`extra`, strictness, etc.).
+- <https://docs.pydantic.dev/latest/concepts/pydantic_settings/> — Pydantic Settings v2 behavior (unknown env vars, nested keys).
+- <https://docs.pydantic.dev/latest/concepts/config/> — Model config patterns (`extra`, strictness, etc.).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -152,17 +153,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | settings-prune tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | config reference + ADR links updated; RTM NFR-MAINT-003 updated |
-| **Security** |  | no security/egress knobs removed without docs/tests; startup remains tolerant to unknown env vars |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | settings load remains fast (no heavy validators) |
+| Requirement     | Status | Proof / Notes                                                                                                  |
+| --------------- | ------ | -------------------------------------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                                                |
+| **Formatting**  |        | `uv run ruff format .`                                                                                         |
+| **Lint**        |        | `uv run ruff check .` clean                                                                                    |
+| **Types**       |        | `uv run pyright` clean                                                                                         |
+| **Pylint**      |        | meets threshold                                                                                                |
+| **Tests**       |        | settings-prune tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | config reference + ADR links updated; RTM NFR-MAINT-003 updated                                                |
+| **Security**    |        | no security/egress knobs removed without docs/tests; startup remains tolerant to unknown env vars              |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                     |
+| **Performance** |        | settings load remains fast (no heavy validators)                                                               |
 
 **EXECUTE UNTIL COMPLETE.**

@@ -3,17 +3,18 @@
 Implements `ADR-045` + `SPEC-026`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-045-ingestion-api-and-legacy-facade.md`
 - SPEC: `docs/specs/spec-026-ingestion-api-facade.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/ — LlamaIndex ingestion pipeline overview.
-- https://docs.llamaindex.ai/en/stable/module_guides/loading/documents_and_nodes/ — Document/node concepts and file readers.
-- https://docs.unstructured.io/ — Unstructured docs (partitioning strategies; offline-first cautions).
-- https://pymupdf.readthedocs.io/ — PyMuPDF docs (PDF parsing/rendering primitives used by the repo).
-- https://docs.python.org/3/library/pathlib.html — `pathlib` path handling patterns (safe path joins, normalization).
+- <https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/> — LlamaIndex ingestion pipeline overview.
+- <https://docs.llamaindex.ai/en/stable/module_guides/loading/documents_and_nodes/> — Document/node concepts and file readers.
+- <https://docs.unstructured.io/> — Unstructured docs (partitioning strategies; offline-first cautions).
+- <https://pymupdf.readthedocs.io/> — PyMuPDF docs (PDF parsing/rendering primitives used by the repo).
+- <https://docs.python.org/3/library/pathlib.html> — `pathlib` path handling patterns (safe path joins, normalization).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -196,17 +197,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | SPEC/RTM updated |
-| **Security** |  | symlink traversal blocked; cache clear constrained to `settings.cache_dir` |
-| **Tech Debt** |  | zero TODO/FIXME introduced; no placeholder stubs remain |
-| **Performance** |  | hashing is streaming; no import-time heavy work |
+| Requirement     | Status | Proof / Notes                                                                      |
+| --------------- | ------ | ---------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                    |
+| **Formatting**  |        | `uv run ruff format .`                                                             |
+| **Lint**        |        | `uv run ruff check .` clean                                                        |
+| **Types**       |        | `uv run pyright` clean                                                             |
+| **Pylint**      |        | meets threshold                                                                    |
+| **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | SPEC/RTM updated                                                                   |
+| **Security**    |        | symlink traversal blocked; cache clear constrained to `settings.cache_dir`         |
+| **Tech Debt**   |        | zero TODO/FIXME introduced; no placeholder stubs remain                            |
+| **Performance** |        | hashing is streaming; no import-time heavy work                                    |
 
 **EXECUTE UNTIL COMPLETE.**

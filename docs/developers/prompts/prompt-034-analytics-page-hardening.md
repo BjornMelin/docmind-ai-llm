@@ -3,16 +3,17 @@
 Implements `ADR-053` + `SPEC-034`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-053-analytics-page-hardening.md`
 - SPEC: `docs/specs/spec-034-analytics-page-hardening.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://duckdb.org/docs/api/python/overview.html — DuckDB Python API overview (connections, results, `.df()` patterns).
-- https://duckdb.org/docs/guides/python/import_pandas.html — DuckDB ↔ pandas integration patterns.
-- https://docs.streamlit.io/develop/api-reference/charts — Streamlit charting APIs (rendering dataframes/charts).
-- https://docs.python.org/3/library/json.html — JSON parsing primitives (streaming JSONL parsing strategy).
+- <https://duckdb.org/docs/api/python/overview.html> — DuckDB Python API overview (connections, results, `.df()` patterns).
+- <https://duckdb.org/docs/guides/python/import_pandas.html> — DuckDB ↔ pandas integration patterns.
+- <https://docs.streamlit.io/develop/api-reference/charts> — Streamlit charting APIs (rendering dataframes/charts).
+- <https://docs.python.org/3/library/json.html> — JSON parsing primitives (streaming JSONL parsing strategy).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -21,6 +22,7 @@ Implements `ADR-053` + `SPEC-034`.
 **Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
 
 Skill references to consult (as needed):
+
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
 - `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
 
@@ -175,17 +177,17 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | parsing tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | bounded parsing; privacy-safe defaults; no secret logs |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | streaming JSONL parsing; DuckDB connections closed deterministically |
+| Requirement     | Status | Proof / Notes                                                                                           |
+| --------------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                                                                         |
+| **Formatting**  |        | `uv run ruff format .`                                                                                  |
+| **Lint**        |        | `uv run ruff check .` clean                                                                             |
+| **Types**       |        | `uv run pyright` clean                                                                                  |
+| **Pylint**      |        | meets threshold                                                                                         |
+| **Tests**       |        | parsing tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        |        | ADR/SPEC/RTM updated                                                                                    |
+| **Security**    |        | bounded parsing; privacy-safe defaults; no secret logs                                                  |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                              |
+| **Performance** |        | streaming JSONL parsing; DuckDB connections closed deterministically                                    |
 
 **EXECUTE UNTIL COMPLETE.**

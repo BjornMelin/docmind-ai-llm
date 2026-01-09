@@ -3,19 +3,20 @@
 Implements `ADR-042` + `SPEC-023`.
 
 **Read first (repo truth):**
+
 - ADR: `docs/developers/adrs/ADR-042-containerization-hardening.md`
 - SPEC: `docs/specs/spec-023-containerization-hardening.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
 
-- https://docs.docker.com/build/building/best-practices/ — Dockerfile best practices (multi-stage, caching, secrets).
-- https://docs.docker.com/compose/ — Docker Compose overview and workflows.
-- https://docs.docker.com/compose/compose-file/ — Compose file reference (ports, env, healthchecks).
-- https://docs.docker.com/reference/cli/docker/compose/config/ — `docker compose config` validation.
-- https://hub.docker.com/_/python — Official Python image tags and supported variants.
-- https://docs.astral.sh/uv/guides/integration/docker/ — `uv` Docker install guidance (`uv sync --frozen`).
-- https://docs.streamlit.io/deploy/tutorials/docker — Streamlit Docker deployment tutorial (ports, command).
+- <https://docs.docker.com/build/building/best-practices/> — Dockerfile best practices (multi-stage, caching, secrets).
+- <https://docs.docker.com/compose/> — Docker Compose overview and workflows.
+- <https://docs.docker.com/compose/compose-file/> — Compose file reference (ports, env, healthchecks).
+- <https://docs.docker.com/reference/cli/docker/compose/config/> — `docker compose config` validation.
+- <https://hub.docker.com/_/python> — Official Python image tags and supported variants.
+- <https://docs.astral.sh/uv/guides/integration/docker/> — `uv` Docker install guidance (`uv sync --frozen`).
+- <https://docs.streamlit.io/deploy/tutorials/docker> — Streamlit Docker deployment tutorial (ports, command).
 
 Use the `$docker-architect` workflow patterns (multi-stage, non-root, .dockerignore).
 
@@ -35,6 +36,7 @@ docker buildx version
 ```
 
 Skill references to consult (as needed):
+
 - `/home/bjorn/.codex/skills/docker-architect/references/security_hardening.md`
 - `/home/bjorn/.codex/skills/docker-architect/references/compose_patterns.md`
 - `/home/bjorn/.codex/skills/docker-architect/references/dockerfile_patterns.md`
@@ -234,20 +236,20 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Docker Build** |  | `docker build -t docmind:dev .` succeeds |
-| **Compose Config** |  | `docker compose config` clean |
-| **Container Runtime** |  | Streamlit starts; app accessible on expected port |
-| **Packaging** |  | `uv sync` clean (host) |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` clean |
-| **Types** |  | `uv run pyright` clean |
-| **Pylint** |  | meets threshold |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | non-root user; `.env` not copied; no secrets baked |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | image build is reproducible; no unnecessary layers |
+| Requirement           | Status | Proof / Notes                                                                      |
+| --------------------- | ------ | ---------------------------------------------------------------------------------- |
+| **Docker Build**      |        | `docker build -t docmind:dev .` succeeds                                           |
+| **Compose Config**    |        | `docker compose config` clean                                                      |
+| **Container Runtime** |        | Streamlit starts; app accessible on expected port                                  |
+| **Packaging**         |        | `uv sync` clean (host)                                                             |
+| **Formatting**        |        | `uv run ruff format .`                                                             |
+| **Lint**              |        | `uv run ruff check .` clean                                                        |
+| **Types**             |        | `uv run pyright` clean                                                             |
+| **Pylint**            |        | meets threshold                                                                    |
+| **Tests**             |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**              |        | ADR/SPEC/RTM updated                                                               |
+| **Security**          |        | non-root user; `.env` not copied; no secrets baked                                 |
+| **Tech Debt**         |        | zero TODO/FIXME introduced                                                         |
+| **Performance**       |        | image build is reproducible; no unnecessary layers                                 |
 
 **EXECUTE UNTIL COMPLETE.**
