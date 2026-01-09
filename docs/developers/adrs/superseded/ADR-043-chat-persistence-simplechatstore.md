@@ -1,11 +1,11 @@
 ---
 ADR: 043
 Title: Chat Persistence via LlamaIndex SimpleChatStore (JSON) + ChatMemoryBuffer
-Status: Proposed
+Status: Superseded
 Version: 1.0
 Date: 2026-01-09
 Supersedes: 021
-Superseded-by:
+Superseded-by: 057
 Related: 024, 047
 Tags: chat, memory, streamlit, persistence
 References:
@@ -28,6 +28,8 @@ ADR-021 proposes persistence via SQLite-backed chat stores, but:
 - for v1 ship-readiness, the lowest-risk approach is to use LlamaIndex core primitives already installed
 
 Note: LlamaIndex documents `ChatMemoryBuffer` as a deprecated memory type in newer releases. DocMind already uses `ChatMemoryBuffer` broadly; v1 keeps it for stability while introducing persistence via `SimpleChatStore`.
+
+> Status notice (2026-01-09): Superseded by ADR-057, which adopts LangGraph-native persistence (SQLite checkpointer + store) with time travel and hybrid long-term memory for the final release.
 
 ## Decision Drivers
 

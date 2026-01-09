@@ -332,9 +332,9 @@ class DatabaseConfig(BaseModel):
     sqlite_db_path: Path = Path("./data/docmind.db")
     enable_wal_mode: bool = True
 
-# Note: Chat persistence is implemented via LlamaIndex `SimpleChatStore` JSON
-# under `settings.data_dir` (ADR-043 / SPEC-024) and does not require a SQLite
-# chat DB setting.
+# Note: Chat persistence and agentic long-term memory are implemented via
+# LangGraph-native SQLite persistence (ADR-057 / SPEC-041) and DO require a
+# configured SQLite path for the Chat DB (see `settings.chat.sqlite_path`).
 ```
 
 In `src/config/integrations.py`:
@@ -453,9 +453,9 @@ DOCMIND_SEMANTIC_CACHE__TOP_K=5
 DOCMIND_SEMANTIC_CACHE__MAX_RESPONSE_BYTES=24000
 DOCMIND_SEMANTIC_CACHE__NAMESPACE=default
 
-# Chat Memory / Persistence (ADR-043)
-# Note: v1 implementation persists chat history via JSON SimpleChatStore (no SQLite required).
-# If a SQLite-backed store is introduced later, it must be explicitly documented and tested.
+# Chat Memory / Persistence (ADR-057)
+# The final-release persistence design uses LangGraph SQLite checkpointer + store
+# and is explicitly configured via `DOCMIND_CHAT__SQLITE_PATH` (see SPEC-041).
 
 # Analysis Modes (ADR-023)
 DOCMIND_ANALYSIS__MODE=auto

@@ -5,19 +5,19 @@ Status: Superseded
 Version: 3.3
 Date: 2026-01-09
 Supersedes:
-Superseded-by: 043
+Superseded-by: 057
 Related: 001, 003, 013, 043
 Tags: memory, chat, context, streamlit, sqlite
 References:
 - [LlamaIndex — Chat Memory](https://docs.llamaindex.ai/)
-- [ADR-043 — Chat Persistence (SimpleChatStore JSON)](../ADR-043-chat-persistence-simplechatstore.md)
+- [ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite)](../ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)
 ---
 
 ## Description
 
 Adopt LlamaIndex ChatMemoryBuffer with SimpleChatStore (SQLite) for persistent chat history and context‑aware follow‑ups within a 128K context budget (ADR‑004/010). Use trimming/condensation as needed.
 
-> Status notice (2026-01-09): Superseded by ADR-043. For v1 we standardize on `SimpleChatStore` persisted to JSON and wire it into existing `ChatMemoryBuffer` usage (no SQLite chat store).
+> Status notice (2026-01-09): Superseded by ADR-057. DocMind adopts LangGraph-native persistence (SQLite checkpointer + store) with time travel and hybrid long-term memory for the final release.
 
 ## Context
 
