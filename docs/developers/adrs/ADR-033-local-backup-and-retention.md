@@ -1,12 +1,12 @@
 ---
 ADR: 033
 Title: Local Backup & Retention
-Status: Proposed (Amended)
-Version: 1.3
-Date: 2025-09-09
+Status: Accepted (Amended)
+Version: 2.0
+Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 030, 031, 032, 038
+Related: 030, 031, 032, 038, 052, 053
 Tags: backup, retention, local-first, offline
 References:
 - [Python shutil — File Operations](https://docs.python.org/3/library/shutil.html)
@@ -61,7 +61,7 @@ Include snapshot directories (`storage/<timestamp>`) in retention rules:
 graph TD
   A["User"] --> B["Backup CLI"]
   B --> C["Copy cache.duckdb"]
-  B --> D["Copy Qdrant dir"]
+  B --> D["Create + download Qdrant collection snapshot"]
   B --> E["Copy analytics.duckdb (opt)"]
   B --> F["Copy documents dir (opt)"]
   B --> G["Prune old backups"]
@@ -102,6 +102,7 @@ In `scripts/backup.py` (illustrative):
 ```python
 from pathlib import Path
 import shutil, time
+import qdrant_client
 
 def create_backup(settings, include_docs=False, include_analytics=False):
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -109,7 +110,14 @@ def create_backup(settings, include_docs=False, include_analytics=False):
     dest.mkdir(parents=True, exist_ok=False)
     (dest/"cache").mkdir()
     shutil.copy2(Path(settings.cache_dir)/"docmind.duckdb", dest/"cache"/"docmind.duckdb")
-    shutil.copytree(settings.qdrant_dir, dest/"qdrant")
+    client = qdrant_client.QdrantClient(url=settings.database.qdrant_url)
+    # Prefer server-side snapshots over copying raw storage directories.
+    snapshot = client.create_snapshot(collection_name=settings.database.qdrant_collection)
+    # qdrant-client returns the snapshot name but does not download it directly.
+    # Download via Qdrant REST API:
+    #   GET /collections/{collection_name}/snapshots/{snapshot_name}
+    # and write the response body to dest/"qdrant"/<snapshot_name>.
+    # (Implement with stdlib urllib.request or httpx; keep offline-first defaults.)
     if include_analytics:
         (dest/"analytics").mkdir()
         shutil.copy2(Path(settings.data_dir)/"analytics"/"analytics.duckdb", dest/"analytics"/"analytics.duckdb")

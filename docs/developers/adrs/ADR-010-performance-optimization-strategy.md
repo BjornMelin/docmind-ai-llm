@@ -87,7 +87,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/config/llm.py` (illustrative):
+In `src/config/integrations.py` / `src/config/settings.py` (illustrative):
 
 ```python
 ENGINE_ARGS = {"max_model_len": 131072, "kv_cache_dtype": "fp8_e5m2"}
@@ -107,7 +107,7 @@ SUPERVISOR_TUNING = {
 ```env
 DOCMIND_VLLM__CONTEXT_WINDOW=131072
 DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2
-DOCMIND_AGENTS__PARALLEL_TOOLS=true
+DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true
 ```
 
 ## Testing

@@ -86,7 +86,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/core/analytics.py` (illustrative):
+In `src/pages/03_analytics.py` (current wiring; refactor boundary in ADR-053):
 
 ```python
 import duckdb

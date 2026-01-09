@@ -109,7 +109,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/core/processing.py` (illustrative wiring):
+In `src/processing/ingestion_pipeline.py` (illustrative wiring):
 
 ```python
 from pathlib import Path
@@ -119,7 +119,7 @@ from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 def build_cache(settings):
     cache_db = Path(settings.cache_dir) / "docmind.duckdb"
     cache_db.parent.mkdir(parents=True, exist_ok=True)
-    return IngestionCache(cache=DuckDBKVStore(db_path=str(cache_db)), collection="docmind_processing")
+    return IngestionCache(cache=DuckDBKVStore(database_name=str(cache_db)), collection="docmind_processing")
 ```
 
 ### Configuration

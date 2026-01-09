@@ -50,7 +50,7 @@ The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), 
 
 ## Decision
 
-We adopt Streamlit’s programmatic multipage pattern with native components and caching. Pages: Chat (native streaming), Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only when necessary), Analytics (Plotly charts), and Settings (forms). Sidebar exposes reranker controls `normalize_scores` and `top_n` (ADR‑036). State uses `st.session_state`; caching uses `st.cache_data` and `st.cache_resource`.
+We adopt Streamlit’s programmatic multipage pattern with native components and caching. Pages: Chat (native streaming), Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only when necessary), Analytics (Plotly charts), and Settings (forms). Reranking remains always-on with internal guardrails (ADR‑024/SPEC‑005); v1 avoids advanced reranker controls in the UI. State uses `st.session_state`; caching uses `st.cache_data` and `st.cache_resource`.
 
 ### GraphRAG UI Controls (Amendment)
 
@@ -105,7 +105,7 @@ graph TD
 
 ### Integration Requirements
 
-- IR‑1: Sidebar exposes `normalize_scores` and `top_n` (ADR‑036)
+- IR‑1: Reranking stays always-on with internal guardrails (ADR‑024/SPEC‑005)
 - IR‑2: Use unified settings (ADR‑024) and state model (ADR‑016)
 
 ## Design
@@ -125,10 +125,10 @@ import streamlit as st
 
 st.set_page_config(page_title="DocMind AI", page_icon="📄", layout="wide", initial_sidebar_state="expanded")
 
-chat = st.Page("src/pages/chat.py", title="Chat", icon="💬", default=True)
-docs = st.Page("src/pages/documents.py", title="Documents", icon="📁")
-analytics = st.Page("src/pages/analytics.py", title="Analytics", icon="📊")
-settings = st.Page("src/pages/settings.py", title="Settings", icon="⚙️")
+chat = st.Page("src/pages/01_chat.py", title="Chat", icon="💬", default=True)
+docs = st.Page("src/pages/02_documents.py", title="Documents", icon="📁")
+analytics = st.Page("src/pages/03_analytics.py", title="Analytics", icon="📊")
+settings = st.Page("src/pages/04_settings.py", title="Settings", icon="⚙️")
 
 nav = st.navigation({"Main": [chat, docs], "System": [analytics, settings]})
 st.logo("assets/docmind_logo.png", icon_image="assets/docmind_icon.png")
@@ -170,8 +170,8 @@ import pytest
 
 def test_pages_construct():
     import streamlit as st
-    st.Page("src/pages/chat.py", title="Chat", icon="💬", default=True)
-    st.Page("src/pages/documents.py", title="Documents", icon="📁")
+    st.Page("src/pages/01_chat.py", title="Chat", icon="💬", default=True)
+    st.Page("src/pages/02_documents.py", title="Documents", icon="📁")
 
 @pytest.mark.asyncio
 async def test_streaming_generator(mock_llm):

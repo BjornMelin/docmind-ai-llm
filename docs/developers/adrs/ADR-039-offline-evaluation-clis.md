@@ -4,7 +4,7 @@ Title: Offline Evaluation CLIs (BEIR + RAGAS) for Retrieval Quality
 Status: Accepted
 Version: 1.0
 Date: 2026-01-09
-Supersedes:
+Supersedes: 012
 Superseded-by:
 Related: 012, 014
 Tags: evaluation, offline, tooling, retrieval

@@ -65,25 +65,29 @@ graph TD
 ### Core Libraries
 
 ```toml
-# RAG Framework
-llama-index = "^0.11.0"           # Primary RAG framework
-langgraph-supervisor = "^0.0.29"  # Agent orchestration
+# NOTE: This is a conceptual inventory. Pinned versions live in `pyproject.toml`.
 
-# Models & Inference
-sentence-transformers = "^3.3.0"  # BGE-M3, reranking
-transformers = "^4.46.0"          # Qwen3-14B
-FlagEmbedding = "^1.2.0"         # BGE-M3 sparse features
+# RAG Framework + Orchestration
+llama-index = "*"                # Ingestion/retrieval primitives (see pyproject.toml)
+langgraph = "*"                  # Graph-based orchestration
+langgraph-supervisor = "*"       # Supervisor multi-agent wrapper
+langchain-core = "*"             # Runnable interfaces
 
-# Enhanced Capabilities
-instructor = "^1.3.0"             # Structured outputs (85-point feature)
-dspy-ai = "^2.4.0"               # Query optimization (82-point feature)
-gptcache = "^0.1.0"              # Semantic caching (72-point feature)
-graphrag = "^0.1.0"              # Optional GraphRAG (76.5-point feature)
+# Storage & Persistence
+qdrant-client = "*"              # Dense+sparse vectors and hybrid queries
+duckdb = "*"                     # Ingestion cache KV + analytics (separate lanes)
 
-# Storage & UI
-qdrant-client = "^1.12.0"        # Vector database
-streamlit = "^1.40.0"            # UI with native streaming
-unstructured = "^0.16.0"         # Document processing
+# UI
+streamlit = "*"                  # Multipage UI (`st.Page`, `st.navigation`)
+
+# Document Processing
+unstructured = "*"               # Multiformat parsing/chunking
+pymupdf = "*"                    # PDF rendering/text extraction
+
+# Optional capabilities (extras)
+dspy-ai = "*"                    # Query optimization (gated by config)
+# GraphRAG via LlamaIndex graph stores (extra `graph`)
+# Multimodal rerank via ColPali (extra `multimodal`)
 ```
 
 ## Agent Architecture

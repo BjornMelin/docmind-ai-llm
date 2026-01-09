@@ -1,20 +1,23 @@
 ---
 ADR: 021
 Title: Conversational Memory & Context Management
-Status: Accepted
-Version: 3.2
-Date: 2025-09-02
+Status: Superseded
+Version: 3.3
+Date: 2026-01-09
 Supersedes:
-Superseded-by:
-Related: 001, 003, 013
+Superseded-by: 043
+Related: 001, 003, 013, 043
 Tags: memory, chat, context, streamlit, sqlite
 References:
 - [LlamaIndex — Chat Memory](https://docs.llamaindex.ai/)
+- [ADR-043 — Chat Persistence (SimpleChatStore JSON)](../ADR-043-chat-persistence-simplechatstore.md)
 ---
 
 ## Description
 
 Adopt LlamaIndex ChatMemoryBuffer with SimpleChatStore (SQLite) for persistent chat history and context‑aware follow‑ups within a 128K context budget (ADR‑004/010). Use trimming/condensation as needed.
+
+> Status notice (2026-01-09): Superseded by ADR-043. For v1 we standardize on `SimpleChatStore` persisted to JSON and wire it into existing `ChatMemoryBuffer` usage (no SQLite chat store).
 
 ## Context
 

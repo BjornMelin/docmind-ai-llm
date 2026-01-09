@@ -38,11 +38,11 @@ Prior processing was text-only with basic sentence splitting, limited metadata, 
 
 ### Decision Framework
 
-| Model / Option               | Coverage (35%) | Simplicity (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision      |
-| ---------------------------- | -------------- | ---------------- | ----------------- | ----------------- | ----------- | ------------- |
-| Unstructured (Selected)      | 9              | 9                | 8                 | 9                 | **8.8**     | ✅ Selected    |
-| Multi-library stack          | 7              | 4                | 7                 | 5                 | 5.9         | Rejected      |
-| Custom per-format parsers    | 9              | 2                | 7                 | 3                 | 5.7         | Rejected      |
+| Model / Option            | Coverage (35%) | Simplicity (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision    |
+| ------------------------- | -------------- | ---------------- | ----------------- | ----------------- | ----------- | ----------- |
+| Unstructured (Selected)   | 9              | 9                | 8                 | 9                 | **8.8**     | ✅ Selected |
+| Multi-library stack       | 7              | 4                | 7                 | 5                 | 5.9         | Rejected    |
+| Custom per-format parsers | 9              | 2                | 7                 | 3                 | 5.7         | Rejected    |
 
 ## Decision
 
@@ -97,34 +97,27 @@ graph TD
 
 ### Implementation Details
 
-In `src/processing/document_processor.py`:
+In `src/processing/ingestion_pipeline.py` (simplified):
 
 ```python
-from unstructured.partition.auto import partition
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
+from llama_index.core.node_parser import TokenTextSplitter
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
-def build_pipeline(settings):
-    cache = IngestionCache(
-        cache=DuckDBKVStore(db_path=str(settings.cache_path)),
-        collection="docmind_processing",
+def build_pipeline(cfg, *, embedding):
+    kv_store = DuckDBKVStore(database_name=str(cfg.cache_dir / \"docmind.duckdb\"))
+    cache = IngestionCache(cache=kv_store, collection=cfg.cache_collection)
+    return IngestionPipeline(
+        transformations=[
+            TokenTextSplitter(
+                chunk_size=cfg.chunk_size,
+                chunk_overlap=cfg.chunk_overlap,
+                separator=\"\\n\",
+            ),
+            embedding,
+        ],
+        cache=cache,
     )
-    # Title-based chunking is handled inside the Unstructured transformation; LlamaIndex
-    # IngestionPipeline orchestrates transformations and caching (no explicit SentenceSplitter).
-    return IngestionPipeline(transformations=[UnstructuredTransformation(settings)], cache=cache)
-
-class UnstructuredTransformation:
-    def __init__(self, settings):
-        self.settings = settings
-
-    def __call__(self, nodes, **kwargs):
-        # Expect one Document node carrying source path in metadata
-        out = []
-        for node in nodes:
-            src = node.metadata.get("file_path")
-            elements = partition(filename=src, **self.settings.partition_kwargs())
-            out.extend(convert_elements_to_nodes(elements, base_metadata=node.metadata))
-        return out
 ```
 
 ### Configuration
@@ -132,11 +125,11 @@ class UnstructuredTransformation:
 Prefer nested env names per config guidelines.
 
 ```env
-DOCMIND_INGEST__CHUNK_SIZE=512
-DOCMIND_INGEST__CHUNK_OVERLAP=50
-DOCMIND_INGEST__EMIT_PAGE_IMAGES=true
-DOCMIND_INGEST__STRATEGY=auto  # hi_res|fast|ocr_only|auto
-DOCMIND_CACHE__PATH=./cache/docmind.duckdb
+DOCMIND_PROCESSING__CHUNK_SIZE=1024
+DOCMIND_PROCESSING__CHUNK_OVERLAP=100
+DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
+DOCMIND_CACHE__DIR=./cache
+DOCMIND_CACHE__FILENAME=docmind.duckdb
 ```
 
 ## Testing

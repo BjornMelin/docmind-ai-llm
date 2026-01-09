@@ -94,7 +94,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/core/processing.py` (DocumentProcessor wiring):
+In `src/processing/ingestion_pipeline.py` (pipeline wiring):
 
 ```python
 from pathlib import Path
@@ -102,7 +102,7 @@ from llama_index.core.ingestion import IngestionCache
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
 cache_db = Path(settings.cache_dir) / "docmind.duckdb"
-kv = DuckDBKVStore(db_path=str(cache_db))
+kv = DuckDBKVStore(database_name=str(cache_db))
 self.cache = IngestionCache(cache=kv, collection="docmind_processing")
 ```
 

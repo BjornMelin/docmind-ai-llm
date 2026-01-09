@@ -1,12 +1,12 @@
 ---
 ADR: 054
 Title: Configuration Surface Pruning (Remove Unused/No-op Knobs for v1)
-Status: Proposed
-Version: 1.0
+Status: Superseded
+Version: 1.1
 Date: 2026-01-09
-Supersedes:
-Superseded-by:
-Related: 024, 013
+Supersedes: 023, 033, 035
+Superseded-by: 023, 033, 035
+Related: 024, 013, 031
 Tags: configuration, maintainability, release
 ---
 
@@ -16,14 +16,18 @@ Remove configuration knobs that exist in `src/config/settings.py` but have no im
 
 ## Context
 
-The settings model currently includes several fields that are not referenced anywhere in `src/`:
+The settings model currently includes several fields that are either unreferenced in `src/` **or** have no functional implementation (only placeholder/plumbing code):
 
 - `backup_enabled`, `backup_keep_last`
 - `semantic_cache.*` (ADR‑035 references GPTCache/FAISS, but deps are not present)
 - `analysis.*` (ADR‑023 analysis mode strategy not implemented)
 - `AgentConfig.enable_deadline_propagation`, `AgentConfig.enable_router_injection`
+- `ChatConfig.sqlite_path` (ADR‑021 prescribed SQLite chat store; v1 uses JSON `SimpleChatStore`, see ADR‑043)
+- `DatabaseConfig.sqlite_db_path`, `DatabaseConfig.enable_wal_mode` (no SQLite operational store is implemented; `sqlite3` is unused in `src/`)
 
 Shipping these as-is creates a misleading public configuration surface and increases maintenance and support burden (“why doesn’t this setting do anything?”).
+
+> Status notice (2026-01-09): This “prune for v1” approach is superseded. The project direction is to implement the existing configuration surface and complete the advanced capabilities (analysis modes, backups, semantic cache) rather than removing them.
 
 ## Decision Drivers
 

@@ -307,35 +307,34 @@ def get_vllm_server_command() -> list[str]:
     return cmd
 ```
 
-Planned settings (to implement next)
+Selected nested models (current + release plan)
 
-In `src/config/settings.py` (planned nested models):
+In `src/config/settings.py` (canonical model; see dedicated SPECS for behavior):
 
 ```python
 class SemanticCacheConfig(BaseModel):
+    # ADR-035 / SPEC-038 (Qdrant-backed; strict invalidation)
     enabled: bool = False
-    provider: Literal["gptcache","none"] = "gptcache"
+    provider: Literal["qdrant", "none"] = "none"
     score_threshold: float = 0.85
     ttl_seconds: int = 1_209_600  # 14 days
     top_k: int = 5
     max_response_bytes: int = 24_000
     namespace: str = "default"
 
-class ChatConfig(BaseModel):
-    sqlite_path: Path = Path("./data/docmind.db")
-
 class AnalysisConfig(BaseModel):
-    mode: Literal["auto","separate","combined"] = "auto"
+    # ADR-023 / SPEC-036
+    mode: Literal["auto", "separate", "combined"] = "auto"
     max_workers: int = 4
 
-class GraphRAGConfig(BaseModel):
-    enabled: bool = False
+class DatabaseConfig(BaseModel):
+    # ADR-055 / SPEC-039 (operational metadata store; WAL)
+    sqlite_db_path: Path = Path("./data/docmind.db")
+    enable_wal_mode: bool = True
 
-# DocMindSettings(...)
-#   semantic_cache: SemanticCacheConfig = Field(default_factory=SemanticCacheConfig)
-#   chat: ChatConfig = Field(default_factory=ChatConfig)
-#   analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
-#   graphrag: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+# Note: Chat persistence is implemented via LlamaIndex `SimpleChatStore` JSON
+# under `settings.data_dir` (ADR-043 / SPEC-024) and does not require a SQLite
+# chat DB setting.
 ```
 
 In `src/config/integrations.py`:
@@ -442,18 +441,21 @@ DOCMIND_BACKUP__KEEP_LAST=7
 # Logging
 DOCMIND_LOG_LEVEL=INFO
 
-# --- Planned settings (to be implemented) ---
+# --- Optional advanced features (targeted for the full release) ---
+# These sections document supported (or imminently supported) configuration
+# surfaces that have corresponding ADRs/SPECs and implementation prompts.
 # Semantic Cache (ADR-035)
 DOCMIND_SEMANTIC_CACHE__ENABLED=false
-DOCMIND_SEMANTIC_CACHE__PROVIDER=gptcache
+DOCMIND_SEMANTIC_CACHE__PROVIDER=qdrant
 DOCMIND_SEMANTIC_CACHE__SCORE_THRESHOLD=0.85
 DOCMIND_SEMANTIC_CACHE__TTL_SECONDS=1209600
 DOCMIND_SEMANTIC_CACHE__TOP_K=5
 DOCMIND_SEMANTIC_CACHE__MAX_RESPONSE_BYTES=24000
 DOCMIND_SEMANTIC_CACHE__NAMESPACE=default
 
-# Chat Memory (ADR-021)
-DOCMIND_CHAT__SQLITE_PATH=./data/docmind.db
+# Chat Memory / Persistence (ADR-043)
+# Note: v1 implementation persists chat history via JSON SimpleChatStore (no SQLite required).
+# If a SQLite-backed store is introduced later, it must be explicitly documented and tested.
 
 # Analysis Modes (ADR-023)
 DOCMIND_ANALYSIS__MODE=auto

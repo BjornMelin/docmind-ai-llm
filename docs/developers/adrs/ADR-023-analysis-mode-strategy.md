@@ -1,20 +1,28 @@
 ---
 ADR: 023
-Title: Document Analysis Mode Strategy
-Status: Accepted
-Version: 1.1
-Date: 2025-09-02
+Title: Document Analysis Modes (Separate / Combined / Auto)
+Status: Proposed
+Version: 2.0
+Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 001, 003, 009, 011, 016, 022
+Related: 001, 003, 009, 011, 013, 016, 022, 024, 052
 Tags: analysis, modes, routing, parallel, aggregation
 References:
-- [LlamaIndex — Query Pipeline](https://docs.llamaindex.ai/)
+- [Streamlit — Tabs](https://docs.streamlit.io/develop/api-reference/layout/st.tabs)
+- [LlamaIndex — Query Pipeline](https://docs.llamaindex.ai/en/stable/module_guides/querying/query_pipeline/)
+- [LangGraph — Concepts](https://langchain-ai.github.io/langgraph/concepts/)
 ---
 
 ## Description
 
-Provide two analysis modes for uploaded documents: Separate (per‑document analysis in parallel) and Combined (holistic multi‑document analysis). Use LlamaIndex QueryPipeline with conditional routing and lightweight aggregation to deliver flexible, performant analysis.
+Provide three analysis modes for working with a document set:
+
+- **Separate**: per-document analysis in parallel, with an optional “compare/synthesize” reduce step.
+- **Combined**: a single holistic analysis across all selected documents.
+- **Auto**: chooses Separate vs Combined based on corpus size and doc count.
+
+This adds an explicit user-facing knob (UI + config) and a small, testable domain service that routes work through existing retrieval + multi-agent synthesis rather than duplicating business logic in Streamlit pages.
 
 ## Context
 
@@ -31,32 +39,41 @@ Users need document‑specific insights and cross‑document synthesis. Separate
 
 - A: Combined only — simple, but no doc‑specific insights
 - B: Sequential per‑doc — simple, but slow; no synthesis
-- C: Manual mode without optimization — flexible, but inconsistent
-- D: QueryPipeline + conditional routing (Selected) — parallel + synthesis; modest coordination
+- C: ThreadPool “map” + lightweight reduce (Selected) — simple, fast, integrates with existing coordinator
+- D: LangGraph-native MapReduce graph — powerful but higher complexity
 
 ### Decision Framework
 
-| Model / Option                        | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision    |
-| ------------------------------------- | ---------------- | ----------------- | ---------------- | ----------------- | ----------- | ----------- |
-| D: QueryPipeline + routing (Selected) | 9                | 9                 | 7                | 8                 | **8.6**     | ✅ Selected |
-| B: Sequential individual              | 6                | 4                 | 9                | 8                 | 6.2         | Rejected    |
-| A: Combined only                      | 4                | 6                 | 9                | 9                 | 5.8         | Rejected    |
-| C: Manual w/o optimization            | 7                | 5                 | 7                | 7                 | 6.2         | Rejected    |
+Weights: Capability 35% · Performance 35% · Simplicity 20% · Maintenance 10%
+
+| Model / Option                             | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision |
+| ------------------------------------------ | ---------------- | ----------------- | ---------------- | ----------------- | ----------: | -------- |
+| **C: ThreadPool map + lightweight reduce** | 9                | 9                 | 9                | 9                 | **9.0**     | ✅ Sel.  |
+| D: LangGraph-native MapReduce              | 9                | 9                 | 6                | 7                 | 7.9         | Rejected |
+| B: Sequential per-doc                      | 7                | 4                 | 9                | 9                 | 6.6         | Rejected |
+| A: Combined only                           | 5                | 7                 | 10               | 10                | 7.0         | Rejected |
 
 ## Decision
 
-Adopt a conditional analysis strategy with QueryPipeline routing: Separate mode runs per‑document pipelines in parallel; Combined mode uses a unified index; aggregation merges insights and comparisons. Auto mode selects based on document count/size. Integrates with the 5‑agent system (ADR‑001/011).
+Adopt a conditional analysis strategy implemented as a small domain-layer service:
+
+1) **Route** the request into `separate` or `combined` mode (auto selection supported).
+2) **Separate** runs per-document analyses concurrently (ThreadPool), each using the existing retrieval + agent synthesis stack with a doc filter applied.
+3) **Reduce** (optional) synthesizes a short cross-document comparison using the per-doc outputs (bounded input size).
+4) **Combined** performs a single analysis over the full document set.
+
+This keeps Streamlit pages thin and makes the behavior easy to test offline with the existing MockLLM and retrieval stubs.
 
 ## High-Level Architecture
 
 ```mermaid
 graph TD
   U["Upload + Mode Selection"] --> R["Mode Router"]
-  R -->|Separate| P["Parallel Per-Doc Pipelines"]
-  R -->|Combined| C["Unified Pipeline"]
-  P --> A["Aggregator"]
-  C --> A
-  A --> V["Results + Synthesis"]
+  R -->|Separate| P["Parallel per-doc analysis (ThreadPool)"]
+  R -->|Combined| C["Single combined analysis"]
+  P --> A["Optional reduce: compare/synthesize"]
+  C --> V["Combined result"]
+  A --> V["Results UI (tabs + summary)"]
 ```
 
 ## Related Requirements
@@ -66,7 +83,7 @@ graph TD
 - FR‑1: Separate mode produces individual results per document
 - FR‑2: Combined mode produces unified cross‑document result
 - FR‑3: Separate mode executes in parallel
-- FR‑4: Aggregation merges insights and comparisons
+- FR‑4: Optional reduce step merges insights and comparisons
 
 ### Non-Functional Requirements
 
@@ -87,23 +104,21 @@ graph TD
 
 ### Architecture Overview
 
-- Separate: spawn parallel per‑document pipelines; preserve doc context
-- Combined: build unified index; synthesize across documents
-- Aggregation: merge insights, comparisons, and action items
+- Separate: spawn parallel per‑document analyses; preserve doc context via doc-level retrieval filters
+- Combined: run one analysis across the selected corpus
+- Reduce: merge the per-doc outputs into a short comparison/summary (optional)
 
 ### Implementation Details
 
-In `src/analysis/modes.py` (illustrative):
+In `src/analysis/service.py` (illustrative):
 
 ```python
 from concurrent.futures import ThreadPoolExecutor
 
-def analyze(documents, query, mode, settings):
-    mode = auto_select(mode, len(documents), settings)
-    if mode == "separate":
-        with ThreadPoolExecutor(max_workers=settings.max_workers) as ex:
-            return [ex.submit(run_single, d, query).result() for d in documents]
-    return [run_combined(documents, query)]
+def analyze_documents(documents, query, mode, settings):
+    # Separate: map over docs in parallel (bounded by settings.analysis.max_workers)
+    # Combined: single run over corpus
+    ...
 ```
 
 ### Configuration

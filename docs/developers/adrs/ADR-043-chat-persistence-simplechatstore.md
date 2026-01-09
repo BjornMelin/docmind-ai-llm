@@ -6,11 +6,13 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes: 021
 Superseded-by:
-Related: 012, 024
+Related: 024, 047
 Tags: chat, memory, streamlit, persistence
 References:
+  - https://docs.llamaindex.ai/en/stable/module_guides/storing/chat_stores/
+  - https://docs.llamaindex.ai/en/stable/module_guides/deploying/agents/memory/
   - https://docs.llamaindex.ai/en/stable/api_reference/memory/chat_memory_buffer/
-  - https://docs.llamaindex.ai/en/v0.10.22/module_guides/storing/chat_stores/
+  - https://docs.llamaindex.ai/en/stable/api_reference/storage/chat_store/
 ---
 
 ## Description
@@ -24,6 +26,8 @@ ADR-021 proposes persistence via SQLite-backed chat stores, but:
 - current code (`src/pages/01_chat.py`) uses only `st.session_state.messages` (no persistence)
 - the repo does not currently depend on a SQLite chat store integration package
 - for v1 ship-readiness, the lowest-risk approach is to use LlamaIndex core primitives already installed
+
+Note: LlamaIndex documents `ChatMemoryBuffer` as a deprecated memory type in newer releases. DocMind already uses `ChatMemoryBuffer` broadly; v1 keeps it for stability while introducing persistence via `SimpleChatStore`.
 
 ## Decision Drivers
 

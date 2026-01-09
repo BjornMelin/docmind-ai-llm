@@ -4,7 +4,7 @@ Title: Containerization Hardening (Dockerfile + Compose) for Ship-Ready Deployme
 Status: Proposed
 Version: 1.0
 Date: 2026-01-09
-Supersedes:
+Supersedes: 015
 Superseded-by:
 Related: 015, 024
 Tags: docker, compose, packaging, security, deployment

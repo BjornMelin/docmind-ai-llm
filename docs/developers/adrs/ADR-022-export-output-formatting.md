@@ -90,7 +90,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/export/manager.py` (illustrative):
+Graph export implementation exists today in `src/retrieval/graph_config.py` (JSONL required; Parquet optional). The snippet below remains conceptual for a future “export manager” abstraction (if/when needed beyond graph exports):
 
 ```python
 from typing import Any
