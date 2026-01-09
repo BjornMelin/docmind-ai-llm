@@ -6,6 +6,7 @@ Implements `ADR-047` + `SPEC-028`.
 
 - ADR: `docs/developers/adrs/ADR-047-safe-logging-policy-no-pii-redactor.md`
 - SPEC: `docs/specs/spec-028-safe-logging-no-pii-redactor.md`
+- Requirements: `docs/specs/requirements.md` (NFR-SEC-002, NFR-MAINT-003)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

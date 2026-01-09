@@ -6,6 +6,7 @@ Implements `ADR-049` + `SPEC-030`.
 
 - ADR: `docs/developers/adrs/ADR-049-multimodal-helper-cleanup.md`
 - SPEC: `docs/specs/spec-030-multimodal-helper-cleanup.md`
+- Requirements: `docs/specs/requirements.md` (NFR-MAINT-003)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

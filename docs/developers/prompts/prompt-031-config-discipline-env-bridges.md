@@ -6,6 +6,7 @@ Implements `ADR-050` + `SPEC-031`.
 
 - ADR: `docs/developers/adrs/ADR-050-config-discipline-env-bridges.md`
 - SPEC: `docs/specs/spec-031-config-discipline-env-bridges.md`
+- Requirements: `docs/specs/requirements.md` (NFR-MAINT-003, NFR-SEC-001)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

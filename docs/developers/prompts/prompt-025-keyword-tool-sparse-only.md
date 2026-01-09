@@ -6,6 +6,7 @@ Implements `ADR-044` + `SPEC-025`.
 
 - ADR: `docs/developers/adrs/ADR-044-keyword-tool-sparse-only-qdrant.md`
 - SPEC: `docs/specs/spec-025-keyword-tool-sparse-only.md`
+- Requirements: `docs/specs/requirements.md` (FR-023)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

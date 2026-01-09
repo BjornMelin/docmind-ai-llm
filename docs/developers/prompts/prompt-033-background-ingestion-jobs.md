@@ -6,6 +6,7 @@ Implements `ADR-052` + `SPEC-033`.
 
 - ADR: `docs/developers/adrs/ADR-052-background-ingestion-jobs.md`
 - SPEC: `docs/specs/spec-033-background-ingestion-jobs.md`
+- Requirements: `docs/specs/requirements.md` (FR-025)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

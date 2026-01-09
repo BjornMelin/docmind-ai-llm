@@ -6,6 +6,7 @@ Implements `ADR-048` + `SPEC-029`.
 
 - ADR: `docs/developers/adrs/ADR-048-docs-consistency-pass.md`
 - SPEC: `docs/specs/spec-029-docs-consistency-pass.md`
+- Requirements: `docs/specs/requirements.md` (NFR-MAINT-003)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

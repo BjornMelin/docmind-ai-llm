@@ -6,6 +6,7 @@ Implements `ADR-043` + `SPEC-024`.
 
 - ADR: `docs/developers/adrs/ADR-043-chat-persistence-simplechatstore.md`
 - SPEC: `docs/specs/spec-024-chat-persistence-simplechatstore.md`
+- Requirements: `docs/specs/requirements.md` (FR-022, NFR-SEC-002)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

@@ -6,6 +6,7 @@ Implements `ADR-041` + `SPEC-022`.
 
 - ADR: `docs/developers/adrs/ADR-041-settings-ui-hardening-and-safe-badges.md`
 - SPEC: `docs/specs/spec-022-settings-ui-hardening.md`
+- Requirements: `docs/specs/requirements.md` (FR-021, FR-012, NFR-SEC-004)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

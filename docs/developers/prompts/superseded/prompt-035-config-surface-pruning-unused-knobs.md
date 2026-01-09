@@ -91,9 +91,9 @@ You must keep changes minimal, library-first, and maintainable.
 
 - `src/config/settings.py`
 - `docs/developers/configuration-reference.md`
-- `docs/developers/adrs/ADR-035-semantic-cache-gptcache-sqlite-faiss.md` (update status or cross-link as out-of-scope for v1)
-- `docs/developers/adrs/ADR-033-local-backup-and-retention.md` (update status or cross-link as out-of-scope for v1)
-- `docs/developers/adrs/ADR-023-analysis-mode-strategy.md` (update status or cross-link as out-of-scope for v1)
+- `docs/developers/adrs/ADR-035-semantic-cache-qdrant.md` (note: superseded plan; see prompt-038)
+- `docs/developers/adrs/ADR-033-local-backup-and-retention.md` (note: superseded plan; see prompt-037)
+- `docs/developers/adrs/ADR-023-analysis-mode-strategy.md` (note: superseded plan; see prompt-036)
 - `tests/unit/config/test_settings_pruned_fields.py` (new)
 - `docs/specs/traceability.md`
 

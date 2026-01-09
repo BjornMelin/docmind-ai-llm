@@ -6,6 +6,7 @@ Implements `ADR-045` + `SPEC-026`.
 
 - ADR: `docs/developers/adrs/ADR-045-ingestion-api-and-legacy-facade.md`
 - SPEC: `docs/specs/spec-026-ingestion-api-facade.md`
+- Requirements: `docs/specs/requirements.md` (FR-024, NFR-SEC-001)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

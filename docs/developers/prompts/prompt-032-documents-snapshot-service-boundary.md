@@ -6,6 +6,7 @@ Implements `ADR-051` + `SPEC-032`.
 
 - ADR: `docs/developers/adrs/ADR-051-documents-snapshot-service-boundary.md`
 - SPEC: `docs/specs/spec-032-documents-snapshot-service-boundary.md`
+- Requirements: `docs/specs/requirements.md` (NFR-MAINT-001, NFR-MAINT-003)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

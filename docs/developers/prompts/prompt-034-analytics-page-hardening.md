@@ -6,6 +6,7 @@ Implements `ADR-053` + `SPEC-034`.
 
 - ADR: `docs/developers/adrs/ADR-053-analytics-page-hardening.md`
 - SPEC: `docs/specs/spec-034-analytics-page-hardening.md`
+- Requirements: `docs/specs/requirements.md` (FR-010, NFR-OBS-001)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

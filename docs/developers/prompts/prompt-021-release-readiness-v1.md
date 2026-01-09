@@ -5,6 +5,7 @@ Use this prompt to implement **every** work package defined in `docs/specs/spec-
 **Read first (repo truth):**
 
 - SPEC: `docs/specs/spec-021-release-readiness-v1.md`
+- Requirements: `docs/specs/requirements.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
@@ -16,18 +17,25 @@ Use this prompt to implement **every** work package defined in `docs/specs/spec-
 - <https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/> — LlamaIndex ingestion pipeline overview.
 - <https://qdrant.tech/documentation/concepts/hybrid-queries/> — Qdrant hybrid query concepts (dense+sparse).
 - <https://qdrant.tech/documentation/concepts/search/#query-points> — Qdrant Query Points API reference (Prefetch/fusion patterns).
+- <https://qdrant.tech/documentation/concepts/snapshots/> — Qdrant snapshots (backup/restore).
+- <https://docs.python.org/3/library/sqlite3.html> — stdlib sqlite3 (ops metadata store, migrations, WAL).
+- <https://www.sqlite.org/wal.html> — WAL mode semantics and concurrency tradeoffs.
+- <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming (supervisor loop integration).
+- <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/interrupts> — LangGraph interrupts/stop patterns (cooperative cancellation).
 - <https://docs.astral.sh/uv/guides/integration/docker/> — `uv` Docker build guidance (reproducible installs).
 - <https://docs.astral.sh/ruff/formatter/> — Ruff formatter reference (repo uses `ruff format`).
 - <https://docs.astral.sh/ruff/linter/> — Ruff linter reference (repo uses `ruff check`).
 - <https://github.com/microsoft/pyright/blob/main/docs/configuration.md> — Pyright configuration reference.
 - <https://docs.docker.com/build/building/best-practices/> — Docker build best practices.
 - <https://opentelemetry.io/docs/languages/python/> — OpenTelemetry Python docs (optional in this repo).
+- <https://docs.llamaindex.ai/en/stable/module_guides/storing/chat_stores/> — LlamaIndex chat store persistence patterns.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
 **Skills to load during execution (by package):**
 
 - `$streamlit-master-architect` for any Streamlit page/UI work (WP01, WP03, WP11–WP13).
+- `$streamlit-master-architect` also applies to WP14 (analysis modes) and any Streamlit-side UX work for WP15/16.
 - `$docker-architect` for container/compose work (WP02).
 
 **Mandatory preflight in each new session:**

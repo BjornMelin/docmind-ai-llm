@@ -6,6 +6,7 @@ Implements `ADR-046` + `SPEC-027`.
 
 - ADR: `docs/developers/adrs/ADR-046-remove-legacy-main-entrypoint.md`
 - SPEC: `docs/specs/spec-027-remove-legacy-main-entrypoint.md`
+- Requirements: `docs/specs/requirements.md` (NFR-PORT-001, NFR-MAINT-003)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)

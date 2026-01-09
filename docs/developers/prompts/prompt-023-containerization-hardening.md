@@ -6,6 +6,7 @@ Implements `ADR-042` + `SPEC-023`.
 
 - ADR: `docs/developers/adrs/ADR-042-containerization-hardening.md`
 - SPEC: `docs/specs/spec-023-containerization-hardening.md`
+- Requirements: `docs/specs/requirements.md` (NFR-PORT-003, NFR-SEC-001)
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
