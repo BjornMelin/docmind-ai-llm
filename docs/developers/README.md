@@ -2,30 +2,30 @@
 
 > **Streamlined developer documentation following industry best practices with the Divio documentation framework**
 
-This directory contains comprehensive, consolidated documentation for DocMind AI developers. The documentation has been organized into **5 core guides** plus specialized references, eliminating redundancy while preserving all essential technical content.
+This directory contains documentation for DocMind AI developers. The documentation has been organized into **5 core guides** plus specialized references, eliminating redundancy while preserving all essential technical content.
 
-## 🚀 Quick Navigation
+## Quick Navigation
 
 ### Core Documentation (5 Essential Guides)
 
-| Guide | Purpose | Audience | Time to Read |
-|-------|---------|----------|--------------|
-| **[Getting Started](getting-started.md)** | Complete 30-minute onboarding from zero to productive | New developers | 30 min |
-| **[System Architecture](system-architecture.md)** | Deep understanding of multi-agent coordination and system design | Developers needing architectural context | 45 min |
-| **[Developer Handbook](developer-handbook.md)** | Practical implementation guidance, testing, and maintenance | Active developers building features | 60 min |
-| **[Configuration Reference](configuration-reference.md)** | Complete configuration guide with GPU optimization | DevOps, system administrators | 30 min |
-| **[Operations Guide](operations-guide.md)** | Production deployment and operational procedures | DevOps, SRE, production teams | 45 min |
+| Guide                                                     | Purpose                                                          | Audience                                 | Time to Read |
+| --------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- | ------------ |
+| **[Getting Started](getting-started.md)**                 | Complete 30-minute onboarding from zero to productive            | New developers                           | 30 min       |
+| **[System Architecture](system-architecture.md)**         | Deep understanding of multi-agent coordination and system design | Developers needing architectural context | 45 min       |
+| **[Developer Handbook](developer-handbook.md)**           | Practical implementation guidance, testing, and maintenance      | Active developers building features      | 60 min       |
+| **[Configuration Reference](configuration-reference.md)** | Complete configuration guide with GPU optimization               | DevOps, system administrators            | 30 min       |
+| **[Operations Guide](operations-guide.md)**               | Production deployment and operational procedures                 | DevOps, SRE, production teams            | 45 min       |
 
 ### Specialized References
 
-| Guide | Purpose | Audience |
-|-------|---------|----------|
-| **[Architecture Overview](architecture-overview.md)** | Executive technical summary with performance specs | Technical leads, architects |
-| **[Cache Implementation Guide](cache.md)** | Wiring, configuration, operations, troubleshooting | Developers integrating cache |
-| **[Configuration Usage Guide](configuration-usage-guide.md)** | Practical how-to for env vars and settings helpers | Developers, DevOps |
-| **[GraphRAG Adapters Guide](guides/graphrag-adapters.md)** | Adapter protocol, registry wiring, and optional dependency lanes | Developers extending GraphRAG |
-| **[Testing Guide](../testing/testing-guide.md)** | Canonical testing strategy and commands | QA engineers, developers writing tests |
-| **[CI/CD Pipeline](ci-cd-pipeline.md)** | Continuous integration and deployment workflows | DevOps engineers, release managers |
+| Guide                                                         | Purpose                                                          | Audience                               |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
+| **[Architecture Overview](architecture-overview.md)**         | Executive technical summary with performance specs               | Technical leads, architects            |
+| **[Cache Implementation Guide](cache.md)**                    | Wiring, configuration, operations, troubleshooting               | Developers integrating cache           |
+| **[Configuration Usage Guide](configuration-usage-guide.md)** | Practical how-to for env vars and settings helpers               | Developers, DevOps                     |
+| **[GraphRAG Adapters Guide](guides/graphrag-adapters.md)**    | Adapter protocol, registry wiring, and optional dependency lanes | Developers extending GraphRAG          |
+| **[Testing Guide](../testing/testing-guide.md)**              | Canonical testing strategy and commands                          | QA engineers, developers writing tests |
+| **[CI/CD Pipeline](ci-cd-pipeline.md)**                       | Continuous integration and deployment workflows                  | DevOps engineers, release managers     |
 
 ### Documentation Framework
 
@@ -33,7 +33,7 @@ Following the **Divio Documentation System** for optimal developer experience:
 
 - **Tutorial** ([Getting Started](getting-started.md)) - Learning-oriented guidance
 - **How-to Guides** ([Developer Handbook](developer-handbook.md)) - Problem-solving oriented
-- **Reference** ([Configuration Reference](configuration-reference.md)) - Information-oriented  
+- **Reference** ([Configuration Reference](configuration-reference.md)) - Information-oriented
 - **Explanation** ([System Architecture](system-architecture.md)) - Understanding-oriented
 - **Operations** ([Operations Guide](operations-guide.md)) - Production-oriented
 
@@ -66,7 +66,7 @@ Following the **Divio Documentation System** for optimal developer experience:
 - **Single Source of Truth**: `from src.config import settings`
 - **76% Complexity Reduction**: Simplified from legacy over-engineered approach
 - **Pydantic Settings V2**: Nested models with full validation
-- **DOCMIND_ Prefix**: Consistent environment variable naming
+- **DOCMIND\_ Prefix**: Consistent environment variable naming
 
 ### Development Standards
 
@@ -107,15 +107,15 @@ chunk_size = settings.processing.chunk_size
 
 ## Getting Help
 
-| Issue Type | Primary Guide | Secondary Resources |
-|------------|---------------|-------------------|
-| **Setup Problems** | [Getting Started](getting-started.md) | [Configuration Reference](configuration-reference.md) |
-| **Architecture Questions** | [System Architecture](system-architecture.md) | [Architecture Overview](architecture-overview.md), [ADRs](adrs/) |
-| **Implementation Help** | [Developer Handbook](developer-handbook.md) | [Cache Implementation](cache.md) |
-| **Configuration Issues** | [Configuration Reference](configuration-reference.md) | [Operations Guide](operations-guide.md) |
-| **Performance Problems** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
-| **Production Deployment** | [Operations Guide](operations-guide.md) | [Configuration Reference](configuration-reference.md) |
-| **Testing Issues** | [Developer Handbook](developer-handbook.md) | [Testing Guide](../testing/testing-guide.md) |
+| Issue Type                 | Primary Guide                                         | Secondary Resources                                              |
+| -------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| **Setup Problems**         | [Getting Started](getting-started.md)                 | [Configuration Reference](configuration-reference.md)            |
+| **Architecture Questions** | [System Architecture](system-architecture.md)         | [Architecture Overview](architecture-overview.md), [ADRs](adrs/) |
+| **Implementation Help**    | [Developer Handbook](developer-handbook.md)           | [Cache Implementation](cache.md)                                 |
+| **Configuration Issues**   | [Configuration Reference](configuration-reference.md) | [Operations Guide](operations-guide.md)                          |
+| **Performance Problems**   | [Operations Guide](operations-guide.md)               | [Configuration Reference](configuration-reference.md)            |
+| **Production Deployment**  | [Operations Guide](operations-guide.md)               | [Configuration Reference](configuration-reference.md)            |
+| **Testing Issues**         | [Developer Handbook](developer-handbook.md)           | [Testing Guide](../testing/testing-guide.md)                     |
 
 ## Contributing
 
@@ -137,12 +137,12 @@ All architectural decisions are documented in the [adrs/](adrs/) directory. Key 
 
 **Structure**: This documentation follows a **5 core guides + specialized references** approach:
 
-| Category | Files | Purpose |
-|----------|-------|---------|
-| **Core Guides** (5) | Essential documentation covering 90% of developer needs | Primary navigation |
-| **Specialized References** (4) | Deep-dive topics for specific use cases | Secondary resources |
-| **ADRs** (26) | Architectural decisions and technical rationale | Reference material |
-| **Archived** | Historical documentation preserved for reference | Legacy content |
+| Category                       | Files                                                   | Purpose             |
+| ------------------------------ | ------------------------------------------------------- | ------------------- |
+| **Core Guides** (5)            | Essential documentation covering 90% of developer needs | Primary navigation  |
+| **Specialized References** (4) | Deep-dive topics for specific use cases                 | Secondary resources |
+| **ADRs** (26)                  | Architectural decisions and technical rationale         | Reference material  |
+| **Archived**                   | Historical documentation preserved for reference        | Legacy content      |
 
 ### Migration Notes
 

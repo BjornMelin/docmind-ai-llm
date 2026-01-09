@@ -25,7 +25,7 @@ graph TB
         UI[Streamlit UI]
         API[FastAPI Endpoints]
     end
-    
+
     subgraph "Multi-Agent Orchestration Layer"
         SUP[LangGraph Supervisor]
         ROUTER[Router Agent]
@@ -34,24 +34,24 @@ graph TB
         SYNTHESIS[Synthesis Agent]
         VALIDATOR[Validator Agent]
     end
-    
+
     subgraph "Processing Layer"
         DOC[Document Processor]
         EMB[BGE-M3 Embeddings]
         RERANK[BGE-reranker-v2-m3]
     end
-    
+
     subgraph "Storage Layer"
         QDRANT[Qdrant Vector DB]
         SQLITE[SQLite Session Store]
         CACHE[Simple Cache]
     end
-    
+
     subgraph "LLM Backend Layer"
         VLLM[vLLM FlashInfer]
         QWEN[Qwen3-4B-FP8]
     end
-    
+
     UI --> SUP
     API --> SUP
     SUP --> ROUTER
@@ -59,19 +59,19 @@ graph TB
     SUP --> RETRIEVAL
     SUP --> SYNTHESIS
     SUP --> VALIDATOR
-    
+
     RETRIEVAL --> DOC
     RETRIEVAL --> EMB
     RETRIEVAL --> RERANK
-    
+
     EMB --> QDRANT
     DOC --> SQLITE
     RETRIEVAL --> CACHE
-    
+
     SYNTHESIS --> VLLM
     VALIDATOR --> VLLM
     VLLM --> QWEN
-    
+
     style SUP fill:#ff9999
     style VLLM fill:#99ccff
     style QDRANT fill:#ffcc99
@@ -80,14 +80,14 @@ graph TB
 
 ### Core Components
 
-| Component | Purpose | Technology | Performance Target |
-|-----------|---------|------------|-------------------|
-| **Frontend** | Document uploads, configuration, results, chat interface | Streamlit | Real-time streaming |
-| **Multi-Agent System** | 5-agent coordination for complex queries | LangGraph Supervisor | <200ms coordination |
-| **LLM Backend** | Language model inference with 128K context | vLLM FlashInfer + Qwen3-4B-FP8 | 120-180 tok/s decode |
-| **Vector Storage** | Hybrid dense/sparse search with RRF fusion | Qdrant | <100ms retrieval |
-| **Document Processing** | Hi-res parsing with NLP pipeline | Unstructured + spaCy | <2s per document |
-| **Performance Layer** | FP8 quantization, parallel execution, CUDA optimization | PyTorch 2.7.0 + CUDA 12.8 | 12-14GB VRAM usage |
+| Component               | Purpose                                                  | Technology                     | Performance Target   |
+| ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
+| **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                      | Real-time streaming  |
+| **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
+| **LLM Backend**         | Language model inference with 128K context               | vLLM FlashInfer + Qwen3-4B-FP8 | 120-180 tok/s decode |
+| **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                         | <100ms retrieval     |
+| **Document Processing** | Hi-res parsing with NLP pipeline                         | Unstructured + spaCy           | <2s per document     |
+| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.7.0 + CUDA 12.8      | 12-14GB VRAM usage   |
 
 ## Unified Configuration Architecture
 
@@ -112,27 +112,27 @@ timeout = settings.agents.decision_timeout    # Multi-agent coordination (200ms)
 graph TD
     ENV[.env File] --> PYDANTIC[Pydantic Settings V2]
     PYDANTIC --> ROOT[DocMindSettings]
-    
+
     ROOT --> VLLM[VLLMConfig]
     ROOT --> EMBEDDING[EmbeddingConfig]
     ROOT --> AGENTS[AgentConfig]
     ROOT --> PROCESSING[ProcessingConfig]
     ROOT --> QDRANT[QdrantConfig]
     ROOT --> LLM[LLMConfig]
-    
+
     VLLM --> V1[model: str]
     VLLM --> V2[attention_backend: str]
     VLLM --> V3[gpu_memory_utilization: float]
     VLLM --> V4[kv_cache_dtype: str]
-    
+
     EMBEDDING --> E1[model_name: str = "BAAI/bge-m3"]
     EMBEDDING --> E2[max_length: int = 8192]
     EMBEDDING --> E3[batch_size: int = 32]
-    
+
     AGENTS --> A1[decision_timeout: int = 200]
     AGENTS --> A2[enable_multi_agent: bool = true]
     AGENTS --> A3[max_retries: int = 2]
-    
+
     style ROOT fill:#ff9999
     style VLLM fill:#99ccff
     style EMBEDDING fill:#ffcc99
@@ -187,36 +187,36 @@ DocMind AI employs a sophisticated **5-agent coordination system** built on Lang
 ```mermaid
 graph TD
     A[User Query] --> B[LangGraph Supervisor]
-    
+
     B --> C[Router Agent]
-    B --> D[Planner Agent] 
+    B --> D[Planner Agent]
     B --> E[Retrieval Agent]
     B --> F[Synthesis Agent]
     B --> G[Validator Agent]
-    
+
     C --> H{Query Complexity}
     H -->|Simple| I[Direct Retrieval Path]
     H -->|Complex| J[Multi-Agent Pipeline]
-    
+
     D --> K[Query Decomposition]
     K --> L[Execution Strategy]
-    
+
     E --> M[Vector Search]
     E --> N[Hybrid Retrieval]
     E --> O[GraphRAG]
-    
+
     F --> P[Multi-Source Synthesis]
     P --> Q[Deduplication]
-    
+
     G --> R[Response Validation]
     R --> S[Quality Assessment]
-    
+
     I --> T[Final Response]
     S --> T
-    
+
     U[Fallback System] -.-> T
     B -.-> U
-    
+
     style B fill:#ff9999
     style C fill:#99ccff
     style E fill:#ffcc99
@@ -226,13 +226,13 @@ graph TD
 
 ### Agent Specialization
 
-| Agent | Role | Performance Target | Key Features |
-|-------|------|-------------------|--------------|
-| **Router Agent** | Query classification and strategy selection | <50ms | Pattern-based routing, complexity analysis |
-| **Planner Agent** | Query decomposition into sub-tasks | <100ms | Multi-strategy planning, execution ordering |
-| **Retrieval Agent** | Multi-strategy document retrieval | <150ms | Vector/Hybrid/GraphRAG, optional DSPy optimization |
-| **Synthesis Agent** | Multi-source result combination | <100ms | Deduplication, relevance ranking |
-| **Validator Agent** | Response quality assessment | <75ms | Hallucination detection, source verification |
+| Agent               | Role                                        | Performance Target | Key Features                                       |
+| ------------------- | ------------------------------------------- | ------------------ | -------------------------------------------------- |
+| **Router Agent**    | Query classification and strategy selection | <50ms              | Pattern-based routing, complexity analysis         |
+| **Planner Agent**   | Query decomposition into sub-tasks          | <100ms             | Multi-strategy planning, execution ordering        |
+| **Retrieval Agent** | Multi-strategy document retrieval           | <150ms             | Vector/Hybrid/GraphRAG, optional DSPy optimization |
+| **Synthesis Agent** | Multi-source result combination             | <100ms             | Deduplication, relevance ranking                   |
+| **Validator Agent** | Response quality assessment                 | <75ms              | Hallucination detection, source verification       |
 
 ### LangGraph Supervisor Implementation
 
@@ -245,7 +245,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 class MultiAgentCoordinator:
     """5-agent coordination system with LangGraph supervisor."""
-    
+
     def __init__(self, llm, tools_data):
         # Create specialized agents
         self.agents = {
@@ -255,7 +255,7 @@ class MultiAgentCoordinator:
             "synthesis": create_react_agent(llm, [synthesize_results]),
             "validator": create_react_agent(llm, [validate_response])
         }
-        
+
         # Create supervisor graph with memory
         self.memory = InMemorySaver()
         self.supervisor = langgraph_supervisor.create_supervisor(
@@ -263,17 +263,17 @@ class MultiAgentCoordinator:
             system_prompt="Coordinate multi-agent document analysis",
             memory=self.memory
         )
-    
+
     async def arun(self, query: str, **kwargs) -> str:
         """Execute multi-agent coordination for complex queries."""
         config = {"configurable": {"thread_id": str(uuid4())}}
-        
+
         # Route query through supervisor
         result = await self.supervisor.ainvoke(
             {"messages": [HumanMessage(content=query)]},
             config=config
         )
-        
+
         return result["messages"][-1].content
 ```
 
@@ -294,7 +294,7 @@ def route_query(
     """Analyze query complexity and select processing strategy."""
     complexity = analyze_query_complexity(query)
     strategy = select_retrieval_strategy(complexity)
-    
+
     return RoutingDecision(
         complexity=complexity,
         strategy=strategy,
@@ -310,11 +310,11 @@ def retrieve_documents(
     """Execute multi-strategy document retrieval."""
     retriever = get_retriever(strategy)
     results = retriever.retrieve(query, top_k=10)
-    
+
     # Apply reranking for quality
     if len(results) > 5:
         results = rerank_documents(query, results)
-    
+
     return results[:5]  # Return top 5 after reranking
 ```
 
@@ -330,13 +330,13 @@ graph LR
     D --> E[Text Chunking]
     E --> F[BGE-M3 Embeddings]
     F --> G[Vector Storage]
-    
+
     H[Metadata Extraction] --> G
     B --> H
-    
+
     I[IngestionCache] --> G
     E --> I
-    
+
     style B fill:#ff9999
     style D fill:#99ccff
     style F fill:#ffcc99
@@ -358,7 +358,7 @@ DocMind AI implements advanced hybrid search with RRF fusion:
 ```python
 class QdrantVectorStore:
     """Qdrant vector storage with hybrid search capabilities."""
-    
+
     async def hybrid_search(self, query: str, top_k: int = 10) -> List[Document]:
         """Execute hybrid dense + sparse search using server-side fusion (Qdrant)."""
         # In production, hybrid fusion is executed server-side via Qdrant Query API
@@ -403,30 +403,30 @@ sequenceDiagram
     participant SY as Synthesis Agent
     participant V as Validator Agent
     participant LLM as vLLM Backend
-    
+
     U->>UI: Submit Query
     UI->>S: Query Processing Request
-    
+
     S->>R: Route Query
     R->>S: Routing Decision
-    
+
     alt Complex Query
         S->>P: Plan Execution
         P->>S: Execution Strategy
     end
-    
+
     S->>RT: Retrieve Documents
     RT->>RT: Hybrid Search + Reranking
     RT->>S: Retrieved Documents
-    
+
     S->>SY: Synthesize Response
     SY->>LLM: Generate Response
     LLM->>SY: Generated Content
     SY->>S: Synthesized Response
-    
+
     S->>V: Validate Response
     V->>S: Validation Result
-    
+
     S->>UI: Final Response
     UI->>U: Display Results
 ```
@@ -442,21 +442,21 @@ sequenceDiagram
     participant EMB as BGE-M3 Embedder
     participant VS as Qdrant Vector Store
     participant CACHE as IngestionCache
-    
+
     U->>UI: Upload Document
     UI->>DP: Process Document
-    
+
     DP->>DP: Parse with Unstructured
     DP->>NLP: NLP Analysis
     NLP->>DP: Linguistic Features
-    
+
     DP->>DP: Intelligent Chunking
     DP->>CACHE: Cache Processed Chunks
-    
+
     DP->>EMB: Generate Embeddings
     EMB->>EMB: Dense + Sparse Embeddings
     EMB->>VS: Store Vectors
-    
+
     VS->>UI: Processing Complete
     UI->>U: Ready for Queries
 ```
@@ -538,11 +538,11 @@ graph TD
     B -->|No| D{Can Extend Existing?}
     D -->|Yes| E[Extend Pattern]
     D -->|No| F[Design Simple Solution]
-    
+
     C --> G[Validate Integration]
     E --> G
     F --> G
-    
+
     G --> H[Update Configuration]
     H --> I[Add Tests]
     I --> J[Update Documentation]
@@ -609,7 +609,7 @@ class NewIntegrationConfig(BaseModel):
 class NewIntegration:
     def __init__(self, config: NewIntegrationConfig):
         self.config = config
-    
+
     async def process(self, data):
         """Async processing method."""
         pass

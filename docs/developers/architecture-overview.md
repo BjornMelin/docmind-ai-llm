@@ -18,31 +18,31 @@ DocMind AI is an agentic RAG system leveraging Qwen3-4B-Instruct-2507-FP8's 128K
 ```mermaid
 graph TD
     A[Streamlit UI<br/>Streaming + Session Memory] --> B[5-Agent Orchestration<br/>LangGraph Supervisor]
-    
+
     B --> C[Routing Agent<br/>Query Analysis]
-    B --> D[Planning Agent<br/>Query Decomposition]  
+    B --> D[Planning Agent<br/>Query Decomposition]
     B --> E[Retrieval Agent<br/>Document Search]
     B --> F[Synthesis Agent<br/>Multi-source Combination]
     B --> G[Validation Agent<br/>Quality Assurance]
-    
+
     C --> H[Adaptive Retrieval Pipeline<br/>RAPTOR-Lite + Hybrid Search]
     D --> H
     E --> H
     F --> H
     G --> H
-    
+
     H --> I[Hierarchical Indexing<br/>2-3 levels max]
     H --> J[Dense+Sparse Search<br/>BGE-M3 unified embeddings]
     H --> K[Multi-Stage Reranking<br/>BGE-reranker-v2-m3]
-    
+
     I --> L[Storage Layer]
     J --> L
     K --> L
-    
+
     L --> M[Qdrant<br/>Vector Storage]
     L --> N[SQLite<br/>Metadata & Sessions]
     L --> O[DuckDB<br/>Analytics Optional]
-    
+
     style A fill:#e1f5fe
     style B fill:#f3e5f5
     style H fill:#fff3e0
@@ -53,12 +53,12 @@ graph TD
 
 ### Core Models (100% Local)
 
-| Component | Model | Size | VRAM | Purpose |
-|-----------|-------|------|------|---------|
-| **LLM** | Qwen3-4B-Instruct-2507-FP8 | 3.6GB | 3.6GB | Generation, reasoning, 128K context |
-| **Embedding** | BGE-M3 | 2.3GB | 2-3GB | Unified dense+sparse embeddings |
-| **Reranking** | BGE-reranker-v2-m3 | 1.1GB | 1-2GB | Multi-stage reranking |
-| **KV Cache (128K)** | FP8 Quantization | 0GB | ~8GB | 50% memory reduction vs FP16 |
+| Component           | Model                      | Size  | VRAM  | Purpose                             |
+| ------------------- | -------------------------- | ----- | ----- | ----------------------------------- |
+| **LLM**             | Qwen3-4B-Instruct-2507-FP8 | 3.6GB | 3.6GB | Generation, reasoning, 128K context |
+| **Embedding**       | BGE-M3                     | 2.3GB | 2-3GB | Unified dense+sparse embeddings     |
+| **Reranking**       | BGE-reranker-v2-m3         | 1.1GB | 1-2GB | Multi-stage reranking               |
+| **KV Cache (128K)** | FP8 Quantization           | 0GB   | ~8GB  | 50% memory reduction vs FP16        |
 
 **Total VRAM**: 12-14GB with 128K context (RTX 4090 Laptop optimized)
 
@@ -91,21 +91,25 @@ unstructured = "^0.16.0"         # Document processing
 ### 5-Agent System (ADR-011)
 
 1. **Routing Agent**: Query analysis and strategy selection
+
    - Classifies query complexity and intent
    - Routes to appropriate retrieval strategies
    - Handles fallback scenarios
 
 2. **Planning Agent**: Complex query decomposition
+
    - Breaks down multi-part questions
    - Creates retrieval sub-tasks
    - Coordinates multi-step reasoning
 
 3. **Retrieval Agent**: Document search with optimization
+
    - Executes multi‑strategy retrieval (vector + hybrid; optional GraphRAG)
    - Optional DSPy query optimization for query rewriting (when enabled)
    - Manages server‑side dense+sparse fusion via Qdrant Query API
 
 4. **Synthesis Agent**: Multi-source combination
+
    - Combines results from multiple retrieval passes
    - Resolves conflicts between sources
    - Generates coherent responses
@@ -305,7 +309,7 @@ ENABLE_DSPY=false
 This architecture overview synthesizes decisions from:
 
 - **ADR-001**: Modern Agentic RAG Architecture
-- **ADR-002**: Unified Embedding Strategy  
+- **ADR-002**: Unified Embedding Strategy
 - **ADR-003**: Adaptive Retrieval Pipeline
 - **ADR-004**: Local-First LLM Strategy
 - **ADR-006**: Modern Reranking Architecture
