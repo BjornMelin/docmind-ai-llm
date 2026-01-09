@@ -85,7 +85,6 @@ Skill references to consult (as needed):
   - `uv run ruff format .`
   - `uv run ruff check . --fix`
   - `uv run pyright`
-  - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
   - `uv run python scripts/run_tests.py --fast`
 
 ### MCP tool sequence (use when it adds signal)
@@ -163,7 +162,6 @@ After container changes, the repo must still pass:
 - `uv run ruff format .`
 - `uv run ruff check . --fix`
 - `uv run pyright`
-- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 - `uv run python scripts/run_tests.py --fast` (then `uv run python scripts/run_tests.py` before marking complete)
 
 #### 2) Security

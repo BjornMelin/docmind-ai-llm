@@ -107,7 +107,6 @@ Must pass:
 - `uv run ruff format .`
 - `uv run ruff check .`
 - `uv run pyright`
-- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 
 #### 3) Deletion safety
 
@@ -134,7 +133,6 @@ uv sync
 uv run ruff format .
 uv run ruff check .
 uv run pyright
-uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
 uv run python scripts/run_tests.py
 ```

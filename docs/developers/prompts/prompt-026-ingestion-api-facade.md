@@ -164,7 +164,6 @@ uv sync
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
 uv run python scripts/run_tests.py
 ```

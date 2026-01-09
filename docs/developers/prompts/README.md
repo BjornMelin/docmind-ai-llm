@@ -22,7 +22,7 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 7. `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md`
 8. `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md`
 9. `docs/developers/prompts/prompt-033-background-ingestion-jobs.md`
-10. `docs/developers/prompts/prompt-024-chat-persistence-simplechatstore.md`
+10. `docs/developers/prompts/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md`
 11. `docs/developers/prompts/prompt-036-document-analysis-modes.md`
 12. `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md`
 13. `docs/developers/prompts/prompt-037-local-backup-and-retention.md`
@@ -35,6 +35,7 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 
 ## Superseded prompts (do not implement)
 
+- `docs/developers/prompts/superseded/prompt-024-chat-persistence-simplechatstore.md`
 - `docs/developers/prompts/superseded/prompt-035-config-surface-pruning-unused-knobs.md`
 
 ## Codex tool + skill usage (fresh sessions)

@@ -147,7 +147,6 @@ Your code must pass:
 - `uv run ruff format .`
 - `uv run ruff check .`
 - `uv run pyright`
-- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 
 Rules:
 
@@ -208,7 +207,6 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
      - `uv run ruff format .`
      - `uv run ruff check .`
      - `uv run pyright`
-     - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
      - `uv run python scripts/run_tests.py --fast`
 
 ---

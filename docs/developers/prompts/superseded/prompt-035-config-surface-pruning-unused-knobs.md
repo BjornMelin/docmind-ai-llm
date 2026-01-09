@@ -4,8 +4,8 @@ Implements `ADR-054` + `SPEC-035`.
 
 **Read first (repo truth):**
 
-- ADR: `docs/developers/adrs/ADR-054-config-surface-pruning-unused-knobs.md`
-- SPEC: `docs/specs/spec-035-config-surface-pruning-unused-knobs.md`
+- ADR: `docs/developers/adrs/superseded/ADR-054-config-surface-pruning-unused-knobs.md`
+- SPEC: `docs/specs/superseded/spec-035-config-surface-pruning-unused-knobs.md`
 - RTM: `docs/specs/traceability.md`
 
 ## Official docs (research during implementation)
@@ -120,7 +120,6 @@ uv sync
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
 uv run python scripts/run_tests.py
 ```

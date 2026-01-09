@@ -103,7 +103,6 @@ You must keep changes minimal, library-first, and maintainable.
   - `uv run ruff format .`
   - `uv run ruff check . --fix`
   - `uv run pyright`
-  - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
   - `uv run python scripts/run_tests.py --fast` (then `uv run python scripts/run_tests.py` before marking complete)
 
 ---
@@ -125,7 +124,6 @@ uv sync
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
 uv run python scripts/run_tests.py
 ```

@@ -171,7 +171,6 @@ Must pass:
 - `uv run ruff format .`
 - `uv run ruff check . --fix`
 - `uv run pyright`
-- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 
 #### 3) Streamlit UI Discipline
 
@@ -220,7 +219,6 @@ Must pass:
      uv run ruff format .
      uv run ruff check . --fix
      uv run pyright
-     uv run pylint --fail-under=9.5 src/ tests/ scripts/
      uv run python scripts/run_tests.py --fast
      uv run python scripts/run_tests.py
      ```
@@ -260,7 +258,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | Formatting  |        | `ruff format`                                                                                            |
 | Lint        |        | `ruff check` clean                                                                                       |
 | Types       |        | `pyright` clean                                                                                          |
-| Pylint      |        | meets threshold                                                                                          |
 | Tests       |        | settings tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | Docs        |        | ADR/SPEC/RTM updated                                                                                     |
 | Security    |        | no unsafe HTML; allowlist enforced                                                                       |

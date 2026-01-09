@@ -132,7 +132,6 @@ Your code must pass:
 - `uv run ruff format .`
 - `uv run ruff check .`
 - `uv run pyright`
-- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
 
 #### 3) Security & Privacy
 
@@ -173,7 +172,6 @@ uv sync
 uv run ruff format .
 uv run ruff check .
 uv run pyright
-uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python -m pytest -q
 ```
 

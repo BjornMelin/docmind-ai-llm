@@ -2,10 +2,12 @@
 
 Implements `ADR-043` + `SPEC-024`.
 
+> Status: Superseded by `docs/developers/prompts/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` (implements ADR-057 + SPEC-041).
+
 **Read first (repo truth):**
 
-- ADR: `docs/developers/adrs/ADR-043-chat-persistence-simplechatstore.md`
-- SPEC: `docs/specs/spec-024-chat-persistence-simplechatstore.md`
+- ADR: `docs/developers/adrs/superseded/ADR-043-chat-persistence-simplechatstore.md`
+- SPEC: `docs/specs/superseded/spec-024-chat-persistence-simplechatstore.md`
 - Requirements: `docs/specs/requirements.md` (FR-022, NFR-SEC-002)
 - RTM: `docs/specs/traceability.md`
 
@@ -132,8 +134,8 @@ You must keep changes minimal, library-first, and maintainable.
 - `src/pages/01_chat.py`
 - `src/ui/chat_persistence.py` (new)
 - `tests/integration/ui/` (new AppTest file)
-- `docs/developers/adrs/ADR-043-chat-persistence-simplechatstore.md`
-- `docs/specs/spec-024-chat-persistence-simplechatstore.md`
+- `docs/developers/adrs/superseded/ADR-043-chat-persistence-simplechatstore.md`
+- `docs/specs/superseded/spec-024-chat-persistence-simplechatstore.md`
 - `docs/specs/traceability.md`
 
 **Out-of-scope (explicit):**
@@ -173,7 +175,6 @@ uv sync
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
 uv run python scripts/run_tests.py
 ```
