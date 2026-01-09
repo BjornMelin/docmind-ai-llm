@@ -276,17 +276,19 @@ Analytics:
 
 <!-- opensrc:start -->
 
-## opensrc Reference Library
+## Source Code Reference
 
-- Treat `opensrc/` as **read-only** dependency source snapshots for deeper internals/edge cases.
-- Always check `opensrc/sources.json` first and cite exact paths + versions when using it in analysis/ADRs.
-- Fetch additional sources only when necessary to understand implementation details (not just public APIs).
+Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
+
+See `opensrc/sources.json` for the list of available packages and their versions.
+
+Use this source code when you need to understand how a package works internally, not just its types/interface.
+
+### Fetching Additional Source Code
+
+To fetch source code for a package or repository you need to understand, run:
 
 ```bash
-# Inspect what is already available (preferred first step)
-cat opensrc/sources.json
-
-# Fetch additional sources (prefer non-interactive flags when available, e.g. --modify=false)
 npx opensrc <package>           # npm package (e.g., npx opensrc zod)
 npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
 npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
@@ -297,6 +299,13 @@ npx opensrc list
 npx opensrc remove <name>
 ```
 
-Refresh sources after dependency upgrades or when investigating a bug fixed upstream.
-
 <!-- opensrc:end -->
+
+## opensrc Usage Guidance (Repo Contract)
+
+- Treat `opensrc/` as **read-only** dependency source snapshots for deeper internals/edge cases.
+- Always check `opensrc/sources.json` first and cite exact paths + versions when using it in ADRs/SPECs or incident writeups.
+- Fetch additional sources only when necessary to understand implementation details (not just public APIs).
+- Prefer **non-interactive** runs when possible:
+  - `npx opensrc pypi:<package>@<version> --modify=false`
+- Refresh sources after dependency upgrades or when investigating a bug fixed upstream (remove then re-fetch).
