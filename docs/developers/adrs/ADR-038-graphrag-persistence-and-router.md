@@ -2,8 +2,8 @@
 ADR: 038
 Title: GraphRAG Persistence and Router Integration
 Status: Accepted
-Version: 1.1
-Date: 2025-09-09
+Version: 1.2
+Date: 2026-01-09
 Supersedes:
 Superseded-by:
 Related: 003, 013, 016, 019, 022, 024, 031, 033, 034
@@ -127,9 +127,9 @@ DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 
 ## Telemetry & Observability
 
-- Graph ingestion, export, and router selection MUST emit OpenTelemetry spans via `configure_observability` (SPEC-012).
-- Structured telemetry events (`router_selected`, `export_performed`, `lock_takeover`) SHALL be logged via `log_jsonl` and mirrored in manifests.
-- Console exporters provide offline-first observability when no OTLP endpoint is configured.
+- Graph export and router composition emit OpenTelemetry spans via `configure_observability` (SPEC-012). Spans are no-op unless `settings.observability.enabled` configures SDK providers.
+- Structured local telemetry events (`router_selected`, `snapshot_stale_detected`, `export_performed`, and `traversal_depth` where applicable) are logged via `log_jsonl` and export metadata is mirrored into snapshot manifests.
+- Exporters are disabled by default (offline-first). Tests may patch exporters to console; production uses OTLP exporters when enabled.
 
 ## Consequences
 
@@ -153,5 +153,6 @@ DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 
 ## Changelog
 
+- 1.2 (2026-01-09): Docs-only: align observability notes with current SPEC-012 + implementation (no implicit console fallback; remove lock_takeover mention).
 - 1.1 (2025-09-16): Accepted; documented manifest metadata and OpenTelemetry instrumentation
 - 1.0 (2025-09-09): Initial proposed ADR for GraphRAG router+SnapshotManager

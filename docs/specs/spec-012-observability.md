@@ -1,8 +1,8 @@
 ---
 spec: SPEC-012
 title: Observability: OpenTelemetry Tracing & Metrics
-version: 1.1.0
-date: 2025-09-16
+version: 1.2.0
+date: 2026-01-09
 owners: ["ai-arch"]
 status: Accepted
 related_requirements:
@@ -13,114 +13,165 @@ related_adrs: ["ADR-001","ADR-010","ADR-032"]
 
 ## Objective
 
-Provide a unified OpenTelemetry configuration for DocMind AI covering traces, metrics, and structured events across ingestion, snapshot persistence, GraphRAG operations, and the Streamlit UI. Replace bespoke logging helpers with standards-based exporters and ensure deterministic instrumentation suitable for local-first deployments.
+Provide local-first observability for DocMind AI:
+
+- Structured **local JSONL telemetry** (sampling + rotation; never required network)
+- Optional **OpenTelemetry tracing + metrics** export (explicitly enabled; safe-by-default)
 
 ## Configuration
 
 ### ObservabilityConfig (src/config/settings.py)
 
-```python
-class ObservabilityConfig(BaseModel):
-    enabled: bool = True
-    service_name: str = "docmind-ai"
-    endpoint: HttpUrl | None = None  # OTLP endpoint; None -> console exporters
-    headers: dict[str, str] = Field(default_factory=dict)
-    protocol: Literal["grpc", "http/protobuf"] = "http/protobuf"
-    sampling_ratio: float = 1.0
-    metrics_interval_ms: int = 30000
-    export_timeout_ms: int = 10000
-    resource_attributes: dict[str, str] = Field(default_factory=dict)
-    enable_metrics: bool = True
-    enable_traces: bool = True
-```
+DocMind settings expose a single observability config surface under `settings.observability`.
 
-- Values may be overridden by environment variables following the `DOCMIND_OBSERVABILITY__*` naming convention.
-- Resource attributes SHALL merge user-supplied keys with defaults (`service.name`, `service.namespace`, `telemetry.sdk.*`).
+| Field                   | Type                        |            Default | Notes                                                               |
+| ----------------------- | --------------------------- | -----------------: | ------------------------------------------------------------------- |
+| `enabled`               | `bool`                      |            `False` | Export is opt-in (offline-first).                                   |
+| `service_name`          | `str`                       | `"docmind-agents"` | Used as OTEL `service.name`.                                        |
+| `endpoint`              | `str \| None`               |             `None` | Optional exporter endpoint override (see endpoint semantics below). |
+| `protocol`              | `"grpc" \| "http/protobuf"` |  `"http/protobuf"` | Which OTLP exporters to instantiate.                                |
+| `headers`               | `dict[str,str]`             |               `{}` | Passed to exporters (auth, multi-tenant keys).                      |
+| `sampling_ratio`        | `float`                     |              `1.0` | Trace sampling (ParentBased + TraceIdRatioBased).                   |
+| `metrics_interval_ms`   | `int`                       |            `60000` | Passed to `PeriodicExportingMetricReader`.                          |
+| `instrument_llamaindex` | `bool`                      |             `True` | Enables optional LlamaIndex OTel instrumentation when installed.    |
+
+Environment overrides use Pydantic Settings V2 nested env keys:
+
+- `DOCMIND_OBSERVABILITY__ENABLED=true`
+- `DOCMIND_OBSERVABILITY__PROTOCOL=http/protobuf`
+- `DOCMIND_OBSERVABILITY__ENDPOINT=http://localhost:4318/` (see endpoint semantics)
+- `DOCMIND_OBSERVABILITY__HEADERS__x-auth=token`
+
+Additional resource metadata:
+
+- `DOCMIND_ENVIRONMENT` → sets OTEL resource attribute `deployment.environment` (when present).
 
 ### Dependencies
 
-- The project exposes an optional extras group for observability (`uv sync --extra observability`) that installs OTLP HTTP/gRPC exporters and `portalocker` for cross-platform snapshot locking.
-- Base environments retain console exporters so instrumentation remains optional during development.
+- OpenTelemetry SDK + OTLP exporters are installed in the base environment (`pyproject.toml` dependencies).
+- LlamaIndex OTel instrumentation is optional and provided by the `observability` extra:
+  - `uv sync --extra observability` (adds `llama-index-observability-otel`).
 
 ### Environment Overrides
 
-- `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_PROTOCOL`, and `OTEL_SERVICE_NAME` MUST be respected when present.
-- When `ObservabilityConfig.enabled` is `False`, instrumentation MUST be disabled and no exporters registered.
+DocMind passes `endpoint`/`headers` explicitly when configured, but the underlying OpenTelemetry exporters also respect standard OTEL environment variables when a value is not provided (for example `OTEL_EXPORTER_OTLP_ENDPOINT`, signal-specific endpoints, and OTEL metric interval/timeouts).
+
+When `settings.observability.enabled` is `False`, DocMind does not install SDK providers and no exporters are registered.
+
+### Endpoint Semantics (OTLP HTTP vs gRPC)
+
+DocMind uses a _single_ `observability.endpoint` value for both traces and metrics exporters.
+
+- For `protocol="grpc"` this is typically fine (one host:port for both signals).
+- For `protocol="http/protobuf"`, traces and metrics normally use different paths (`/v1/traces` vs `/v1/metrics`). Because the OpenTelemetry Python HTTP exporters only auto-append these paths **when the endpoint argument is not provided**, the recommended configuration is:
+  - leave `DOCMIND_OBSERVABILITY__ENDPOINT` unset (`None`), and set `OTEL_EXPORTER_OTLP_ENDPOINT` (base) or signal-specific endpoints via the environment, OR
+  - use `protocol="grpc"` for a single shared endpoint.
 
 ## Implementation
 
-### configure_observability(settings)
+### OpenTelemetry bootstrap (`src/telemetry/opentelemetry.py`)
 
-- Located in `src/telemetry/opentelemetry.py`.
-- Responsibilities:
-  - Build an OpenTelemetry `Resource` with merged attributes.
-  - Instantiate a `TracerProvider` + `BatchSpanProcessor` (OTLP span exporter or console fallback).
-  - Instantiate a `MeterProvider` + `PeriodicExportingMetricReader` (OTLP metric exporter or console fallback).
-  - Register the providers globally via `opentelemetry.trace.set_tracer_provider` and `opentelemetry.metrics.set_meter_provider`.
-  - Register `LlamaIndexOpenTelemetry` integration (if available) once per process.
-  - Return a `ShutdownHandle` exposing `shutdown()` for tests.
-- Idempotent: repeated calls reuse existing providers when configuration is unchanged and perform graceful shutdown when settings mutate.
+DocMind exposes a small bootstrap API:
+
+- `configure_observability(settings)`:
+  - Calls `setup_tracing(settings)` and `setup_metrics(settings)`.
+  - Optionally registers LlamaIndex instrumentation once per process.
+  - Safe to call repeatedly; providers are configured at most once (per process).
+- `shutdown_tracing()` / `shutdown_metrics()`:
+  - Used by tests to reset global providers and internal state.
+
+Implementation notes:
+
+- Tracing uses `TracerProvider(resource=..., sampler=ParentBased(TraceIdRatioBased(...)))` and a `BatchSpanProcessor` with an OTLP span exporter.
+- Metrics uses `MeterProvider(resource=..., metric_readers=[PeriodicExportingMetricReader(...)])` with an OTLP metric exporter.
 
 ### Instrumentation Points
 
-| Component | Span / Metric | Attributes |
-|-----------|---------------|------------|
-| IngestionPipeline (`src/processing/ingestion_pipeline.py`) | `ingestion.pipeline.run` | `document_count`, `pipeline_id`, `cache_hit_ratio` |
-| SnapshotManager (`src/persistence/snapshot.py`) | `snapshot.begin`, `snapshot.persist`, `snapshot.promote`, `snapshot.retention` | `snapshot_id`, `corpus_hash`, `config_hash`, `graph_export_count` |
-| Graph export (`src/retrieval/graph_config.py`) | `graphrag.export` | `snapshot_id`, `export_format`, `seed_count`, `duration_ms` |
-| RouterQueryEngine (`src/retrieval/router_factory.py`) | `router.select` | `route`, `pg_index_present`, `selector_type` |
-| Streamlit UI actions (`src/pages/02_documents.py`, `src/pages/01_chat.py`) | `ui.action` | `action`, `success`, `snapshot_id` |
+Spans are present in these code paths (no-op unless tracing is enabled):
+
+| Component                                              | Span name                                                                                              | Attributes / events                                                                                                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ingestion (`src/processing/ingestion_pipeline.py`)     | `ingest_documents`                                                                                     | `docmind.document_count`                                                                                                                                     |
+| Snapshot (`src/persistence/snapshot.py`)               | `snapshot.write_manifest` / `snapshot.finalize` / `snapshot.persist_vector` / `snapshot.persist_graph` | (no attributes currently)                                                                                                                                    |
+| Router build (`src/retrieval/router_factory.py`)       | `router_factory.build_router_engine`                                                                   | attrs: `router.adapter_name`, `router.kg_requested`, `router.hybrid_requested`, `router.kg_enabled`; event: `router_selected` (`tool.count`, `tool.names`)   |
+| Router tool (`src/agents/tools/router_tool.py`)        | `router_tool.query`                                                                                    | attrs: `router.query.length`, `router.engine.available`, `router.selected_strategy`, `router.success`, `router.latency_ms`, …                                |
+| Coordinator (`src/agents/coordinator.py`)              | `coordinator.process_query`                                                                            | attrs: `coordinator.thread_id`, `query.length`, `coordinator.workflow_timeout`, `coordinator.fallback`                                                       |
+| Chat UI (`src/pages/01_chat.py`)                       | `chat.staleness_check`                                                                                 | attrs: `snapshot.id`, `snapshot.is_stale`                                                                                                                    |
+| Graph export helper (`src/telemetry/opentelemetry.py`) | `graph_export.<fmt>`                                                                                   | attrs: `graph.export.adapter_name`, `graph.export.format`, `graph.export.depth`, `graph.export.seed_count`; event: `export_performed` (`path`, `size.bytes`) |
 
 Metrics recorded via the shared `MeterProvider`:
 
-- `snapshot.retention.count`
-- `snapshot.promote.duration_ms`
-- `ingestion.nodes.processed`
-- `graph.export.duration_ms`
-- `router.route.count`
+- `docmind.graph.export.count` (counter; attrs include `export_type` and optional `context`)
+- `docmind.graph.export.duration` (histogram, `ms`)
+- `docmind.graph.export.seed_count` (histogram)
+- `docmind.graph.export.size` (histogram, `By`)
+- `docmind.coordinator.latency` (histogram, `s`; attr `success`)
+- `docmind.coordinator.calls` (counter; attr `success`)
 
-Console exporters SHALL be used automatically when no OTLP endpoint is provided to preserve offline usability.
+Metric recording is fail-open: `record_graph_export_metric(...)` is a no-op unless a meter provider has been configured.
 
 ## Canonical Telemetry Events
 
-Telemetry JSONL logs (written via `log_jsonl`) must include:
+### Local JSONL (`src/utils/telemetry.py`)
 
-- `router_selected`: { route, selector_type, pg_index_present }
-- `snapshot_stale_detected`: { reason, manifest_version, current_config_hash }
-- `export_performed`: { kind, seed_count, capped, dest_relpath, duration_ms }
-- `lock_takeover`: { lock_path, owner_id, elapsed_seconds, takeover_count }
+DocMind emits local JSONL events to `logs/telemetry.jsonl` via `log_jsonl(...)`.
+
+Controls (read directly from env vars; see SPEC-031 for consolidation work):
+
+- `DOCMIND_TELEMETRY_DISABLED` → disables event writes
+- `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0` → sampling rate
+- `DOCMIND_TELEMETRY_ROTATE_BYTES=<int>` → size-based rotation (`.1` suffix)
+
+Canonical event keys used by requirements/tests:
+
+- Retrieval + fusion:
+  - `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`
+- Dedup:
+  - `dedup.before`, `dedup.after`, `dedup.dropped`, `dedup.key`
+- Rerank:
+  - `rerank.stage`, `rerank.topk`, `rerank.latency_ms`, `rerank.timeout` (+ optional `rerank.batch_size`, `rerank.processed_count`, `rerank.processed_batches`)
+- Routing event:
+  - `router_selected: true`, plus `route`, `timing_ms`, and `traversal_depth` when `route=="knowledge_graph"`
+- Snapshot staleness event:
+  - `snapshot_stale_detected: true`, plus `snapshot_id`, `reason`
+- Export event:
+  - `export_performed: true`, plus `export_type`, `seed_count`, `dest_path`, `context`, and `duration_ms` when available (optional: `dest_relpath`, `size_bytes`, `capped`).
 
 ## Acceptance Criteria
 
 ```gherkin
 Feature: Observability bootstrap
-  Scenario: Configure OTLP exporters
-    Given ObservabilityConfig.enabled=true and endpoint=https://collector:4318
+  Scenario: Disabled by default
+    Given settings.observability.enabled=false
     When configure_observability(settings) runs
-    Then traces and metrics SHALL be exported via OTLP HTTP/protobuf with configured headers
-    And LlamaIndexOpenTelemetry SHALL be registered exactly once
+    Then global tracer and meter providers SHALL remain no-op
 
-  Scenario: Console fallback when endpoint missing
-    Given ObservabilityConfig.enabled=true and endpoint=None
+  Scenario: Enabled configures SDK providers once
+    Given settings.observability.enabled=true
     When configure_observability(settings) runs
-    Then console span and metric exporters SHALL be active
-    And no network calls are attempted
+    Then SDK tracer and meter providers SHALL be installed
+    And subsequent calls SHALL be idempotent
 
 Feature: Instrumented operations
-  Scenario: Graph export emits telemetry
-    Given a snapshot export succeeds
-    Then `graphrag.export` span and `export_performed` event SHALL record seed_count and duration
+  Scenario: Router tool emits traversal depth for KG route
+    Given router_tool selects knowledge_graph
+    Then a JSONL event SHALL include traversal_depth (int)
 
 Feature: Shutdown semantics
-  Scenario: Observability disabled after enabling
-    Given configure_observability(settings_enabled) has been called
-    When configure_observability(settings_disabled) runs with enabled=false
-    Then previously registered providers SHALL be shutdown without raising errors
+  Scenario: Tests can reset providers
+    Given observability has been configured
+    When shutdown_tracing and shutdown_metrics run
+    Then providers SHALL reset without raising errors
 ```
 
 ## Testing Guidance
 
-- Unit tests MUST patch OTLP exporters to avoid network access and assert exporter configuration.
-- Integration tests SHOULD verify console output for offline mode and confirm spans exist using `InMemorySpanExporter`.
-- ObservabilityConfig parsing is covered via `tests/unit/telemetry/test_observability_config.py`.
-- UI and pipeline tests MUST assert that key actions push telemetry events using the shared helpers.
+- Unit tests MUST avoid network access:
+  - patch exporter constructors (see `tests/shared_fixtures.py::configured_observability_console`)
+  - verify configuration and idempotency (`tests/unit/telemetry/test_otel_setup.py`)
+- JSONL telemetry schema tests:
+  - `tests/unit/telemetry/test_telemetry_schema_assertions.py`
+  - `tests/unit/telemetry/test_rotation_sampling.py`
+- Feature telemetry tests:
+  - `tests/unit/agents/test_router_tool_telemetry.py` (traversal depth)
+  - `tests/unit/ui/test_documents_snapshot_utils.py` (export event payloads)
