@@ -139,16 +139,49 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
+
+---
+
+### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+
+1. Adding BM25 dependencies (`rank_bm25`, etc.) for this prompt (explicitly out-of-scope).
+2. Logging raw query strings or retrieved content in logs/telemetry.
+3. Duplicating sparse query logic across multiple modules (prefer one canonical helper).
+4. Silent broad `except Exception` fallbacks without telemetry/error classification.
+
+---
+
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (retriever + tool wiring + tests).
+2. `functions.mcp__exa__deep_search_exa` / `functions.mcp__exa__crawling_exa` → official Qdrant Query API docs when subtle behavior matters.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`qdrant-client`, `llama-index`).
+4. `functions.mcp__gh_grep__searchGitHub` → real-world sparse/named-vector query patterns.
+5. `functions.mcp__zen__analyze` → ensure one canonical sparse-query path.
+6. `functions.mcp__zen__codereview` → post-implementation review.
+7. `functions.mcp__zen__secaudit` → ensure no raw query/content logging.
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel doc lookups.
 
 ---
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes            |
-| ----------- | ------ | ------------------------ |
-| Tests       |        | keyword tool tests green |
-| Security    |        | no raw query logs        |
-| Docs        |        | RTM updated              |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | RTM updated |
+| **Security** |  | no raw query logs/content; allowlist posture unchanged |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | no new import-time heavy work; bounded query payloads |
 
 **EXECUTE UNTIL COMPLETE.**

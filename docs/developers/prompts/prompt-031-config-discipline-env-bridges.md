@@ -68,6 +68,21 @@ This is security-sensitive config work. Prefer repo truth and run structured aud
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
+### YOU ARE
+
+You are an autonomous implementation agent for the **DocMind AI LLM** repository.
+
+You will implement the feature described below end-to-end, including:
+
+- code changes
+- tests
+- documentation updates (ADR/SPEC/RTM)
+- deletion of dead code and removal of legacy/backcompat shims within scope
+
+You must keep changes minimal, library-first, and maintainable.
+
+---
+
 ### FEATURE CONTEXT (FILLED)
 
 **Primary Task:** Centralize JSONL telemetry + image encryption env config in `DocMindSettings` and remove `os.getenv` sprawl from core modules.
@@ -100,6 +115,30 @@ This is security-sensitive config work. Prefer repo truth and run structured aud
 
 ---
 
+### HARD RULES (EXECUTION)
+
+#### 1) Config discipline
+
+- Source of truth is `src/config/settings.py` (Pydantic Settings v2).
+- Do not add new `os.getenv` usage outside settings.
+- Do not weaken offline-first policy or allow remote endpoints by default.
+
+#### 2) Style, Types, and Lint
+
+Must pass:
+
+- `uv run ruff format .`
+- `uv run ruff check .`
+- `uv run pyright`
+- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+
+#### 3) Security posture
+
+- Never log secrets.
+- Any telemetry/exporter egress must remain gated by config and default-off.
+
+---
+
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
 
 1. [ ] Inventory env reads: `rg "os\\.getenv\\(" src/`.
@@ -120,16 +159,49 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
+
+---
+
+### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+
+1. Keeping scattered `os.getenv` reads “because it works” (must centralize in settings).
+2. Introducing new env var names (explicitly out-of-scope) instead of mapping existing ones.
+3. Logging env values or full base URLs that may contain credentials.
+4. Making exporters/remote endpoints enabled by default (violates offline-first).
+
+---
+
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (settings schema + refactors + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → official Pydantic Settings docs if time-sensitive behavior is unclear.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`pydantic`, `pydantic-settings`).
+4. `functions.mcp__gh_grep__searchGitHub` → optional patterns for nested env parsing and secret handling.
+5. `functions.mcp__zen__analyze` → if changes span config + telemetry + processing modules.
+6. `functions.mcp__zen__codereview` → post-implementation review.
+7. `functions.mcp__zen__secaudit` → mandatory security audit (secrets + egress surfaces).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel reads.
 
 ---
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes                                              |
-| ----------- | ------ | ---------------------------------------------------------- |
-| Env reads   |        | `rg "os\\.getenv\\(" src/` only in settings layer (if any) |
-| Tests       |        | mapping tests green                                        |
-| Docs        |        | RTM updated                                                |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | mapping tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | RTM updated |
+| **Security** |  | no secret logs; egress surfaces remain gated/off by default |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | no new import-time heavy work; settings load remains fast |
 
 **EXECUTE UNTIL COMPLETE.**

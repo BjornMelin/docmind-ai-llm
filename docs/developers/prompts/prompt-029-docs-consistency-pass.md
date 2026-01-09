@@ -48,6 +48,21 @@ Docs drift is best solved with repo-local tooling + grep first.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
+### YOU ARE
+
+You are an autonomous implementation agent for the **DocMind AI LLM** repository.
+
+You will implement the feature described below end-to-end, including:
+
+- code changes (scripts/checkers as needed)
+- tests
+- documentation updates (SPEC/RTM)
+- deletion of dead code and removal of legacy/backcompat shims within scope
+
+You must keep changes minimal, library-first, and maintainable.
+
+---
+
 ### FEATURE CONTEXT (FILLED)
 
 **Primary Task:** Fix documentation drift for v1 and add a lightweight automated drift check so CI catches future mismatches.
@@ -80,6 +95,20 @@ Docs drift is best solved with repo-local tooling + grep first.
 
 ---
 
+### HARD RULES (EXECUTION)
+
+#### 1) Docs truth discipline
+
+- Prefer repo-truth over prose: verify paths with `rg`, validate configs against `src/config/settings.py`, and keep examples runnable.
+- Avoid “future work” placeholders; delete stale placeholders instead of rewording them.
+
+#### 2) Packaging + quality gates
+
+- Use **uv only**: `uv sync`, `uv run ...`
+- If you add a drift-checker script, wire it into existing quality gates in `scripts/run_quality_gates.py`.
+
+---
+
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
 
 1. [ ] Identify drift: `rg "src/processing/document_processor.py|process_document\\(" docs/`.
@@ -102,17 +131,50 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 uv run python scripts/run_quality_gates.py --ci --report
 ```
 
 ---
 
+### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+
+1. Docs referencing non-existent files/modules (must be caught by the drift checker).
+2. “Phase 2”/placeholder claims for features that are not shipped.
+3. Drift checker that is too strict (false positives) or too lax (misses broken references).
+4. Web citations for stable facts that are already derivable from repo truth (prefer local).
+
+---
+
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → plan doc changes + drift checker scope.
+2. `functions.mcp__exa__web_search_exa` / `web.run` → only if a doc section depends on time-sensitive upstream behavior.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → only if docs must mention subtle library behavior precisely.
+4. `functions.mcp__gh_grep__searchGitHub` → generally unnecessary.
+5. `functions.mcp__zen__analyze` → optional if drift touches architecture boundaries.
+6. `functions.mcp__zen__codereview` → recommended to avoid checker false positives/negatives.
+7. `functions.mcp__zen__secaudit` → only if docs change security-sensitive guidance.
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local drift scans (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes                    |
-| ----------- | ------ | -------------------------------- |
-| Docs        |        | no references to missing modules |
-| Drift check |        | runs in quality gates            |
-| RTM         |        | updated                          |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` (if Python scripts changed) |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | no references to missing modules |
+| **Security** |  | security guidance matches repo posture (offline-first) |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | drift checker runs fast (O(files) scans; no heavy IO) |
 
 **EXECUTE UNTIL COMPLETE.**

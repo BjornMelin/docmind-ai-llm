@@ -138,6 +138,16 @@ You must keep changes minimal, library-first, and maintainable.
 - Container runtime must be Python **3.11.x**.
 - Use `uv sync --frozen` in container builds.
 
+#### 2) Style, Types, and Lint (host-side)
+
+After container changes, the repo must still pass:
+
+- `uv run ruff format .`
+- `uv run ruff check . --fix`
+- `uv run pyright`
+- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+- `uv run python scripts/run_tests.py --fast` (then `uv run python scripts/run_tests.py` before marking complete)
+
 #### 2) Security
 
 - No secrets baked into the image.
@@ -189,14 +199,38 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (Dockerfile/compose + smoke checks).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → official base-image/tag guidance and Streamlit container docs.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → API details (only if you need `uv`/Streamlit invocation specifics).
+4. `functions.mcp__gh_grep__searchGitHub` → production patterns for multi-stage Python+uv images (optional).
+5. `functions.mcp__zen__analyze` → only if you discover complex compose/service topology.
+6. `functions.mcp__zen__codereview` → post-implementation review (blast radius is large).
+7. `functions.mcp__zen__secaudit` → required security audit (non-root, secrets, `.dockerignore`, ports).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement    | Status | Proof / Notes                    |
-| -------------- | ------ | -------------------------------- |
-| Docker build   |        | `docker build` succeeds          |
-| Compose config |        | `docker compose config` clean    |
-| Runtime        |        | app logs show Streamlit started  |
-| Security       |        | non-root user; `.env` not copied |
-| Docs           |        | ADR/SPEC/RTM updated             |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Docker Build** |  | `docker build -t docmind:dev .` succeeds |
+| **Compose Config** |  | `docker compose config` clean |
+| **Container Runtime** |  | Streamlit starts; app accessible on expected port |
+| **Packaging** |  | `uv sync` clean (host) |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | ADR/SPEC/RTM updated |
+| **Security** |  | non-root user; `.env` not copied; no secrets baked |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | image build is reproducible; no unnecessary layers |
 
 **EXECUTE UNTIL COMPLETE.**

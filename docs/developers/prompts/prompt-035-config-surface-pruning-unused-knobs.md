@@ -109,6 +109,7 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
 
 ---
@@ -121,16 +122,35 @@ uv run python scripts/run_tests.py --fast
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (prune + docs + tests).
+2. `functions.mcp__exa__web_search_exa` / `web.run` → generally unnecessary; prefer repo truth.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative Pydantic Settings v2 behavior (unknown env vars).
+4. `functions.mcp__gh_grep__searchGitHub` → optional patterns for “deprecated env vars tolerated” behaviors.
+5. `functions.mcp__zen__analyze` → optional if pruning affects multiple subsystems.
+6. `functions.mcp__zen__codereview` → required post-implementation review (avoid accidental breakage).
+7. `functions.mcp__zen__secaudit` → required only if pruning touches security/egress-related knobs.
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes                        |
-| ----------- | ------ | ------------------------------------ |
-| Formatting  |        | `ruff format`                        |
-| Lint        |        | `ruff check` clean                   |
-| Types       |        | `pyright` clean                      |
-| Pylint      |        | meets threshold                      |
-| Tests       |        | settings-prune tests green           |
-| Docs        |        | config reference + ADR links updated |
-| RTM         |        | NFR-MAINT-003 updated                |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | settings-prune tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | config reference + ADR links updated; RTM NFR-MAINT-003 updated |
+| **Security** |  | no security/egress knobs removed without docs/tests; startup remains tolerant to unknown env vars |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | settings load remains fast (no heavy validators) |
 
 **EXECUTE UNTIL COMPLETE.**

@@ -38,6 +38,21 @@ This work is primarily repo hygiene; prefer local repo truth over web research.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
+### YOU ARE
+
+You are an autonomous implementation agent for the **DocMind AI LLM** repository.
+
+You will implement the feature described below end-to-end, including:
+
+- code changes
+- tests
+- documentation updates (ADR/SPEC/RTM)
+- deletion of dead code and removal of legacy/backcompat shims within scope
+
+You must keep changes minimal, library-first, and maintainable.
+
+---
+
 ### FEATURE CONTEXT (FILLED)
 
 **Primary Task:** Delete `src/main.py` and remove all references so the supported entrypoint is only `streamlit run src/app.py`.
@@ -64,6 +79,31 @@ This work is primarily repo hygiene; prefer local repo truth over web research.
 
 ---
 
+### HARD RULES (EXECUTION)
+
+#### 1) Python + Packaging
+
+- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Use **uv only**:
+  - install/sync: `uv sync`
+  - run tools: `uv run <cmd>`
+
+#### 2) Style, Types, and Lint
+
+Must pass:
+
+- `uv run ruff format .`
+- `uv run ruff check .`
+- `uv run pyright`
+- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+
+#### 3) Deletion safety
+
+- Delete only `src/main.py` and its direct references; do not remove unrelated files.
+- Avoid destructive git/history actions (`git reset --hard`, etc.).
+
+---
+
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
 
 1. [ ] Confirm nothing imports `src.main` (`rg "from src\\.main|import src\\.main"`).
@@ -82,16 +122,48 @@ uv run ruff check .
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
+
+---
+
+### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+
+1. Leaving dual entrypoints (docs or scripts still referencing `src/main.py`).
+2. Import-time `.env` loads or behavior that bypasses `src/config/settings.py`.
+3. Deleting “unused” code without proving it’s unused (must `rg` imports/references first).
+
+---
+
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → plan deletion + reference cleanup + verification.
+2. `functions.mcp__exa__web_search_exa` / `web.run` → only if you need to confirm a packaging/entrypoint best practice (rare).
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → generally unnecessary for this prompt.
+4. `functions.mcp__gh_grep__searchGitHub` → unnecessary (repo hygiene task).
+5. `functions.mcp__zen__analyze` → use if you find unexpected runtime coupling to `src.main`.
+6. `functions.mcp__zen__codereview` → recommended post-implementation review.
+7. `functions.mcp__zen__secaudit` → not required unless you discover new security-sensitive behavior.
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
 
 ---
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement   | Status | Proof / Notes                                    |
-| ------------- | ------ | ------------------------------------------------ |
-| Entrypoints   |        | `streamlit run src/app.py` documented            |
-| References    |        | `rg "src/main.py" docs src pyproject.toml` clean |
-| Quality gates |        | commands green                                   |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | docs/scripts reference only `streamlit run src/app.py` |
+| **Security** |  | no new config bypasses introduced |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | no new import-time heavy work |
 
 **EXECUTE UNTIL COMPLETE.**

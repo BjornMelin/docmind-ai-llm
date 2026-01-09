@@ -127,6 +127,7 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
 
 ---
@@ -140,16 +141,35 @@ uv run python scripts/run_tests.py --fast
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (service boundary + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → only if subtle LlamaIndex persistence behavior needs confirmation.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (LlamaIndex persistence, if needed).
+4. `functions.mcp__gh_grep__searchGitHub` → optional patterns for service-layer boundaries around Streamlit apps.
+5. `functions.mcp__zen__analyze` → required pre-refactor architecture assessment.
+6. `functions.mcp__zen__codereview` → required post-implementation review (boundary cleanliness).
+7. `functions.mcp__zen__secaudit` → optional unless new write surfaces are introduced.
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes         |
-| ----------- | ------ | --------------------- |
-| Formatting  |        | `ruff format`         |
-| Lint        |        | `ruff check` clean    |
-| Types       |        | `pyright` clean       |
-| Pylint      |        | meets threshold       |
-| Tests       |        | fast tier green       |
-| Docs        |        | ADR/SPEC/RTM updated  |
-| Security    |        | no new write surfaces |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | ADR/SPEC/RTM updated |
+| **Security** |  | snapshot writes remain atomic; no new write surfaces |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | service layer keeps Streamlit pages import-light |
 
 **EXECUTE UNTIL COMPLETE.**

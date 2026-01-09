@@ -155,6 +155,7 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
 
 ---
@@ -168,16 +169,35 @@ uv run python scripts/run_tests.py --fast
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (concurrency + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → Streamlit fragment/threading docs if time-sensitive behavior is unclear.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`streamlit` `st.fragment` caveats).
+4. `functions.mcp__gh_grep__searchGitHub` → real-world `st.fragment(run_every=...)` patterns.
+5. `functions.mcp__zen__analyze` → use if job manager interacts with multiple domain boundaries.
+6. `functions.mcp__zen__codereview` → post-implementation review (thread safety + lifecycle correctness).
+7. `functions.mcp__zen__secaudit` → required security audit (paths, secrets, no `st.*` in threads).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes                                  |
-| ----------- | ------ | ---------------------------------------------- |
-| Formatting  |        | `ruff format`                                  |
-| Lint        |        | `ruff check` clean                             |
-| Types       |        | `pyright` clean                                |
-| Pylint      |        | meets threshold                                |
-| Tests       |        | JobManager + UI wiring green                   |
-| Docs        |        | ADR/SPEC/RTM updated                           |
-| Security    |        | no Streamlit calls in threads; atomic finalize |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | JobManager + UI wiring green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | ADR/SPEC/RTM updated |
+| **Security** |  | no Streamlit calls in threads; atomic finalize; no secret/content leaks |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | bounded queues; fragments don’t leak UI elements on reruns |
 
 **EXECUTE UNTIL COMPLETE.**

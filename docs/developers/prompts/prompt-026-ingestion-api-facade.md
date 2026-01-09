@@ -149,6 +149,7 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
 
 ---
@@ -162,16 +163,35 @@ uv run python scripts/run_tests.py --fast
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (API + facade + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → official LlamaIndex/unstructured docs if subtle behavior is unclear.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`llama-index`, optional `unstructured`).
+4. `functions.mcp__gh_grep__searchGitHub` → real-world ingestion/facade patterns (optional).
+5. `functions.mcp__zen__analyze` → only if multiple ingestion paths emerge; keep one canonical API.
+6. `functions.mcp__zen__codereview` → post-implementation review (ensure facade is thin; no legacy path remains).
+7. `functions.mcp__zen__secaudit` → required security audit (path traversal, symlink escape).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes             |
-| ----------- | ------ | ------------------------- |
-| Formatting  |        | `ruff format`             |
-| Lint        |        | `ruff check` clean        |
-| Types       |        | `pyright` clean           |
-| Pylint      |        | meets threshold           |
-| Tests       |        | fast tier green           |
-| Docs        |        | SPEC/RTM updated          |
-| Security    |        | symlink traversal blocked |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | SPEC/RTM updated |
+| **Security** |  | symlink traversal blocked; cache clear constrained to `settings.cache_dir` |
+| **Tech Debt** |  | zero TODO/FIXME introduced; no placeholder stubs remain |
+| **Performance** |  | hashing is streaming; no import-time heavy work |
 
 **EXECUTE UNTIL COMPLETE.**

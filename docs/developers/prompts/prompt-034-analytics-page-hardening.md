@@ -129,6 +129,7 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
 
 ---
@@ -142,15 +143,35 @@ uv run python scripts/run_tests.py --fast
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (DB lifecycle + parser + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → DuckDB Python docs if time-sensitive behavior is unclear.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`duckdb`) when available.
+4. `functions.mcp__gh_grep__searchGitHub` → optional patterns for bounded JSONL parsing and DuckDB usage.
+5. `functions.mcp__zen__analyze` → optional if analytics code touches multiple layers (telemetry + persistence).
+6. `functions.mcp__zen__codereview` → recommended post-implementation review.
+7. `functions.mcp__zen__secaudit` → required security audit (privacy defaults + bounded parsing).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes        |
-| ----------- | ------ | -------------------- |
-| Formatting  |        | `ruff format`        |
-| Lint        |        | `ruff check` clean   |
-| Types       |        | `pyright` clean      |
-| Pylint      |        | meets threshold      |
-| Tests       |        | parsing tests green  |
-| Docs        |        | ADR/SPEC/RTM updated |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | parsing tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | ADR/SPEC/RTM updated |
+| **Security** |  | bounded parsing; privacy-safe defaults; no secret logs |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | streaming JSONL parsing; DuckDB connections closed deterministically |
 
 **EXECUTE UNTIL COMPLETE.**

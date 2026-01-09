@@ -55,6 +55,21 @@ Use only if you must confirm behavior of a logging dependency; otherwise avoid.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
+### YOU ARE
+
+You are an autonomous implementation agent for the **DocMind AI LLM** repository.
+
+You will implement the feature described below end-to-end, including:
+
+- code changes
+- tests
+- documentation updates (ADR/SPEC/RTM)
+- deletion of dead code and removal of legacy/backcompat shims within scope
+
+You must keep changes minimal, library-first, and maintainable.
+
+---
+
 ### FEATURE CONTEXT (FILLED)
 
 **Primary Task:** Remove `src.utils.security.redact_pii` no-op stub and enforce metadata-only logging patterns by adding small helpers.
@@ -84,6 +99,33 @@ Use only if you must confirm behavior of a logging dependency; otherwise avoid.
 
 ---
 
+### HARD RULES (EXECUTION)
+
+#### 1) Python + Packaging
+
+- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Use **uv only**:
+  - install/sync: `uv sync`
+  - run tools: `uv run <cmd>`
+- Do not add dependencies for redaction/scrubbing for this prompt.
+
+#### 2) Logging/PII discipline
+
+- Never log raw prompts, documents, chat messages, or model outputs.
+- If you need correlation, log only metadata (hashes/fingerprints, lengths, counts, status codes).
+- Never log secrets or full URLs containing keys/tokens.
+
+#### 3) Style, Types, and Lint
+
+Must pass:
+
+- `uv run ruff format .`
+- `uv run ruff check .`
+- `uv run pyright`
+- `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+
+---
+
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
 
 1. [ ] Identify all `redact_pii` references (`rg "redact_pii"`).
@@ -102,16 +144,49 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
+
+---
+
+### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+
+1. “Security theater” stubs (like a no-op redactor) that imply safety without enforcement.
+2. Broad `except Exception` around logging that hides failures silently.
+3. Logging full URLs, request headers, or environment variables (potential secrets).
+4. Logging raw content and calling it “sanitized” without proof/tests.
+
+---
+
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (refactor + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → only if you need authoritative security/logging references.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → logging APIs (e.g., `loguru`) if you add small wrappers.
+4. `functions.mcp__gh_grep__searchGitHub` → optional: see common “fingerprint logging” patterns.
+5. `functions.mcp__zen__analyze` → only if refactor touches multiple layers (telemetry + UI + agents).
+6. `functions.mcp__zen__codereview` → post-implementation review (required for security-sensitive prompts).
+7. `functions.mcp__zen__secaudit` → mandatory security audit (PII/secrets in logs).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
 
 ---
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement    | Status | Proof / Notes                    |
-| -------------- | ------ | -------------------------------- |
-| Sensitive logs |        | no raw prompt/doc content logged |
-| Tests          |        | security tests updated           |
-| Docs           |        | SPEC/RTM updated                 |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | SPEC/RTM updated |
+| **Security** |  | no raw prompt/doc/chat/model-output logs; no secret logs |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | logging remains constant-time/metadata-only |
 
 **EXECUTE UNTIL COMPLETE.**

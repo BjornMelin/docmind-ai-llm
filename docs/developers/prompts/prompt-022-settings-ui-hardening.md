@@ -199,6 +199,7 @@ Must pass:
      uv run pyright
      uv run pylint --fail-under=9.5 src/ tests/ scripts/
      uv run python scripts/run_tests.py --fast
+     uv run python scripts/run_tests.py
      ```
 
 ---
@@ -212,6 +213,22 @@ Must pass:
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (UI + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → official docs/changelogs if Streamlit/python-dotenv behavior is time-sensitive.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`streamlit`, `pydantic`, `python-dotenv`).
+4. `functions.mcp__gh_grep__searchGitHub` → real-world patterns for forms/validation gating (only if needed).
+5. `functions.mcp__zen__analyze` → only if you find unexpected UI↔config coupling.
+6. `functions.mcp__zen__codereview` → post-implementation review.
+7. `functions.mcp__zen__secaudit` → required security audit (no unsafe HTML; safe `.env` persistence).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
 | Requirement | Status | Proof / Notes                      |
@@ -221,9 +238,10 @@ Must pass:
 | Lint        |        | `ruff check` clean                 |
 | Types       |        | `pyright` clean                    |
 | Pylint      |        | meets threshold                    |
-| Tests       |        | settings tests green               |
+| Tests       |        | settings tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | Docs        |        | ADR/SPEC/RTM updated               |
 | Security    |        | no unsafe HTML; allowlist enforced |
 | Tech Debt   |        | no TODO/FIXME introduced           |
+| Performance |        | no new import-time heavy work      |
 
 **EXECUTE UNTIL COMPLETE.**

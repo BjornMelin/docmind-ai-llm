@@ -156,6 +156,7 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
 
 ---
@@ -168,12 +169,35 @@ uv run python scripts/run_tests.py --fast
 
 ---
 
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → implementation plan (persistence wiring + tests).
+2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → official docs/changelogs only if LlamaIndex storage behavior is time-sensitive.
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`llama-index` chat store/memory).
+4. `functions.mcp__gh_grep__searchGitHub` → real-world patterns for JSON chat-store persistence (optional).
+5. `functions.mcp__zen__analyze` → only if you find unexpected coupling between UI and persistence.
+6. `functions.mcp__zen__codereview` → post-implementation review.
+7. `functions.mcp__zen__secaudit` → required security audit (path validation + no content logging).
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+
+---
+
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes                    |
-| ----------- | ------ | -------------------------------- |
-| Tests       |        | AppTest proves persistence       |
-| Security    |        | path validation; no content logs |
-| Docs        |        | ADR/SPEC/RTM updated             |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | AppTest proves persistence; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | ADR/SPEC/RTM updated |
+| **Security** |  | path validation under `settings.data_dir`; no content logs |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | no new import-time heavy work; IO done lazily |
 
 **EXECUTE UNTIL COMPLETE.**

@@ -37,6 +37,21 @@ This is a deletion/cleanup task. Prefer local repo truth.
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
+### YOU ARE
+
+You are an autonomous implementation agent for the **DocMind AI LLM** repository.
+
+You will implement the feature described below end-to-end, including:
+
+- code changes
+- tests
+- documentation updates (ADR/SPEC/RTM)
+- deletion of dead code and removal of legacy/backcompat shims within scope
+
+You must keep changes minimal, library-first, and maintainable.
+
+---
+
 ### FEATURE CONTEXT (FILLED)
 
 **Primary Task:** Remove `src/utils/multimodal.py` and its tests if it is not used by production code, eliminating TODO placeholders and dead code.
@@ -63,6 +78,24 @@ This is a deletion/cleanup task. Prefer local repo truth.
 
 ---
 
+### HARD RULES (EXECUTION)
+
+#### 1) Deletion safety
+
+- Prove unused before deleting: `rg` all references in `src/`, `tests/`, `docs/`, `scripts/`.
+- If anything imports the module at runtime, stop and reassess scope (do not delete blindly).
+
+#### 2) Quality gates
+
+- Run standard repo gates after deletion:
+  - `uv run ruff format .`
+  - `uv run ruff check . --fix`
+  - `uv run pyright`
+  - `uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+  - `uv run python scripts/run_tests.py --fast` (then `uv run python scripts/run_tests.py` before marking complete)
+
+---
+
 ### STEP-BY-STEP EXECUTION PLAN (FILLED)
 
 1. [ ] Confirm unused in production: `rg "src\\.utils\\.multimodal" src/`.
@@ -80,16 +113,48 @@ uv run ruff check . --fix
 uv run pyright
 uv run pylint --fail-under=9.5 src/ tests/ scripts/
 uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py
 ```
+
+---
+
+### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+
+1. Moving dead code to another production module/package instead of deleting it.
+2. Keeping “phase 2” TODO placeholders in `src/` (violates release readiness).
+3. Removing tests without replacing coverage where the behavior is still required elsewhere.
+
+---
+
+### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+
+Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
+
+1. `functions.mcp__zen__planner` → plan deletion + reference cleanup.
+2. `functions.mcp__exa__web_search_exa` / `web.run` → unnecessary (repo hygiene task).
+3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → unnecessary.
+4. `functions.mcp__gh_grep__searchGitHub` → unnecessary.
+5. `functions.mcp__zen__analyze` → use if you find dynamic/indirect references.
+6. `functions.mcp__zen__codereview` → recommended post-implementation review.
+7. `functions.mcp__zen__secaudit` → optional; use if deletion affects security-sensitive surfaces.
+
+Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
 
 ---
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes                       |
-| ----------- | ------ | ----------------------------------- |
-| Dead code   |        | no unused multimodal helper in prod |
-| Tests       |        | suite green                         |
-| Docs        |        | references removed or updated       |
+| Requirement | Status | Proof / Notes |
+|---|---|---|
+| **Packaging** |  | `uv sync` clean |
+| **Formatting** |  | `uv run ruff format .` |
+| **Lint** |  | `uv run ruff check .` clean |
+| **Types** |  | `uv run pyright` clean |
+| **Pylint** |  | meets threshold |
+| **Tests** |  | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs** |  | references removed or updated |
+| **Security** |  | no security surfaces regressed by deletion |
+| **Tech Debt** |  | zero TODO/FIXME introduced |
+| **Performance** |  | less import surface; no new heavy imports |
 
 **EXECUTE UNTIL COMPLETE.**
