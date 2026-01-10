@@ -3,13 +3,14 @@ ADR: 023
 Title: Document Analysis Modes (Separate / Combined / Auto)
 Status: Proposed
 Version: 2.0
-Date: 2026-01-09
+Date: 2026-01-10
 Supersedes:
 Superseded-by:
 Related: 001, 003, 009, 011, 013, 016, 022, 024, 052
 Tags: analysis, modes, routing, parallel, aggregation
 References:
 - [Streamlit — Tabs](https://docs.streamlit.io/develop/api-reference/layout/st.tabs)
+- [Python — concurrent.futures](https://docs.python.org/3/library/concurrent.futures.html)
 - [LlamaIndex — Query Pipeline](https://docs.llamaindex.ai/en/stable/module_guides/querying/query_pipeline/)
 - [LangGraph — Concepts](https://langchain-ai.github.io/langgraph/concepts/)
 ---
@@ -52,6 +53,15 @@ Weights: Capability 35% · Performance 35% · Simplicity 20% · Maintenance 10%
 | D: LangGraph-native MapReduce              | 9                | 9                 | 6                | 7                 | 7.9         | Rejected |
 | B: Sequential per-doc                      | 7                | 4                 | 9                | 9                 | 6.6         | Rejected |
 | A: Combined only                           | 5                | 7                 | 10               | 10                | 7.0         | Rejected |
+
+### Architecture Tier-2 ≥9.0 (Complexity/Perf/Alignment)
+
+Weights: Complexity 40% · Perf 30% · Alignment 30% (10 = best)
+
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| **ThreadPool map + lightweight reduce** | 9.5 | 9.0 | 9.5 | **9.35** | ✅ Selected |
+| LangGraph-native MapReduce graph | 7.0 | 9.0 | 9.0 | 8.10 | Rejected |
 
 ## Decision
 
@@ -154,7 +164,7 @@ async def test_parallel_separate(fake_docs, analyzer):
 
 ### Ongoing Maintenance & Considerations
 
--.Tune thresholds for auto selection as datasets vary
+- Tune thresholds for auto selection as datasets vary.
 
 - Keep aggregation minimal; extend only with clear value
 
@@ -165,5 +175,4 @@ async def test_parallel_separate(fake_docs, analyzer):
 
 ## Changelog
 
-- **1.1 (2025-09-02)**: No change required; cache unification speeds both modes without architectural impact.
-- **1.0 (2025-08-18)**: Initial document analysis mode strategy with parallel individual processing, unified combined analysis, and intelligent result aggregation
+- **2.0 (2026-01-10)**: Tier-2 decision gate added; updated references and maintenance notes.
