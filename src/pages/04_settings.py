@@ -7,6 +7,7 @@ pre-validation to avoid persisting invalid configuration.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -65,6 +66,9 @@ def _validate_candidate(
     return validated, []
 
 
+_GGUF_PATH_PATTERN = re.compile(r"^[A-Za-z0-9._ \-~/\\\\:]+$")
+
+
 def resolve_valid_gguf_path(path_text: str) -> Path | None:
     """Resolve and validate a GGUF model path.
 
@@ -77,6 +81,12 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
     """
     clean = (path_text or "").strip()
     if not clean:
+        return None
+    if (
+        "\x00" in clean
+        or any(ord(ch) < 32 for ch in clean)
+        or _GGUF_PATH_PATTERN.fullmatch(clean) is None
+    ):
         return None
 
     try:
