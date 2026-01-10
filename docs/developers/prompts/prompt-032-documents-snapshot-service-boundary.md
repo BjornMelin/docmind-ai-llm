@@ -53,6 +53,11 @@ Skill references to consult (as needed):
 
 - `functions.list_mcp_resources` → read any local “persistence/snapshot” resources before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc` (persistence, storage, node metadata)
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (rare for this package)
+
 **Architecture gate (required):**
 
 - Run `functions.mcp__zen__analyze` before the refactor to document current behavior boundaries and identify duplication.

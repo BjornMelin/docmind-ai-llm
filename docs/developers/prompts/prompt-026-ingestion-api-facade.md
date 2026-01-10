@@ -47,6 +47,11 @@ Implements `ADR-045` + `SPEC-026`.
 - `functions.list_mcp_resources` → look for LlamaIndex/unstructured docs resources.
 - `functions.read_mcp_resource` → prefer local resources before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (only if ingestion triggers agent workflows directly)
+
 **API verification (Context7):**
 
 - `functions.mcp__context7__resolve-library-id` → `llama-index` (and optionally `unstructured`)

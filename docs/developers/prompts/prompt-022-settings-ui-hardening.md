@@ -64,6 +64,12 @@ uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_
 - `functions.list_mcp_resources` → look for Streamlit/Pydantic/python-dotenv references.
 - `functions.read_mcp_resource` → read any relevant local docs/indexes before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if this work package touches OpenAI API semantics)
+
 **API verification (Context7, only when uncertain):**
 
 - `functions.mcp__context7__resolve-library-id` → `streamlit`, `pydantic`, `python-dotenv`

@@ -47,6 +47,11 @@ Implements `ADR-035` + `SPEC-038`.
 - `functions.list_mcp_resources` → look for Qdrant/LlamaIndex resources.
 - `functions.read_mcp_resource` → read relevant local docs/indexes before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (only if cache integration touches LangGraph tools/state)
+
 **API verification (Context7, only when uncertain):**
 
 - `functions.mcp__context7__resolve-library-id` → `qdrant-client`, `llama-index`

@@ -85,6 +85,24 @@ This section is the *minimum* expected tool usage guidance for any prompt execut
 - `functions.mcp__context7__resolve-library-id` — map library name → Context7 id.
 - `functions.mcp__context7__query-docs` — authoritative API references/snippets once you have the id.
 
+### LlamaIndex docs (MCP)
+
+- `functions.mcp__llama_index_docs__search_docs` — ranked search across LlamaIndex docs (best for concepts).
+- `functions.mcp__llama_index_docs__grep_docs` — exact/regex search (best for class/function names).
+- `functions.mcp__llama_index_docs__read_doc` — read a full doc page once you know its path.
+
+### LangChain/LangGraph docs (MCP)
+
+- `functions.mcp__langchain-docs__SearchDocsByLangChain` — search LangChain/LangGraph docs (best for LangGraph persistence, interrupts, state APIs).
+
+### OpenAI developer docs (MCP)
+
+Use only when the work package touches the OpenAI API/client semantics:
+
+- `functions.mcp__openaiDeveloperDocs__search_openai_docs` — search OpenAI platform docs.
+- `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` — fetch exact markdown for a page/section.
+- `functions.mcp__openaiDeveloperDocs__get_openapi_spec` — inspect endpoint schemas/code samples.
+
 ### Web
 
 - `web.run` — general browsing/search with citations when info is time-sensitive or uncertain.

@@ -53,6 +53,12 @@ rg -n "duckdb\\.connect|__import__\\(" src/pages/03_analytics.py
 
 - `functions.list_mcp_resources` → read any local DuckDB/telemetry resources before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc` (rare for this package)
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (rare for this package)
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (rare for this package)
+
 **API verification (Context7 + web):**
 
 - If available, use `functions.mcp__context7__resolve-library-id` → `duckdb` and `functions.mcp__context7__query-docs` for connection lifecycle patterns.

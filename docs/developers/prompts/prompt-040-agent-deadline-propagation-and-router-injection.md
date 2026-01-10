@@ -47,6 +47,12 @@ This is agent/orchestration work. No dedicated skill exists for LangGraph, but:
 
 - `functions.list_mcp_resources` → read any LangGraph/LangChain/timeout resources if present.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (interrupts, persistence/config, runnable timeouts)
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc` (only if router injection uses LlamaIndex engines directly)
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if touching OpenAI client semantics)
+
 **API verification (Context7, only when uncertain):**
 
 - `functions.mcp__context7__resolve-library-id` → `langgraph`, `langchain`

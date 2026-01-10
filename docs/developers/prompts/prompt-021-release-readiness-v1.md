@@ -70,11 +70,15 @@ Examples of “parallel-safe” bundles (use as patterns):
 1. `functions.mcp__zen__planner` → plan the current WP only.
 2. `functions.list_mcp_resources` → discover preloaded docs/indexes; `functions.read_mcp_resource` to load any relevant ones.
 3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API signatures/snippets (Streamlit, Pydantic, LlamaIndex, Qdrant, DuckDB, OpenTelemetry).
-4. `functions.mcp__exa__web_search_exa` (+ `functions.mcp__exa__crawling_exa`) → official docs/changelogs when behavior is subtle or “latest” matters.
-5. `functions.mcp__gh_grep__searchGitHub` → real-world usage patterns for tricky APIs.
-6. `functions.mcp__zen__analyze` → architecture sanity check before cross-cutting refactors.
-7. `functions.mcp__zen__secaudit` → security audit for new/changed surfaces (config, path handling, logging, network).
-8. `functions.mcp__zen__codereview` → final quality gate after each WP.
+4. Prefer MCP doc corpora before general web when applicable:
+   - LlamaIndex: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+   - LangChain/LangGraph: `functions.mcp__langchain-docs__SearchDocsByLangChain`
+   - OpenAI API: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only when needed)
+5. `functions.mcp__exa__web_search_exa` (+ `functions.mcp__exa__crawling_exa`) → official docs/changelogs when behavior is subtle or “latest” matters.
+6. `functions.mcp__gh_grep__searchGitHub` → real-world usage patterns for tricky APIs.
+7. `functions.mcp__zen__analyze` → architecture sanity check before cross-cutting refactors.
+8. `functions.mcp__zen__secaudit` → security audit for new/changed surfaces (config, path handling, logging, network).
+9. `functions.mcp__zen__codereview` → final quality gate after each WP.
 
 **opensrc usage (dependency internals, repo-truth):**
 

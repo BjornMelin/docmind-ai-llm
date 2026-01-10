@@ -41,6 +41,11 @@ This is a persistence feature. No special skill is required, but if you touch St
 
 - `functions.list_mcp_resources` → read any local “sqlite/migrations/persistence” resources.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc` (rare for this package)
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (rare for this package)
+
 **API verification (Context7, only when needed):**
 
 - `functions.mcp__context7__resolve-library-id` → `langchain`, `langgraph` only if you end up wiring ops DB into agent graph tooling (prefer not).

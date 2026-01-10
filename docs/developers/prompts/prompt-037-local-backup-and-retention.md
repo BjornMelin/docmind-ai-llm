@@ -46,6 +46,11 @@ Implements `ADR-033` + `SPEC-037`.
 - `functions.list_mcp_resources` → look for Qdrant/python resources.
 - `functions.read_mcp_resource` → read relevant local docs/indexes before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc` (rare for this package)
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (rare for this package)
+
 **API verification (Context7, only when uncertain):**
 
 - `functions.mcp__context7__resolve-library-id` → `qdrant-client`

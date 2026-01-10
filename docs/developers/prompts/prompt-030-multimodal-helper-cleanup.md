@@ -27,6 +27,11 @@ This is a deletion/cleanup task. Prefer local repo truth.
 - `functions.mcp__zen__analyze` if references look indirect or dynamic.
 - `functions.mcp__zen__codereview` after deletion to ensure no dangling imports.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc` (if you need to confirm how multimodal nodes are represented)
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (rare for this package)
+
 ### Prompt-specific Tool Playbook (optimize tool usage)
 
 **Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.

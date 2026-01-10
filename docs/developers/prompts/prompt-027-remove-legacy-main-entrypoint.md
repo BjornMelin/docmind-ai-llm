@@ -44,6 +44,12 @@ This work is primarily repo hygiene; prefer local repo truth over web research.
 
 - `functions.list_mcp_resources` → read any local “entrypoints/runbook” resources (if present).
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (rare for this package)
+
 **Editing discipline:**
 
 - Use `functions.apply_patch` for small documentation updates and `*** Delete File: src/main.py` for the deletion.
