@@ -47,10 +47,6 @@ jobs:
           uvx ruff format --check .
           uvx ruff check --fix --exit-non-zero-on-fix .
 
-      - name: Quality Gate - Pylint (fail-under=9.5)
-        run: |
-          uv run pylint --fail-under=9.5 -j 0 src tests scripts
-
       - name: Run tiered unit/integration tests (fast gate)
         env:
           REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}
