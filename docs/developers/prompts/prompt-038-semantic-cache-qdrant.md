@@ -40,7 +40,7 @@ Implements `ADR-035` + `SPEC-038`.
 - Confirm Qdrant client usage patterns already in repo:
   - `rg -n "QdrantClient\\(" src -S`
 - Verify qdrant-client is available and inspect snapshot methods:
-  - `uv run python -c \"import inspect; from qdrant_client import QdrantClient; c=QdrantClient(location=':memory:'); print([m for m in dir(c) if 'snapshot' in m])\"`
+- `uv run python -c 'from qdrant_client import QdrantClient; c=QdrantClient(location=":memory:"); print([m for m in dir(c) if "snapshot" in m])'`
 
 **MCP resources first (when available):**
 

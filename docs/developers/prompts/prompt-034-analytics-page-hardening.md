@@ -44,8 +44,8 @@ rg -n "duckdb\\.connect|__import__\\(" src/pages/03_analytics.py
 **Parallel preflight (use `multi_tool_use.parallel`):**
 
 - Locate DB usage + telemetry parsing:
-  - `rg -n \"duckdb\\.connect|\\.execute\\(|\\.df\\(\" -S src/pages/03_analytics.py src`
-  - `rg -n \"telemetry\\.jsonl|log_jsonl|rotate\" -S src/utils/telemetry.py src/telemetry`
+- `rg -n 'duckdb\.connect|\.execute\(|\.df\(' -S src/pages/03_analytics.py src`
+- `rg -n 'telemetry\.jsonl|log_jsonl|rotate' -S src/utils/telemetry.py src/telemetry`
 - Read in parallel:
   - `src/pages/03_analytics.py`
   - `src/utils/telemetry.py`

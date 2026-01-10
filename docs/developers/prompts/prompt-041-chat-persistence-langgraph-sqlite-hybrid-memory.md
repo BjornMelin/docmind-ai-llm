@@ -201,6 +201,7 @@ Rules:
 - Use LangGraph checkpointer and store interfaces (`setup()`, `thread_id` config).
 - Ensure persisted state is serializable (avoid storing live objects in state).
   - Example: Do not store `database.Connection`, `aiohttp.ClientSession`, `threading.Lock`, or open file handles in state. Persist resource identifiers instead and reconstruct live resources at runtime.
+- Add a serialization validation test (or helper) early to catch non-serializable state shapes before wiring persistence.
 - Memory namespaces must be scoped to `user_id` and `thread_id` (no cross-user bleed).
 - Enforce bounded memory growth: TTL/retention and delete/purge operations are first-class.
 
@@ -228,6 +229,7 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 3. [ ] Add LangGraph persistence in `src/agents/coordinator.py`:
    - replace `InMemorySaver` with `SqliteSaver` and ensure `setup()` called
    - ensure state schema supports multi-turn message accumulation and serialization (migrate to `AnyMessage` + reducer semantics as needed)
+   - add a unit test or helper that asserts state objects are serializable (JSON/Pydantic) without live handles
    - Commands:
      - `uv run ruff check src/agents/coordinator.py src/agents/models.py`
 4. [ ] Add long-term memory primitives:

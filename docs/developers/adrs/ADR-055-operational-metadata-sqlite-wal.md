@@ -105,7 +105,7 @@ flowchart LR
    - enables WAL + foreign keys
    - applies migrations via `PRAGMA user_version`
    - v0 → v1 migration creates core tables (jobs, snapshots, ui_state) and sets `PRAGMA user_version=1`
-- each migration runs in its own transaction; on failure, rollback, abort startup, and optionally restore from a pre-migration backup
+   - each migration runs in its own transaction; on failure, rollback and abort startup
 2. Track schema versions:
    - v0 = empty/legacy
    - v1 = initial ops schema (jobs/snapshots/ui_state)
@@ -141,8 +141,9 @@ CREATE TABLE IF NOT EXISTS ui_state (
 PRAGMA user_version=1;
 COMMIT;
 ```
-2. Integrate with background jobs (ADR-052) to write lifecycle events.
-3. Add unit tests for migrations and core write/read APIs.
+
+4. Integrate with background jobs (ADR-052) to write lifecycle events.
+5. Add unit tests for migrations and core write/read APIs.
 
 ## Testing
 

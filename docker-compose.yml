@@ -4,10 +4,10 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - BACKEND=ollama
-      - CONTEXT_SIZE=32768
-      - QDRANT_URL=http://qdrant:6333
+      - DOCMIND_LLM_BACKEND=ollama
+      - DOCMIND_OLLAMA_BASE_URL=http://ollama:11434
+      - DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=http://ollama
+      - DOCMIND_QDRANT__URL=http://qdrant:6333
       # GPU Configuration
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=0
@@ -25,9 +25,20 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
+    networks:
+      - internal
     runtime: nvidia
     ipc: host
     shm_size: '2gb'
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["gpu"]
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - internal
+    runtime: nvidia
 
   qdrant:
     image: qdrant/qdrant:gpu-nvidia-latest
@@ -48,8 +59,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - internal
     runtime: nvidia
+
+networks:
+  internal:
+    internal: true
 
 volumes:
   qdrant_storage:
   gpu_cache:
+  ollama:

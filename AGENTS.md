@@ -166,6 +166,8 @@ Security policy:
 
 - Remote endpoints are blocked unless `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`
   or the host is in `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`.
+- Optional Analytics page is gated by `DOCMIND_ANALYTICS_ENABLED=true` and reads
+  from `data/analytics/analytics.duckdb`.
 
 ## Ingestion and Processing
 
@@ -241,30 +243,6 @@ DSPy (optional):
   - `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0`
   - `DOCMIND_TELEMETRY_ROTATE_BYTES=<int>`
 
-## opensrc Reference Library
-
-`opensrc/` contains **dependency source snapshots** for deeper internals/edge cases (see `opensrc/sources.json`).
-
-Guidelines:
-
-- Treat `opensrc/` as read-only.
-- Prefer repo-truth (local code + official docs) first; use `opensrc/` when documentation is ambiguous or behavior is subtle.
-- When you rely on internals, cite the exact `opensrc/…` path + version in notes/PR descriptions.
-
-Fetch additional sources as needed:
-
-```bash
-npx opensrc <package>           # npm package (e.g., npx opensrc zod)
-npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
-npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
-npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
-```
-
-Analytics:
-
-- Optional Analytics page is gated by `DOCMIND_ANALYTICS_ENABLED=true` and reads
-  from `data/analytics/analytics.duckdb`.
-
 ## Offline-First Behavior
 
 - Use `tools/models/pull.py` to predownload models.
@@ -295,18 +273,20 @@ Analytics:
 - When behavior changes, update README and relevant spec/ADR.
 
 <!-- opensrc:start -->
+## opensrc Reference Library
 
-## Source Code Reference
+`opensrc/` contains **dependency source snapshots** for deeper internals/edge cases (see `opensrc/sources.json`).
 
-Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
+Guidelines:
 
-See `opensrc/sources.json` for the list of available packages and their versions.
+- Treat `opensrc/` as **read-only** local references; it is excluded from version control (see `.gitignore`) and Ruff linting to preserve snapshots.
+- Prefer repo-truth (local code + official docs) first; use `opensrc/` when documentation is ambiguous or behavior is subtle.
+- Always cite exact `opensrc/…` paths + versions when relying on internals in ADRs/SPECs or incident writeups.
+- Fetch additional sources only when necessary to understand implementation details (not just public APIs).
+- Prefer **non-interactive** runs when possible:
+  - `npx opensrc pypi:<package>@<version> --modify=false`
 
-Use this source code when you need to understand how a package works internally, not just its types/interface.
-
-### Fetching Additional Source Code
-
-To fetch source code for a package or repository you need to understand, run:
+Fetch additional sources as needed:
 
 ```bash
 npx opensrc <package>           # npm package (e.g., npx opensrc zod)
@@ -319,13 +299,6 @@ npx opensrc list
 npx opensrc remove <name>
 ```
 
+Refresh sources after dependency upgrades or when investigating a bug fixed upstream (remove then re-fetch).
+
 <!-- opensrc:end -->
-
-## opensrc Usage Guidance (Repo Contract)
-
-- Treat `opensrc/` as **read-only** dependency source snapshots for deeper internals/edge cases.
-- Always check `opensrc/sources.json` first and cite exact paths + versions when using it in ADRs/SPECs or incident writeups.
-- Fetch additional sources only when necessary to understand implementation details (not just public APIs).
-- Prefer **non-interactive** runs when possible:
-  - `npx opensrc pypi:<package>@<version> --modify=false`
-- Refresh sources after dependency upgrades or when investigating a bug fixed upstream (remove then re-fetch).

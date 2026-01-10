@@ -50,7 +50,7 @@ Docs drift is best solved with repo-local tooling + grep first.
 
 - LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
 - LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
-- OpenAI API docs: `search` → `fetch` (OpenAI Docs MCP server at https://developers.openai.com/mcp; only if updating docs that cite OpenAI API semantics)
+- OpenAI API docs: `search` → `fetch` (OpenAI Docs MCP server at [developers.openai.com/mcp](https://developers.openai.com/mcp); only if updating docs that cite OpenAI API semantics)
 
 **API verification (only when needed):**
 
@@ -133,22 +133,27 @@ You must keep changes minimal, library-first, and maintainable.
 
 0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
-1. [ ] Identify drift: `rg "src/processing/document_processor.py|process_document\\(" docs/`.
-2. [ ] Update `docs/specs/spec-002-ingestion-pipeline.md` to match the canonical ingestion pipeline + API.
-3. [ ] Update `docs/developers/developer-handbook.md` ingestion examples to the canonical API (SPEC-026).
-4. [ ] Update `docs/developers/system-architecture.md` to reflect actual modules.
-5. [ ] Update `docs/specs/spec-012-observability.md` to match code and ensure SRS has referenced NFR-OBS requirements.
-6. [ ] Implement drift checker:
+1. [ ] Verify the target docs exist and are not archived/deprecated before editing.
+2. [ ] Identify drift: `rg "src/processing/document_processor.py|process_document\\(" docs/`.
+3. [ ] Update `docs/specs/spec-002-ingestion-pipeline.md` to match the canonical ingestion pipeline + API.
+4. [ ] Update `docs/developers/developer-handbook.md` ingestion examples to the canonical API (SPEC-026).
+5. [ ] Update `docs/developers/system-architecture.md` to reflect actual modules.
+6. [ ] Update `docs/specs/spec-012-observability.md` to match code and ensure SRS has referenced NFR-OBS requirements.
+7. [ ] Implement drift checker:
    - scan non-archived docs for `src/<...>.py` references
    - fail if referenced files don't exist
    - classify findings:
      - **hard failures**: direct code refs to missing `src/...` paths (regex: `src/[a-zA-Z_][^)\s]*\.py`)
      - **soft warnings**: refs inside code comments, historical changelog entries, or after "example:" (regex: leading `#` or `<!--` or in blockquote)
      - **allowlist**: entries in `scripts/doc_drift_allowlist.txt` (one path per line)
+   - outputs:
+     - JSON report (write to `data/reports/doc_drift.json`)
+     - human-readable log with severity levels (info/warn/error)
+     - exit code: non-zero for hard failures, zero for soft warnings only
    - report severity and track false positives (keep soft warnings non-blocking)
    - **Suppression**: add paths to allowlist file; annotate with `# drift-ok` inline comment for intentional examples
-7. [ ] Wire drift checker into quality gates.
-8. [ ] Update RTM row and run quality gates.
+8. [ ] Wire drift checker into quality gates (`scripts/run_quality_gates.py`) and the CI workflow (`.github/workflows/ci.yml`); fail pipeline on non-allowlisted hard failures and emit warnings for soft findings.
+9. [ ] Update RTM row and run quality gates.
 
 Commands:
 

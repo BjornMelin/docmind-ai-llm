@@ -41,7 +41,7 @@ Harden the Streamlit Settings page so that:
 
 Replace `src/ui/components/provider_badge.py` HTML markup with Streamlit-native UI:
 
-- `st.badge(label, color=..., icon=..., help=...)` for provider and GraphRAG status
+- `st.badge(label, icon=..., help=...)` for provider and GraphRAG status
 - `st.caption` for model id and resolved base URL (when applicable)
 
 No `unsafe_allow_html=True` usage is permitted.

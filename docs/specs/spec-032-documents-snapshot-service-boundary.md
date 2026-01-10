@@ -54,6 +54,21 @@ Where `SnapshotRebuildResult` includes:
 - `manifest_meta: dict[str, Any]` (or `None` if caller prefers to reload from disk)
 - `graph_exports: list[dict[str, Any]]`
 
+### Snapshot manifest schema (manifest.meta.json)
+
+The service must write manifest metadata with the following fields (matching `SnapshotManager.write_manifest`):
+
+- Required: `index_id`, `graph_store_type`, `vector_store_type`, `corpus_hash`, `config_hash`, `versions`
+- Optional: `graph_exports`
+
+`corpus_hash` and `config_hash` are computed via `compute_corpus_hash` and `compute_config_hash`
+(`src/persistence/hashing.py`) using the uploaded corpus paths and the current settings config.
+
+When present, `graph_exports` entries include export metadata such as:
+
+- `path` (workspace-relative), `format`, `seed_count`, `size_bytes`, `duration_ms`, `sha256`
+- `created_at` (ISO timestamp) when available
+
 ### Documents page responsibilities
 
 `src/pages/02_documents.py` becomes:

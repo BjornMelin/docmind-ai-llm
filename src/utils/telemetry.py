@@ -96,4 +96,4 @@ def log_jsonl(event: dict[str, Any]) -> None:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-__all__ = ["log_jsonl"]
+__all__ = ["TELEMETRY_JSONL_PATH", "log_jsonl"]

@@ -43,7 +43,7 @@ def provider_badge(cfg: DocMindSettings) -> None:
 
     st.badge(f"Provider: {provider}")
     if model:
-        st.badge(f"Model: {model}")
+        st.caption(f"Model: {model}")
     st.badge(
         f"GraphRAG: {status_label} ({adapter_name})",
         icon="✅" if supports_graphrag else "⚠️",

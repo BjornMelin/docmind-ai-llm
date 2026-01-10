@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 012, 014
+Related: 012, 014, SPEC-010
 Tags: evaluation, offline, tooling, retrieval
 References:
   - https://pypi.org/project/ragas/
@@ -78,6 +78,7 @@ Outputs MUST be schema-validated and reproducible (seeded).
 - Pin evaluation tooling in `pyproject.toml`:
   - `ragas>=0.2.10,<0.4.0`
   - `beir>=2.0.0,<3.0.0`
+- Rationale: keep compatible minor ranges in the spec while `uv.lock` pins exact versions for reproducible runs.
 
 ## High-Level Architecture
 
@@ -94,7 +95,7 @@ flowchart TD
 
 - Evaluation runs MUST be offline by default.
 - No raw document content or prompts should be uploaded anywhere.
-- Outputs must avoid secrets; any logging must use safe summaries (counts, durations).
+- Outputs must avoid secrets; any logging must use **metadata-only logging with keyed HMAC fingerprints**. See `AGENTS.md` and `docs/specs/spec-028-safe-logging-no-pii-redactor.md` for the canonical safe-logging policy.
 
 ## Consequences
 

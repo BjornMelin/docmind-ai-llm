@@ -98,15 +98,21 @@ Emit local JSONL events (best effort):
 
 ### Unit
 
-- JobManager start/complete/cancel with a stub worker that emits deterministic progress.
-- Queue boundedness (no unbounded memory growth).
-- TTL cleanup for orphaned jobs.
-- Shutdown behavior: `JobManager.shutdown()` stops the executor cleanly (best-effort).
+- JobManager start/complete/cancel with a stub worker fixture that emits deterministic progress.
+- Cancellation edge cases:
+  - cancel before job starts
+  - cancel during shutdown
+  - cancel after completion (no-op, status stays succeeded)
+- Queue boundedness (overflow/dropping/backpressure) using a bounded queue; assert size never exceeds the cap.
+- TTL cleanup for orphaned jobs (expired job entries removed).
+- Shutdown behavior: `JobManager.shutdown()` stops the executor cleanly (best-effort); use thread mocking to simulate racey cancellations.
 
 ### Integration (AppTest)
 
 - Start a job (stubbed to complete quickly) and assert progress UI renders.
 - Cancel a job and assert UI state reflects cancellation.
+- Mock ingestion pipeline and heavy IO using `unittest.mock.patch` so AppTest runs in seconds, not minutes.
+- Use Streamlit AppTest for UI rendering; if needed, add a minimal UI smoke test via Playwright or a simple DOM snapshot.
 
 ## Rollout / Migration
 

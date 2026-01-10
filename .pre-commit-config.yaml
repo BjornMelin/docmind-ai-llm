@@ -23,6 +23,15 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=2000"]
 
+  - repo: local
+    hooks:
+      - id: no-todo-check
+        name: No TODO/FIXME/XXX placeholders
+        entry: bash -c 'rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+        always_run: true
+
 # Optional local policy guard; uncomment to prevent direct commits to main
 #  - repo: https://github.com/pre-commit/pre-commit-hooks
 #    rev: v4.6.0

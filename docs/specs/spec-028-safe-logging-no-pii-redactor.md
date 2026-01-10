@@ -53,7 +53,7 @@ Suggested helpers:
 #### Key management
 
 - Key source: `DocMindSettings.hashing.hmac_secret` (local secret; must never be logged). This secret is also the source-of-truth for HMAC canonicalization in `src/utils/canonicalization.py`.
-- Implementation detail: encode `DocMindSettings.hashing.hmac_secret` to bytes when constructing `DocumentCanonicalConfig` to match the `hmac.new()` bytes requirement.
+- Implementation detail: encode `DocMindSettings.hashing.hmac_secret` to UTF-8 bytes when constructing `CanonicalizationConfig` to match the `hmac.new()` bytes requirement and the 32-byte minimum. Ensure `src/utils/log_safety.py::fingerprint_text()` applies the same UTF-8 encoding path for consistency.
 - Env var: `DOCMIND_HASHING__HMAC_SECRET` (use a strong random string; at least 32 bytes).
 - Rotation: bump `DocMindSettings.hashing.hmac_secret_version` and treat fingerprints as non-stable across rotations.
 
@@ -75,8 +75,11 @@ Update any logging/telemetry events within scope to:
 - Unit tests for `src/utils/log_safety.py` (fingerprints, URL sanitization, and backstop redaction).
 - Update existing security tests to remove `redact_pii` no-op expectations.
 - Add a “canary” test:
-  - emit logs with a known canary string in memory
-  - assert the canary does not appear in captured logs/JSONL telemetry.
+  - add in `tests/unit/utils/test_log_safety.py` (or `tests/integration/test_logging_safety.py` if integration scope is preferred)
+  - configure standard logging with an in-memory handler (StringIO-backed `StreamHandler`) and/or a JSONL telemetry sink mock
+  - emit logs containing a known canary string (e.g., `CANARY_SECRET_12345`) in message, exception, and structured context
+  - run the safe-logging pipeline (`redact_text_backstop()` / `fingerprint_text()` helpers or logger wrapper)
+  - assert the canary does not appear in captured logs/JSONL output (cover message, exception message, and structured fields)
 
 ## Rollout / migration
 

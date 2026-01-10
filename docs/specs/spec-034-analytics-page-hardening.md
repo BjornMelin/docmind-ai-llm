@@ -45,10 +45,10 @@ Add helper (module-local or reusable) that:
   - snapshot_stale_detected count
   - export_performed count
 - enforces caps:
-  - `max_lines` (default e.g. 50_000)
-  - `max_bytes` (default e.g. 25 MB)
+  - `max_lines` (default 50_000)
+  - `max_bytes` (default 25 MB)
 
-Selection criteria: choose caps based on measured telemetry growth and memory budgets (e.g., target ≤25 MB parse per run; estimate `max_lines ≈ target_bytes / avg_line_bytes` from sample logs).
+Rationale: defaults target a bounded ~25 MB parse window based on typical daily telemetry volume; adjust only after measuring log growth (estimate `max_lines ≈ target_bytes / avg_line_bytes` from sample logs).
 
 Scope: caps apply per telemetry JSONL file read (and should be enforced consistently across multi-session files, if present).
 

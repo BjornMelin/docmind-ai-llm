@@ -47,6 +47,15 @@ jobs:
           uvx ruff format --check .
           uvx ruff check --fix --exit-non-zero-on-fix .
 
+      - name: Quality Gate - No TODO/FIXME/XXX placeholders
+        run: |
+          if rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools; then
+            echo "Found TODO/FIXME/XXX placeholders. Remove them before merging."
+            exit 1
+          else
+            echo "No TODO/FIXME/XXX placeholders found."
+          fi
+
       - name: Run tiered unit/integration tests (fast gate)
         env:
           REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}

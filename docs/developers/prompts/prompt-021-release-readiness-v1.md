@@ -21,7 +21,7 @@ Use this prompt to implement **every** work package defined in `docs/specs/spec-
 - <https://docs.python.org/3/library/sqlite3.html> — stdlib sqlite3 (ops metadata store, migrations, WAL).
 - <https://www.sqlite.org/wal.html> — WAL mode semantics and concurrency tradeoffs.
 - <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming (coordinator loop integration).
-- <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/interrupts> — LangGraph interrupts/stop patterns (cooperative cancellation).
+- <https://docs.langchain.com/oss/python/langgraph/interrupts> — LangGraph interrupts/stop patterns (cooperative cancellation).
 - <https://docs.astral.sh/uv/guides/integration/docker/> — `uv` Docker build guidance (reproducible installs).
 - <https://docs.astral.sh/ruff/formatter/> — Ruff formatter reference (repo uses `ruff format`).
 - <https://docs.astral.sh/ruff/linter/> — Ruff linter reference (repo uses `ruff check`).
@@ -104,11 +104,11 @@ npx opensrc open-telemetry/opentelemetry-python
 
 ### Long-running processes
 
-Use `functions.write_stdin` if you start long-running commands (examples: `streamlit run ...`, `docker compose up ...`) and need to interact or fetch more output without restarting.
+Use `functions.write_stdin` if you start long-running commands (examples: `streamlit run …`, `docker compose up …`) and need to interact or fetch more output without restarting.
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## Implementation Executor Template (DocMind / Python)
 
-### YOU ARE
+### You Are
 
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
@@ -123,7 +123,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### Feature Context (Filled)
 
 **Primary Task:** Ship DocMind v1 by executing all work packages listed in `docs/specs/spec-021-release-readiness-v1.md`.
 
@@ -149,7 +149,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### Hard Rules (Execution)
 
 #### 1) Python + Packaging
 
@@ -210,7 +210,7 @@ Rules:
 #### 7) Observability & Security
 
 - Emit telemetry events where the SPEC requires:
-  - local JSONL telemetry and/or OTel spans/metrics (when enabled)
+  - local JSONL telemetry or OTel spans/metrics (when enabled)
 - Never log secrets.
 - Enforce endpoint allowlist for any remote surface.
 - Validate filesystem paths (no traversal, no symlink escape).
@@ -243,7 +243,7 @@ uv run python scripts/run_quality_gates.py --ci --report
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
 Scan the feature scope and delete or refactor immediately if found:
 
@@ -259,7 +259,7 @@ Scan the feature scope and delete or refactor immediately if found:
 
 ---
 
-### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+### MCP Tool Strategy (For Implementation Run)
 
 Use these tools as needed:
 
@@ -273,7 +273,7 @@ Use these tools as needed:
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### Final Verification Checklist (Must Complete)
 
 | Requirement     | Status | Proof / Notes                                     |
 | --------------- | ------ | ------------------------------------------------- |
@@ -285,6 +285,6 @@ Use these tools as needed:
 | **Docs**        |        | ADR/SPEC/RTM updated                              |
 | **Security**    |        | allowlist + path validation + no secret logs      |
 | **Tech Debt**   |        | zero TODO/FIXME introduced                        |
-| **Performance** |        | no new import-time heavy work; key flows measured |
+| **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >10% vs baseline (see `scripts/README.md`) |
 
 **EXECUTE UNTIL COMPLETE.**

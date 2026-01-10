@@ -21,7 +21,13 @@ This is a cross-cutting refactor (UI → persistence boundary). Use analysis + r
 
 **Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
-**Note:** Paths that reference `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}` assume a local Codex skill install. Adjust the prefix to your team’s skill library location or a repo-local copy if needed.
+**Note:** Paths that reference `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}` assume a local Codex skill install. Adjust the prefix to your team’s skill library location or a repo-local copy if needed. Codex skills are optional and not part of the DocMind release.
+
+**Adapting without Codex:** If Codex skills are not available:
+
+- Use `rg` + your editor to review `src/pages/02_documents.py` and the persistence modules.
+- Read LlamaIndex persistence docs directly from <https://docs.llamaindex.ai/en/stable/> when needed.
+- Use standard Python tooling (`uv run pyright`, `uv run python scripts/run_tests.py`) without MCP extensions.
 
 **Use skill:** `$streamlit-master-architect` (for the Documents page wiring + AppTest), but keep the service boundary Streamlit-free.
 
@@ -74,13 +80,13 @@ Skill references to consult (as needed):
 
 - Run `functions.mcp__zen__codereview` after tests pass to ensure the service boundary is clean and Streamlit-free.
 
-**opensrc (optional):**
+**opensrc (local reference only):**
 
-Use only if you must understand LlamaIndex persistence internals; prefer repo code + tests first.
+The `opensrc/` directory is a local development artifact (excluded from version control) containing offline snapshots of dependencies. Use it only for quick reference of LlamaIndex internals during development and not for production or critical implementation decisions. Prefer repo code, tests, and official LlamaIndex docs instead.
 
 ## **Implementation Executor Template (DocMind / Python)**
 
-### YOU ARE
+### You Are
 
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
@@ -134,6 +140,7 @@ You must keep changes minimal, library-first, and maintainable.
 2. [ ] Implement `src/persistence/snapshot_service.py`:
    - typed result model (dataclass or Pydantic)
    - snapshot workspace lifecycle + manifest writing
+   - manifest schema fields: required `index_id`, `graph_store_type`, `vector_store_type`, `corpus_hash`, `config_hash`, `versions`; optional `graph_exports` (with sha256 metadata hash)
    - packaged `graph_exports` metadata hashing (sha256)
 3. [ ] Refactor `src/pages/02_documents.py` to call the service and only render results/errors.
 4. [ ] Update tests:
@@ -181,6 +188,8 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ### **Final Verification Checklist (Must Complete)**
 
+All items below must be completed (Status = ✓) before the implementation is ready for code review.
+
 | Requirement     | Status | Proof / Notes                                                                                                 |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
 | **Packaging**   |        | `uv sync` clean                                                                                               |
@@ -191,6 +200,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                          |
 | **Security**    |        | snapshot writes remain atomic; no new write surfaces                                                          |
 | **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                    |
-| **Performance** |        | service layer keeps Streamlit pages import-light                                                              |
+| **Performance** |        | service layer keeps Streamlit pages import-light; no regressions >10% vs baseline (measure via `scripts/performance_monitor.py`) |
 
 **EXECUTE UNTIL COMPLETE.**
