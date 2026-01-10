@@ -36,13 +36,9 @@ def clear_caches(settings_obj: Any | None = None) -> int:
     # Best-effort cache clearing; never raise
     from contextlib import suppress
 
-    with suppress(
-        Exception
-    ):  # pragma: no cover - defensive
+    with suppress(Exception):  # pragma: no cover - defensive
         st.cache_data.clear()
-    with suppress(
-        Exception
-    ):  # pragma: no cover - defensive
+    with suppress(Exception):  # pragma: no cover - defensive
         st.cache_resource.clear()
 
     return int(getattr(settings_obj, "cache_version", 0))

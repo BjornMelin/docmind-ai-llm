@@ -1,6 +1,5 @@
 """Unit tests for the lean RetrievalAgent wrapper."""
 
-
 from __future__ import annotations
 
 import json

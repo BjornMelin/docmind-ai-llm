@@ -1,6 +1,5 @@
 """E2E smoke: chat via router with GraphRAG present (offline, deterministic)."""
 
-
 from __future__ import annotations
 
 from types import SimpleNamespace

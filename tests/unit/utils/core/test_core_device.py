@@ -1,6 +1,5 @@
 """Unit tests for centralized device/VRAM policy helpers in src.utils.core."""
 
-
 import types
 
 import pytest

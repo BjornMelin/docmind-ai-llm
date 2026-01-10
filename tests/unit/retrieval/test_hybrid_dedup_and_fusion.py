@@ -49,8 +49,6 @@ def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyp
 )
 def test_fusion_selection(monkeypatch, mode: str, expected: str):  # type: ignore[no-untyped-def]
     hmod = importlib.import_module("src.retrieval.hybrid")
-    params = hmod._HybridParams(
-        collection="c", fusion_mode=mode
-    )
+    params = hmod._HybridParams(collection="c", fusion_mode=mode)
     retriever = hmod.ServerHybridRetriever(params, client=lambda: None)  # type: ignore[arg-type]
     assert retriever._fusion().fusion.name == expected

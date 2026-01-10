@@ -19,7 +19,6 @@ Tests use proper boundary mocking to avoid external dependencies while validatin
 complete user workflows and application integration.
 """
 
-
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
