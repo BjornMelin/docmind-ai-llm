@@ -109,6 +109,7 @@ These ADRs are kept for historical context only and MUST NOT be implemented. See
 - **[ADR-012 — Evaluation with DeepEval (Superseded by ADR-039)](superseded/ADR-012-evaluation-strategy.md)**
 - **[ADR-015 — Docker-First Local Deployment (Superseded by ADR-042)](superseded/ADR-015-deployment-strategy.md)**
 - **[ADR-021 — Conversational Memory & Context Management (Superseded by ADR-057)](superseded/ADR-021-chat-memory-context-management.md)**
+- **[ADR-043 — Chat Persistence via SimpleChatStore (Superseded by ADR-057)](superseded/ADR-043-chat-persistence-simplechatstore.md)**
 - **[ADR-025 — Caching Strategy (Superseded by ADR-030)](superseded/ADR-025-caching-strategy.md)**
 - **[ADR-036 — Reranker UI Controls (Superseded)](superseded/ADR-036-reranker-ui-controls-normalize-topn.md)**
 - **[ADR-054 — Config Surface Pruning (Unused Knobs) (Superseded)](superseded/ADR-054-config-surface-pruning-unused-knobs.md)**
@@ -130,7 +131,7 @@ Latest additions:
 - **[ADR-044 — Keyword Tool (Sparse-only Qdrant)](ADR-044-keyword-tool-sparse-only-qdrant.md)**
 - **[ADR-045 — Programmatic Ingestion API + Legacy Facade](ADR-045-ingestion-api-and-legacy-facade.md)**
 - **[ADR-046 — Remove Legacy `src/main.py` Entrypoint](ADR-046-remove-legacy-main-entrypoint.md)**
-- **[ADR-047 — Safe Logging Policy (No PII Redactor Stub)](ADR-047-safe-logging-policy-no-pii-redactor.md)**
+- **[ADR-047 — Safe Logging Policy (Metadata-only + Keyed Fingerprints + Backstop)](ADR-047-safe-logging-policy-no-pii-redactor.md)**
 - **[ADR-048 — Docs Consistency Pass](ADR-048-docs-consistency-pass.md)**
 - **[ADR-049 — Multimodal Helper Cleanup](ADR-049-multimodal-helper-cleanup.md)**
 - **[ADR-050 — Config Discipline (Remove `os.getenv` Sprawl)](ADR-050-config-discipline-env-bridges.md)**

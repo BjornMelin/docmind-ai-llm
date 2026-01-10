@@ -13,15 +13,18 @@ References:
   - [LangGraph — Memory](https://docs.langchain.com/oss/python/langgraph/add-memory)
   - [LangGraph — Time travel](https://docs.langchain.com/oss/python/langgraph/use-time-travel)
   - [langgraph-checkpoint-sqlite (PyPI)](https://pypi.org/project/langgraph-checkpoint-sqlite/)
-  - [LangMem — Introduction](https://langchain-ai.github.io/langmem/)
-  - [LangMem — Memory tools](https://langchain-ai.github.io/langmem/guides/memory_tools/)
-  - [LangMem — Background memory manager](https://langchain-ai.github.io/langmem/background_quickstart)
+  - [Letta — Agentic memory leaderboard](https://www.letta.com/blog/letta-leaderboard)
+  - [Letta — Benchmarking agent memory (LoCoMo)](https://www.letta.com/blog/benchmarking-ai-agent-memory)
+  - [Mem0 — Agent memory benchmark](https://mem0.ai/blog/ai-agent-memory-benchmark/)
+  - [Mem0 — Paper (arXiv)](https://arxiv.org/abs/2504.19413)
+  - [Zep/Graphiti — Agent memory (paper)](https://arxiv.org/abs/2501.13956)
+  - [Zep/Graphiti — Docs (Memory)](https://help.getzep.com/v2/memory)
   - [Streamlit — st.query_params](https://docs.streamlit.io/develop/api-reference/caching-and-state/st.query_params)
 ---
 
 ## Description
 
-Adopt **LangGraph-native persistence** for DocMind Chat: durable **thread checkpoints** + **time-travel branching** via `langgraph-checkpoint-sqlite` and **hybrid long-term memory** via LangGraph `SqliteStore` integrated with **LangMem**.
+Adopt **LangGraph-native persistence** for DocMind Chat: durable **thread checkpoints** + **time-travel branching** via `langgraph-checkpoint-sqlite` and **hybrid long-term memory** via LangGraph `SqliteStore` (SQLite + `sqlite-vec` semantic search) with a **deterministic, testable memory consolidation pipeline** inspired by state-of-the-art “add/update/delete” memory update patterns.
 
 ## Context
 
@@ -39,7 +42,7 @@ For the **final release**, chat must support:
 - a **tiered memory system**:
   - short-term conversation context (thread state)
   - long-term memories (facts/preferences) with metadata-filtered recall
-  - background consolidation to reduce “memory creep”
+  - background consolidation with explicit add/update/delete semantics to reduce “memory creep” and contradictions
 
 DocMind is offline-first and already uses LangGraph (supervisor pattern). We should reuse LangGraph primitives rather than invent a parallel persistence system.
 
@@ -47,27 +50,31 @@ DocMind is offline-first and already uses LangGraph (supervisor pattern). We sho
 
 - Final-release capabilities: multi-session, branching/time travel, long-term memory + consolidation
 - Offline-first security posture: no remote services required; egress remains gated by settings
-- Library-first: use maintained LangGraph/LangMem primitives vs custom storage logic
+- Library-first: use maintained LangGraph persistence primitives vs building a parallel memory service
 - Observability: instrument key operations without logging raw chat content
 - Maintainability: one canonical persistence path for agent state and memory
+ - Production pragmatism: minimize new always-on services/ports (local-first UX)
 
 ## Alternatives
 
-- A: **LangGraph SQLite checkpointer + store + LangMem** (Selected)
-  - Pros: native to LangGraph, supports time travel and long-term memory; offline-first; minimal custom code
-  - Cons: adds dependency (`langgraph-checkpoint-sqlite`, `langmem`); must ensure message/state schemas are serializable
+- A: **LangGraph SQLite checkpointer + SqliteStore + deterministic consolidation** (Selected)
+  - Pros: native to LangGraph, supports time travel and long-term memory; offline-first; single local DB; retention/TTL possible; minimal moving parts
+  - Cons: must ensure message/state schemas are serializable; consolidation requires careful prompting + tests
 - B: LlamaIndex `SimpleChatStore` JSON + `ChatMemoryBuffer` only (ADR-043)
   - Pros: no new deps
   - Cons: no time travel; limited multi-agent state persistence; hard to extend to hybrid memory tiers
-- C: Mem0 OSS stack
-  - Pros: rich memory concepts and benchmarks; can be self-hosted
-  - Cons: heavier operational footprint; more moving parts; risk of opaque behavior and prompt-injection memory poisoning
-- D: Letta (MemGPT) self-hosted service
+- C: Zep/Graphiti temporal KG memory (self-hosted)
+  - Pros: temporal knowledge graph semantics; strong memory + GraphRAG framing
+  - Cons: service/process footprint and additional DB dependencies; more operational complexity for local-first Streamlit UX
+- D: Mem0 OSS stack (dense/graph)
+  - Pros: published benchmarks; explicit add/update/delete memory update architecture
+  - Cons: heavier operational footprint (graph DB for Mem0g); more moving parts; opaque behavior risk for local UX
+- E: Letta (MemGPT) self-hosted service
   - Pros: strong memory hierarchy concept
   - Cons: introduces a server/process; more operational and packaging complexity for Streamlit local-first UX
-- E: Custom build (SQLite schema + Qdrant collection for memory vectors)
-  - Pros: full control, reuse Qdrant
-  - Cons: reinvents checkpointing/time-travel semantics; higher maintenance and correctness risk
+- F: Custom build (SQLite schema + Qdrant memory collection)
+  - Pros: maximum control; reuse Qdrant for semantic retrieval
+  - Cons: more custom code and lifecycle/retention logic; higher maintenance than LangGraph store; duplicates vector infra already present in LangGraph store
 
 ### Decision Framework (≥9.0)
 
@@ -75,11 +82,12 @@ Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
 | Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
 |---|---:|---:|---:|---:|---|
-| **A: LangGraph SQLite + LangMem** | 9.5 | 9.0 | 9.6 | **9.36** | ✅ Selected |
+| **A: LangGraph SQLite + SqliteStore + consolidation** | 9.2 | 9.0 | 9.7 | **9.26** | ✅ Selected |
 | B: LlamaIndex JSON store only | 9.5 | 7.5 | 6.5 | 8.00 | Rejected |
-| C: Mem0 OSS | 6.5 | 8.0 | 6.0 | 6.93 | Rejected |
-| D: Letta/MemGPT service | 5.5 | 7.5 | 5.0 | 5.93 | Rejected |
-| E: Custom (SQLite + Qdrant memory) | 7.0 | 8.5 | 8.5 | 7.85 | Rejected |
+| C: Zep/Graphiti service | 6.0 | 8.5 | 6.5 | 6.95 | Rejected |
+| D: Mem0 OSS | 6.5 | 8.5 | 6.5 | 7.10 | Rejected |
+| E: Letta/MemGPT service | 5.5 | 7.5 | 5.0 | 5.93 | Rejected |
+| F: Custom (SQLite + Qdrant memory) | 7.5 | 9.0 | 9.0 | 8.15 | Rejected |
 
 ## Decision
 
@@ -87,10 +95,11 @@ We will implement chat persistence and agentic memory using **LangGraph’s pers
 
 1. Use `langgraph-checkpoint-sqlite==3.0.1`:
    - `langgraph.checkpoint.sqlite.SqliteSaver` as the **thread checkpointer** (durable checkpoints per `thread_id`).
-   - `langgraph.store.sqlite.SqliteStore` as the **long-term memory store** (KV + metadata filters + semantic search via sqlite-vec).
-2. Integrate **LangMem** for:
-   - memory tools (hot path) to store/search memories during chat
-   - background memory store manager for consolidation and contradiction resolution
+   - `langgraph.store.sqlite.SqliteStore` as the **long-term memory store** (KV + metadata filters + semantic search via `sqlite-vec`).
+2. Implement a **deterministic memory consolidation pipeline** (in-graph step) that:
+   - extracts candidate “memories” from the most recent turn (facts/preferences) into a fixed schema
+   - applies an explicit **ADD / UPDATE / DELETE / NOOP** policy against existing memories (bounded search window)
+   - persists to `SqliteStore` under a strict namespace (`user_id`, `thread_id`) and enforces retention/TTL
 3. Keep all persistence **local by default**. No cloud sync. Any remote LLM usage remains gated by existing DocMind settings.
 
 This supersedes ADR-043 and ADR-021 by establishing **one canonical, final-release persistence strategy** built on LangGraph.
@@ -166,6 +175,21 @@ Use `SqliteStore` with an embeddings adapter that reuses DocMind’s embedding m
 - Embeddings: wrap LlamaIndex `Settings.embed_model` behind a LangChain `Embeddings` adapter.
 - Index fields: the memory payload field(s) that contain natural language to embed (e.g., `"content"`).
 
+### Memory consolidation semantics (final-release)
+
+The system must not “append everything forever”. Consolidation is required to keep the memory store small, useful, and safe.
+
+Rules:
+
+- Extraction must output a typed schema (facts/preferences), not free-form text.
+- Update policy must be explicit: **ADD**, **UPDATE**, **DELETE**, **NOOP**.
+- Consolidation must be bounded:
+  - limit candidates per turn
+  - limit retrieval window when checking for overlap/contradictions
+- Retention must be enforced:
+  - TTL for low-importance memories
+  - user-visible purge/delete for any stored memory
+
 ### Namespacing (multi-user and isolation)
 
 Memory keys and namespaces must be scoped to avoid cross-session/user leakage.
@@ -221,4 +245,3 @@ For user chat content:
 - Keep `langgraph-checkpoint-sqlite` pinned at a version with known SQL-injection fixes for metadata filtering.
 - Maintain strict user/session scoping in namespaces and filters.
 - Add regression tests around checkpoint listing and filter key validation.
-

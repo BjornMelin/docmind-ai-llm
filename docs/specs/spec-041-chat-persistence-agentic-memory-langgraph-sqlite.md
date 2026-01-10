@@ -57,12 +57,10 @@ related_adrs: ["ADR-057", "ADR-011", "ADR-016", "ADR-024", "ADR-047", "ADR-055"]
 Add (pinned):
 
 - `langgraph-checkpoint-sqlite==3.0.1` (includes `sqlite-vec>=0.1.6`)
-- `langmem==0.0.30`
 
 Rationale:
 
-- Enables durable checkpoints, time travel, and a DB-backed LangGraph store for semantic search.
-- Enables memory tools + background consolidation built for LangGraph stores.
+- Enables durable checkpoints, time travel, and a DB-backed LangGraph store for semantic search (no extra service).
 
 ### Storage boundaries
 
@@ -113,16 +111,22 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
         return LISettings.embed_model.get_text_embedding(text)
 ```
 
-#### C) LangMem integration
+#### C) Memory extraction + consolidation (final-release)
 
-Use both:
+Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns:
 
-- **Hot-path tools** in the agent graph:
-  - `create_manage_memory_tool(namespace=(..., "{user_id}", "{thread_id}"))`
-  - `create_search_memory_tool(namespace=(..., "{user_id}", "{thread_id}"))`
-- **Background consolidation manager**:
-  - `create_memory_store_manager(model=..., namespace=(..., "{user_id}"))`
-  - called opportunistically (debounced) after a conversation turn completes
+1) **Extract candidates** from the most recent conversation turn into a fixed schema:
+   - memories must be small, user-relevant facts/preferences
+   - each candidate includes: `content`, `kind` (`fact|preference|todo|project_state`), `importance` (0..1), `source_checkpoint_id`, and optional `tags`
+2) **Update policy**:
+   - retrieve the top-N nearest existing memories in the same namespace (vector search)
+   - decide per candidate: `ADD`, `UPDATE(existing_id)`, `DELETE(existing_id)`, or `NOOP`
+   - write changes back to the store
+3) **Retention / TTL**:
+   - apply TTL for low-importance items
+   - enforce max per-namespace counts (evict oldest/lowest-importance)
+4) **User controls**:
+   - UI must provide memory review and delete/purge per-user and per-session
 
 Namespace conventions:
 
@@ -254,4 +258,3 @@ Update `docs/specs/traceability.md`:
 
 - FR-022: point to new modules/tests and mark as `Planned`.
 - Add new rows for session management + time travel + memory review.
-

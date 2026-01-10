@@ -15,13 +15,17 @@ Implements `ADR-057` + `SPEC-041`.
 - <https://docs.langchain.com/oss/python/langgraph/add-memory> — Short-term vs long-term memory, and DB-backed implementations.
 - <https://docs.langchain.com/oss/python/langgraph/use-time-travel> — `get_state_history`, `update_state`, and resuming from a fork.
 - <https://pypi.org/project/langgraph-checkpoint-sqlite/> — `langgraph-checkpoint-sqlite==3.0.1` (SqliteSaver + SqliteStore, sqlite-vec dependency).
-- <https://langchain-ai.github.io/langmem/> — LangMem overview (hot-path tools + background memory manager).
-- <https://langchain-ai.github.io/langmem/guides/memory_tools/> — Memory tools (`create_manage_memory_tool`, `create_search_memory_tool`) and namespace templating (`{user_id}`, `{thread_id}`).
-- <https://langchain-ai.github.io/langmem/background_quickstart> — Background memory extraction/consolidation patterns (debounce guidance).
 - <https://docs.streamlit.io/develop/api-reference/chat/st.chat_input> — Chat input widget behavior.
 - <https://docs.streamlit.io/develop/api-reference/chat/st.chat_message> — Chat message rendering patterns.
 - <https://docs.streamlit.io/develop/api-reference/caching-and-state/st.query_params> — Shareable URLs (`?chat=<id>`), repeated keys, and multipage clearing behavior.
 - <https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest> — AppTest for Streamlit integration tests.
+
+SOTA memory research (context, informs design):
+
+- <https://www.letta.com/blog/letta-leaderboard> — Memory capability benchmark suite for LLMs (read/write/update memory).
+- <https://www.letta.com/blog/benchmarking-ai-agent-memory> — LoCoMo benchmark discussion; compares filesystem/tooling memory vs specialized memory systems.
+- <https://mem0.ai/blog/ai-agent-memory-benchmark/> — Mem0 benchmark comparisons; describes extraction + update pipeline patterns.
+- <https://arxiv.org/abs/2501.13956> — Zep/Graphiti temporal knowledge graph approach for agent memory.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -62,6 +66,12 @@ Skill references to consult (as needed):
 
 - `functions.list_mcp_resources` → look for preloaded LangGraph/Streamlit resources.
 - `functions.read_mcp_resource` → read before doing web search.
+
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (persistence, checkpoints, interrupts/time travel)
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc` (if you bridge any LlamaIndex chat stores/tools)
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if this work package touches OpenAI API semantics)
 
 **API verification (Context7, only when uncertain):**
 
@@ -111,7 +121,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### FEATURE CONTEXT (FILLED)
 
-**Primary Task:** Replace the superseded SimpleChatStore plan with a final-release chat persistence + hybrid agentic memory system using LangGraph SQLite (`SqliteSaver` + `SqliteStore`) and LangMem (memory tools + background consolidation), with Streamlit UI session management and time-travel branching.
+**Primary Task:** Replace the superseded SimpleChatStore plan with a final-release chat persistence + hybrid agentic memory system using LangGraph SQLite (`SqliteSaver` + `SqliteStore` with `sqlite-vec` semantic search), plus a deterministic “extract + ADD/UPDATE/DELETE/NOOP” memory consolidation pipeline, with Streamlit UI session management and time-travel branching.
 
 **Why now:** The current Chat UI is session-only and the coordinator uses `InMemorySaver`, so there is no durable memory or time travel. The final release requires multi-session persistence, branching, and long-term memory without violating offline-first security posture.
 
@@ -119,7 +129,8 @@ You must keep changes minimal, library-first, and maintainable.
 
 - Chat sessions persist across refresh/restart and support create/rename/delete/select.
 - Coordinator uses `langgraph-checkpoint-sqlite` for durable checkpoints, enabling time travel with `get_state_history` + `update_state`.
-- Long-term memory tools (LangMem) can store/search memories scoped by `user_id` and `thread_id`, and a memory review/purge UI exists.
+- Long-term memory store uses `SqliteStore` vector indexing; memories are scoped by `user_id` and `thread_id`, support metadata-filtered recall, and are user-reviewable/deletable.
+- Consolidation is implemented with explicit `ADD/UPDATE/DELETE/NOOP` operations and bounded retention/TTL (no unbounded growth).
 - No raw message content is emitted in telemetry/logs; DB paths are validated; remote endpoints remain blocked by default.
 - Tests added: unit tests for chat DB/session registry + AppTest integration for session restore and time travel fork.
 - Docs remain aligned: ADR-057 + SPEC-041 + requirements/RTM updated; superseded docs remain in `*/superseded/`.
@@ -176,11 +187,12 @@ Rules:
 - Do not add new `os.getenv` usage in domain code.
 - If new config is needed (e.g., `chat.user_id`), add it to settings and document it.
 
-#### 5) LangGraph + LangMem Alignment
+#### 5) LangGraph Store Alignment
 
 - Use LangGraph checkpointer and store interfaces (`setup()`, `thread_id` config).
 - Ensure persisted state is serializable (avoid storing live objects in state).
 - Memory namespaces must be scoped to `user_id` and `thread_id` (no cross-user bleed).
+- Enforce bounded memory growth: TTL/retention and delete/purge operations are first-class.
 
 #### 6) Observability & Security
 
@@ -194,7 +206,7 @@ Rules:
 
 You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
-1. [ ] Add dependencies + wire `langgraph-checkpoint-sqlite` + `langmem` (pin versions in `pyproject.toml` and `uv.lock`).
+1. [ ] Add dependency + wire `langgraph-checkpoint-sqlite` (pin versions in `pyproject.toml` and `uv.lock`).
    - Commands:
      - `uv sync`
      - `uv run python -c \"import langgraph; print(langgraph.__version__)\"`
@@ -208,7 +220,11 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
    - ensure state schema supports multi-turn message accumulation and serialization (migrate to `AnyMessage` + reducer semantics as needed)
    - Commands:
      - `uv run ruff check src/agents/coordinator.py src/agents/models.py`
-4. [ ] Add long-term memory tools in `src/agents/tools/memory.py` and register them in `src/agents/registry/tool_registry.py`.
+4. [ ] Add long-term memory primitives:
+   - `SqliteStore` vector index initialization (embedding adapter, dims, fields)
+   - memory extract + `ADD/UPDATE/DELETE/NOOP` consolidation step
+   - memory search tool (vector search + metadata filters)
+   - register tools in `src/agents/registry/tool_registry.py`
    - Commands:
      - `uv run ruff check src/agents/tools/memory.py src/agents/registry/tool_registry.py`
 5. [ ] Update Chat UI (`src/pages/01_chat.py`) to:
@@ -249,17 +265,16 @@ Scan the feature scope and delete or refactor immediately if found:
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement | Status | Proof / Notes |
-|---|---|---|
-| **Packaging** |  | `uv sync` clean |
-| **Formatting** |  | `uv run ruff format .` |
-| **Lint** |  | `uv run ruff check .` |
-| **Types** |  | `uv run pyright` |
-| **Tests** |  | `uv run python scripts/run_tests.py --fast` |
-| **Docs** |  | ADR/SPEC/RTM updated |
-| **Security** |  | allowlist + path validation + no raw chat logs |
-| **Tech Debt** |  | zero TODO/FIXME introduced |
-| **Performance** |  | no import-time heavy work; key spans measured |
+| Requirement     | Status | Proof / Notes                                  |
+| --------------- | ------ | ---------------------------------------------- |
+| **Packaging**   |        | `uv sync` clean                                |
+| **Formatting**  |        | `uv run ruff format .`                         |
+| **Lint**        |        | `uv run ruff check .`                          |
+| **Types**       |        | `uv run pyright`                               |
+| **Tests**       |        | `uv run python scripts/run_tests.py --fast`    |
+| **Docs**        |        | ADR/SPEC/RTM updated                           |
+| **Security**    |        | allowlist + path validation + no raw chat logs |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                     |
+| **Performance** |        | no import-time heavy work; key spans measured  |
 
 **EXECUTE UNTIL COMPLETE.**
-
