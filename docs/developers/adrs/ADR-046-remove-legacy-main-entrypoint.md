@@ -43,7 +43,7 @@ Keeping it increases confusion and creates a latent “wrong entrypoint” trap,
 Scoring rubric:
 
 - Complexity (40%): higher is simpler. Delete is minimal code; archive adds process overhead.
-- Performance (30%): no runtime perf change expected; scores reflect negligible impact.
+- Performance (30%): no runtime perf change expected; scores reflect negligible impact (low discriminative power when parity across options).
 - Alignment (30%): alignment to Streamlit-only entrypoint and config discipline; delete is highest.
 
 ## Decision

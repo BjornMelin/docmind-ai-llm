@@ -63,9 +63,9 @@ Implements `ADR-035` + `SPEC-038`.
 
 ---
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## Implementation Executor Template (DocMind / Python)
 
-### YOU ARE
+### You Are
 
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
@@ -80,7 +80,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT
+### Feature Context
 
 **Primary Task:** Implement a Qdrant-backed semantic response cache with:
 
@@ -121,7 +121,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### Hard Rules (Execution)
 
 #### 1) Python + Packaging
 
@@ -151,9 +151,9 @@ Your code must pass:
 
 ---
 
-### STEP-BY-STEP EXECUTION PLAN
+### Step-by-Step Execution Plan
 
-You MUST produce a plan and keep exactly one step “in_progress” at a time.
+You MUST produce a plan and keep exactly one step “in_progress” at a time. For humans, annotate the checklist with `[~]` on the single in-progress step; for agents, update plan state via `functions.update_plan`.
 
 1. [ ] Read ADR/SPEC and locate the best cache insertion point in the LLM call path.
 2. [ ] Implement `src/utils/semantic_cache.py`:
@@ -182,7 +182,7 @@ uv run python -m pytest -q
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
 1. Storing raw prompts or full retrieved context text in the cache payload.
 2. Semantic hits without strict filters (model/template/params/corpus hash).
@@ -192,7 +192,7 @@ uv run python -m pytest -q
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### Final Verification Checklist (Must Complete)
 
 | Requirement       | Status | Proof / Notes                              |
 | ----------------- | ------ | ------------------------------------------ |
@@ -204,4 +204,4 @@ uv run python -m pytest -q
 | **Security**      |        | no raw prompts stored; strict invalidation |
 | **Offline-first** |        | default-off; no new egress                 |
 
-**EXECUTE UNTIL COMPLETE.**
+**Execute Until Complete.**

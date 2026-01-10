@@ -12,7 +12,7 @@ Implements `ADR-056` + `SPEC-040`.
 ## Official docs (research during implementation)
 
 - <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming patterns (sync vs. async).
-- <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/human-in-the-loop> — Human-in-the-loop / interrupts (control-flow, not hard cancellation).
+- <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/interrupts> — Human-in-the-loop / interrupts (control-flow, not hard cancellation).
 - <https://reference.langchain.com/python/langchain_core/runnables/#langchain_core.runnables.RunnableConfig> — RunnableConfig / execution config surface.
 - <https://reference.langchain.com/python/integrations/langchain_openai/ChatOpenAI/> — `ChatOpenAI(timeout=...)` reference.
 
@@ -77,9 +77,9 @@ This is agent/orchestration work. No dedicated skill exists for LangGraph, but:
 
 Use only if you must confirm LangGraph/LangChain internals for timeout behavior. Prefer official docs + runtime introspection.
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## Implementation Executor Template (DocMind / Python)
 
-### YOU ARE
+### You Are
 
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
@@ -94,7 +94,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### Feature Context (Filled)
 
 **Primary Task:** Implement cooperative agent deadline propagation and router injection:
 
@@ -133,7 +133,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### Hard Rules (Execution)
 
 #### 1) Python + Packaging
 
@@ -166,7 +166,7 @@ uv run python scripts/run_tests.py --fast
 
 ---
 
-### STEP-BY-STEP EXECUTION PLAN (FILLED)
+### Step-by-Step Execution Plan (Filled)
 
 You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
@@ -180,7 +180,7 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
 1. Global flags for cancellation shared across users/sessions.
 2. “Hard-killing” threads/futures to cancel work.
@@ -189,7 +189,7 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### Final Verification Checklist (Must Complete)
 
 | Requirement    | Status | Proof / Notes                                              |
 | -------------- | ------ | ---------------------------------------------------------- |
@@ -202,4 +202,4 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 | **Security**   |        | no raw-content logs; bounded timeouts; allowlist preserved |
 | **Tech Debt**  |        | zero TODO/FIXME introduced                                 |
 
-**EXECUTE UNTIL COMPLETE.**
+**Execute Until Complete.**

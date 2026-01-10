@@ -47,8 +47,8 @@ Skill references to consult (as needed):
   - `rg -n \"rebuild_snapshot|SnapshotManager|manifest\\.jsonl|graph_exports\" -S src tests`
   - `rg -n \"02_documents\\.py\" -S src tests docs`
 - Read in parallel:
-  - `src/pages/02_documents.py`
-  - `src/persistence/snapshot_manager.py` (and related persistence modules)
+- `src/pages/02_documents.py`
+  - `src/persistence/snapshot.py` (SnapshotManager) plus `snapshot_writer.py` and `snapshot_utils.py`
   - `src/retrieval/graph_config.py` (exports packaging, if involved)
 
 **MCP resources first (when available):**
@@ -97,7 +97,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### **Feature Context (Filled)**
 
-**Primary Task:** Extract snapshot rebuild + GraphRAG export packaging logic from `src/pages/02_documents.py` into a persistence-layer service module (`src/persistence/snapshot_service.py`) and keep the Documents page as UI wiring only.
+**Primary Task:** Extract snapshot rebuild + GraphRAG export packaging logic from `src/pages/02_documents.py` into a persistence-layer service module (`src/persistence/snapshot_service.py`) and keep the Documents page as UI wiring only. `snapshot_service.py` is the orchestration layer that coordinates `SnapshotManager` (`snapshot.py`), `SnapshotWriter` (`snapshot_writer.py`), and pure helpers (`snapshot_utils.py`); state/lifecycle stays in `SnapshotManager`, low-level I/O stays in `SnapshotWriter`, and helpers remain in `snapshot_utils.py`.
 
 **Why now:** The Documents page currently embeds domain logic (snapshot lifecycle, hashing, export metadata) which is difficult to test and easy to regress during UI changes. A service boundary improves correctness and maintainability for v1.
 

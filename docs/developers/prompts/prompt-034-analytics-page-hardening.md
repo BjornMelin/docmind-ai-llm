@@ -92,9 +92,9 @@ cat opensrc/sources.json | rg -n "duckdb" || true
 npx opensrc pypi:duckdb
 ```
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## Implementation Executor Template (DocMind / Python)
 
-### YOU ARE
+### You Are
 
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
@@ -108,7 +108,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### Feature Context (Filled)
 
 **Primary Task:** Refactor the Streamlit Analytics page to close DuckDB connections deterministically and parse local telemetry JSONL efficiently using canonical paths.
 
@@ -133,7 +133,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### STEP-BY-STEP EXECUTION PLAN (FILLED)
+### Step-by-Step Execution Plan (Filled)
 
 0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
@@ -158,7 +158,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
 1. `duckdb.connect(...)` without close.
 2. `Path(...).read_text().splitlines()` on potentially large telemetry files.
@@ -167,7 +167,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+### MCP Tool Strategy (For Implementation Run)
 
 Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
 
@@ -183,7 +183,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### Final Verification Checklist (Must Complete)
 
 | Requirement     | Status | Proof / Notes                                                                                           |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------------- |

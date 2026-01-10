@@ -12,6 +12,7 @@ from contextlib import suppress
 from pathlib import Path
 
 import streamlit as st
+from dotenv import set_key, unset_key
 
 from src.config.integrations import initialize_integrations
 from src.config.settings import settings
@@ -34,17 +35,14 @@ def _persist_env(vars_to_set: dict[str, str]) -> None:
     Minimal .env updater: overwrites existing keys; preserves others.
     """
     env_path = Path(".env")
-    existing: dict[str, str] = {}
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip() or line.strip().startswith("#"):
-                continue
-            if "=" in line:
-                k, v = line.split("=", 1)
-                existing[k.strip()] = v.strip()
-    existing |= vars_to_set
-    content = "\n".join(f"{k}={v}" for k, v in existing.items()) + "\n"
-    env_path.write_text(content, encoding="utf-8")
+    if not env_path.exists():
+        env_path.write_text("", encoding="utf-8")
+
+    for key, value in vars_to_set.items():
+        if value == "":
+            unset_key(str(env_path), key)
+        else:
+            set_key(str(env_path), key, value, quote_mode="auto")
 
 
 def _apply_runtime() -> None:

@@ -109,7 +109,7 @@ Skill references to consult (as needed):
 
 Use only if container behavior depends on packaging internals (rare). Prefer repo scripts and `pyproject.toml` truth.
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## Implementation Executor Template (DocMind / Python)
 
 ### YOU ARE
 
@@ -158,7 +158,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### Hard Rules (Execution)
 
 #### 1) Python + Packaging
 
@@ -217,13 +217,15 @@ After container changes, the repo must still pass:
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
 1. Python 3.12+ base images (violates pyproject).
 2. JSON `CMD` with embedded shell strings (`[". venv/bin/activate && …"]`).
 3. Missing `.dockerignore`.
 4. Root runtime user without justification.
 5. Compose env vars that bypass `DOCMIND_*` settings model.
+
+**Automation note:** Add a lightweight static check in CI to enforce these rules (Dockerfile CMD/ENTRYPOINT validation, `.dockerignore` presence, non-root runtime user, and env var prefix scanning).
 
 ---
 

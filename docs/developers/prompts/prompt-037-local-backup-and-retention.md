@@ -102,6 +102,9 @@ You must keep changes minimal, library-first, and maintainable.
 - Unit and integration tests cover rotation, manifests, and Qdrant snapshot behavior (mocked/offline).
 - Docs updated and RTM includes `FR-027` mapping.
 
+**ADR-051 Integration Status:**
+ADR-051 (Documents Snapshot Service Boundary) is currently **Proposed**. Until it is accepted and `src/persistence/snapshot_service.py` exists, implement Qdrant snapshots using `qdrant_client` directly. Add a `# FIXME: refactor to snapshot_service.create_snapshot()` comment in the backup implementation (e.g., `scripts/backup.py`) where Qdrant snapshots are created to signal the future refactor.
+
 **In-scope modules/files (initial):**
 
 - `scripts/backup.py` (new)

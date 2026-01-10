@@ -12,7 +12,7 @@ with the current codebase, pyproject.toml, scripts, and docs/specs/ADRs.
 - `src/config/`: Pydantic Settings + LLM integration wiring
 - `src/processing/`: Ingestion pipeline, OCR, PDF page exports
 - `src/retrieval/`: Router, hybrid retrieval, reranking, GraphRAG helpers
-- `src/agents/`: LangGraph supervisor, tools, coordinator
+- `src/agents/`: LangGraph coordinator, tools (external package name `langgraph-supervisor` remains unchanged)
 - `src/persistence/`: Snapshot writer, hashing, locking
 - `src/telemetry/` and `src/utils/telemetry.py`: OpenTelemetry hooks + JSONL events
 - `templates/`: Prompt templates and presets

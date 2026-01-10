@@ -6,7 +6,7 @@ Version: 1.2
 Date: 2026-01-09
 Supersedes:
 Superseded-by: ADR-050
-Related: 024, 013, 031
+Related: 021, 023, 024, 013, 031, 035, 043
 Tags: configuration, maintainability, release
 ---
 
@@ -91,5 +91,5 @@ Weights: Complexity 40% · Risk Reduction 30% · Alignment 30% (10 = best)
 ## Changelog
 
 - 1.2 (2026-01-10): Superseded by ADR-050; updated metadata and Decision framing.
-- 1.1 (2026-01-09): Added supersession notice.
-- 1.0 (2026-01-09): Proposed for v1 coherence and maintainability.
+- 1.1 (2026-01-09): Added supersession notice (same-day update).
+- 1.0 (2026-01-09): Proposed for v1 coherence and maintainability (initial draft).

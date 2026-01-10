@@ -53,6 +53,7 @@ Suggested helpers:
 #### Key management
 
 - Key source: `DocMindSettings.hashing.hmac_secret` (local secret; must never be logged). This secret is also the source-of-truth for HMAC canonicalization in `src/utils/canonicalization.py`.
+- Implementation detail: encode `DocMindSettings.hashing.hmac_secret` to bytes when constructing `DocumentCanonicalConfig` to match the `hmac.new()` bytes requirement.
 - Env var: `DOCMIND_HASHING__HMAC_SECRET` (use a strong random string; at least 32 bytes).
 - Rotation: bump `DocMindSettings.hashing.hmac_secret_version` and treat fingerprints as non-stable across rotations.
 

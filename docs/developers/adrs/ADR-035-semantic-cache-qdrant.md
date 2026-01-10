@@ -122,14 +122,14 @@ graph TD
 ### Functional Requirements
 
 - FR‑1: Serve responses from an optional cache (exact + semantic) for repeated requests.
-- FR‑2: Cache adapter must expose a provider-agnostic interface with a single integration point in the LLM call path.
-- FR‑3: Automatic invalidation of cache entries when corpus/config hashes change.
+- FR‑2: Provide a provider-agnostic adapter interface with a single integration point in the LLM call path.
+- FR‑3: Implement automatic invalidation of cache entries when corpus/config hashes change.
 
 ### Non-Functional Requirements
 
-- NFR‑1: Offline/local; deterministic tests; no network in CI.
-- NFR‑2: Default Off feature flag for safe-by-default behavior.
-- NFR‑3: Ensure privacy by not storing raw prompts; optionally support encryption for cached responses.
+- NFR‑1: Support offline/local execution; deterministic tests; no network in CI.
+- NFR‑2: Maintain default-off behavior for safe-by-default feature enablement.
+- NFR‑3: Protect privacy: do not store raw prompts; optionally support encryption for cached responses.
 
 ### Performance Requirements
 
@@ -193,7 +193,7 @@ def test_cache_hit_miss(mock_cache, deterministic_embed):
 ### Negative Consequences / Trade-offs
 
 - Read-time time-to-live vs scheduled cleanup
-- FAISS dependency footprint (applies only to optional GPTCache provider, not the primary Qdrant implementation)
+- FAISS. Dependency footprint applies only to optional GPTCache provider, not the primary Qdrant implementation
 
 ### Ongoing Maintenance & Considerations
 

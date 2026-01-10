@@ -50,7 +50,7 @@ Docs drift is best solved with repo-local tooling + grep first.
 
 - LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
 - LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
-- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if updating docs that cite OpenAI API semantics)
+- OpenAI API docs: `search` → `fetch` (OpenAI Docs MCP server at https://developers.openai.com/mcp; only if updating docs that cite OpenAI API semantics)
 
 **API verification (only when needed):**
 

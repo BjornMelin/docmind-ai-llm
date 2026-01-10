@@ -9,8 +9,8 @@ related_requirements:
   - FR-010: Streamlit multipage navigation.
   - FR-011: Native chat streaming.
   - FR-012: Multi-provider settings in UI.
-  - FR-001: Documents ingestion flows surfaced in UI.
-related_adrs: ["ADR-013","ADR-016","ADR-041","ADR-052","ADR-057"]
+  - FR-001: Backend document ingestion using Unstructured.
+related_adrs: ["ADR-013","ADR-016","ADR-041","ADR-052","ADR-057","ADR-009","ADR-002"]
 ---
 
 

@@ -15,6 +15,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.config.settings import settings
+from src.utils.telemetry import TELEMETRY_JSONL_PATH
 
 
 def main() -> None:  # pragma: no cover - Streamlit page
@@ -70,7 +71,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
     st.plotly_chart(px.bar(df_success, x="success", y="n"), use_container_width=True)
 
     # Telemetry JSONL (optional)
-    telem_path = Path("./logs/telemetry.jsonl")
+    telem_path = TELEMETRY_JSONL_PATH
     if telem_path.exists():
         st.subheader("Telemetry — Router Selection (JSONL)")
         counts: dict[str, int] = {}

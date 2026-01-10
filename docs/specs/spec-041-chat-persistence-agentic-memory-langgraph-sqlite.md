@@ -25,7 +25,7 @@ notes: "ADR-055 is currently 'Proposed' status; update reference when it advance
    - resume execution from the fork
 3. **Hybrid agentic memory**:
    - short-term memory: thread state (messages) via LangGraph checkpointer
-   - long-term memory: facts/preferences stored in LangGraph `SqliteStore`
+   - long-term memory: facts/preferences stored in a DocMind-managed SQLite memory table (with `sqlite-vec` for semantic search)
    - background consolidation using an explicit extract + update policy (reduces duplicates/contradictions)
 4. **Offline-first + security-first**:
    - no new network surfaces required
@@ -61,7 +61,7 @@ Add (pinned):
 
 Rationale:
 
-- Enables durable checkpoints, time travel, and a DB-backed LangGraph store for semantic search (no extra service).
+- Enables durable checkpoints and time travel; the long-term memory store is a DocMind-managed SQLite schema in the same Chat DB (no extra service).
 
 ### Storage boundaries
 
@@ -77,7 +77,7 @@ This spec introduces the Chat DB.
 - Path: `settings.chat.sqlite_path`
 - Default: `./data/chat.db` (separate from Ops DB for data isolation and independent retention/backup)
 - Must be under `settings.data_dir` by default.
-- WAL enabled by `SqliteSaver.setup()` / `SqliteStore.setup()`.
+- WAL enabled by `SqliteSaver.setup()` and Chat DB initialization.
 
 ### Components
 
@@ -92,7 +92,7 @@ This spec introduces the Chat DB.
 
 #### B) Long-term memory store
 
-- Use `langgraph.store.sqlite.SqliteStore`
+- Use a DocMind-managed memory table in the Chat DB (SQLite + `sqlite-vec`), with a small adapter surface modeled after LangGraph store semantics (get/put/list + metadata filter).
 - Configure vector index:
   - dims: `settings.embedding.dimension` (1024)
   - embed: **LlamaIndex embed model adapter** implementing `langchain_core.embeddings.Embeddings`
@@ -134,7 +134,32 @@ Namespace conventions:
 - per-session: `("memories", "{user_id}", "{thread_id}")`
 - per-user global (optional): `("memories", "{user_id}")`
 
-### Release scope (v1 vs roadmap)
+##### Memory candidate schema
+
+Pydantic model (canonical for validation/tests):
+
+```python
+from pydantic import BaseModel, Field
+
+class MemoryCandidate(BaseModel):
+    content: str
+    kind: str = Field(pattern="^(fact|preference|todo|project_state)$")
+    importance: float = Field(ge=0.0, le=1.0)
+    source_checkpoint_id: str
+    tags: list[str] | None = None
+```
+
+Example payloads:
+
+```json
+{"content":"Prefers dark mode","kind":"preference","importance":0.7,"source_checkpoint_id":"chkpt_01"}
+```
+
+```json
+{"content":"Project roadmap doc lives in /docs/specs","kind":"fact","importance":1.0,"source_checkpoint_id":"chkpt_99","tags":["docs","project_state"]}
+```
+
+### Release scope (v1.0 vs. roadmap)
 
 **Release 1.0 (v1) scope:**
 - Durable checkpoints + session registry
@@ -160,6 +185,8 @@ Important Streamlit behavior:
 
 - Query parameters are cleared when navigating between pages in a multipage app.
   - Therefore, query params are treated as an **entry hint**, not the sole source of truth.
+  - On first load of a shared link, hydrate `st.session_state["chat_thread_id"]` (and a branch candidate from `?branch=`) and proceed from session state afterward. If a user navigates away and back, resume the thread from `st.session_state` and prompt the user to re-select/confirm the branch if the URL no longer contains `?branch=`.
+  - If persistent shareable URLs are required, consider a hash-based fragment or a server-side share token that rehydrates session state on load.
 
 #### E) Session registry
 
@@ -189,7 +216,7 @@ Expose in Chat sidebar:
 3. Fork operation:
    - call `graph.update_state(selected_state.config, values=…)` to create a new checkpoint id.
 4. Resume:
-   - call `graph.invoke(None, new_config)` (or the supervisor’s equivalent) and persist new branch head.
+   - call `graph.invoke(None, new_config)` via the coordinator’s compiled graph (e.g., `coordinator.compiled_graph.invoke`) or add a small public wrapper (e.g., `coordinator.resume_from_fork(...)`) and persist the new branch head.
 5. Ensure both histories remain accessible (session remains the same `thread_id` but different checkpoint lineage).
 
 ## Observability
@@ -258,8 +285,9 @@ Threats and controls:
 
 - No import-time heavy work in Streamlit pages; DB connections and coordinator initialization must be cached (`st.cache_resource`) or lazy.
 - Recommended pattern:
-  - `@st.cache_resource` factory for DB/checkpointer
+  - `@st.cache_resource` factory for DB/checkpointer (keyed by `user_id` if relevant) to avoid repeated connections on Streamlit reruns
   - lazy session-state init for the coordinator (only create when missing)
+- Add a performance test simulating rapid messages + session switches to assert DB connection counts remain bounded (no leaks across reruns).
 - Memory consolidation runs in the background (debounced) to avoid blocking the hot path (Streamlit fragments `run_every` per ADR-052 when available).
 
 ## RTM Updates

@@ -51,7 +51,7 @@ Skill references to consult (as needed):
 
 ### Prompt-specific Tool Playbook (optimize tool usage)
 
-**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`.
+**Planning discipline (required):** Use `functions.update_plan` to track execution steps and keep exactly one step `in_progress`. If `functions.update_plan` is unavailable, maintain a markdown checklist with `[~]` marking the single in-progress step and update it in each response.
 
 **Parallel preflight (use `multi_tool_use.parallel`):**
 

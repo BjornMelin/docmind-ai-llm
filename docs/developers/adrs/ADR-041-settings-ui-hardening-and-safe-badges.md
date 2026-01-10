@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 024, 013, 016
+Related: 024, 013, 016, 031
 Tags: streamlit, settings, configuration, security
 References:
 - https://docs.streamlit.io/develop/api-reference/text/st.badge
@@ -83,10 +83,14 @@ flowchart TD
 
 ## Testing
 
+- Unit tests for helpers (validation + `.env` persistence):
+  - URL validation helpers and allowlist checks
+  - `.env` persistence round-trip (set/unset, missing file behavior)
 - AppTest-based integration tests for Settings page:
   - invalid URL blocks Save/Apply and renders errors
   - valid change persists to `.env` and runtime apply binds LlamaIndex Settings.llm
   - provider badge renders without using `unsafe_allow_html=True`
+- Cross-reference SPEC-022 for the detailed test matrix and separation of unit vs. integration coverage.
 
 ## Consequences
 

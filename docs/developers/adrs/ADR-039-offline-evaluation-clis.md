@@ -42,6 +42,8 @@ This ADR documents an existing decision already reflected in SPEC-010 and implem
 
 ### Decision Framework
 
+Weights reflect stakeholder consensus to prioritize leverage/maintenance (offline, repeatable, low overhead) while still valuing quality gates and risk reduction.
+
 | Model / Option                   | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) |    Total | Decision    |
 | -------------------------------- | -------------: | ----------: | -------------------: | ----------: | -------: | ----------- |
 | **D: Offline CLIs (BEIR+RAGAS)** |              9 |           8 |                    9 |           8 | **8.65** | ✅ Selected |
@@ -57,6 +59,25 @@ Implement and maintain **offline evaluation CLIs**:
 - `tools/eval/run_ragas.py` for RAG metrics (e.g., faithfulness, answer relevancy)
 
 Outputs MUST be schema-validated and reproducible (seeded).
+
+### Evaluation Gates (CI)
+
+- Retrieval quality gates (example defaults; tune per corpus):
+  - **NDCG@10 < 0.60** → fail CI
+  - **Recall@50 < 0.75** → fail CI
+- Hook into the evaluation job in CI (e.g., quality gates stage / `scripts/run_quality_gates.py --ci`) and block merges on regressions.
+
+### BEIR Dataset Selection Strategy
+
+- Use a fixed, representative subset for regression detection to keep runs fast:
+  - `scifact`, `fiqa`, `trec-covid`, `arguana`, `nfcorpus`
+- Run the full BEIR suite only for release candidates or scheduled performance sweeps.
+
+### Version Pinning (Reproducibility)
+
+- Pin evaluation tooling in `pyproject.toml`:
+  - `ragas>=0.2.10,<0.4.0`
+  - `beir>=2.0.0,<3.0.0`
 
 ## High-Level Architecture
 

@@ -53,6 +53,7 @@ Implement a "proposed settings" pattern in `src/pages/04_settings.py`:
 1. Collect widget values into an env-mapping using canonical keys (e.g., `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`).
 2. Validate the candidate mapping:
    - Build a candidate dict with nested structure:
+
      ```python
      candidate = {
          "llm": {"backend": "openai", "model": "gpt-4"},
@@ -60,25 +61,26 @@ Implement a "proposed settings" pattern in `src/pages/04_settings.py`:
          "security": {"allow_remote_endpoints": False},
      }
      ```
+
    - Call `DocMindSettings.model_validate(candidate)` (or a helper) to ensure:
      - types/ranges are correct
-     - URL constraints (/v1 normalization) are satisfied via `validate_base_url()` in `settings.py`
-     - security policy validation passes (allowlist, localhost-only per ADR-031)
+     - URL constraints (/v1 normalization) are satisfied via `_norm_lmstudio()` (uses `ensure_v1()`)
+     - security policy validation passes via `_validate_endpoints_security()` and `_validate_lmstudio_url()` (allowlist, localhost-only per ADR-031)
 3. Only after validation succeeds:
    - update the global `settings` singleton (in-memory)
-   - call `initialize_integrations(force_llm=True, force_embed=False)` for Apply (see `src/config/integrations.py`)
+   - call `initialize_integrations(*, force_llm: bool = False, force_embed: bool = False)` for Apply (see `src/config/integrations.py`)
    - persist to `.env` for Save.
 
 ### .env persistence
 
-Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv` (≥1.0.0):
+Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv==1.1.1` (pinned in `pyproject.toml`):
 
 - Use `dotenv.set_key(".env", key, value, quote_mode="auto")` for values
 - Use `dotenv.unset_key(".env", key)` for empty values (removes the key entirely)
-- If `.env` does not exist, `set_key` will create it
+- If `.env` does not exist, create it before calling `set_key`
 - Keep comments and unrelated keys intact (best-effort; rely on python-dotenv semantics)
 
-> **Edge cases**: Empty string values are treated as unset (removed via `unset_key`). Verify round-trip correctness in unit tests: write → read → validate returns expected values.
+> **Edge cases**: Empty string values are treated as unset (removed via `unset_key`). Verify round-trip correctness in unit tests: write → read → validate returns expected values and preserves comments best-effort.
 
 ## Observability
 
@@ -89,7 +91,7 @@ Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv` 
 ## Security
 
 - Enforce offline-first and allowlist rules exactly as `src/config/settings.py` defines them:
-  - Use `validate_base_url()` helper (in `settings.py`) to check URL normalization and allowlist
+  - Use `_norm_lmstudio()` for /v1 normalization and `_validate_endpoints_security()` plus `_validate_lmstudio_url()` for allowlist + localhost checks
   - Env var naming follows `DOCMIND_` prefix with `__` nesting (e.g., `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`)
   - Cross-reference ADR-031 (Config Discipline) for full policy
 - Treat the Settings UI as an untrusted input boundary:

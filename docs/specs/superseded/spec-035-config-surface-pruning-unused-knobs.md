@@ -7,7 +7,7 @@ owners: ["ai-arch"]
 status: Superseded
 related_requirements:
   - NFR-MAINT-003: No drift between docs/specs/RTM and shipped code
-related_adrs: ["ADR-054", "ADR-024"]
+related_adrs: ["ADR-050", "ADR-024"]
 ---
 
 > **Supersession Notice (2026-01-09):** This spec is superseded by ADR-050 (Config Discipline & Env Bridges) and SPEC-031. The current direction is to implement the existing configuration surface (analysis modes, backups, semantic cache, ops DB) rather than pruning it.
@@ -36,7 +36,9 @@ Remove from `src/config/settings.py` (and any docs/UI references):
 - `DatabaseConfig.sqlite_db_path`
 - `DatabaseConfig.enable_wal_mode`
 
-## Design
+## Design (Not implemented; see supersession notice for rationale)
+
+The steps below describe the original intended plan and were not executed because the spec was superseded.
 
 1. Delete the unused fields/models and update any exports in `__all__`.
 2. Update docs:

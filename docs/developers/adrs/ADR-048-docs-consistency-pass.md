@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 027, 024
+Related: 027, 024, 029
 Tags: docs, maintainability, release
 ---
 
@@ -33,7 +33,9 @@ This erodes trust and makes maintenance harder.
 
 ### Decision Framework (≥9.0)
 
-> **Complexity** refers to development + CI/tooling overhead (higher score = simpler solution).
+Complexity is weighted highest (40%) to reflect the maintenance burden on a small team; lower effort and minimal CI/tooling overhead are prioritized over novel automation.
+
+> **Complexity** refers to development effort required (lower effort = higher score).
 
 | Option                            | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
 | --------------------------------- | ---------------: | ---------: | --------------: | ------: |
@@ -41,6 +43,12 @@ This erodes trust and makes maintenance harder.
 | B: Manual only                    |               10 |         10 |               7 |     8.9 |
 | D: Archive                        |                6 |         10 |               7 |     7.6 |
 | A: Do nothing                     |               10 |         10 |               0 |     7.0 |
+
+Scoring notes (brief):
+- **C**: small script + allowlist yields low effort (9), no perf risk (10), strong alignment (9).
+- **B**: lowest effort (10) but weaker alignment (7) because drift can return.
+- **D**: higher effort to triage/archive content (6), but perf unaffected (10).
+- **A**: trivial effort (10) but fails alignment (0) because drift remains.
 
 ## Decision
 
@@ -64,3 +72,6 @@ This erodes trust and makes maintenance harder.
 ### Trade-offs
 
 - The drift check may require a small allowlist for intentional examples/archived references.
+- Implementation effort is small: the drift-check script is expected to be <100 lines (see prompt-029).
+- Allowlist maintenance should be infrequent (only when adding intentional examples or archiving docs); owner: docs maintainers during release grooming.
+- Drift detection should start as a **soft CI warning** in early iterations and move to a **hard failure** once allowlist noise is stable.

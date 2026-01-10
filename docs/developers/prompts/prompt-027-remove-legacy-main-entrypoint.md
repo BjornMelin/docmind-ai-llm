@@ -54,7 +54,7 @@ This work is primarily repo hygiene; prefer local repo truth over web research.
 
 - Use `functions.apply_patch` for small documentation updates and `*** Delete File: src/main.py` for the deletion.
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## Implementation Executor Template (DocMind / Python)
 
 ### YOU ARE
 
@@ -71,7 +71,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### Feature Context (Filled)
 
 **Primary Task:** Delete `src/main.py` and remove all references so the supported entrypoint is only `streamlit run src/app.py`.
 
@@ -97,7 +97,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### Hard Rules (Execution)
 
 #### 1) Python + Packaging
 
@@ -145,7 +145,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
 1. Leaving dual entrypoints (docs or scripts still referencing `src/main.py`).
 2. Import-time `.env` loads or behavior that bypasses `src/config/settings.py`.
@@ -153,7 +153,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+### MCP Tool Strategy (For Implementation Run)
 
 Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
 
@@ -169,7 +169,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### Final Verification Checklist (Must Complete)
 
 | Requirement     | Status | Proof / Notes                                                                      |
 | --------------- | ------ | ---------------------------------------------------------------------------------- |

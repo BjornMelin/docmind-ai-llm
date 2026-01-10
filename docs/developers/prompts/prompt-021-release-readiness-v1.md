@@ -20,7 +20,7 @@ Use this prompt to implement **every** work package defined in `docs/specs/spec-
 - <https://qdrant.tech/documentation/concepts/snapshots/> — Qdrant snapshots (backup/restore).
 - <https://docs.python.org/3/library/sqlite3.html> — stdlib sqlite3 (ops metadata store, migrations, WAL).
 - <https://www.sqlite.org/wal.html> — WAL mode semantics and concurrency tradeoffs.
-- <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming (supervisor loop integration).
+- <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming (coordinator loop integration).
 - <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/interrupts> — LangGraph interrupts/stop patterns (cooperative cancellation).
 - <https://docs.astral.sh/uv/guides/integration/docker/> — `uv` Docker build guidance (reproducible installs).
 - <https://docs.astral.sh/ruff/formatter/> — Ruff formatter reference (repo uses `ruff format`).
@@ -51,7 +51,12 @@ uv run python -c "import streamlit as st; print(st.__version__)"
 Use the repo’s tool inventory guidance:
 
 - `docs/developers/prompts/README.md` (tool inventory + opensrc rules)
-- `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md` (complete MCP + skill list)
+- `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md` (complete MCP + skill list; if unset or missing, rely on the repo README + local `skills/` directory listing)
+
+### Skills & Tool Preload Checklist
+
+- Verify required skills are installed (`streamlit-master-architect`, `docker-architect`).
+- If a skill is missing, note it explicitly and proceed with the closest applicable guidance from `docs/developers/prompts/README.md`.
 
 ### Parallelization rules (mandatory)
 
@@ -69,7 +74,7 @@ Examples of “parallel-safe” bundles (use as patterns):
 
 - LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
 - LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
-- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only when the WP touches OpenAI API semantics)
+- OpenAI API docs: use only when the WP touches OpenAI API semantics (e.g., OpenAI-compatible base URL normalization, API key handling, or SDK behavior).
 
 **MCP tool sequence (use when it adds signal):**
 
@@ -190,7 +195,7 @@ Rules:
 #### 5) LlamaIndex + LangGraph Alignment
 
 - Prefer LlamaIndex maintained primitives over custom ingestion/retrieval glue.
-- Prefer LangGraph supervisor patterns for orchestration logic.
+- Prefer LangGraph coordinator patterns for orchestration logic.
 - Preserve offline-first operation:
   - do not add implicit network calls
 - gate network/exporters behind config flags.
@@ -212,9 +217,9 @@ Rules:
 
 ---
 
-### STEP-BY-STEP EXECUTION PLAN (FILLED)
+### Step-by-Step Execution Plan (Filled)
 
-You MUST produce a plan and keep exactly one step “in_progress” at a time.
+You MUST produce a plan and keep exactly one step “in_progress” at a time. Use `[ ]` for todo, `[~]` for in_progress, and `[x]` for done (e.g., `[~] Read spec-021`).
 
 0. [ ] Read `docs/specs/spec-021-release-readiness-v1.md` + `docs/specs/traceability.md` and restate DoD in your plan.
 

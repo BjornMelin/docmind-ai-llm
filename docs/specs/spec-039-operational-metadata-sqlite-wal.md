@@ -4,19 +4,20 @@ title: Operational Metadata Store (SQLite WAL)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Accepted
 related_requirements:
   - FR-015: Persist operational metadata via SQLite WAL.
   - FR-025: Background jobs record progress/cancellation safely.
   - NFR-REL-001: Recovery after restart without corruption.
   - NFR-SEC-001: Offline-first; local-only by default.
-related_adrs: ["ADR-055", "ADR-031", "ADR-052", "ADR-033", "ADR-032", "ADR-024"]
-notes: "ADR-055 and ADR-052 are currently 'Proposed' status; update references when they advance to 'Accepted'."
+related_adrs: ["ADR-031", "ADR-033", "ADR-032", "ADR-024"]
+notes: "ADR-055 and ADR-052 are currently 'Proposed' status (verified 2026-01-10); update references when they advance to 'Accepted'."
 ---
 
 ## Goals
 
 1. Provide a **transactional, local-only ops metadata store** for DocMind.
+   - This ops DB is separate from the LangGraph SQLite checkpointer + `SqliteStore` (ADR-057): separate file, schema, and connections; they may coexist under `settings.data_dir` but are operated independently.
 2. Enable **background job UX** and reliable state recovery across restarts:
    - job lifecycle (queued/running/succeeded/failed/cancelled)
    - progress updates (percent, stage, timestamps)
@@ -38,6 +39,7 @@ notes: "ADR-055 and ADR-052 are currently 'Proposed' status; update references w
 
 - DB file: `settings.database.sqlite_db_path` (default `./data/docmind.db`)
 - Must remain under `settings.data_dir` by default.
+- Ops DB is independent from the Chat DB used by LangGraph persistence; backup/restore and WAL handling are separate per DB file.
 
 ### Database Settings (WAL)
 
@@ -45,8 +47,8 @@ On every connection:
 
 - `PRAGMA journal_mode=WAL;`
 - `PRAGMA foreign_keys=ON;`
-- `PRAGMA busy_timeout=<ms>;` (bounded retries for single-writer contention)
-- `PRAGMA synchronous=NORMAL;` (or `FULL` if durability is prioritized over speed)
+- `PRAGMA busy_timeout=5000;` (5-second timeout for single-writer contention; adjust per deployment)
+- `PRAGMA synchronous=NORMAL;` (default for balance; use `FULL` if durability is critical and latency is acceptable)
 
 ### Schema (v1 minimal)
 
@@ -109,7 +111,7 @@ Add:
 
 Integrate:
 
-- `src/ui/background_jobs.py` writes job lifecycle state to ops DB (best-effort; fail-open).
+- `src/ui/background_jobs.py` writes job lifecycle state to ops DB (best-effort; fail-open: if ops DB write fails, log a warning and continue; do not abort the job).
 - Snapshot actions record `ops_snapshot_event` entries where relevant.
 
 ### Observability
@@ -124,6 +126,8 @@ Never include raw prompt/document text.
 ### Security
 
 - Validate DB path (no traversal/symlink escape) and default under `settings.data_dir`.
+  - Use `pathlib.Path.resolve().relative_to(settings.data_dir)` to ensure the path is within the allowed directory; raise `ValueError` if not.
+  - Check for symlinks with `Path.is_symlink()` if stricter isolation is required.
 - Store only metadata; no secrets; no raw content.
 - Use bounded retries for `SQLITE_BUSY` and avoid unbounded loops.
 

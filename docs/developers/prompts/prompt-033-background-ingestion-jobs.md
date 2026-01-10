@@ -53,7 +53,7 @@ Skill references to consult (as needed):
 - Read in parallel:
   - `src/pages/02_documents.py`
   - `src/processing/ingestion_pipeline.py`
-  - `src/persistence/snapshot_service.py` (if WP07 already landed) or the current snapshot module used by Documents
+  - `src/persistence/snapshot.py` (SnapshotManager) and related snapshot modules used by Documents
 
 **MCP resources first (when available):**
 
@@ -94,7 +94,7 @@ Skill references to consult (as needed):
 3. `functions.mcp__gh_grep__searchGitHub` → search for `st.fragment(run_every=` patterns in real repos.
 4. `functions.mcp__zen__secaudit` → verify no unsafe thread/UI interactions; no path/secret leaks in progress events.
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## Implementation Executor Template (DocMind / Python)
 
 ### YOU ARE
 
@@ -111,7 +111,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### Feature Context (Filled)
 
 **Primary Task:** Implement background document ingestion + snapshot rebuild with progress reporting and best-effort cancellation in the Streamlit Documents page using stdlib threads and `st.fragment(run_every=...)` polling.
 
@@ -145,7 +145,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### Hard Rules (Execution)
 
 1. Worker threads must not call Streamlit APIs.
 2. Job progress channel must be bounded (no unbounded queues).
@@ -153,7 +153,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### STEP-BY-STEP EXECUTION PLAN (FILLED)
+### Step-by-Step Execution Plan (Filled)
 
 0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
@@ -184,7 +184,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
 1. Calling `st.*` from worker threads.
 2. Unbounded progress queues or accumulating UI elements on fragment reruns.
@@ -193,7 +193,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+### MCP Tool Strategy (For Implementation Run)
 
 Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
 
@@ -209,7 +209,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### Final Verification Checklist (Must Complete)
 
 | Requirement     | Status | Proof / Notes                                                                                                    |
 | --------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |

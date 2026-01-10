@@ -82,7 +82,7 @@ Update `SemanticCacheConfig` in `src/config/settings.py`:
 ```python
 class SemanticCacheConfig(BaseModel):
     enabled: bool = False
-    provider: Literal["qdrant"] = "qdrant"
+    provider: Literal["qdrant", "none"] = "qdrant"
     collection_name: str | None = None  # Override default collection name
     score_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
     ttl_seconds: int = Field(default=1209600, ge=0)  # 14 days
@@ -93,7 +93,7 @@ class SemanticCacheConfig(BaseModel):
 ```
 
 Fields:
-- `provider`: Cache backend (currently only `"qdrant"`)
+- `provider`: Cache backend (`"qdrant"` or `"none"` when explicitly disabled)
 - `collection_name`: Optional override for Qdrant collection name
 - `allow_semantic_for_templates`: Optional allowlist of template IDs for semantic matching
 - Existing fields preserved: `enabled`, `score_threshold`, `ttl_seconds`, `top_k`, `max_response_bytes`, `namespace`
@@ -138,3 +138,4 @@ Emit local JSONL events via `log_jsonl()` (default log level: INFO):
 Update `docs/specs/traceability.md`:
 
 - Add row `FR-026` with code + tests once implemented.
+- Implementation PRs must include RTM updates linking code + tests for FR-026.

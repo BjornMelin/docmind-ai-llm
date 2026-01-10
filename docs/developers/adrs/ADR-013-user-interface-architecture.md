@@ -177,12 +177,21 @@ def test_pages_construct():
 
 def test_page_registry_metadata():
     # Verify titles/icons/default selection for registered pages.
-    # (Implementation-specific: assert against Streamlit's page registry.)
-    ...
+    chat = st.Page("src/pages/01_chat.py", title="Chat", icon=":material/chat:", default=True)
+    docs = st.Page("src/pages/02_documents.py", title="Documents", icon=":material/description:")
+    assert chat.title == "Chat"
+    assert chat.icon == ":material/chat:"
+    assert chat.default is True
+    assert docs.title == "Documents"
+    assert docs.default is False
 
 def test_session_state_shared_keys(app_runner):
     # Load Chat and Documents pages to confirm shared session_state keys persist.
-    ...
+    app_runner.run("src/pages/01_chat.py")
+    import streamlit as st
+    st.session_state["docmind_shared_key"] = "ok"
+    app_runner.run("src/pages/02_documents.py")
+    assert st.session_state.get("docmind_shared_key") == "ok"
 
 @pytest.mark.asyncio
 async def test_streaming_generator(mock_llm):

@@ -1,6 +1,6 @@
 ---
 ADR: 057
-Title: Chat Persistence + Hybrid Agentic Memory via LangGraph SQLite (Checkpointer + Store)
+Title: Chat Persistence + Hybrid Agentic Memory via LangGraph SQLite (Checkpointer + Memory Store)
 Status: Proposed
 Version: 1.0
 Date: 2026-01-09
@@ -24,7 +24,7 @@ References:
 
 ## Description
 
-Adopt **LangGraph-native persistence** for DocMind Chat: durable **thread checkpoints** + **time-travel branching** via `langgraph-checkpoint-sqlite` and **hybrid long-term memory** via LangGraph `SqliteStore` (SQLite + `sqlite-vec` semantic search) with a **deterministic, testable memory consolidation pipeline** inspired by state-of-the-art “add/update/delete” memory update patterns.
+Adopt **LangGraph-native persistence** for DocMind Chat: durable **thread checkpoints** + **time-travel branching** via `langgraph-checkpoint-sqlite` and **hybrid long-term memory** via a DocMind-managed SQLite memory store (SQLite + `sqlite-vec` semantic search, modeled after LangGraph store semantics) with a **deterministic, testable memory consolidation pipeline** inspired by state-of-the-art “add/update/delete” memory update patterns.
 
 ## Context
 
@@ -57,7 +57,7 @@ DocMind is offline-first and already uses LangGraph (supervisor pattern). We sho
 
 ## Alternatives
 
-- A: **LangGraph SQLite checkpointer + SqliteStore + deterministic consolidation** (Selected)
+- A: **LangGraph SQLite checkpointer + DocMind memory store + deterministic consolidation** (Selected)
   - Pros: native to LangGraph, supports time travel and long-term memory; offline-first; single local DB; retention/TTL possible; minimal moving parts
   - Cons: must ensure message/state schemas are serializable; consolidation requires careful prompting + tests
 - B: LlamaIndex `SimpleChatStore` JSON + `ChatMemoryBuffer` only (ADR-043)
@@ -82,7 +82,7 @@ Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
 | Option                                                | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total | Decision    |
 | ----------------------------------------------------- | ---------------: | ---------: | --------------: | -------: | ----------- |
-| **A: LangGraph SQLite + SqliteStore + consolidation** |              9.2 |        9.0 |             9.7 | **9.26** | ✅ Selected |
+| **A: LangGraph SQLite + DocMind memory store + consolidation** |              9.2 |        9.0 |             9.7 | **9.26** | ✅ Selected |
 | B: LlamaIndex JSON store only                         |              9.5 |        7.5 |             6.5 |     8.00 | Rejected    |
 | C: Zep/Graphiti service                               |              6.0 |        8.5 |             6.5 |     6.95 | Rejected    |
 | D: Mem0 OSS                                           |              6.5 |        8.5 |             6.5 |     7.10 | Rejected    |
@@ -95,14 +95,18 @@ We will implement chat persistence and agentic memory using **LangGraph’s pers
 
 1. Use `langgraph-checkpoint-sqlite==3.0.1`:
    - `langgraph.checkpoint.sqlite.SqliteSaver` as the **thread checkpointer** (durable checkpoints per `thread_id`).
-   - `langgraph.store.sqlite.SqliteStore` as the **long-term memory store** (KV + metadata filters + semantic search via `sqlite-vec`).
+   - DocMind-managed SQLite memory store as the **long-term memory store** (KV + metadata filters + semantic search via `sqlite-vec`).
 2. Implement a **deterministic memory consolidation pipeline** (in-graph step) that:
    - extracts candidate “memories” from the most recent turn (facts/preferences) into a fixed schema
    - applies an explicit **ADD / UPDATE / DELETE / NOOP** policy against existing memories (bounded search window)
-   - persists to `SqliteStore` under a strict namespace (`user_id`, `thread_id`) and enforces retention/TTL
+   - persists to the memory store under a strict namespace (`user_id`, `thread_id`) and enforces retention/TTL
 3. Keep all persistence **local by default**. No cloud sync. Any remote LLM usage remains gated by existing DocMind settings.
 
 This supersedes ADR-043 and ADR-021 by establishing **one canonical, final-release persistence strategy** built on LangGraph.
+
+### Security Considerations
+
+- `langgraph-checkpoint-sqlite==3.0.1` is pinned because it fixes **CVE-2025-67644** (SQL injection via metadata filter keys in checkpoint list; patched release published 2025-12-09).
 
 ## High-Level Architecture
 
@@ -110,7 +114,7 @@ This supersedes ADR-043 and ADR-021 by establishing **one canonical, final-relea
 flowchart LR
   UI[Streamlit Chat UI] -->|thread_id + user_id| SUP[LangGraph Supervisor Graph]
   SUP -->|checkpoints| CP[(SQLite: SqliteSaver)]
-  SUP -->|memory tools| LT[(SQLite: SqliteStore)]
+  SUP -->|memory tools| LT[(SQLite: Memory Store)]
   LT -->|semantic recall| SUP
   BG[Background Memory Manager] -->|consolidate| LT
 
@@ -157,7 +161,7 @@ DocMind must keep operational metadata (jobs/snapshots) distinct from user chat 
 
 - Default: `settings.chat.sqlite_path` (existing field; repurposed/clarified by this ADR).
 - Must live under `settings.data_dir` by default.
-- SQLite in WAL mode (enabled by `SqliteSaver.setup()` / `SqliteStore.setup()`).
+- SQLite in WAL mode (enabled by `SqliteSaver.setup()` and Chat DB initialization).
 
 ### State schema constraints (serialization)
 
@@ -169,7 +173,7 @@ To persist and time-travel reliably:
 
 ### Long-term memory store configuration
 
-Use `SqliteStore` with an embeddings adapter that reuses DocMind’s embedding model:
+Use the DocMind memory store with an embeddings adapter that reuses DocMind’s embedding model:
 
 - Dimensions: `settings.embedding.dimension` (1024 for BGE-M3)
 - Embeddings: wrap LlamaIndex `Settings.embed_model` behind a LangChain `Embeddings` adapter.
@@ -183,7 +187,7 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
     return Settings.embed_model.get_text_embedding(text)
 
   def embed_documents(self, texts: list[str]) -> list[list[float]]:
-    return [Settings.embed_model.get_text_embedding(t) for t in texts]
+    return Settings.embed_model.get_text_embeddings(texts)
 ```
 
 ### Memory consolidation semantics (final-release)

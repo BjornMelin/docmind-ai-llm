@@ -103,11 +103,12 @@ flowchart TD
 
 - Unit:
   - `deadline_ts` seeded in state when enabled
-  - LLM and Qdrant timeouts are capped to the decision timeout
+  - LLM and Qdrant timeouts are capped to the decision timeout (mock external calls with fixed delays for determinism)
   - retrieval tool returns structured payload with documents
   - router injection preferred when enabled and router_engine is present
 - Integration:
-  - run a short decision timeout and verify the coordinator returns a timeout response without waiting for long retries
+  - run a short decision timeout (2–3s) and verify the coordinator returns a timeout response without waiting for long retries
+  - regression: reproduce the “runaway retries” scenario and assert retries stop once the deadline elapses
 
 ## Consequences
 
