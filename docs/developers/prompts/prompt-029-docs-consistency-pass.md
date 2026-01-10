@@ -140,12 +140,13 @@ You must keep changes minimal, library-first, and maintainable.
 5. [ ] Update `docs/specs/spec-012-observability.md` to match code and ensure SRS has referenced NFR-OBS requirements.
 6. [ ] Implement drift checker:
    - scan non-archived docs for `src/<...>.py` references
-   - fail if referenced files don’t exist
+   - fail if referenced files don't exist
    - classify findings:
-     - hard failures: direct code refs to missing `src/...` paths
-     - soft warnings: historical examples, comments, or external docs references
-     - allowlist: intentional external cross-references
+     - **hard failures**: direct code refs to missing `src/...` paths (regex: `src/[a-zA-Z_][^)\s]*\.py`)
+     - **soft warnings**: refs inside code comments, historical changelog entries, or after "example:" (regex: leading `#` or `<!--` or in blockquote)
+     - **allowlist**: entries in `scripts/doc_drift_allowlist.txt` (one path per line)
    - report severity and track false positives (keep soft warnings non-blocking)
+   - **Suppression**: add paths to allowlist file; annotate with `# drift-ok` inline comment for intentional examples
 7. [ ] Wire drift checker into quality gates.
 8. [ ] Update RTM row and run quality gates.
 

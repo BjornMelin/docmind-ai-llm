@@ -1,7 +1,7 @@
 ---
 ADR: 023
 Title: Document Analysis Modes (Separate / Combined / Auto)
-Status: Proposed
+Status: Accepted
 Version: 2.0
 Date: 2026-01-10
 Supersedes:

@@ -192,7 +192,8 @@ def test_cache_hit_miss(mock_cache, deterministic_embed):
 
 ### Negative Consequences / Trade-offs
 
-- FAISS dependency footprint; read-time time-to-live vs scheduled cleanup
+- Read-time time-to-live vs scheduled cleanup
+- FAISS dependency footprint (applies only to optional GPTCache provider, not the primary Qdrant implementation)
 
 ### Ongoing Maintenance & Considerations
 

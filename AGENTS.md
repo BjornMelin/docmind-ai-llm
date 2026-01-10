@@ -149,7 +149,7 @@ Optional extras:
 - Do not use `os.getenv` directly in core code.
 - Avoid import-time IO; use `startup_init()` and `initialize_integrations()` from
   `src/config/integrations.py` to set up directories, LlamaIndex Settings, and OTel.
-- Agent tooling: `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true|false` controls parallel tool execution (see ADR‑010).
+- Agent tooling: `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true|false` controls parallel tool execution (see ADR-010).
 
 LLM backends:
 
@@ -249,7 +249,7 @@ Guidelines:
 
 - Treat `opensrc/` as read-only.
 - Prefer repo-truth (local code + official docs) first; use `opensrc/` when documentation is ambiguous or behavior is subtle.
-- When you rely on internals, cite the exact `opensrc/...` path + version in notes/PR descriptions.
+- When you rely on internals, cite the exact `opensrc/…` path + version in notes/PR descriptions.
 
 Fetch additional sources as needed:
 

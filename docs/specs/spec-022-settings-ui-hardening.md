@@ -48,27 +48,37 @@ No `unsafe_allow_html=True` usage is permitted.
 
 ### Proposed settings validation
 
-Implement a “proposed settings” pattern in `src/pages/04_settings.py`:
+Implement a "proposed settings" pattern in `src/pages/04_settings.py`:
 
 1. Collect widget values into an env-mapping using canonical keys (e.g., `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`).
 2. Validate the candidate mapping:
-   - Build a candidate dict with nested delimiter `__`
+   - Build a candidate dict with nested structure:
+     ```python
+     candidate = {
+         "llm": {"backend": "openai", "model": "gpt-4"},
+         "openai": {"base_url": "http://localhost:1234/v1"},
+         "security": {"allow_remote_endpoints": False},
+     }
+     ```
    - Call `DocMindSettings.model_validate(candidate)` (or a helper) to ensure:
      - types/ranges are correct
-     - URL constraints (/v1 normalization) are satisfied
-     - security policy validation passes (allowlist, localhost-only)
+     - URL constraints (/v1 normalization) are satisfied via `validate_base_url()` in `settings.py`
+     - security policy validation passes (allowlist, localhost-only per ADR-031)
 3. Only after validation succeeds:
    - update the global `settings` singleton (in-memory)
-   - call `initialize_integrations(force_llm=True, force_embed=False)` for Apply
-   - persist to `.env` for Save
+   - call `initialize_integrations(force_llm=True, force_embed=False)` for Apply (see `src/config/integrations.py`)
+   - persist to `.env` for Save.
 
 ### .env persistence
 
-Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv`:
+Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv` (≥1.0.0):
 
 - Use `dotenv.set_key(".env", key, value, quote_mode="auto")` for values
-- Use `dotenv.unset_key(".env", key)` for values that are empty/unset
+- Use `dotenv.unset_key(".env", key)` for empty values (removes the key entirely)
+- If `.env` does not exist, `set_key` will create it
 - Keep comments and unrelated keys intact (best-effort; rely on python-dotenv semantics)
+
+> **Edge cases**: Empty string values are treated as unset (removed via `unset_key`). Verify round-trip correctness in unit tests: write → read → validate returns expected values.
 
 ## Observability
 
@@ -78,7 +88,10 @@ Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv`:
 
 ## Security
 
-- Enforce offline-first and allowlist rules exactly as `src/config/settings.py` defines them.
+- Enforce offline-first and allowlist rules exactly as `src/config/settings.py` defines them:
+  - Use `validate_base_url()` helper (in `settings.py`) to check URL normalization and allowlist
+  - Env var naming follows `DOCMIND_` prefix with `__` nesting (e.g., `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`)
+  - Cross-reference ADR-031 (Config Discipline) for full policy
 - Treat the Settings UI as an untrusted input boundary:
   - validate before persist
   - validate before apply
@@ -90,16 +103,17 @@ Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv`:
 
 Add/extend `tests/integration/test_settings_page.py` (or create a new file) to assert:
 
-- Invalid LM Studio URL (missing `/v1`) renders an error and disables Save/Apply.
-- Remote URL when `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` renders an error and disables actions.
+- Invalid LM Studio URL (missing `/v1`) renders error message "Base URL must end with /v1 for LM Studio" and disables Save/Apply buttons (check `disabled` property).
+- Remote URL when `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` renders an error and disables actions; also test `=true` case to confirm remote URLs are allowed.
 - Valid provider change persists to `.env` via `python-dotenv` and can be read back.
 
 ### Unit
 
-- Provider badge renders without `unsafe_allow_html`.
+- Provider badge source does not use `unsafe_allow_html=True` (inspect component code).
 - `.env` persistence helper:
-  - set_key called for normal values
-  - unset_key called for empty values
+  - `set_key` called for normal values
+  - `unset_key` called for empty values
+  - Round-trip test: write → read → validate returns expected values.
 
 ## Rollout / migration
 

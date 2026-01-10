@@ -33,6 +33,8 @@ This erodes trust and makes maintenance harder.
 
 ### Decision Framework (≥9.0)
 
+> **Complexity** refers to development + CI/tooling overhead (higher score = simpler solution).
+
 | Option                            | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
 | --------------------------------- | ---------------: | ---------: | --------------: | ------: |
 | **C: Manual fixes + drift check** |                9 |         10 |               9 | **9.3** |
@@ -46,8 +48,11 @@ This erodes trust and makes maintenance harder.
 
 2. Add a lightweight automated check in CI/quality gates to prevent regressions:
 
-- scan non-archived docs for referenced `src/…` paths and assert files exist
-- keep allowlist/suppressions minimal
+- Scan non-archived docs for referenced `src/…` paths and assert files exist
+- Keep allowlist/suppressions minimal:
+  - **Allowed**: intentional examples showing patterns (not real paths), archived ADRs/specs (`/superseded/`), and historical changelogs
+  - **Not allowed**: paths to deleted files in active docs; use `# REMOVED` comments or update text
+- Suppression file: `scripts/doc_drift_allowlist.txt` (one path per line)
 
 ## Consequences
 

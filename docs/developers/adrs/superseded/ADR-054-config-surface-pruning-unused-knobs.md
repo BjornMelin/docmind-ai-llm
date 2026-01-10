@@ -2,10 +2,10 @@
 ADR: 054
 Title: Configuration Surface Pruning (Remove Unused/No-op Knobs for v1)
 Status: Superseded
-Version: 1.1
+Version: 1.2
 Date: 2026-01-09
 Supersedes:
-Superseded-by:
+Superseded-by: ADR-050
 Related: 024, 013, 031
 Tags: configuration, maintainability, release
 ---
@@ -27,7 +27,7 @@ The settings model currently includes several fields that are either unreference
 
 Shipping these as-is creates a misleading public configuration surface and increases maintenance and support burden (“why doesn’t this setting do anything?”).
 
-> Status notice (2026-01-09): This “prune for v1” approach is superseded. Reconsidered on 2026-01-09 due to release readiness needs and the decision to implement the existing configuration surface (see ADR-050 / SPEC-031). The project direction is to complete the advanced capabilities (analysis modes, backups, semantic cache) rather than removing them.
+> **Supersession Notice (2026-01-09):** This ADR is superseded by ADR-050 (Config Discipline & Env Bridges). The original "prune for v1" approach was reconsidered; the project direction is now to implement the existing configuration surface rather than removing fields. Advanced capabilities (analysis modes, backups, semantic cache) will be completed per ADR-050 and SPEC-031.
 
 ## Decision Drivers
 
@@ -54,7 +54,7 @@ Weights: Complexity 40% · Risk Reduction 30% · Alignment 30% (10 = best)
 
 ## Decision
 
-We will:
+> **Note:** This decision was not implemented; the ADR is superseded. The original plan was to:
 
 1. Remove the unused fields from `DocMindSettings` and nested models.
 
@@ -90,4 +90,6 @@ We will:
 
 ## Changelog
 
+- 1.2 (2026-01-10): Superseded by ADR-050; updated metadata and Decision framing.
+- 1.1 (2026-01-09): Added supersession notice.
 - 1.0 (2026-01-09): Proposed for v1 coherence and maintainability.

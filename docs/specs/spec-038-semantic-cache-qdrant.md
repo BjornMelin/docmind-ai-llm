@@ -44,6 +44,8 @@ Dedicated Qdrant collection (example: `docmind_semcache`) storing:
   - `created_at`, `expires_at`
   - `response_ref` (either response text or a pointer to encrypted blob on disk)
 
+> **Note on payload design**: Metadata fields (`model_id`, `template_id`, `corpus_hash`, `config_hash`, etc.) are required for strict invalidation and metadata filtering during cache lookups. No original prompt text is stored (see Security below). The `response_ref` field points to a local encrypted blob when encryption is enabled; the path itself does not contain PII. Observability events exclude sensitive fields (see Observability below).
+
 ### Read Path
 
 1. Canonicalize request → `prompt_key`.
@@ -71,23 +73,40 @@ The cache must include:
 
 Any mismatch prevents hits.
 
+> **corpus_hash contract**: `corpus_hash` is computed over corpus file metadata (file paths, sizes, and modification times) via `SnapshotManager.compute_corpus_hash()`. It is recomputed after ingestion completes or during snapshot finalization. Changes to files, document re-indexing, or embedding model updates will change the hash and invalidate cache entries. See ADR-035 for the broader invalidation strategy.
+
 ### Configuration
 
 Update `SemanticCacheConfig` in `src/config/settings.py`:
 
-- add provider `qdrant`
-- add `collection_name` (optional override)
-- add `allow_semantic_for_templates: list[str]` (optional)
-- keep existing:
-  - `enabled`, `score_threshold`, `ttl_seconds`, `top_k`, `max_response_bytes`, `namespace`
+```python
+class SemanticCacheConfig(BaseModel):
+    enabled: bool = False
+    provider: Literal["qdrant"] = "qdrant"
+    collection_name: str | None = None  # Override default collection name
+    score_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    ttl_seconds: int = Field(default=1209600, ge=0)  # 14 days
+    top_k: int = Field(default=5, ge=1)
+    max_response_bytes: int = Field(default=24000, ge=0)
+    namespace: str = "default"
+    allow_semantic_for_templates: list[str] | None = None  # Optional allowlist
+```
+
+Fields:
+- `provider`: Cache backend (currently only `"qdrant"`)
+- `collection_name`: Optional override for Qdrant collection name
+- `allow_semantic_for_templates`: Optional allowlist of template IDs for semantic matching
+- Existing fields preserved: `enabled`, `score_threshold`, `ttl_seconds`, `top_k`, `max_response_bytes`, `namespace`
 
 ### Observability
 
-Emit JSONL events:
+Emit local JSONL events via `log_jsonl()` (default log level: INFO):
 
 - `semantic_cache_hit` with `{kind: exact|semantic, score, duration_ms, template_id}`
 - `semantic_cache_miss` with `{duration_ms, template_id}`
-- `semantic_cache_store` with `{duration_ms, bytes, template_id}`
+- `semantic_cache_store` with `{duration_ms, bytes, template_id}` (DEBUG level)
+
+**Safe-to-log fields**: `score`, `duration_ms`, `bytes`, `kind` are safe. `template_id` is safe as it does not contain PII (only identifier strings). Do not log `model_id`, `corpus_hash`, or response content in observability events. Conforms to ADR-047 (Safe Logging Policy) and project traceability guidance.
 
 ### Security
 

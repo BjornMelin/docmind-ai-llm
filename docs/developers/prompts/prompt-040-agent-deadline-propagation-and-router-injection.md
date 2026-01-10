@@ -12,7 +12,7 @@ Implements `ADR-056` + `SPEC-040`.
 ## Official docs (research during implementation)
 
 - <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming patterns (sync vs. async).
-- <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/interrupts> — Interrupts (control-flow, not hard cancellation).
+- <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/human-in-the-loop> — Human-in-the-loop / interrupts (control-flow, not hard cancellation).
 - <https://reference.langchain.com/python/langchain_core/runnables/#langchain_core.runnables.RunnableConfig> — RunnableConfig / execution config surface.
 - <https://reference.langchain.com/python/integrations/langchain_openai/ChatOpenAI/> — `ChatOpenAI(timeout=...)` reference.
 

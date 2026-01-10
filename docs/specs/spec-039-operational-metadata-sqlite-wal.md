@@ -11,6 +11,7 @@ related_requirements:
   - NFR-REL-001: Recovery after restart without corruption.
   - NFR-SEC-001: Offline-first; local-only by default.
 related_adrs: ["ADR-055", "ADR-031", "ADR-052", "ADR-033", "ADR-032", "ADR-024"]
+notes: "ADR-055 and ADR-052 are currently 'Proposed' status; update references when they advance to 'Accepted'."
 ---
 
 ## Goals
@@ -86,9 +87,11 @@ Index:
 
 Implement migrations via `PRAGMA user_version`:
 
-- ship SQL migration files under `src/persistence/migrations/ops_db/`
-  - `0001_init.sql` creates tables + indexes
-- `ops_db.apply_migrations()` applies sequentially within a transaction.
+- Ship SQL migration files under `src/persistence/migrations/ops_db/`
+  - Use sequential numeric prefix: `0001_init.sql`, `0002_add_column.sql`, etc.
+  - Each file must be idempotent within its version
+- `ops_db.apply_migrations()` applies sequentially within a transaction
+- **Rollback**: Not supported; migrations are forward-only (document schema changes in ADR if needed)
 
 ### Code Modules
 
@@ -97,12 +100,12 @@ Add:
 - `src/persistence/ops_db.py`
   - `connect_ops_db(path: Path) -> sqlite3.Connection`
   - `apply_migrations(conn) -> None`
-  - `OpsDB` thin wrapper:
-    - `create_job(job_type: str) -> str`
-    - `update_job(job_id: str, ...) -> None`
-    - `finish_job(job_id: str, status: str, ...) -> None`
-    - `list_jobs(limit: int = 50) -> list[dict]`
-    - `record_snapshot_event(snapshot_id: str, event_type: str, meta: dict | None)`
+  - `OpsDB` thin wrapper (single-record operations; batch not needed for v1):
+    - `create_job(job_type: str) -> str` — creates and returns job_id
+    - `update_job(job_id: str, progress_pct: float | None, stage: str | None, message: str | None) -> None`
+    - `finish_job(job_id: str, status: str, error_code: str | None = None) -> None`
+    - `list_jobs(limit: int = 50) -> list[dict]` — returns recent jobs ordered by `updated_at_ms` DESC
+    - `record_snapshot_event(snapshot_id: str, event_type: str, meta: dict | None) -> None`
 
 Integrate:
 

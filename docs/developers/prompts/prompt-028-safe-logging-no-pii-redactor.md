@@ -107,6 +107,7 @@ You must keep changes minimal, library-first, and maintainable.
   - safe URL logging helpers
   - deterministic regex backstop redaction for exception messages / rare string fields
 - Fingerprinting key source is `settings.hashing.hmac_secret` (shared source-of-truth with `src/utils/canonicalization.py`).
+  - **Type conversion required**: `settings.hashing.hmac_secret` is a string; encode to bytes (`hmac_secret.encode("utf-8")`) when passing to `DocumentCanonicalConfig` or `hmac.new()` to avoid TypeError.
 - RTM updated: NFR-SEC-002 planned → implemented.
 - No logging statements include raw user prompts, documents, or model outputs within the touched scope.
 

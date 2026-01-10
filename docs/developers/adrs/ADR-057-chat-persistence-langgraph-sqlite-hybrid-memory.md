@@ -177,7 +177,7 @@ Use `SqliteStore` with an embeddings adapter that reuses DocMind’s embedding m
 
 Adapter sketch:
 
-```
+```python
 class LlamaIndexEmbeddingsAdapter(Embeddings):
   def embed_query(self, text: str) -> list[float]:
     return Settings.embed_model.get_text_embedding(text)
@@ -205,7 +205,7 @@ Implementation detail: see SPEC-041 for consolidation rules, bounds, and importa
 
 Example pseudocode:
 
-```
+```text
 function consolidate_memories(latest_turn, existing_memories, config):
   candidates = extract_facts(latest_turn)  # typed schema
   for candidate in candidates:

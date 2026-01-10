@@ -10,7 +10,7 @@ related_requirements:
 related_adrs: ["ADR-054", "ADR-024"]
 ---
 
-> Status notice (2026-01-09): This spec is superseded. The current direction is to implement the existing configuration surface (analysis modes, backups, semantic cache, ops DB) rather than pruning it.
+> **Supersession Notice (2026-01-09):** This spec is superseded by ADR-050 (Config Discipline & Env Bridges) and SPEC-031. The current direction is to implement the existing configuration surface (analysis modes, backups, semantic cache, ops DB) rather than pruning it.
 
 ## Goals
 
@@ -43,8 +43,8 @@ Remove from `src/config/settings.py` (and any docs/UI references):
    - `docs/developers/configuration-reference.md` (remove sections)
    - ADR index or affected ADRs (mark out-of-scope for v1)
 3. Compatibility:
-   - rely on `extra=\"ignore\"` in Pydantic settings
-  - optionally log a one-time warning if deprecated env var prefixes are present.
+   - rely on `extra="ignore"` in Pydantic settings
+   - optionally log a one-time warning if deprecated env var prefixes are present.
 
 ## Testing Strategy
 

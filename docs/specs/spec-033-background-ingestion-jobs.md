@@ -38,7 +38,8 @@ Implement:
 
 - `JobManager` (plain class; no Streamlit APIs)
 - `get_job_manager()` (Streamlit wrapper using `@st.cache_resource` to keep a single manager per process)
-- `JobManager.shutdown()` to gracefully stop the executor (best-effort), registered via `atexit` in the Streamlit wrapper so dev restarts don’t leak threads
+- `JobManager.shutdown()` to gracefully stop the executor (best-effort), registered via `atexit` in the Streamlit wrapper so dev restarts don't leak threads
+  - **Shutdown behavior**: in-flight jobs are allowed to complete their current phase (graceful drain, ~5s timeout), then marked `cancelled` if still running; no partial outputs are published
 - `JobState` tracking:
   - `job_id`, `owner_id`, `created_at`, `last_seen_at`
   - `status`: queued/running/succeeded/failed/canceled
@@ -66,6 +67,7 @@ Use a small typed structure:
 2. Render progress:
 
    - `@st.fragment(run_every="1s")` poller drains queue for the active job and updates a progress bar/status block
+   - **Polling interval rationale**: 1s balances UX responsiveness (users see updates quickly) with minimal overhead (one rerun/sec). Configurable via `DOCMIND_UI__PROGRESS_POLL_INTERVAL_SEC` if needed.
 
 3. Completion:
    - on success, update `st.session_state` with indices/router and snapshot metadata

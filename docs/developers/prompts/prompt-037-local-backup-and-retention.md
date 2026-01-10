@@ -36,8 +36,9 @@ Implements `ADR-033` + `SPEC-037`.
 
 - Find current data layout usage:
   - `rg -n "data_dir|cache_dir|analytics_db_path|uploads" src/config/settings.py src/pages -S`
-- Confirm qdrant-client snapshot APIs:
+- Confirm qdrant-client snapshot APIs (requires `uv sync` first):
   - `uv run python -c "import inspect; from qdrant_client import QdrantClient; c=QdrantClient(location=':memory:'); print([m for m in dir(c) if 'snapshot' in m])"`
+  - _Note: Skip if qdrant-client import fails; snapshot APIs are optional for this work._
 - Locate existing snapshot retention logic:
   - `rg -n "retention|gc_grace_seconds|recover_snapshots" src/persistence/snapshot.py -S`
 

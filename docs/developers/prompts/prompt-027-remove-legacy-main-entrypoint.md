@@ -38,7 +38,7 @@ This work is primarily repo hygiene; prefer local repo truth over web research.
 - Find docs/scripts references:
   - `rg -n \"\\bsrc/main\\.py\\b|\\bsrc\\.main\\b\" -S docs scripts pyproject.toml README.md`
 - Read file before deletion:
-  - `sed -n '1,220p' src/main.py` (confirm no hidden exports used elsewhere)
+  - `cat src/main.py` (confirm no hidden exports used elsewhere; file is typically <250 lines)
 
 **MCP resources first (when available):**
 

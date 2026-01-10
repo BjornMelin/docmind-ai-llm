@@ -11,6 +11,7 @@ related_requirements:
   - NFR-SEC-002: Local data remains on device; logging excludes sensitive content.
   - NFR-REL-001: Crash-safe persistence and recovery.
 related_adrs: ["ADR-057", "ADR-011", "ADR-016", "ADR-024", "ADR-047", "ADR-055"]
+notes: "ADR-055 is currently 'Proposed' status; update reference when it advances to 'Accepted'."
 ---
 
 ## Goals
