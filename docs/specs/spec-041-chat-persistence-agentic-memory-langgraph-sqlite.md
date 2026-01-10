@@ -25,7 +25,7 @@ related_adrs: ["ADR-057", "ADR-011", "ADR-016", "ADR-024", "ADR-047", "ADR-055"]
 3. **Hybrid agentic memory**:
    - short-term memory: thread state (messages) via LangGraph checkpointer
    - long-term memory: facts/preferences stored in LangGraph `SqliteStore`
-   - background consolidation using LangMem (reduces duplicates/contradictions)
+   - background consolidation using an explicit extract + update policy (reduces duplicates/contradictions)
 4. **Offline-first + security-first**:
    - no new network surfaces required
    - no raw chat content in telemetry/logs
@@ -204,7 +204,7 @@ Threats and controls:
 
 1. **PII retention**
    - Provide explicit UI controls: memory review + delete + session purge.
-   - Default to “store only salient facts/preferences” (LangMem consolidation) rather than raw logs.
+   - Default to “store only salient facts/preferences” (explicit extract + update policy) rather than raw logs.
 2. **Prompt-injection memory poisoning**
    - Treat memories as *untrusted* facts: store provenance and allow user review.
    - Use fixed tool schemas; do not allow arbitrary system prompt writes.
