@@ -110,15 +110,18 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### Feature Context (Filled)
 
-**Primary Task:** Refactor the Streamlit Analytics page to close DuckDB connections deterministically and parse local telemetry JSONL efficiently using canonical paths.
+**Primary Task:** Refactor the Streamlit Analytics page to close DuckDB connections deterministically, parse local telemetry JSONL efficiently, and enforce an explicit runtime gate plus canonical DuckDB path.
 
 **Why now:** Current Analytics page risks resource leaks and reads telemetry via hardcoded paths with full-file loads. This is avoidable and hurts reliability for long-running sessions.
 
 **Definition of Done (DoD):**
 
+- Analytics page is gated by `DOCMIND_ANALYTICS_ENABLED=true` at runtime.
+- DuckDB file path is canonical: `data/analytics/analytics.duckdb`.
 - `src/pages/03_analytics.py` closes DuckDB connections (context manager or `try/finally`).
 - No dynamic `__import__` remains in Analytics page.
 - Telemetry parsing is streaming/bounded and uses canonical telemetry path.
+- Canonical analytics DB path constant + getter live in `src/utils/telemetry.py` and are enforced in `src/pages/03_analytics.py`.
 - Unit tests cover telemetry parsing caps and invalid lines.
 - Page remains importable (existing smoke test passes).
 

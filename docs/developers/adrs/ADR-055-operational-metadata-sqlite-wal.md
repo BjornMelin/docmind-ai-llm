@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 031, 032, 033, 052, 024, 057
+Related: 030, 031, 032, 033, 052, 024, 057
 Tags: persistence, sqlite, wal, jobs, offline-first
 References:
   - https://docs.python.org/3/library/sqlite3.html
@@ -113,9 +113,10 @@ flowchart LR
 
     ```sql
     BEGIN;
-    PRAGMA foreign_keys=ON;
-    PRAGMA journal_mode=WAL;
+    PRAGMA foreign_keys=ON; -- enforce FK integrity between jobs and snapshots
+    PRAGMA journal_mode=WAL; -- WAL for concurrent reads + durability under writer load
 
+    -- jobs use TEXT ids; status: queued -> running -> done/failed; *_ms are INTEGER epoch ms
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY,
       status TEXT NOT NULL,
@@ -124,6 +125,7 @@ flowchart LR
       updated_at_ms INTEGER NOT NULL
     );
 
+    -- snapshots keep history per job_id (FK) for restores/audit
     CREATE TABLE IF NOT EXISTS snapshots (
       id TEXT PRIMARY KEY,
       job_id TEXT,
@@ -132,6 +134,7 @@ flowchart LR
       FOREIGN KEY(job_id) REFERENCES jobs(id)
     );
 
+    -- durable UI state key/value store; updated_at_ms as INTEGER epoch ms
     CREATE TABLE IF NOT EXISTS ui_state (
       key TEXT PRIMARY KEY,
       value TEXT,
