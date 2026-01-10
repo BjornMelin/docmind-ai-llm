@@ -768,9 +768,12 @@ class DocMindSettings(BaseSettings):
     @property
     def backend_base_url_normalized(self) -> str | None:
         """Return backend-aware normalized base URL (OpenAI-like -> /v1)."""
+        openai_fields_set = getattr(self.openai, "model_fields_set", set())
         openai_base_url = (
             self.openai.base_url
-            if self.openai.base_url and self.openai.base_url != _DEFAULT_OPENAI_BASE_URL
+            if "base_url" in openai_fields_set
+            and self.openai.base_url
+            and self.openai.base_url != _DEFAULT_OPENAI_BASE_URL
             else None
         )
         if self.llm_backend == "ollama":

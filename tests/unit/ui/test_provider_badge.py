@@ -10,14 +10,17 @@ from src.config.settings import DocMindSettings
 from src.ui.components.provider_badge import provider_badge
 
 
+def _find_repo_root(start: Path) -> Path:
+    for parent in (start, *start.parents):
+        if (parent / "pyproject.toml").exists() and (parent / "src").is_dir():
+            return parent
+    raise RuntimeError(f"Failed to locate repo root from {start}")
+
+
 def test_provider_badge_has_no_unsafe_html_sink() -> None:
-    source = (
-        Path(__file__).resolve().parents[3]
-        / "src"
-        / "ui"
-        / "components"
-        / "provider_badge.py"
-    )
+    repo_root = _find_repo_root(Path(__file__).resolve())
+    source = repo_root / "src" / "ui" / "components" / "provider_badge.py"
+    assert source.exists(), f"Expected source file not found: {source}"
     assert "unsafe_allow_html" not in source.read_text(encoding="utf-8")
 
 

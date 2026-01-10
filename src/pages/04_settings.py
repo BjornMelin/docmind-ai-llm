@@ -23,13 +23,40 @@ from src.utils.telemetry import log_jsonl
 def _validate_candidate(
     candidate: dict[str, object],
 ) -> tuple[DocMindSettings | None, list[str]]:
-    """Validate a candidate settings payload before Apply/Save."""
+    """Validate a candidate settings payload before Apply/Save.
+
+    The ``candidate`` argument is expected to be a dictionary whose keys
+    correspond to the fields of :class:`DocMindSettings`. Typical keys include
+    top-level runtime options such as ``"llm_backend"``, ``"model"``,
+    ``"context_window"``, ``"llm_request_timeout_seconds"``,
+    ``"enable_gpu_acceleration"``, provider URLs like ``"ollama_base_url"``,
+    ``"vllm_base_url"``, ``"lmstudio_base_url"``, ``"llamacpp_base_url"``,
+    and nested sections such as ``"retrieval"`` (e.g. ``"rrf_k"``,
+    ``"text_rerank_timeout_ms"``, ``"siglip_timeout_ms"``,
+    ``"colpali_timeout_ms"``, ``"total_rerank_budget_ms"``) and ``"security"``
+    (e.g. ``"allow_remote_endpoints"``).
+
+    Args:
+        candidate: A dict-like settings payload (for example, data collected
+            from the settings form or from ``st.session_state``) that matches
+            the schema of :class:`DocMindSettings`.
+
+    Returns:
+        A tuple ``(validated_settings, error_messages)`` where
+        ``validated_settings`` is a :class:`DocMindSettings` instance on
+        success and ``None`` on failure, and ``error_messages`` is a list of
+        human-readable validation error messages (empty when validation
+        succeeds).
+    """
     try:
         validated = DocMindSettings.model_validate(candidate)
     except ValidationError as exc:
         messages: list[str] = []
         for err in exc.errors():
-            loc = ".".join(str(p) for p in err.get("loc", []) if p is not None)
+            loc_parts = err["loc"]
+            if not isinstance(loc_parts, (list, tuple)):
+                loc_parts = (loc_parts,)
+            loc = ".".join(str(p) for p in loc_parts if p is not None)
             msg = str(err.get("msg", "Invalid value"))
             messages.append(f"{loc}: {msg}" if loc else msg)
         return None, messages
@@ -39,8 +66,23 @@ def _validate_candidate(
 
 
 def _is_valid_gguf_path(path_text: str) -> bool:
-    path = Path(path_text).expanduser()
-    return path.is_file() and path.suffix.lower() == ".gguf"
+    clean = (path_text or "").strip()
+    if not clean:
+        return False
+
+    try:
+        resolved = Path(clean).expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+    # Avoid persisting paths that resolve outside the user home directory.
+    home = Path.home().resolve(strict=False)
+    try:
+        resolved.relative_to(home)
+    except ValueError:
+        return False
+
+    return resolved.is_file() and resolved.suffix.lower() == ".gguf"
 
 
 def _apply_validated_runtime(validated: DocMindSettings) -> None:
@@ -54,7 +96,7 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
     settings.vllm_base_url = validated.vllm_base_url  # type: ignore[assignment]
     settings.lmstudio_base_url = validated.lmstudio_base_url  # type: ignore[assignment]
     settings.llamacpp_base_url = validated.llamacpp_base_url
-    settings.vllm.llamacpp_model_path = validated.vllm.llamacpp_model_path
+    settings.vllm.llamacpp_model_path = validated.vllm.llamacpp_model_path  # type: ignore[assignment]
     settings.security.allow_remote_endpoints = validated.security.allow_remote_endpoints
 
     # Apply retrieval timeouts to in-memory settings; policy remains env-driven.
@@ -85,6 +127,7 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
                 "backend": validated.llm_backend,
                 "model": model_label,
                 "reason": exc.__class__.__name__,
+                "error": str(exc),
             }
         )
         return
@@ -269,11 +312,15 @@ def main() -> None:
         st.info(hint)
 
     ui_errors: list[str] = []
-    if (
-        provider == "llamacpp"
-        and not (llamacpp_url or "").strip()
-        and (not gguf_path or not _is_valid_gguf_path(gguf_path))
-    ):
+
+    clean_llamacpp_url = (llamacpp_url or "").strip()
+    clean_gguf_path = (gguf_path or "").strip()
+
+    is_llamacpp = provider == "llamacpp"
+    gguf_invalid = clean_gguf_path and not _is_valid_gguf_path(clean_gguf_path)
+    gguf_missing_for_local = not clean_llamacpp_url and not clean_gguf_path
+
+    if is_llamacpp and (gguf_invalid or gguf_missing_for_local):
         ui_errors.append(
             "Invalid GGUF model path. File must exist and have a .gguf extension."
         )
@@ -285,10 +332,10 @@ def main() -> None:
         "ollama_base_url": ollama_url.strip(),
         "vllm_base_url": vllm_url.strip() or None,
         "lmstudio_base_url": lmstudio_url.strip(),
-        "llamacpp_base_url": llamacpp_url.strip() or None,
+        "llamacpp_base_url": clean_llamacpp_url or None,
         "llm_request_timeout_seconds": int(timeout_s),
         "enable_gpu_acceleration": bool(use_gpu),
-        "vllm": {"llamacpp_model_path": gguf_path.strip()},
+        "vllm": {"llamacpp_model_path": str(Path(clean_gguf_path).expanduser())},
         "security": {
             "allow_remote_endpoints": bool(allow_remote),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),

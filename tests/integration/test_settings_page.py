@@ -6,7 +6,6 @@ Relies on Streamlit AppTest to run src/pages/04_settings.py in a temp cwd.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -14,7 +13,7 @@ from streamlit.testing.v1 import AppTest
 
 
 @pytest.fixture(name="settings_app_test")
-def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
+def fixture_settings_app_test(tmp_path, monkeypatch) -> AppTest:
     """Create an AppTest instance for the Settings page with temp cwd.
 
     - Runs page in a temporary working directory so Save writes to a temp .env.
@@ -35,7 +34,12 @@ def test_settings_apply_runtime_rebinds_llm(settings_app_test: AppTest) -> None:
 
     # Find and click the "Apply runtime" button
     buttons = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
-    (buttons[0] if buttons else app.button[0]).click().run()
+    if not buttons:
+        # Fallback is defensive: AppTest widget ordering can change.
+        assert app.button, "No buttons rendered by settings page"
+        app.button[0].click().run()
+    else:
+        buttons[0].click().run()
 
     # Verify Settings.llm is bound
     from llama_index.core import Settings
@@ -145,7 +149,7 @@ def test_settings_allow_remote_allows_remote_urls(settings_app_test: AppTest) ->
 
 
 def test_settings_toggle_providers_and_apply(
-    settings_app_test: AppTest, monkeypatch
+    settings_app_test: AppTest, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Toggle each provider and Apply runtime, asserting LLM kind per provider.
 
@@ -224,7 +228,9 @@ def test_settings_toggle_providers_and_apply(
         raising=False,
     )
 
-    # Ensure a valid local GGUF exists for llama.cpp local mode validation
+    # Ensure a local GGUF path exists for llama.cpp local mode validation.
+    # This creates a minimal stub file (not a valid GGUF model); the test only
+    # relies on the file's presence/path, not on actually loading the model.
     gguf_path = Path("model.gguf")
     gguf_path.write_text("dummy", encoding="utf-8")
 
@@ -306,4 +312,9 @@ def test_settings_toggle_providers_and_apply(
     import importlib
 
     settings_mod = importlib.import_module("src.config.settings")
-    settings_mod.settings = settings_mod.DocMindSettings()
+    monkeypatch.setattr(
+        settings_mod,
+        "settings",
+        settings_mod.DocMindSettings(),
+        raising=False,
+    )

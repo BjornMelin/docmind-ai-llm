@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.config.settings import DocMindSettings
+from src.config.settings import _DEFAULT_OPENAI_BASE_URL, DocMindSettings
 
 
 @pytest.mark.parametrize(
@@ -39,8 +39,17 @@ def test_backend_base_url_openai_group_overrides_when_customized():  # type: ign
     s = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
     s.llm_backend = "vllm"
     s.vllm_base_url = "http://localhost:8000"
-    s.openai.base_url = "http://localhost:9999/v1"
+    s.openai = s.openai.model_copy(update={"base_url": "http://localhost:9999/v1"})
     assert s.backend_base_url_normalized == "http://localhost:9999/v1"
+
+
+def test_backend_base_url_openai_group_default_does_not_override():  # type: ignore[no-untyped-def]
+    s = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    s.llm_backend = "vllm"
+    s.vllm_base_url = "http://localhost:8000"
+    # Even if explicitly set, default base URL should not override the backend base.
+    s.openai = s.openai.model_copy(update={"base_url": _DEFAULT_OPENAI_BASE_URL})
+    assert s.backend_base_url_normalized == "http://localhost:8000/v1"
 
 
 def test_allow_remote_effective_env_override(monkeypatch):  # type: ignore[no-untyped-def]
