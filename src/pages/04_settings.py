@@ -12,8 +12,8 @@ from contextlib import suppress
 from pathlib import Path
 
 import streamlit as st
-from dotenv import set_key, unset_key
 
+from src.config.env_persistence import persist_env
 from src.config.integrations import initialize_integrations
 from src.config.settings import settings
 from src.retrieval.adapter_registry import get_default_adapter_health
@@ -30,19 +30,8 @@ def _is_localhost(url: str) -> bool:
 
 
 def _persist_env(vars_to_set: dict[str, str]) -> None:
-    """Persist key=value pairs into the project's .env file.
-
-    Minimal .env updater: overwrites existing keys; preserves others.
-    """
-    env_path = Path(".env")
-    if not env_path.exists():
-        env_path.write_text("", encoding="utf-8")
-
-    for key, value in vars_to_set.items():
-        if value == "":
-            unset_key(str(env_path), key)
-        else:
-            set_key(str(env_path), key, value, quote_mode="auto")
+    """Persist key=value pairs into the project's .env file."""
+    persist_env(vars_to_set)
 
 
 def _apply_runtime() -> None:
