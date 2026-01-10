@@ -27,7 +27,6 @@ from src.utils.core import detect_hardware
 
 # Pytest patterns intentionally redefine fixtures and catch broad exceptions
 # in order to produce comprehensive validation reports. Adjust checks here.
-# pylint: disable=redefined-outer-name,broad-exception-caught
 
 
 class ProductionValidationResult:

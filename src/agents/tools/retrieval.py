@@ -359,12 +359,12 @@ def _collect_via_tool_factory(
             try:
                 res = t.invoke(query) if hasattr(t, "invoke") else t.call(query)
                 collected.extend(_parse_tool_result(res))
-            except Exception as te:  # pylint: disable=broad-exception-caught
+            except Exception as te:
                 logger.error("Tool execution failed: {}", te)
                 logger.warning("Partial failure: continuing with other tools")
                 continue
         return collected
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:
         logger.debug("Tool collection path failed; using detailed path", exc_info=True)
         return []
 

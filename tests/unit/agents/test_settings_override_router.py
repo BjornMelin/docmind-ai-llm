@@ -4,7 +4,6 @@ This test patches internal methods of MultiAgentCoordinator to avoid heavy
 dependencies and ensures that the router_engine override is preserved in the
 initial state passed to the agent workflow.
 """
-# pylint: disable=protected-access
 
 from __future__ import annotations
 

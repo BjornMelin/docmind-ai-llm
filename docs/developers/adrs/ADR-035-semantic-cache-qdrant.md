@@ -4,7 +4,7 @@ Title: Application-Level Semantic Cache (Qdrant-backed, Guardrailed)
 Status: Proposed
 Version: 3.0.0
 Date: 2026-01-09
-Supersedes:
+Supersedes: ADR-035-semantic-cache-gptcache-sqlite-faiss.md
 Superseded-by:
 Related: 004, 010, 024, 030, 031, 032, 038
 Tags: cache, semantic, qdrant, offline, privacy
@@ -122,14 +122,14 @@ graph TD
 ### Functional Requirements
 
 - FR‑1: Serve responses from an optional cache (exact + semantic) for repeated requests.
-- FR‑2: Provide a provider-agnostic adapter interface with a single integration point in the LLM call path.
-- FR‑3: Implement automatic invalidation of cache entries when corpus/config hashes change.
+- FR‑2: A provider-agnostic adapter interface should expose a single integration point in the LLM call path.
+- FR‑3: Automatic invalidation of cache entries must occur when corpus/config hashes change.
 
 ### Non-Functional Requirements
 
 - NFR‑1: Support offline/local execution; deterministic tests; no network in CI.
-- NFR‑2: Maintain default-off behavior for safe-by-default feature enablement.
-- NFR‑3: Protect privacy: do not store raw prompts; optionally support encryption for cached responses.
+- NFR‑2: Default-off behavior must be maintained for safe-by-default feature enablement.
+- NFR‑3: Privacy must be protected: raw prompts are never stored; optional encryption supports cached responses.
 
 ### Performance Requirements
 
@@ -173,6 +173,8 @@ DOCMIND_SEMANTIC_CACHE__TTL_SECONDS=1209600
 DOCMIND_SEMANTIC_CACHE__TOP_K=5
 DOCMIND_SEMANTIC_CACHE__MAX_RESPONSE_BYTES=24000
 DOCMIND_SEMANTIC_CACHE__NAMESPACE=default
+# DOCMIND_SEMANTIC_CACHE__COLLECTION_NAME=docmind_semcache
+# DOCMIND_SEMANTIC_CACHE__ALLOW_SEMANTIC_FOR_TEMPLATES=template_a,template_b
 ```
 
 ## Testing

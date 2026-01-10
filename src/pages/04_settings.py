@@ -1,4 +1,3 @@
-# pylint: disable=invalid-name, C0103, too-many-statements
 """Settings page for LLM runtime (SPEC-001).
 
 Provides provider selection, URLs, model, context window, timeout, and GPU

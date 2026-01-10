@@ -150,7 +150,7 @@ class ToolFactory:
                 from src.retrieval.reranking import MultimodalReranker
 
                 post = [MultimodalReranker()]
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             post = None
         query_engine = build_vector_query_engine(
             index, post, similarity_top_k=settings.retrieval.top_k, verbose=False
@@ -352,7 +352,7 @@ class ToolFactory:
             try:
                 tools.append(cls.create_keyword_tool(vector_index))
                 logger.info("Added optional keyword search tool")
-            except Exception as e:  # pylint: disable=broad-exception-caught  # pragma: no cover - defensive
+            except Exception as e:
                 logger.warning("Keyword tool registration failed: %s", e)
 
         logger.info("Created %d tools for agent", len(tools))

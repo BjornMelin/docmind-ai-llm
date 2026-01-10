@@ -1,4 +1,3 @@
-# pylint: disable=invalid-name
 """Streamlit Chat page.
 
 This page renders a simple chat UI backed by the multi-agent coordinator.
@@ -97,7 +96,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
     # Autoload router from latest snapshot per policy
     try:
         _load_latest_snapshot_into_session()
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         st.caption(f"Autoload skipped: {exc}")
     # Fallback: best-effort hydration from latest snapshot if not set
     if "router_engine" not in st.session_state:
@@ -105,7 +104,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
             snap = latest_snapshot_dir()
             if snap is not None:
                 _hydrate_router_from_snapshot(snap)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             logger.debug("Hydration from snapshot failed: %s", exc)
     # Last-resort: ensure a router object exists for downstream tooling/tests
     if "router_engine" not in st.session_state:
@@ -140,7 +139,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
                                 )
                         else:
                             st.caption(f"Snapshot up-to-date: {latest.name}")
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         # Do not interrupt chat if staleness check fails
         st.caption(f"Staleness check skipped: {exc}")
 

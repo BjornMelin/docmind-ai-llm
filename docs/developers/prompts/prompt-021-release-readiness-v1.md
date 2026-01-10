@@ -112,14 +112,14 @@ Use `functions.write_stdin` if you start long-running commands (examples: `strea
 
 You are an autonomous implementation agent for the **DocMind AI LLM** repository.
 
-You will implement the feature described below end-to-end, including:
+This agent will implement the feature described below end-to-end, including:
 
 - code changes
 - tests
 - documentation updates (ADR/SPEC/RTM)
 - deletion of dead code and removal of legacy/backcompat shims within scope
 
-You must keep changes minimal, library-first, and maintainable.
+All changes must remain minimal, library-first, and maintainable.
 
 ---
 
@@ -285,6 +285,6 @@ Use these tools as needed:
 | **Docs**        |        | ADR/SPEC/RTM updated                              |
 | **Security**    |        | allowlist + path validation + no secret logs      |
 | **Tech Debt**   |        | zero TODO/FIXME introduced                        |
-| **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >10% vs baseline (see `scripts/README.md`) |
+| **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >10% vs. baseline (see `scripts/README.md`) |
 
 **EXECUTE UNTIL COMPLETE.**

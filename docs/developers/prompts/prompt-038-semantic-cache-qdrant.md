@@ -34,13 +34,13 @@ Implements `ADR-035` + `SPEC-038`.
 **Parallel preflight (use `multi_tool_use.parallel` for independent work):**
 
 - Locate the LLM call boundary where caching can be inserted:
-  - `rg -n "Settings\\.llm|\\.complete\\(|\\.achat\\(|\\.chat\\(|llm\\." src/agents src/pages src/config -S`
+  - `rg -nP --type=py '(?:Settings\\.llm|\\.complete\\(|\\.achat\\(|\\.chat\\(|llm\\.)' src/agents src/pages src/config -C 2`
 - Confirm semantic cache config fields and current provider enum:
   - `rg -n "class SemanticCacheConfig" src/config/settings.py`
 - Confirm Qdrant client usage patterns already in repo:
   - `rg -n "QdrantClient\\(" src -S`
 - Verify qdrant-client is available and inspect snapshot methods:
-- `uv run python -c 'from qdrant_client import QdrantClient; c=QdrantClient(location=":memory:"); print([m for m in dir(c) if "snapshot" in m])'`
+  - `uv run python -c 'from qdrant_client import QdrantClient; c=QdrantClient(location=":memory:"); print([m for m in dir(c) if "snapshot" in m])'`
 
 **MCP resources first (when available):**
 
@@ -67,16 +67,14 @@ Implements `ADR-035` + `SPEC-038`.
 
 ### You Are
 
-You are an autonomous implementation agent for the **DocMind AI LLM** repository.
-
-You will implement the feature described below end-to-end, including:
+You are an autonomous implementation agent for the **DocMind AI LLM** repository. Your role is to implement the feature described below end-to-end:
 
 - code changes
 - tests
 - documentation updates (ADR/SPEC/RTM)
 - deletion of dead code and removal of legacy/backcompat shims within scope
 
-You must keep changes minimal, library-first, and maintainable.
+Maintain changes as minimal, library-first, and maintainable.
 
 ---
 
@@ -108,8 +106,8 @@ You must keep changes minimal, library-first, and maintainable.
 - One integration point (choose the narrowest viable boundary):
   - `src/agents/coordinator.py` (preferred) or
   - `src/config/llm_factory.py` (if implementing an LLM wrapper)
-- `tests/unit/utils/test_semantic_cache.py` (new)
-- `tests/integration/test_semantic_cache_integration.py` (new; uses MockLLM)
+- `tests/unit/utils/semantic_cache/test_semantic_cache.py` (new)
+- `tests/integration/retrieval/test_semantic_cache_integration.py` (new; uses MockLLM)
 - `docs/specs/spec-038-semantic-cache-qdrant.md`
 - `docs/specs/requirements.md`
 - `docs/specs/traceability.md`
@@ -155,7 +153,7 @@ Your code must pass:
 
 You MUST produce a plan and keep exactly one step “in_progress” at a time. For humans, annotate the checklist with `[~]` on the single in-progress step; for agents, update plan state via `functions.update_plan`.
 
-1. [ ] Read ADR/SPEC and locate the best cache insertion point in the LLM call path.
+1. [ ] Read ADR/SPEC, confirm the cache insertion point is explicitly documented, and update ADR/SPEC if the boundary is ambiguous.
 2. [ ] Implement `src/utils/semantic_cache.py`:
    - protocol + Qdrant implementation
    - canonicalization + prompt_key hashing

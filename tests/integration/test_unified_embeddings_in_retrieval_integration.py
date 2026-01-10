@@ -23,7 +23,7 @@ def test_unified_embedder_integration_dense_and_sparse_text():
                 "lexical_weights": [{0: 1.0} for _ in range(n)],
             }
 
-    u.text._backend = _Stub()  # type: ignore[attr-defined]  # pylint: disable=protected-access
+    u.text._backend = _Stub()  # type: ignore[attr-defined]
     out = u.text.encode_text(["x", "y"], return_dense=True, return_sparse=True)
     assert out["dense"].shape == (2, 1024)
     assert len(out["sparse"]) == 2

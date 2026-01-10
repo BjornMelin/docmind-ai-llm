@@ -19,7 +19,7 @@ def test_text_rerank_true_cancellation(monkeypatch):
     )
 
     # Force timeout by using a blocking function longer than the configured timeout.
-    def very_slow_post(nodes, query_str):  # pylint: disable=unused-argument
+    def very_slow_post(nodes, query_str):
         import time as _t
 
         _t.sleep((timeout_ms + 50) / 1000.0)
@@ -64,7 +64,7 @@ def test_text_rerank_timeout_fail_open(monkeypatch):
     monkeypatch.setattr(rr, "_now_ms", fake_now)
 
     # Patch text reranker to add an artificial delay
-    def slow_post(nodes, query_str):  # pylint: disable=unused-argument
+    def slow_post(nodes, query_str):
         time.sleep(0.001)
         return list(nodes)
 

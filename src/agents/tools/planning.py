@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=cyclic-import
 import json
 import time
 from typing import Annotated
@@ -73,7 +72,7 @@ def route_query(
         logger.info("Query routed: {} complexity, {} strategy", complexity, strategy)
         return json.dumps(decision)
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         logger.error("Query routing failed: {}", e)
         raise
 
@@ -89,7 +88,7 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
         try:
             context = ChatMemoryBuffer.from_defaults()
             state["context"] = context
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             context = ChatMemoryBuffer.from_defaults()
             state["context"] = context
     if isinstance(state, dict) and state.get("reset_context_on_error"):
@@ -102,7 +101,7 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
                 getattr(msg, "content", str(msg))
                 for msg in history[-RECENT_CHAT_HISTORY_LIMIT:]
             ]
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             return []
     return []
 

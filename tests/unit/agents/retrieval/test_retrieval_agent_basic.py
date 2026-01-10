@@ -1,6 +1,5 @@
 """Unit tests for the lean RetrievalAgent wrapper."""
 
-# pylint: disable=protected-access
 
 from __future__ import annotations
 
@@ -38,7 +37,7 @@ def _make_stub_agent(payload: dict[str, object]):
     class _Agent:
         """Stub agent returning the provided payload as JSON."""
 
-        def invoke(self, *_a, **_k):  # pylint: disable=unused-argument
+        def invoke(self, *_a, **_k):
             """Return the stored payload within a LangGraph message envelope."""
             return {"messages": [SimpleNamespace(content=json.dumps(payload))]}
 
@@ -51,7 +50,7 @@ def _bad_payload_agent():
     class _Agent:
         """Stub agent returning malformed content for fallback tests."""
 
-        def invoke(self, *_a, **_k):  # pylint: disable=unused-argument
+        def invoke(self, *_a, **_k):
             """Return content that cannot be parsed as JSON."""
             return {"messages": [SimpleNamespace(content="not-json")]}
 
@@ -64,7 +63,7 @@ def _raising_agent():
     class _Agent:
         """Stub agent raising to exercise error handling."""
 
-        def invoke(self, *_a, **_k):  # pylint: disable=unused-argument
+        def invoke(self, *_a, **_k):
             """Raise runtime error to mimic agent failure."""
             raise RuntimeError("boom")
 
@@ -111,12 +110,12 @@ class _PositionalQueryTool:
         self.received_query: object | None = None
         self.received_state: object | None = None
 
-    def __call__(  # pylint: disable=too-many-positional-arguments
+    def __call__(
         self,
         query: str,
         strategy: str = "hybrid",
-        use_dspy: bool = True,  # pylint: disable=unused-argument
-        use_graphrag: bool = False,  # pylint: disable=unused-argument
+        use_dspy: bool = True,
+        use_graphrag: bool = False,
         state: dict | None = None,
     ) -> str:
         self.received_query = query

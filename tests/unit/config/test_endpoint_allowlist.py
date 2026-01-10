@@ -17,7 +17,7 @@ def test_endpoint_allowlist_blocks_remote_urls() -> None:
     cfg.security.allow_remote_endpoints = False
     cfg.vllm_base_url = "https://api.example.com/v1"
     with pytest.raises(ValueError, match=r".*"):
-        cfg._validate_endpoints_security()  # pylint: disable=protected-access
+        cfg._validate_endpoints_security()
 
 
 @pytest.mark.parametrize(
@@ -33,4 +33,4 @@ def test_endpoint_allowlist_allows_localhost(url: str) -> None:
     cfg.security.allow_remote_endpoints = False
     cfg.vllm_base_url = url
     # Should not raise
-    cfg._validate_endpoints_security()  # pylint: disable=protected-access
+    cfg._validate_endpoints_security()

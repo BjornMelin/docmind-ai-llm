@@ -50,13 +50,13 @@ Add helper (module-local or reusable) that:
 
 Rationale: defaults target a bounded ~25 MB parse window based on typical daily telemetry volume; adjust only after measuring log growth (estimate `max_lines ≈ target_bytes / avg_line_bytes` from sample logs).
 
-Scope: caps apply per telemetry JSONL file read (and should be enforced consistently across multi-session files, if present).
+Scope: caps apply per parse invocation (each call enforces its own `max_lines` and `max_bytes` limits independently), keeping behavior deterministic without session-wide state.
 
 Recourse: when a cap is hit, stop reading additional lines/bytes, log a warning, and return aggregated counts from the bounded window (no exceptions raised for cap hits).
 
 ### Canonical telemetry path
 
-Use the same path as the telemetry emitter by defining a shared constant or getter (e.g., `TELEMETRY_JSONL_PATH` or `get_telemetry_jsonl_path()` in `src/utils/telemetry.py`) and referencing it from the Analytics page. Add a test that asserts the analytics helper reads from the same path.
+Use the same path as the telemetry emitter by referencing a shared public constant or getter (e.g., `TELEMETRY_JSONL_PATH` or `get_telemetry_jsonl_path()` in `src/utils/telemetry.py`) from the Analytics page. Add a test that asserts the analytics helper reads from the same path.
 
 ## Observability
 

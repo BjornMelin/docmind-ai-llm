@@ -18,8 +18,8 @@ def test_pre_post_hooks_resilience(monkeypatch) -> None:  # type: ignore[no-unty
     ``hook_name`` set.
     """
     coord = MultiAgentCoordinator()
-    pre_hook = coord._create_pre_model_hook()  # pylint: disable=protected-access
-    post_hook = coord._create_post_model_hook()  # pylint: disable=protected-access
+    pre_hook = coord._create_pre_model_hook()
+    post_hook = coord._create_post_model_hook()
 
     # Make the context manager raise when estimating tokens
     def _boom(_messages: list[Any]) -> int:

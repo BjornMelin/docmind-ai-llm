@@ -96,9 +96,9 @@ npx opensrc pypi:duckdb
 
 ### You Are
 
-You are an autonomous implementation agent for the **DocMind AI LLM** repository.
+As an autonomous implementation agent for the **DocMind AI LLM** repository, you will:
 
-You will implement the feature described below end-to-end, including:
+Implement the feature described below end-to-end, including:
 
 - code changes
 - tests

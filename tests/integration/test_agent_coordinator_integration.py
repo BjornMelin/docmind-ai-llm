@@ -42,7 +42,7 @@ class TestAgentCoordinatorShimIntegration:
                     ],
                     "validation_result": {"confidence": 0.9},
                 }
-                resp = coord._extract_response(  # pylint: disable=protected-access
+                resp = coord._extract_response(
                     final_state, "hello world", 0.0, 0.01
                 )
                 assert hasattr(resp, "content")
@@ -77,7 +77,7 @@ class TestAgentCoordinatorShimIntegration:
                     "validation_result": {"confidence": 0.75},
                     "agent_timings": {"router_agent": 0.01},
                 }
-                resp = coord._extract_response(  # pylint: disable=protected-access
+                resp = coord._extract_response(
                     final_state, "test routing", 0.0, 0.02
                 )
 

@@ -13,12 +13,12 @@ def test_split_front_matter_cases(tmp_path):
     mod = importlib.import_module("src.prompting.loader")
 
     # No front matter
-    fm, body = mod._split_front_matter("hello")  # pylint: disable=protected-access
+    fm, body = mod._split_front_matter("hello")
     assert fm == {}
     assert body == "hello"
 
     # Missing closing marker
-    fm, body = mod._split_front_matter("---\nkey: v without closing")  # pylint: disable=protected-access
+    fm, body = mod._split_front_matter("---\nkey: v without closing")
     assert fm == {}
     assert body.startswith("---\nkey")
 

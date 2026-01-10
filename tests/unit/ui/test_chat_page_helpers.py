@@ -26,7 +26,7 @@ def test_chunked_stream_edges():
     page = importlib.import_module("src.pages.01_chat")
 
     # Empty
-    assert list(page._chunked_stream("")) == []  # pylint: disable=protected-access
+    assert list(page._chunked_stream("")) == []
     # Exact multiple
     s = "a" * 96
     out = list(page._chunked_stream(s, chunk_size=48))
@@ -46,16 +46,16 @@ def test_get_settings_override_forwarding(monkeypatch):
     import streamlit as st  # type: ignore
 
     st.session_state.clear()
-    assert page._get_settings_override() is None  # pylint: disable=protected-access
+    assert page._get_settings_override() is None
 
     st.session_state["router_engine"] = object()
-    ov = page._get_settings_override()  # pylint: disable=protected-access
+    ov = page._get_settings_override()
     assert ov == {"router_engine": st.session_state["router_engine"]}
 
     st.session_state["vector_index"] = object()
     st.session_state["hybrid_retriever"] = object()
     st.session_state["graphrag_index"] = object()
-    ov = page._get_settings_override()  # pylint: disable=protected-access
+    ov = page._get_settings_override()
     assert set(ov.keys()) == {"router_engine", "vector", "retriever", "kg"}
 
 
@@ -72,7 +72,7 @@ def test_hydrate_router_from_snapshot(monkeypatch):
     monkeypatch.setattr(page, "build_router_engine", lambda *_, **__: "ROUTER")
 
     st.session_state.clear()
-    page._hydrate_router_from_snapshot(Path("/tmp/snap"))  # pylint: disable=protected-access
+    page._hydrate_router_from_snapshot(Path("/tmp/snap"))
     assert st.session_state["vector_index"] == "VEC"
     assert st.session_state["graphrag_index"] == "KG"
     assert st.session_state["router_engine"] == "ROUTER"
@@ -84,7 +84,7 @@ def test_hydrate_router_from_snapshot(monkeypatch):
         lambda *_, **__: (_ for _ in ()).throw(RuntimeError("x")),
     )
     st.session_state.clear()
-    page._hydrate_router_from_snapshot(Path("/tmp/snap"))  # pylint: disable=protected-access
+    page._hydrate_router_from_snapshot(Path("/tmp/snap"))
     assert (
         st.session_state.get("router_engine") is None
         or "router_engine" not in st.session_state
@@ -105,7 +105,7 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
 
     # ignore policy → no action
     monkeypatch.setattr(settings.graphrag_cfg, "autoload_policy", "ignore")
-    page._load_latest_snapshot_into_session()  # pylint: disable=protected-access
+    page._load_latest_snapshot_into_session()
     assert st.session_state == {}
 
     # pinned policy with existing dir
@@ -121,7 +121,7 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
         "_hydrate_router_from_snapshot",
         lambda p: st.session_state.__setitem__("router_engine", "R"),
     )
-    page._load_latest_snapshot_into_session()  # pylint: disable=protected-access
+    page._load_latest_snapshot_into_session()
     assert st.session_state.get("router_engine") == "R"
 
     # latest_non_stale path with latest_snapshot_dir returning a path
@@ -135,5 +135,5 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
         "_hydrate_router_from_snapshot",
         lambda p: st.session_state.__setitem__("router_engine", "R2"),
     )
-    page._load_latest_snapshot_into_session()  # pylint: disable=protected-access
+    page._load_latest_snapshot_into_session()
     assert st.session_state.get("router_engine") == "R2"

@@ -53,7 +53,7 @@ def test_siglip_loader_cached(monkeypatch):
     fake_tf.SiglipModel = _FakeModel
     fake_tf.SiglipProcessor = _FakeProcessor
     monkeypatch.setitem(sys.modules, "transformers", fake_tf)
-    vision._cached.cache_clear()  # pylint: disable=protected-access
+    vision._cached.cache_clear()
 
     # First load
     _ = rr._load_siglip()

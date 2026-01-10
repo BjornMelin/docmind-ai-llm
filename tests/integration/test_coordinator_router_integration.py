@@ -14,7 +14,6 @@ import pytest
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.registry import DefaultToolRegistry
 
-# pylint: disable=protected-access
 # Rationale: tests set minimal coordinator internals to avoid heavy setup.
 
 

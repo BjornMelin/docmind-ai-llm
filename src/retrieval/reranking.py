@@ -264,7 +264,7 @@ def _load_images_for_siglip(
     return imgs
 
 
-def _siglip_rescore(  # pylint: disable=too-many-branches, too-many-statements
+def _siglip_rescore(
     query: str, nodes: list[NodeWithScore], budget_ms: int
 ) -> list[NodeWithScore]:
     """Compute SigLIP text-image cosine scores for visual nodes.
@@ -456,7 +456,7 @@ class MultimodalReranker(BaseNodePostprocessor):
     - Time budgets and fail-open behavior
     """
 
-    def _postprocess_nodes(  # pylint: disable=too-many-branches, too-many-statements
+    def _postprocess_nodes(
         self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
     ) -> list[NodeWithScore]:
         """Apply modality-aware reranking with time budgets and fail-open behavior.

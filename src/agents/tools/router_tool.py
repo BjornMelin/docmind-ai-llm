@@ -39,7 +39,7 @@ def router_tool(
 
             try:
                 resp = router_engine.query(query)
-            except Exception as exc:  # pylint: disable=broad-exception-caught
+            except Exception as exc:
                 span.set_attribute("router.success", False)
                 span.set_attribute("router.error", str(exc))
                 logger.error("router_tool query failed: %s", exc)
@@ -57,7 +57,7 @@ def router_tool(
                 metadata = getattr(resp, "metadata", None)
                 if isinstance(metadata, dict):
                     selected_strategy = metadata.get("selector_result")
-            except Exception:  # pylint: disable=broad-exception-caught  # pragma: no cover
+            except Exception:
                 selected_strategy = None
 
             timing_ms = (time.perf_counter() - start) * 1000.0
@@ -99,7 +99,7 @@ def router_tool(
 
             return json.dumps(payload)
 
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             span.set_attribute("router.success", False)
             span.set_attribute("router.error", str(exc))
             logger.error("router_tool failed: %s", exc)

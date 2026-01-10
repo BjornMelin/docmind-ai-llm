@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 031, 032, 033, 052, 024
+Related: 031, 032, 033, 052, 024, 057
 Tags: persistence, sqlite, wal, jobs, offline-first
 References:
   - https://docs.python.org/3/library/sqlite3.html
@@ -111,36 +111,36 @@ flowchart LR
    - v1 = initial ops schema (jobs/snapshots/ui_state)
 3. Example migration sketch:
 
-```sql
-BEGIN;
-PRAGMA foreign_keys=ON;
-PRAGMA journal_mode=WAL;
+    ```sql
+    BEGIN;
+    PRAGMA foreign_keys=ON;
+    PRAGMA journal_mode=WAL;
 
-CREATE TABLE IF NOT EXISTS jobs (
-  id TEXT PRIMARY KEY,
-  status TEXT NOT NULL,
-  payload TEXT,
-  created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
-);
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      payload TEXT,
+      created_at_ms INTEGER NOT NULL,
+      updated_at_ms INTEGER NOT NULL
+    );
 
-CREATE TABLE IF NOT EXISTS snapshots (
-  id TEXT PRIMARY KEY,
-  job_id TEXT,
-  data TEXT,
-  created_at_ms INTEGER NOT NULL,
-  FOREIGN KEY(job_id) REFERENCES jobs(id)
-);
+    CREATE TABLE IF NOT EXISTS snapshots (
+      id TEXT PRIMARY KEY,
+      job_id TEXT,
+      data TEXT,
+      created_at_ms INTEGER NOT NULL,
+      FOREIGN KEY(job_id) REFERENCES jobs(id)
+    );
 
-CREATE TABLE IF NOT EXISTS ui_state (
-  key TEXT PRIMARY KEY,
-  value TEXT,
-  updated_at_ms INTEGER NOT NULL
-);
+    CREATE TABLE IF NOT EXISTS ui_state (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at_ms INTEGER NOT NULL
+    );
 
-PRAGMA user_version=1;
-COMMIT;
-```
+    PRAGMA user_version=1;
+    COMMIT;
+    ```
 
 4. Integrate with background jobs (ADR-052) to write lifecycle events.
 5. Add unit tests for migrations and core write/read APIs.

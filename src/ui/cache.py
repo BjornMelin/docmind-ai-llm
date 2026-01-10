@@ -38,11 +38,11 @@ def clear_caches(settings_obj: Any | None = None) -> int:
 
     with suppress(
         Exception
-    ):  # pragma: no cover - defensive  # pylint: disable=broad-exception-caught
+    ):  # pragma: no cover - defensive
         st.cache_data.clear()
     with suppress(
         Exception
-    ):  # pragma: no cover - defensive  # pylint: disable=broad-exception-caught
+    ):  # pragma: no cover - defensive
         st.cache_resource.clear()
 
     return int(getattr(settings_obj, "cache_version", 0))

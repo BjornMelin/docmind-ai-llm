@@ -6,7 +6,6 @@ Relies on Streamlit AppTest to run src/pages/04_settings.py in a temp cwd.
 
 from __future__ import annotations
 
-# pylint: disable=too-many-statements  # UI scenario flows are intentionally linear
 from collections.abc import Iterator
 from pathlib import Path
 

@@ -10,7 +10,6 @@ Key behaviors:
 - Hardware-aware LlamaCPP params
 - Optional structured-output flag for vLLM (SPEC-007 prep)
 """
-# pylint: disable=ungrouped-imports
 
 import logging
 import os
@@ -254,7 +253,7 @@ def _should_configure_llm(force_llm: bool) -> bool:
 
 def _configure_llm() -> None:
     try:
-        settings._validate_endpoints_security()  # pylint: disable=protected-access
+        settings._validate_endpoints_security()
     except ValueError as err:
         logger.warning("LLM configuration blocked by security policy: %s", err)
         Settings.llm = None

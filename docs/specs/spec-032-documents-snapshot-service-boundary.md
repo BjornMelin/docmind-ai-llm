@@ -73,9 +73,9 @@ When present, `graph_exports` entries include export metadata such as:
 
 `src/pages/02_documents.py` becomes:
 
-- ingestion UI wiring (`ingest_files(...)`)
+- ingestion UI wiring (`ingest_files(…)`)
 - storing indices/router in `st.session_state`
-- calling `snapshot_service.rebuild_snapshot(...)` and rendering results
+- calling `snapshot_service.rebuild_snapshot(…)` and rendering results
 
 ### Import-time performance
 
@@ -88,6 +88,7 @@ The service and page must avoid heavy imports at module import time:
 
 - Continue emitting local telemetry for export events (JSONL) via `src/utils/telemetry.log_jsonl`.
 - Continue recording graph export metrics via `src/telemetry/opentelemetry.record_graph_export_metric` when meters are configured.
+- Telemetry failures (JSONL write or OTel metric recording) must be logged and skipped so snapshot rebuilds proceed; no retries beyond the current attempt.
 
 ## Security
 

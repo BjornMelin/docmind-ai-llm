@@ -419,7 +419,7 @@ def persist_vector_index(index: Any, out_dir: Path) -> None:
             index.storage_context.persist(  # type: ignore[attr-defined]
                 persist_dir=str(out_dir)
             )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             _emit_snapshot_log(
                 "persist_vector",
                 status="failure",
@@ -456,7 +456,7 @@ def persist_graph_store(store: Any, out_dir: Path) -> None:
                 store.persist(persist_dir=str(out_dir))  # type: ignore[attr-defined]
             except TypeError:
                 store.persist(str(out_dir))
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             _emit_snapshot_log(
                 "persist_graph",
                 status="failure",

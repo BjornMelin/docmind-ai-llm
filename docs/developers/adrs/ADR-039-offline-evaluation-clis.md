@@ -4,13 +4,17 @@ Title: Offline Evaluation CLIs (BEIR + RAGAS) for Retrieval Quality
 Status: Accepted
 Version: 1.0
 Date: 2026-01-09
-Supersedes:
+Supersedes: 012
 Superseded-by:
 Related: 012, 014, SPEC-010
 Tags: evaluation, offline, tooling, retrieval
 References:
   - https://pypi.org/project/ragas/
   - https://github.com/beir-cellar/beir
+  - Implementation: tools/eval/run_beir.py, tools/eval/run_ragas.py
+  - Spec/ADR: docs/specs/SPEC-010 (Evaluation & Quality Gates)
+  - Spec/ADR: docs/developers/adrs/ADR-012-evaluation-strategy.md
+  - Spec/ADR: docs/developers/adrs/ADR-014-llm-eval-telemetry.md
 ---
 
 ## Description

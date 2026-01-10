@@ -9,13 +9,29 @@ from pathlib import Path
 
 import pytest
 
-from src.utils import security
+from src.utils import log_safety, security
 
 
 def test_redact_pii_returns_string() -> None:
-    """redact_pii should return a string of same type even for empty input."""
-    assert isinstance(security.redact_pii("hello"), str)
-    assert security.redact_pii("") == ""
+    """redact_pii should return a deterministic redaction string."""
+    redacted = security.redact_pii("hello@example.com")
+    assert isinstance(redacted, str)
+    assert "hello@example.com" not in redacted
+
+
+def test_log_safety_redaction_is_deterministic() -> None:
+    """log_safety redaction should be stable and include a fingerprint."""
+    redacted_a, fp_a = log_safety.redact_pii(
+        "hello@example.com",
+        return_fingerprint=True,
+    )
+    redacted_b, fp_b = log_safety.redact_pii(
+        "hello@example.com",
+        return_fingerprint=True,
+    )
+    assert redacted_a == redacted_b
+    assert fp_a == fp_b
+    assert "hello@example.com" not in redacted_a
 
 
 def test_validate_export_path_local(tmp_path: Path) -> None:

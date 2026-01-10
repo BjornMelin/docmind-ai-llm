@@ -36,15 +36,19 @@ related_adrs: ["ADR-052", "ADR-051", "ADR-013", "ADR-016"]
 
 Implement:
 
+- Constants:
+  - `MAX_PROGRESS_QUEUE_SIZE = 100` (default bound for progress queue)
+  - `SHUTDOWN_GRACE_PERIOD_SEC = 5` (default graceful shutdown timeout)
+
 - `JobManager` (plain class; no Streamlit APIs)
 - `get_job_manager()` (Streamlit wrapper using `@st.cache_resource` to keep a single manager per process)
 - `JobManager.shutdown()` to gracefully stop the executor (best-effort), registered via `atexit` in the Streamlit wrapper so dev restarts don't leak threads
-  - **Shutdown behavior**: in-flight jobs are allowed to complete their current phase (graceful drain, ~5s timeout), then marked `canceled` if still running; no partial outputs are published
+  - **Shutdown behavior**: in-flight jobs are allowed to complete their current phase (graceful drain, `SHUTDOWN_GRACE_PERIOD_SEC` timeout), then marked `canceled` if still running; no partial outputs are published
 - `JobState` tracking:
   - `job_id`, `owner_id`, `created_at`, `last_seen_at`
   - `status`: queued/running/succeeded/failed/canceled
   - `cancel_event: threading.Event`
-  - `progress_queue: queue.Queue[ProgressEvent]` (bounded)
+- `progress_queue: queue.Queue[ProgressEvent]` (bounded; create with `maxsize=MAX_PROGRESS_QUEUE_SIZE`)
   - `result` / `error`
 
 ### Progress events
@@ -61,13 +65,13 @@ Use a small typed structure:
 1. On submit:
 
    - validate input
-   - save uploaded files to disk (or do this as the first worker phase)
+   - save uploaded files to disk before job submission (UI responsibility)
    - start job and store `job_id` in `st.session_state`
 
 2. Render progress:
 
    - `@st.fragment(run_every="1s")` poller drains queue for the active job and updates a progress bar/status block
-   - **Polling interval rationale**: 1s balances UX responsiveness (users see updates quickly) with minimal overhead (one rerun/sec). Configurable via `DOCMIND_UI__PROGRESS_POLL_INTERVAL_SEC` if needed.
+  - **Polling interval rationale**: 1s balances UX responsiveness (users see updates quickly) with minimal overhead (one rerun/sec). Configurable via `DOCMIND_UI__PROGRESS_POLL_INTERVAL_SEC` if needed.
 
 3. Completion:
    - on success, update `st.session_state` with indices (routing configuration / router engine) and snapshot metadata (see ADR-052)
@@ -77,6 +81,12 @@ Use a small typed structure:
 
 - Cancel button calls `job_manager.cancel(job_id)`.
 - Worker checks `cancel_event.is_set()` at safe boundaries and aborts with cleanup.
+
+### Configuration
+
+- `DOCMIND_UI__PROGRESS_POLL_INTERVAL_SEC` (default: `1`) — UI polling interval for progress updates.
+- `max_progress_queue_size` (default: `MAX_PROGRESS_QUEUE_SIZE`) — `JobManager` init parameter to bound progress queue.
+- `shutdown_grace_period_sec` (default: `SHUTDOWN_GRACE_PERIOD_SEC`) — `JobManager` init parameter for graceful shutdown timeout.
 
 ## Observability
 

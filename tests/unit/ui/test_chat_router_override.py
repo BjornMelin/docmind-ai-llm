@@ -11,7 +11,6 @@ import importlib
 import streamlit as st
 
 # Accessing a private helper to validate override mapping is intentional here.
-# pylint: disable=protected-access
 
 
 def test_chat_router_override_flag_roundtrip() -> None:

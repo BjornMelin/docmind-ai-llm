@@ -28,12 +28,10 @@ _ENV_KID = "DOCMIND_IMG_KID"
 
 
 def redact_pii(text: str) -> str:
-    """Return text with PII redaction (stub: no-op).
+    """Return text with PII redaction for safe logging."""
+    from src.utils.log_safety import redact_pii as _redact_pii
 
-    Implement real patterns/rules as needed per deployment.
-    """
-    # TODO(privacy-hardening): Implement PII detection/redaction rules.
-    return text
+    return _redact_pii(text)
 
 
 def _get_key() -> bytes | None:

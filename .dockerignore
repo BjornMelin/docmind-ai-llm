@@ -17,3 +17,5 @@ data/
 logs/
 models/
 models_cache/
+opensrc/
+.codex/

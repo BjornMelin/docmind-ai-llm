@@ -148,7 +148,7 @@ def performance_timer(
     try:
         yield metrics
         success = True
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         metrics["error"] = str(exc)
         raise
     finally:
@@ -206,7 +206,7 @@ async def async_performance_timer(
     try:
         yield metrics
         success = True
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         metrics["error"] = str(exc)
         raise
     finally:

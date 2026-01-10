@@ -9,7 +9,6 @@ import pytest
 
 from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
 
-# pylint: disable=redefined-outer-name
 # Rationale: pytest fixtures intentionally shadow same-named references in tests.
 
 
@@ -197,7 +196,7 @@ class TestModernizedMonitoringPatterns:
         log_error_with_context(err, "op")
         logging_boundary["logger"].error.assert_called_once()
 
-    def test_performance_timer_success(  # pylint: disable=unused-argument
+    def test_performance_timer_success(
         self, system_resource_boundary, performance_boundary, logging_boundary
     ):
         """Test successful performance timer execution."""
@@ -208,14 +207,14 @@ class TestModernizedMonitoringPatterns:
         logging_boundary["logger"].info.assert_called()
 
     @pytest.mark.asyncio
-    async def test_async_performance_timer_success(  # pylint: disable=unused-argument
+    async def test_async_performance_timer_success(
         self, system_resource_boundary, performance_boundary, logging_boundary
     ):
         """Test successful async performance timer execution."""
-        import asyncio  # pylint: disable=C0415
+        import asyncio
 
         from src.utils.monitoring import (
-            async_performance_timer,  # pylint: disable=C0415
+            async_performance_timer,
         )
 
         async with async_performance_timer("async_operation") as metrics:

@@ -1,6 +1,5 @@
 """Unit tests for centralized device/VRAM policy helpers in src.utils.core."""
 
-# pylint: disable=missing-module-docstring,missing-function-docstring,consider-using-from-import
 
 import types
 

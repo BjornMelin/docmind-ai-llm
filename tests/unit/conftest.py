@@ -22,7 +22,6 @@ from PIL import Image
 
 from src.config.settings import DocMindSettings
 
-# pylint: disable=redefined-outer-name
 # Rationale: pytest fixture dependency injection intentionally uses argument names
 # that shadow fixture factory functions defined at module scope. Renaming breaks
 # fixture resolution; suppress at module level for tests.
