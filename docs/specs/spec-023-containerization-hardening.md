@@ -2,7 +2,7 @@
 spec: SPEC-023
 title: Containerization Hardening — Python 3.11, uv-lock, Non-root, and Canonical DOCMIND Env
 version: 1.0.0
-date: 2026-01-09
+date: 2026-01-10
 owners: ["ai-arch"]
 status: Draft
 related_requirements:
@@ -25,7 +25,7 @@ Make Docker artifacts **runnable, reproducible, and secure-by-default** for DocM
 
 ## Non-goals
 
-- Supporting every GPU configuration in Docker for v1 (GPU compose profiles can be added later)
+- Bundling multiple GPU inference backends in compose (high support burden)
 - Publishing to a registry (CI publish can be a follow-up ticket)
 
 ## Technical design
@@ -39,7 +39,7 @@ Use a multi-stage Dockerfile:
    - base: Python 3.11 slim (bookworm)
    - install build deps required by Unstructured/PyMuPDF (`libmagic1`, MuPDF libs, etc.)
    - install `uv`
-   - run `uv sync --frozen` (optionally with extras for GPU in a separate variant)
+   - run `uv sync --frozen`
 
 2. Runtime stage:
 
@@ -60,6 +60,27 @@ Update compose to:
   - `DOCMIND_LLM_BACKEND`, `DOCMIND_OLLAMA_BASE_URL`, `DOCMIND_OPENAI__BASE_URL`, etc.
 - never hardcode secrets
 
+#### Optional GPU backend profile (Ollama)
+
+Add a compose profile `gpu` that starts a **single** bundled GPU-capable local inference backend:
+
+- `ollama` service (profile: `gpu`)
+- GPU access enabled per Docker’s official compose GPU guidance
+- Internal-only by default:
+  - do not publish `ollama` ports to host unless explicitly desired
+  - DocMind connects via the compose network hostname
+
+Recommended env wiring in the `docmind` service:
+
+- `DOCMIND_LLM_BACKEND=ollama`
+- `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434`
+- keep remote endpoints blocked:
+  - `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` (default)
+  - extend allowlist to include `ollama`:
+    - `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=["http://localhost","http://127.0.0.1","http://ollama"]`
+
+Power users can still run vLLM/LM Studio externally and point DocMind at them (with allowlist rules), but compose does not bundle them.
+
 ### .dockerignore
 
 Add `.dockerignore` to exclude:
@@ -75,6 +96,7 @@ Add `.dockerignore` to exclude:
 - Avoid `latest` tags for base images; pin to Python 3.11 slim variant.
 - Add a healthcheck:
   - Prefer Streamlit’s health endpoint (`/_stcore/health`) when available.
+- Keep optional GPU backend internal-only by default (no public ports).
 
 ## Testing strategy
 
@@ -85,6 +107,14 @@ docker build -t docmind:dev .
 docker compose config
 docker compose up --build -d
 docker compose logs -f --tail=100 app
+```
+
+GPU profile verification (host must have NVIDIA runtime configured):
+
+```bash
+docker compose --profile gpu up --build -d
+docker compose ps
+docker compose logs -f --tail=100 ollama
 ```
 
 ## RTM updates (docs/specs/traceability.md)

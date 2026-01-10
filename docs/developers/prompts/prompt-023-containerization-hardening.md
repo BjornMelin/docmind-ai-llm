@@ -15,6 +15,9 @@ Implements `ADR-042` + `SPEC-023`.
 - <https://docs.docker.com/compose/> — Docker Compose overview and workflows.
 - <https://docs.docker.com/compose/compose-file/> — Compose file reference (ports, env, healthchecks).
 - <https://docs.docker.com/reference/cli/docker/compose/config/> — `docker compose config` validation.
+- <https://docs.docker.com/compose/how-tos/gpu-support/> — Compose GPU support (device reservations / prerequisites).
+- <https://docs.docker.com/engine/containers/resource_constraints/#gpu> — Docker Engine GPU prerequisites.
+- <https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html> — NVIDIA Container Toolkit install guide.
 - <https://hub.docker.com/_/python> — Official Python image tags and supported variants.
 - <https://docs.astral.sh/uv/guides/integration/docker/> — `uv` Docker install guidance (`uv sync --frozen`).
 - <https://docs.streamlit.io/deploy/tutorials/docker> — Streamlit Docker deployment tutorial (ports, command).
@@ -60,6 +63,12 @@ Skill references to consult (as needed):
 
 - `functions.list_mcp_resources` → look for Docker/Compose/Streamlit resources (rare but cheap to check).
 - `functions.read_mcp_resource` → prefer local docs if present.
+
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if this work package touches OpenAI API semantics)
 
 **Time-sensitive facts (prefer web tools):**
 
@@ -130,6 +139,7 @@ You must keep changes minimal, library-first, and maintainable.
 - Container runs as non-root user.
 - `.dockerignore` exists and excludes `.env` and large dev artifacts.
 - `docker-compose.yml` uses canonical `DOCMIND_*` variables (no legacy names like `OLLAMA_BASE_URL`).
+- `docker-compose.yml` provides a `gpu` profile that runs **Ollama** with GPU access on an internal network (no host port publish by default), and DocMind connects via `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434` with `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` including `http://ollama`.
 - `docs/specs/traceability.md` includes NFR-PORT-003 row (Planned → Implemented).
 
 **In-scope modules/files (initial):**
@@ -143,7 +153,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Out-of-scope (explicit):**
 
-- Implementing GPU compose profiles unless already trivial.
+- Bundling multiple GPU inference backends in compose (vLLM/LM Studio). DocMind must support them via configuration, but only Ollama is shipped as a compose GPU service.
 - Registry publish workflow.
 
 ---
