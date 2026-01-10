@@ -101,6 +101,10 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
     else:
         return None
 
+    # Disallow symlinks to avoid path trickery (best-effort; file open is untrusted).
+    if resolved.is_symlink():
+        return None
+
     if not (resolved.is_file() and resolved.suffix.lower() == ".gguf"):
         return None
 

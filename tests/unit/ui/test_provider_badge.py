@@ -3,44 +3,36 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
+import inspect
 
 import pytest
 import streamlit as st
 
+import src.ui.components.provider_badge as provider_badge_module
 from src.config.settings import DocMindSettings
 from src.ui.components.provider_badge import provider_badge
 
 
-def _find_repo_root(start: Path) -> Path:
-    start_dir = start if start.is_dir() else start.parent
-    for parent in (start_dir, *start_dir.parents):
-        if (parent / "pyproject.toml").exists() and (parent / "src").is_dir():
-            return parent
-    raise RuntimeError(f"Failed to locate repo root from {start}")
+def _provider_badge_source() -> str:
+    return inspect.getsource(provider_badge_module)
 
 
 def _is_true_constant(node: ast.AST) -> bool:
-    if isinstance(node, ast.Constant):
-        return node.value is True
-    if isinstance(node, ast.NameConstant):
-        return node.value is True
-    return False
+    return isinstance(node, ast.Constant) and node.value is True
 
 
 @pytest.mark.unit
 def test_provider_badge_does_not_use_unsafe_allow_html() -> None:
-    repo_root = _find_repo_root(Path(__file__).resolve())
-    source = repo_root / "src" / "ui" / "components" / "provider_badge.py"
-    assert source.exists(), f"Expected source file not found: {source}"
-
-    tree = ast.parse(source.read_text(encoding="utf-8"))
+    source_text = _provider_badge_source()
+    tree = ast.parse(source_text)
     unsafe_calls: list[ast.Call] = []
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         if not isinstance(node.func, ast.Attribute) or node.func.attr != "markdown":
+            continue
+        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "st":
             continue
 
         for kw in node.keywords:

@@ -214,7 +214,7 @@ def lightweight_embedding_model():
 
 
 @pytest.fixture(autouse=True)
-def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> object:
     """Prevent external LLM initialization during tests."""
     if not _llama_available():
         return
@@ -231,7 +231,7 @@ def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _router_factory_stubs(request: pytest.FixtureRequest) -> None:
+def _router_factory_stubs(request: pytest.FixtureRequest) -> object:
     """Inject a stub llama-index adapter unless the test requests the real one."""
     from src.retrieval.llama_index_adapter import set_llama_index_adapter
 
@@ -280,7 +280,23 @@ def _router_factory_stubs(request: pytest.FixtureRequest) -> None:
         @classmethod
         def from_args(cls, **kwargs: object) -> _RouterQueryEngine:
             """Create instance from keyword arguments."""
-            return cls(**kwargs)
+            selector = kwargs.get("selector")
+            query_engine_tools = kwargs.get("query_engine_tools")
+            verbose = kwargs.get("verbose")
+            llm = kwargs.get("llm")
+            return cls(
+                selector=selector,
+                query_engine_tools=query_engine_tools
+                if isinstance(query_engine_tools, list)
+                else None,
+                verbose=verbose if isinstance(verbose, bool) else False,
+                llm=llm,
+                **{
+                    k: v
+                    for k, v in kwargs.items()
+                    if k not in {"selector", "query_engine_tools", "verbose", "llm"}
+                },
+            )
 
     class _RetrieverQueryEngine:
         """Stub for retriever query engine."""
@@ -315,7 +331,7 @@ def _router_factory_stubs(request: pytest.FixtureRequest) -> None:
         get_pydantic_selector=_get_pydantic_selector,
         __is_stub__=True,
     )
-    set_llama_index_adapter(adapter)
+    set_llama_index_adapter(adapter)  # type: ignore[arg-type]
     try:
         yield
     finally:

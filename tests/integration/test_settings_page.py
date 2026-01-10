@@ -232,12 +232,11 @@ def test_settings_toggle_providers_and_apply(
     gguf_path = Path("model.gguf")
     gguf_path.write_text("dummy", encoding="utf-8")
 
-    # Allow the temp cwd as an additional base dir for GGUF validation.
-    settings_globals = settings_app_test.run().session_state
-    settings_globals["docmind_allowed_gguf_base_dirs"] = [str(Path.cwd())]
-
     app = settings_app_test.run()
     assert not app.exception
+
+    # Allow the temp cwd as an additional base dir for GGUF validation.
+    app.session_state["docmind_allowed_gguf_base_dirs"] = [str(Path.cwd())]
 
     # Find provider selectbox
     providers = [s for s in app.selectbox if "LLM Provider" in str(s)]

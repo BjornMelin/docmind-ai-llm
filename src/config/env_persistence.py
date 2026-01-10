@@ -36,6 +36,12 @@ class EnvPersistError(RuntimeError):
     """Raised when persisting a specific env key fails."""
 
     def __init__(self, key: str, message: str):
+        """Initialize for a failure persisting a specific env key.
+
+        Args:
+            key: Environment variable name that failed.
+            message: Human-readable error message.
+        """
         super().__init__(message)
         self.key = key
 
@@ -54,8 +60,8 @@ def persist_env(vars_to_set: dict[str, str], *, env_path: Path | None = None) ->
             target.open("x", encoding="utf-8").close()
 
     for key, value in vars_to_set.items():
-        _validate_env_key(key)
         try:
+            _validate_env_key(key)
             if value == "":
                 unset_key(str(target), key)
             else:
