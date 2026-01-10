@@ -8,7 +8,7 @@ pre-validation to avoid persisting invalid configuration.
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import streamlit as st
 from pydantic import ValidationError
@@ -82,6 +82,8 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
     clean = (path_text or "").strip()
     if not clean:
         return None
+    if clean.startswith("~") and not clean.startswith("~/"):
+        return None
     if (
         "\x00" in clean
         or any(ord(ch) < 32 for ch in clean)
@@ -89,12 +91,13 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
     ):
         return None
 
+    home_dir = Path.home()
     try:
-        resolved = Path(clean).expanduser().resolve(strict=False)
+        home_dir_resolved = home_dir.expanduser().resolve(strict=False)
     except (OSError, RuntimeError, ValueError):
-        return None
+        home_dir_resolved = home_dir
 
-    allowed_bases = [Path.home()]
+    allowed_bases = [home_dir_resolved]
     try:
         extra_bases = st.session_state.get("docmind_allowed_gguf_base_dirs")
     except Exception:  # pragma: no cover - defensive
@@ -104,34 +107,69 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
             [Path(str(base)) for base in extra_bases if str(base).strip()]
         )
 
-    base_dir: Path | None = None
+    base_dirs: list[Path] = []
     for base in allowed_bases:
         try:
-            base_dir = base.expanduser().resolve(strict=False)
+            base_dir = Path(str(base)).expanduser().resolve(strict=False)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        base_dirs.append(base_dir)
+
+    if not base_dirs:
+        return None
+
+    raw_text = clean
+    base_override: Path | None = None
+    if clean.startswith("~/"):
+        raw_text = clean[2:]
+        if not raw_text:
+            return None
+        base_override = home_dir_resolved
+
+    raw = PurePath(raw_text)
+    if any(part == ".." for part in raw.parts):
+        return None
+
+    candidates: list[tuple[Path, Path]] = []
+    if raw.is_absolute() and base_override is None:
+        for base_dir in base_dirs:
+            if raw.is_relative_to(base_dir):
+                candidates.append((base_dir, Path(raw)))
+                break
+        if not candidates:
+            return None
+    else:
+        for base_dir in base_dirs:
+            if base_override is not None and base_dir != base_override:
+                continue
+            candidates.append((base_dir, base_dir / raw))
+
+    for base_dir, candidate in candidates:
+        stop_at = base_dir
+        symlink_found = False
+        reached_base = False
+        for part in (candidate, *candidate.parents):
+            if part.is_symlink():
+                symlink_found = True
+                break
+            if part == stop_at:
+                reached_base = True
+                break
+        if symlink_found or not reached_base:
+            continue
+
+        try:
+            resolved = candidate.resolve(strict=False)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        try:
             resolved.relative_to(base_dir)
         except ValueError:
-            base_dir = None
             continue
-        break
-    else:
-        return None
+        if resolved.is_file() and resolved.suffix.lower() == ".gguf":
+            return resolved
 
-    # Disallow symlink traversal (align with src/utils/security.py).
-    # Note: Path.resolve() follows symlinks, so we must inspect the original path.
-    raw = Path(clean).expanduser()
-    raw_candidate = raw if raw.is_absolute() else (base_dir / raw)
-    stop_at = base_dir if base_dir is not None else Path.home()
-
-    for part in (raw_candidate, *raw_candidate.parents):
-        if part.is_symlink():
-            return None
-        if part == stop_at:
-            break
-
-    if not (resolved.is_file() and resolved.suffix.lower() == ".gguf"):
-        return None
-
-    return resolved
+    return None
 
 
 def _apply_validated_runtime(validated: DocMindSettings) -> None:
