@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -19,15 +20,37 @@ def _find_repo_root(start: Path) -> Path:
     raise RuntimeError(f"Failed to locate repo root from {start}")
 
 
+def _is_true_constant(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant):
+        return node.value is True
+    if isinstance(node, ast.NameConstant):
+        return node.value is True
+    return False
+
+
 @pytest.mark.unit
 def test_provider_badge_does_not_use_unsafe_allow_html() -> None:
     repo_root = _find_repo_root(Path(__file__).resolve())
     source = repo_root / "src" / "ui" / "components" / "provider_badge.py"
     assert source.exists(), f"Expected source file not found: {source}"
 
-    text = source.read_text(encoding="utf-8")
-    assert "unsafe_allow_html=True" not in text
-    assert "unsafe_allow_html = True" not in text
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    unsafe_calls: list[ast.Call] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "markdown":
+            continue
+
+        for kw in node.keywords:
+            if kw.arg != "unsafe_allow_html":
+                continue
+            if kw.value is not None and _is_true_constant(kw.value):
+                unsafe_calls.append(node)
+                break
+
+    assert not unsafe_calls, "Found st.markdown(..., unsafe_allow_html=True)"
 
 
 @pytest.mark.unit

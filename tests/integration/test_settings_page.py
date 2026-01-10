@@ -32,14 +32,10 @@ def test_settings_apply_runtime_rebinds_llm(settings_app_test: AppTest) -> None:
     app = settings_app_test.run()
     assert not app.exception
 
-    # Find and click the "Apply runtime" button
+    # Find and click the "Apply runtime" button by label (no index fallback).
     buttons = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
-    if not buttons:
-        # Fallback is defensive: AppTest widget ordering can change.
-        assert app.button, "No buttons rendered by settings page"
-        app.button[0].click().run()
-    else:
-        buttons[0].click().run()
+    assert buttons, "Apply runtime button not found"
+    buttons[0].click().run()
 
     # Verify Settings.llm is bound
     from llama_index.core import Settings
@@ -65,7 +61,8 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
 
     # Click Save
     save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
-    (save_buttons[0] if save_buttons else app.button[1]).click().run()
+    assert save_buttons, "Save button not found"
+    save_buttons[0].click().run()
 
     # Verify .env was created with keys
     env_file = tmp_path / ".env"
@@ -89,7 +86,8 @@ def test_settings_save_normalizes_lmstudio_url(
         lmstudio_inputs[0].set_value("http://localhost:1234").run()
 
     save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
-    (save_buttons[0] if save_buttons else app.button[1]).click().run()
+    assert save_buttons, "Save button not found"
+    save_buttons[0].click().run()
 
     env_file = tmp_path / ".env"
     assert env_file.exists(), ".env not created by Save action"
@@ -235,11 +233,8 @@ def test_settings_toggle_providers_and_apply(
     gguf_path.write_text("dummy", encoding="utf-8")
 
     # Allow the temp cwd as an additional base dir for GGUF validation.
-    monkeypatch.setattr(
-        "src.pages.04_settings.st.session_state",
-        {"docmind_allowed_gguf_base_dirs": [str(Path.cwd())]},
-        raising=False,
-    )
+    settings_globals = settings_app_test.run().session_state
+    settings_globals["docmind_allowed_gguf_base_dirs"] = [str(Path.cwd())]
 
     app = settings_app_test.run()
     assert not app.exception
@@ -251,8 +246,9 @@ def test_settings_toggle_providers_and_apply(
 
     # Helpers
     def _click_apply() -> None:
-        btns = [b for b in app.button if "Apply runtime" in str(b)]
-        (btns[0] if btns else app.button[0]).click().run()
+        btns = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
+        assert btns, "Apply runtime button not found"
+        btns[0].click().run()
         # Fallback: if global LISettings.llm not set by UI click, set via integrator
         from llama_index.core import Settings as LISettings  # local import
 

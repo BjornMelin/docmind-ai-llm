@@ -53,7 +53,7 @@ def _validate_candidate(
     except ValidationError as exc:
         messages: list[str] = []
         for err in exc.errors():
-            loc_parts = err["loc"]
+            loc_parts = err.get("loc", ())
             if not isinstance(loc_parts, (list, tuple)):
                 loc_parts = (loc_parts,)
             loc = ".".join(str(p) for p in loc_parts if p is not None)
@@ -65,32 +65,28 @@ def _validate_candidate(
     return validated, []
 
 
-def _is_valid_gguf_path(path_text: str) -> bool:
-    """Validate GGUF path is safe and exists.
+def resolve_valid_gguf_path(path_text: str) -> Path | None:
+    """Resolve and validate a GGUF model path.
 
-    Security: paths must resolve within one of the allowed base directories to
-    reduce path traversal risk when persisting user-entered paths. Note that
-    this check cannot fully prevent TOCTOU issues if attacker-controlled
-    symlinks are modified between validation and later file open; consumers
-    should still treat this as a best-effort pre-validation.
+    Security: resolve once and enforce that the resolved path lives within one
+    of the allowed base directories (default: the current user home directory).
+    This is best-effort pre-validation; callers should still treat file opens as
+    untrusted.
     """
     clean = (path_text or "").strip()
     if not clean:
-        return False
+        return None
 
     try:
         resolved = Path(clean).expanduser().resolve(strict=False)
     except (OSError, RuntimeError, ValueError):
-        return False
+        return None
 
-    # Default to restricting paths under the user's home directory. This keeps
-    # the UI safe-by-default while allowing explicit opt-in to other directories.
     allowed_bases = [Path.home()]
-    extra_bases = (
-        st.session_state.get("docmind_allowed_gguf_base_dirs")
-        if isinstance(st.session_state, dict)
-        else None
-    )
+    try:
+        extra_bases = st.session_state.get("docmind_allowed_gguf_base_dirs")
+    except Exception:  # pragma: no cover - defensive
+        extra_bases = None
     if isinstance(extra_bases, (list, tuple)):
         allowed_bases.extend(
             [Path(str(base)) for base in extra_bases if str(base).strip()]
@@ -103,9 +99,12 @@ def _is_valid_gguf_path(path_text: str) -> bool:
             continue
         break
     else:
-        return False
+        return None
 
-    return resolved.is_file() and resolved.suffix.lower() == ".gguf"
+    if not (resolved.is_file() and resolved.suffix.lower() == ".gguf"):
+        return None
+
+    return resolved
 
 
 def _apply_validated_runtime(validated: DocMindSettings) -> None:
@@ -340,12 +339,18 @@ def main() -> None:
     clean_gguf_path = (gguf_path or "").strip()
 
     is_llamacpp = provider == "llamacpp"
-    gguf_invalid = clean_gguf_path and not _is_valid_gguf_path(clean_gguf_path)
+    resolved_gguf_path = resolve_valid_gguf_path(clean_gguf_path)
     gguf_missing_for_local = not clean_llamacpp_url and not clean_gguf_path
 
-    if is_llamacpp and (gguf_invalid or gguf_missing_for_local):
+    if is_llamacpp and (resolved_gguf_path is None) and (not gguf_missing_for_local):
         ui_errors.append(
-            "Invalid GGUF model path. File must exist and have a .gguf extension."
+            "Invalid GGUF model path. File must exist, have a .gguf extension, "
+            "and be under the allowed base directories."
+        )
+
+    if is_llamacpp and gguf_missing_for_local:
+        ui_errors.append(
+            "Provide either a llama.cpp base URL or a local GGUF model path."
         )
 
     candidate = {
@@ -360,10 +365,8 @@ def main() -> None:
         "enable_gpu_acceleration": bool(use_gpu),
         "vllm": {
             "llamacpp_model_path": (
-                str(Path(clean_gguf_path).expanduser())
-                if is_llamacpp
-                and clean_gguf_path
-                and _is_valid_gguf_path(clean_gguf_path)
+                str(resolved_gguf_path)
+                if is_llamacpp and resolved_gguf_path is not None
                 else ""
             )
         },
@@ -461,8 +464,10 @@ def main() -> None:
                 }
                 try:
                     persist_env(env_map)
-                except (ValueError, OSError) as exc:
-                    st.error(f"Failed to write .env: {exc}")
+                except (ValueError, OSError, RuntimeError) as exc:
+                    key = getattr(exc, "key", "")
+                    suffix = f" (key={key})" if key else ""
+                    st.error(f"Failed to write .env{suffix}: {exc}")
                 else:
                     st.success("Saved to .env")
 

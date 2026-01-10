@@ -12,6 +12,10 @@ def _load_settings_page_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleT
     integrations = importlib.import_module("src.config.integrations")
     monkeypatch.setattr(integrations, "initialize_integrations", lambda **_: None)
 
+    # Ensure a fresh import for each test (avoid module cache pollution).
+    import sys
+
+    sys.modules.pop("src.pages.04_settings", None)
     return importlib.import_module("src.pages.04_settings")
 
 
@@ -41,7 +45,7 @@ def test_validate_candidate_handles_type_errors(
 
 
 @pytest.mark.unit
-def test_is_valid_gguf_path_rejects_outside_home(
+def test_resolve_valid_gguf_path_rejects_outside_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
@@ -53,11 +57,11 @@ def test_is_valid_gguf_path_rejects_outside_home(
     external = tmp_path / "external.gguf"
     external.write_text("dummy", encoding="utf-8")
 
-    assert page._is_valid_gguf_path(str(external)) is False
+    assert page.resolve_valid_gguf_path(str(external)) is None
 
 
 @pytest.mark.unit
-def test_is_valid_gguf_path_accepts_outside_home_when_base_dirs_configured(
+def test_resolve_valid_gguf_path_accepts_outside_home_when_base_dirs_configured(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
@@ -71,18 +75,18 @@ def test_is_valid_gguf_path_accepts_outside_home_when_base_dirs_configured(
     gguf = allowed / "external.gguf"
     gguf.write_text("dummy", encoding="utf-8")
 
-    monkeypatch.setattr(
-        page.st,
-        "session_state",
-        {"docmind_allowed_gguf_base_dirs": [str(allowed)]},
-        raising=False,
+    # session_state isn't a plain dict; set the key on the object.
+    monkeypatch.setitem(
+        page.st.session_state,
+        "docmind_allowed_gguf_base_dirs",
+        [str(allowed)],
     )
 
-    assert page._is_valid_gguf_path(str(gguf)) is True
+    assert page.resolve_valid_gguf_path(str(gguf)) == gguf
 
 
 @pytest.mark.unit
-def test_is_valid_gguf_path_accepts_under_home(
+def test_resolve_valid_gguf_path_accepts_under_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
@@ -94,4 +98,4 @@ def test_is_valid_gguf_path_accepts_under_home(
     gguf = fake_home / "model.gguf"
     gguf.write_text("dummy", encoding="utf-8")
 
-    assert page._is_valid_gguf_path(str(gguf)) is True
+    assert page.resolve_valid_gguf_path(str(gguf)) == gguf

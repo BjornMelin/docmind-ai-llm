@@ -1,4 +1,8 @@
-"""Helpers for persisting environment variables to .env."""
+"""Helpers for persisting environment variables to `.env`.
+
+This helper is intended for DocMind-owned environment variables. Keys are
+validated as `[A-Z][A-Z0-9_]*`.
+"""
 
 from __future__ import annotations
 
@@ -28,10 +32,21 @@ def _validate_env_value(value: str) -> None:
         raise ValueError("Env var value contains control characters")
 
 
+class EnvPersistError(RuntimeError):
+    """Raised when persisting a specific env key fails."""
+
+    def __init__(self, key: str, message: str):
+        super().__init__(message)
+        self.key = key
+
+
 def persist_env(vars_to_set: dict[str, str], *, env_path: Path | None = None) -> None:
     """Persist key=value pairs into the project's .env file.
 
     Creates the file if it does not exist. Empty values remove the key.
+
+    Raises:
+        EnvPersistError: When a specific key cannot be written/removed.
     """
     target = env_path or Path(".env")
     if not target.exists():
@@ -40,8 +55,11 @@ def persist_env(vars_to_set: dict[str, str], *, env_path: Path | None = None) ->
 
     for key, value in vars_to_set.items():
         _validate_env_key(key)
-        if value == "":
-            unset_key(str(target), key)
-        else:
-            _validate_env_value(value)
-            set_key(str(target), key, value, quote_mode="auto")
+        try:
+            if value == "":
+                unset_key(str(target), key)
+            else:
+                _validate_env_value(value)
+                set_key(str(target), key, value, quote_mode="auto")
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise EnvPersistError(key=key, message=f"key={key}: {exc}") from exc
