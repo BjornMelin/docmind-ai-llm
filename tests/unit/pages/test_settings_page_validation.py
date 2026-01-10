@@ -45,6 +45,24 @@ def test_validate_candidate_handles_type_errors(
 
 
 @pytest.mark.unit
+def test_validate_candidate_formats_nested_error_locations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+
+    validated, errors = page._validate_candidate(
+        {
+            "llm_backend": "ollama",
+            "security": {"allow_remote_endpoints": "nope"},
+        }
+    )
+
+    assert validated is None
+    assert errors
+    assert any("security.allow_remote_endpoints" in msg for msg in errors)
+
+
+@pytest.mark.unit
 def test_resolve_valid_gguf_path_rejects_outside_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
