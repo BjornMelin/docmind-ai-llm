@@ -9,7 +9,7 @@ related_requirements:
   - FR-026: Optional semantic response caching for repeated/near-duplicate requests.
   - NFR-SEC-001: Offline-first; remote endpoints gated.
   - NFR-MAINT-003: No placeholder APIs; docs/specs/RTM match code.
-related_adrs: ["ADR-035","ADR-024","ADR-031","ADR-010","ADR-004"]
+related_adrs: ["ADR-035", "ADR-024", "ADR-031", "ADR-010", "ADR-004"]
 ---
 
 ## Goals
@@ -119,4 +119,3 @@ Emit JSONL events:
 Update `docs/specs/traceability.md`:
 
 - Add row `FR-026` with code + tests once implemented.
-

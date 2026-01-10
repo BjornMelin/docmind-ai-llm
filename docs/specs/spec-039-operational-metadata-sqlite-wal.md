@@ -150,4 +150,3 @@ All tests must run offline and deterministic.
 Update `docs/specs/traceability.md`:
 
 - Add/expand `FR-015` mapping to `src/persistence/ops_db.py` + tests above.
-

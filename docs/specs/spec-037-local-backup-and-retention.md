@@ -9,7 +9,7 @@ related_requirements:
   - FR-027: Users can create local backups with retention/restore steps.
   - NFR-SEC-001: Offline-first; no remote endpoints by default.
   - NFR-MAINT-003: No placeholder APIs; docs/specs/RTM match code.
-related_adrs: ["ADR-033","ADR-031","ADR-030","ADR-024","ADR-038"]
+related_adrs: ["ADR-033", "ADR-031", "ADR-030", "ADR-024", "ADR-038"]
 ---
 
 ## Goals
@@ -112,4 +112,3 @@ Emit:
 Update `docs/specs/traceability.md`:
 
 - Add row `FR-027` with code + tests once implemented.
-

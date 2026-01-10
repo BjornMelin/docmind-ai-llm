@@ -71,35 +71,35 @@ Resolution:
 
 Weights: Complexity 40% · Perf 30% · Alignment 30% (10 = best)
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total |
-|---|---:|---:|---:|---:|
-| **Qdrant semantic cache + exact-match + hash invalidation (Selected)** | 8.8 | 9.3 | 9.3 | **9.1** |
-| Exact-match only (SQLite/DuckDB) | 9.5 | 8.5 | 9.0 | 9.05 |
-| GPTCache (SQLite + FAISS) | 6.5 | 8.8 | 7.0 | 7.4 |
+| Option                                                                 | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
+| ---------------------------------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
+| **Qdrant semantic cache + exact-match + hash invalidation (Selected)** |              8.8 |        9.3 |             9.3 | **9.1** |
+| Exact-match only (SQLite/DuckDB)                                       |              9.5 |        8.5 |             9.0 |    9.05 |
+| GPTCache (SQLite + FAISS)                                              |              6.5 |        8.8 |             7.0 |     7.4 |
 
 ## Decision
 
 Implement a semantic cache with these constraints:
 
-1) **Dedicated Qdrant collection** for cache entries (not mixed with document vectors).
+1. **Dedicated Qdrant collection** for cache entries (not mixed with document vectors).
 
-2) **Two-stage read path**:
+2. **Two-stage read path**:
 
-- **Exact-match**: attempt lookup by `prompt_key` (hash of canonicalized request + stable metadata).
-- **Semantic**: if enabled for the request type, do vector search (Cosine) with:
-  - strict metadata filters (model id, temperature, prompt template id/version, tools enabled flag, etc.)
-  - strict invalidation filters (`corpus_hash`, `config_hash`)
-  - similarity threshold (`score_threshold`)
+   - **Exact-match**: attempt lookup by `prompt_key` (hash of canonicalized request + stable metadata).
+   - **Semantic**: if enabled for the request type, do vector search (Cosine) with:
+     - strict metadata filters (model id, temperature, prompt template id/version, tools enabled flag, etc.)
+     - strict invalidation filters (`corpus_hash`, `config_hash`)
+     - similarity threshold (`score_threshold`)
 
-3) **Store minimal sensitive data**:
+3. **Store minimal sensitive data**:
 
-- Do **not** store raw prompt text.
-- Store response text only when within `max_response_bytes` and when allowed by config.
-- Provide an opt-in “encrypt cached response payload” option using existing AES-GCM utilities.
+   - Do **not** store raw prompt text.
+   - Store response text only when within `max_response_bytes` and when allowed by config.
+   - Provide an opt-in “encrypt cached response payload” option using existing AES-GCM utilities.
 
-4) **Fail open**: cache errors bypass cache and proceed with normal generation.
+4. **Fail open**: cache errors bypass cache and proceed with normal generation.
 
-5) **Default Off**: enabled only when `settings.semantic_cache.enabled=true`.
+5. **Default Off**: enabled only when `settings.semantic_cache.enabled=true`.
 
 ## High-Level Architecture
 

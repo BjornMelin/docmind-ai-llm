@@ -125,4 +125,3 @@ All tests must be deterministic and offline.
 Update `docs/specs/traceability.md`:
 
 - Add `FR-029` row (and update `FR-014` row if needed) mapping to code/tests above.
-
