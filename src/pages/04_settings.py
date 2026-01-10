@@ -174,28 +174,43 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
 
 def _apply_validated_runtime(validated: DocMindSettings) -> None:
     """Apply runtime by updating settings then rebinding LlamaIndex Settings.llm."""
-    settings.llm_backend = validated.llm_backend  # type: ignore[assignment]
-    settings.model = validated.model  # type: ignore[assignment]
-    settings.context_window = validated.context_window
-    settings.llm_request_timeout_seconds = validated.llm_request_timeout_seconds
-    settings.enable_gpu_acceleration = validated.enable_gpu_acceleration
-    settings.ollama_base_url = validated.ollama_base_url  # type: ignore[assignment]
-    settings.vllm_base_url = validated.vllm_base_url  # type: ignore[assignment]
-    settings.lmstudio_base_url = validated.lmstudio_base_url  # type: ignore[assignment]
-    settings.llamacpp_base_url = validated.llamacpp_base_url
-    settings.vllm.llamacpp_model_path = validated.vllm.llamacpp_model_path  # type: ignore[assignment]
-    settings.security.allow_remote_endpoints = validated.security.allow_remote_endpoints
-
-    # Apply retrieval timeouts to in-memory settings; policy remains env-driven.
-    settings.retrieval.rrf_k = validated.retrieval.rrf_k
-    settings.retrieval.text_rerank_timeout_ms = (
-        validated.retrieval.text_rerank_timeout_ms
+    updated = settings.model_copy(
+        update={
+            "llm_backend": validated.llm_backend,
+            "model": validated.model,
+            "context_window": validated.context_window,
+            "llm_request_timeout_seconds": validated.llm_request_timeout_seconds,
+            "enable_gpu_acceleration": validated.enable_gpu_acceleration,
+            "ollama_base_url": validated.ollama_base_url,
+            "vllm_base_url": validated.vllm_base_url,
+            "lmstudio_base_url": validated.lmstudio_base_url,
+            "llamacpp_base_url": validated.llamacpp_base_url,
+            "vllm": settings.vllm.model_copy(
+                update={
+                    "llamacpp_model_path": validated.vllm.llamacpp_model_path,
+                }
+            ),
+            "security": settings.security.model_copy(
+                update={
+                    "allow_remote_endpoints": validated.security.allow_remote_endpoints,
+                }
+            ),
+            "retrieval": settings.retrieval.model_copy(
+                update={
+                    "rrf_k": validated.retrieval.rrf_k,
+                    "text_rerank_timeout_ms": (
+                        validated.retrieval.text_rerank_timeout_ms
+                    ),
+                    "siglip_timeout_ms": validated.retrieval.siglip_timeout_ms,
+                    "colpali_timeout_ms": validated.retrieval.colpali_timeout_ms,
+                    "total_rerank_budget_ms": (
+                        validated.retrieval.total_rerank_budget_ms
+                    ),
+                }
+            ),
+        }
     )
-    settings.retrieval.siglip_timeout_ms = validated.retrieval.siglip_timeout_ms
-    settings.retrieval.colpali_timeout_ms = validated.retrieval.colpali_timeout_ms
-    settings.retrieval.total_rerank_budget_ms = (
-        validated.retrieval.total_rerank_budget_ms
-    )
+    settings.__dict__.update(updated.__dict__)
 
     model_label = validated.model or validated.vllm.model
     try:
