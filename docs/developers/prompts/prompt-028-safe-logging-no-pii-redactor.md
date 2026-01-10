@@ -14,6 +14,8 @@ Implements `ADR-047` + `SPEC-028`.
 - <https://loguru.readthedocs.io/> — Loguru logging docs (repo standard logger).
 - <https://opentelemetry.io/docs/languages/python/> — OpenTelemetry Python docs (optional exporters; ensure default-off).
 - <https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html> — OWASP logging guidance (avoid sensitive data in logs).
+- <https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html> — Agent-specific risks (memory poisoning, data exfiltration, logging).
+- <https://docs.python.org/3/library/hmac.html> — HMAC for keyed fingerprints (avoid dictionary attacks on hashes).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -46,6 +48,12 @@ This is security-sensitive. Use structured security review tools.
 
 - `functions.list_mcp_resources` → read any local “security/logging/PII” resources before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if this work package touches OpenAI API semantics)
+
 **API verification (Context7, only when needed):**
 
 - `functions.mcp__context7__resolve-library-id` → `loguru` (and optionally `opentelemetry-sdk` if touched)
@@ -55,8 +63,9 @@ This is security-sensitive. Use structured security review tools.
 
 - Run `functions.mcp__zen__secaudit` with focus:
   - threat_level: high (because logs can exfiltrate PII)
-  - ensure helpers never accept raw content without hashing/fingerprinting
+  - ensure helpers never log raw content; only metadata/fingerprints
   - ensure URLs are sanitized (no embedding API keys)
+  - ensure deterministic backstop redaction exists for exception messages
 
 **Review gate (recommended):**
 
@@ -85,7 +94,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### FEATURE CONTEXT (FILLED)
 
-**Primary Task:** Remove `src.utils.security.redact_pii` no-op stub and enforce metadata-only logging patterns by adding small helpers.
+**Primary Task:** Remove `src.utils.security.redact_pii` no-op stub and enforce metadata-only logging by adding safe helpers (keyed fingerprints + deterministic redaction backstop).
 
 **Why now:** A no-op PII redactor creates false confidence and increases the chance that sensitive content is logged. DocMind must be safe-by-default.
 
@@ -93,7 +102,11 @@ You must keep changes minimal, library-first, and maintainable.
 
 - `redact_pii` removed from `src/utils/security.py` and exports.
 - Tests updated (no assertions on no-op redaction).
-- `src/utils/log_safety.py` exists with text fingerprinting + safe URL logging helpers.
+- `src/utils/log_safety.py` exists with:
+  - keyed HMAC fingerprinting (for correlation without content)
+  - safe URL logging helpers
+  - deterministic regex backstop redaction for exception messages / rare string fields
+- Fingerprinting key source is `settings.hashing.hmac_secret` (shared source-of-truth with `src/utils/canonicalization.py`).
 - RTM updated: NFR-SEC-002 planned → implemented.
 - No logging statements include raw user prompts, documents, or model outputs within the touched scope.
 
@@ -107,8 +120,8 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Out-of-scope (explicit):**
 
-- Implementing regex-based PII redaction.
-- Adding external scrubbing dependencies.
+- Adding heavyweight/ML-based PII detection dependencies (Presidio/spaCy pipelines).
+- Logging raw content “temporarily” for debugging.
 
 ---
 
@@ -125,8 +138,9 @@ You must keep changes minimal, library-first, and maintainable.
 #### 2) Logging/PII discipline
 
 - Never log raw prompts, documents, chat messages, or model outputs.
-- If you need correlation, log only metadata (hashes/fingerprints, lengths, counts, status codes).
+- If you need correlation, log only metadata (keyed fingerprints, lengths, counts, status codes).
 - Never log secrets or full URLs containing keys/tokens.
+- If you must log an exception message that could contain user text, pass it through the deterministic backstop redactor first.
 
 #### 3) Style, Types, and Lint
 
@@ -145,9 +159,13 @@ Must pass:
 1. [ ] Identify all `redact_pii` references (`rg "redact_pii"`).
 2. [ ] Remove `redact_pii` from `src/utils/security.py` and update `__all__`.
 3. [ ] Update/delete the tests asserting no-op behavior.
-4. [ ] Add `src/utils/log_safety.py` helpers (typed, minimal).
+4. [ ] Add `src/utils/log_safety.py` helpers (typed, minimal):
+   - keyed HMAC fingerprint helper (use `settings.hashing.hmac_secret`)
+   - safe URL logger helper
+   - deterministic regex backstop redactor for exception messages
 5. [ ] Replace any raw-content logging within scope with metadata-only logging.
-6. [ ] Update RTM row and run quality gates.
+6. [ ] Add a canary-string log test: assert canary never appears in captured logs/JSONL telemetry.
+7. [ ] Update RTM row and run quality gates.
 
 Commands:
 
@@ -168,6 +186,7 @@ uv run python scripts/run_tests.py
 2. Broad `except Exception` around logging that hides failures silently.
 3. Logging full URLs, request headers, or environment variables (potential secrets).
 4. Logging raw content and calling it “sanitized” without proof/tests.
+5. Using unkeyed hashes (plain SHA256) for correlation on short strings (dictionary-attackable).
 
 ---
 

@@ -1,8 +1,8 @@
 ---
 spec: SPEC-028
-title: Safe Logging Policy — No PII Redactor Stub, Log Metadata Only
+title: Safe Logging Policy — No PII Redactor Stub; Metadata-only + Keyed Fingerprints + Backstop
 version: 1.0.0
-date: 2026-01-09
+date: 2026-01-10
 owners: ["ai-arch"]
 status: Draft
 related_requirements:
@@ -16,12 +16,15 @@ related_adrs: ["ADR-047", "ADR-024", "ADR-032"]
 Ensure DocMind logs and telemetry are safe-by-default by:
 
 - removing the no-op `redact_pii()` function
-- standardizing on “metadata-only” logging for user prompts, documents, and model outputs
+- standardizing on **metadata-only** logging for user prompts, documents, and model outputs
+- adding **keyed HMAC fingerprints** for correlation without content
+- adding a **deterministic regex backstop** for rare string fields that may reach logs (for example exception messages)
 
 ## Non-goals
 
 - Implementing comprehensive PII redaction in-app (high risk of gaps; high maintenance)
-- Adding external scrubbing/export dependencies for v1
+- Adding external scrubbing/export dependencies
+- Logging raw prompts/documents/model outputs “temporarily for debugging”
 
 ## Technical design
 
@@ -41,25 +44,38 @@ Suggested helpers:
 
 - `fingerprint_text(text: str) -> dict[str, str | int]` returning:
   - `len` (int)
-  - `sha256` (hex)
-- `safe_url_for_log(url: str) -> str` returning only `scheme://host:port` (no path/query)
+  - `hmac_sha256_12` (hex prefix, keyed) for correlation
+- `safe_url_for_log(url: str) -> str` returning only `scheme://host[:port]` (no path/query)
+- `redact_text_backstop(text: str) -> str` (deterministic regex redaction) intended only for:
+  - exception messages
+  - rare string fields that could accidentally contain content
+
+#### Key management
+
+- Key source: `DocMindSettings.hashing.hmac_secret` (local secret; must never be logged). This secret is also the source-of-truth for HMAC canonicalization in `src/utils/canonicalization.py`.
+- Env var: `DOCMIND_HASHING__HMAC_SECRET` (use a strong random string; at least 32 bytes).
+- Rotation: bump `DocMindSettings.hashing.hmac_secret_version` and treat fingerprints as non-stable across rotations.
 
 ### Policy enforcement
 
 Update any logging/telemetry events within scope to:
 
 - avoid raw prompt, document text, or model output in logs
-- log metadata only (counts, sizes, hashes)
+- log metadata only (counts, sizes, fingerprints)
+- avoid exception messages that embed raw user/document text; use `redact_text_backstop()` for the message if you must log it
 
 ## Security
 
 - Never log secrets, API keys, or raw user content.
-- Treat exceptions carefully: do not log exception messages that embed raw user inputs (wrap with safe metadata when necessary).
+- Treat exceptions carefully: do not log exception messages that embed raw user inputs (wrap with safe metadata and apply `redact_text_backstop()`).
 
 ## Testing strategy
 
-- Unit tests for `src/utils/log_safety.py`.
-- Update existing security tests to remove `redact_pii` expectations.
+- Unit tests for `src/utils/log_safety.py` (fingerprints, URL sanitization, and backstop redaction).
+- Update existing security tests to remove `redact_pii` no-op expectations.
+- Add a “canary” test:
+  - emit logs with a known canary string in memory
+  - assert the canary does not appear in captured logs/JSONL telemetry
 
 ## Rollout / migration
 
