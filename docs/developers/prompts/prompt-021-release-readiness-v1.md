@@ -65,6 +65,12 @@ Examples of “parallel-safe” bundles (use as patterns):
 - `functions.exec_command` running `rg` searches + `functions.list_mcp_resources` + `functions.mcp__context7__resolve-library-id` (independent).
 - Multiple Exa searches (`functions.mcp__exa__web_search_exa`) for different libraries/pages (independent).
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only when the WP touches OpenAI API semantics)
+
 **MCP tool sequence (use when it adds signal):**
 
 1. `functions.mcp__zen__planner` → plan the current WP only.
