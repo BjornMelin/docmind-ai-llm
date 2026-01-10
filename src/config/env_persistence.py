@@ -18,6 +18,12 @@ def _validate_env_key(key: str) -> None:
 
 
 def _validate_env_value(value: str) -> None:
+    """Reject values containing ASCII control characters.
+
+    This intentionally focuses on ASCII control bytes (0x00-0x1F plus 0x7F),
+    which are the most common source of broken `.env` parsing. Unicode control
+    characters (e.g. U+2028/U+2029) are not currently rejected.
+    """
     if _CONTROL_CHARS_RE.search(value):
         raise ValueError("Env var value contains control characters")
 

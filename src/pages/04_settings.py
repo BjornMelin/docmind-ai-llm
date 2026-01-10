@@ -66,6 +66,14 @@ def _validate_candidate(
 
 
 def _is_valid_gguf_path(path_text: str) -> bool:
+    """Validate GGUF path is safe and exists.
+
+    Security: paths must resolve within one of the allowed base directories to
+    reduce path traversal risk when persisting user-entered paths. Note that
+    this check cannot fully prevent TOCTOU issues if attacker-controlled
+    symlinks are modified between validation and later file open; consumers
+    should still treat this as a best-effort pre-validation.
+    """
     clean = (path_text or "").strip()
     if not clean:
         return False
@@ -75,11 +83,26 @@ def _is_valid_gguf_path(path_text: str) -> bool:
     except (OSError, RuntimeError, ValueError):
         return False
 
-    # Avoid persisting paths that resolve outside the user home directory.
-    home = Path.home().resolve(strict=False)
-    try:
-        resolved.relative_to(home)
-    except ValueError:
+    # Default to restricting paths under the user's home directory. This keeps
+    # the UI safe-by-default while allowing explicit opt-in to other directories.
+    allowed_bases = [Path.home()]
+    extra_bases = (
+        st.session_state.get("docmind_allowed_gguf_base_dirs")
+        if isinstance(st.session_state, dict)
+        else None
+    )
+    if isinstance(extra_bases, (list, tuple)):
+        allowed_bases.extend(
+            [Path(str(base)) for base in extra_bases if str(base).strip()]
+        )
+
+    for base in allowed_bases:
+        try:
+            resolved.relative_to(base.expanduser().resolve(strict=False))
+        except ValueError:
+            continue
+        break
+    else:
         return False
 
     return resolved.is_file() and resolved.suffix.lower() == ".gguf"
@@ -335,7 +358,15 @@ def main() -> None:
         "llamacpp_base_url": clean_llamacpp_url or None,
         "llm_request_timeout_seconds": int(timeout_s),
         "enable_gpu_acceleration": bool(use_gpu),
-        "vllm": {"llamacpp_model_path": str(Path(clean_gguf_path).expanduser())},
+        "vllm": {
+            "llamacpp_model_path": (
+                str(Path(clean_gguf_path).expanduser())
+                if is_llamacpp
+                and clean_gguf_path
+                and _is_valid_gguf_path(clean_gguf_path)
+                else ""
+            )
+        },
         "security": {
             "allow_remote_endpoints": bool(allow_remote),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
@@ -430,7 +461,7 @@ def main() -> None:
                 }
                 try:
                     persist_env(env_map)
-                except ValueError as exc:
+                except (ValueError, OSError) as exc:
                     st.error(f"Failed to write .env: {exc}")
                 else:
                     st.success("Saved to .env")
