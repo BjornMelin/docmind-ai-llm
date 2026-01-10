@@ -4,7 +4,7 @@ title: Settings UI Hardening — Pre-validation, Safe Provider Badge, and .env P
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Completed
 related_requirements:
   - FR-021: Settings UI pre-validation + safe provider badge.
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.
@@ -105,7 +105,7 @@ Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv==
 
 Add/extend `tests/integration/test_settings_page.py` (or create a new file) to assert:
 
-- Invalid LM Studio URL (missing `/v1`) renders error message "Base URL must end with /v1 for LM Studio" and disables Save/Apply buttons (check `disabled` property).
+- LM Studio base URL is normalized to include `/v1`; Save persists the normalized value to `.env`.
 - Remote URL when `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` renders an error and disables actions; also test `=true` case to confirm remote URLs are allowed.
 - Valid provider change persists to `.env` via `python-dotenv` and can be read back.
 

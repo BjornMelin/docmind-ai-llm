@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from dotenv import dotenv_values
 
 from src.config.env_persistence import persist_env
@@ -39,3 +40,11 @@ def test_persist_env_creates_missing_file(tmp_path, monkeypatch) -> None:
 
     values = dotenv_values(env_path)
     assert values.get("DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS") == "false"
+
+
+def test_persist_env_rejects_control_characters(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    env_path = tmp_path / ".env"
+
+    with pytest.raises(ValueError, match=r"control characters"):
+        persist_env({"DOCMIND_MODEL": "line1\nline2"}, env_path=env_path)

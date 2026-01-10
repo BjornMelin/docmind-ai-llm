@@ -1,7 +1,7 @@
 ---
 ADR: 041
 Title: Settings UI Hardening: Pre-validation, Safe Badges, and .env Persistence
-Status: Proposed
+Status: Implemented
 Version: 1.0
 Date: 2026-01-09
 Supersedes:
@@ -103,7 +103,9 @@ flowchart TD
 ### Trade-offs
 
 - Slightly more UI code for validation and error rendering.
+- We intentionally avoid `st.form` for Settings inputs so validation and action disabling stay reactive; forms can be revisited if validation-on-submit is acceptable.
 
 ## Changelog
 
 - 1.0 (2026-01-09): Proposed for v1 release hardening.
+- 1.1 (2026-01-10): Implemented in code + tests (Settings pre-validation, safe badges, dotenv persistence).

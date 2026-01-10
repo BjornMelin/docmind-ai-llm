@@ -1,42 +1,263 @@
-"""Settings page for LLM runtime (SPEC-001).
+"""Settings page for LLM runtime (SPEC-001, SPEC-022).
 
 Provides provider selection, URLs, model, context window, timeout, and GPU
-toggle. Supports applying runtime immediately and saving to .env.
+toggle. Supports applying runtime immediately and saving to .env with
+pre-validation to avoid persisting invalid configuration.
 """
 
 from __future__ import annotations
 
-import os
-from contextlib import suppress
-from pathlib import Path
+import re
+from pathlib import Path, PurePath
 
 import streamlit as st
+from pydantic import ValidationError
 
 from src.config.env_persistence import persist_env
 from src.config.integrations import initialize_integrations
-from src.config.settings import settings
+from src.config.settings import DocMindSettings, settings
 from src.retrieval.adapter_registry import get_default_adapter_health
 from src.ui.components.provider_badge import provider_badge
+from src.utils.telemetry import log_jsonl
 
 
-def _is_localhost(url: str) -> bool:
-    return (
-        url.startswith("http://localhost")
-        or url.startswith("https://localhost")
-        or url.startswith("http://127.0.0.1")
-        or url.startswith("https://127.0.0.1")
+def _validate_candidate(
+    candidate: dict[str, object],
+) -> tuple[DocMindSettings | None, list[str]]:
+    """Validate a candidate settings payload before Apply/Save.
+
+    The ``candidate`` argument is expected to be a dictionary whose keys
+    correspond to the fields of :class:`DocMindSettings`. Typical keys include
+    top-level runtime options such as ``"llm_backend"``, ``"model"``,
+    ``"context_window"``, ``"llm_request_timeout_seconds"``,
+    ``"enable_gpu_acceleration"``, provider URLs like ``"ollama_base_url"``,
+    ``"vllm_base_url"``, ``"lmstudio_base_url"``, ``"llamacpp_base_url"``,
+    and nested sections such as ``"retrieval"`` (e.g. ``"rrf_k"``,
+    ``"text_rerank_timeout_ms"``, ``"siglip_timeout_ms"``,
+    ``"colpali_timeout_ms"``, ``"total_rerank_budget_ms"``) and ``"security"``
+    (e.g. ``"allow_remote_endpoints"``).
+
+    Args:
+        candidate: A dict-like settings payload (for example, data collected
+            from the settings form or from ``st.session_state``) that matches
+            the schema of :class:`DocMindSettings`.
+
+    Returns:
+        A tuple ``(validated_settings, error_messages)`` where
+        ``validated_settings`` is a :class:`DocMindSettings` instance on
+        success and ``None`` on failure, and ``error_messages`` is a list of
+        human-readable validation error messages (empty when validation
+        succeeds).
+    """
+    try:
+        validated = DocMindSettings.model_validate(candidate)
+    except ValidationError as exc:
+        messages: list[str] = []
+        for err in exc.errors():
+            loc_parts = err.get("loc", ())
+            if not isinstance(loc_parts, (list, tuple)):
+                loc_parts = (loc_parts,)
+            loc = ".".join(str(p) for p in loc_parts if p is not None)
+            msg = str(err.get("msg", "Invalid value"))
+            messages.append(f"{loc}: {msg}" if loc else msg)
+        return None, messages
+    except (TypeError, ValueError) as exc:
+        return None, [str(exc)]
+    return validated, []
+
+
+_GGUF_PATH_PATTERN = re.compile(r"^[A-Za-z0-9._ \-~/\\\\:]+$")
+
+
+def resolve_valid_gguf_path(path_text: str) -> Path | None:
+    """Resolve and validate a GGUF model path.
+
+    Security: resolve once and enforce that the resolved path lives within one
+    of the allowed base directories (default: the current user home directory).
+
+    WARNING: This function is best-effort pre-validation only. Callers MUST
+    treat any subsequent file operations as untrusted and handle failures
+    defensively (including TOCTOU races, permission errors, and IO errors).
+    """
+    clean = (path_text or "").strip()
+    if not clean:
+        return None
+    if clean.startswith("~") and not clean.startswith("~/"):
+        return None
+    if (
+        "\x00" in clean
+        or any(ord(ch) < 32 for ch in clean)
+        or _GGUF_PATH_PATTERN.fullmatch(clean) is None
+    ):
+        return None
+
+    home_dir = Path.home()
+    try:
+        home_dir_resolved = home_dir.expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        home_dir_resolved = home_dir
+
+    allowed_bases = [home_dir_resolved]
+    try:
+        extra_bases = st.session_state.get("docmind_allowed_gguf_base_dirs")
+    except Exception:  # pragma: no cover - defensive
+        extra_bases = None
+    if isinstance(extra_bases, (list, tuple)):
+        allowed_bases.extend(
+            [Path(str(base)) for base in extra_bases if str(base).strip()]
+        )
+
+    base_dirs: list[Path] = []
+    for base in allowed_bases:
+        try:
+            base_dir = Path(str(base)).expanduser().resolve(strict=False)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        base_dirs.append(base_dir)
+
+    if not base_dirs:
+        return None
+
+    raw_text = clean
+    base_override: Path | None = None
+    if clean.startswith("~/"):
+        raw_text = clean[2:]
+        if not raw_text:
+            return None
+        base_override = home_dir_resolved
+
+    raw = PurePath(raw_text)
+    if any(part == ".." for part in raw.parts):
+        return None
+
+    candidates: list[tuple[Path, Path]] = []
+    if raw.is_absolute() and base_override is None:
+        for base_dir in base_dirs:
+            if raw.is_relative_to(base_dir):
+                candidates.append((base_dir, Path(raw)))
+                break
+        if not candidates:
+            return None
+    else:
+        for base_dir in base_dirs:
+            if base_override is not None and base_dir != base_override:
+                continue
+            candidates.append((base_dir, base_dir / raw))
+
+    for base_dir, candidate in candidates:
+        stop_at = base_dir
+        symlink_found = False
+        reached_base = False
+        for part in (candidate, *candidate.parents):
+            if part.is_symlink():
+                symlink_found = True
+                break
+            if part == stop_at:
+                reached_base = True
+                break
+        if symlink_found or not reached_base:
+            continue
+
+        try:
+            resolved = candidate.resolve(strict=False)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        try:
+            resolved.relative_to(base_dir)
+        except ValueError:
+            continue
+        if resolved.is_file() and resolved.suffix.lower() == ".gguf":
+            return resolved
+
+    return None
+
+
+def _apply_validated_runtime(validated: DocMindSettings) -> None:
+    """Apply runtime by updating settings then rebinding LlamaIndex Settings.llm."""
+    updated = settings.model_copy(
+        update={
+            "llm_backend": validated.llm_backend,
+            "model": validated.model,
+            "context_window": validated.context_window,
+            "llm_request_timeout_seconds": validated.llm_request_timeout_seconds,
+            "enable_gpu_acceleration": validated.enable_gpu_acceleration,
+            "ollama_base_url": validated.ollama_base_url,
+            "vllm_base_url": validated.vllm_base_url,
+            "lmstudio_base_url": validated.lmstudio_base_url,
+            "llamacpp_base_url": validated.llamacpp_base_url,
+            "vllm": settings.vllm.model_copy(
+                update={
+                    "llamacpp_model_path": validated.vllm.llamacpp_model_path,
+                }
+            ),
+            "security": settings.security.model_copy(
+                update={
+                    "allow_remote_endpoints": validated.security.allow_remote_endpoints,
+                }
+            ),
+            "retrieval": settings.retrieval.model_copy(
+                update={
+                    "rrf_k": validated.retrieval.rrf_k,
+                    "text_rerank_timeout_ms": (
+                        validated.retrieval.text_rerank_timeout_ms
+                    ),
+                    "siglip_timeout_ms": validated.retrieval.siglip_timeout_ms,
+                    "colpali_timeout_ms": validated.retrieval.colpali_timeout_ms,
+                    "total_rerank_budget_ms": (
+                        validated.retrieval.total_rerank_budget_ms
+                    ),
+                }
+            ),
+        }
     )
+    settings.__dict__.update(updated.__dict__)
 
+    model_label = validated.model or validated.vllm.model
+    try:
+        initialize_integrations(force_llm=True, force_embed=False)
+    except (
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:  # pragma: no cover - defensive UI feedback
+        st.error(f"Runtime apply failed: {exc.__class__.__name__}")
+        log_jsonl(
+            {
+                "settings.apply": True,
+                "success": False,
+                "backend": validated.llm_backend,
+                "model": model_label,
+                "reason": exc.__class__.__name__,
+                "error": str(exc),
+            }
+        )
+        return
 
-def _persist_env(vars_to_set: dict[str, str]) -> None:
-    """Persist key=value pairs into the project's .env file."""
-    persist_env(vars_to_set)
+    from llama_index.core import Settings as LISettings  # local import (tests patch)
 
+    if getattr(LISettings, "llm", None) is None:
+        st.error("Runtime apply failed: Settings.llm is not bound.")
+        log_jsonl(
+            {
+                "settings.apply": True,
+                "success": False,
+                "backend": validated.llm_backend,
+                "model": model_label,
+                "reason": "llm_unbound",
+            }
+        )
+        return
 
-def _apply_runtime() -> None:
-    """Apply current runtime by rebinding Settings.llm and context caps."""
-    initialize_integrations(force_llm=True, force_embed=False)
-    st.success("Runtime applied. Settings.llm rebound.")
+    st.success("Runtime applied. Settings.llm bound.")
+    log_jsonl(
+        {
+            "settings.apply": True,
+            "success": True,
+            "backend": validated.llm_backend,
+            "model": model_label,
+        }
+    )
 
 
 def main() -> None:
@@ -94,7 +315,7 @@ def main() -> None:
         lmstudio_url = st.text_input(
             "LM Studio base URL",
             value=settings.lmstudio_base_url,
-            help="Must end with /v1",
+            help="OpenAI-compatible; normalized to end with /v1",
         )
         llamacpp_url = st.text_input(
             "llama.cpp server URL (optional)",
@@ -102,26 +323,10 @@ def main() -> None:
             placeholder="http://localhost:8080/v1",
         )
 
-    # Show resolved normalized backend base URL (read-only)
-    st.caption("Resolved backend base URL (normalized)")
-    st.text_input(
-        "Resolved base URL",
-        value=str(getattr(settings, "backend_base_url_normalized", "")),
-        disabled=True,
-    )
-
     gguf_path = st.text_input(
         "GGUF model path (LlamaCPP local)",
         value=str(settings.vllm.llamacpp_model_path),
     )
-    gguf_valid = False
-    if gguf_path:
-        if os.path.exists(gguf_path) and gguf_path.lower().endswith(".gguf"):
-            gguf_valid = True
-        else:
-            st.error(
-                "Invalid GGUF model path. File must exist and have a .gguf extension."
-            )
 
     st.subheader("Security")
     allow_remote = st.checkbox(
@@ -208,77 +413,146 @@ def main() -> None:
     if not supports:
         st.info(hint)
 
-    # Basic validation rules
-    if lmstudio_url and not lmstudio_url.rstrip("/").endswith("/v1"):
-        st.error("LM Studio URL must end with /v1")
-    if not allow_remote:
-        for name, url in (
-            ("Ollama", ollama_url),
-            ("vLLM", vllm_url),
-            ("LM Studio", lmstudio_url),
-            ("llama.cpp", llamacpp_url or ""),
-        ):
-            if url and not _is_localhost(url):
-                st.error(
-                    f"{name} URL must be localhost when remote endpoints are disabled"
-                )
+    ui_errors: list[str] = []
+
+    clean_llamacpp_url = (llamacpp_url or "").strip()
+    clean_gguf_path = (gguf_path or "").strip()
+
+    is_llamacpp = provider == "llamacpp"
+    resolved_gguf_path = resolve_valid_gguf_path(clean_gguf_path)
+    gguf_missing_for_local = not clean_llamacpp_url and not clean_gguf_path
+
+    if is_llamacpp and (resolved_gguf_path is None) and (not gguf_missing_for_local):
+        ui_errors.append(
+            "Invalid GGUF model path. File must exist, have a .gguf extension, "
+            "and be under the allowed base directories."
+        )
+
+    if is_llamacpp and gguf_missing_for_local:
+        ui_errors.append(
+            "Provide either a llama.cpp base URL or a local GGUF model path."
+        )
+
+    # NOTE: The settings UI intentionally validates only the values it edits.
+    # Missing sections are populated from DocMindSettings defaults, so this form
+    # does not act as a full-validator for unrelated config blocks.
+    candidate = {
+        "llm_backend": provider,
+        "model": model.strip() or None,
+        "context_window": int(context_window),
+        "ollama_base_url": ollama_url.strip(),
+        "vllm_base_url": vllm_url.strip() or None,
+        "lmstudio_base_url": lmstudio_url.strip(),
+        "llamacpp_base_url": clean_llamacpp_url or None,
+        "llm_request_timeout_seconds": int(timeout_s),
+        "enable_gpu_acceleration": bool(use_gpu),
+        "vllm": {
+            "llamacpp_model_path": (
+                str(resolved_gguf_path)
+                if is_llamacpp and resolved_gguf_path is not None
+                else ""
+            )
+        },
+        "security": {
+            "allow_remote_endpoints": bool(allow_remote),
+            "endpoint_allowlist": list(settings.security.endpoint_allowlist),
+            "trust_remote_code": bool(settings.security.trust_remote_code),
+        },
+        "retrieval": {
+            "rrf_k": int(rrf_k),
+            "text_rerank_timeout_ms": int(t_text),
+            "siglip_timeout_ms": int(t_siglip),
+            "colpali_timeout_ms": int(t_colpali),
+            "total_rerank_budget_ms": int(t_total),
+        },
+    }
+    validated, validation_errors = _validate_candidate(candidate)
+
+    resolved_base_url = (
+        str(getattr(validated, "backend_base_url_normalized", ""))
+        if validated is not None
+        else str(getattr(settings, "backend_base_url_normalized", ""))
+    )
+    st.caption("Resolved backend base URL (normalized)")
+    st.text_input(
+        "Resolved base URL",
+        value=resolved_base_url,
+        disabled=True,
+    )
+
+    if ui_errors or validation_errors:
+        st.subheader("Validation")
+        for msg in ui_errors + validation_errors:
+            st.error(msg)
 
     # Actions
+    actions_disabled = validated is None or bool(ui_errors)
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("Apply runtime", use_container_width=True):
-            # Update in-memory settings first
-            settings.llm_backend = provider  # type: ignore[assignment]
-            settings.model = model  # type: ignore[assignment]
-            settings.context_window = int(context_window)
-            settings.llm_request_timeout_seconds = int(timeout_s)
-            settings.enable_gpu_acceleration = bool(use_gpu)
-            settings.ollama_base_url = ollama_url  # type: ignore[assignment]
-            settings.vllm_base_url = vllm_url  # type: ignore[assignment]
-            settings.lmstudio_base_url = lmstudio_url  # type: ignore[assignment]
-            settings.llamacpp_base_url = llamacpp_url or None
-            # nested path
-            # Update GGUF path only when valid
-            if gguf_valid and gguf_path:
-                with suppress(Exception):  # pragma: no cover - UI guard
-                    settings.vllm.llamacpp_model_path = Path(gguf_path)
-            settings.security.allow_remote_endpoints = bool(allow_remote)
-            # Apply retrieval timeouts to in-memory settings; policy is read-only
-            with suppress(Exception):
-                settings.retrieval.rrf_k = int(rrf_k)
-                settings.retrieval.text_rerank_timeout_ms = int(t_text)
-                settings.retrieval.siglip_timeout_ms = int(t_siglip)
-                settings.retrieval.colpali_timeout_ms = int(t_colpali)
-                settings.retrieval.total_rerank_budget_ms = int(t_total)
-
-            _apply_runtime()
+        if st.button(
+            "Apply runtime",
+            use_container_width=True,
+            disabled=actions_disabled,
+        ):
+            if validated is None:  # pragma: no cover - defensive
+                st.error("Cannot apply: invalid settings.")
+            else:
+                _apply_validated_runtime(validated)
 
     with col_b:
-        if st.button("Save", use_container_width=True):
-            env_map = {
-                "DOCMIND_LLM_BACKEND": provider,
-                "DOCMIND_MODEL": model,
-                "DOCMIND_CONTEXT_WINDOW": str(int(context_window)),
-                "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(int(timeout_s)),
-                "DOCMIND_ENABLE_GPU_ACCELERATION": ("true" if use_gpu else "false"),
-                "DOCMIND_OLLAMA_BASE_URL": ollama_url,
-                "DOCMIND_VLLM_BASE_URL": vllm_url,
-                "DOCMIND_LMSTUDIO_BASE_URL": lmstudio_url,
-                "DOCMIND_LLAMACPP_BASE_URL": llamacpp_url or "",
-                # nested path override
-                "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": gguf_path,
-                "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
-                    "true" if allow_remote else "false"
-                ),
-                # Retrieval policy is configured via env; read-only here
-                "DOCMIND_RETRIEVAL__RRF_K": str(int(rrf_k)),
-                "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(int(t_text)),
-                "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(int(t_siglip)),
-                "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(int(t_colpali)),
-                "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(int(t_total)),
-            }
-            _persist_env(env_map)
-            st.success("Saved to .env")
+        if st.button("Save", use_container_width=True, disabled=actions_disabled):
+            if validated is None:  # pragma: no cover - defensive
+                st.error("Cannot save: invalid settings.")
+            else:
+                context_window_value = (
+                    validated.context_window
+                    if validated.context_window is not None
+                    else validated.vllm.context_window
+                )
+                env_map = {
+                    "DOCMIND_LLM_BACKEND": validated.llm_backend,
+                    "DOCMIND_MODEL": (validated.model or ""),
+                    "DOCMIND_CONTEXT_WINDOW": str(int(context_window_value)),
+                    "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(
+                        int(validated.llm_request_timeout_seconds)
+                    ),
+                    "DOCMIND_ENABLE_GPU_ACCELERATION": (
+                        "true" if validated.enable_gpu_acceleration else "false"
+                    ),
+                    "DOCMIND_OLLAMA_BASE_URL": validated.ollama_base_url,
+                    "DOCMIND_VLLM_BASE_URL": (validated.vllm_base_url or ""),
+                    "DOCMIND_LMSTUDIO_BASE_URL": validated.lmstudio_base_url,
+                    "DOCMIND_LLAMACPP_BASE_URL": (validated.llamacpp_base_url or ""),
+                    # nested path override
+                    "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": str(
+                        validated.vllm.llamacpp_model_path
+                    ),
+                    "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
+                        "true" if validated.security.allow_remote_endpoints else "false"
+                    ),
+                    # Retrieval policy is configured via env; read-only here
+                    "DOCMIND_RETRIEVAL__RRF_K": str(int(validated.retrieval.rrf_k)),
+                    "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(
+                        int(validated.retrieval.text_rerank_timeout_ms)
+                    ),
+                    "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(
+                        int(validated.retrieval.siglip_timeout_ms)
+                    ),
+                    "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(
+                        int(validated.retrieval.colpali_timeout_ms)
+                    ),
+                    "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(
+                        int(validated.retrieval.total_rerank_budget_ms)
+                    ),
+                }
+                try:
+                    persist_env(env_map)
+                except (ValueError, OSError, RuntimeError) as exc:
+                    key = getattr(exc, "key", "")
+                    suffix = f" (key={key})" if key else ""
+                    st.error(f"Failed to write .env{suffix}: {exc}")
+                else:
+                    st.success("Saved to .env")
 
     st.subheader("Cache Utilities")
     st.caption(

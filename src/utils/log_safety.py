@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal, overload
 
 from src.config import settings
 from src.utils.canonicalization import CanonicalizationConfig, compute_hashes
@@ -47,6 +48,24 @@ def _format_redacted_string(
     fingerprint: str, canon_version: str, secret_version: str
 ) -> str:
     return f"[redacted:{fingerprint[:12]}:v{canon_version}:{secret_version}]"
+
+
+@overload
+def redact_pii(
+    value: str,
+    key_id: str | None = None,
+    *,
+    return_fingerprint: Literal[False] = False,
+) -> str: ...
+
+
+@overload
+def redact_pii(
+    value: str,
+    key_id: str | None = None,
+    *,
+    return_fingerprint: Literal[True],
+) -> tuple[str, str]: ...
 
 
 def redact_pii(
