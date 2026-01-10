@@ -93,6 +93,9 @@ class OpenAIConfig(BaseModel):
         return ensure_v1((v or "").strip()) or ""
 
 
+_DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
+
+
 class SecurityConfig(BaseModel):
     """Security and remote endpoint policy settings."""
 
@@ -765,17 +768,23 @@ class DocMindSettings(BaseSettings):
     @property
     def backend_base_url_normalized(self) -> str | None:
         """Return backend-aware normalized base URL (OpenAI-like -> /v1)."""
+        openai_base_url = (
+            self.openai.base_url
+            if self.openai.base_url and self.openai.base_url != _DEFAULT_OPENAI_BASE_URL
+            else None
+        )
         if self.llm_backend == "ollama":
             return self.ollama_base_url
         if self.llm_backend == "lmstudio":
-            # Prefer explicit OpenAI group when provided
-            return ensure_v1(self.openai.base_url or self.lmstudio_base_url)
+            # Prefer explicit OpenAI group only when customized
+            return ensure_v1(openai_base_url or self.lmstudio_base_url)
         if self.llm_backend == "vllm":
-            # Prefer explicit OpenAI-like endpoint when provided
-            base = self.openai.base_url or self.vllm_base_url or self.vllm.vllm_base_url
+            # Prefer explicit OpenAI-like endpoint only when customized
+            base = openai_base_url or self.vllm_base_url or self.vllm.vllm_base_url
             return ensure_v1(base)
         if self.llm_backend == "llamacpp":
-            return ensure_v1(self.openai.base_url or self.llamacpp_base_url)
+            # Prefer explicit OpenAI group only when customized
+            return ensure_v1(openai_base_url or self.llamacpp_base_url)
         return None
 
     def allow_remote_effective(self) -> bool:

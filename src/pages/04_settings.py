@@ -1,42 +1,118 @@
-"""Settings page for LLM runtime (SPEC-001).
+"""Settings page for LLM runtime (SPEC-001, SPEC-022).
 
 Provides provider selection, URLs, model, context window, timeout, and GPU
-toggle. Supports applying runtime immediately and saving to .env.
+toggle. Supports applying runtime immediately and saving to .env with
+pre-validation to avoid persisting invalid configuration.
 """
 
 from __future__ import annotations
 
-import os
-from contextlib import suppress
 from pathlib import Path
 
 import streamlit as st
+from pydantic import ValidationError
 
 from src.config.env_persistence import persist_env
 from src.config.integrations import initialize_integrations
-from src.config.settings import settings
+from src.config.settings import DocMindSettings, settings
 from src.retrieval.adapter_registry import get_default_adapter_health
 from src.ui.components.provider_badge import provider_badge
+from src.utils.telemetry import log_jsonl
 
 
-def _is_localhost(url: str) -> bool:
-    return (
-        url.startswith("http://localhost")
-        or url.startswith("https://localhost")
-        or url.startswith("http://127.0.0.1")
-        or url.startswith("https://127.0.0.1")
+def _validate_candidate(
+    candidate: dict[str, object],
+) -> tuple[DocMindSettings | None, list[str]]:
+    """Validate a candidate settings payload before Apply/Save."""
+    try:
+        validated = DocMindSettings.model_validate(candidate)
+    except ValidationError as exc:
+        messages: list[str] = []
+        for err in exc.errors():
+            loc = ".".join(str(p) for p in err.get("loc", []) if p is not None)
+            msg = str(err.get("msg", "Invalid value"))
+            messages.append(f"{loc}: {msg}" if loc else msg)
+        return None, messages
+    except (TypeError, ValueError) as exc:
+        return None, [str(exc)]
+    return validated, []
+
+
+def _is_valid_gguf_path(path_text: str) -> bool:
+    path = Path(path_text).expanduser()
+    return path.is_file() and path.suffix.lower() == ".gguf"
+
+
+def _apply_validated_runtime(validated: DocMindSettings) -> None:
+    """Apply runtime by updating settings then rebinding LlamaIndex Settings.llm."""
+    settings.llm_backend = validated.llm_backend  # type: ignore[assignment]
+    settings.model = validated.model  # type: ignore[assignment]
+    settings.context_window = validated.context_window
+    settings.llm_request_timeout_seconds = validated.llm_request_timeout_seconds
+    settings.enable_gpu_acceleration = validated.enable_gpu_acceleration
+    settings.ollama_base_url = validated.ollama_base_url  # type: ignore[assignment]
+    settings.vllm_base_url = validated.vllm_base_url  # type: ignore[assignment]
+    settings.lmstudio_base_url = validated.lmstudio_base_url  # type: ignore[assignment]
+    settings.llamacpp_base_url = validated.llamacpp_base_url
+    settings.vllm.llamacpp_model_path = validated.vllm.llamacpp_model_path
+    settings.security.allow_remote_endpoints = validated.security.allow_remote_endpoints
+
+    # Apply retrieval timeouts to in-memory settings; policy remains env-driven.
+    settings.retrieval.rrf_k = validated.retrieval.rrf_k
+    settings.retrieval.text_rerank_timeout_ms = (
+        validated.retrieval.text_rerank_timeout_ms
+    )
+    settings.retrieval.siglip_timeout_ms = validated.retrieval.siglip_timeout_ms
+    settings.retrieval.colpali_timeout_ms = validated.retrieval.colpali_timeout_ms
+    settings.retrieval.total_rerank_budget_ms = (
+        validated.retrieval.total_rerank_budget_ms
     )
 
+    model_label = validated.model or validated.vllm.model
+    try:
+        initialize_integrations(force_llm=True, force_embed=False)
+    except (
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:  # pragma: no cover - defensive UI feedback
+        st.error(f"Runtime apply failed: {exc.__class__.__name__}")
+        log_jsonl(
+            {
+                "settings.apply": True,
+                "success": False,
+                "backend": validated.llm_backend,
+                "model": model_label,
+                "reason": exc.__class__.__name__,
+            }
+        )
+        return
 
-def _persist_env(vars_to_set: dict[str, str]) -> None:
-    """Persist key=value pairs into the project's .env file."""
-    persist_env(vars_to_set)
+    from llama_index.core import Settings as LISettings  # local import (tests patch)
 
+    if getattr(LISettings, "llm", None) is None:
+        st.error("Runtime apply failed: Settings.llm is not bound.")
+        log_jsonl(
+            {
+                "settings.apply": True,
+                "success": False,
+                "backend": validated.llm_backend,
+                "model": model_label,
+                "reason": "llm_unbound",
+            }
+        )
+        return
 
-def _apply_runtime() -> None:
-    """Apply current runtime by rebinding Settings.llm and context caps."""
-    initialize_integrations(force_llm=True, force_embed=False)
-    st.success("Runtime applied. Settings.llm rebound.")
+    st.success("Runtime applied. Settings.llm bound.")
+    log_jsonl(
+        {
+            "settings.apply": True,
+            "success": True,
+            "backend": validated.llm_backend,
+            "model": model_label,
+        }
+    )
 
 
 def main() -> None:
@@ -94,7 +170,7 @@ def main() -> None:
         lmstudio_url = st.text_input(
             "LM Studio base URL",
             value=settings.lmstudio_base_url,
-            help="Must end with /v1",
+            help="OpenAI-compatible; normalized to end with /v1",
         )
         llamacpp_url = st.text_input(
             "llama.cpp server URL (optional)",
@@ -102,26 +178,10 @@ def main() -> None:
             placeholder="http://localhost:8080/v1",
         )
 
-    # Show resolved normalized backend base URL (read-only)
-    st.caption("Resolved backend base URL (normalized)")
-    st.text_input(
-        "Resolved base URL",
-        value=str(getattr(settings, "backend_base_url_normalized", "")),
-        disabled=True,
-    )
-
     gguf_path = st.text_input(
         "GGUF model path (LlamaCPP local)",
         value=str(settings.vllm.llamacpp_model_path),
     )
-    gguf_valid = False
-    if gguf_path:
-        if os.path.exists(gguf_path) and gguf_path.lower().endswith(".gguf"):
-            gguf_valid = True
-        else:
-            st.error(
-                "Invalid GGUF model path. File must exist and have a .gguf extension."
-            )
 
     st.subheader("Security")
     allow_remote = st.checkbox(
@@ -208,77 +268,125 @@ def main() -> None:
     if not supports:
         st.info(hint)
 
-    # Basic validation rules
-    if lmstudio_url and not lmstudio_url.rstrip("/").endswith("/v1"):
-        st.error("LM Studio URL must end with /v1")
-    if not allow_remote:
-        for name, url in (
-            ("Ollama", ollama_url),
-            ("vLLM", vllm_url),
-            ("LM Studio", lmstudio_url),
-            ("llama.cpp", llamacpp_url or ""),
-        ):
-            if url and not _is_localhost(url):
-                st.error(
-                    f"{name} URL must be localhost when remote endpoints are disabled"
-                )
+    ui_errors: list[str] = []
+    if (
+        provider == "llamacpp"
+        and not (llamacpp_url or "").strip()
+        and (not gguf_path or not _is_valid_gguf_path(gguf_path))
+    ):
+        ui_errors.append(
+            "Invalid GGUF model path. File must exist and have a .gguf extension."
+        )
+
+    candidate = {
+        "llm_backend": provider,
+        "model": model.strip() or None,
+        "context_window": int(context_window),
+        "ollama_base_url": ollama_url.strip(),
+        "vllm_base_url": vllm_url.strip() or None,
+        "lmstudio_base_url": lmstudio_url.strip(),
+        "llamacpp_base_url": llamacpp_url.strip() or None,
+        "llm_request_timeout_seconds": int(timeout_s),
+        "enable_gpu_acceleration": bool(use_gpu),
+        "vllm": {"llamacpp_model_path": gguf_path.strip()},
+        "security": {
+            "allow_remote_endpoints": bool(allow_remote),
+            "endpoint_allowlist": list(settings.security.endpoint_allowlist),
+            "trust_remote_code": bool(settings.security.trust_remote_code),
+        },
+        "retrieval": {
+            "rrf_k": int(rrf_k),
+            "text_rerank_timeout_ms": int(t_text),
+            "siglip_timeout_ms": int(t_siglip),
+            "colpali_timeout_ms": int(t_colpali),
+            "total_rerank_budget_ms": int(t_total),
+        },
+    }
+    validated, validation_errors = _validate_candidate(candidate)
+
+    resolved_base_url = (
+        str(getattr(validated, "backend_base_url_normalized", ""))
+        if validated is not None
+        else str(getattr(settings, "backend_base_url_normalized", ""))
+    )
+    st.caption("Resolved backend base URL (normalized)")
+    st.text_input(
+        "Resolved base URL",
+        value=resolved_base_url,
+        disabled=True,
+    )
+
+    if ui_errors or validation_errors:
+        st.subheader("Validation")
+        for msg in ui_errors + validation_errors:
+            st.error(msg)
 
     # Actions
+    actions_disabled = validated is None or bool(ui_errors)
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("Apply runtime", use_container_width=True):
-            # Update in-memory settings first
-            settings.llm_backend = provider  # type: ignore[assignment]
-            settings.model = model  # type: ignore[assignment]
-            settings.context_window = int(context_window)
-            settings.llm_request_timeout_seconds = int(timeout_s)
-            settings.enable_gpu_acceleration = bool(use_gpu)
-            settings.ollama_base_url = ollama_url  # type: ignore[assignment]
-            settings.vllm_base_url = vllm_url  # type: ignore[assignment]
-            settings.lmstudio_base_url = lmstudio_url  # type: ignore[assignment]
-            settings.llamacpp_base_url = llamacpp_url or None
-            # nested path
-            # Update GGUF path only when valid
-            if gguf_valid and gguf_path:
-                with suppress(Exception):  # pragma: no cover - UI guard
-                    settings.vllm.llamacpp_model_path = Path(gguf_path)
-            settings.security.allow_remote_endpoints = bool(allow_remote)
-            # Apply retrieval timeouts to in-memory settings; policy is read-only
-            with suppress(Exception):
-                settings.retrieval.rrf_k = int(rrf_k)
-                settings.retrieval.text_rerank_timeout_ms = int(t_text)
-                settings.retrieval.siglip_timeout_ms = int(t_siglip)
-                settings.retrieval.colpali_timeout_ms = int(t_colpali)
-                settings.retrieval.total_rerank_budget_ms = int(t_total)
-
-            _apply_runtime()
+        if st.button(
+            "Apply runtime",
+            use_container_width=True,
+            disabled=actions_disabled,
+        ):
+            if validated is None:  # pragma: no cover - defensive
+                st.error("Cannot apply: invalid settings.")
+            else:
+                _apply_validated_runtime(validated)
 
     with col_b:
-        if st.button("Save", use_container_width=True):
-            env_map = {
-                "DOCMIND_LLM_BACKEND": provider,
-                "DOCMIND_MODEL": model,
-                "DOCMIND_CONTEXT_WINDOW": str(int(context_window)),
-                "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(int(timeout_s)),
-                "DOCMIND_ENABLE_GPU_ACCELERATION": ("true" if use_gpu else "false"),
-                "DOCMIND_OLLAMA_BASE_URL": ollama_url,
-                "DOCMIND_VLLM_BASE_URL": vllm_url,
-                "DOCMIND_LMSTUDIO_BASE_URL": lmstudio_url,
-                "DOCMIND_LLAMACPP_BASE_URL": llamacpp_url or "",
-                # nested path override
-                "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": gguf_path,
-                "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
-                    "true" if allow_remote else "false"
-                ),
-                # Retrieval policy is configured via env; read-only here
-                "DOCMIND_RETRIEVAL__RRF_K": str(int(rrf_k)),
-                "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(int(t_text)),
-                "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(int(t_siglip)),
-                "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(int(t_colpali)),
-                "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(int(t_total)),
-            }
-            _persist_env(env_map)
-            st.success("Saved to .env")
+        if st.button("Save", use_container_width=True, disabled=actions_disabled):
+            if validated is None:  # pragma: no cover - defensive
+                st.error("Cannot save: invalid settings.")
+            else:
+                context_window_value = (
+                    validated.context_window
+                    if validated.context_window is not None
+                    else validated.vllm.context_window
+                )
+                env_map = {
+                    "DOCMIND_LLM_BACKEND": validated.llm_backend,
+                    "DOCMIND_MODEL": (validated.model or ""),
+                    "DOCMIND_CONTEXT_WINDOW": str(int(context_window_value)),
+                    "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(
+                        int(validated.llm_request_timeout_seconds)
+                    ),
+                    "DOCMIND_ENABLE_GPU_ACCELERATION": (
+                        "true" if validated.enable_gpu_acceleration else "false"
+                    ),
+                    "DOCMIND_OLLAMA_BASE_URL": validated.ollama_base_url,
+                    "DOCMIND_VLLM_BASE_URL": (validated.vllm_base_url or ""),
+                    "DOCMIND_LMSTUDIO_BASE_URL": validated.lmstudio_base_url,
+                    "DOCMIND_LLAMACPP_BASE_URL": (validated.llamacpp_base_url or ""),
+                    # nested path override
+                    "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": str(
+                        validated.vllm.llamacpp_model_path
+                    ),
+                    "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
+                        "true" if validated.security.allow_remote_endpoints else "false"
+                    ),
+                    # Retrieval policy is configured via env; read-only here
+                    "DOCMIND_RETRIEVAL__RRF_K": str(int(validated.retrieval.rrf_k)),
+                    "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(
+                        int(validated.retrieval.text_rerank_timeout_ms)
+                    ),
+                    "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(
+                        int(validated.retrieval.siglip_timeout_ms)
+                    ),
+                    "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(
+                        int(validated.retrieval.colpali_timeout_ms)
+                    ),
+                    "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(
+                        int(validated.retrieval.total_rerank_budget_ms)
+                    ),
+                }
+                try:
+                    persist_env(env_map)
+                except ValueError as exc:
+                    st.error(f"Failed to write .env: {exc}")
+                else:
+                    st.success("Saved to .env")
 
     st.subheader("Cache Utilities")
     st.caption(

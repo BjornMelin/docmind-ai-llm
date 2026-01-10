@@ -34,12 +34,8 @@ def test_settings_apply_runtime_rebinds_llm(settings_app_test: AppTest) -> None:
     assert not app.exception
 
     # Find and click the "Apply runtime" button
-    # Use a robust match: click any button whose label contains "Apply runtime"
-    if buttons := [b for b in app.button if "Apply runtime" in str(b)]:
-        buttons[0].click().run()
-    else:
-        # Fallback: click the first button (Settings has only two: Apply, Save)
-        app.button[0].click().run()
+    buttons = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
+    (buttons[0] if buttons else app.button[0]).click().run()
 
     # Verify Settings.llm is bound
     from llama_index.core import Settings
@@ -64,11 +60,8 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
         lmstudio_inputs[0].set_value("http://localhost:1234/v1").run()
 
     # Click Save
-    if save_buttons := [b for b in app.button if str(b).strip().endswith("Save")]:
-        save_buttons[0].click().run()
-    else:
-        # The second button is Save in the page layout
-        app.button[1].click().run()
+    save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
+    (save_buttons[0] if save_buttons else app.button[1]).click().run()
 
     # Verify .env was created with keys
     env_file = tmp_path / ".env"
@@ -78,6 +71,77 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     values = dotenv_values(env_file)
     assert values.get("DOCMIND_MODEL") == "Hermes-2-Pro-Llama-3-8B"
     assert values.get("DOCMIND_LMSTUDIO_BASE_URL") == "http://localhost:1234/v1"
+
+
+def test_settings_save_normalizes_lmstudio_url(
+    settings_app_test: AppTest, tmp_path: Path
+) -> None:
+    """LM Studio base URL should be normalized to include /v1 on Save."""
+    app = settings_app_test.run()
+    assert not app.exception
+
+    text_inputs = list(app.text_input)
+    if lmstudio_inputs := [w for w in text_inputs if "LM Studio base URL" in str(w)]:
+        lmstudio_inputs[0].set_value("http://localhost:1234").run()
+
+    save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
+    (save_buttons[0] if save_buttons else app.button[1]).click().run()
+
+    env_file = tmp_path / ".env"
+    assert env_file.exists(), ".env not created by Save action"
+    from dotenv import dotenv_values
+
+    values = dotenv_values(env_file)
+    assert values.get("DOCMIND_LMSTUDIO_BASE_URL") == "http://localhost:1234/v1"
+
+
+def test_settings_invalid_remote_url_disables_actions(
+    settings_app_test: AppTest,
+) -> None:
+    """Remote URLs should be blocked when allow_remote_endpoints is disabled."""
+    app = settings_app_test.run()
+    assert not app.exception
+
+    vllm_inputs = [w for w in app.text_input if "vLLM base URL" in str(w)]
+    assert vllm_inputs, "vLLM base URL input not found"
+    vllm_inputs[0].set_value("http://example.com:8000").run()
+
+    apply_buttons = [
+        b for b in app.button if getattr(b, "label", "") == "Apply runtime"
+    ]
+    save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
+    assert apply_buttons
+    assert save_buttons
+    assert apply_buttons[0].disabled is True
+    assert save_buttons[0].disabled is True
+    assert any(
+        "Remote endpoints are disabled" in str(getattr(e, "value", ""))
+        for e in app.error
+    )
+
+
+def test_settings_allow_remote_allows_remote_urls(settings_app_test: AppTest) -> None:
+    """Remote URLs should be allowed when allow_remote_endpoints is enabled."""
+    app = settings_app_test.run()
+    assert not app.exception
+
+    allow_remote = [w for w in app.checkbox if "Allow remote endpoints" in str(w)]
+    assert allow_remote, "Allow remote endpoints checkbox not found"
+    allow_remote[0].set_value(True).run()
+
+    vllm_inputs = [w for w in app.text_input if "vLLM base URL" in str(w)]
+    assert vllm_inputs, "vLLM base URL input not found"
+    vllm_inputs[0].set_value("http://example.com:8000").run()
+
+    apply_buttons = [
+        b for b in app.button if getattr(b, "label", "") == "Apply runtime"
+    ]
+    save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
+    assert apply_buttons
+    assert save_buttons
+    assert apply_buttons[0].disabled is False
+    assert save_buttons[0].disabled is False
+    assert not list(app.error)
 
 
 def test_settings_toggle_providers_and_apply(
@@ -160,6 +224,10 @@ def test_settings_toggle_providers_and_apply(
         raising=False,
     )
 
+    # Ensure a valid local GGUF exists for llama.cpp local mode validation
+    gguf_path = Path("model.gguf")
+    gguf_path.write_text("dummy", encoding="utf-8")
+
     app = settings_app_test.run()
     assert not app.exception
 
@@ -230,7 +298,7 @@ def test_settings_toggle_providers_and_apply(
     provider_sel = providers[0]
     provider_sel.select("llamacpp").run()
     _set_text("llama.cpp server URL (optional)", "")
-    _set_text("GGUF model path (LlamaCPP local)", "/tmp/model.gguf")
+    _set_text("GGUF model path (LlamaCPP local)", str(gguf_path))
     _click_apply()
     assert _settings.llm_backend == "llamacpp"
 
