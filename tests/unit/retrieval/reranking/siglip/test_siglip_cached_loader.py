@@ -10,7 +10,10 @@ import importlib
 import sys
 from types import ModuleType, SimpleNamespace
 
+import pytest
 
+
+@pytest.mark.unit
 def test_siglip_loader_cached(monkeypatch):
     from src.retrieval import reranking as rr
 
@@ -53,6 +56,10 @@ def test_siglip_loader_cached(monkeypatch):
     fake_tf.SiglipModel = _FakeModel
     fake_tf.SiglipProcessor = _FakeProcessor
     monkeypatch.setitem(sys.modules, "transformers", fake_tf)
+    assert hasattr(vision, "_cached"), "vision_siglip is expected to define _cached"
+    assert hasattr(
+        vision._cached, "cache_clear"
+    ), "vision_siglip._cached should expose cache_clear"
     vision._cached.cache_clear()
 
     # First load

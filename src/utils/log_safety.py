@@ -43,6 +43,12 @@ def _fingerprint_value(value: str, key_id: str | None = None) -> tuple[str, str,
     )
 
 
+def _format_redacted_string(
+    fingerprint: str, canon_version: str, secret_version: str
+) -> str:
+    return f"[redacted:{fingerprint[:12]}:v{canon_version}:{secret_version}]"
+
+
 def redact_pii(
     value: str,
     key_id: str | None = None,
@@ -57,7 +63,7 @@ def redact_pii(
         return_fingerprint: When True, return `(redacted, fingerprint)`.
     """
     fingerprint, canon_version, secret_version = _fingerprint_value(value, key_id)
-    redacted = f"[redacted:{fingerprint[:12]}:v{canon_version}:{secret_version}]"
+    redacted = _format_redacted_string(fingerprint, canon_version, secret_version)
     if return_fingerprint:
         return redacted, fingerprint
     return redacted
@@ -66,7 +72,7 @@ def redact_pii(
 def build_pii_log_entry(value: str, key_id: str | None = None) -> RedactionResult:
     """Return a metadata-only log payload for PII values."""
     fingerprint, canon_version, secret_version = _fingerprint_value(value, key_id)
-    redacted = f"[redacted:{fingerprint[:12]}:v{canon_version}:{secret_version}]"
+    redacted = _format_redacted_string(fingerprint, canon_version, secret_version)
     return RedactionResult(
         redacted=redacted,
         fingerprint=fingerprint,
