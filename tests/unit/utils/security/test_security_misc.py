@@ -13,8 +13,10 @@ def test_decrypt_file_passthrough_when_not_enc():
 
 
 def test_redact_pii_noop():
-    """Redact PII stub returns text unchanged."""
+    """redact_pii should not return raw input."""
     from src.utils.security import redact_pii
 
     s = "no pii here"
-    assert redact_pii(s) == s
+    redacted = redact_pii(s)
+    assert redacted != s
+    assert s not in redacted
