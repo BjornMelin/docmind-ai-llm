@@ -420,7 +420,8 @@ class HashingConfig(BaseModel):
     def _validate_hmac_secret(cls, value: str) -> str:
         if len(value.encode("utf-8")) < 32:
             raise ValueError(
-                "DOCMIND_HASH_SECRET must be at least 32 bytes for HMAC strength"
+                "DOCMIND_HASHING__HMAC_SECRET must be at least 32 bytes "
+                "for HMAC strength"
             )
         return value
 
@@ -558,7 +559,7 @@ class DocMindSettings(BaseSettings):
     cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
 
-    # Canonical hashing (ADR-XXX)
+    # Canonical hashing (ADR-050, ADR-047)
     hashing: HashingConfig = Field(default_factory=HashingConfig)
 
     # Analytics (ADR-032)

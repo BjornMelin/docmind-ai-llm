@@ -1,12 +1,12 @@
 ---
 ADR: 050
-Title: Configuration Discipline — Eliminate `os.getenv` Sprawl and Remove Unused Hashing Placeholder
+Title: Configuration Discipline — Eliminate `os.getenv` Sprawl and Formalize Local Secrets
 Status: Proposed
-Version: 1.0
-Date: 2026-01-09
+Version: 1.1
+Date: 2026-01-10
 Supersedes:
 Superseded-by:
-Related: 024, 032
+Related: 024, 032, 047
 Tags: configuration, settings, maintainability, security
 References:
   - https://docs.pydantic.dev/latest/concepts/pydantic_settings/
@@ -18,7 +18,7 @@ Centralize runtime configuration in `src/config/settings.py` by:
 
 - removing direct `os.getenv` usage from core modules where settings already exist or should exist
 - adding missing settings groups for JSONL telemetry and image encryption toggles
-- removing unused “hashing” settings placeholders (currently not referenced by code)
+- fixing the `ADR-XXX` marker and formalizing the existing hashing secret so it can be used for keyed fingerprints (ADR-047)
 
 ## Context
 
@@ -33,7 +33,9 @@ Current drift points:
 - `src/utils/telemetry.py` reads `DOCMIND_TELEMETRY_*` via `os.getenv`
 - `src/telemetry/opentelemetry.py` reads `DOCMIND_ENVIRONMENT` via `os.getenv`
 - image encryption helpers read `DOCMIND_IMG_*` via `os.getenv`
-- `settings.py` contains an `ADR-XXX` marker for hashing config, and the hashing config is unused in code
+- `src/config/settings.py` contains an `ADR-XXX` marker for hashing config
+- `HashingConfig`’s validator error message references the wrong env var name (it should point to `DOCMIND_HASHING__HMAC_SECRET`)
+- `src/utils/canonicalization.py` implements HMAC-based canonical hashes and is test-covered, but is not yet wired to `DocMindSettings.hashing` (and the secret is required for keyed fingerprints in safe logging; ADR-047)
 
 ## Alternatives
 
@@ -55,13 +57,13 @@ To hit ≥9.0, we keep the change minimal:
 
 - add only the missing settings groups that correspond to existing env variables
 - do not introduce new config surfaces or new env var names
-- remove unused hashing placeholder entirely instead of “designing” it
+- replace the `ADR-XXX` marker with a real ADR reference and wire the existing hashing secret for safe fingerprints (ADR-047)
 
 Re-scored:
 
 | Option                                                              | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
 | ------------------------------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **C (minimal): Settings groups + refactor + delete unused hashing** |                9 |         10 |               9 | **9.3** |
+| **C (minimal): Settings groups + refactor + wire hashing secret**   |              9.2 |       10.0 |             9.2 | **9.4** |
 
 ## Decision
 
@@ -73,7 +75,7 @@ Re-scored:
 
 1. Refactor modules to read from `settings` instead of `os.getenv`.
 
-2. Remove unused `HashingConfig` from settings (and the `ADR-XXX` marker) unless code starts using it in v1 (out-of-scope).
+2. Fix the `ADR-XXX` marker and validator error message for `HashingConfig.hmac_secret` and explicitly use it for keyed fingerprints (ADR-047).
 
 ## Security & Privacy
 
@@ -86,6 +88,7 @@ Re-scored:
 
 - One configuration source of truth.
 - Removes undocumented env behavior and ADR-XXX drift.
+- Establishes a safe, local secret suitable for keyed fingerprints (correlation without content).
 
 ### Trade-offs
 

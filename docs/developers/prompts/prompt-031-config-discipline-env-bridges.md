@@ -51,6 +51,12 @@ This is security-sensitive config work. Prefer repo truth and run structured aud
 
 - `functions.list_mcp_resources` → look for Pydantic settings resources; read them before web search.
 
+**Authoritative library docs (MCP, prefer over general web when applicable):**
+
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
+- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
+- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if this work package touches OpenAI API semantics)
+
 **API verification (Context7):**
 
 - `functions.mcp__context7__resolve-library-id` → `pydantic`, `pydantic-settings`
@@ -101,14 +107,16 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Primary Task:** Centralize JSONL telemetry + image encryption env config in `DocMindSettings` and remove `os.getenv` sprawl from core modules.
 
-**Why now:** Scattered env reads undermine settings discipline and hide security-sensitive toggles. There is also an `ADR-XXX` marker and unused hashing config that should not ship.
+**Why now:** Scattered env reads undermine settings discipline and hide security-sensitive toggles. There is also an `ADR-XXX` marker and a hashing secret that must be formalized for keyed fingerprints (safe logging correlation) and for the existing HMAC canonicalization utilities in `src/utils/canonicalization.py` (so tests and production share the same policy).
 
 **Definition of Done (DoD):**
 
 - `TelemetryConfig` and `ImageEncryptionConfig` exist in `src/config/settings.py`.
 - `DOCMIND_TELEMETRY_*`, `DOCMIND_IMG_*`, and `DOCMIND_ENVIRONMENT` map through settings.
 - `src/utils/telemetry.py`, `src/utils/security.py`, `src/processing/pdf_pages.py`, and `src/telemetry/opentelemetry.py` do not call `os.getenv`.
-- Unused hashing config + ADR-XXX marker removed (or properly wired if truly used).
+- `ADR-XXX` marker removed (replaced with real ADR reference) and `settings.hashing.hmac_secret` is treated as a real local secret:
+  - validator error messages reference `DOCMIND_HASHING__HMAC_SECRET`
+  - the secret can be used by `src/utils/log_safety.py` (SPEC-028) for keyed fingerprints and by `src/utils/canonicalization.py` for canonical hashes
 - Unit tests validate env→settings mapping and telemetry behavior.
 - Quality gates pass.
 
@@ -161,7 +169,9 @@ Must pass:
 3. [ ] Refactor `src/utils/telemetry.py` to read from `settings` (no env reads).
 4. [ ] Refactor image encryption env reads to settings and update callers.
 5. [ ] Refactor OTEL resource env read (`DOCMIND_ENVIRONMENT`) to settings.
-6. [ ] Remove unused hashing config + ADR-XXX marker (or document and wire if truly used).
+6. [ ] Replace `ADR-XXX` marker with a real ADR reference and formalize hashing secret UX:
+   - update validator error message to reference `DOCMIND_HASHING__HMAC_SECRET`
+   - add a unit test for the mapping/validation message
 7. [ ] Add/update unit tests for settings mappings and telemetry.
 8. [ ] Update RTM row and run quality gates.
 

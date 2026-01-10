@@ -2,7 +2,7 @@
 spec: SPEC-031
 title: Configuration Discipline (Settings-only; No `os.getenv` Sprawl)
 version: 1.0.0
-date: 2026-01-09
+date: 2026-01-10
 owners: ["ai-arch"]
 status: Draft
 related_requirements:
@@ -42,7 +42,12 @@ In `src/config/settings.py`:
 
 3. Add optional `environment: str | None` at top-level settings (maps `DOCMIND_ENVIRONMENT`) for OTEL resource tags.
 
-4. Remove the unused `HashingConfig` block and the `ADR-XXX` marker (unless hashing config is truly used).
+4. Fix the `ADR-XXX` marker and formalize hashing secret usage:
+
+   - Replace `# Canonical hashing (ADR-XXX)` with a real ADR reference (`ADR-050` and/or `ADR-047`).
+   - Fix the validator error message for `HashingConfig.hmac_secret` to reference the correct env var:
+     - `DOCMIND_HASHING__HMAC_SECRET`
+   - Use `settings.hashing.hmac_secret` for keyed fingerprints in `src/utils/log_safety.py` (see `SPEC-028`) and as the secret source for `src/utils/canonicalization.py` configuration (so tests and production share the same policy).
 
 ### Consumer refactors
 
@@ -64,6 +69,9 @@ Replace `os.getenv` reads with `settings.*` lookups in:
   - image encryption key parsing behavior
   - environment mapping
 - Unit tests for telemetry emitter to ensure it uses settings (no env reads).
+- Unit tests for `HashingConfig`:
+  - `DOCMIND_HASHING__HMAC_SECRET` validation (min length)
+  - error message references the correct env var name (human-facing, but important for UX)
 
 ## Security
 

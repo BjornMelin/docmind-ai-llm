@@ -70,7 +70,7 @@ Each work package MUST ship with:
 | 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md` |
 | 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | `docs/developers/prompts/prompt-029-docs-consistency-pass.md` |
 | 09 | Multimodal helper cleanup (remove TODO; clarify test-only helper) | ADR-049 | SPEC-030 | `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md` |
-| 10 | Config discipline: remove `os.getenv` sprawl; fix ADR-XXX marker | ADR-050 | SPEC-031 | `docs/developers/prompts/prompt-031-config-discipline-env-bridges.md` |
+| 10 | Config discipline: remove `os.getenv` sprawl; fix ADR-XXX marker; formalize hashing secret | ADR-050 | SPEC-031 | `docs/developers/prompts/prompt-031-config-discipline-env-bridges.md` |
 | 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md` |
 | 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | `docs/developers/prompts/prompt-033-background-ingestion-jobs.md` |
 | 13 | Analytics page hardening (DuckDB + telemetry parsing) | ADR-053 | SPEC-034 | `docs/developers/prompts/prompt-034-analytics-page-hardening.md` |
