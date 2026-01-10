@@ -78,7 +78,7 @@ def test_reranking_timeouts_and_final_telemetry(monkeypatch):  # type: ignore[no
 
     # Execute reranking
     rr = rmod.MultimodalReranker()
-    out = rr._postprocess_nodes(nodes, qb)  # pylint: disable=protected-access
+    out = rr._postprocess_nodes(nodes, qb)
     assert isinstance(out, list)
     assert len(out) == rmod.settings.retrieval.reranking_top_k
 

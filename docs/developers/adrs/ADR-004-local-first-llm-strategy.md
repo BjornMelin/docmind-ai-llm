@@ -46,11 +46,11 @@ Key forces and constraints:
 
 ### Decision Framework
 
-| Model / Option                           | Local-First (35%) | Performance (25%) | Quality (20%) | Maintainability (20%) | Total Score | Decision |
-| ---------------------------------------- | ----------------- | ----------------- | ------------- | --------------------- | ----------- | -------- |
-| Qwen3‑4B FP8 on vLLM (Selected)          | 5                 | 4                 | 4             | 5                     | 4.6         | ✅ Selected |
-| Qwen3‑14B + YaRN (llama.cpp/vLLM)        | 4                 | 3                 | 5             | 3                     | 3.95        | Rejected |
-| Cloud API (OpenAI/Claude)                | 1                 | 4                 | 5             | 4                     | 3.2         | Rejected |
+| Model / Option                    | Local-First (35%) | Performance (25%) | Quality (20%) | Maintainability (20%) | Total Score | Decision    |
+| --------------------------------- | ----------------- | ----------------- | ------------- | --------------------- | ----------- | ----------- |
+| Qwen3‑4B FP8 on vLLM (Selected)   | 5                 | 4                 | 4             | 5                     | 4.6         | ✅ Selected |
+| Qwen3‑14B + YaRN (llama.cpp/vLLM) | 4                 | 3                 | 5             | 3                     | 3.95        | Rejected    |
+| Cloud API (OpenAI/Claude)         | 1                 | 4                 | 5             | 4                     | 3.2         | Rejected    |
 
 ## Decision
 
@@ -214,21 +214,26 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
 ## Changelog
 
 - 2025-09-04
-  - 12.1: Standardized to ADR template; added weighted decision matrix, mermaid architecture, config and testing skeletons; clarified 128K enforcement and dependencies. Updated front‑matter and references.
+
+  - 12.1: Standardized to ADR template; added weighted decision matrix, mermaid architecture, config, and testing skeletons; clarified 128K enforcement and dependencies. Updated front‑matter and references.
 
 - 2025-08-27
+
   - 12.0: USER SCENARIO VALIDATION & HARDWARE ADAPTABILITY — expanded multi‑provider documentation and scenarios.
 
 - 2025-08-20
+
   - 11.1: Hardware-constrained rationale; FlashInfer backend; 120K trim + 8K buffer strategy.
 
 - 2025-08-19
+
   - 11.0: Corrected to Qwen3‑4B‑FP8; enforce 128K; FP8 KV cache; performance/memory updates.
   - 10.0: INT8 KV cache optimization analysis.
   - 9.0: Initial reality check.
   - 8.0: Initial Qwen3‑4B evaluation.
 
 - 2025-08-18
+
   - 7.0: Shift to 32K native + adaptive retrieval.
   - 6.0: Hardware upgrade; YaRN configs documented.
   - 5.2: Reverted to Qwen3‑14B practicality; multi‑provider support.
@@ -239,9 +244,11 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
   - 4.1: Agent integration improvements.
 
 - 2025-08-17
+
   - 4.0: Missing prior entry.
 
 - 2025-08-16
+
   - 3.0: Critical corrections to Qwen3‑14B and context.
 
 - 2025-01-16

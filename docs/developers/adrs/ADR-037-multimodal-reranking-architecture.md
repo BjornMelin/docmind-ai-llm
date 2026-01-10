@@ -38,11 +38,11 @@ Prior reranking (ADR‑006) used a single text CrossEncoder (`bge‑reranker‑v
 
 ### Decision Framework
 
-| Model / Option                                          | Quality on Visual Docs (35%) | Latency/VRAM (30%) | Integration Simplicity (20%) | Adaptability (15%) | Total Score | Decision |
-| ------------------------------------------------------- | ---------------------------- | ------------------ | ---------------------------- | ------------------ | ----------- | -------- |
-| **SigLIP default + optional ColPali (Selected)**        | 8                            | 9                  | 9                            | 9                  | **8.6**     | ✅ Selected |
-| ColPali default + fallback to SigLIP                    | 9                            | 6                  | 7                            | 8                  | 7.7         | Rejected |
-| SigLIP only                                             | 7                            | 10                 | 10                           | 7                  | 8.1         | Rejected |
+| Model / Option                                   | Quality on Visual Docs (35%) | Latency/VRAM (30%) | Integration Simplicity (20%) | Adaptability (15%) | Total Score | Decision    |
+| ------------------------------------------------ | ---------------------------- | ------------------ | ---------------------------- | ------------------ | ----------- | ----------- |
+| **SigLIP default + optional ColPali (Selected)** | 8                            | 9                  | 9                            | 9                  | **8.6**     | ✅ Selected |
+| ColPali default + fallback to SigLIP             | 9                            | 6                  | 7                            | 8                  | 7.7         | Rejected    |
+| SigLIP only                                      | 7                            | 10                 | 10                           | 7                  | 8.1         | Rejected    |
 
 ## Decision
 

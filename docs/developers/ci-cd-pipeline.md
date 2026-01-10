@@ -4,31 +4,30 @@ This page outlines CI/CD practices for DocMind AI.
 
 ## Targets
 
-- Python 3.10 and 3.11
+- Python 3.11 (project constraint: `>=3.11,<3.12`)
 - Offline‑deterministic unit/integration tests (no network)
-- Lint and format: ruff (format + check), pylint (focused modules)
+- Lint and format: Ruff (format + check); Ruff enforces pylint-equivalent rules via `PL*` selectors in `pyproject.toml`
 
 ## Suggested Steps
 
 1) Lint and format
 
     ```bash
-    ruff format
-    ruff check --fix
-    pylint src/ docs/ -j 0
+    uv run ruff format .
+    uv run ruff check . --fix
+    uv run pyright
     ```
 
 2) Run tests (fast subsets on CI)
 
     ```bash
-    uv run python -m pytest tests/unit -q
-    uv run python -m pytest tests/integration -q
+    uv run python scripts/run_tests.py --fast
     ```
 
 3) Coverage (scoped to changed subsystems)
 
     ```bash
-    uv run python -m pytest --cov=src --cov-report=term-missing tests/unit -q
+    uv run python scripts/run_tests.py --coverage
     ```
 
 4) Docs validation (optional)

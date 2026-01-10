@@ -39,11 +39,11 @@ Separate dense and sparse models increase coordination cost and memory. BGE‑M3
 
 ### Decision Framework
 
-| Model / Option         | Quality (40%) | Simplicity (30%) | Perf (30%) | Total Score | Decision      |
-| ---------------------- | ------------- | ---------------- | ---------- | ----------- | ------------- |
-| BGE‑M3 + CLIP          | 9             | 9                | 9          | **9.0**     | ✅ Selected    |
-| Nomic‑v2 + CLIP        | 8             | 8                | 8          | 8.0         | Rejected      |
-| 3‑model (baseline)     | 7             | 2                | 3          | 4.0         | Rejected      |
+| Model / Option     | Quality (40%) | Simplicity (30%) | Perf (30%) | Total Score | Decision    |
+| ------------------ | ------------- | ---------------- | ---------- | ----------- | ----------- |
+| BGE‑M3 + CLIP      | 9             | 9                | 9          | **9.0**     | ✅ Selected |
+| Nomic‑v2 + CLIP    | 8             | 8                | 8          | 8.0         | Rejected    |
+| 3‑model (baseline) | 7             | 2                | 3          | 4.0         | Rejected    |
 
 ## Decision
 
@@ -106,49 +106,23 @@ Note on model roles: Embeddings = BGE‑M3 (text) and SigLIP (images). Reranking
 
 ### Implementation Details
 
-In `src/utils/embeddings.py`:
-
-```python
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-
-def get_bgem3_embedding(device: str = "cpu", batch_size: int = 8):
-    return HuggingFaceEmbedding(
-        model_name="BAAI/bge-m3",
-        device=device,
-        embed_batch_size=batch_size,
-        trust_remote_code=True,
-    )
-```
+Text embedding (BGE-M3) binding (simplified):
 
 In `src/config/integrations.py`:
 
 ```python
 from llama_index.core import Settings
-from src.utils.embeddings import get_bgem3_embedding
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
-def setup_embeddings(use_gpu: bool):
-    Settings.embed_model = get_bgem3_embedding(
-        device="cuda" if use_gpu else "cpu",
-        batch_size=64 if use_gpu else 8,
+def configure_embeddings(model_name: str, device: str) -> None:
+    Settings.embed_model = HuggingFaceEmbedding(
+        model_name=model_name,
+        device=device,
+        trust_remote_code=False,
     )
 ```
 
-Image embedding (SigLIP) for multimodal search:
-
-In `src/utils/embeddings.py`:
-
-```python
-from transformers import AutoModel, AutoProcessor
-
-SIGLIP_CKPT = "google/siglip-base-patch16-224"
-
-def get_siglip(device: str = "cpu"):
-    model = AutoModel.from_pretrained(SIGLIP_CKPT)
-    proc = AutoProcessor.from_pretrained(SIGLIP_CKPT)
-    model = model.to(device)
-    model.eval()
-    return model, proc
-```
+Image embedding helpers (SigLIP/OpenCLIP) live under `src/models/embeddings.py` (see `ImageEmbedder` / `UnifiedEmbedder`).
 
 Qdrant collection dimensionality (ensure index schema aligns):
 

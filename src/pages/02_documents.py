@@ -1,4 +1,3 @@
-# pylint: disable=invalid-name,broad-exception-caught
 """Streamlit Documents page wiring the ingestion pipeline and snapshots."""
 
 from __future__ import annotations

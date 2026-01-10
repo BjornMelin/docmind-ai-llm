@@ -37,11 +37,11 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 ### Decision Framework
 
-| Model / Option                               | Simplicity (35%) | Library Fit (35%) | Flexibility (20%) | Maintenance (10%) | Total Score | Decision      |
-| -------------------------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ------------- |
-| C: Pydantic + LlamaIndex (Selected)          | 9                | 10                | 9                 | 9                 | **9.3**     | ✅ Selected    |
-| A: Monolithic custom                          | 4                | 5                 | 8                 | 5                 | 5.5         | Rejected      |
-| B: Disjoint modules                           | 6                | 6                 | 7                 | 6                 | 6.3         | Rejected      |
+| Model / Option                      | Simplicity (35%) | Library Fit (35%) | Flexibility (20%) | Maintenance (10%) | Total Score | Decision    |
+| ----------------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ----------- |
+| C: Pydantic + LlamaIndex (Selected) | 9                | 10                | 9                 | 9                 | **9.3**     | ✅ Selected |
+| A: Monolithic custom                | 4                | 5                 | 8                 | 5                 | 5.5         | Rejected    |
+| B: Disjoint modules                 | 6                | 6                 | 7                 | 6                 | 6.3         | Rejected    |
 
 ## Decision
 
@@ -57,6 +57,7 @@ Amendment (OpenAI‑compatible servers & Local‑First):
 - Security Policy: `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` by default; only loopback hosts are allowed when disabled. To use remote endpoints (e.g., OpenAI cloud), set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` or add the host to `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`.
 
 Factory Resolution (library‑first):
+
 - For OpenAI‑compatible backends, use LlamaIndex `OpenAILike` with `api_base=backend_base_url_normalized`. This ensures consistent `/v1` handling and avoids duplicated code.
 
 See also: the canonical configuration guide at `docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
@@ -68,9 +69,11 @@ Amendment (Hybrid Fusion Flags; supersedes legacy flags):
 DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true|false
 DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf
 ```
+
 Legacy flags such as `DOCMIND_RETRIEVAL__DBSF_ENABLED` are removed. Use `FUSION_MODE=dbsf` when server hybrid is enabled.
 
 Telemetry requirements (local JSONL; PII-safe, bounded, sampled):
+
 - Emit: `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
 - Tuning via env: `DOCMIND_TELEMETRY_SAMPLE`, `DOCMIND_TELEMETRY_ENABLED/DISABLED` (bridge ensures sinks honor disabled).
 
@@ -304,35 +307,34 @@ def get_vllm_server_command() -> list[str]:
     return cmd
 ```
 
-Planned settings (to implement next)
+Selected nested models (current + release plan)
 
-In `src/config/settings.py` (planned nested models):
+In `src/config/settings.py` (canonical model; see dedicated SPECS for behavior):
 
 ```python
 class SemanticCacheConfig(BaseModel):
+    # ADR-035 / SPEC-038 (Qdrant-backed; strict invalidation)
     enabled: bool = False
-    provider: Literal["gptcache","none"] = "gptcache"
+    provider: Literal["qdrant", "none"] = "none"
     score_threshold: float = 0.85
     ttl_seconds: int = 1_209_600  # 14 days
     top_k: int = 5
     max_response_bytes: int = 24_000
     namespace: str = "default"
 
-class ChatConfig(BaseModel):
-    sqlite_path: Path = Path("./data/docmind.db")
-
 class AnalysisConfig(BaseModel):
-    mode: Literal["auto","separate","combined"] = "auto"
+    # ADR-023 / SPEC-036
+    mode: Literal["auto", "separate", "combined"] = "auto"
     max_workers: int = 4
 
-class GraphRAGConfig(BaseModel):
-    enabled: bool = False
+class DatabaseConfig(BaseModel):
+    # ADR-055 / SPEC-039 (operational metadata store; WAL)
+    sqlite_db_path: Path = Path("./data/docmind.db")
+    enable_wal_mode: bool = True
 
-# DocMindSettings(...)
-#   semantic_cache: SemanticCacheConfig = Field(default_factory=SemanticCacheConfig)
-#   chat: ChatConfig = Field(default_factory=ChatConfig)
-#   analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
-#   graphrag: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
+# Note: Chat persistence and agentic long-term memory are implemented via
+# LangGraph-native SQLite persistence (ADR-057 / SPEC-041) and DO require a
+# configured SQLite path for the Chat DB (see `settings.chat.sqlite_path`).
 ```
 
 In `src/config/integrations.py`:
@@ -439,18 +441,21 @@ DOCMIND_BACKUP__KEEP_LAST=7
 # Logging
 DOCMIND_LOG_LEVEL=INFO
 
-# --- Planned settings (to be implemented) ---
+# --- Optional advanced features (targeted for the full release) ---
+# These sections document supported (or imminently supported) configuration
+# surfaces that have corresponding ADRs/SPECs and implementation prompts.
 # Semantic Cache (ADR-035)
 DOCMIND_SEMANTIC_CACHE__ENABLED=false
-DOCMIND_SEMANTIC_CACHE__PROVIDER=gptcache
+DOCMIND_SEMANTIC_CACHE__PROVIDER=qdrant
 DOCMIND_SEMANTIC_CACHE__SCORE_THRESHOLD=0.85
 DOCMIND_SEMANTIC_CACHE__TTL_SECONDS=1209600
 DOCMIND_SEMANTIC_CACHE__TOP_K=5
 DOCMIND_SEMANTIC_CACHE__MAX_RESPONSE_BYTES=24000
 DOCMIND_SEMANTIC_CACHE__NAMESPACE=default
 
-# Chat Memory (ADR-021)
-DOCMIND_CHAT__SQLITE_PATH=./data/docmind.db
+# Chat Memory / Persistence (ADR-057)
+# The final-release persistence design uses LangGraph SQLite checkpointer + store
+# and is explicitly configured via `DOCMIND_CHAT__SQLITE_PATH` (see SPEC-041).
 
 # Analysis Modes (ADR-023)
 DOCMIND_ANALYSIS__MODE=auto

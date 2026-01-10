@@ -36,11 +36,11 @@ Local multi‑agent RAG requires predictable, low‑latency inference under tigh
 
 ### Decision Framework
 
-| Model / Option                 | Latency (40%) | VRAM (30%) | Simplicity (20%) | Stability (10%) | Total | Decision      |
-| ------------------------------ | ------------- | ---------- | ---------------- | --------------- | ----- | ------------- |
-| FP8 + parallel (Selected)      | 9             | 9          | 8                | 8               | **8.7** | ✅ Selected    |
-| FP16 KV                         | 6             | 5          | 9                | 9               | 6.7   | Rejected      |
-| 32K context                     | 7             | 9          | 9                | 9               | 8.0   | Rejected      |
+| Model / Option            | Latency (40%) | VRAM (30%) | Simplicity (20%) | Stability (10%) | Total   | Decision    |
+| ------------------------- | ------------- | ---------- | ---------------- | --------------- | ------- | ----------- |
+| FP8 + parallel (Selected) | 9             | 9          | 8                | 8               | **8.7** | ✅ Selected |
+| FP16 KV                   | 6             | 5          | 9                | 9               | 6.7     | Rejected    |
+| 32K context               | 7             | 9          | 9                | 9               | 8.0     | Rejected    |
 
 ## Decision
 
@@ -87,7 +87,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/config/llm.py` (illustrative):
+In `src/config/integrations.py` / `src/config/settings.py` (illustrative):
 
 ```python
 ENGINE_ARGS = {"max_model_len": 131072, "kv_cache_dtype": "fp8_e5m2"}
@@ -107,7 +107,7 @@ SUPERVISOR_TUNING = {
 ```env
 DOCMIND_VLLM__CONTEXT_WINDOW=131072
 DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2
-DOCMIND_AGENTS__PARALLEL_TOOLS=true
+DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true
 ```
 
 ## Testing

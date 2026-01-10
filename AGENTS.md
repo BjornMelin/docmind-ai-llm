@@ -12,7 +12,7 @@ with the current codebase, pyproject.toml, scripts, and docs/specs/ADRs.
 - `src/config/`: Pydantic Settings + LLM integration wiring
 - `src/processing/`: Ingestion pipeline, OCR, PDF page exports
 - `src/retrieval/`: Router, hybrid retrieval, reranking, GraphRAG helpers
-- `src/agents/`: LangGraph supervisor, tools, coordinator
+- `src/agents/`: LangGraph coordinator, tools (external package name `langgraph-supervisor` remains unchanged)
 - `src/persistence/`: Snapshot writer, hashing, locking
 - `src/telemetry/` and `src/utils/telemetry.py`: OpenTelemetry hooks + JSONL events
 - `templates/`: Prompt templates and presets
@@ -47,7 +47,7 @@ with the current codebase, pyproject.toml, scripts, and docs/specs/ADRs.
 - Setup: `uv sync && cp .env.example .env`
 - Run app: `streamlit run src/app.py`
 - Run app with port env: `./scripts/run_app.sh`
-- Lint/format: `ruff format . && ruff check . --fix && uv run pylint --fail-under=9.5 src/ tests/ scripts/`
+- Lint/format: `uv run ruff format . && uv run ruff check . --fix && uv run pyright`
 - Tests (fast tier): `uv run python scripts/run_tests.py --fast`
 - Tests (all): `uv run python scripts/run_tests.py`
 - Coverage: `uv run python scripts/run_tests.py --coverage`
@@ -149,6 +149,7 @@ Optional extras:
 - Do not use `os.getenv` directly in core code.
 - Avoid import-time IO; use `startup_init()` and `initialize_integrations()` from
   `src/config/integrations.py` to set up directories, LlamaIndex Settings, and OTel.
+- Agent tooling: `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true|false` controls parallel tool execution (see ADR-010).
 
 LLM backends:
 
@@ -165,6 +166,8 @@ Security policy:
 
 - Remote endpoints are blocked unless `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`
   or the host is in `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`.
+- Optional Analytics page is gated by `DOCMIND_ANALYTICS_ENABLED=true` and reads
+  from `data/analytics/analytics.duckdb`.
 
 ## Ingestion and Processing
 
@@ -203,6 +206,7 @@ Security policy:
   (`settings.retrieval.*_timeout_ms`).
 
 DSPy (optional):
+
 - DSPy query optimization is gated by `DOCMIND_ENABLE_DSPY_OPTIMIZATION=true`.
 - Guard imports and fail open when DSPy is unavailable.
 
@@ -239,10 +243,6 @@ DSPy (optional):
   - `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0`
   - `DOCMIND_TELEMETRY_ROTATE_BYTES=<int>`
 
-Analytics:
-- Optional Analytics page is gated by `DOCMIND_ANALYTICS_ENABLED=true` and reads
-  from `data/analytics/analytics.duckdb`.
-
 ## Offline-First Behavior
 
 - Use `tools/models/pull.py` to predownload models.
@@ -272,14 +272,33 @@ Analytics:
 - ADRs: `docs/developers/adrs/` (configuration, persistence, testing, GraphRAG).
 - When behavior changes, update README and relevant spec/ADR.
 
+<!-- opensrc:start -->
 ## opensrc Reference Library
 
-- `opensrc/` contains dependency source snapshots (see `opensrc/sources.json`).
-- Fetch additional sources as needed:
+`opensrc/` contains **dependency source snapshots** for deeper internals/edge cases (see `opensrc/sources.json`).
+
+Guidelines:
+
+- Treat `opensrc/` as **read-only** local references; it is excluded from version control (see `.gitignore`) and Ruff linting to preserve snapshots.
+- Prefer repo-truth (local code + official docs) first; use `opensrc/` when documentation is ambiguous or behavior is subtle.
+- Always cite exact `opensrc/…` paths + versions when relying on internals in ADRs/SPECs or incident writeups.
+- Fetch additional sources only when necessary to understand implementation details (not just public APIs).
+- Prefer **non-interactive** runs when possible:
+  - `npx opensrc pypi:<package>@<version> --modify=false`
+
+Fetch additional sources as needed:
 
 ```bash
 npx opensrc <package>           # npm package (e.g., npx opensrc zod)
 npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
 npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
 npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+
+# Manage sources
+npx opensrc list
+npx opensrc remove <name>
 ```
+
+Refresh sources after dependency upgrades or when investigating a bug fixed upstream (remove then re-fetch).
+
+<!-- opensrc:end -->

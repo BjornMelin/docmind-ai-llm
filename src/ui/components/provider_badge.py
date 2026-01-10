@@ -6,8 +6,6 @@ Settings pages per SPEC-001 and SPEC-008.
 
 from __future__ import annotations
 
-import html
-
 import streamlit as st
 
 from src.config.settings import DocMindSettings
@@ -42,22 +40,17 @@ def provider_badge(cfg: DocMindSettings) -> None:
 
     supports_graphrag, adapter_name, hint = get_default_adapter_health()
     status_label = "enabled" if supports_graphrag else "disabled"
-    tooltip = html.escape(hint, quote=True)
-    adapter_name_escaped = html.escape(adapter_name, quote=False)
-    graphrag_html = (
-        f" · GraphRAG: <span title='{tooltip}'><b>{status_label}</b>"
-        f" ({adapter_name_escaped})</span>"
-    )
 
-    badge = (
-        "<span style='padding:4px 8px;border-radius:12px;"
-        "background:#eef;border:1px solid #aac'>"
-        f"Provider: <b>{provider}</b> · Model: <code>{model}</code>"
-        + (f" · <small>{base_url}</small>" if base_url else "")
-        + graphrag_html
-        + "</span>"
+    st.badge(f"Provider: {provider}")
+    if model:
+        st.caption(f"Model: {model}")
+    st.badge(
+        f"GraphRAG: {status_label} ({adapter_name})",
+        icon="✅" if supports_graphrag else "⚠️",
+        help=hint,
     )
-    st.markdown(badge, unsafe_allow_html=True)
+    if base_url:
+        st.caption(f"Base URL: {base_url}")
 
 
 __all__ = ["provider_badge"]

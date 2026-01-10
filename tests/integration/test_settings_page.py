@@ -6,7 +6,6 @@ Relies on Streamlit AppTest to run src/pages/04_settings.py in a temp cwd.
 
 from __future__ import annotations
 
-# pylint: disable=too-many-statements  # UI scenario flows are intentionally linear
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -74,9 +73,11 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     # Verify .env was created with keys
     env_file = tmp_path / ".env"
     assert env_file.exists(), ".env not created by Save action"
-    contents = env_file.read_text()
-    assert "DOCMIND_MODEL=Hermes-2-Pro-Llama-3-8B" in contents
-    assert "DOCMIND_LMSTUDIO_BASE_URL=http://localhost:1234/v1" in contents
+    from dotenv import dotenv_values
+
+    values = dotenv_values(env_file)
+    assert values.get("DOCMIND_MODEL") == "Hermes-2-Pro-Llama-3-8B"
+    assert values.get("DOCMIND_LMSTUDIO_BASE_URL") == "http://localhost:1234/v1"
 
 
 def test_settings_toggle_providers_and_apply(

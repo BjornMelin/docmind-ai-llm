@@ -1,20 +1,23 @@
 ---
 ADR: 015
 Title: Docker-First Local Deployment
-Status: Accepted
-Version: 5.1
-Date: 2025-08-19
+Status: Superseded
+Version: 5.2
+Date: 2026-01-09
 Supersedes:
-Superseded-by:
-Related: 004, 010, 011, 013, 024, 026
+Superseded-by: 042
+Related: 004, 010, 011, 013, 024, 026, 042
 Tags: deployment, docker, local-first
 References:
 - [Docker Compose — Docs](https://docs.docker.com/compose/)
+- [ADR-042 — Containerization Hardening (Dockerfile + Compose)](../ADR-042-containerization-hardening.md)
 ---
 
 ## Description
 
 Provide a dead‑simple Docker deployment for the local Streamlit app. One image, one compose file, environment‑driven configuration, and optional GPU.
+
+> Status notice (2026-01-09): Superseded by ADR-042 for v1. Container artifacts must be `uv`/`uv.lock`-based, Python 3.11, multi-stage, non-root, and use canonical `DOCMIND_*` env vars.
 
 ## Context
 
@@ -33,10 +36,10 @@ DocMind AI is a local app. Users should `docker compose up` and go. No multi‑s
 
 ### Decision Framework
 
-| Option           | Simplicity (50%) | Reliability (30%) | Flex (20%) | Total | Decision      |
-| ---------------- | ---------------- | ----------------- | ---------- | ----- | ------------- |
-| Single compose   | 10               | 9                 | 7          | 9.2   | ✅ Selected    |
-| Multi‑profile    | 5                | 7                 | 9          | 6.3   | Rejected      |
+| Option         | Simplicity (50%) | Reliability (30%) | Flex (20%) | Total | Decision    |
+| -------------- | ---------------- | ----------------- | ---------- | ----- | ----------- |
+| Single compose | 10               | 9                 | 7          | 9.2   | ✅ Selected |
+| Multi‑profile  | 5                | 7                 | 9          | 6.3   | Rejected    |
 
 ## Decision
 

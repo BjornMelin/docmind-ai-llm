@@ -36,11 +36,11 @@ Re-indexing unchanged content wastes compute and I/O. Prior ADRs unified process
 
 ### Decision Framework
 
-| Model / Option                 | Simplicity (35%) | Correctness (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision      |
-| ------------------------------ | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ------------- |
-| Stable hash + upsert (Sel.)    | 9                | 9                 | 9                 | 9                 | **9.0**     | ✅ Selected    |
-| Dedicated embedding cache      | 6                | 8                 | 8                 | 5                 | 6.9         | Rejected      |
-| Ad-hoc skip logic              | 7                | 5                 | 6                 | 6                 | 6.1         | Rejected      |
+| Model / Option              | Simplicity (35%) | Correctness (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision    |
+| --------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ----------- |
+| Stable hash + upsert (Sel.) | 9                | 9                 | 9                 | 9                 | **9.0**     | ✅ Selected |
+| Dedicated embedding cache   | 6                | 8                 | 8                 | 5                 | 6.9         | Rejected    |
+| Ad-hoc skip logic           | 7                | 5                 | 6                 | 6                 | 6.1         | Rejected    |
 
 ## Decision
 

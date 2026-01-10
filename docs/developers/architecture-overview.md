@@ -18,31 +18,31 @@ DocMind AI is an agentic RAG system leveraging Qwen3-4B-Instruct-2507-FP8's 128K
 ```mermaid
 graph TD
     A[Streamlit UI<br/>Streaming + Session Memory] --> B[5-Agent Orchestration<br/>LangGraph Supervisor]
-    
+
     B --> C[Routing Agent<br/>Query Analysis]
-    B --> D[Planning Agent<br/>Query Decomposition]  
+    B --> D[Planning Agent<br/>Query Decomposition]
     B --> E[Retrieval Agent<br/>Document Search]
     B --> F[Synthesis Agent<br/>Multi-source Combination]
     B --> G[Validation Agent<br/>Quality Assurance]
-    
+
     C --> H[Adaptive Retrieval Pipeline<br/>RAPTOR-Lite + Hybrid Search]
     D --> H
     E --> H
     F --> H
     G --> H
-    
+
     H --> I[Hierarchical Indexing<br/>2-3 levels max]
     H --> J[Dense+Sparse Search<br/>BGE-M3 unified embeddings]
     H --> K[Multi-Stage Reranking<br/>BGE-reranker-v2-m3]
-    
+
     I --> L[Storage Layer]
     J --> L
     K --> L
-    
+
     L --> M[Qdrant<br/>Vector Storage]
     L --> N[SQLite<br/>Metadata & Sessions]
     L --> O[DuckDB<br/>Analytics Optional]
-    
+
     style A fill:#e1f5fe
     style B fill:#f3e5f5
     style H fill:#fff3e0
@@ -53,37 +53,41 @@ graph TD
 
 ### Core Models (100% Local)
 
-| Component | Model | Size | VRAM | Purpose |
-|-----------|-------|------|------|---------|
-| **LLM** | Qwen3-4B-Instruct-2507-FP8 | 3.6GB | 3.6GB | Generation, reasoning, 128K context |
-| **Embedding** | BGE-M3 | 2.3GB | 2-3GB | Unified dense+sparse embeddings |
-| **Reranking** | BGE-reranker-v2-m3 | 1.1GB | 1-2GB | Multi-stage reranking |
-| **KV Cache (128K)** | FP8 Quantization | 0GB | ~8GB | 50% memory reduction vs FP16 |
+| Component           | Model                      | Size  | VRAM  | Purpose                             |
+| ------------------- | -------------------------- | ----- | ----- | ----------------------------------- |
+| **LLM**             | Qwen3-4B-Instruct-2507-FP8 | 3.6GB | 3.6GB | Generation, reasoning, 128K context |
+| **Embedding**       | BGE-M3                     | 2.3GB | 2-3GB | Unified dense+sparse embeddings     |
+| **Reranking**       | BGE-reranker-v2-m3         | 1.1GB | 1-2GB | Multi-stage reranking               |
+| **KV Cache (128K)** | FP8 Quantization           | 0GB   | ~8GB  | 50% memory reduction vs FP16        |
 
 **Total VRAM**: 12-14GB with 128K context (RTX 4090 Laptop optimized)
 
 ### Core Libraries
 
 ```toml
-# RAG Framework
-llama-index = "^0.11.0"           # Primary RAG framework
-langgraph-supervisor = "^0.0.29"  # Agent orchestration
+# NOTE: This is a conceptual inventory. Pinned versions live in `pyproject.toml`.
 
-# Models & Inference
-sentence-transformers = "^3.3.0"  # BGE-M3, reranking
-transformers = "^4.46.0"          # Qwen3-14B
-FlagEmbedding = "^1.2.0"         # BGE-M3 sparse features
+# RAG Framework + Orchestration
+llama-index = "*"                # Ingestion/retrieval primitives (see pyproject.toml)
+langgraph = "*"                  # Graph-based orchestration
+langgraph-supervisor = "*"       # Supervisor multi-agent wrapper
+langchain-core = "*"             # Runnable interfaces
 
-# Enhanced Capabilities
-instructor = "^1.3.0"             # Structured outputs (85-point feature)
-dspy-ai = "^2.4.0"               # Query optimization (82-point feature)
-gptcache = "^0.1.0"              # Semantic caching (72-point feature)
-graphrag = "^0.1.0"              # Optional GraphRAG (76.5-point feature)
+# Storage & Persistence
+qdrant-client = "*"              # Dense+sparse vectors and hybrid queries
+duckdb = "*"                     # Ingestion cache KV + analytics (separate lanes)
 
-# Storage & UI
-qdrant-client = "^1.12.0"        # Vector database
-streamlit = "^1.40.0"            # UI with native streaming
-unstructured = "^0.16.0"         # Document processing
+# UI
+streamlit = "*"                  # Multipage UI (`st.Page`, `st.navigation`)
+
+# Document Processing
+unstructured = "*"               # Multiformat parsing/chunking
+pymupdf = "*"                    # PDF rendering/text extraction
+
+# Optional capabilities (extras)
+dspy-ai = "*"                    # Query optimization (gated by config)
+# GraphRAG via LlamaIndex graph stores (extra `graph`)
+# Multimodal rerank via ColPali (extra `multimodal`)
 ```
 
 ## Agent Architecture
@@ -91,21 +95,25 @@ unstructured = "^0.16.0"         # Document processing
 ### 5-Agent System (ADR-011)
 
 1. **Routing Agent**: Query analysis and strategy selection
+
    - Classifies query complexity and intent
    - Routes to appropriate retrieval strategies
    - Handles fallback scenarios
 
 2. **Planning Agent**: Complex query decomposition
+
    - Breaks down multi-part questions
    - Creates retrieval sub-tasks
    - Coordinates multi-step reasoning
 
 3. **Retrieval Agent**: Document search with optimization
+
    - Executes multi‑strategy retrieval (vector + hybrid; optional GraphRAG)
    - Optional DSPy query optimization for query rewriting (when enabled)
    - Manages server‑side dense+sparse fusion via Qdrant Query API
 
 4. **Synthesis Agent**: Multi-source combination
+
    - Combines results from multiple retrieval passes
    - Resolves conflicts between sources
    - Generates coherent responses
@@ -305,7 +313,7 @@ ENABLE_DSPY=false
 This architecture overview synthesizes decisions from:
 
 - **ADR-001**: Modern Agentic RAG Architecture
-- **ADR-002**: Unified Embedding Strategy  
+- **ADR-002**: Unified Embedding Strategy
 - **ADR-003**: Adaptive Retrieval Pipeline
 - **ADR-004**: Local-First LLM Strategy
 - **ADR-006**: Modern Reranking Architecture

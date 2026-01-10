@@ -1,20 +1,23 @@
 ---
 ADR: 012
 Title: Evaluation with DeepEval
-Status: Implemented
-Version: 4.0
-Date: 2025-08-19
+Status: Superseded
+Version: 4.1
+Date: 2026-01-09
 Supersedes:
-Superseded-by:
-Related: 001, 003, 004, 010, 018
+Superseded-by: 039
+Related: 001, 003, 004, 010, 018, 039
 Tags: evaluation, metrics, deepeval, quality
 References:
 - [DeepEval](https://github.com/confident-ai/deepeval)
+- [ADR-039 — Offline Evaluation CLIs (BEIR + RAGAS)](../ADR-039-offline-evaluation-clis.md)
 ---
 
 ## Description
 
 Adopt DeepEval for quality evaluation (RAG and LLM) with minimal glue. Replace custom evaluators with library metrics; keep tests local and deterministic.
+
+> Status notice (2026-01-09): Superseded by ADR-039. DocMind’s evaluation tooling for v1 is implemented via BEIR + RAGAS under `tools/eval/` and documented in SPEC-010.
 
 ## Context
 
@@ -34,11 +37,11 @@ Custom evaluation code was large and brittle. DeepEval provides ready metrics fo
 
 ### Decision Framework
 
-| Model / Option         | Rigor (35%) | Simplicity (35%) | Local (20%) | Maintenance (10%) | Total | Decision      |
-| ---------------------- | ----------- | ---------------- | ----------- | ----------------- | ----- | ------------- |
-| DeepEval (Selected)    | 8           | 9                | 9           | 9                 | **8.6** | ✅ Selected    |
-| Custom evaluators      | 9           | 3                | 9           | 4                 | 6.6   | Rejected      |
-| Spot checks            | 3           | 9                | 9           | 9                 | 6.0   | Rejected      |
+| Model / Option      | Rigor (35%) | Simplicity (35%) | Local (20%) | Maintenance (10%) | Total   | Decision    |
+| ------------------- | ----------- | ---------------- | ----------- | ----------------- | ------- | ----------- |
+| DeepEval (Selected) | 8           | 9                | 9           | 9                 | **8.6** | ✅ Selected |
+| Custom evaluators   | 9           | 3                | 9           | 4                 | 6.6     | Rejected    |
+| Spot checks         | 3           | 9                | 9           | 9                 | 6.0     | Rejected    |
 
 ## Decision
 

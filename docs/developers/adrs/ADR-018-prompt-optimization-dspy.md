@@ -34,11 +34,11 @@ Manual prompt tuning is slow and inconsistent. DSPy compiles prompt programs and
 
 ### Decision Framework
 
-| Model / Option | Quality (40%) | Simplicity (30%) | Local (20%) | Maintenance (10%) | Total | Decision      |
-| -------------- | ------------- | ---------------- | ----------- | ----------------- | ----- | ------------- |
-| DSPy (Sel.)    | 9             | 8                | 9           | 8                 | **8.7** | ✅ Selected    |
-| LCEL few‑shot   | 7             | 7                | 9           | 8                 | 7.6   | Rejected      |
-| Manual          | 5             | 9                | 9           | 9                 | 6.9   | Rejected      |
+| Model / Option | Quality (40%) | Simplicity (30%) | Local (20%) | Maintenance (10%) | Total   | Decision    |
+| -------------- | ------------- | ---------------- | ----------- | ----------------- | ------- | ----------- |
+| DSPy (Sel.)    | 9             | 8                | 9           | 8                 | **8.7** | ✅ Selected |
+| LCEL few‑shot  | 7             | 7                | 9           | 8                 | 7.6     | Rejected    |
+| Manual         | 5             | 9                | 9           | 9                 | 6.9     | Rejected    |
 
 ## Decision
 

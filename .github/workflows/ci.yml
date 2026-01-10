@@ -47,9 +47,14 @@ jobs:
           uvx ruff format --check .
           uvx ruff check --fix --exit-non-zero-on-fix .
 
-      - name: Quality Gate - Pylint (fail-under=9.5)
+      - name: Quality Gate - No TODO/FIXME/XXX placeholders
         run: |
-          uv run pylint --fail-under=9.5 -j 0 src tests scripts
+          if rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools; then
+            echo "Found TODO/FIXME/XXX placeholders. Remove them before merging."
+            exit 1
+          else
+            echo "No TODO/FIXME/XXX placeholders found."
+          fi
 
       - name: Run tiered unit/integration tests (fast gate)
         env:

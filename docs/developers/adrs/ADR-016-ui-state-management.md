@@ -33,14 +33,14 @@ Earlier versions introduced custom SessionState/Cache managers. Streamlit provid
 
 ### Decision Framework
 
-| Model / Option            | Simplicity (40%) | Reliability (30%) | Integration (20%) | Maintenance (10%) | Total | Decision      |
-| ------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----- | ------------- |
-| Streamlit native (Sel.)   | 10               | 9                 | 9                 | 9                 | **9.5** | ✅ Selected    |
-| Custom layer              | 4                | 6                 | 7                 | 5                 | 5.5   | Rejected      |
+| Model / Option          | Simplicity (40%) | Reliability (30%) | Integration (20%) | Maintenance (10%) | Total   | Decision    |
+| ----------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ------- | ----------- |
+| Streamlit native (Sel.) | 10               | 9                 | 9                 | 9                 | **9.5** | ✅ Selected |
+| Custom layer            | 4                | 6                 | 7                 | 5                 | 5.5     | Rejected    |
 
 ## Decision
 
-Adopt Streamlit native state and caching. For conversational memory, integrate with ChatMemoryBuffer/ChatStore (ADR‑021) without adding new state layers.
+Adopt Streamlit native state and caching. For conversational memory, integrate with the local chat persistence layer (ADR‑057) without adding new state layers.
 
 Amendment (GraphRAG): add state entries `vector_index`, `pg_index`, `router_engine`, and `snapshot_manifest`. On Chat initialization, attempt to load the latest snapshot manifest to compute staleness and default the chat strategy to Router when `pg_index` is present (see ADR‑038).
 
@@ -51,7 +51,7 @@ graph TD
   UI["Pages/Components"] --> S["st.session_state"]
   UI --> C1["st.cache_data"]
   UI --> C2["st.cache_resource"]
-  S --> P["Persistence (ADR-021)"]
+  S --> P["Persistence (ADR-057)"]
 ```
 
 ## Related Requirements
@@ -72,7 +72,7 @@ graph TD
 
 ### Integration Requirements
 
-- IR‑1: Compatible with ADR‑013 UI and ADR‑021 memory
+- IR‑1: Compatible with ADR‑013 UI and ADR‑057 chat persistence
 
 ## Design
 

@@ -140,7 +140,7 @@ class ServerHybridRetriever:
             return qmodels.FusionQuery(fusion=qmodels.Fusion.DBSF)
         return qmodels.FusionQuery(fusion=qmodels.Fusion.RRF)
 
-    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:  # pylint: disable=too-many-locals
+    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
         """Execute server-side hybrid retrieval.
 
         Computes dense and sparse queries, prefetches candidates, fuses scores

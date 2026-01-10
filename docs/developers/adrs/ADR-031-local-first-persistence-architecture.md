@@ -2,8 +2,8 @@
 ADR: 031
 Title: Local-First Persistence Architecture (Vectors, Cache, Operational Data)
 Status: Accepted (Amended)
-Version: 1.5
-Date: 2025-09-09
+Version: 1.6
+Date: 2026-01-09
 Supersedes:
 Superseded-by:
 Related: 026, 030, 033, 035, 038
@@ -37,11 +37,11 @@ Earlier designs mixed concerns and introduced multiple storage backends. To redu
 
 ### Decision Framework
 
-| Model / Option                             | Simplicity (30%) | Library Fit (30%) | Performance (25%) | Maintenance (15%) | Total Score | Decision      |
-| ------------------------------------------ | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ------------- |
-| Qdrant + IngestionCache/DuckDBKV (Selected)| 9                | 10                | 9                 | 9                 | **9.2**     | ✅ Selected    |
-| Redis-based                                | 5                | 6                 | 8.5               | 7                 | 6.4         | Rejected      |
-| Custom cache                               | 4                | 5                 | 7                 | 4                 | 5.1         | Rejected      |
+| Model / Option                              | Simplicity (30%) | Library Fit (30%) | Performance (25%) | Maintenance (15%) | Total Score | Decision    |
+| ------------------------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ----------- |
+| Qdrant + IngestionCache/DuckDBKV (Selected) | 9                | 10                | 9                 | 9                 | **9.2**     | ✅ Selected |
+| Redis-based                                 | 5                | 6                 | 8.5               | 7                 | 6.4         | Rejected    |
+| Custom cache                                | 4                | 5                 | 7                 | 4                 | 5.1         | Rejected    |
 
 ## Decision
 
@@ -109,7 +109,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/core/processing.py` (illustrative wiring):
+In `src/processing/ingestion_pipeline.py` (illustrative wiring):
 
 ```python
 from pathlib import Path
@@ -119,7 +119,7 @@ from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 def build_cache(settings):
     cache_db = Path(settings.cache_dir) / "docmind.duckdb"
     cache_db.parent.mkdir(parents=True, exist_ok=True)
-    return IngestionCache(cache=DuckDBKVStore(db_path=str(cache_db)), collection="docmind_processing")
+    return IngestionCache(cache=DuckDBKVStore(database_name=str(cache_db)), collection="docmind_processing")
 ```
 
 ### Configuration
@@ -140,9 +140,9 @@ def test_cache_roundtrip(cache):
 
 ### Observability
 
-- configure_observability() (SPEC-012) provisions OpenTelemetry tracer/meter providers with OTLP (or console) exporters and registers LlamaIndex instrumentation.
-- Snapshot, ingestion, and router workflows emit spans and metrics annotated with snapshot IDs, hashes, and GraphRAG metadata; console fallback keeps local-first deployments viable.
-- JSONL telemetry events (`router_selected`, `export_performed`, `lock_takeover`, `snapshot_stale_detected`) serve as the structured logging contract for offline audits.
+- `configure_observability()` (SPEC-012) provisions OpenTelemetry SDK providers with OTLP exporters **only when enabled** via `settings.observability.enabled` (offline-first default is disabled).
+- Key workflows emit spans/metrics (no-op unless exporters are enabled), including snapshot persistence (`snapshot.*` spans), ingestion (`ingest_documents` span), router composition (`router_factory.build_router_engine` span), and GraphRAG export metrics (`docmind.graph.export.*`).
+- Local JSONL telemetry events (`router_selected`, `snapshot_stale_detected`, `export_performed`, plus retrieval/rerank keys) serve as the structured logging contract for offline audits. Rotation/sampling are controlled by `DOCMIND_TELEMETRY_*` env vars.
 
 ## Consequences
 
@@ -167,6 +167,7 @@ def test_cache_roundtrip(cache):
 
 ## Changelog
 
+- 1.6 (2026-01-09): Docs-only: align observability section with SPEC-012 and shipped telemetry (no implicit console fallback; remove lock_takeover mention).
 - 1.5 (2025-09-16): Clarified SnapshotLock heartbeat/takeover semantics, retention discipline, and OpenTelemetry logging requirements.
 - 1.4 (2025-09-16): Documented portalocker-based locking with TTL metadata, fallback locking, graph export telemetry, and removal of legacy `manifest.json`.
 - 1.3 (2025-09-16): Documented tri-file manifest layout, `complete` flag semantics, CURRENT pointer resolution, timestamped graph exports, and telemetry expectations.

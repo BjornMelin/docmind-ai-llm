@@ -41,16 +41,16 @@ The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), 
 
 ### Decision Framework
 
-| Model / Option                 | Simplicity (35%) | UX (30%) | Integration (20%) | Maintenance (15%) | Total Score | Decision      |
-| ------------------------------ | ---------------- | -------- | ----------------- | ----------------- | ----------- | ------------- |
-| Programmatic Streamlit (Sel.)  | 9                | 9        | 9                 | 9                 | **9.0**     | ✅ Selected    |
-| Directory‑based multipage      | 8                | 6        | 6                 | 7                 | 6.9         | Rejected      |
-| Gradio                         | 9                | 6        | 5                 | 8                 | 6.9         | Rejected      |
-| FastAPI + React                | 4                | 9        | 9                 | 5                 | 6.4         | Rejected      |
+| Model / Option                | Simplicity (35%) | UX (30%) | Integration (20%) | Maintenance (15%) | Total Score | Decision    |
+| ----------------------------- | ---------------- | -------- | ----------------- | ----------------- | ----------- | ----------- |
+| Programmatic Streamlit (Sel.) | 9                | 9        | 9                 | 9                 | **9.0**     | ✅ Selected |
+| Directory‑based multipage     | 8                | 6        | 6                 | 7                 | 6.9         | Rejected    |
+| Gradio                        | 9                | 6        | 5                 | 8                 | 6.9         | Rejected    |
+| FastAPI + React               | 4                | 9        | 9                 | 5                 | 6.4         | Rejected    |
 
 ## Decision
 
-We adopt Streamlit’s programmatic multipage pattern with native components and caching. Pages: Chat (native streaming), Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only when necessary), Analytics (Plotly charts), and Settings (forms). Sidebar exposes reranker controls `normalize_scores` and `top_n` (ADR‑036). State uses `st.session_state`; caching uses `st.cache_data` and `st.cache_resource`.
+We adopt Streamlit’s programmatic multipage pattern with native components and caching. Pages: Chat (native streaming), Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only when necessary), Analytics (Plotly charts), and Settings (forms). Reranking remains always-on with internal guardrails (ADR‑024/SPEC‑005); v1 avoids advanced reranker controls in the UI. State uses `st.session_state`; caching uses `st.cache_data` and `st.cache_resource`.
 
 ### GraphRAG UI Controls (Amendment)
 
@@ -105,7 +105,7 @@ graph TD
 
 ### Integration Requirements
 
-- IR‑1: Sidebar exposes `normalize_scores` and `top_n` (ADR‑036)
+- IR‑1: Reranking stays always-on with internal guardrails (ADR‑024/SPEC‑005)
 - IR‑2: Use unified settings (ADR‑024) and state model (ADR‑016)
 
 ## Design
@@ -125,15 +125,17 @@ import streamlit as st
 
 st.set_page_config(page_title="DocMind AI", page_icon="📄", layout="wide", initial_sidebar_state="expanded")
 
-chat = st.Page("src/pages/chat.py", title="Chat", icon="💬", default=True)
-docs = st.Page("src/pages/documents.py", title="Documents", icon="📁")
-analytics = st.Page("src/pages/analytics.py", title="Analytics", icon="📊")
-settings = st.Page("src/pages/settings.py", title="Settings", icon="⚙️")
+chat = st.Page("src/pages/01_chat.py", title="Chat", icon="💬", default=True)
+docs = st.Page("src/pages/02_documents.py", title="Documents", icon="📁")
+analytics = st.Page("src/pages/03_analytics.py", title="Analytics", icon="📊")
+settings = st.Page("src/pages/04_settings.py", title="Settings", icon="⚙️")
 
 nav = st.navigation({"Main": [chat, docs], "System": [analytics, settings]})
 st.logo("assets/docmind_logo.png", icon_image="assets/docmind_icon.png")
 nav.run()
 ```
+
+**Page naming convention:** Page files are prefixed with a two-digit index (e.g., `01_chat.py`, `02_documents.py`) to enforce deterministic ordering in Streamlit’s page discovery and to keep sidebar grouping predictable. Keep leading zeros for correct lexical ordering, avoid reusing indices, and ensure filenames match the `st.Page` registrations.
 
 ### Configuration
 
@@ -170,8 +172,26 @@ import pytest
 
 def test_pages_construct():
     import streamlit as st
-    st.Page("src/pages/chat.py", title="Chat", icon="💬", default=True)
-    st.Page("src/pages/documents.py", title="Documents", icon="📁")
+    st.Page("src/pages/01_chat.py", title="Chat", icon="💬", default=True)
+    st.Page("src/pages/02_documents.py", title="Documents", icon="📁")
+
+def test_page_registry_metadata():
+    # Verify titles/icons/default selection for registered pages.
+    chat = st.Page("src/pages/01_chat.py", title="Chat", icon=":material/chat:", default=True)
+    docs = st.Page("src/pages/02_documents.py", title="Documents", icon=":material/description:")
+    assert chat.title == "Chat"
+    assert chat.icon == ":material/chat:"
+    assert chat.default is True
+    assert docs.title == "Documents"
+    assert docs.default is False
+
+def test_session_state_shared_keys(app_runner):
+    # Load Chat and Documents pages to confirm shared session_state keys persist.
+    app_runner.run("src/pages/01_chat.py")
+    import streamlit as st
+    st.session_state["docmind_shared_key"] = "ok"
+    app_runner.run("src/pages/02_documents.py")
+    assert st.session_state.get("docmind_shared_key") == "ok"
 
 @pytest.mark.asyncio
 async def test_streaming_generator(mock_llm):

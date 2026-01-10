@@ -575,7 +575,6 @@ class UnifiedEmbedder:
                     supported = (np.ndarray,) + (
                         (pil_type,) if pil_type is not None else ()
                     )
-                    # pylint: disable=isinstance-second-argument-not-valid-type
                     if not isinstance(it, supported):
                         t = type(it)
                         msg = f"Unsupported image type: {t}. Supported: {supported}"

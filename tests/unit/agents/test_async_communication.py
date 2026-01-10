@@ -34,7 +34,6 @@ from src.agents.tools.planning import plan_query, route_query
 from src.agents.tools.retrieval import retrieve_documents
 from src.agents.tools.validation import validate_response
 
-# pylint: disable=protected-access
 # Rationale: tests exercise minimal private hooks where no public seam exists.
 
 

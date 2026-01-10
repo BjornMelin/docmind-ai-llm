@@ -157,7 +157,7 @@ cp .env.example .env
 Edit `.env` with these key variables:
 
 ```bash
-# Core Application  
+# Core Application
 DOCMIND_DEBUG=false
 DOCMIND_LOG_LEVEL=INFO
 DOCMIND_BASE_PATH=./
@@ -190,15 +190,15 @@ DocMind AI uses a **unified prefix pattern** with **nested configuration support
 
 ### 4. Configuration Categories
 
-| Category | Environment Prefix | Purpose |
-|----------|-------------------|---------|
-| **Core App** | `DOCMIND_` | Basic application settings |
-| **LLM Backend** | `DOCMIND_LLM__` | Large language model configuration |
-| **Vector Storage** | `DOCMIND_QDRANT__` | Qdrant vector database settings |
-| **Multi-Agent** | `DOCMIND_AGENTS__` | Agent coordination configuration |
-| **Processing** | `DOCMIND_PROCESSING__` | Document processing parameters |
-| **Embedding** | `DOCMIND_EMBEDDING__` | BGE-M3 embedding configuration |
-| **vLLM** | `VLLM_` | vLLM backend optimization |
+| Category           | Environment Prefix     | Purpose                            |
+| ------------------ | ---------------------- | ---------------------------------- |
+| **Core App**       | `DOCMIND_`             | Basic application settings         |
+| **LLM Backend**    | `DOCMIND_LLM__`        | Large language model configuration |
+| **Vector Storage** | `DOCMIND_QDRANT__`     | Qdrant vector database settings    |
+| **Multi-Agent**    | `DOCMIND_AGENTS__`     | Agent coordination configuration   |
+| **Processing**     | `DOCMIND_PROCESSING__` | Document processing parameters     |
+| **Embedding**      | `DOCMIND_EMBEDDING__`  | BGE-M3 embedding configuration     |
+| **vLLM**           | `VLLM_`                | vLLM backend optimization          |
 
 ## First Run Validation
 

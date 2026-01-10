@@ -53,12 +53,14 @@ class SemanticCacheConfig(BaseModel):
     """Application-level semantic cache configuration (ADR-035)."""
 
     enabled: bool = Field(default=False)
-    provider: Literal["gptcache", "none"] = Field(default="gptcache")
+    provider: Literal["qdrant", "none"] = Field(default="qdrant")
+    collection_name: str | None = Field(default=None)
     score_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
-    ttl_seconds: int = Field(default=1_209_600, ge=60)  # 14 days
-    top_k: int = Field(default=5, ge=1, le=50)
-    max_response_bytes: int = Field(default=24_000, ge=1024)
+    ttl_seconds: int = Field(default=1_209_600, ge=0)  # 14 days
+    top_k: int = Field(default=5, ge=1)
+    max_response_bytes: int = Field(default=24_000, ge=0)
     namespace: str = Field(default="default")
+    allow_semantic_for_templates: list[str] | None = Field(default=None)
 
 
 def ensure_v1(url: str | None) -> str | None:
@@ -151,7 +153,7 @@ class ProcessingConfig(BaseModel):
 class ChatConfig(BaseModel):
     """Chat memory configuration (ADR-021)."""
 
-    sqlite_path: Path = Field(default=Path("./data/docmind.db"))
+    sqlite_path: Path = Field(default=Path("./data/chat.db"))
 
 
 class AgentConfig(BaseModel):
@@ -420,7 +422,8 @@ class HashingConfig(BaseModel):
     def _validate_hmac_secret(cls, value: str) -> str:
         if len(value.encode("utf-8")) < 32:
             raise ValueError(
-                "DOCMIND_HASH_SECRET must be at least 32 bytes for HMAC strength"
+                "DOCMIND_HASHING__HMAC_SECRET must be at least 32 bytes "
+                "for HMAC strength"
             )
         return value
 
@@ -558,7 +561,7 @@ class DocMindSettings(BaseSettings):
     cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
 
-    # Canonical hashing (ADR-XXX)
+    # Canonical hashing (ADR-050, ADR-047)
     hashing: HashingConfig = Field(default_factory=HashingConfig)
 
     # Analytics (ADR-032)

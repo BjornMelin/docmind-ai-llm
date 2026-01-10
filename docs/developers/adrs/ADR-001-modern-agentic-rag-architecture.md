@@ -36,11 +36,11 @@ Fixed RAG pipelines fail to adapt to query complexity or recover from poor retri
 
 ### Decision Framework
 
-| Model / Option                         | Capability (35%) | Simplicity (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision      |
-| -------------------------------------- | ---------------- | ---------------- | ----------------- | ----------------- | ----------- | ------------- |
-| C: Lightweight supervisor (Selected)   | 8                | 8                | 9                 | 9                 | **8.4**     | ✅ Selected    |
-| A: Fixed RAG                           | 4                | 9                | 8                 | 9                 | 6.7         | Rejected      |
-| B: Heavy multi‑agent                   | 9                | 3                | 7                 | 5                 | 6.6         | Rejected      |
+| Model / Option                       | Capability (35%) | Simplicity (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision    |
+| ------------------------------------ | ---------------- | ---------------- | ----------------- | ----------------- | ----------- | ----------- |
+| C: Lightweight supervisor (Selected) | 8                | 8                | 9                 | 9                 | **8.4**     | ✅ Selected |
+| A: Fixed RAG                         | 4                | 9                | 8                 | 9                 | 6.7         | Rejected    |
+| B: Heavy multi‑agent                 | 9                | 3                | 7                 | 5                 | 6.6         | Rejected    |
 
 ## Decision
 
@@ -102,7 +102,7 @@ graph TD
 
 ### Implementation Details
 
-In `src/agents/supervisor.py` (illustrative):
+In `src/agents/coordinator.py` (illustrative):
 
 ```python
 from typing import Any, Dict

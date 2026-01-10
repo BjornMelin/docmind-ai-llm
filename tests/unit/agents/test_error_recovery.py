@@ -157,7 +157,7 @@ class TestAgentErrorRecovery:
         # When: Executing with partial failures
         with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
 
-            def create_mixed_tools(*args, **kwargs):  # pylint: disable=unused-argument
+            def create_mixed_tools(*args, **kwargs):
                 # Only return tools that are available
                 available_tools = []
                 if mock_state["tools_data"]["vector"]:
@@ -237,7 +237,7 @@ class TestAgentErrorRecovery:
         # Simulate memory exhaustion in initial tool aggregation path
         call_count = {"create_tools": 0}
 
-        def memory_exhaustion_simulation(*args, **kwargs):  # pylint: disable=unused-argument
+        def memory_exhaustion_simulation(*args, **kwargs):
             call_count["create_tools"] += 1
             raise MemoryError("Insufficient memory for tool execution")
 

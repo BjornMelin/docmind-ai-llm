@@ -1,9 +1,9 @@
 ---
 ADR: 011
 Title: Agent Orchestration with LangGraph Supervisor
-Status: Accepted
-Version: 6.1
-Date: 2025-08-19
+Status: Accepted (Amended)
+Version: 6.3
+Date: 2026-01-09
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024
@@ -38,11 +38,11 @@ DocMind AI relies on multiple agent roles that must coordinate while preserving 
 
 ### Decision Framework
 
-| Option                       | Simplicity (40%) | Reliability (30%) | Capability (20%) | Effort (10%) | Total | Decision      |
-| --------------------------- | ---------------- | ----------------- | ---------------- | ------------ | ----- | ------------- |
-| LangGraph Supervisor        | 10               | 9                 | 9                | 9            | 9.5   | ✅ Selected    |
-| Manual orchestration        | 3                | 5                 | 8                | 4            | 4.9   | Rejected      |
-| Monolithic agent            | 9                | 4                 | 4                | 8            | 6.1   | Rejected      |
+| Option               | Simplicity (40%) | Reliability (30%) | Capability (20%) | Effort (10%) | Total | Decision    |
+| -------------------- | ---------------- | ----------------- | ---------------- | ------------ | ----- | ----------- |
+| LangGraph Supervisor | 10               | 9                 | 9                | 9            | 9.5   | ✅ Selected |
+| Manual orchestration | 3                | 5                 | 8                | 4            | 4.9   | Rejected    |
+| Monolithic agent     | 9                | 4                 | 4                | 8            | 6.1   | Rejected    |
 
 ## Decision
 
@@ -107,7 +107,7 @@ graph TD
 ### Implementation Details
 
 ```python
-# src/agents/supervisor.py (skeleton)
+# src/agents/coordinator.py (skeleton)
 from langgraph_supervisor import create_supervisor
 
 SUPERVISOR_PROMPT = (
@@ -147,8 +147,8 @@ def create_app(llm, tools):
 - Expose as part of unified settings (ADR‑024)
 
 ```env
-DOCMIND_AGENTS__PARALLEL_TOOL_CALLS=true
-DOCMIND_AGENTS__MAX_PARALLEL_CALLS=3
+DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true
+DOCMIND_AGENTS__MAX_CONCURRENT_AGENTS=3
 DOCMIND_LOG_LEVEL=INFO
 ```
 
@@ -182,7 +182,7 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ### Dependencies
 
-- Python: `langgraph>=0.2`, `langchain-core>=0.3`, `langgraph-supervisor>=0.0.29`
+- Python: `langgraph>=1.0.5`, `langchain-core>=1.2.6`, `langgraph-supervisor>=0.0.31`
 
 ### Ongoing Maintenance & Considerations
 

@@ -4,30 +4,31 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - BACKEND=ollama
-      - CONTEXT_SIZE=32768
-      - QDRANT_URL=http://qdrant:6333
-      # GPU Configuration
-      - NVIDIA_VISIBLE_DEVICES=all
-      - CUDA_VISIBLE_DEVICES=0
-      - VLLM_TORCH_BACKEND=cu128
-      - VLLM_ATTENTION_BACKEND=FLASHINFER
-      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-      - FASTEMBED_CACHE_PATH=/tmp/fastembed_cache
-      - ONNXRUNTIME_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider
+      - DOCMIND_LLM_BACKEND=ollama
+      - DOCMIND_OLLAMA_BASE_URL=http://ollama:11434
+      - DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=http://ollama
+      - DOCMIND_QDRANT__URL=http://qdrant:6333
     volumes:
       - .:/app
       - ./models:/models
-      - gpu_cache:/tmp/fastembed_cache
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       qdrant:
         condition: service_healthy
-    runtime: nvidia
+    networks:
+      - internal
     ipc: host
     shm_size: '2gb'
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["gpu"]
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - internal
+    runtime: nvidia
 
   qdrant:
     image: qdrant/qdrant:gpu-nvidia-latest
@@ -48,8 +49,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - internal
     runtime: nvidia
+
+networks:
+  internal:
+    internal: true
 
 volumes:
   qdrant_storage:
-  gpu_cache:
+  ollama:

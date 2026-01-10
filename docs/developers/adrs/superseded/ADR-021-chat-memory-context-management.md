@@ -1,20 +1,23 @@
 ---
 ADR: 021
 Title: Conversational Memory & Context Management
-Status: Accepted
-Version: 3.2
-Date: 2025-09-02
+Status: Superseded
+Version: 3.3
+Date: 2026-01-09
 Supersedes:
-Superseded-by:
-Related: 001, 003, 013
+Superseded-by: 057
+Related: 001, 003, 013, 043
 Tags: memory, chat, context, streamlit, sqlite
 References:
 - [LlamaIndex — Chat Memory](https://docs.llamaindex.ai/)
+- [ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite)](../ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)
 ---
 
 ## Description
 
 Adopt LlamaIndex ChatMemoryBuffer with SimpleChatStore (SQLite) for persistent chat history and context‑aware follow‑ups within a 128K context budget (ADR‑004/010). Use trimming/condensation as needed.
+
+> Status notice (2026-01-09): Superseded by ADR-057. DocMind adopts LangGraph-native persistence (SQLite checkpointer + store) with time travel and hybrid long-term memory for the final release.
 
 ## Context
 
@@ -35,11 +38,11 @@ Users expect persistent, context‑aware conversations across sessions. 128K win
 
 ### Decision Framework
 
-| Model / Option                 | UX (40%) | Simplicity (30%) | Performance (20%) | Maintenance (10%) | Total | Decision      |
-| ------------------------------ | -------- | ---------------- | ----------------- | ----------------- | ----- | ------------- |
-| Buffer + Store (Selected)      | 9        | 9                | 8                 | 9                 | **8.8** | ✅ Selected    |
-| Session‑only                   | 5        | 10               | 9                 | 10                | 7.3   | Rejected      |
-| Custom layer                   | 7        | 4                | 7                 | 5                 | 5.9   | Rejected      |
+| Model / Option            | UX (40%) | Simplicity (30%) | Performance (20%) | Maintenance (10%) | Total   | Decision    |
+| ------------------------- | -------- | ---------------- | ----------------- | ----------------- | ------- | ----------- |
+| Buffer + Store (Selected) | 9        | 9                | 8                 | 9                 | **8.8** | ✅ Selected |
+| Session‑only              | 5        | 10               | 9                 | 10                | 7.3     | Rejected    |
+| Custom layer              | 7        | 4                | 7                 | 5                 | 5.9     | Rejected    |
 
 ## Decision
 

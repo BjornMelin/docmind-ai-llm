@@ -1,12 +1,12 @@
 ---
 ADR: 033
 Title: Local Backup & Retention
-Status: Proposed (Amended)
-Version: 1.3
-Date: 2025-09-09
+Status: Accepted (Amended)
+Version: 2.0
+Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 030, 031, 032, 038
+Related: 030, 031, 032, 038, 051, 052, 053
 Tags: backup, retention, local-first, offline
 References:
 - [Python shutil — File Operations](https://docs.python.org/3/library/shutil.html)
@@ -36,11 +36,11 @@ Earlier designs discussed background services; the local-first architecture (ADR
 
 ### Decision Framework
 
-| Model / Option                 | Simplicity (40%) | Offline (30%) | Safety (20%) | Maintenance (10%) | Total Score | Decision      |
-| ------------------------------ | ---------------- | ------------- | ------------ | ----------------- | ----------- | ------------- |
-| Manual CLI + Rotation (Sel.)   | 10               | 10            | 9            | 9                 | **9.7**     | ✅ Selected    |
-| Background scheduler           | 5                | 9             | 8            | 6                 | 6.8         | Rejected      |
-| External service               | 6                | 2             | 9            | 7                 | 5.6         | Rejected      |
+| Model / Option               | Simplicity (40%) | Offline (30%) | Safety (20%) | Maintenance (10%) | Total Score | Decision    |
+| ---------------------------- | ---------------- | ------------- | ------------ | ----------------- | ----------- | ----------- |
+| Manual CLI + Rotation (Sel.) | 10               | 10            | 9            | 9                 | **9.7**     | ✅ Selected |
+| Background scheduler         | 5                | 9             | 8            | 6                 | 6.8         | Rejected    |
+| External service             | 6                | 2             | 9            | 7                 | 5.6         | Rejected    |
 
 ## Decision
 
@@ -61,7 +61,7 @@ Include snapshot directories (`storage/<timestamp>`) in retention rules:
 graph TD
   A["User"] --> B["Backup CLI"]
   B --> C["Copy cache.duckdb"]
-  B --> D["Copy Qdrant dir"]
+  B --> D["Create + download Qdrant collection snapshot"]
   B --> E["Copy analytics.duckdb (opt)"]
   B --> F["Copy documents dir (opt)"]
   B --> G["Prune old backups"]
@@ -102,6 +102,7 @@ In `scripts/backup.py` (illustrative):
 ```python
 from pathlib import Path
 import shutil, time
+import qdrant_client
 
 def create_backup(settings, include_docs=False, include_analytics=False):
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -109,7 +110,20 @@ def create_backup(settings, include_docs=False, include_analytics=False):
     dest.mkdir(parents=True, exist_ok=False)
     (dest/"cache").mkdir()
     shutil.copy2(Path(settings.cache_dir)/"docmind.duckdb", dest/"cache"/"docmind.duckdb")
-    shutil.copytree(settings.qdrant_dir, dest/"qdrant")
+    client = qdrant_client.QdrantClient(url=settings.database.qdrant_url)
+    # Prefer server-side snapshots over copying raw storage directories.
+    snapshot = client.create_snapshot(collection_name=settings.database.qdrant_collection)
+    # qdrant-client returns the snapshot name but does not download it directly.
+    # Download via Qdrant REST API:
+    #   GET /collections/{collection_name}/snapshots/{snapshot_name}
+    # and write the response body to dest/"qdrant"/<snapshot_name>.
+    # Implementation guidance:
+    # - Prefer stdlib urllib.request (avoid new deps) unless httpx is justified.
+    # - Offline-first defaults: no external mirror fallbacks; relax TLS verification only for localhost/test endpoints.
+    # - Error handling:
+    #   - If Qdrant is unreachable: log warning, retry N times, then skip Qdrant snapshot.
+    #   - If collection is missing: log warning and skip snapshot.
+    #   - If snapshot creation fails: surface error to caller (do not proceed silently).
     if include_analytics:
         (dest/"analytics").mkdir()
         shutil.copy2(Path(settings.data_dir)/"analytics"/"analytics.duckdb", dest/"analytics"/"analytics.duckdb")
@@ -117,6 +131,8 @@ def create_backup(settings, include_docs=False, include_analytics=False):
         shutil.copytree(settings.documents_dir, dest/"documents")
     return dest
 ```
+
+Note: When ADR‑051 (Documents Snapshot Service Boundary) is accepted, the backup script should call `snapshot_service.create_snapshot()` instead of direct `qdrant_client` operations to unify snapshot orchestration.
 
 ### Configuration
 
@@ -155,6 +171,7 @@ def test_rotation(tmp_path):
 
 ## Changelog
 
+- **v2.0 (2026-01-09)**: Amended with server-side Qdrant snapshots, manifest metadata, CURRENT pointer guardrails, and planned integration with ADR‑051 (snapshot service boundary).
 - 1.3 (2025-09-16): Added CURRENT pointer guardrail, OpenTelemetry retention spans, and stale lock handling guidance.
 - 1.2 (2025-09-16): Clarified snapshot metadata (`manifest.meta.json`, `graph_exports`) and cleanup of `_tmp-*` workspaces / `.lock.stale-*` remnants.
 - 1.1 (2025-09-09): Added snapshot retention guidance and ADR‑038 cross‑link

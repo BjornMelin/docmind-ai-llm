@@ -2,7 +2,7 @@
 
 ## Overview
 
-This comprehensive reference guide covers all configuration options for DocMind AI. The system uses a unified configuration approach with Pydantic Settings v2, providing 30 essential environment variables organized into logical categories with full validation and type safety.
+This reference guide covers all configuration options for DocMind AI. The system uses a unified configuration approach with Pydantic Settings v2, providing 30 essential environment variables organized into logical categories with full validation and type safety.
 
 ## Table of Contents
 
@@ -48,32 +48,32 @@ agent_timeout = settings.agents.decision_timeout # Multi-agent coordination (200
 graph TD
     ENV[Environment Variables] --> PYDANTIC[Pydantic Settings V2]
     PYDANTIC --> ROOT[DocMindSettings]
-    
+
     ROOT --> CORE[Core App Settings]
     ROOT --> VLLM[VLLMConfig]
-    ROOT --> EMBEDDING[EmbeddingConfig]  
+    ROOT --> EMBEDDING[EmbeddingConfig]
     ROOT --> AGENTS[AgentConfig]
     ROOT --> PROCESSING[ProcessingConfig]
     ROOT --> QDRANT[QdrantConfig]
     ROOT --> LLM[LLMConfig]
-    
+
     CORE --> C1[debug: bool]
     CORE --> C2[log_level: str]
     CORE --> C3[base_path: Path]
-    
+
     VLLM --> V1[model: str]
     VLLM --> V2[attention_backend: str]
     VLLM --> V3[gpu_memory_utilization: float]
     VLLM --> V4[kv_cache_dtype: str]
-    
+
     EMBEDDING --> E1[model_name: str]
     EMBEDDING --> E2[max_length: int]
     EMBEDDING --> E3[batch_size: int]
-    
+
     AGENTS --> A1[decision_timeout: int]
     AGENTS --> A2[enable_multi_agent: bool]
     AGENTS --> A3[max_retries: int]
-    
+
     style ROOT fill:#ff9999
     style VLLM fill:#99ccff
     style EMBEDDING fill:#ffcc99
@@ -96,13 +96,13 @@ See the canonical OpenAI-compatible local server configuration below.
 
 ### Core Application Settings
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `DOCMIND_DEBUG` | bool | `false` | Enable debug mode with verbose logging |
-| `DOCMIND_LOG_LEVEL` | str | `"INFO"` | Logging level (DEBUG, INFO, WARNING, ERROR) |
-| `DOCMIND_BASE_PATH` | Path | `"./"` | Base path for application files and cache |
-| `DOCMIND_APP_NAME` | str | `"DocMind AI"` | Application display name |
-| `DOCMIND_APP_VERSION` | str | `"2.0.0"` | Application version |
+| Variable              | Type | Default        | Description                                 |
+| --------------------- | ---- | -------------- | ------------------------------------------- |
+| `DOCMIND_DEBUG`       | bool | `false`        | Enable debug mode with verbose logging      |
+| `DOCMIND_LOG_LEVEL`   | str  | `"INFO"`       | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `DOCMIND_BASE_PATH`   | Path | `"./"`         | Base path for application files and cache   |
+| `DOCMIND_APP_NAME`    | str  | `"DocMind AI"` | Application display name                    |
+| `DOCMIND_APP_VERSION` | str  | `"2.0.0"`      | Application version                         |
 
 **Example Configuration:**
 
@@ -117,15 +117,15 @@ DOCMIND_APP_VERSION=2.0.0
 
 ### vLLM Backend Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `DOCMIND_VLLM__MODEL` | str | `"Qwen/Qwen3-4B-Instruct-2507-FP8"` | Model name for vLLM backend |
-| `DOCMIND_VLLM__ATTENTION_BACKEND` | str | `"FLASHINFER"` | Attention backend (FLASHINFER recommended) |
-| `DOCMIND_VLLM__GPU_MEMORY_UTILIZATION` | float | `0.85` | GPU memory utilization (0.0-1.0) |
-| `DOCMIND_VLLM__KV_CACHE_DTYPE` | str | `"fp8_e5m2"` | KV cache data type for memory optimization |
-| `DOCMIND_VLLM__MAX_MODEL_LEN` | int | `131072` | Maximum context length (128K tokens) |
-| `DOCMIND_VLLM__ENFORCE_EAGER` | bool | `false` | Disable graph optimization for FlashInfer |
-| `DOCMIND_VLLM__DTYPE` | str | `"auto"` | Model precision (auto, fp16, fp8) |
+| Variable                               | Type  | Default                             | Description                                |
+| -------------------------------------- | ----- | ----------------------------------- | ------------------------------------------ |
+| `DOCMIND_VLLM__MODEL`                  | str   | `"Qwen/Qwen3-4B-Instruct-2507-FP8"` | Model name for vLLM backend                |
+| `DOCMIND_VLLM__ATTENTION_BACKEND`      | str   | `"FLASHINFER"`                      | Attention backend (FLASHINFER recommended) |
+| `DOCMIND_VLLM__GPU_MEMORY_UTILIZATION` | float | `0.85`                              | GPU memory utilization (0.0-1.0)           |
+| `DOCMIND_VLLM__KV_CACHE_DTYPE`         | str   | `"fp8_e5m2"`                        | KV cache data type for memory optimization |
+| `DOCMIND_VLLM__MAX_MODEL_LEN`          | int   | `131072`                            | Maximum context length (128K tokens)       |
+| `DOCMIND_VLLM__ENFORCE_EAGER`          | bool  | `false`                             | Disable graph optimization for FlashInfer  |
+| `DOCMIND_VLLM__DTYPE`                  | str   | `"auto"`                            | Model precision (auto, fp16, fp8)          |
 
 **Example Configuration:**
 
@@ -142,13 +142,13 @@ DOCMIND_VLLM__DTYPE=auto
 
 ### LLM Backend Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `DOCMIND_LLM_BACKEND` | str | `"vllm"` | LLM backend type (vllm, ollama, openai) |
-| `DOCMIND_LLM__BASE_URL` | str | `"http://localhost:11434"` | LLM service base URL |
-| `DOCMIND_LLM__MODEL` | str | `"Qwen/Qwen3-4B-Instruct-2507-FP8"` | Model name |
-| `DOCMIND_LLM__TIMEOUT` | int | `300` | Request timeout in seconds |
-| `DOCMIND_LLM__MAX_RETRIES` | int | `3` | Maximum retry attempts |
+| Variable                   | Type | Default                             | Description                             |
+| -------------------------- | ---- | ----------------------------------- | --------------------------------------- |
+| `DOCMIND_LLM_BACKEND`      | str  | `"vllm"`                            | LLM backend type (vllm, ollama, openai) |
+| `DOCMIND_LLM__BASE_URL`    | str  | `"http://localhost:11434"`          | LLM service base URL                    |
+| `DOCMIND_LLM__MODEL`       | str  | `"Qwen/Qwen3-4B-Instruct-2507-FP8"` | Model name                              |
+| `DOCMIND_LLM__TIMEOUT`     | int  | `300`                               | Request timeout in seconds              |
+| `DOCMIND_LLM__MAX_RETRIES` | int  | `3`                                 | Maximum retry attempts                  |
 
 **Example Configuration:**
 
@@ -163,13 +163,13 @@ DOCMIND_LLM__MAX_RETRIES=3
 
 ### BGE-M3 Embedding Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `DOCMIND_EMBEDDING__MODEL_NAME` | str | `"BAAI/bge-m3"` | BGE-M3 model name |
-| `DOCMIND_EMBEDDING__MAX_LENGTH` | int | `8192` | Maximum token length for embeddings |
-| `DOCMIND_EMBEDDING__BATCH_SIZE` | int | `32` | Batch size for embedding generation |
-| `DOCMIND_EMBEDDING__NORMALIZE_EMBEDDINGS` | bool | `true` | L2 normalize embeddings |
-| `DOCMIND_EMBEDDING__USE_FP16` | bool | `true` | Use FP16 precision for GPU acceleration |
+| Variable                                  | Type | Default         | Description                             |
+| ----------------------------------------- | ---- | --------------- | --------------------------------------- |
+| `DOCMIND_EMBEDDING__MODEL_NAME`           | str  | `"BAAI/bge-m3"` | BGE-M3 model name                       |
+| `DOCMIND_EMBEDDING__MAX_LENGTH`           | int  | `8192`          | Maximum token length for embeddings     |
+| `DOCMIND_EMBEDDING__BATCH_SIZE`           | int  | `32`            | Batch size for embedding generation     |
+| `DOCMIND_EMBEDDING__NORMALIZE_EMBEDDINGS` | bool | `true`          | L2 normalize embeddings                 |
+| `DOCMIND_EMBEDDING__USE_FP16`             | bool | `true`          | Use FP16 precision for GPU acceleration |
 
 **Example Configuration:**
 
@@ -184,13 +184,13 @@ DOCMIND_EMBEDDING__USE_FP16=true
 
 ### Multi-Agent System Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `DOCMIND_AGENTS__ENABLE_MULTI_AGENT` | bool | `true` | Enable 5-agent coordination system |
-| `DOCMIND_AGENTS__DECISION_TIMEOUT` | int | `200` | Agent decision timeout in milliseconds |
-| `DOCMIND_AGENTS__MAX_RETRIES` | int | `2` | Maximum retry attempts per agent |
-| `DOCMIND_AGENTS__ENABLE_FALLBACK_RAG` | bool | `true` | Enable fallback to single-agent RAG |
-| `DOCMIND_AGENTS__CONCURRENT_AGENTS` | int | `3` | Maximum concurrent agent execution |
+| Variable                              | Type | Default | Description                            |
+| ------------------------------------- | ---- | ------- | -------------------------------------- |
+| `DOCMIND_AGENTS__ENABLE_MULTI_AGENT`  | bool | `true`  | Enable 5-agent coordination system     |
+| `DOCMIND_AGENTS__DECISION_TIMEOUT`    | int  | `200`   | Agent decision timeout in milliseconds |
+| `DOCMIND_AGENTS__MAX_RETRIES`         | int  | `2`     | Maximum retry attempts per agent       |
+| `DOCMIND_AGENTS__ENABLE_FALLBACK_RAG` | bool | `true`  | Enable fallback to single-agent RAG    |
+| `DOCMIND_AGENTS__CONCURRENT_AGENTS`   | int  | `3`     | Maximum concurrent agent execution     |
 
 **Example Configuration:**
 
@@ -205,13 +205,13 @@ DOCMIND_AGENTS__CONCURRENT_AGENTS=3
 
 ### Document Processing Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `DOCMIND_PROCESSING__CHUNK_SIZE` | int | `1500` | Document chunk size in tokens |
-| `DOCMIND_PROCESSING__CHUNK_OVERLAP` | int | `150` | Overlap between chunks in tokens |
-| `DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB` | int | `100` | Maximum document size in MB |
-| `DOCMIND_PROCESSING__ENABLE_OCR` | bool | `true` | Enable OCR for image-based documents |
-| `DOCMIND_PROCESSING__SPACY_MODEL` | str | `"en_core_web_sm"` | spaCy model for NLP processing |
+| Variable                                   | Type | Default            | Description                          |
+| ------------------------------------------ | ---- | ------------------ | ------------------------------------ |
+| `DOCMIND_PROCESSING__CHUNK_SIZE`           | int  | `1500`             | Document chunk size in tokens        |
+| `DOCMIND_PROCESSING__CHUNK_OVERLAP`        | int  | `150`              | Overlap between chunks in tokens     |
+| `DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB` | int  | `100`              | Maximum document size in MB          |
+| `DOCMIND_PROCESSING__ENABLE_OCR`           | bool | `true`             | Enable OCR for image-based documents |
+| `DOCMIND_PROCESSING__SPACY_MODEL`          | str  | `"en_core_web_sm"` | spaCy model for NLP processing       |
 
 **Example Configuration:**
 
@@ -226,13 +226,13 @@ DOCMIND_PROCESSING__SPACY_MODEL=en_core_web_sm
 
 ### Qdrant Vector Database Configuration
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `DOCMIND_QDRANT__URL` | str | `"http://localhost:6333"` | Qdrant service URL |
-| `DOCMIND_QDRANT__COLLECTION_NAME` | str | `"docmind_vectors"` | Collection name for vectors |
-| `DOCMIND_QDRANT__VECTOR_SIZE` | int | `1024` | BGE-M3 dense embedding dimension |
-| `DOCMIND_QDRANT__DISTANCE_METRIC` | str | `"Cosine"` | Distance metric for similarity search |
-| `DOCMIND_QDRANT__ENABLE_HYBRID_SEARCH` | bool | `true` | Enable dense + sparse hybrid search |
+| Variable                               | Type | Default                   | Description                           |
+| -------------------------------------- | ---- | ------------------------- | ------------------------------------- |
+| `DOCMIND_QDRANT__URL`                  | str  | `"http://localhost:6333"` | Qdrant service URL                    |
+| `DOCMIND_QDRANT__COLLECTION_NAME`      | str  | `"docmind_vectors"`       | Collection name for vectors           |
+| `DOCMIND_QDRANT__VECTOR_SIZE`          | int  | `1024`                    | BGE-M3 dense embedding dimension      |
+| `DOCMIND_QDRANT__DISTANCE_METRIC`      | str  | `"Cosine"`                | Distance metric for similarity search |
+| `DOCMIND_QDRANT__ENABLE_HYBRID_SEARCH` | bool | `true`                    | Enable dense + sparse hybrid search   |
 
 **Example Configuration:**
 
@@ -537,23 +537,23 @@ All user flexibility settings have been successfully restored and thoroughly val
 
 ### Qwen3-4B-Instruct-2507-FP8 Specifications
 
-| Specification | Value | Notes |
-|---------------|-------|-------|
-| **Model Name** | Qwen3-4B-Instruct-2507-FP8 | Latest 2507 designation (July 2024) |
-| **Parameters** | 4.23B parameters | Optimized parameter count |
-| **Context Window** | 131,072 tokens (128K) | Industry-leading context capacity |
-| **Quantization** | FP8 precision with FP8 KV cache | 50% memory reduction |
-| **Architecture** | Transformer with optimized attention | FlashInfer backend support |
-| **Training Cutoff** | July 2024 (2507 designation) | Most recent training data |
+| Specification       | Value                                | Notes                               |
+| ------------------- | ------------------------------------ | ----------------------------------- |
+| **Model Name**      | Qwen3-4B-Instruct-2507-FP8           | Latest 2507 designation (July 2024) |
+| **Parameters**      | 4.23B parameters                     | Optimized parameter count           |
+| **Context Window**  | 131,072 tokens (128 K)               | Industry-leading context capacity   |
+| **Quantization**    | FP8 precision with FP8 KV cache      | 50% memory reduction                |
+| **Architecture**    | Transformer with optimized attention | FlashInfer backend support          |
+| **Training Cutoff** | July 2024 (2507 designation)         | Most recent training data           |
 
 ### Performance Targets
 
-| Metric | Target Range | Achieved with FlashInfer | Hardware |
-|--------|--------------|--------------------------|----------|
-| **Decode Speed** | 100-160 tok/s | 120-180 tok/s | RTX 4090 |
-| **Prefill Speed** | 800-1300 tok/s | 900-1400 tok/s | RTX 4090 |
-| **VRAM Usage** | 12-14GB target | 12-14GB for 128K context | 16GB total |
-| **Context Utilization** | Up to 120K tokens | 131,072 tokens supported | With 8K buffer |
+| Metric                  | Target Range      | Achieved with FlashInfer | Hardware       |
+| ----------------------- | ----------------- | ------------------------ | -------------- |
+| **Decode Speed**        | 100–160 tok/s     | 120–180 tok/s            | RTX 4090       |
+| **Prefill Speed**       | 800–1300 tok/s    | 900–1400 tok/s           | RTX 4090       |
+| **VRAM Usage**          | 12–14 GB target   | 12–14 GB for 128 K context | 16 GB total   |
+| **Context Utilization** | Up to 120 K tokens | 131,072 tokens supported | With 8K buffer |
 
 ### Model-Specific Environment Variables
 
@@ -575,14 +575,14 @@ export QWEN_TARGET_VRAM_GB=14
 
 ### BGE-M3 Unified Embeddings
 
-| Feature | Specification | Benefit |
-|---------|---------------|---------|
-| **Architecture** | Unified dense + sparse model | Single model for both embedding types |
-| **Dense Dimension** | 1024D vectors | High-quality semantic representation |
-| **Sparse Support** | Native sparse embeddings | Keyword-based retrieval capability |
-| **Context Window** | 8192 tokens | 16x improvement over legacy (512 tokens) |
-| **Multilingual** | 100+ languages | Global document support |
-| **Optimization** | FP16 acceleration | 50% performance improvement on RTX 4090 |
+| Feature             | Specification                | Benefit                                  |
+| ------------------- | ---------------------------- | ---------------------------------------- |
+| **Architecture**    | Unified dense + sparse model | Single model for both embedding types    |
+| **Dense Dimension** | 1024D vectors                | High-quality semantic representation     |
+| **Sparse Support**  | Native sparse embeddings     | Keyword-based retrieval capability       |
+| **Context Window**  | 8192 tokens                  | 16x improvement over legacy (512 tokens) |
+| **Multilingual**    | 100+ languages               | Global document support                  |
+| **Optimization**    | FP16 acceleration            | 50% performance improvement on RTX 4090  |
 
 ## GPU & Performance Tuning
 
@@ -676,48 +676,48 @@ DocMind AI provides comprehensive configuration validation:
 # Configuration validation patterns
 class VLLMConfig(BaseModel):
     """vLLM configuration with comprehensive validation."""
-    
+
     model: str = Field(
         default="Qwen/Qwen3-4B-Instruct-2507-FP8",
         description="vLLM model name or path"
     )
-    
+
     attention_backend: str = Field(
         default="FLASHINFER",
         pattern="^(FLASHINFER|XFORMERS|PYTORCH)$",
         description="Attention backend implementation"
     )
-    
+
     gpu_memory_utilization: float = Field(
         default=0.85,
         ge=0.1,  # Minimum 10% GPU usage
         le=0.95, # Maximum 95% to prevent OOM
         description="GPU memory utilization fraction"
     )
-    
+
     kv_cache_dtype: str = Field(
         default="fp8_e5m2",
         pattern="^(auto|fp16|fp8_e5m2|fp8_e4m3)$",
         description="KV cache data type for memory optimization"
     )
-    
+
     @model_validator(mode="after")
     def validate_performance_settings(self) -> "VLLMConfig":
         """Validate performance-related settings."""
-        
+
         # Warn about non-optimal settings
         if self.attention_backend != "FLASHINFER":
             warnings.warn(
                 f"Using {self.attention_backend} backend. FLASHINFER recommended for RTX 4090.",
                 UserWarning
             )
-        
+
         if self.kv_cache_dtype not in ["fp8_e5m2", "fp8_e4m3"]:
             warnings.warn(
                 "Consider using FP8 KV cache for better memory efficiency.",
                 UserWarning
             )
-        
+
         return self
 ```
 
@@ -767,45 +767,45 @@ from src.config import settings
 # Validate configuration changes
 def update_agent_timeout(new_timeout: int) -> bool:
     """Update agent timeout with validation."""
-    
+
     if new_timeout < 50:
         logger.warning("Agent timeout too low, may cause failures")
         return False
-    
+
     if new_timeout > 1000:
         logger.warning("Agent timeout very high, may impact user experience")
         return False
-    
+
     # Update configuration
     settings.agents.decision_timeout = new_timeout
     logger.info(f"Agent timeout updated to {new_timeout}ms")
-    
+
     return True
 
 # Configuration monitoring
 def monitor_configuration_drift():
     """Monitor for configuration drift from recommended values."""
-    
+
     recommendations = []
-    
+
     # Check GPU utilization
     if settings.vllm.gpu_memory_utilization < 0.8:
         recommendations.append(
             "Consider increasing GPU memory utilization for better performance"
         )
-    
+
     # Check agent timeout
     if settings.agents.decision_timeout > 200:
         recommendations.append(
             "Agent timeout exceeds ADR-011 recommendation of ≤200ms"
         )
-    
+
     # Check embedding model
     if settings.embedding.model_name != "BAAI/bge-m3":
         recommendations.append(
             "Using non-standard embedding model, BGE-M3 recommended per ADR-002"
         )
-    
+
     return recommendations
 ```
 
@@ -887,7 +887,7 @@ PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128,garbage_collection_threshold:0.8
 
 ```yaml
 # docker-compose.production.yml
-version: '3.8'
+version: "3.8"
 
 services:
   docmind-ai:
@@ -896,17 +896,17 @@ services:
       # Core settings
       - DOCMIND_DEBUG=false
       - DOCMIND_LOG_LEVEL=INFO
-      
+
       # GPU optimization
       - NVIDIA_VISIBLE_DEVICES=0
       - VLLM_ATTENTION_BACKEND=FLASHINFER
       - VLLM_GPU_MEMORY_UTILIZATION=0.85
       - VLLM_KV_CACHE_DTYPE=fp8_e5m2
-      
+
       # Service URLs
       - DOCMIND_QDRANT__URL=http://qdrant:6333
       - DOCMIND_LLM__BASE_URL=http://localhost:11434
-      
+
     deploy:
       resources:
         reservations:
@@ -914,20 +914,20 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    
+
     depends_on:
       - qdrant
-    
+
     ports:
       - "8501:8501"
-      
+
   qdrant:
     image: qdrant/qdrant:v1.7.0
     ports:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
-      
+
 volumes:
   qdrant_data:
 ```
@@ -988,16 +988,16 @@ if torch.cuda.is_available():
 # Configuration diagnostics
 def diagnose_configuration():
     """Comprehensive configuration diagnostics."""
-    
+
     print("=== CONFIGURATION DIAGNOSTICS ===")
-    
+
     try:
         from src.config import settings
         print("✅ Configuration loaded successfully")
     except Exception as e:
         print(f"❌ Configuration loading failed: {e}")
         return
-    
+
     # Check critical settings
     checks = [
         ("Model", settings.vllm.model, "Qwen/Qwen3-4B-Instruct-2507-FP8"),
@@ -1006,23 +1006,23 @@ def diagnose_configuration():
         ("GPU Memory", settings.vllm.gpu_memory_utilization, lambda x: 0.7 <= x <= 0.95),
         ("Attention Backend", settings.vllm.attention_backend, "FLASHINFER")
     ]
-    
+
     for name, actual, expected in checks:
         if callable(expected):
             status = "✅" if expected(actual) else "⚠️"
         else:
             status = "✅" if actual == expected else "⚠️"
-        
+
         print(f"{status} {name}: {actual}")
-    
+
     # Environment variables check
     import os
     critical_vars = [
         "VLLM_ATTENTION_BACKEND",
-        "VLLM_KV_CACHE_DTYPE", 
+        "VLLM_KV_CACHE_DTYPE",
         "VLLM_GPU_MEMORY_UTILIZATION"
     ]
-    
+
     print("\n=== ENVIRONMENT VARIABLES ===")
     for var in critical_vars:
         value = os.environ.get(var, "NOT SET")
@@ -1051,7 +1051,7 @@ agent_decision_timeout: int = Field(default=200, ge=10, le=1000)
 
 # Evidence of usage:
 # Production: Agent coordination loops, timeout enforcement
-# Tests: Performance validation, timeout testing  
+# Tests: Performance validation, timeout testing
 # ADR Status: ✅ COMPLIANT - Matches ADR-024 specification
 ```
 
@@ -1072,7 +1072,7 @@ model_name: str = Field(default="Qwen/Qwen3-4B-Instruct-2507-FP8")
 **Embedding Configuration**:
 
 ```python
-# embedding.model_name - CORE USAGE  
+# embedding.model_name - CORE USAGE
 # Used in: src/utils/embedding.py, document processing pipeline
 # ADR compliance: ADR-002 Unified Embedding Strategy
 model_name: str = Field(default="BAAI/bge-m3")  # In EmbeddingConfig
@@ -1090,7 +1090,7 @@ model_name: str = Field(default="BAAI/bge-m3")  # In EmbeddingConfig
 ```python
 # gpu_memory_utilization - PERFORMANCE USAGE
 # Used in: GPU optimization, memory monitoring
-# ADR compliance: ADR-010 Performance Optimization Strategy  
+# ADR compliance: ADR-010 Performance Optimization Strategy
 gpu_memory_utilization: float = Field(default=0.85, ge=0.1, le=0.95)
 
 # Evidence of usage:
@@ -1139,7 +1139,7 @@ enable_dspy_optimization: bool = Field(default=False)
 # log_file - Production logging only
 log_file: Path = Field(default=Path("./logs/docmind.log"))
 
-# sqlite_db_path - Production persistence only  
+# sqlite_db_path - Production persistence only
 sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 
 # Usage pattern: Production file system operations
@@ -1158,7 +1158,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 # System tests: True (production validation)
 
 # agent_decision_timeout - Test optimization
-# Production: 200ms (ADR-024)  
+# Production: 200ms (ADR-024)
 # Unit tests: 100ms (faster test execution)
 # Integration tests: 150ms (moderate realism)
 # System tests: 200ms (production validation)
@@ -1170,7 +1170,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 
 ```python
 # model_name - Consistent across environments
-# Production: "Qwen/Qwen3-4B-Instruct-2507-FP8" 
+# Production: "Qwen/Qwen3-4B-Instruct-2507-FP8"
 # All test tiers: Same model for integration fidelity
 
 # embedding.model_name - ADR-002 compliance universal
@@ -1181,15 +1181,15 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 
 #### Configuration ADR Compliance Status
 
-| Configuration Field | ADR Reference | Current Value | Compliance Status | Notes |
-|---------------------|---------------|---------------|-------------------|-------|
-| `agent_decision_timeout` | ADR-024 | 200ms | ✅ COMPLIANT | Meets performance requirement |
-| `embedding.model_name` | ADR-002 | "BAAI/bge-m3" | ✅ COMPLIANT | Unified embedding strategy |
-| `model_name` | ADR-004 | "Qwen/Qwen3-4B-Instruct-2507-FP8" | ✅ COMPLIANT | Local-first LLM |
-| `vllm_kv_cache_dtype` | ADR-010 | "fp8_e5m2" | ✅ COMPLIANT | Performance optimization |
-| `enable_multi_agent` | ADR-011 | True | ✅ COMPLIANT | Multi-agent coordination |
-| `chunk_size` | ADR-009 | 512 | ✅ COMPLIANT | Document processing |
-| `enable_fallback_rag` | ADR-011 | True | ✅ COMPLIANT | Agent fallback system |
+| Configuration Field      | ADR Reference | Current Value                     | Compliance Status | Notes                         |
+| ------------------------ | ------------- | --------------------------------- | ----------------- | ----------------------------- |
+| `agent_decision_timeout` | ADR-024       | 200ms                             | ✅ COMPLIANT      | Meets performance requirement |
+| `embedding.model_name`   | ADR-002       | "BAAI/bge-m3"                     | ✅ COMPLIANT      | Unified embedding strategy    |
+| `model_name`             | ADR-004       | "Qwen/Qwen3-4B-Instruct-2507-FP8" | ✅ COMPLIANT      | Local-first LLM               |
+| `vllm_kv_cache_dtype`    | ADR-010       | "fp8_e5m2"                        | ✅ COMPLIANT      | Performance optimization      |
+| `enable_multi_agent`     | ADR-011       | True                              | ✅ COMPLIANT      | Multi-agent coordination      |
+| `chunk_size`             | ADR-009       | 512                               | ✅ COMPLIANT      | Document processing           |
+| `enable_fallback_rag`    | ADR-011       | True                              | ✅ COMPLIANT      | Agent fallback system         |
 
 #### Historical ADR Violations (Resolved)
 
@@ -1200,7 +1200,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 # Before: agent_decision_timeout: int = Field(default=300) # ❌ 50% performance loss
 # After:  agent_decision_timeout: int = Field(default=200) # ✅ ADR-compliant
 
-# RESOLVED: embedding_model was bge-large-en-v1.5 (violated ADR-002)  
+# RESOLVED: embedding_model was bge-large-en-v1.5 (violated ADR-002)
 # Before: embedding_model: str = Field(default="BAAI/bge-large-en-v1.5") # ❌ Wrong model
 # After:  model_name: str = Field(default="BAAI/bge-m3") # ✅ ADR-compliant (in EmbeddingConfig)
 ```
@@ -1212,7 +1212,7 @@ sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
 **Category 1: Critical Production Fields (100% usage)**:
 
 - `model_name` - Model selection and loading
-- `embedding.model_name` - Embedding generation  
+- `embedding.model_name` - Embedding generation
 - `agent_decision_timeout` - Performance compliance
 - `enable_multi_agent` - Core functionality flag
 
@@ -1270,6 +1270,7 @@ DOCMIND_OPENAI__API_KEY=not-needed
 ```
 
 Notes:
+
 - `BASE_URL` must include a single `/v1`. Do not include endpoint paths (e.g., `/chat/completions`).
 - A placeholder `API_KEY` is accepted for local servers; many clients require a non-empty token but it is not used.
 - Security policy defaults to local-only. Non-loopback hosts require enabling remote endpoints:
@@ -1286,7 +1287,7 @@ To use OpenAI cloud instead of a local server:
 
 ```env
 DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1
-DOCMIND_OPENAI__API_KEY=sk-...
+DOCMIND_OPENAI__API_KEY=sk-…
 DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
 ```
 
@@ -1294,20 +1295,22 @@ This breaks strict offline operation; ensure network egress is acceptable in you
 
 ### Local vs Cloud Configuration Matrix
 
-| Mode | Backend | Required Vars | Example Values |
-|------|---------|---------------|----------------|
-| Local (default) | LM Studio | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY` | `lmstudio`, `http://localhost:1234/v1`, `not-needed` |
-| Local (default) | vLLM (OpenAI server) | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY` | `vllm`, `http://localhost:8000/v1`, `not-needed` |
-| Local (default) | llama.cpp server | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY` | `llamacpp`, `http://localhost:8080/v1`, `not-needed` |
-| Local (GGUF file) | llama.cpp local | `DOCMIND_LLM_BACKEND`, `DOCMIND_VLLM__LLAMACPP_MODEL_PATH` | `llamacpp`, `/path/to/model.gguf` |
-| Cloud (optional) | OpenAI | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`, `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` | e.g., `lmstudio`, `https://api.openai.com/v1`, `sk-...`, `true` |
+| Mode              | Backend              | Required Vars                                                                                                            | Example Values                                                  |
+| ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Local (default)   | LM Studio            | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`                                             | `lmstudio`, `http://localhost:1234/v1`, `not-needed`            |
+| Local (default)   | vLLM (OpenAI server) | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`                                             | `vllm`, `http://localhost:8000/v1`, `not-needed`                |
+| Local (default)   | llama.cpp server     | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`                                             | `llamacpp`, `http://localhost:8080/v1`, `not-needed`            |
+| Local (GGUF file) | llama.cpp local      | `DOCMIND_LLM_BACKEND`, `DOCMIND_VLLM__LLAMACPP_MODEL_PATH`                                                               | `llamacpp`, `/path/to/model.gguf`                               |
+| Cloud (optional)  | OpenAI               | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`, `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` | e.g., `lmstudio`, `https://api.openai.com/v1`, `sk-…`, `true` |
 
 Notes:
+
 - For cloud usage, review allowlists (`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`) and security posture.
 - Base URL normalization enforces a single `/v1` and rejects endpoint paths in base URLs.
-2. **Model selection fields** - Critical for inference pipeline  
-3. **Performance tuning parameters** - Directly impact user experience
-4. **GPU optimization settings** - Hardware utilization efficiency
+
+1. **Model selection fields** - Critical for inference pipeline
+2. **Performance tuning parameters** - Directly impact user experience
+3. **GPU optimization settings** - Hardware utilization efficiency
 
 #### Fields with Low Usage (Review for Removal)
 
@@ -1316,7 +1319,7 @@ Notes:
 ```python
 # Low-usage fields identified for review:
 enable_performance_logging: bool = Field(default=False)  # <20% usage
-debug_mode: bool = Field(default=False)                  # <15% usage 
+debug_mode: bool = Field(default=False)                  # <15% usage
 verbose_logging: bool = Field(default=False)             # <10% usage
 
 # Recommendation: Consolidate into simpler log_level management
@@ -1329,7 +1332,7 @@ verbose_logging: bool = Field(default=False)             # <10% usage
 ```python
 # Potential consolidation opportunities:
 log_level: str = Field(default="INFO")           # Standard logging
-debug: bool = Field(default=False)               # Debug toggle  
+debug: bool = Field(default=False)               # Debug toggle
 enable_performance_logging: bool = Field(default=False)  # Performance logs
 
 # Recommendation: Use log_level exclusively with values: DEBUG, INFO, WARNING, ERROR
@@ -1342,9 +1345,9 @@ enable_performance_logging: bool = Field(default=False)  # Performance logs
 ```python
 def validate_production_configuration_requirements() -> Dict[str, Any]:
     """Validate configuration meets production usage requirements."""
-    
+
     from src.config import settings
-    
+
     validation_report = {
         "timestamp": datetime.utcnow().isoformat(),
         "overall_status": "valid",
@@ -1352,7 +1355,7 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
         "adr_compliance": {},
         "usage_patterns": {}
     }
-    
+
     # Core field validation
     core_fields = {
         "model_name": settings.vllm.model,
@@ -1360,7 +1363,7 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
         "agent_decision_timeout": settings.agents.decision_timeout,
         "enable_multi_agent": settings.agents.enable_multi_agent
     }
-    
+
     for field_name, value in core_fields.items():
         validation_report["field_analysis"][field_name] = {
             "value": value,
@@ -1368,7 +1371,7 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
             "production_required": True,
             "test_override_common": field_name in ["agent_decision_timeout"]
         }
-    
+
     # ADR compliance verification
     adr_checks = {
         "adr_002_bge_m3": settings.embedding.model_name == "BAAI/bge-m3",
@@ -1376,7 +1379,7 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
         "adr_010_fp8_cache": settings.vllm.kv_cache_dtype == "fp8_e5m2",
         "adr_011_multi_agent": settings.agents.enable_multi_agent is True
     }
-    
+
     validation_report["adr_compliance"] = {
         check_name: {
             "compliant": result,
@@ -1384,13 +1387,13 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
         }
         for check_name, result in adr_checks.items()
     }
-    
+
     # Check for non-compliant ADRs
     failed_adrs = [name for name, result in adr_checks.items() if not result]
     if failed_adrs:
         validation_report["overall_status"] = "adr_violations"
         validation_report["failed_adrs"] = failed_adrs
-    
+
     return validation_report
 ```
 
@@ -1399,21 +1402,21 @@ def validate_production_configuration_requirements() -> Dict[str, Any]:
 ```python
 def analyze_configuration_usage_patterns() -> Dict[str, Any]:
     """Analyze actual configuration usage patterns across codebase."""
-    
+
     import subprocess
     from pathlib import Path
-    
+
     usage_analysis = {
         "analysis_timestamp": datetime.utcnow().isoformat(),
         "field_usage": {},
         "usage_categories": {
             "high_usage": [],      # >80% usage across codebase
-            "medium_usage": [],    # 40-80% usage  
+            "medium_usage": [],    # 40-80% usage
             "low_usage": [],       # <40% usage
             "unused": []           # No detected usage
         }
     }
-    
+
     # Configuration fields to analyze
     config_fields = [
         "model_name", "embedding_model", "agent_decision_timeout",
@@ -1421,20 +1424,20 @@ def analyze_configuration_usage_patterns() -> Dict[str, Any]:
         "context_window_size", "enable_fallback_rag", "log_level",
         "debug", "enable_performance_logging"
     ]
-    
+
     project_root = Path(__file__).parent.parent.parent
-    
+
     for field in config_fields:
         # Search for field usage in source code
         try:
             result = subprocess.run([
-                "rg", f"settings\\..*{field}|{field}.*=", 
+                "rg", f"settings\\..*{field}|{field}.*=",
                 str(project_root / "src"),
                 "--type", "py", "--count"
             ], capture_output=True, text=True)
-            
+
             usage_count = len(result.stdout.strip().split('\n')) if result.stdout.strip() else 0
-            
+
             # Categorize usage level
             if usage_count >= 8:
                 usage_categories["high_usage"].append(field)
@@ -1448,22 +1451,22 @@ def analyze_configuration_usage_patterns() -> Dict[str, Any]:
             else:
                 usage_categories["unused"].append(field)
                 usage_level = "unused"
-            
+
             usage_analysis["field_usage"][field] = {
                 "usage_count": usage_count,
                 "usage_level": usage_level,
                 "production_critical": field in [
-                    "model_name", "embedding_model", 
+                    "model_name", "embedding_model",
                     "agent_decision_timeout", "enable_multi_agent"
                 ]
             }
-            
+
         except Exception as e:
             usage_analysis["field_usage"][field] = {
                 "error": str(e),
                 "usage_level": "unknown"
             }
-    
+
     return usage_analysis
 ```
 
@@ -1547,9 +1550,9 @@ Notes:
 
 ### Reranking & Device Feature Flags (Advanced)
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| DOCMIND_RETRIEVAL__SIGLIP_ADAPTER_UNIFIED | bool | true | Use shared vision_siglip.load_siglip in adapter to ensure consistent caching and device placement. |
-| DOCMIND_RETRIEVAL__RERANK_EXECUTOR | str | thread | Executor for rerank timeouts: thread (default) or process (strict isolation). |
+| Variable                                    | Type | Default | Description                                                                                        |
+| ------------------------------------------- | ---- | ------- | -------------------------------------------------------------------------------------------------- |
+| DOCMIND_RETRIEVAL\_\_SIGLIP_ADAPTER_UNIFIED | bool | true    | Use shared vision_siglip.load_siglip in adapter to ensure consistent caching and device placement. |
+| DOCMIND_RETRIEVAL\_\_RERANK_EXECUTOR        | str  | thread  | Executor for rerank timeouts: thread (default) or process (strict isolation).                      |
 
 These flags support canary rollouts on GPU fleets to monitor OOM rate, P95 latency, and timeout counts. The device and VRAM policy is always centralized via `src.utils.core` (e.g., `select_device`, `resolve_device`, `has_cuda_vram`) and does not require a feature flag. The SigLIP adapter unification and the rerank executor remain configurable for operational flexibility.

@@ -15,7 +15,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-_TELEM_PATH = Path("./logs/telemetry.jsonl")
+TELEMETRY_JSONL_PATH = Path("./logs/telemetry.jsonl")
+# Public constant for consumers that need the canonical telemetry path.
+_TELEM_PATH = TELEMETRY_JSONL_PATH
 
 # Context-managed request id (optional). When set, it will be added to events.
 _REQUEST_ID: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -94,4 +96,4 @@ def log_jsonl(event: dict[str, Any]) -> None:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-__all__ = ["log_jsonl"]
+__all__ = ["TELEMETRY_JSONL_PATH", "log_jsonl"]

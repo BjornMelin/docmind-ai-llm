@@ -8,7 +8,7 @@ status: Final
 related_requirements:
   - FR-PKG-001: Provide CLI to pre-download models to cache.
   - NFR-PORT-002: Cross-platform paths and cache env overrides.
-related_adrs: ["ADR-010"]
+related_adrs: ["ADR-040"]
 ---
 
 

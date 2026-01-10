@@ -33,7 +33,7 @@ def test_allow_local_loopback_hosts_ok():
         llamacpp_base_url="http://[::1]:8080/v1",
     )
     # Should not raise
-    s._validate_endpoints_security()  # pylint: disable=protected-access
+    s._validate_endpoints_security()
 
 
 def test_disallow_spoofed_localhost_prefix():
@@ -58,7 +58,7 @@ def test_allow_explicit_allowlisted_host():
         vllm_base_url="https://api.example.com",
     )
     # Should not raise
-    s._validate_endpoints_security()  # pylint: disable=protected-access
+    s._validate_endpoints_security()
 
 
 def test_disallow_similar_but_unlisted_host():
@@ -90,4 +90,4 @@ def test_remote_endpoints_allowed_when_policy_true():
         },
         vllm_base_url="https://unlisted.remote.example",
     )
-    s._validate_endpoints_security()  # pylint: disable=protected-access
+    s._validate_endpoints_security()

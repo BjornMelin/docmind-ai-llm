@@ -11,7 +11,7 @@ related_requirements:
   - FR-LLM-003: Structured outputs SHALL be supported when provider allows.
   - NFR-PERF-001: p50 token throughput ≥ 20 tok/s on mid-GPU.
   - NFR-PORT-001: Windows, macOS, Linux support.
-related_adrs: ["ADR-001","ADR-004","ADR-009","ADR-012"]
+related_adrs: ["ADR-001","ADR-004","ADR-009","ADR-010","ADR-024"]
 ---
 
 

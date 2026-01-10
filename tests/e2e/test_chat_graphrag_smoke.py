@@ -1,7 +1,5 @@
 """E2E smoke: chat via router with GraphRAG present (offline, deterministic)."""
 
-# pylint: disable=protected-access
-
 from __future__ import annotations
 
 from types import SimpleNamespace

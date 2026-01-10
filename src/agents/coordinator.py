@@ -300,7 +300,6 @@ class MultiAgentCoordinator:
             logger.error("Failed to setup coordinator: %s", e)
             return False
 
-    # pylint: disable=too-many-branches,too-many-statements
     def _setup_agent_graph(self) -> None:
         """Setup LangGraph supervisor with agent orchestration."""
         try:
@@ -512,8 +511,8 @@ class MultiAgentCoordinator:
     def _record_query_metrics(self, latency_s: float, success: bool) -> None:
         """Record coordinator latency metrics via OpenTelemetry when available."""
         with contextlib.suppress(Exception):
-            global _COORDINATOR_LATENCY  # pylint: disable=global-statement
-            global _COORDINATOR_COUNTER  # pylint: disable=global-statement
+            global _COORDINATOR_LATENCY
+            global _COORDINATOR_COUNTER
             meter = metrics.get_meter(__name__)
             if _COORDINATOR_LATENCY is None:
                 _COORDINATOR_LATENCY = meter.create_histogram(
@@ -872,7 +871,7 @@ class MultiAgentCoordinator:
                 optimization_metrics={"fallback_mode": True},
             )
 
-        except (RuntimeError, ValueError, AttributeError, Exception) as e:  # pylint: disable=broad-exception-caught
+        except (RuntimeError, ValueError, AttributeError, Exception) as e:
             logger.error("Fallback RAG also failed: %s", e)
             processing_time = time.perf_counter() - start_time
             return AgentResponse(

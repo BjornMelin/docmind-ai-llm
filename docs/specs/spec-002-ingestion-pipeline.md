@@ -111,7 +111,7 @@ Feature: Ingestion pipeline
 - Fast tests: `uv run python scripts/run_tests.py --fast`
 - Full coverage: `uv run python scripts/run_tests.py --coverage`
 - Lint/format: `uv run ruff format . && uv run ruff check . --fix`
-- Pylint (target ≥ 9.5): `uv run pylint --fail-under=9.5 src tests scripts`
+- Note: Ruff enforces pylint-equivalent rules via `PL*` selectors in `pyproject.toml`; no standalone pylint run is required.
 - CI quality gates: `uv run python scripts/run_quality_gates.py --ci --report`
   - Note: current project-wide coverage baseline is ~70.5%; CI coverage gate is configured at 80% and may fail until broader areas gain tests
 

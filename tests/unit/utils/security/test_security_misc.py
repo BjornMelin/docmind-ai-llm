@@ -12,9 +12,11 @@ def test_decrypt_file_passthrough_when_not_enc():
     assert decrypt_file("/tmp/file.jpg") == "/tmp/file.jpg"
 
 
-def test_redact_pii_noop():
-    """Redact PII stub returns text unchanged."""
+def test_redact_pii_performs_redaction():
+    """redact_pii should not return raw input and should mask PII-like content."""
     from src.utils.security import redact_pii
 
     s = "no pii here"
-    assert redact_pii(s) == s
+    redacted = redact_pii(s)
+    assert redacted != s
+    assert s not in redacted

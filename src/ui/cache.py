@@ -6,9 +6,11 @@ salt stored in settings. These helpers are UI-agnostic to enable unit testing.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
 
 import streamlit as st
+from loguru import logger
 
 
 def clear_caches(settings_obj: Any | None = None) -> int:
@@ -34,16 +36,16 @@ def clear_caches(settings_obj: Any | None = None) -> int:
         settings_obj.cache_version = 1
 
     # Best-effort cache clearing; never raise
-    from contextlib import suppress
-
-    with suppress(
-        Exception
-    ):  # pragma: no cover - defensive  # pylint: disable=broad-exception-caught
-        st.cache_data.clear()
-    with suppress(
-        Exception
-    ):  # pragma: no cover - defensive  # pylint: disable=broad-exception-caught
-        st.cache_resource.clear()
+    with suppress(Exception):  # pragma: no cover - defensive
+        try:
+            st.cache_data.clear()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("failed to clear st.cache_data", exc_info=exc)
+    with suppress(Exception):  # pragma: no cover - defensive
+        try:
+            st.cache_resource.clear()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("failed to clear st.cache_resource", exc_info=exc)
 
     return int(getattr(settings_obj, "cache_version", 0))
 

@@ -15,7 +15,7 @@
 > - **Library-First Ingestion Pipeline**: LlamaIndex `IngestionPipeline` with DuckDB cache, deterministic hashing, and AES-GCM page image support
 > - **Snapshot Persistence**: Portalocker-backed SnapshotManager with tri-file manifests, CURRENT pointer discipline, GraphRAG export packaging
 > - **OpenTelemetry Observability**: Configurable OTLP exporters, console fallback, and span coverage for ingestion, snapshots, GraphRAG, and UI actions
-> **Final Architecture Update (2025-08-20):** This PRD now documents the final, validated 5-agent LangGraph supervisor system with complete technical specifications and performance validation results.
+>   **Final Architecture Update (2025-08-20):** This PRD now documents the final, validated 5-agent LangGraph supervisor system with complete technical specifications and performance validation results.
 
 ## 1. Executive Summary
 
@@ -32,14 +32,17 @@ DocMind AI is an offline-first document analysis system using Qwen3-4B-Instruct-
 This section groups the system's requirements into high-level, user-centric features.
 
 - **Epic 1: Core Document Ingestion Pipeline**
+
   - **Description:** Enables users to add documents to the system and have them automatically processed for analysis.
   - **Requirements:** FR-1, FR-2, FR-11, NFR-4, AR-5
 
 - **Epic 2: Hybrid Search & Retrieval**
+
   - **Description:** Provides the core search functionality, allowing users to find the most relevant information using a combination of semantic and keyword search.
   - **Requirements:** FR-3, FR-4, FR-5, FR-6, FR-7, NFR-2
 
 - **Epic 3: Multi-Agent Coordination & Reasoning**
+
   - **Description:** The primary user interface for interacting with documents. A LangGraph supervisor coordinates 5 specialized agents to answer questions, perform analysis, and reason over the indexed content with enhanced quality and reliability.
   - **Requirements:** FR-8, FR-9, FR-10, NFR-1, AR-6
 
@@ -133,7 +136,7 @@ graph TD
         N --> O["3. Synthesize<br/>Response Generation"]
         O --> P["Final Response<br/>w/ Sources & Validation"]
     end
-    
+
     subgraph "Core Configuration & Optimization"
         R["Simple Configuration<br/>Environment Variables + Streamlit Config"]
         S["PyTorch Optimization<br/>TorchAO Quantization"]
@@ -149,7 +152,7 @@ graph TD
     A --> B
     I --> J
     J --> P --> A
-    
+
     G --> M
     H --> M
 
@@ -169,15 +172,15 @@ graph TD
 
 ### Core Libraries
 
-| Component          | Library                  | Version      | Purpose                               |
-| ------------------ | ------------------------ | ------------ | ------------------------------------- |
-| RAG Framework      | llama-index              | >=0.12.0     | Core pipelines, agent, native components |
-| Document Parsing   | unstructured             | >=0.15.13    | PDF/Office parsing                    |
-| Vector Database    | qdrant-client            | 1.15.0       | Hybrid vector storage                 |
-| LLM Backends       | ollama, llama-cpp-python, vllm | Latest       | Local LLM Inference                   |
-| GPU Acceleration   | torch, torchao           | >=2.7.0, >=0.1.0 | CUDA support & Quantization           |
-| Resilience         | tenacity                 | >=9.1.2      | Production-grade error handling       |
-| Web Interface      | streamlit                | >=1.47.1     | User interface                        |
+| Component        | Library                        | Version          | Purpose                                  |
+| ---------------- | ------------------------------ | ---------------- | ---------------------------------------- |
+| RAG Framework    | llama-index                    | >=0.12.0         | Core pipelines, agent, native components |
+| Document Parsing | unstructured                   | >=0.15.13        | PDF/Office parsing                       |
+| Vector Database  | qdrant-client                  | 1.15.0           | Hybrid vector storage                    |
+| LLM Backends     | ollama, llama-cpp-python, vllm | Latest           | Local LLM Inference                      |
+| GPU Acceleration | torch, torchao                 | >=2.7.0, >=0.1.0 | CUDA support & Quantization              |
+| Resilience       | tenacity                       | >=9.1.2          | Production-grade error handling          |
+| Web Interface    | streamlit                      | >=1.47.1         | User interface                           |
 
 ### Model Dependencies
 
@@ -257,7 +260,7 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
   - Test GPU acceleration and performance optimizations
   - Refine UI/UX based on broader user feedback
 - **Success Criteria**:
-  - >4.2 average user satisfaction rating
+  - > 4.2 average user satisfaction rating
   - <3% user churn rate during beta period
   - 90%+ feature adoption for the core multi-agent coordination system
 - **Key Features**: Full 5-agent supervisor system, GPU acceleration, optional GraphRAG, optional DSPy optimization
@@ -280,17 +283,17 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 #### Primary Channels
 
 1. **Open Source Community**
-    - GitHub repository with comprehensive documentation
-    - Participation in AI/ML conferences and meetups
-    - Technical blog posts and tutorials
+   - GitHub repository with comprehensive documentation
+   - Participation in AI/ML conferences and meetups
+   - Technical blog posts and tutorials
 2. **Privacy-Focused Communities**
-    - Privacy-focused forums and communities
-    - Security conferences and events
-    - Partnerships with privacy advocacy organizations
+   - Privacy-focused forums and communities
+   - Security conferences and events
+   - Partnerships with privacy advocacy organizations
 3. **Academic Networks**
-    - Research conferences and publications
-    - University partnerships and student programs
-    - Academic blog collaborations and case studies
+   - Research conferences and publications
+   - University partnerships and student programs
+   - Academic blog collaborations and case studies
 
 #### Content Marketing
 
@@ -319,14 +322,17 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 This section details how the Success Metrics will be tracked. As a privacy-first application, all analytics will be opt-in and anonymized.
 
 - **User Satisfaction (CSAT)**:
+
   - **Measurement:** An optional, non-intrusive in-app survey will be presented to users after 10 sessions, asking for a rating on a 1-5 scale.
   - **Tool:** Internal implementation, results aggregated anonymously.
 
 - **Task Completion Rate & Feature Adoption**:
+
   - **Measurement:** We will track anonymized usage events for core actions (e.g., `document_processed`, `query_answered`, `gpu_toggle_used`). This will allow us to calculate the percentage of users who successfully use key features.
   - **Tool:** Internal event tracking system (opt-in).
 
 - **Performance & Error Rate**:
+
   - **Measurement:** The application will locally log performance metrics (query latency, processing time) and any critical errors. An optional "Share Diagnostic Data" feature will allow users to send anonymized logs to help with debugging and performance tuning.
   - **Tool:** Internal logging (Loguru) with a voluntary export function.
 
