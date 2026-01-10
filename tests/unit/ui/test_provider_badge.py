@@ -24,7 +24,6 @@ def test_provider_badge_uses_config_values(monkeypatch) -> None:
     provider_badge(settings)
 
     assert any(
-        isinstance(entry, tuple)
-        and entry[0] == f"Provider: {settings.llm_backend}"
+        isinstance(entry, tuple) and entry[0] == f"Provider: {settings.llm_backend}"
         for entry in calls["badge"]
     )
