@@ -70,8 +70,10 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
 
     Security: resolve once and enforce that the resolved path lives within one
     of the allowed base directories (default: the current user home directory).
-    This is best-effort pre-validation; callers should still treat file opens as
-    untrusted.
+
+    WARNING: This function is best-effort pre-validation only. Callers MUST
+    treat any subsequent file operations as untrusted and handle failures
+    defensively (including TOCTOU races, permission errors, and IO errors).
     """
     clean = (path_text or "").strip()
     if not clean:
@@ -92,18 +94,29 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
             [Path(str(base)) for base in extra_bases if str(base).strip()]
         )
 
+    base_dir: Path | None = None
     for base in allowed_bases:
         try:
-            resolved.relative_to(base.expanduser().resolve(strict=False))
+            base_dir = base.expanduser().resolve(strict=False)
+            resolved.relative_to(base_dir)
         except ValueError:
+            base_dir = None
             continue
         break
     else:
         return None
 
-    # Disallow symlinks to avoid path trickery (best-effort; file open is untrusted).
-    if resolved.is_symlink():
-        return None
+    # Disallow symlink traversal (align with src/utils/security.py).
+    # Note: Path.resolve() follows symlinks, so we must inspect the original path.
+    raw = Path(clean).expanduser()
+    raw_candidate = raw if raw.is_absolute() else (base_dir / raw)
+    stop_at = base_dir if base_dir is not None else Path.home()
+
+    for part in (raw_candidate, *raw_candidate.parents):
+        if part.is_symlink():
+            return None
+        if part == stop_at:
+            break
 
     if not (resolved.is_file() and resolved.suffix.lower() == ".gguf"):
         return None
@@ -357,6 +370,9 @@ def main() -> None:
             "Provide either a llama.cpp base URL or a local GGUF model path."
         )
 
+    # NOTE: The settings UI intentionally validates only the values it edits.
+    # Missing sections are populated from DocMindSettings defaults, so this form
+    # does not act as a full-validator for unrelated config blocks.
     candidate = {
         "llm_backend": provider,
         "model": model.strip() or None,

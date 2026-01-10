@@ -25,7 +25,7 @@ def _is_true_constant(node: ast.AST) -> bool:
 def test_provider_badge_does_not_use_unsafe_allow_html() -> None:
     source_text = _provider_badge_source()
     tree = ast.parse(source_text)
-    unsafe_calls: list[ast.Call] = []
+    unsafe_calls: list[tuple[int, int]] = []
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -39,10 +39,13 @@ def test_provider_badge_does_not_use_unsafe_allow_html() -> None:
             if kw.arg != "unsafe_allow_html":
                 continue
             if kw.value is not None and _is_true_constant(kw.value):
-                unsafe_calls.append(node)
+                unsafe_calls.append((node.lineno, node.col_offset))
                 break
 
-    assert not unsafe_calls, "Found st.markdown(..., unsafe_allow_html=True)"
+    lines = [line for line, _ in unsafe_calls]
+    assert not unsafe_calls, (
+        f"Found st.markdown(..., unsafe_allow_html=True) at lines: {lines}"
+    )
 
 
 @pytest.mark.unit

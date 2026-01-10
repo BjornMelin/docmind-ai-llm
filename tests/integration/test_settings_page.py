@@ -314,9 +314,4 @@ def test_settings_toggle_providers_and_apply(
     import importlib
 
     settings_mod = importlib.import_module("src.config.settings")
-    monkeypatch.setattr(
-        settings_mod,
-        "settings",
-        settings_mod.DocMindSettings(),
-        raising=False,
-    )
+    settings_mod.settings = settings_mod.DocMindSettings()  # type: ignore[attr-defined]

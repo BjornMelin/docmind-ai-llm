@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 import types
 from pathlib import Path
 
@@ -13,8 +14,6 @@ def _load_settings_page_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleT
     monkeypatch.setattr(integrations, "initialize_integrations", lambda **_: None)
 
     # Ensure a fresh import for each test (avoid module cache pollution).
-    import sys
-
     sys.modules.pop("src.pages.04_settings", None)
     return importlib.import_module("src.pages.04_settings")
 

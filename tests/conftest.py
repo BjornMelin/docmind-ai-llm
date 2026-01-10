@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+from collections.abc import Generator
 from contextlib import suppress
 from pathlib import Path
 from types import SimpleNamespace
@@ -214,7 +215,7 @@ def lightweight_embedding_model():
 
 
 @pytest.fixture(autouse=True)
-def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> object:
+def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent external LLM initialization during tests."""
     if not _llama_available():
         return
@@ -231,7 +232,9 @@ def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> object:
 
 
 @pytest.fixture(autouse=True)
-def _router_factory_stubs(request: pytest.FixtureRequest) -> object:
+def _router_factory_stubs(
+    request: pytest.FixtureRequest,
+) -> Generator[None, None, None]:
     """Inject a stub llama-index adapter unless the test requests the real one."""
     from src.retrieval.llama_index_adapter import set_llama_index_adapter
 
