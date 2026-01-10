@@ -21,23 +21,25 @@ Implements `ADR-052` + `SPEC-033`.
 
 **Use skill:** `$streamlit-master-architect`
 
+**Note:** Paths use `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}`. Set this env var or adjust to your local skill install location before running.
+
 Mandatory Streamlit evergreen steps:
 
 ```bash
 uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
-uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
-uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
+uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
+uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
 ```
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md` (fragments + reruns)
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md` (threading + unsafe patterns)
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/e2e_playwright_mcp.md` (optional E2E smoke)
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/caching_and_fragments.md` (fragments + reruns)
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/security.md` (threading + unsafe patterns)
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/testing_apptest.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/e2e_playwright_mcp.md` (optional E2E smoke)
 
 ### Prompt-specific Tool Playbook (optimize tool usage)
 
@@ -215,7 +217,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                                                           |
 | **Lint**        |        | `uv run ruff check .` clean                                                                                      |
 | **Types**       |        | `uv run pyright` clean                                                                                           |
-| **Pylint**      |        | meets threshold                                                                                                  |
 | **Tests**       |        | JobManager + UI wiring green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                             |
 | **Security**    |        | no Streamlit calls in threads; atomic finalize; no secret/content leaks                                          |

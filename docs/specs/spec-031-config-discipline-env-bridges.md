@@ -44,7 +44,7 @@ In `src/config/settings.py`:
 
 4. Fix the `ADR-XXX` marker and formalize hashing secret usage:
 
-   - Replace `# Canonical hashing (ADR-XXX)` with a real ADR reference (`ADR-050` and/or `ADR-047`).
+   - Replace `# Canonical hashing (ADR-XXX)` with a real ADR reference (`ADR-050` or `ADR-047`).
    - Fix the validator error message for `HashingConfig.hmac_secret` to reference the correct env var:
      - `DOCMIND_HASHING__HMAC_SECRET`
    - Use `settings.hashing.hmac_secret` for keyed fingerprints in `src/utils/log_safety.py` (see `SPEC-028`) and as the secret source for `src/utils/canonicalization.py` configuration (so tests and production share the same policy).

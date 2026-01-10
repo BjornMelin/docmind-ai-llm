@@ -91,7 +91,7 @@ Replace custom `.env` writer in `src/pages/04_settings.py` with `python-dotenv`:
 Add/extend `tests/integration/test_settings_page.py` (or create a new file) to assert:
 
 - Invalid LM Studio URL (missing `/v1`) renders an error and disables Save/Apply.
-- Remote URL when `allow_remote_endpoints=false` renders an error and disables actions.
+- Remote URL when `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` renders an error and disables actions.
 - Valid provider change persists to `.env` via `python-dotenv` and can be read back.
 
 ### Unit

@@ -17,7 +17,7 @@ Implements `ADR-054` + `SPEC-035`.
 
 This is config + docs truth work; keep it minimal and test-backed.
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Primary tools to leverage:**
 
@@ -109,7 +109,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 1. [ ] Identify unused settings fields (confirm no references in `src/`).
 2. [ ] Remove unused fields/models from `src/config/settings.py` and update exports.
-3. [ ] Update docs to remove references and/or mark ADRs as out-of-scope for v1.
+3. [ ] Update docs to remove references or mark ADRs as out-of-scope for v1.
 4. [ ] Add unit tests validating settings loading when deprecated env vars are set.
 5. [ ] Update RTM and run quality gates.
 
@@ -158,7 +158,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                                                         |
 | **Lint**        |        | `uv run ruff check .` clean                                                                                    |
 | **Types**       |        | `uv run pyright` clean                                                                                         |
-| **Pylint**      |        | meets threshold                                                                                                |
 | **Tests**       |        | settings-prune tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | config reference + ADR links updated; RTM NFR-MAINT-003 updated                                                |
 | **Security**    |        | no security/egress knobs removed without docs/tests; startup remains tolerant to unknown env vars              |

@@ -23,7 +23,7 @@ Replace `src/utils/document.py` placeholder stubs with a **canonical programmati
 - developer docs (`docs/developers/*`)
 - some tests that patch the symbols
 
-At the same time, the actual ingestion implementation is already present and library-first:
+At the same time, the actual ingestion implementation is already present and library-first; the canonical API will live in `src/processing/ingestion_api.py` and be used by `src/processing/ingestion_pipeline.py::ingest_documents_sync` and `src/ui/_ingest_adapter_impl.py`, while `src.utils.document` remains a thin forwarding facade:
 
 - `src/processing/ingestion_pipeline.py::ingest_documents_sync`
 - `src/ui/_ingest_adapter_impl.py` for Streamlit uploads
@@ -66,6 +66,7 @@ Leaving placeholder stubs undermines ship readiness and documentation trust.
 ## Security & Privacy
 
 - Ingestion API must validate file paths (no traversal) and remain local-only.
+- Block symlink-based path escape: reject symlinks at the file level and in parent directory chains (per SPEC-026).
 - No network access beyond explicit model backends (already gated by settings).
 
 ## Consequences

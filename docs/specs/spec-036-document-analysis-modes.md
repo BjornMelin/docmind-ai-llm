@@ -2,9 +2,9 @@
 spec: SPEC-036
 title: Document Analysis Modes (Separate / Combined / Auto)
 version: 1.0.0
-date: 2026-01-09
+date: 2026-01-10
 owners: ["ai-arch"]
-status: Draft
+status: Final
 related_requirements:
   - FR-028: Users can run document analysis in Separate/Combined/Auto modes.
   - NFR-PERF-001: Chat p50 latency budgets remain within targets.
@@ -29,8 +29,8 @@ related_adrs: ["ADR-023","ADR-013","ADR-016","ADR-011","ADR-052"]
 
 1. As a user, I can select **Combined** mode to get a single holistic answer across my corpus.
 2. As a user, I can select **Separate** mode to get one answer per document (shown in tabs), plus an optional compare/synthesis summary.
-3. As a user, I can select **Auto** mode and have the app pick the best mode based on document count and token budget.
-4. As a user, I can cancel long analyses (best-effort) without corrupting state or publishing partial artifacts.
+3. The system should support **Auto** mode that selects the best analysis mode based on document count and token budget.
+4. Users need the ability to cancel long analyses (best-effort) without corrupting state or publishing partial artifacts.
 
 ## Technical Design
 

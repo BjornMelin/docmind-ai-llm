@@ -19,14 +19,16 @@ Implements `ADR-051` + `SPEC-032`.
 
 This is a cross-cutting refactor (UI → persistence boundary). Use analysis + review tools.
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
+
+**Note:** Paths that reference `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}` assume a local Codex skill install. Adjust the prefix to your team’s skill library location or a repo-local copy if needed.
 
 **Use skill:** `$streamlit-master-architect` (for the Documents page wiring + AppTest), but keep the service boundary Streamlit-free.
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/testing_apptest.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/caching_and_fragments.md`
 
 **Primary tools to leverage:**
 
@@ -66,7 +68,7 @@ Skill references to consult (as needed):
 
 - If you run `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs.
 - Attach screenshots of the Documents page state changes with `functions.view_image` if verification is visual.
-- Optional E2E smoke (skill script): `/home/bjorn/.codex/skills/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
+- Optional E2E smoke (skill script): `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
 
 **Review gate (required):**
 
@@ -76,7 +78,7 @@ Skill references to consult (as needed):
 
 Use only if you must understand LlamaIndex persistence internals; prefer repo code + tests first.
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## **Implementation Executor Template (DocMind / Python)**
 
 ### YOU ARE
 
@@ -93,11 +95,11 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### **Feature Context (Filled)**
 
 **Primary Task:** Extract snapshot rebuild + GraphRAG export packaging logic from `src/pages/02_documents.py` into a persistence-layer service module (`src/persistence/snapshot_service.py`) and keep the Documents page as UI wiring only.
 
-**Why now:** The Documents page currently embeds domain logic (snapshot lifecycle, hashing, export metadata) which is hard to test and easy to regress during UI changes. A service boundary improves correctness and maintainability for v1.
+**Why now:** The Documents page currently embeds domain logic (snapshot lifecycle, hashing, export metadata) which is difficult to test and easy to regress during UI changes. A service boundary improves correctness and maintainability for v1.
 
 **Definition of Done (DoD):**
 
@@ -152,7 +154,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### **Anti-Pattern Kill List (Immediate Deletion/Rewrite)**
 
 1. Snapshot persistence logic embedded in Streamlit pages.
 2. Import-time heavy dependencies in `src/pages/*` that break smoke tests.
@@ -161,7 +163,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
+### **MCP Tool Strategy (For Implementation Run)**
 
 Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
 
@@ -177,7 +179,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### **Final Verification Checklist (Must Complete)**
 
 | Requirement     | Status | Proof / Notes                                                                                                 |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
@@ -185,7 +187,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                                                        |
 | **Lint**        |        | `uv run ruff check .` clean                                                                                   |
 | **Types**       |        | `uv run pyright` clean                                                                                        |
-| **Pylint**      |        | meets threshold                                                                                               |
 | **Tests**       |        | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                          |
 | **Security**    |        | snapshot writes remain atomic; no new write surfaces                                                          |

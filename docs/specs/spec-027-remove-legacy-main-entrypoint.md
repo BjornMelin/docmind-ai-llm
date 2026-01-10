@@ -4,7 +4,7 @@ title: Remove Legacy Entrypoint (`src/main.py`)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Final
 related_requirements:
   - NFR-PORT-001: Single definitive architecture; no prod/local forks.
   - NFR-MAINT-003: No placeholder/dead entrypoints.
@@ -19,6 +19,11 @@ Remove the dead/legacy Python entrypoint (`src/main.py`) so that the only suppor
 
 - Creating a new CLI for DocMind v1 (evaluation/model-pull CLIs already exist under `tools/` and `src/eval/`)
 - Changing Streamlit navigation or UI routing
+
+## Transition
+
+- Approver: `ai-arch`
+- Draft → Final when `src/main.py` removal is merged, README/scripts updated, and quality gates are green.
 
 ## Technical design
 
@@ -55,4 +60,4 @@ Add a planned row:
   - Code: `src/main.py` (deleted), `pyproject.toml` (updated)
   - Tests: N/A
   - Verification: inspection + quality gates
-  - Status: Planned → Implemented
+  - Status: Planned → Implemented (after approval + tests)

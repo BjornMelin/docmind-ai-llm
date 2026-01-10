@@ -20,7 +20,7 @@ Implements `ADR-048` + `SPEC-029`.
 
 Docs drift is best solved with repo-local tooling + grep first.
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Primary tools to leverage:**
 
@@ -141,6 +141,11 @@ You must keep changes minimal, library-first, and maintainable.
 6. [ ] Implement drift checker:
    - scan non-archived docs for `src/<...>.py` references
    - fail if referenced files don’t exist
+   - classify findings:
+     - hard failures: direct code refs to missing `src/...` paths
+     - soft warnings: historical examples, comments, or external docs references
+     - allowlist: intentional external cross-references
+   - report severity and track false positives (keep soft warnings non-blocking)
 7. [ ] Wire drift checker into quality gates.
 8. [ ] Update RTM row and run quality gates.
 
@@ -191,7 +196,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dri
 | **Formatting**  |        | `uv run ruff format .` (if Python scripts changed)                                 |
 | **Lint**        |        | `uv run ruff check .` clean                                                        |
 | **Types**       |        | `uv run pyright` clean                                                             |
-| **Pylint**      |        | meets threshold                                                                    |
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | no references to missing modules                                                   |
 | **Security**    |        | security guidance matches repo posture (offline-first)                             |

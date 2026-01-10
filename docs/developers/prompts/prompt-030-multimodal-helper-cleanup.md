@@ -18,7 +18,7 @@ Implements `ADR-049` + `SPEC-030`.
 
 This is a deletion/cleanup task. Prefer local repo truth.
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Primary tools to leverage:**
 
@@ -52,7 +52,7 @@ This is a deletion/cleanup task. Prefer local repo truth.
 
 - Use `functions.apply_patch` with `*** Delete File: src/utils/multimodal.py` and delete/update test files in the same patch to keep diffs reviewable.
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## **Implementation Executor Template (DocMind / Python)**
 
 ### YOU ARE
 
@@ -69,7 +69,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### **Feature Context (Filled)**
 
 **Primary Task:** Remove `src/utils/multimodal.py` and its tests if it is not used by production code, eliminating TODO placeholders and dead code.
 
@@ -95,7 +95,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### **Hard Rules (Execution)**
 
 #### 1) Deletion safety
 
@@ -135,7 +135,7 @@ uv run python scripts/run_tests.py
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### **Anti-Pattern Kill List (Immediate Deletion/Rewrite)**
 
 1. Moving dead code to another production module/package instead of deleting it.
 2. Keeping “phase 2” TODO placeholders in `src/` (violates release readiness).
@@ -159,7 +159,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### **Final Verification Checklist (Must Complete)**
 
 | Requirement     | Status | Proof / Notes                                                                      |
 | --------------- | ------ | ---------------------------------------------------------------------------------- |
@@ -167,7 +167,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                             |
 | **Lint**        |        | `uv run ruff check .` clean                                                        |
 | **Types**       |        | `uv run pyright` clean                                                             |
-| **Pylint**      |        | meets threshold                                                                    |
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | references removed or updated                                                      |
 | **Security**    |        | no security surfaces regressed by deletion                                         |

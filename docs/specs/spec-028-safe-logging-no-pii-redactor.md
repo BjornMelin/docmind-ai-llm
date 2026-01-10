@@ -75,7 +75,7 @@ Update any logging/telemetry events within scope to:
 - Update existing security tests to remove `redact_pii` no-op expectations.
 - Add a “canary” test:
   - emit logs with a known canary string in memory
-  - assert the canary does not appear in captured logs/JSONL telemetry
+  - assert the canary does not appear in captured logs/JSONL telemetry.
 
 ## Rollout / migration
 

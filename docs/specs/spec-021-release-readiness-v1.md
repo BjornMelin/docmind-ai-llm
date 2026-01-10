@@ -80,6 +80,8 @@ Each work package MUST ship with:
 | 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
 | 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md` |
 
+All ADR/SPEC/prompt files referenced above are stored under `docs/` in this repo and are part of this release plan.
+
 ## Execution order and dependencies
 
 Recommended dependency order (minimizes churn):
@@ -127,6 +129,7 @@ Work packages that change behavior MUST update:
 
 - `docs/specs/traceability.md` with new/updated rows (Status = Planned → Implemented when done)
 - any referenced SPEC/ADR cross-links that currently drift (see WP08)
+- Consult the RTM format/schema in `docs/specs/traceability.md` (see “RTM Entry Format”).
 
 ## Rollback plan
 

@@ -541,7 +541,7 @@ All user flexibility settings have been successfully restored and thoroughly val
 | ------------------- | ------------------------------------ | ----------------------------------- |
 | **Model Name**      | Qwen3-4B-Instruct-2507-FP8           | Latest 2507 designation (July 2024) |
 | **Parameters**      | 4.23B parameters                     | Optimized parameter count           |
-| **Context Window**  | 131,072 tokens (128K)                | Industry-leading context capacity   |
+| **Context Window**  | 131,072 tokens (128 K)               | Industry-leading context capacity   |
 | **Quantization**    | FP8 precision with FP8 KV cache      | 50% memory reduction                |
 | **Architecture**    | Transformer with optimized attention | FlashInfer backend support          |
 | **Training Cutoff** | July 2024 (2507 designation)         | Most recent training data           |
@@ -550,10 +550,10 @@ All user flexibility settings have been successfully restored and thoroughly val
 
 | Metric                  | Target Range      | Achieved with FlashInfer | Hardware       |
 | ----------------------- | ----------------- | ------------------------ | -------------- |
-| **Decode Speed**        | 100-160 tok/s     | 120-180 tok/s            | RTX 4090       |
-| **Prefill Speed**       | 800-1300 tok/s    | 900-1400 tok/s           | RTX 4090       |
-| **VRAM Usage**          | 12-14GB target    | 12-14GB for 128K context | 16GB total     |
-| **Context Utilization** | Up to 120K tokens | 131,072 tokens supported | With 8K buffer |
+| **Decode Speed**        | 100–160 tok/s     | 120–180 tok/s            | RTX 4090       |
+| **Prefill Speed**       | 800–1300 tok/s    | 900–1400 tok/s           | RTX 4090       |
+| **VRAM Usage**          | 12–14 GB target   | 12–14 GB for 128 K context | 16 GB total   |
+| **Context Utilization** | Up to 120 K tokens | 131,072 tokens supported | With 8K buffer |
 
 ### Model-Specific Environment Variables
 
@@ -1287,7 +1287,7 @@ To use OpenAI cloud instead of a local server:
 
 ```env
 DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1
-DOCMIND_OPENAI__API_KEY=sk-...
+DOCMIND_OPENAI__API_KEY=sk-…
 DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
 ```
 
@@ -1301,7 +1301,7 @@ This breaks strict offline operation; ensure network egress is acceptable in you
 | Local (default)   | vLLM (OpenAI server) | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`                                             | `vllm`, `http://localhost:8000/v1`, `not-needed`                |
 | Local (default)   | llama.cpp server     | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`                                             | `llamacpp`, `http://localhost:8080/v1`, `not-needed`            |
 | Local (GGUF file) | llama.cpp local      | `DOCMIND_LLM_BACKEND`, `DOCMIND_VLLM__LLAMACPP_MODEL_PATH`                                                               | `llamacpp`, `/path/to/model.gguf`                               |
-| Cloud (optional)  | OpenAI               | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`, `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` | e.g., `lmstudio`, `https://api.openai.com/v1`, `sk-...`, `true` |
+| Cloud (optional)  | OpenAI               | `DOCMIND_LLM_BACKEND`, `DOCMIND_OPENAI__BASE_URL`, `DOCMIND_OPENAI__API_KEY`, `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` | e.g., `lmstudio`, `https://api.openai.com/v1`, `sk-…`, `true` |
 
 Notes:
 

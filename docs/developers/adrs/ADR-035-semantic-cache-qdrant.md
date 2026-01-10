@@ -6,7 +6,7 @@ Version: 3.0.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 004, 010, 024, 030, 031, 032
+Related: 004, 010, 024, 030, 031, 032, 038
 Tags: cache, semantic, qdrant, offline, privacy
 References:
 - [Qdrant — Collections](https://qdrant.tech/documentation/concepts/collections/)
@@ -121,15 +121,15 @@ graph TD
 
 ### Functional Requirements
 
-- FR‑1: Optionally serve responses from a cache (exact + semantic) for repeated requests.
-- FR‑2: Provide a provider-agnostic adapter interface with a single integration point in the LLM call path.
-- FR‑3: Invalidate cache entries when corpus/config hashes change.
+- FR‑1: Serve responses from an optional cache (exact + semantic) for repeated requests.
+- FR‑2: Cache adapter must expose a provider-agnostic interface with a single integration point in the LLM call path.
+- FR‑3: Automatic invalidation of cache entries when corpus/config hashes change.
 
 ### Non-Functional Requirements
 
 - NFR‑1: Offline/local; deterministic tests; no network in CI.
-- NFR‑2: Safe-by-default; feature-flag default Off.
-- NFR‑3: Privacy-preserving: do not store raw prompts; support encryption for cached responses.
+- NFR‑2: Default Off feature flag for safe-by-default behavior.
+- NFR‑3: Ensure privacy by not storing raw prompts; optionally support encryption for cached responses.
 
 ### Performance Requirements
 
@@ -192,7 +192,7 @@ def test_cache_hit_miss(mock_cache, deterministic_embed):
 
 ### Negative Consequences / Trade-offs
 
-- FAISS dependency footprint; read-time TTL vs scheduled cleanup
+- FAISS dependency footprint; read-time time-to-live vs scheduled cleanup
 
 ### Ongoing Maintenance & Considerations
 

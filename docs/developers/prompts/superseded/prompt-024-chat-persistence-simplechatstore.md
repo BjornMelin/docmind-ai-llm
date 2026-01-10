@@ -2,7 +2,7 @@
 
 Implements `ADR-043` + `SPEC-024`.
 
-> Status: Superseded by `docs/developers/prompts/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` (implements ADR-057 + SPEC-041).
+> Status: Superseded by `docs/developers/prompts/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` (implements ADR-057 + SPEC-041). Current linting uses Ruff (not Pylint).
 
 **Read first (repo truth):**
 
@@ -22,14 +22,14 @@ Implements `ADR-043` + `SPEC-024`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Use skill:** `$streamlit-master-architect` (Streamlit reruns, AppTest, session state discipline)
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/architecture_state.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/testing_apptest.md`
 
 **Preflight:**
 
@@ -73,7 +73,7 @@ rg -n "st\\.session_state\\.|st\\.chat_" src/pages/01_chat.py
 - If you run `streamlit run src/app.py`, keep the process alive; use `functions.write_stdin` to pull logs.
 - If you capture screenshots during manual verification, attach them with `functions.view_image`.
 - For E2E smoke, use the skill’s Playwright flow:
-  - `/home/bjorn/.codex/skills/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
+  - `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
 
 **Security gate (required):**
 
@@ -213,7 +213,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                                                         |
 | **Lint**        |        | `uv run ruff check .` clean                                                                                    |
 | **Types**       |        | `uv run pyright` clean                                                                                         |
-| **Pylint**      |        | meets threshold                                                                                                |
 | **Tests**       |        | AppTest proves persistence; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                           |
 | **Security**    |        | path validation under `settings.data_dir`; no content logs                                                     |

@@ -23,7 +23,7 @@ Remove `src/utils/multimodal.py` from the production package if it is unused by 
 
 1. Confirm `src/utils/multimodal.py` is unused in production code:
 
-   - `rg "src\\.utils\\.multimodal|from src\\.utils\\.multimodal" src/` should return nothing.
+   - `rg "src\\.utils\\.multimodal" src/` should return nothing (covers direct imports; use `functions.mcp__zen__analyze` if dynamic/string imports are suspected).
 
 2. Delete:
 

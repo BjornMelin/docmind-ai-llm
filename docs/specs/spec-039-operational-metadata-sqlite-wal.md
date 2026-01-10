@@ -72,7 +72,7 @@ Indexes:
 
 #### `ops_snapshot_event`
 
-- `id INTEGER PRIMARY KEY AUTOINCREMENT`
+- `id INTEGER PRIMARY KEY`
 - `snapshot_id TEXT NOT NULL` (directory name / timestamp)
 - `event_type TEXT NOT NULL` (`created|gc_pruned|restored|failed`)
 - `created_at_ms INTEGER NOT NULL`

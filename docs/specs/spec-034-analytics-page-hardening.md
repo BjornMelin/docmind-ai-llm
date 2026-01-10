@@ -48,9 +48,15 @@ Add helper (module-local or reusable) that:
   - `max_lines` (default e.g. 50_000)
   - `max_bytes` (default e.g. 25MB)
 
+Selection criteria: choose caps based on measured telemetry growth and memory budgets (e.g., target ≤25MB parse per run; estimate `max_lines ≈ target_bytes / avg_line_bytes` from sample logs).
+
+Scope: caps apply per telemetry JSONL file read (and should be enforced consistently across multi-session files, if present).
+
+Recourse: when a cap is hit, stop reading additional lines/bytes, log a warning, and return aggregated counts from the bounded window (no exceptions raised for cap hits).
+
 ### Canonical telemetry path
 
-Use the same path as the telemetry emitter (expose a public getter/constant from `src/utils/telemetry.py`), rather than hardcoding `./logs/telemetry.jsonl`.
+Use the same path as the telemetry emitter by defining a shared constant or getter (e.g., `TELEMETRY_JSONL_PATH` or `get_telemetry_jsonl_path()` in `src/utils/telemetry.py`) and referencing it from the Analytics page. Add a test that asserts the analytics helper reads from the same path.
 
 ## Observability
 
@@ -59,11 +65,18 @@ No new telemetry; this is a consumer-only hardening.
 ## Security
 
 - Only aggregated counts displayed.
-- Do not display raw telemetry event payloads by default.
+- Do not display raw telemetry event payloads.
 
 ## Testing Strategy
 
-- Unit tests for the telemetry parsing helper.
+- Unit tests for telemetry parsing helper (`tests/unit/utils/test_telemetry_parsing.py`):
+  - parse valid JSONL lines and aggregate counts
+  - skip invalid JSON lines without raising
+  - enforce `max_lines` and `max_bytes` caps
+- Integration tests for Analytics page (`tests/integration/test_pages_analytics.py`):
+  - DuckDB connection closes normally and on query exception
+  - Analytics page import has no side effects
+  - Telemetry helper uses the canonical telemetry path
 - Keep `tests/integration/test_pages_smoke.py` passing.
 
 ## RTM Updates

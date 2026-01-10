@@ -58,10 +58,10 @@ We will:
 2. Implement “proposed settings” validation:
 
 - Build a candidate env/settings mapping from widget values.
-- Validate via `DocMindSettings.model_validate(...)` (or equivalent safe construction) **before** mutating the global `settings` singleton or writing `.env`.
+- Validate via `DocMindSettings.model_validate(…)` (or equivalent safe construction) **before** mutating the global `settings` singleton or writing `.env`.
 - Disable Apply/Save actions when validation fails; show errors to the user.
 
-1. Persist `.env` updates using `python-dotenv` `set_key` / `unset_key`:
+3. Persist `.env` updates using `python-dotenv` `set_key` / `unset_key`:
 
 - Use `quote_mode="auto"` to preserve readability.
 - Use `unset_key` for empty values where appropriate.

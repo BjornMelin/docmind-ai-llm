@@ -91,9 +91,9 @@ Emit JSONL events:
 
 ### Security
 
-- Never store raw prompts.
-- Consider optional encryption of cached response payloads using existing AES-GCM helpers.
-- Never log secrets or API keys in cache metadata.
+- **Vector storage only**: Store prompt embeddings (vectors) for semantic search; never store the original prompt text in the payload.
+- **Response encryption**: Use optional AES-GCM encryption (existing helpers) for cached response payloads when handling sensitive content (PII, credentials, regulated data). Encrypt response blobs when stored outside trusted local disk; keep it optional for non-sensitive, performance-critical caches.
+- **Metadata logging**: Never log secrets, API keys, or PII in cache metadata or observability events.
 
 ## Testing Strategy
 

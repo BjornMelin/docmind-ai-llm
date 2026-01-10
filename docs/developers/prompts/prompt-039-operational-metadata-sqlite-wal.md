@@ -14,11 +14,11 @@ Implements `ADR-055` + `SPEC-039`.
 - <https://docs.python.org/3/library/sqlite3.html> — stdlib sqlite3 connection/transactions.
 - <https://www.sqlite.org/wal.html> — WAL mode semantics, concurrency, durability tradeoffs.
 - <https://www.sqlite.org/pragma.html> — PRAGMAs (`journal_mode`, `foreign_keys`, `busy_timeout`, `user_version`).
-- <https://duckdb.org/docs/stable/connect/concurrency.html> — Concurrency notes (for separation of ops DB vs analytics/cache).
+- <https://duckdb.org/docs/stable/connect/concurrency.html> — Concurrency notes (for separation of ops DB vs. analytics/cache).
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 This is a persistence feature. No special skill is required, but if you touch Streamlit UI pages or AppTest, load `$streamlit-master-architect`.
 
@@ -178,7 +178,6 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 | **Formatting** |        | `ruff format`                         |
 | **Lint**       |        | `ruff check` clean                    |
 | **Types**      |        | `pyright` clean                       |
-| **Pylint**     |        | meets threshold                       |
 | **Tests**      |        | `scripts/run_tests.py --fast` green   |
 | **Docs**       |        | ADR/SPEC/RTM updated                  |
 | **Security**   |        | WAL + path validation + metadata-only |

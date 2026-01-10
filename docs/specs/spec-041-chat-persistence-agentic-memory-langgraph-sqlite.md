@@ -74,7 +74,7 @@ This spec introduces the Chat DB.
 ### Chat DB location
 
 - Path: `settings.chat.sqlite_path`
-- Default: `./data/docmind.db` (existing default; implementation will clarify and may rename for separation from ops DB)
+- Default: `./data/chat.db` (separate from Ops DB for data isolation and independent retention/backup)
 - Must be under `settings.data_dir` by default.
 - WAL enabled by `SqliteSaver.setup()` / `SqliteStore.setup()`.
 
@@ -133,6 +133,17 @@ Namespace conventions:
 - per-session: `("memories", "{user_id}", "{thread_id}")`
 - per-user global (optional): `("memories", "{user_id}")`
 
+### Release scope (v1 vs roadmap)
+
+**Release 1.0 (v1) scope:**
+- Durable checkpoints + session registry
+- Long-term memory storage with explicit `ADD/UPDATE/DELETE/NOOP` policy
+- Basic TTL and per-namespace caps with user-visible review/delete
+
+**Roadmap (post-v1):**
+- More advanced importance scoring and automated conflict resolution
+- Background consolidation scheduling with adaptive cadence
+
 #### D) Streamlit state + URL sync
 
 Use Streamlit-native state per ADR-016:
@@ -175,7 +186,7 @@ Expose in Chat sidebar:
 1. List checkpoints for current `thread_id` (reverse chronological).
 2. User selects one checkpoint to fork.
 3. Fork operation:
-   - call `graph.update_state(selected_state.config, values=...)` to create a new checkpoint id.
+   - call `graph.update_state(selected_state.config, values=…)` to create a new checkpoint id.
 4. Resume:
    - call `graph.invoke(None, new_config)` (or the supervisor’s equivalent) and persist new branch head.
 5. Ensure both histories remain accessible (session remains the same `thread_id` but different checkpoint lineage).
@@ -245,7 +256,10 @@ Threats and controls:
 ## Performance Expectations / Guardrails
 
 - No import-time heavy work in Streamlit pages; DB connections and coordinator initialization must be cached (`st.cache_resource`) or lazy.
-- Memory consolidation runs in the background (debounced) to avoid blocking the hot path.
+- Recommended pattern:
+  - `@st.cache_resource` factory for DB/checkpointer
+  - lazy session-state init for the coordinator (only create when missing)
+- Memory consolidation runs in the background (debounced) to avoid blocking the hot path (Streamlit fragments `run_every` per ADR-052 when available).
 
 ## RTM Updates
 

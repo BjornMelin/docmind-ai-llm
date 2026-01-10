@@ -21,7 +21,7 @@ Provide three analysis modes for working with a document set:
 
 - **Separate**: per-document analysis in parallel, with an optional “compare/synthesize” reduce step.
 - **Combined**: a single holistic analysis across all selected documents.
-- **Auto**: chooses Separate vs Combined based on corpus size and doc count.
+- **Auto**: chooses Separate vs. Combined based on corpus size and doc count.
 
 This adds an explicit user-facing knob (UI + config) and a small, testable domain service that routes work through existing retrieval + multi-agent synthesis rather than duplicating business logic in Streamlit pages.
 

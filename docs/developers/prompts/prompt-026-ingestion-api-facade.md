@@ -19,7 +19,7 @@ Implements `ADR-045` + `SPEC-026`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Primary tools to leverage:**
 
@@ -35,7 +35,7 @@ Implements `ADR-045` + `SPEC-026`.
 **Parallel preflight (use `multi_tool_use.parallel`):**
 
 - Locate placeholders and call sites:
-  - `rg -n \"(NotImplementedError|ingestion-phase-2|load_documents_|clear_document_cache)\" -S src tests`
+- `rg -n '(NotImplementedError|ingestion-phase-2|load_documents_|clear_document_cache)' -S src tests`
   - `rg -n \"src\\.utils\\.document\" -S src tests`
 - Read in parallel:
   - `src/utils/document.py`
@@ -208,7 +208,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                             |
 | **Lint**        |        | `uv run ruff check .` clean                                                        |
 | **Types**       |        | `uv run pyright` clean                                                             |
-| **Pylint**      |        | meets threshold                                                                    |
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | SPEC/RTM updated                                                                   |
 | **Security**    |        | symlink traversal blocked; cache clear constrained to `settings.cache_dir`         |

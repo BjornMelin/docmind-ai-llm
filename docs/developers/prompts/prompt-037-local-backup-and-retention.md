@@ -18,7 +18,7 @@ Implements `ADR-033` + `SPEC-037`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Optional skills (only if used):**
 
@@ -186,7 +186,6 @@ uv run python -m pytest -q
 | **Formatting**    |        | `uv run ruff format .`             |
 | **Lint**          |        | `uv run ruff check .`              |
 | **Types**         |        | `uv run pyright`                   |
-| **Pylint**        |        | meets threshold                    |
 | **Tests**         |        | `uv run python -m pytest -q`       |
 | **Docs**          |        | ADR/SPEC/RTM updated               |
 | **Security**      |        | path validation; no secret logs    |

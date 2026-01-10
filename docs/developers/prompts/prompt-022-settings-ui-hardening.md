@@ -18,12 +18,12 @@ Implements `ADR-041` + `SPEC-022`.
 - <https://docs.streamlit.io/develop/api-reference/app-testing/st.testing.v1.apptest> — AppTest reference for integration tests.
 - <https://docs.pydantic.dev/latest/concepts/models/> — `model_validate`, validation errors, and patterns.
 - <https://docs.pydantic.dev/latest/concepts/pydantic_settings/> — Pydantic Settings v2 env mapping patterns.
-- <https://bbc2.github.io/python-dotenv/reference/> — `set_key`/`unset_key` reference.
+- <https://python-dotenv.readthedocs.io/en/v1.0.0/> — `set_key`/`unset_key` reference.
 - <https://github.com/theskumar/python-dotenv> — python-dotenv canonical project + usage examples.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Use skill:** `$streamlit-master-architect`
 
@@ -35,17 +35,17 @@ Load and follow its workflows for:
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/widget_keys_and_reruns.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/security.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/testing_apptest.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/widget_keys_and_reruns.md`
 
 **Streamlit preflight (version + docs + audit):**
 
 ```bash
 uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
-uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
-uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
+uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
+uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
 ```
 
 ### Prompt-specific Tool Playbook (optimize tool usage)
@@ -80,14 +80,14 @@ uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_
 
 **Time-sensitive facts (use web tools):**
 
-- Prefer `functions.mcp__exa__web_search_exa` for discovery; use `web.run` if you need citations or dates (Streamlit forms changes, dotenv quote options).
+- Prefer `functions.mcp__exa__web_search_exa` for discovery. Use `web.run` when you need citations or dates. Streamlit form changes and dotenv quote options are the typical cases.
 
 **Long-running UI validation (use native capabilities):**
 
 - If you start `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs instead of restarting.
 - If you capture UI screenshots during verification, attach them with `functions.view_image`.
 - For user-critical E2E smoke, use the skill’s Playwright flow:
-  - `/home/bjorn/.codex/skills/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
+  - `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
 
 **Security gate (required):**
 

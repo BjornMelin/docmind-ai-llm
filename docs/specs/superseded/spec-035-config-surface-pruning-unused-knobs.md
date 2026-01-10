@@ -44,7 +44,7 @@ Remove from `src/config/settings.py` (and any docs/UI references):
    - ADR index or affected ADRs (mark out-of-scope for v1)
 3. Compatibility:
    - rely on `extra=\"ignore\"` in Pydantic settings
-   - optionally log a one-time warning if deprecated env var prefixes are present
+  - optionally log a one-time warning if deprecated env var prefixes are present.
 
 ## Testing Strategy
 

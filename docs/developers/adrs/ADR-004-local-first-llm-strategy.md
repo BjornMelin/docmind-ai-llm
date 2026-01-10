@@ -215,7 +215,7 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
 
 - 2025-09-04
 
-  - 12.1: Standardized to ADR template; added weighted decision matrix, mermaid architecture, config and testing skeletons; clarified 128K enforcement and dependencies. Updated front‑matter and references.
+  - 12.1: Standardized to ADR template; added weighted decision matrix, mermaid architecture, config, and testing skeletons; clarified 128K enforcement and dependencies. Updated front‑matter and references.
 
 - 2025-08-27
 

@@ -18,7 +18,7 @@ Implements `ADR-046` + `SPEC-027`.
 
 This work is primarily repo hygiene; prefer local repo truth over web research.
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Primary tools to leverage:**
 
@@ -177,7 +177,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                             |
 | **Lint**        |        | `uv run ruff check .` clean                                                        |
 | **Types**       |        | `uv run pyright` clean                                                             |
-| **Pylint**      |        | meets threshold                                                                    |
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | docs/scripts reference only `streamlit run src/app.py`                             |
 | **Security**    |        | no new config bypasses introduced                                                  |

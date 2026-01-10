@@ -135,6 +135,8 @@ st.logo("assets/docmind_logo.png", icon_image="assets/docmind_icon.png")
 nav.run()
 ```
 
+**Page naming convention:** Page files are prefixed with a two-digit index (e.g., `01_chat.py`, `02_documents.py`) to enforce deterministic ordering in Streamlit’s page discovery and to keep sidebar grouping predictable. Keep leading zeros for correct lexical ordering, avoid reusing indices, and ensure filenames match the `st.Page` registrations.
+
 ### Configuration
 
 `.streamlit/config.toml`:
@@ -172,6 +174,15 @@ def test_pages_construct():
     import streamlit as st
     st.Page("src/pages/01_chat.py", title="Chat", icon="💬", default=True)
     st.Page("src/pages/02_documents.py", title="Documents", icon="📁")
+
+def test_page_registry_metadata():
+    # Verify titles/icons/default selection for registered pages.
+    # (Implementation-specific: assert against Streamlit's page registry.)
+    ...
+
+def test_session_state_shared_keys(app_runner):
+    # Load Chat and Documents pages to confirm shared session_state keys persist.
+    ...
 
 @pytest.mark.asyncio
 async def test_streaming_generator(mock_llm):

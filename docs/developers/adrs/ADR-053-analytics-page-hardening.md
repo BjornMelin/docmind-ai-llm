@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 032, 013, 016
+Related: ADR-032 (local analytics/metrics), ADR-013 (UI architecture), ADR-016 (Streamlit state)
 Tags: streamlit, analytics, duckdb, telemetry
 References:
   - https://duckdb.org/docs/
@@ -58,18 +58,20 @@ We will:
 2. Replace dynamic `__import__` with explicit `import pandas as pd` (Analytics already depends on pandas/plotly).
 3. Add a small telemetry parsing helper that:
    - streams JSONL lines (no full-file `.read_text().splitlines()` for large files)
-   - applies a max-bytes or max-lines cap
-4. Use a canonical telemetry path shared with the emitter (`src/utils/telemetry.py`), not a hardcoded duplicate.
+   - applies both `max_bytes` and `max_lines` caps (stop parsing and log a warning on cap)
+4. Use a canonical telemetry path shared with the emitter by exporting a public constant/getter from `src/utils/telemetry.py` (e.g., `TELEMETRY_JSONL_PATH`).
 
 ## Security & Privacy
 
 - Analytics stays local-only.
 - Telemetry parsing must not surface secrets; only aggregate counts.
+- See ADR-047 for safe logging patterns; telemetry must follow metadata-only + keyed HMAC approach.
 
 ## Testing
 
-- Unit tests for telemetry parsing helper (valid JSON, invalid JSON, caps).
-- Smoke import test for Analytics page remains green.
+- Unit tests for telemetry parsing helper (valid JSON, invalid JSON, caps) and ensure DuckDB connections close on success and on exceptions.
+- Cap enforcement tests verify parsing stops at `max_lines`/`max_bytes` and emits a warning.
+- Smoke import test for Analytics page remains green and gracefully handles missing `analytics.duckdb`.
 
 ## Changelog
 

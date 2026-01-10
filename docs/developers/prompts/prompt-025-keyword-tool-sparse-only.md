@@ -19,7 +19,7 @@ Implements `ADR-044` + `SPEC-025`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Primary tools to leverage:**
 
@@ -198,7 +198,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                             |
 | **Lint**        |        | `uv run ruff check .` clean                                                        |
 | **Types**       |        | `uv run pyright` clean                                                             |
-| **Pylint**      |        | meets threshold                                                                    |
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | RTM updated                                                                        |
 | **Security**    |        | no raw query logs/content; allowlist posture unchanged                             |

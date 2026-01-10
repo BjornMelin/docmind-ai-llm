@@ -4,8 +4,8 @@ Title: Configuration Surface Pruning (Remove Unused/No-op Knobs for v1)
 Status: Superseded
 Version: 1.1
 Date: 2026-01-09
-Supersedes: 023, 033, 035
-Superseded-by: 023, 033, 035
+Supersedes:
+Superseded-by:
 Related: 024, 013, 031
 Tags: configuration, maintainability, release
 ---
@@ -27,7 +27,7 @@ The settings model currently includes several fields that are either unreference
 
 Shipping these as-is creates a misleading public configuration surface and increases maintenance and support burden (“why doesn’t this setting do anything?”).
 
-> Status notice (2026-01-09): This “prune for v1” approach is superseded. The project direction is to implement the existing configuration surface and complete the advanced capabilities (analysis modes, backups, semantic cache) rather than removing them.
+> Status notice (2026-01-09): This “prune for v1” approach is superseded. Reconsidered on 2026-01-09 due to release readiness needs and the decision to implement the existing configuration surface (see ADR-050 / SPEC-031). The project direction is to complete the advanced capabilities (analysis modes, backups, semantic cache) rather than removing them.
 
 ## Decision Drivers
 

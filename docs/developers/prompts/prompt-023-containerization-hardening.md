@@ -26,7 +26,7 @@ Use the `$docker-architect` workflow patterns (multi-stage, non-root, .dockerign
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Use skill:** `$docker-architect`
 
@@ -34,16 +34,16 @@ Mandatory workflow steps from the skill:
 
 ```bash
 uv sync
-python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_inventory.py --root .
-python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_audit.py --root .
+python3 ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/scripts/docker_inventory.py --root .
+python3 ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/scripts/docker_audit.py --root .
 docker buildx version
 ```
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/docker-architect/references/security_hardening.md`
-- `/home/bjorn/.codex/skills/docker-architect/references/compose_patterns.md`
-- `/home/bjorn/.codex/skills/docker-architect/references/dockerfile_patterns.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/references/security_hardening.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/references/compose_patterns.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/references/dockerfile_patterns.md`
 
 ### Prompt-specific Tool Playbook (optimize tool usage)
 
@@ -56,8 +56,8 @@ Skill references to consult (as needed):
   - `rg -n \"(FROM|USER|EXPOSE|HEALTHCHECK|CMD|ENTRYPOINT)\" Dockerfile docker-compose.yml || true`
   - `rg -n \"DOCMIND_|OLLAMA_|LMSTUDIO_|VLLM_\" docker-compose.yml .env.example docs -S || true`
 - Run skill scripts in parallel with reading docker artifacts:
-  - `/home/bjorn/.codex/skills/docker-architect/scripts/docker_inventory.py`
-  - `/home/bjorn/.codex/skills/docker-architect/scripts/docker_audit.py`
+  - `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/scripts/docker_inventory.py`
+  - `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/scripts/docker_audit.py`
 
 **MCP resources first (when available):**
 
@@ -191,8 +191,8 @@ After container changes, the repo must still pass:
    - Run:
 
      ```bash
-     python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_inventory.py --root .
-     python3 /home/bjorn/.codex/skills/docker-architect/scripts/docker_audit.py --root .
+     python3 ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/scripts/docker_inventory.py --root .
+     python3 ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/docker-architect/scripts/docker_audit.py --root .
      ```
 
 2. [ ] Add `.dockerignore` to exclude secrets and build junk.
@@ -220,7 +220,7 @@ After container changes, the repo must still pass:
 ### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
 
 1. Python 3.12+ base images (violates pyproject).
-2. JSON `CMD` with embedded shell strings (`[". venv/bin/activate && ..."]`).
+2. JSON `CMD` with embedded shell strings (`[". venv/bin/activate && …"]`).
 3. Missing `.dockerignore`.
 4. Root runtime user without justification.
 5. Compose env vars that bypass `DOCMIND_*` settings model.
@@ -254,7 +254,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**        |        | `uv run ruff format .`                                                             |
 | **Lint**              |        | `uv run ruff check .` clean                                                        |
 | **Types**             |        | `uv run pyright` clean                                                             |
-| **Pylint**            |        | meets threshold                                                                    |
 | **Tests**             |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**              |        | ADR/SPEC/RTM updated                                                               |
 | **Security**          |        | non-root user; `.env` not copied; no secrets baked                                 |

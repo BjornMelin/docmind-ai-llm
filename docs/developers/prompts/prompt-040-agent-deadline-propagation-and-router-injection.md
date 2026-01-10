@@ -11,14 +11,14 @@ Implements `ADR-056` + `SPEC-040`.
 
 ## Official docs (research during implementation)
 
-- <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming patterns (sync vs async).
+- <https://langchain-ai.github.io/langgraph/how-tos/streaming/> — LangGraph streaming patterns (sync vs. async).
 - <https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/interrupts> — Interrupts (control-flow, not hard cancellation).
 - <https://reference.langchain.com/python/langchain_core/runnables/#langchain_core.runnables.RunnableConfig> — RunnableConfig / execution config surface.
 - <https://reference.langchain.com/python/integrations/langchain_openai/ChatOpenAI/> — `ChatOpenAI(timeout=...)` reference.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 This is agent/orchestration work. No dedicated skill exists for LangGraph, but:
 
@@ -197,7 +197,6 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 | **Formatting** |        | `ruff format`                                              |
 | **Lint**       |        | `ruff check` clean                                         |
 | **Types**      |        | `pyright` clean                                            |
-| **Pylint**     |        | meets threshold                                            |
 | **Tests**      |        | `scripts/run_tests.py --fast` green                        |
 | **Docs**       |        | ADR/SPEC/RTM updated                                       |
 | **Security**   |        | no raw-content logs; bounded timeouts; allowlist preserved |

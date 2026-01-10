@@ -42,7 +42,7 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 
 Before starting any prompt in a fresh Codex TUI session:
 
-1. Read the tool inventory: `~/prompt_library/assistant/codex-inventory.md`.
+1. Read the tool inventory: `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 2. Use repo-truth first:
    - Local search: `rg`
    - Dependency internals: `opensrc/` (see `AGENTS.md`)
@@ -54,6 +54,17 @@ Before starting any prompt in a fresh Codex TUI session:
    - `functions.mcp__zen__planner` (plan)
    - `functions.mcp__zen__secaudit` (security)
    - `functions.mcp__zen__codereview` (quality gate)
+
+## Setup (portable paths)
+
+Set environment variables so prompts remain portable across machines and CI:
+
+```bash
+export CODEX_PROMPT_LIBRARY="${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}"
+export CODEX_SKILLS_HOME="${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}"
+```
+
+Fallback: If you do not have the Codex skill library installed, copy required skill files into a repo-local directory (e.g., `docs/developers/skills/`) and update the prompt paths accordingly before running.
 
 ## Tool Inventory (required + usage guidance)
 

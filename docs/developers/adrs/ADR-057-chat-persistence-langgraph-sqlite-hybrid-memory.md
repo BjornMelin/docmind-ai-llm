@@ -50,7 +50,7 @@ DocMind is offline-first and already uses LangGraph (supervisor pattern). We sho
 
 - Final-release capabilities: multi-session, branching/time travel, long-term memory + consolidation
 - Offline-first security posture: no remote services required; egress remains gated by settings
-- Library-first: use maintained LangGraph persistence primitives vs building a parallel memory service
+- Library-first: use maintained LangGraph persistence primitives vs. building a parallel memory service
 - Observability: instrument key operations without logging raw chat content
 - Maintainability: one canonical persistence path for agent state and memory
 - Production pragmatism: minimize new always-on services/ports (local-first UX)
@@ -62,7 +62,7 @@ DocMind is offline-first and already uses LangGraph (supervisor pattern). We sho
   - Cons: must ensure message/state schemas are serializable; consolidation requires careful prompting + tests
 - B: LlamaIndex `SimpleChatStore` JSON + `ChatMemoryBuffer` only (ADR-043)
   - Pros: no new deps
-  - Cons: no time travel; limited multi-agent state persistence; hard to extend to hybrid memory tiers
+- Cons: no time travel; limited multi-agent state persistence; challenging to extend to hybrid memory tiers
 - C: Zep/Graphiti temporal KG memory (self-hosted)
   - Pros: temporal knowledge graph semantics; strong memory + GraphRAG framing
   - Cons: service/process footprint and additional DB dependencies; more operational complexity for local-first Streamlit UX
@@ -175,6 +175,17 @@ Use `SqliteStore` with an embeddings adapter that reuses DocMind’s embedding m
 - Embeddings: wrap LlamaIndex `Settings.embed_model` behind a LangChain `Embeddings` adapter.
 - Index fields: the memory payload field(s) that contain natural language to embed (e.g., `"content"`).
 
+Adapter sketch:
+
+```
+class LlamaIndexEmbeddingsAdapter(Embeddings):
+  def embed_query(self, text: str) -> list[float]:
+    return Settings.embed_model.get_text_embedding(text)
+
+  def embed_documents(self, texts: list[str]) -> list[list[float]]:
+    return [Settings.embed_model.get_text_embedding(t) for t in texts]
+```
+
 ### Memory consolidation semantics (final-release)
 
 The system must not “append everything forever”. Consolidation is required to keep the memory store small, useful, and safe.
@@ -188,7 +199,21 @@ Rules:
   - limit retrieval window when checking for overlap/contradictions
 - Retention must be enforced:
   - TTL for low-importance memories
-  - user-visible purge/delete for any stored memory
+  - user-visible purge/delete for any stored memory.
+
+Implementation detail: see SPEC-041 for consolidation rules, bounds, and importance scoring.
+
+Example pseudocode:
+
+```
+function consolidate_memories(latest_turn, existing_memories, config):
+  candidates = extract_facts(latest_turn)  # typed schema
+  for candidate in candidates:
+    matches = search_memories(existing_memories, candidate, max_results=config.max_results)
+    action = choose_action(candidate, matches)  # ADD/UPDATE/DELETE/NOOP
+    apply_action(action, candidate, matches)
+  enforce_retention(existing_memories, config.ttl_rules, user_id, thread_id)
+```
 
 ### Namespacing (multi-user and isolation)
 
@@ -201,11 +226,11 @@ Recommended namespace structure:
 
 ### Branching / time travel semantics
 
-Use LangGraph built-ins:
+Use LangGraph built-ins for branching/time travel:
 
 - `graph.get_state_history(config)` to enumerate checkpoints (reverse chronological).
-- `graph.update_state(selected_state.config, values=...)` to fork state.
-- `graph.invoke(None, new_config)` to resume from the forked checkpoint.
+- `graph.update_state(selected_state.config, values=...)` to fork state and create a branch.
+- Resume execution via `graph.invoke(None, new_config)` from the forked checkpoint.
 
 ### Encryption-at-rest (optional)
 
@@ -226,6 +251,11 @@ For user chat content:
   - Memory tools store and retrieve a preference
 - Security tests:
   - Ensure no raw message content is emitted in telemetry payloads
+- Failure-path tests:
+  - SQLite corruption recovery: verify WAL rollback and checkpoint integrity
+  - Encryption-at-rest (if enabled): key rotation and recovery from missing/incorrect key
+  - Concurrent access: multi-session read/write safety
+  - Purge/export: ensure user-initiated purge fully removes stored data
 
 ## Consequences
 

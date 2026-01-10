@@ -30,7 +30,7 @@ Persist Streamlit Chat history locally using LlamaIndex core primitives:
 
 1) As a user, I refresh the browser and my prior chat history remains.
 2) As a user, I can clear chat history for the current session.
-3) As a user, chat persistence never triggers network access.
+3) Chat persistence never triggers network access.
 
 ## Technical design
 
@@ -65,7 +65,7 @@ Session id policy:
 
 ### Notes on token limits
 
-- Use `ChatMemoryBuffer.from_defaults(token_limit=...)` for prompt window trimming.
+- Use `ChatMemoryBuffer.from_defaults(token_limit=…)` for prompt window trimming.
 - Persistence stores the full history; memory is responsible for limiting prompt window.
 
 ## Observability

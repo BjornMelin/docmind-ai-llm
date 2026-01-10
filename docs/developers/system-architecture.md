@@ -87,7 +87,7 @@ graph TB
 | **LLM Backend**         | Language model inference with 128K context               | vLLM FlashInfer + Qwen3-4B-FP8 | 120-180 tok/s decode |
 | **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                         | <100ms retrieval     |
 | **Document Processing** | Hi-res parsing with NLP pipeline                         | Unstructured + spaCy           | <2s per document     |
-| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.7.0 + CUDA 12.8      | 12-14GB VRAM usage   |
+| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.7.0 + CUDA 12.8      | 12–14 GB VRAM usage  |
 
 ## Unified Configuration Architecture
 

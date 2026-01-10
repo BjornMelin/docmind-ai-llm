@@ -58,6 +58,8 @@ Emit a JSONL event when the keyword tool:
 - Unit: `tests/unit/agents/test_tool_factory_keyword.py` should validate that:
   - tool is only registered when flag true
   - tool name is `keyword_search`
+  - telemetry event is emitted when sparse encoder is unavailable
+  - description emphasizes lexical/keyword-only semantics
 - Unit: new tests for sparse-only retriever behavior:
   - encodes query and calls `query_points(using="text-sparse")` (mock client)
   - deterministic ordering
@@ -69,6 +71,6 @@ Add:
 
 - FR-023: “Keyword tool (sparse-only Qdrant)”
   - Code: `src/retrieval/keyword.py`, `src/agents/tool_factory.py`
-  - Tests: existing + new unit tests
-  - Verification: test
-  - Status: Planned → Implemented
+  - Tests: `tests/unit/agents/test_tool_factory_keyword.py`, `tests/unit/retrieval/test_keyword_retriever.py`
+  - Verification: unit tests pass; optional Qdrant integration validation when available
+  - Status: Planned → Implemented (after tests pass)

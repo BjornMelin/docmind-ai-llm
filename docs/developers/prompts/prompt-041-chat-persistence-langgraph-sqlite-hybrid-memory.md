@@ -29,7 +29,7 @@ SOTA memory research (context, informs design):
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Use skill:** `$streamlit-master-architect`
 
@@ -38,16 +38,16 @@ Mandatory workflow steps from the skill:
 ```bash
 uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
-uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
+uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
 ```
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/widget_keys_and_reruns.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/security.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/architecture_state.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/widget_keys_and_reruns.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/caching_and_fragments.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/testing_apptest.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/security.md`
 
 ### Prompt-specific Tool Playbook (optimize tool usage)
 
@@ -88,7 +88,16 @@ Skill references to consult (as needed):
 
 - Check `opensrc/sources.json` and prefer existing snapshots.
 - If a dependency is ambiguous, fetch sources with `npx opensrc pypi:<pkg>@<ver> --modify=false`.
-- Cite exact `opensrc/...` paths in code review notes when using internals.
+- Cite exact `opensrc/…` paths in code review notes when using internals.
+
+**Tool availability + fallbacks (Codex environment):**
+
+- MCP tools are not guaranteed unless configured; if a tool is unavailable, use the fallback listed here instead.
+- `functions.mcp__zen__secaudit`: If unavailable, run a manual security checklist (DB path validation, injection checks on dynamic queries/filters, prompt-injection storage hygiene, telemetry redaction review) and document findings.
+- `functions.mcp__zen__codereview`: If unavailable, do a manual code review pass focused on type safety, error handling, and Streamlit rerun safety.
+- `functions.mcp__context7__query-docs`: If unavailable, use the official docs links above and verify locally by reading code + tests.
+- `functions.mcp__gh_grep__searchGitHub`: If unavailable, use local `rg` queries (see preflight commands) and existing repo patterns.
+- `functions.mcp__langchain-docs__SearchDocsByLangChain`: If unavailable, use the official LangGraph docs links above and local code inspection.
 
 **Security gate (required):**
 
@@ -178,7 +187,7 @@ Rules:
 #### 3) Streamlit UI Discipline
 
 - `src/app.py` stays a thin shell (no business logic).
-- `src/pages/01_chat.py` should be UI wiring; move DB/session logic to `src/persistence/*` and `src/ui/*` helpers.
+- `src/pages/01_chat.py` should handle UI wiring; move DB/session logic to `src/persistence/*` and `src/ui/*` helpers.
 - Avoid expensive work at import time; Streamlit reruns frequently.
 
 #### 4) Config Discipline (Pydantic Settings v2)
@@ -191,6 +200,7 @@ Rules:
 
 - Use LangGraph checkpointer and store interfaces (`setup()`, `thread_id` config).
 - Ensure persisted state is serializable (avoid storing live objects in state).
+  - Example: Do not store `database.Connection`, `aiohttp.ClientSession`, `threading.Lock`, or open file handles in state. Persist resource identifiers instead and reconstruct live resources at runtime.
 - Memory namespaces must be scoped to `user_id` and `thread_id` (no cross-user bleed).
 - Enforce bounded memory growth: TTL/retention and delete/purge operations are first-class.
 
@@ -238,6 +248,7 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
    - unit: `chat_db` CRUD + namespace scoping
    - integration: AppTest session persistence + time travel fork
    - Commands:
+     - `mkdir -p tests/unit/persistence tests/integration/ui`
      - `uv run python -m pytest -q tests/unit/persistence/test_chat_db.py`
      - `uv run python -m pytest -q tests/integration/ui/test_chat_persistence_langgraph.py`
 7. [ ] Run repo quality gates (no placeholders left in scope).

@@ -104,6 +104,7 @@ Notes:
 
 - `DOCMIND_ENABLE_GRAPHRAG` is the authoritative gate for router/UI behavior.
 - `DOCMIND_GRAPHRAG_CFG__ENABLED` controls the nested GraphRAG config helper; keep it in sync with the top-level flag.
+- **Both flags must be `true` for GraphRAG to be enabled.** If either is `false`, the feature is disabled.
 - Legacy `DOCMIND_GRAPHRAG__*` variables were used in early drafts and are deprecated in favor of the names above.
 
 ## Testing

@@ -104,6 +104,43 @@ flowchart LR
    - ensures directory exists
    - enables WAL + foreign keys
    - applies migrations via `PRAGMA user_version`
+   - v0 → v1 migration creates core tables (jobs, snapshots, ui_state) and sets `PRAGMA user_version=1`
+   - each migration runs in its own transaction; on failure, rollback and abort startup (or restore from pre-migration backup)
+2. Track schema versions:
+   - v0 = empty/legacy
+   - v1 = initial ops schema (jobs/snapshots/ui_state)
+3. Example migration sketch:
+
+```sql
+BEGIN;
+PRAGMA foreign_keys=ON;
+PRAGMA journal_mode=WAL;
+
+CREATE TABLE IF NOT EXISTS jobs (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  payload TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS snapshots (
+  id TEXT PRIMARY KEY,
+  job_id TEXT,
+  data TEXT,
+  created_at_ms INTEGER NOT NULL,
+  FOREIGN KEY(job_id) REFERENCES jobs(id)
+);
+
+CREATE TABLE IF NOT EXISTS ui_state (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at_ms INTEGER NOT NULL
+);
+
+PRAGMA user_version=1;
+COMMIT;
+```
 2. Integrate with background jobs (ADR-052) to write lifecycle events.
 3. Add unit tests for migrations and core write/read APIs.
 
@@ -115,6 +152,12 @@ flowchart LR
   - busy_timeout/retry behavior for single-writer semantics
 - Integration tests:
   - background job writes job state to DB (using a temp data dir)
+
+## Operational concerns
+
+- WAL checkpoint starvation: long-running readers can prevent checkpoints from advancing. Use periodic checkpoints and monitor WAL file size.
+- Large write transactions can bloat WAL; keep writes small and short-lived.
+- Retry strategy: set `busy_timeout`, use bounded retries/backoff for the single writer, and log when retries are exhausted.
 
 ## Consequences
 

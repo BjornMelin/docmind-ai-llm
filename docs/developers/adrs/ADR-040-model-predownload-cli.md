@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 010, 013
+Related: SPEC-013
 Tags: packaging, offline, models
 References:
   - https://huggingface.co/docs/huggingface_hub/
@@ -42,9 +42,9 @@ This ADR documents an existing decision already reflected in SPEC-013 and implem
 
 | Model / Option           | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) |    Total | Decision    |
 | ------------------------ | -------------: | ----------: | -------------------: | ----------: | -------: | ----------- |
-| **C: Pre-download CLI**  |              8 |           8 |                    9 |           8 | **8.35** | ✅ Selected |
-| A: Lazy runtime download |              4 |           6 |                    2 |           8 |     4.55 | Rejected    |
-| B: Manual steps only     |              3 |           4 |                    4 |           7 |     4.05 | Rejected    |
+| **C: Pre-download CLI**  |              8 |           8 |                    9 |           8 | **8.25** | ✅ Selected |
+| A: Lazy runtime download |              4 |           6 |                    2 |           8 |     4.6  | Rejected    |
+| B: Manual steps only     |              3 |           4 |                    4 |           7 |     4.1  | Rejected    |
 
 ## Decision
 

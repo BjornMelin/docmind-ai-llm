@@ -20,7 +20,7 @@ Implements `ADR-050` + `SPEC-031`.
 
 This is security-sensitive config work. Prefer repo truth and run structured audits.
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Primary tools to leverage:**
 
@@ -40,7 +40,7 @@ This is security-sensitive config work. Prefer repo truth and run structured aud
 - Inventory env reads + config drift:
   - `rg -n \"os\\.getenv\\(\" -S src`
   - `rg -n \"DOCMIND_(TELEMETRY|IMG|ENVIRONMENT)\" -S src docs tests .env.example`
-  - `rg -n \"ADR-XXX\" -S src docs || true`
+  - `rg -n \"ADR-047\" -S src docs || true`
 - Read in parallel:
   - `src/config/settings.py`
   - `src/utils/telemetry.py`
@@ -107,14 +107,14 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Primary Task:** Centralize JSONL telemetry + image encryption env config in `DocMindSettings` and remove `os.getenv` sprawl from core modules.
 
-**Why now:** Scattered env reads undermine settings discipline and hide security-sensitive toggles. There is also an `ADR-XXX` marker and a hashing secret that must be formalized for keyed fingerprints (safe logging correlation) and for the existing HMAC canonicalization utilities in `src/utils/canonicalization.py` (so tests and production share the same policy).
+**Why now:** Scattered env reads undermine settings discipline and hide security-sensitive toggles. There is also an `ADR-047` marker and a hashing secret that must be formalized for keyed fingerprints (safe logging correlation) and for the existing HMAC canonicalization utilities in `src/utils/canonicalization.py` (so tests and production share the same policy).
 
 **Definition of Done (DoD):**
 
 - `TelemetryConfig` and `ImageEncryptionConfig` exist in `src/config/settings.py`.
 - `DOCMIND_TELEMETRY_*`, `DOCMIND_IMG_*`, and `DOCMIND_ENVIRONMENT` map through settings.
 - `src/utils/telemetry.py`, `src/utils/security.py`, `src/processing/pdf_pages.py`, and `src/telemetry/opentelemetry.py` do not call `os.getenv`.
-- `ADR-XXX` marker removed (replaced with real ADR reference) and `settings.hashing.hmac_secret` is treated as a real local secret:
+- `ADR-047` marker removed (replaced with real ADR reference) and `settings.hashing.hmac_secret` is treated as a real local secret:
   - validator error messages reference `DOCMIND_HASHING__HMAC_SECRET`
   - the secret can be used by `src/utils/log_safety.py` (SPEC-028) for keyed fingerprints and by `src/utils/canonicalization.py` for canonical hashes
 - Unit tests validate env→settings mapping and telemetry behavior.
@@ -169,7 +169,7 @@ Must pass:
 3. [ ] Refactor `src/utils/telemetry.py` to read from `settings` (no env reads).
 4. [ ] Refactor image encryption env reads to settings and update callers.
 5. [ ] Refactor OTEL resource env read (`DOCMIND_ENVIRONMENT`) to settings.
-6. [ ] Replace `ADR-XXX` marker with a real ADR reference and formalize hashing secret UX:
+6. [ ] Replace `ADR-047` marker with a real ADR reference and formalize hashing secret UX:
    - update validator error message to reference `DOCMIND_HASHING__HMAC_SECRET`
    - add a unit test for the mapping/validation message
 7. [ ] Add/update unit tests for settings mappings and telemetry.
@@ -221,7 +221,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                                                  |
 | **Lint**        |        | `uv run ruff check .` clean                                                                             |
 | **Types**       |        | `uv run pyright` clean                                                                                  |
-| **Pylint**      |        | meets threshold                                                                                         |
 | **Tests**       |        | mapping tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | RTM updated                                                                                             |
 | **Security**    |        | no secret logs; egress surfaces remain gated/off by default                                             |

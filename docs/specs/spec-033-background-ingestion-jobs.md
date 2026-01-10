@@ -28,7 +28,7 @@ related_adrs: ["ADR-052", "ADR-051", "ADR-013", "ADR-016"]
 
 1. As a user, when I click **Ingest**, I see progress updates and can continue navigating the app.
 2. As a user, I can cancel an ingestion job and the app does not leave partial snapshots.
-3. As a user, when the job completes, I see the new snapshot ID and the Chat page can use it.
+3. When the job completes, the user sees the new snapshot ID and the Chat page can use it.
 
 ## Technical Design
 

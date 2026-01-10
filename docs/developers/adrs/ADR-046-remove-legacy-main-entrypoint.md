@@ -6,7 +6,7 @@ Version: 1.0
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
-Related: 012, 024, 015
+Related: ADR-012, ADR-024, ADR-015
 Tags: cleanup, entrypoint, streamlit, legacy
 References:
   - https://docs.streamlit.io/develop/api-reference/cli/run
@@ -40,6 +40,12 @@ Keeping it increases confusion and creates a latent “wrong entrypoint” trap,
 | B: Archive    |                7 |         10 |               8 |     8.2 |
 | A: Keep       |                3 |          8 |               3 |     4.5 |
 
+Scoring rubric:
+
+- Complexity (40%): higher is simpler. Delete is minimal code; archive adds process overhead.
+- Performance (30%): no runtime perf change expected; scores reflect negligible impact.
+- Alignment (30%): alignment to Streamlit-only entrypoint and config discipline; delete is highest.
+
 ## Decision
 
 We will:
@@ -65,3 +71,5 @@ streamlit run src/app.py
 ### Trade-offs
 
 - None for supported app usage; any custom users relying on `python src/main.py` must migrate (explicitly unsupported for v1).
+- Migration guidance must be documented in v1 release notes: “`python src/main.py` removed; use `streamlit run src/app.py` instead.”
+- Downstream projects should search for hardcoded `src/main.py` references and update CI/deployment scripts.

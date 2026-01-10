@@ -20,12 +20,14 @@ Implements `ADR-053` + `SPEC-034`.
 
 **Use skill:** `$streamlit-master-architect` (page import discipline, AppTest patterns)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
+
+**Note:** Paths use `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}`. Adjust to your local skill install if needed.
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/testing_apptest.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/architecture_state.md`
 
 **Preflight:**
 
@@ -189,7 +191,6 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Formatting**  |        | `uv run ruff format .`                                                                                  |
 | **Lint**        |        | `uv run ruff check .` clean                                                                             |
 | **Types**       |        | `uv run pyright` clean                                                                                  |
-| **Pylint**      |        | meets threshold                                                                                         |
 | **Tests**       |        | parsing tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                    |
 | **Security**    |        | bounded parsing; privacy-safe defaults; no secret logs                                                  |

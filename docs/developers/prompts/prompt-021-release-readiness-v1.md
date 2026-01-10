@@ -41,7 +41,7 @@ Use this prompt to implement **every** work package defined in `docs/specs/spec-
 **Mandatory preflight in each new session:**
 
 ```bash
-cd /home/bjorn/repos/agents/docmind-ai-llm
+cd ${DOCMIND_REPO_ROOT:-/path/to/docmind-ai-llm}
 rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools || true
 uv run python -c "import streamlit as st; print(st.__version__)"
 ```
@@ -51,7 +51,7 @@ uv run python -c "import streamlit as st; print(st.__version__)"
 Use the repo’s tool inventory guidance:
 
 - `docs/developers/prompts/README.md` (tool inventory + opensrc rules)
-- `~/prompt_library/assistant/codex-inventory.md` (complete MCP + skill list)
+- `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md` (complete MCP + skill list)
 
 ### Parallelization rules (mandatory)
 
@@ -193,14 +193,14 @@ Rules:
 - Prefer LangGraph supervisor patterns for orchestration logic.
 - Preserve offline-first operation:
   - do not add implicit network calls
-  - gate network/exporters behind config flags
+- gate network/exporters behind config flags.
 
 #### 6) Persistence & Caching Correctness
 
 - Respect snapshot locking/atomicity semantics.
 - Ensure ingestion/idempotency rules remain deterministic:
   - stable IDs/hashes
-  - explicit cache invalidation behavior
+- explicit cache invalidation behavior.
 
 #### 7) Observability & Security
 
@@ -276,7 +276,6 @@ Use these tools as needed:
 | **Formatting**  |        | `ruff format`                                     |
 | **Lint**        |        | `ruff check` clean                                |
 | **Types**       |        | `pyright` clean                                   |
-| **Pylint**      |        | meets threshold                                   |
 | **Tests**       |        | `pytest` green (scoped + full tiers as required)  |
 | **Docs**        |        | ADR/SPEC/RTM updated                              |
 | **Security**    |        | allowlist + path validation + no secret logs      |

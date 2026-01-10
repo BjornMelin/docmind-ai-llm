@@ -23,7 +23,7 @@ Implement **cooperative deadline propagation** for the LangGraph supervisor work
 
 DocMind’s multi-agent coordinator currently:
 
-- runs `compiled_graph.stream(...)` synchronously (Streamlit-compatible)
+- runs `compiled_graph.stream(…)` synchronously (Streamlit-compatible)
 - enforces a wall-clock timeout only **between** streamed state transitions
 - defines config flags:
   - `agents.enable_deadline_propagation`
@@ -80,7 +80,7 @@ We will implement a **budget-aware, cooperative timeout model**:
 1. Add an **absolute deadline** to `MultiAgentState` when `settings.agents.enable_deadline_propagation` is enabled.
 2. Cap request timeouts (LLM and Qdrant client timeouts) so individual calls cannot exceed the agent decision timeout.
 3. Restore a consistent retrieval tool contract by using the structured `retrieve_documents` tool for the retrieval agent.
-4. When `settings.agents.enable_router_injection` is enabled and a `router_engine` is injected in state/tools_data, prefer it as the retrieval path (fail-open to explicit retrieval).
+4. If `settings.agents.enable_router_injection` is enabled and a `router_engine` is injected in state/tools_data, prefer it as the retrieval path (fail-open to explicit retrieval).
 
 ## High-Level Architecture
 

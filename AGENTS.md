@@ -149,6 +149,7 @@ Optional extras:
 - Do not use `os.getenv` directly in core code.
 - Avoid import-time IO; use `startup_init()` and `initialize_integrations()` from
   `src/config/integrations.py` to set up directories, LlamaIndex Settings, and OTel.
+- Agent tooling: `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true|false` controls parallel tool execution (see ADR‑010).
 
 LLM backends:
 

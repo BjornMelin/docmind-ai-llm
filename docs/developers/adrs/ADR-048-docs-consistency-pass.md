@@ -46,7 +46,7 @@ This erodes trust and makes maintenance harder.
 
 2. Add a lightweight automated check in CI/quality gates to prevent regressions:
 
-- scan non-archived docs for referenced `src/...` paths and assert files exist
+- scan non-archived docs for referenced `src/…` paths and assert files exist
 - keep allowlist/suppressions minimal
 
 ## Consequences

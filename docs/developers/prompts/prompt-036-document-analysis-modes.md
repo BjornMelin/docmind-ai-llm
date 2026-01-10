@@ -20,7 +20,7 @@ Implements `ADR-023` + `SPEC-036`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **Use skill:** `$streamlit-master-architect`
 
@@ -33,18 +33,18 @@ Load and follow its workflows for:
 
 Skill references to consult (as needed):
 
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/architecture_state.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/caching_and_fragments.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/testing_apptest.md`
-- `/home/bjorn/.codex/skills/streamlit-master-architect/references/widget_keys_and_reruns.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/architecture_state.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/caching_and_fragments.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/testing_apptest.md`
+- `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/references/widget_keys_and_reruns.md`
 
 **Streamlit preflight (version + docs + audit):**
 
 ```bash
 uv sync
 uv run python -c "import streamlit as st; print(st.__version__)"
-uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
-uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
+uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/audit_streamlit_project.py --root . --format md
+uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/sync_streamlit_docs.py --out /tmp/streamlit-docs
 ```
 
 ### Prompt-specific Tool Playbook (optimize tool usage)
@@ -80,11 +80,13 @@ uv run python /home/bjorn/.codex/skills/streamlit-master-architect/scripts/sync_
 
 **Time-sensitive facts (use web tools):**
 
-- Prefer `functions.mcp__exa__web_search_exa` for discovery; use `web.run` if you need citations or dates.
+- Prefer `functions.mcp__exa__web_search_exa` for discovery. Use `web.run` when you need citations or dates.
+
+**Tool availability:** If any MCP tool is unavailable in the Codex environment, fall back to repo-local `rg` searches and the official docs links above.
 
 ---
 
-## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
+## **Implementation Executor Template (DocMind / Python)**
 
 ### YOU ARE
 
@@ -137,7 +139,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### HARD RULES (EXECUTION)
+### **Hard Rules (Execution)**
 
 #### 1) Python + Packaging
 
@@ -180,7 +182,7 @@ Rules:
 - Prefer existing coordinator/retrieval wiring; do not re-implement agent logic.
 - Preserve offline-first operation:
   - do not add implicit network calls
-  - gate network/exporters behind config flags
+  - gate network/exporters behind config flags.
 
 ---
 
@@ -217,7 +219,7 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 ---
 
-### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
+### **Anti-Pattern Kill List (Immediate Deletion/Rewrite)**
 
 Scan the feature scope and delete or refactor immediately if found:
 
@@ -233,7 +235,7 @@ Scan the feature scope and delete or refactor immediately if found:
 
 ---
 
-### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
+### **Final Verification Checklist (Must Complete)**
 
 | Requirement     | Status | Proof / Notes                                      |
 | --------------- | ------ | -------------------------------------------------- |
@@ -241,7 +243,6 @@ Scan the feature scope and delete or refactor immediately if found:
 | **Formatting**  |        | `uv run ruff format .`                             |
 | **Lint**        |        | `uv run ruff check .`                              |
 | **Types**       |        | `uv run pyright`                                   |
-| **Pylint**      |        | meets threshold                                    |
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast`        |
 | **Docs**        |        | ADR/SPEC/RTM updated                               |
 | **Security**    |        | no unsafe HTML; no new egress                      |

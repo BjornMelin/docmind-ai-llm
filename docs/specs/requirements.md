@@ -65,6 +65,8 @@ FR-029 The system **shall** enforce and propagate an agent decision timeout budg
 FR-030 The system **shall** provide multi-session Chat management (create/rename/delete/select) and store session metadata locally. Source: SPEC‑041/ADR‑057; Accept: AC‑FR‑030.<br>
 FR-031 The system **shall** support branching/time travel for Chat sessions: list checkpoints, fork from a checkpoint, and resume execution from the fork while preserving history. Source: SPEC‑041/ADR‑057; Accept: AC‑FR‑031.<br>
 FR-032 The system **shall** support long-term memory (facts/preferences) with metadata-filtered recall and user-visible review/purge controls. Source: SPEC‑041/ADR‑057; Accept: AC‑FR‑032.<br>
+FR‑SEC‑IMG‑ENC The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. Keys SHALL be provisioned via env/keystore and never logged in plaintext. Source: SPEC‑011; Accept: AC‑FR‑SEC‑IMG‑ENC.<br>
+FR‑SEC‑NET‑001 The system **shall** default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted. LM Studio endpoints MUST end with `/v1`. Source: SPEC‑011/ADR‑024; Accept: AC‑FR‑SEC‑NET‑001.<br>
 
 ## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010
 
@@ -164,7 +166,6 @@ Scenario: Switch provider from vLLM to Ollama
   Given Settings provider=vllm and model=A
   When I change provider to "ollama" and model=B and press Save
   Then subsequent chats shall hit the Ollama base_url and model=B
-FR‑SEC‑IMG‑ENC The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. Keys SHALL be provisioned via env/keystore and never logged in plaintext. Source: SPEC‑011; Accept: AC‑FR‑SEC‑IMG‑ENC.<br>
 ```
 
 ### AC‑FR‑005‑B
@@ -218,8 +219,6 @@ Scenario: Exports
   Then JSONL SHALL be written (one relation per line)
   And Parquet SHALL be written when pyarrow is available
 ```
-
-FR‑SEC‑NET‑001 The system **shall** default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted. LM Studio endpoints MUST end with `/v1`. Source: SPEC‑011/ADR‑024; Accept: AC‑FR‑SEC‑NET‑001.<br>
 
 ### AC‑FR‑009‑LOCK
 
@@ -317,4 +316,24 @@ Scenario: Deadline exceeded returns a graceful timeout response
   Given agent deadline propagation is enabled and decision_timeout is small
   When a call exceeds the remaining budget
   Then the coordinator SHALL return a timeout response (or fallback) without crashing
+```
+
+### AC‑FR‑030
+
+```gherkin
+Scenario: Create and select chat sessions
+  Given the Chat interface with multi-session support
+  When I create a new session with name "Research Q1"
+  Then the session metadata (name, created_at, selected_at) SHALL be persisted locally
+  And I can switch between sessions using the session selector
+```
+
+### AC‑FR‑031
+
+```gherkin
+Scenario: Branch from checkpoint and resume
+  Given a session with chat history and multiple checkpoints
+  When I list checkpoints and fork from checkpoint #N
+  Then a new branched session SHALL be created with history up to checkpoint #N
+  And resuming the fork SHALL allow new queries without losing the branch point
 ```

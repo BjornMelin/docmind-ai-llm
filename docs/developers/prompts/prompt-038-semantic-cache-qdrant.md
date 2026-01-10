@@ -18,7 +18,7 @@ Implements `ADR-035` + `SPEC-038`.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Read first:** `docs/developers/prompts/README.md` and `~/prompt_library/assistant/codex-inventory.md`.
+**Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
 **opensrc guidance:**
 
@@ -34,11 +34,11 @@ Implements `ADR-035` + `SPEC-038`.
 **Parallel preflight (use `multi_tool_use.parallel` for independent work):**
 
 - Locate the LLM call boundary where caching can be inserted:
-  - `rg -n \"Settings\\.llm|\\.complete\\(|\\.achat\\(|\\.chat\\(|llm\\.\" src/agents src/pages src/config -S`
+  - `rg -n "Settings\\.llm|\\.complete\\(|\\.achat\\(|\\.chat\\(|llm\\." src/agents src/pages src/config -S`
 - Confirm semantic cache config fields and current provider enum:
-  - `rg -n \"class SemanticCacheConfig\" -n src/config/settings.py`
+  - `rg -n "class SemanticCacheConfig" src/config/settings.py`
 - Confirm Qdrant client usage patterns already in repo:
-  - `rg -n \"QdrantClient\\(\" src -S`
+  - `rg -n "QdrantClient\\(" src -S`
 - Verify qdrant-client is available and inspect snapshot methods:
   - `uv run python -c \"import inspect; from qdrant_client import QdrantClient; c=QdrantClient(location=':memory:'); print([m for m in dir(c) if 'snapshot' in m])\"`
 
@@ -199,7 +199,6 @@ uv run python -m pytest -q
 | **Formatting**    |        | `uv run ruff format .`                     |
 | **Lint**          |        | `uv run ruff check .`                      |
 | **Types**         |        | `uv run pyright`                           |
-| **Pylint**        |        | meets threshold                            |
 | **Tests**         |        | `uv run python -m pytest -q`               |
 | **Docs**          |        | ADR/SPEC/RTM updated                       |
 | **Security**      |        | no raw prompts stored; strict invalidation |
