@@ -16,12 +16,22 @@ import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
-from qdrant_client.http.api_client import ResourceExhaustedResponse
+
+try:  # optional across qdrant-client versions
+    from qdrant_client.http.api_client import ResourceExhaustedResponse
+except ImportError:  # pragma: no cover - older clients
+
+    class ResourceExhaustedResponse(Exception):  # noqa: N818
+        """Fallback when qdrant-client lacks ResourceExhaustedResponse."""
+
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qdrant_client.http.models import QueryResponse as QdrantQueryResponse
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from src.retrieval.sparse_query import encode_to_qdrant
@@ -67,12 +77,10 @@ class KeywordSparseRetriever:
             client_factory: Optional factory to lazily construct a QdrantClient.
         """
         self.params = params
-        self._client: QdrantClient | None = client
-        self._client_factory = client_factory or (
-            lambda: QdrantClient(**get_client_config())
-        )
-        # Cache timeout for telemetry; keep consistent with configured client.
         cfg = get_client_config()
+        self._client: QdrantClient | None = client
+        self._client_factory = client_factory or (lambda: QdrantClient(**cfg))
+        # Cache timeout for telemetry; keep consistent with configured client.
         try:
             self._qdrant_timeout_s = int(cfg.get("timeout", 60))
         except (TypeError, ValueError):  # pragma: no cover - defensive
@@ -174,9 +182,7 @@ class KeywordSparseRetriever:
         )
         return nodes
 
-    def _query_points_with_retry(
-        self, sparse_vec: Any
-    ):  # -> qdrant_client.http.models.QueryResponse
+    def _query_points_with_retry(self, sparse_vec: Any) -> QdrantQueryResponse:
         """Query Qdrant with rate-limit aware retries (best-effort)."""
         retries = max(0, int(self.params.rate_limit_retries))
         last_exc: ResourceExhaustedResponse | None = None
@@ -197,7 +203,7 @@ class KeywordSparseRetriever:
                 time.sleep(delay)
         if last_exc is not None:
             raise last_exc
-        raise ResourceExhaustedResponse("Qdrant rate limit exceeded")
+        raise RuntimeError("Qdrant rate limit retry exhausted without exception")
 
     def _rate_limit_delay(self, exc: ResourceExhaustedResponse, attempt: int) -> float:
         retry_after = getattr(exc, "retry_after", None)
