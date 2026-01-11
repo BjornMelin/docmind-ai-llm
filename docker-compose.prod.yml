@@ -1,0 +1,5 @@
+services:
+  app:
+    read_only: true
+    tmpfs:
+      - /tmp

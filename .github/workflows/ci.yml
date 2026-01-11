@@ -85,3 +85,106 @@ jobs:
             coverage.xml
             coverage.json
           if-no-files-found: ignore
+
+  container-static:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Hadolint (errors only)
+        run: |
+          docker run --rm -i hadolint/hadolint:v2.12.0 hadolint --failure-threshold error - < Dockerfile
+
+      - name: Static checks (non-root, no latest, env prefixes)
+        run: |
+          test -f .dockerignore
+          rg -n '^\\.env(\\.|$)' .dockerignore
+
+          if rg -n ':latest\\b' Dockerfile docker-compose.yml; then
+            echo "Do not use ':latest' tags in Docker artifacts."
+            exit 1
+          fi
+
+          rg -n '^FROM\\s+python:3\\.11' Dockerfile
+
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          dockerfile = Path("Dockerfile").read_text(encoding="utf-8").splitlines()
+          user_directives = []
+          cmd_directives = []
+          entrypoint_directives = []
+
+          for raw in dockerfile:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+              continue
+            if re.match(r"(?i)^USER\\s+", line):
+              user_directives.append(line.split(maxsplit=1)[1].strip())
+              continue
+            if re.match(r"(?i)^CMD\\s+", line):
+              cmd_directives.append(line.split(maxsplit=1)[1].strip())
+              continue
+            if re.match(r"(?i)^ENTRYPOINT\\s+", line):
+              entrypoint_directives.append(line.split(maxsplit=1)[1].strip())
+              continue
+
+          if not user_directives:
+            raise SystemExit("Dockerfile must set a non-root USER.")
+          final_user = user_directives[-1]
+          if final_user.lower() in {"root", "0"}:
+            raise SystemExit(f"Dockerfile final USER must be non-root (found: {final_user!r}).")
+
+          def _parse_json_array(value: str) -> list[str]:
+            if not value.startswith("["):
+              raise ValueError("not JSON array form")
+            parsed = json.loads(value)
+            if not isinstance(parsed, list) or not all(isinstance(v, str) for v in parsed):
+              raise ValueError("invalid JSON array")
+            return parsed
+
+          if cmd_directives:
+            cmd = cmd_directives[-1]
+            arr = _parse_json_array(cmd)
+            if len(arr) == 1 and re.search(r"\\s|&&|\\|\\|", arr[0]):
+              raise SystemExit(f"Dockerfile CMD must not embed shell in a single string: {cmd}")
+            if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
+              raise SystemExit(f"Dockerfile CMD must not use shell form: {cmd}")
+
+          if entrypoint_directives:
+            ep = entrypoint_directives[-1]
+            arr = _parse_json_array(ep)
+            if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
+              raise SystemExit(f"Dockerfile ENTRYPOINT must not use shell form: {ep}")
+
+          print("Container artifact checks: OK")
+          PY
+
+          # Compose validation and canonical env var naming.
+          docker compose config >/dev/null
+          if [ -f docker-compose.prod.yml ]; then
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml config >/dev/null
+            rg -n 'read_only:\\s*true' docker-compose.prod.yml
+            rg -n 'tmpfs:' docker-compose.prod.yml
+            rg -n '/tmp' docker-compose.prod.yml
+          fi
+          if rg -n '^\\s+OLLAMA_BASE_URL\\s*:' docker-compose.yml; then
+            echo "Use DOCMIND_OLLAMA_BASE_URL in compose, not OLLAMA_BASE_URL."
+            exit 1
+          fi
+          if rg -n '^\\s+VLLM_BASE_URL\\s*:' docker-compose.yml; then
+            echo "Use DOCMIND_VLLM__VLLM_BASE_URL in compose, not VLLM_BASE_URL."
+            exit 1
+          fi
+          if rg -n '^\\s+LMSTUDIO_BASE_URL\\s*:' docker-compose.yml; then
+            echo "Use DOCMIND_LMSTUDIO_BASE_URL in compose, not LMSTUDIO_BASE_URL."
+            exit 1
+          fi

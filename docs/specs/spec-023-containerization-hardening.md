@@ -4,7 +4,7 @@ title: Containerization Hardening — Python 3.11, uv-lock, Non-root, and Canoni
 version: 1.0.0
 date: 2026-01-10
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - NFR-PORT-003: Docker/compose artifacts run and are reproducible from uv.lock.
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.
@@ -39,6 +39,14 @@ Use a multi-stage Dockerfile:
    - base: Python 3.11 slim (bookworm)
    - install build deps required by Unstructured/PyMuPDF (`libmagic1`, MuPDF libs, etc.)
    - install `uv`
+   - set `UV_PYTHON_DOWNLOADS=never` to keep uv from downloading a separate Python
+   - prefetch the `torch` wheel with retry/resume before `uv sync` to avoid
+     large-download hangs; prefer the PyTorch CPU wheel index when available,
+     and fall back to PyPI. Support `TORCH_VERSION`, optional `TORCH_WHEEL_URL`,
+     and optional `TORCH_WHEEL_SHA256` for checksum verification.
+   - keep the app image CPU-oriented by skipping CUDA-specific `nvidia-*`
+     packages during `uv sync` (GPU inference is provided by the Ollama
+     service in compose, not the app container)
    - run `uv sync --frozen`
 
 2. Runtime stage:
@@ -81,6 +89,27 @@ Recommended env wiring in the `docmind` service:
 
 Power users can still run vLLM/LM Studio externally and point DocMind at them (with allowlist rules), but compose does not bundle them.
 
+Legacy Compose note: older `docker-compose` variants may ignore `deploy.resources`.
+If you must support them, use a GPU device request block instead of (or in addition to)
+`deploy.resources` in the `ollama` service:
+
+```yaml
+device_requests:
+  - driver: nvidia
+    count: 1
+    capabilities: [gpu]
+```
+
+#### Hardened production override
+
+Add `docker-compose.prod.yml` for production hardening:
+
+- `read_only: true` for the app container
+- `tmpfs` for `/tmp`
+- keep `/app/cache` and `/app/logs` as volumes (operators may swap these to `tmpfs` if they prefer ephemeral storage)
+
+This keeps the base compose file dev-friendly while providing a least-privilege option.
+
 ### .dockerignore
 
 Add `.dockerignore` to exclude:
@@ -109,7 +138,13 @@ docker compose up --build -d
 docker compose logs -f --tail=100 app
 ```
 
-GPU profile verification (host must have NVIDIA runtime configured):
+Hardened compose verification:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml config
+```
+
+GPU profile verification (requires Docker Compose v2+ and NVIDIA runtime configured):
 
 ```bash
 docker compose --profile gpu up --build -d
