@@ -284,6 +284,10 @@ docker-compose up --build
 
 Access the app at `http://localhost:8501`.
 
+Note: GPU reservations in `docker-compose.yml` require Docker Engine with
+Compose V2 (Docker Compose plugin). The `deploy.resources.reservations.devices`
+block is ignored on older Compose versions and in swarm mode.
+
 ## Usage
 
 ### Configure LLM Runtime (Settings page)

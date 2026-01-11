@@ -16,6 +16,8 @@ permissions:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -91,6 +93,8 @@ jobs:
 
   container-static:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -162,6 +166,7 @@ jobs:
               if value.endswith("\\"):
                 value = value[:-1].rstrip()
               if value.startswith("["):
+                # Pragmatic bracket counting; ignores brackets inside strings/comments.
                 bracket_balance = value.count("[") - value.count("]")
                 while bracket_balance > 0 and idx + 1 < len(dockerfile):
                   idx += 1

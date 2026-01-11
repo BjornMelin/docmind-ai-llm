@@ -31,6 +31,7 @@ services:
   ollama:
     image: ollama/ollama:0.13.5
     profiles: ["gpu"]
+    # GPU reservations require Docker Engine + Compose V2 (see README).
     volumes:
       - ollama:/root/.ollama
     networks:
@@ -51,6 +52,7 @@ services:
     networks:
       - backend
     healthcheck:
+      # Uses bash /dev/tcp since qdrant image omits curl/wget.
       test: ["CMD", "bash", "-c", ":> /dev/tcp/127.0.0.1/6333 || exit 1"]
       interval: 10s
       timeout: 5s

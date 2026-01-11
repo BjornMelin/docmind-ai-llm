@@ -125,6 +125,10 @@ def main() -> None:
                 headers["Range"] = f"bytes={existing}-"
             req = urllib.request.Request(url, headers=headers)  # noqa: S310
             with _open_https_request(req, timeout=60) as resp, dest.open("ab") as fh:
+                if existing and resp.status == 200:
+                    fh.seek(0)
+                    fh.truncate()
+                    existing = 0
                 total = resp.headers.get("Content-Range")
                 if total and "/" in total:
                     total = total.split("/")[-1].strip()
@@ -156,6 +160,15 @@ def main() -> None:
                     dest.unlink()
                 else:
                     # Without a checksum we can only assume the file is complete.
+                    file_size = dest.stat().st_size
+                    min_size = 50 * 1024 * 1024
+                    if file_size < min_size:
+                        print(
+                            f"File too small ({file_size} bytes); re-downloading.",
+                            flush=True,
+                        )
+                        dest.unlink()
+                        continue
                     print(
                         "Received HTTP 416 for existing torch wheel with no checksum; "
                         "assuming file is complete and proceeding "
