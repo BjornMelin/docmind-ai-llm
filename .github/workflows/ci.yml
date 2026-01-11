@@ -267,6 +267,7 @@ jobs:
                 f"Dockerfile ENTRYPOINT must use JSON array form (found: {ep})"
               )
             _assert_no_shell_invocation("ENTRYPOINT", arr, ep)
+            _assert_no_embedded_shell("ENTRYPOINT", arr, ep)
 
           print("Container artifact checks: OK")
           PY
