@@ -8,9 +8,25 @@ import socket
 import sys
 import time
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
+
+
+class _TorchWheelIndexParser(HTMLParser):
+    def __init__(self, needle_prefix: str) -> None:
+        super().__init__()
+        self._needle_prefix = needle_prefix
+        self.result: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self.result is not None or tag.lower() != "a":
+            return
+        for attr, value in attrs:
+            if attr.lower() == "href" and value and self._needle_prefix in value:
+                self.result = value
+                return
 
 
 def _resolve_torch_wheel_url(
@@ -25,11 +41,13 @@ def _resolve_torch_wheel_url(
     cpu_index = "https://download.pytorch.org/whl/cpu/torch/"
     try:
         html = _open_https(cpu_index, timeout=30).read().decode("utf-8", "ignore")
-        needle = f"/whl/cpu/torch-{version}%2Bcpu-{py_tag}-{py_tag}-{plat}.whl#sha256="
-        idx = html.find(needle)
-        if idx != -1:
-            end = html.find('"', idx)
-            href = html[idx:end]
+        needle_prefix = (
+            f"/whl/cpu/torch-{version}%2Bcpu-{py_tag}-{py_tag}-{plat}.whl#sha256="
+        )
+        parser = _TorchWheelIndexParser(needle_prefix=needle_prefix)
+        parser.feed(html)
+        href = parser.result
+        if href:
             path, sha = href.split("#sha256=", 1)
             filename = Path(unquote(path)).name
             print(f"Using PyTorch CPU wheel: {filename}", flush=True)
@@ -159,7 +177,9 @@ def main() -> None:
                         break
                     dest.unlink()
                 else:
-                    # Without a checksum we can only assume the file is complete.
+                    # Without a checksum, verify the file size as a sanity check.
+                    # PyTorch wheels are typically 100+ MiB; 50 MiB is a conservative
+                    # minimum.
                     file_size = dest.stat().st_size
                     min_size = 50 * 1024 * 1024
                     if file_size < min_size:

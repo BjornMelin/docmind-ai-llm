@@ -95,6 +95,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      EXPECTED_PYTHON_VERSION: '3.11'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -111,42 +113,73 @@ jobs:
 
       - name: Hadolint (errors only)
         run: |
-          docker run --rm -i hadolint/hadolint:v2.12.0 hadolint --failure-threshold error - < Dockerfile
+          docker run --rm -i hadolint/hadolint:v2.14.0 hadolint --failure-threshold error - < Dockerfile
 
       - name: Static checks (non-root, no latest, env prefixes)
         run: |
           set -euo pipefail
 
           test -f .dockerignore
+          test -f Dockerfile
           python - <<'PY'
           from pathlib import Path
 
           lines = Path(".dockerignore").read_text(encoding="utf-8-sig").splitlines()
           expected = {".env", ".env.*", ".env*"}
           if not any(line.strip() in expected for line in lines):
-            raise SystemExit("Expected .env patterns in .dockerignore")
+            raise SystemExit(
+              "Expected at least one .env pattern (.env, .env.*, or .env*) in .dockerignore"
+            )
           PY
 
           latest_targets=(Dockerfile docker-compose.yml)
           if [ -f docker-compose.prod.yml ]; then
             latest_targets+=(docker-compose.prod.yml)
           fi
-          if rg -n ':latest\\b' "${latest_targets[@]}"; then
+          if rg -n ':latest([^[:alnum:]_]|$)' "${latest_targets[@]}"; then
             echo "Do not use ':latest' tags in Docker artifacts."
             exit 1
           fi
 
-          rg -n '^FROM\\s+python:3\\.11' Dockerfile || { echo "Dockerfile must use python:3.11 base image"; exit 1; }
+          python_ver_re="${EXPECTED_PYTHON_VERSION//./[.]}"
+          rg -n "^FROM[[:space:]]+python:${python_ver_re}([[:space:]]|$|@|-)" Dockerfile || { echo "Dockerfile must use python:${EXPECTED_PYTHON_VERSION} base image"; exit 1; }
 
           python - <<'PY'
           import json
           import re
           from pathlib import Path
 
-          dockerfile = Path("Dockerfile").read_text(encoding="utf-8").splitlines()
-          user_directives = []
-          cmd_directives = []
-          entrypoint_directives = []
+          dockerfile_path = Path("Dockerfile")
+          if not dockerfile_path.exists():
+            raise SystemExit("Dockerfile not found.")
+
+          dockerfile = dockerfile_path.read_text(encoding="utf-8").splitlines()
+          user_directives: list[str] = []
+          cmd_directives: list[str] = []
+          entrypoint_directives: list[str] = []
+
+          def _read_json_value(lines: list[str], idx: int, initial: str) -> tuple[str, int]:
+            value = initial
+            if value.endswith("\\"):
+              value = value[:-1].rstrip()
+            if not value.startswith("["):
+              return value, idx
+
+            collected = value
+            while True:
+              try:
+                json.loads(collected)
+                return collected, idx
+              except json.JSONDecodeError:
+                idx += 1
+                if idx >= len(lines):
+                  raise SystemExit("Unterminated JSON array in Dockerfile CMD/ENTRYPOINT.")
+                cont = lines[idx].strip()
+                if not cont or cont.startswith("#"):
+                  continue
+                if cont.endswith("\\"):
+                  cont = cont[:-1].rstrip()
+                collected = f"{collected} {cont}".strip()
 
           idx = 0
           while idx < len(dockerfile):
@@ -162,21 +195,8 @@ jobs:
             cmd_match = re.match(r"(?i)^CMD\s+", line)
             entrypoint_match = re.match(r"(?i)^ENTRYPOINT\s+", line)
             if cmd_match or entrypoint_match:
-              value = line.split(maxsplit=1)[1].strip()
-              if value.endswith("\\"):
-                value = value[:-1].rstrip()
-              if value.startswith("["):
-                # Pragmatic bracket counting; ignores brackets inside strings/comments.
-                bracket_balance = value.count("[") - value.count("]")
-                while bracket_balance > 0 and idx + 1 < len(dockerfile):
-                  idx += 1
-                  cont = dockerfile[idx].strip()
-                  if not cont or cont.startswith("#"):
-                    continue
-                  if cont.endswith("\\"):
-                    cont = cont[:-1].rstrip()
-                  value = f"{value} {cont}".strip()
-                  bracket_balance = value.count("[") - value.count("]")
+              initial = line.split(maxsplit=1)[1].strip()
+              value, idx = _read_json_value(dockerfile, idx, initial)
               if cmd_match:
                 cmd_directives.append(value)
               else:
@@ -199,6 +219,34 @@ jobs:
               raise ValueError("invalid JSON array")
             return parsed
 
+          def _assert_no_shell_invocation(kind: str, arr: list[str], raw: str) -> None:
+            if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
+              raise SystemExit(
+                f"Dockerfile {kind} must not invoke a shell via sh -c / bash -c: {raw}"
+              )
+
+          def _assert_no_embedded_shell(kind: str, arr: list[str], raw: str) -> None:
+            if len(arr) != 1:
+              return
+
+            arg0 = arr[0]
+            if re.search(r"&&|\|\||[|;<>`]", arg0):
+              raise SystemExit(
+                f"Dockerfile {kind} must not embed shell operators in a single string: {raw}"
+              )
+
+            # Catch common mistakes like `CMD ["python -m app"]` while permitting
+            # rare cases like a binary path that legitimately contains spaces.
+            common_bins = ("python", "python3", "uvicorn", "streamlit", "gunicorn", "bash", "sh")
+            if any(arg0.startswith(f"{b} ") for b in common_bins):
+              raise SystemExit(
+                f"Dockerfile {kind} must split arguments into an exec-form array: {raw}"
+              )
+            if re.search(r"\s--?\w", arg0) or re.search(r"\s-[A-Za-z]", arg0):
+              raise SystemExit(
+                f"Dockerfile {kind} must split flags into separate args: {raw}"
+              )
+
           if cmd_directives:
             cmd = cmd_directives[-1]
             try:
@@ -207,10 +255,8 @@ jobs:
               raise SystemExit(
                 f"Dockerfile CMD must use JSON array form (found: {cmd})"
               )
-            if len(arr) == 1 and re.search(r"\s|&&|\|\|", arr[0]):
-              raise SystemExit(f"Dockerfile CMD must not embed shell in a single string: {cmd}")
-            if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
-              raise SystemExit(f"Dockerfile CMD must not use shell form: {cmd}")
+            _assert_no_shell_invocation("CMD", arr, cmd)
+            _assert_no_embedded_shell("CMD", arr, cmd)
 
           if entrypoint_directives:
             ep = entrypoint_directives[-1]
@@ -220,17 +266,16 @@ jobs:
               raise SystemExit(
                 f"Dockerfile ENTRYPOINT must use JSON array form (found: {ep})"
               )
-            if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
-              raise SystemExit(f"Dockerfile ENTRYPOINT must not use shell form: {ep}")
+            _assert_no_shell_invocation("ENTRYPOINT", arr, ep)
 
           print("Container artifact checks: OK")
           PY
 
           # Compose validation and canonical env var naming.
-          docker compose config >/dev/null || { echo "docker compose config failed"; exit 1; }
+          docker compose config >/dev/null 2>&1 || { echo "docker compose config failed:"; docker compose config 2>&1; exit 1; }
           if [ -f docker-compose.prod.yml ]; then
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml config >/dev/null || { echo "docker compose -f prod config failed"; exit 1; }
-            rg -n 'read_only:\\s*true' docker-compose.prod.yml || { echo "docker-compose.prod.yml must set read_only: true"; exit 1; }
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml config >/dev/null 2>&1 || { echo "docker compose -f prod config failed:"; docker compose -f docker-compose.yml -f docker-compose.prod.yml config 2>&1; exit 1; }
+            rg -n 'read_only:[[:space:]]*true' docker-compose.prod.yml || { echo "docker-compose.prod.yml must set read_only: true"; exit 1; }
             rg -n 'tmpfs:' docker-compose.prod.yml || { echo "docker-compose.prod.yml must set tmpfs"; exit 1; }
             rg -n '/tmp' docker-compose.prod.yml || { echo "docker-compose.prod.yml tmpfs must include /tmp"; exit 1; }
           fi
@@ -238,15 +283,15 @@ jobs:
           if [ -f docker-compose.prod.yml ]; then
             compose_files+=(docker-compose.prod.yml)
           fi
-          if rg -n '(^\\s+OLLAMA_BASE_URL\\s*:|^\\s*-\\s*OLLAMA_BASE_URL\\s*=)' "${compose_files[@]}"; then
+          if rg -n '(^[[:space:]]+OLLAMA_BASE_URL[[:space:]]*:|^[[:space:]]*-[[:space:]]*OLLAMA_BASE_URL[[:space:]]*=)' "${compose_files[@]}"; then
             echo "Use DOCMIND_OLLAMA_BASE_URL in compose, not OLLAMA_BASE_URL."
             exit 1
           fi
-          if rg -n '(^\\s+VLLM_BASE_URL\\s*:|^\\s*-\\s*VLLM_BASE_URL\\s*=)' "${compose_files[@]}"; then
+          if rg -n '(^[[:space:]]+VLLM_BASE_URL[[:space:]]*:|^[[:space:]]*-[[:space:]]*VLLM_BASE_URL[[:space:]]*=)' "${compose_files[@]}"; then
             echo "Use DOCMIND_VLLM__VLLM_BASE_URL in compose, not VLLM_BASE_URL."
             exit 1
           fi
-          if rg -n '(^\\s+LMSTUDIO_BASE_URL\\s*:|^\\s*-\\s*LMSTUDIO_BASE_URL\\s*=)' "${compose_files[@]}"; then
+          if rg -n '(^[[:space:]]+LMSTUDIO_BASE_URL[[:space:]]*:|^[[:space:]]*-[[:space:]]*LMSTUDIO_BASE_URL[[:space:]]*=)' "${compose_files[@]}"; then
             echo "Use DOCMIND_LMSTUDIO_BASE_URL in compose, not LMSTUDIO_BASE_URL."
             exit 1
           fi
