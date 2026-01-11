@@ -13,9 +13,17 @@ htmlcov/
 dist/
 build/
 .DS_Store
+cache/
 data/
 logs/
 models/
 models_cache/
 opensrc/
 .codex/
+docs/
+tests/
+tests_agents/
+tools/
+scripts/*
+!scripts/docker_fetch_torch_wheel.py
+.github/
