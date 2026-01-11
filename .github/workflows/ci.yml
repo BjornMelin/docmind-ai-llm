@@ -116,7 +116,14 @@ jobs:
           set -euo pipefail
 
           test -f .dockerignore
-          rg -n '^\\.env(\\.|$)' .dockerignore || { echo "Expected .env patterns in .dockerignore"; exit 1; }
+          python - <<'PY'
+          from pathlib import Path
+
+          lines = Path(".dockerignore").read_text(encoding="utf-8-sig").splitlines()
+          expected = {".env", ".env.*"}
+          if not any(line.strip() in expected for line in lines):
+            raise SystemExit("Expected .env patterns in .dockerignore")
+          PY
 
           if rg -n ':latest\\b' Dockerfile docker-compose.yml; then
             echo "Do not use ':latest' tags in Docker artifacts."
