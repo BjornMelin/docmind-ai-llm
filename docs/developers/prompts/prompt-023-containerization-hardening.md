@@ -26,7 +26,7 @@ Use the `$docker-architect` workflow patterns (multi-stage, non-root, .dockerign
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Audience note:** This prompt targets the Codex/MCP execution environment (functions.* tools and `${CODEX_*}` paths). If you are running without Codex, replace those calls with direct shell commands and standard tooling; the skill paths are external to the DocMind repo.
+**Audience note:** This prompt targets the Codex/MCP execution environment (functions._ tools and `${CODEX_*}` paths). If you are running without Codex, replace those calls with direct shell commands and standard tooling; the skill paths are external to the DocMind repo.
 
 **Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
@@ -70,7 +70,6 @@ Skill references to consult (as needed):
 
 - LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
 - LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain`
-- OpenAI API docs: `functions.mcp__openaiDeveloperDocs__search_openai_docs` → `functions.mcp__openaiDeveloperDocs__fetch_openai_doc` (only if this work package touches OpenAI API semantics)
 
 **Time-sensitive facts (prefer web tools):**
 
@@ -142,12 +141,14 @@ You must keep changes minimal, library-first, and maintainable.
 - `.dockerignore` exists and excludes `.env` and large dev artifacts.
 - `docker-compose.yml` uses canonical `DOCMIND_*` variables (no legacy names like `OLLAMA_BASE_URL`).
 - `docker-compose.yml` provides a `gpu` profile that runs **Ollama** with GPU access on an internal network (no host port publish by default), and DocMind connects via `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434` with `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` including `http://ollama`.
+- `docker-compose.prod.yml` provides `read_only: true` and `tmpfs` for `/tmp`.
 - `docs/specs/traceability.md` includes NFR-PORT-003 row (Planned → Implemented).
 
 **In-scope modules/files (initial):**
 
 - `Dockerfile`
 - `docker-compose.yml`
+- `docker-compose.prod.yml`
 - `.dockerignore` (new)
 - `docs/developers/adrs/ADR-042-containerization-hardening.md`
 - `docs/specs/spec-023-containerization-hardening.md`
@@ -204,6 +205,7 @@ After container changes, the repo must still pass:
 4. [ ] Update `docker-compose.yml` to canonical `DOCMIND_*` env contract and validate config.
 
    - Run: `docker compose config`
+   - Run: `docker compose -f docker-compose.yml -f docker-compose.prod.yml config`
 
 5. [ ] Build and run container locally (smoke).
 

@@ -1,7 +1,7 @@
 ---
 ADR: 042
 Title: Containerization Hardening (Dockerfile + Compose) with Optional GPU Backend (Ollama)
-Status: Proposed
+Status: Implemented
 Version: 1.1
 Date: 2026-01-10
 Supersedes: 015
@@ -70,6 +70,7 @@ Implement a ship-ready container baseline:
 - Replace Dockerfile with:
   - Python 3.11 base
   - multi-stage build with `uv sync --frozen`
+  - `UV_PYTHON_DOWNLOADS=never` to force uv to use container Python
   - non-root runtime user
   - correct Streamlit entrypoint: `streamlit run src/app.py --server.address=0.0.0.0 --server.port=8501`
 - Update `docker-compose.yml`:
@@ -80,6 +81,16 @@ Implement a ship-ready container baseline:
     - internal-only network (no `ports:` by default)
     - DocMind connects via `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434`
     - extend `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` to include `http://ollama`
+- Make `torch` installation reliable during container builds by prefetching the
+  exact wheel with retry/resume and installing it before `uv sync --frozen`.
+  Provide `TORCH_VERSION`, `TORCH_WHEEL_URL`, and optional `TORCH_WHEEL_SHA256`
+  build args for overrides/verification. The fetch step defaults to the
+  PyTorch CPU wheel index when available and falls back to PyPI.
+- Keep the app image CPU-oriented by skipping CUDA-specific `nvidia-*` packages
+  during `uv sync` (GPU inference remains external via the Ollama service).
+- Add a hardened compose override (`docker-compose.prod.yml`) that sets
+  `read_only: true` and `tmpfs` for `/tmp` while keeping `/app/cache` and
+  `/app/logs` as volumes (operators can switch those to `tmpfs` if desired).
 
 ## Security & Privacy
 
@@ -88,6 +99,8 @@ Implement a ship-ready container baseline:
 - Compose should allow passing `.env` at runtime only when desired.
 - Remote endpoints remain blocked by default; containers should not change this posture.
 - The optional GPU backend service should not be exposed publicly by default (internal network only).
+- GPU reservations require Docker Compose v2+; older compose variants may ignore
+  `deploy.resources`. See SPEC-023 for a legacy `device_requests` snippet.
 
 ## Consequences
 
@@ -101,6 +114,7 @@ Implement a ship-ready container baseline:
 
 - Slightly more verbose Dockerfile (multi-stage)
 - Only one GPU backend is bundled (Ollama). Power users can still use vLLM/LM Studio externally via configuration, but those services are not shipped as compose services.
+- Runtime uses `libmupdf-dev` on Debian bookworm because a standalone runtime library package is not available; revisit if packaging changes.
 
 ## Changelog
 
