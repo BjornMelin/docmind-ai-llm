@@ -144,82 +144,44 @@ jobs:
           python_ver_re="${EXPECTED_PYTHON_VERSION//./[.]}"
           rg -n "^FROM[[:space:]]+python:${python_ver_re}([[:space:]]|$|@|-)" Dockerfile || { echo "Dockerfile must use python:${EXPECTED_PYTHON_VERSION} base image"; exit 1; }
 
+          python -m pip install --disable-pip-version-check --no-cache-dir dockerfile
+
           python - <<'PY'
-          import json
           import re
           from pathlib import Path
+          import dockerfile
 
           dockerfile_path = Path("Dockerfile")
           if not dockerfile_path.exists():
             raise SystemExit("Dockerfile not found.")
 
-          dockerfile = dockerfile_path.read_text(encoding="utf-8").splitlines()
-          user_directives: list[str] = []
-          cmd_directives: list[str] = []
-          entrypoint_directives: list[str] = []
+          try:
+            commands = dockerfile.parse_file(str(dockerfile_path))
+          except Exception as exc:
+            raise SystemExit(f"Failed to parse Dockerfile: {exc}") from exc
 
-          def _read_json_value(lines: list[str], idx: int, initial: str) -> tuple[str, int]:
-            value = initial
-            if value.endswith("\\"):
-              value = value[:-1].rstrip()
-            if not value.startswith("["):
-              return value, idx
+          user_directives = [cmd for cmd in commands if cmd.cmd == "user"]
+          cmd_directives = [cmd for cmd in commands if cmd.cmd == "cmd"]
+          entrypoint_directives = [cmd for cmd in commands if cmd.cmd == "entrypoint"]
 
-            collected = value
-            while True:
-              try:
-                json.loads(collected)
-                return collected, idx
-              except json.JSONDecodeError:
-                idx += 1
-                if idx >= len(lines):
-                  raise SystemExit("Unterminated JSON array in Dockerfile CMD/ENTRYPOINT.")
-                cont = lines[idx].strip()
-                if not cont or cont.startswith("#"):
-                  continue
-                if cont.endswith("\\"):
-                  cont = cont[:-1].rstrip()
-                collected = f"{collected} {cont}".strip()
-
-          idx = 0
-          while idx < len(dockerfile):
-            raw = dockerfile[idx]
-            line = raw.strip()
-            if not line or line.startswith("#"):
-              idx += 1
-              continue
-            if re.match(r"(?i)^USER\s+", line):
-              user_directives.append(line.split(maxsplit=1)[1].strip())
-              idx += 1
-              continue
-            cmd_match = re.match(r"(?i)^CMD\s+", line)
-            entrypoint_match = re.match(r"(?i)^ENTRYPOINT\s+", line)
-            if cmd_match or entrypoint_match:
-              initial = line.split(maxsplit=1)[1].strip()
-              value, idx = _read_json_value(dockerfile, idx, initial)
-              if cmd_match:
-                cmd_directives.append(value)
-              else:
-                entrypoint_directives.append(value)
-              idx += 1
-              continue
-            idx += 1
+          def _stringify_value(value) -> str:
+            if isinstance(value, tuple):
+              return " ".join(value)
+            return str(value)
 
           if not user_directives:
             raise SystemExit("Dockerfile must set a non-root USER.")
-          final_user = user_directives[-1]
+          final_user = _stringify_value(user_directives[-1].value)
           if final_user.lower() in {"root", "0"}:
             raise SystemExit(f"Dockerfile final USER must be non-root (found: {final_user!r}).")
 
-          def _parse_json_array(value: str) -> list[str]:
-            if not value.startswith("["):
-              raise ValueError("not JSON array form")
-            parsed = json.loads(value)
-            if not isinstance(parsed, list) or not all(isinstance(v, str) for v in parsed):
-              raise ValueError("invalid JSON array")
-            return parsed
-
           def _assert_no_shell_invocation(kind: str, arr: list[str], raw: str) -> None:
+            if len(arr) >= 2:
+              shell_cmd = arr[0].rstrip("/").split("/")[-1]
+              if shell_cmd in ("sh", "bash", "dash", "ash", "ksh") and arr[1] == "-c":
+                raise SystemExit(
+                  f"Dockerfile {kind} must not invoke a shell via {arr[0]} -c: {raw}"
+                )
             if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
               raise SystemExit(
                 f"Dockerfile {kind} must not invoke a shell via sh -c / bash -c: {raw}"
@@ -247,27 +209,21 @@ jobs:
                 f"Dockerfile {kind} must split flags into separate args: {raw}"
               )
 
-          if cmd_directives:
-            cmd = cmd_directives[-1]
-            try:
-              arr = _parse_json_array(cmd)
-            except ValueError:
+          def _validate_exec_form(kind: str, cmd) -> None:
+            if not cmd.json:
               raise SystemExit(
-                f"Dockerfile CMD must use JSON array form (found: {cmd})"
+                f"Dockerfile {kind} must use JSON array form (found: {cmd.original})"
               )
-            _assert_no_shell_invocation("CMD", arr, cmd)
-            _assert_no_embedded_shell("CMD", arr, cmd)
+            arr = list(cmd.value) if isinstance(cmd.value, tuple) else [str(cmd.value)]
+            raw = cmd.original
+            _assert_no_shell_invocation(kind, arr, raw)
+            _assert_no_embedded_shell(kind, arr, raw)
+
+          if cmd_directives:
+            _validate_exec_form("CMD", cmd_directives[-1])
 
           if entrypoint_directives:
-            ep = entrypoint_directives[-1]
-            try:
-              arr = _parse_json_array(ep)
-            except ValueError:
-              raise SystemExit(
-                f"Dockerfile ENTRYPOINT must use JSON array form (found: {ep})"
-              )
-            _assert_no_shell_invocation("ENTRYPOINT", arr, ep)
-            _assert_no_embedded_shell("ENTRYPOINT", arr, ep)
+            _validate_exec_form("ENTRYPOINT", entrypoint_directives[-1])
 
           print("Container artifact checks: OK")
           PY
