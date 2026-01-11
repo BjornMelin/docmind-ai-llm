@@ -1,10 +1,10 @@
 ---
 spec: SPEC-025
 title: Keyword Search Tool — Sparse-only Qdrant Retriever (text-sparse)
-version: 1.0.0
-date: 2026-01-09
+version: 1.0.1
+date: 2026-01-11
 owners: ["ai-arch"]
-status: Draft
+status: Completed
 related_requirements:
   - FR-023: Keyword/lexical tool for exact term lookups (disabled by default).
   - NFR-MAINT-001: Library-first; avoid new retrieval dependencies for v1.
@@ -67,10 +67,10 @@ Emit a JSONL event when the keyword tool:
 
 ## RTM updates (docs/specs/traceability.md)
 
-Add:
+FR-023 is implemented and recorded in the RTM:
 
 - FR-023: “Keyword tool (sparse-only Qdrant)”
   - Code: `src/retrieval/keyword.py`, `src/agents/tool_factory.py`
   - Tests: `tests/unit/agents/test_tool_factory_keyword.py`, `tests/unit/retrieval/test_keyword_retriever.py`
   - Verification: unit tests pass; optional Qdrant integration validation when available
-  - Status: Planned → Implemented (after tests pass)
+  - Status: Implemented

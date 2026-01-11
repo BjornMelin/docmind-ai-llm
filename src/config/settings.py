@@ -349,7 +349,8 @@ class RetrievalConfig(BaseModel):
         default="thread",
         description=("Executor for rerank timeouts: 'thread' or 'process'"),
     )
-    # Optional keyword tool (BM25) registration flag (disabled by default)
+    # Optional keyword tool (sparse-only Qdrant text-sparse) registration flag
+    # (disabled by default)
     enable_keyword_tool: bool = Field(default=False)
 
     # --- Centralized reranking timeouts (ms) ---
