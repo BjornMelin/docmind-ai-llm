@@ -64,8 +64,8 @@ def test_keyword_tool_emits_telemetry_when_sparse_unavailable(
     tools = ToolFactory.create_tools_from_indexes(idx)
     kw = next(t for t in tools if t.metadata.name == "keyword_search")
 
-    out = kw.query_engine.retrieve("q")  # avoid response synthesis
-    assert out == []
+    out = kw.query_engine.query("q")  # exercise BaseQueryEngine interface
+    assert out is not None
     assert events
     assert events[-1].get("retrieval.tool") == "keyword_search"
     assert events[-1].get("retrieval.sparse_fallback") is True

@@ -153,10 +153,16 @@ class ToolFactory:
             using="text-sparse",
         )
         retriever = KeywordSparseRetriever(params)
+        try:
+            from llama_index.core import Settings as _LISettings  # type: ignore
+
+            llm = getattr(_LISettings, "llm", None)
+        except (ImportError, AttributeError, TypeError):  # pragma: no cover
+            llm = None
         query_engine = build_retriever_query_engine(
             retriever=retriever,
             post=None,
-            llm=None,
+            llm=llm,
             response_mode="compact",
             verbose=False,
         )

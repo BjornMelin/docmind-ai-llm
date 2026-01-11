@@ -11,6 +11,7 @@ if sparse encoding or Qdrant query fails, it returns an empty list.
 
 from __future__ import annotations
 
+import random
 import time
 from collections.abc import Callable
 from contextlib import suppress
@@ -20,6 +21,7 @@ from typing import Any
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
+from qdrant_client.http.api_client import ResourceExhaustedResponse
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from src.retrieval.sparse_query import encode_to_qdrant
@@ -42,6 +44,9 @@ class KeywordParams:
         "modality",
         "image_path",
     )
+    rate_limit_retries: int = 2
+    rate_limit_backoff_base_s: float = 0.5
+    rate_limit_backoff_max_s: float = 8.0
 
 
 class KeywordSparseRetriever:
@@ -103,16 +108,11 @@ class KeywordSparseRetriever:
             return []
 
         try:
-            result = self._get_client().query_points(
-                collection_name=self.params.collection,
-                query=sparse_vec,
-                using=self.params.using,
-                limit=int(self.params.top_k),
-                with_payload=list(self.params.with_payload),
-            )
+            result = self._query_points_with_retry(sparse_vec)
         except (
             ResponseHandlingException,
             UnexpectedResponse,
+            ResourceExhaustedResponse,
             ConnectionError,
             TimeoutError,
             OSError,
@@ -173,6 +173,52 @@ class KeywordSparseRetriever:
             t0=t0, return_count=len(nodes), sparse_fallback=False, error_type=None
         )
         return nodes
+
+    def _query_points_with_retry(
+        self, sparse_vec: Any
+    ):  # -> qdrant_client.http.models.QueryResponse
+        """Query Qdrant with rate-limit aware retries (best-effort)."""
+        retries = max(0, int(self.params.rate_limit_retries))
+        last_exc: ResourceExhaustedResponse | None = None
+        for attempt in range(retries + 1):
+            try:
+                return self._get_client().query_points(
+                    collection_name=self.params.collection,
+                    query=sparse_vec,
+                    using=self.params.using,
+                    limit=int(self.params.top_k),
+                    with_payload=list(self.params.with_payload),
+                )
+            except ResourceExhaustedResponse as exc:
+                last_exc = exc
+                if attempt >= retries:
+                    break
+                delay = self._rate_limit_delay(exc, attempt)
+                time.sleep(delay)
+        if last_exc is not None:
+            raise last_exc
+        raise ResourceExhaustedResponse("Qdrant rate limit exceeded")
+
+    def _rate_limit_delay(self, exc: ResourceExhaustedResponse, attempt: int) -> float:
+        retry_after = getattr(exc, "retry_after", None)
+        if retry_after is None:
+            try:
+                if len(exc.args) > 1:
+                    retry_after = exc.args[1]
+            except (AttributeError, TypeError):
+                retry_after = None
+        if retry_after is not None:
+            try:
+                return max(0.0, float(retry_after))
+            except (TypeError, ValueError):
+                pass
+        base = max(0.0, float(self.params.rate_limit_backoff_base_s))
+        delay = min(
+            base * (2**attempt),
+            float(self.params.rate_limit_backoff_max_s),
+        )
+        # jitter in [0.5x, 1.0x]
+        return delay * (0.5 + (random.random() * 0.5))  # noqa: S311
 
     def _emit_telemetry(
         self,
