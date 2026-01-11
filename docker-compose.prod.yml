@@ -2,4 +2,4 @@ services:
   app:
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:size=256M

@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -88,6 +91,8 @@ jobs:
 
   container-static:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,6 +101,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
 
       - name: Hadolint (errors only)
         run: |
@@ -127,13 +137,13 @@ jobs:
             line = raw.strip()
             if not line or line.startswith("#"):
               continue
-            if re.match(r"(?i)^USER\\s+", line):
+            if re.match(r"(?i)^USER\s+", line):
               user_directives.append(line.split(maxsplit=1)[1].strip())
               continue
-            if re.match(r"(?i)^CMD\\s+", line):
+            if re.match(r"(?i)^CMD\s+", line):
               cmd_directives.append(line.split(maxsplit=1)[1].strip())
               continue
-            if re.match(r"(?i)^ENTRYPOINT\\s+", line):
+            if re.match(r"(?i)^ENTRYPOINT\s+", line):
               entrypoint_directives.append(line.split(maxsplit=1)[1].strip())
               continue
 
@@ -154,7 +164,7 @@ jobs:
           if cmd_directives:
             cmd = cmd_directives[-1]
             arr = _parse_json_array(cmd)
-            if len(arr) == 1 and re.search(r"\\s|&&|\\|\\|", arr[0]):
+            if len(arr) == 1 and re.search(r"\s|&&|\|\|", arr[0]):
               raise SystemExit(f"Dockerfile CMD must not embed shell in a single string: {cmd}")
             if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
               raise SystemExit(f"Dockerfile CMD must not use shell form: {cmd}")

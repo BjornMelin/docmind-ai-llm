@@ -16,7 +16,8 @@ services:
       - docmind_cache:/app/cache
       - docmind_logs:/app/logs
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
     networks:
       - frontend
       - backend
@@ -44,11 +45,16 @@ services:
     restart: unless-stopped
 
   qdrant:
-    image: qdrant/qdrant:v1.7.0
+    image: qdrant/qdrant:v1.10.0
     volumes:
       - qdrant_storage:/qdrant/storage
     networks:
       - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 networks:

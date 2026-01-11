@@ -8,6 +8,7 @@ import socket
 import sys
 import time
 import urllib.request
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
 
@@ -38,8 +39,13 @@ def _resolve_torch_wheel_url(
 
     index_url = f"https://pypi.org/pypi/torch/{version}/json"
     print(f"Fetching torch metadata: {index_url}", flush=True)
-    with _open_https(index_url, timeout=60) as resp:
-        data = json.load(resp)
+    try:
+        with _open_https(index_url, timeout=60) as resp:
+            data = json.load(resp)
+    except Exception as exc:
+        raise SystemExit(
+            f"Failed to fetch or parse torch metadata from {index_url}: {exc}"
+        ) from exc
     candidates = [
         u
         for u in data.get("urls", [])
@@ -65,15 +71,15 @@ def _detect_platform() -> str:
     raise SystemExit(f"Unsupported architecture for torch wheel: {arch}")
 
 
-def _sha256_digest(path: str) -> str:
+def _sha256_digest(path: Path) -> str:
     hasher = hashlib.sha256()
-    with open(path, "rb") as fh:
+    with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
 
 
-def _sha256_matches(path: str, expected: str) -> bool:
+def _sha256_matches(path: Path, expected: str) -> bool:
     digest = _sha256_digest(path)
     return digest.lower() == expected.lower()
 
@@ -105,18 +111,18 @@ def main() -> None:
     url, filename, sha256 = _resolve_torch_wheel_url(version, py_tag, plat)
     print(f"Downloading torch wheel: {filename}", flush=True)
 
-    cache_dir = "/root/.cache/torch"
-    os.makedirs(cache_dir, exist_ok=True)
-    dest = os.path.join(cache_dir, filename)
+    cache_dir = Path("/root/.cache/torch")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    dest = cache_dir / filename
 
     for attempt in range(1, 6):
         try:
-            existing = os.path.getsize(dest) if os.path.exists(dest) else 0
+            existing = dest.stat().st_size if dest.exists() else 0
             headers = {"User-Agent": "docmind-docker"}
             if existing:
                 headers["Range"] = f"bytes={existing}-"
             req = urllib.request.Request(url, headers=headers)  # noqa: S310
-            with _open_https_request(req, timeout=60) as resp, open(dest, "ab") as fh:
+            with _open_https_request(req, timeout=60) as resp, dest.open("ab") as fh:
                 total = resp.headers.get("Content-Range")
                 if total and "/" in total:
                     total = total.split("/")[-1].strip()
@@ -141,19 +147,28 @@ def main() -> None:
                         last_report = time.time()
             break
         except HTTPError as exc:
-            if exc.code == 416 and os.path.exists(dest):
-                if sha256 and _sha256_matches(dest, sha256):
+            if exc.code == 416 and dest.exists():
+                if sha256:
+                    if _sha256_matches(dest, sha256):
+                        break
+                    dest.unlink()
+                else:
+                    print(
+                        "Received HTTP 416 for existing torch wheel with no checksum; "
+                        "assuming file is complete and proceeding "
+                        "without verification.",
+                        flush=True,
+                    )
                     break
-                os.remove(dest)
             print(f"torch wheel download failed (attempt {attempt}): {exc}", flush=True)
             if attempt == 5:
                 raise
-            time.sleep(5)
+            time.sleep(min(2**attempt, 30))
         except Exception as exc:
             print(f"torch wheel download failed (attempt {attempt}): {exc}", flush=True)
             if attempt == 5:
                 raise
-            time.sleep(5)
+            time.sleep(min(2**attempt, 30))
 
     if sha256:
         digest = _sha256_digest(dest)
@@ -162,8 +177,7 @@ def main() -> None:
                 f"Torch wheel checksum mismatch: expected {sha256}, got {digest}"
             )
 
-    with open(os.path.join(cache_dir, "torch-wheel.txt"), "w", encoding="utf-8") as fh:
-        fh.write(dest)
+    (cache_dir / "torch-wheel.txt").write_text(str(dest), encoding="utf-8")
     print(dest)
 
 
