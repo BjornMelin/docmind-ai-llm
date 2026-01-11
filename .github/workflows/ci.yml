@@ -160,12 +160,12 @@ jobs:
           except Exception as exc:
             raise SystemExit(f"Failed to parse Dockerfile: {exc}") from exc
 
-          user_directives = [cmd for cmd in commands if cmd.cmd == "user"]
-          cmd_directives = [cmd for cmd in commands if cmd.cmd == "cmd"]
-          entrypoint_directives = [cmd for cmd in commands if cmd.cmd == "entrypoint"]
+          user_directives = [cmd for cmd in commands if cmd.cmd.lower() == "user"]
+          cmd_directives = [cmd for cmd in commands if cmd.cmd.lower() == "cmd"]
+          entrypoint_directives = [cmd for cmd in commands if cmd.cmd.lower() == "entrypoint"]
 
           def _stringify_value(value) -> str:
-            if isinstance(value, tuple):
+            if isinstance(value, (tuple, list)):
               return " ".join(value)
             return str(value)
 
@@ -214,7 +214,7 @@ jobs:
               raise SystemExit(
                 f"Dockerfile {kind} must use JSON array form (found: {cmd.original})"
               )
-            arr = list(cmd.value) if isinstance(cmd.value, tuple) else [str(cmd.value)]
+            arr = list(cmd.value) if isinstance(cmd.value, (tuple, list)) else [str(cmd.value)]
             raw = cmd.original
             _assert_no_shell_invocation(kind, arr, raw)
             _assert_no_embedded_shell(kind, arr, raw)
