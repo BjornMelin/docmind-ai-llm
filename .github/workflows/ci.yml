@@ -113,15 +113,17 @@ jobs:
 
       - name: Static checks (non-root, no latest, env prefixes)
         run: |
+          set -euo pipefail
+
           test -f .dockerignore
-          rg -n '^\\.env(\\.|$)' .dockerignore
+          rg -n '^\\.env(\\.|$)' .dockerignore || { echo "Expected .env patterns in .dockerignore"; exit 1; }
 
           if rg -n ':latest\\b' Dockerfile docker-compose.yml; then
             echo "Do not use ':latest' tags in Docker artifacts."
             exit 1
           fi
 
-          rg -n '^FROM\\s+python:3\\.11' Dockerfile
+          rg -n '^FROM\\s+python:3\\.11' Dockerfile || { echo "Dockerfile must use python:3.11 base image"; exit 1; }
 
           python - <<'PY'
           import json
@@ -179,12 +181,12 @@ jobs:
           PY
 
           # Compose validation and canonical env var naming.
-          docker compose config >/dev/null
+          docker compose config >/dev/null || { echo "docker compose config failed"; exit 1; }
           if [ -f docker-compose.prod.yml ]; then
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml config >/dev/null
-            rg -n 'read_only:\\s*true' docker-compose.prod.yml
-            rg -n 'tmpfs:' docker-compose.prod.yml
-            rg -n '/tmp' docker-compose.prod.yml
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml config >/dev/null || { echo "docker compose -f prod config failed"; exit 1; }
+            rg -n 'read_only:\\s*true' docker-compose.prod.yml || { echo "docker-compose.prod.yml must set read_only: true"; exit 1; }
+            rg -n 'tmpfs:' docker-compose.prod.yml || { echo "docker-compose.prod.yml must set tmpfs"; exit 1; }
+            rg -n '/tmp' docker-compose.prod.yml || { echo "docker-compose.prod.yml tmpfs must include /tmp"; exit 1; }
           fi
           if rg -n '^\\s+OLLAMA_BASE_URL\\s*:' docker-compose.yml; then
             echo "Use DOCMIND_OLLAMA_BASE_URL in compose, not OLLAMA_BASE_URL."
@@ -198,3 +200,5 @@ jobs:
             echo "Use DOCMIND_LMSTUDIO_BASE_URL in compose, not LMSTUDIO_BASE_URL."
             exit 1
           fi
+
+          echo "Static checks: OK"
