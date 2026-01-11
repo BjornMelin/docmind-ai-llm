@@ -19,7 +19,8 @@ def _resolve_torch_wheel_url(
     explicit_url = os.environ.get("TORCH_WHEEL_URL", "").strip()
     if explicit_url:
         explicit_sha = os.environ.get("TORCH_WHEEL_SHA256", "").strip() or None
-        return explicit_url, os.path.basename(explicit_url), explicit_sha
+        explicit_filename = Path(urlparse(explicit_url).path).name
+        return explicit_url, explicit_filename, explicit_sha
 
     cpu_index = "https://download.pytorch.org/whl/cpu/torch/"
     try:
@@ -30,7 +31,7 @@ def _resolve_torch_wheel_url(
             end = html.find('"', idx)
             href = html[idx:end]
             path, sha = href.split("#sha256=", 1)
-            filename = unquote(os.path.basename(path))
+            filename = Path(unquote(path)).name
             print(f"Using PyTorch CPU wheel: {filename}", flush=True)
             return f"https://download.pytorch.org{path}", filename, sha
         print("CPU wheel not found in index; falling back to PyPI.", flush=True)
@@ -111,7 +112,8 @@ def main() -> None:
     url, filename, sha256 = _resolve_torch_wheel_url(version, py_tag, plat)
     print(f"Downloading torch wheel: {filename}", flush=True)
 
-    cache_dir = Path("/root/.cache/torch")
+    cache_root = os.environ.get("TORCH_CACHE_DIR", "").strip()
+    cache_dir = Path(cache_root) if cache_root else Path.home() / ".cache" / "torch"
     cache_dir.mkdir(parents=True, exist_ok=True)
     dest = cache_dir / filename
 
@@ -153,6 +155,7 @@ def main() -> None:
                         break
                     dest.unlink()
                 else:
+                    # Without a checksum we can only assume the file is complete.
                     print(
                         "Received HTTP 416 for existing torch wheel with no checksum; "
                         "assuming file is complete and proceeding "
@@ -165,7 +168,11 @@ def main() -> None:
                 raise
             time.sleep(min(2**attempt, 30))
         except Exception as exc:
-            print(f"torch wheel download failed (attempt {attempt}): {exc}", flush=True)
+            print(
+                f"torch wheel download failed (attempt {attempt}): "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
             if attempt == 5:
                 raise
             time.sleep(min(2**attempt, 30))

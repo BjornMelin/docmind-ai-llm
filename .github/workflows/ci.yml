@@ -91,8 +91,6 @@ jobs:
 
   container-static:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,12 +118,16 @@ jobs:
           from pathlib import Path
 
           lines = Path(".dockerignore").read_text(encoding="utf-8-sig").splitlines()
-          expected = {".env", ".env.*"}
+          expected = {".env", ".env.*", ".env*"}
           if not any(line.strip() in expected for line in lines):
             raise SystemExit("Expected .env patterns in .dockerignore")
           PY
 
-          if rg -n ':latest\\b' Dockerfile docker-compose.yml; then
+          latest_targets=(Dockerfile docker-compose.yml)
+          if [ -f docker-compose.prod.yml ]; then
+            latest_targets+=(docker-compose.prod.yml)
+          fi
+          if rg -n ':latest\\b' "${latest_targets[@]}"; then
             echo "Do not use ':latest' tags in Docker artifacts."
             exit 1
           fi
@@ -142,19 +144,41 @@ jobs:
           cmd_directives = []
           entrypoint_directives = []
 
-          for raw in dockerfile:
+          idx = 0
+          while idx < len(dockerfile):
+            raw = dockerfile[idx]
             line = raw.strip()
             if not line or line.startswith("#"):
+              idx += 1
               continue
             if re.match(r"(?i)^USER\s+", line):
               user_directives.append(line.split(maxsplit=1)[1].strip())
+              idx += 1
               continue
-            if re.match(r"(?i)^CMD\s+", line):
-              cmd_directives.append(line.split(maxsplit=1)[1].strip())
+            cmd_match = re.match(r"(?i)^CMD\s+", line)
+            entrypoint_match = re.match(r"(?i)^ENTRYPOINT\s+", line)
+            if cmd_match or entrypoint_match:
+              value = line.split(maxsplit=1)[1].strip()
+              if value.endswith("\\"):
+                value = value[:-1].rstrip()
+              if value.startswith("["):
+                bracket_balance = value.count("[") - value.count("]")
+                while bracket_balance > 0 and idx + 1 < len(dockerfile):
+                  idx += 1
+                  cont = dockerfile[idx].strip()
+                  if not cont or cont.startswith("#"):
+                    continue
+                  if cont.endswith("\\"):
+                    cont = cont[:-1].rstrip()
+                  value = f"{value} {cont}".strip()
+                  bracket_balance = value.count("[") - value.count("]")
+              if cmd_match:
+                cmd_directives.append(value)
+              else:
+                entrypoint_directives.append(value)
+              idx += 1
               continue
-            if re.match(r"(?i)^ENTRYPOINT\s+", line):
-              entrypoint_directives.append(line.split(maxsplit=1)[1].strip())
-              continue
+            idx += 1
 
           if not user_directives:
             raise SystemExit("Dockerfile must set a non-root USER.")
@@ -172,7 +196,12 @@ jobs:
 
           if cmd_directives:
             cmd = cmd_directives[-1]
-            arr = _parse_json_array(cmd)
+            try:
+              arr = _parse_json_array(cmd)
+            except ValueError:
+              raise SystemExit(
+                f"Dockerfile CMD must use JSON array form (found: {cmd})"
+              )
             if len(arr) == 1 and re.search(r"\s|&&|\|\|", arr[0]):
               raise SystemExit(f"Dockerfile CMD must not embed shell in a single string: {cmd}")
             if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
@@ -180,7 +209,12 @@ jobs:
 
           if entrypoint_directives:
             ep = entrypoint_directives[-1]
-            arr = _parse_json_array(ep)
+            try:
+              arr = _parse_json_array(ep)
+            except ValueError:
+              raise SystemExit(
+                f"Dockerfile ENTRYPOINT must use JSON array form (found: {ep})"
+              )
             if arr[:2] in (["sh", "-c"], ["bash", "-c"]):
               raise SystemExit(f"Dockerfile ENTRYPOINT must not use shell form: {ep}")
 
@@ -195,15 +229,19 @@ jobs:
             rg -n 'tmpfs:' docker-compose.prod.yml || { echo "docker-compose.prod.yml must set tmpfs"; exit 1; }
             rg -n '/tmp' docker-compose.prod.yml || { echo "docker-compose.prod.yml tmpfs must include /tmp"; exit 1; }
           fi
-          if rg -n '^\\s+OLLAMA_BASE_URL\\s*:' docker-compose.yml; then
+          compose_files=(docker-compose.yml)
+          if [ -f docker-compose.prod.yml ]; then
+            compose_files+=(docker-compose.prod.yml)
+          fi
+          if rg -n '(^\\s+OLLAMA_BASE_URL\\s*:|^\\s*-\\s*OLLAMA_BASE_URL\\s*=)' "${compose_files[@]}"; then
             echo "Use DOCMIND_OLLAMA_BASE_URL in compose, not OLLAMA_BASE_URL."
             exit 1
           fi
-          if rg -n '^\\s+VLLM_BASE_URL\\s*:' docker-compose.yml; then
+          if rg -n '(^\\s+VLLM_BASE_URL\\s*:|^\\s*-\\s*VLLM_BASE_URL\\s*=)' "${compose_files[@]}"; then
             echo "Use DOCMIND_VLLM__VLLM_BASE_URL in compose, not VLLM_BASE_URL."
             exit 1
           fi
-          if rg -n '^\\s+LMSTUDIO_BASE_URL\\s*:' docker-compose.yml; then
+          if rg -n '(^\\s+LMSTUDIO_BASE_URL\\s*:|^\\s*-\\s*LMSTUDIO_BASE_URL\\s*=)' "${compose_files[@]}"; then
             echo "Use DOCMIND_LMSTUDIO_BASE_URL in compose, not LMSTUDIO_BASE_URL."
             exit 1
           fi
