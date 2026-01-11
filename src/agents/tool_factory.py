@@ -42,6 +42,7 @@ from src.retrieval.postprocessor_utils import (
     build_retriever_query_engine,
     build_vector_query_engine,
 )
+from src.utils.telemetry import log_jsonl
 
 # Constants
 
@@ -136,31 +137,42 @@ class ToolFactory:
         )
 
     @classmethod
-    def create_keyword_tool(cls, index: Any) -> QueryEngineTool:
-        """Create a simple keyword/BM25-style tool when enabled.
+    def create_keyword_tool(cls, index: Any | None = None) -> QueryEngineTool:
+        """Create a sparse-only keyword/lexical tool (Qdrant ``text-sparse``).
 
-        Note: Uses index.as_query_engine as a placeholder keyword retriever to
-        avoid new vendor dependencies. Registration behind flag only.
+        Note: The ``index`` argument is accepted for API compatibility with
+        existing call sites, but the keyword tool queries Qdrant directly via
+        the Query API (sparse-only) and does not use the VectorStoreIndex.
         """
-        # TODO(retrieval-phase-2): Swap in a real BM25/keyword retriever once a
-        # dependency is selected and wired.
-        post = None
-        try:
-            if bool(getattr(settings.retrieval, "use_reranking", True)):
-                from src.retrieval.reranking import MultimodalReranker
+        del index
+        from src.retrieval.keyword import KeywordParams, KeywordSparseRetriever
 
-                post = [MultimodalReranker()]
-        except Exception:
-            post = None
-        query_engine = build_vector_query_engine(
-            index, post, similarity_top_k=settings.retrieval.top_k, verbose=False
+        params = KeywordParams(
+            collection=settings.database.qdrant_collection,
+            top_k=int(getattr(settings.retrieval, "top_k", 10)),
+            using="text-sparse",
+        )
+        retriever = KeywordSparseRetriever(params)
+        try:
+            from llama_index.core import Settings as _LISettings  # type: ignore
+
+            llm = getattr(_LISettings, "llm", None)
+        except (ImportError, AttributeError, TypeError):  # pragma: no cover
+            llm = None
+        query_engine = build_retriever_query_engine(
+            retriever=retriever,
+            post=None,
+            llm=llm,
+            response_mode="compact",
+            verbose=False,
         )
         return cls.create_query_tool(
             query_engine,
             "keyword_search",
             (
-                "Keyword-based retrieval (BM25-style). Useful for exact term "
-                "matching and boolean-style queries. Disabled by default."
+                "Exact keyword / ID / error-code lookup via sparse lexical matching "
+                "(Qdrant text-sparse). Not semantic; use vector_search for "
+                "meaning-based queries. Disabled by default."
             ),
         )
 
@@ -352,8 +364,23 @@ class ToolFactory:
             try:
                 tools.append(cls.create_keyword_tool(vector_index))
                 logger.info("Added optional keyword search tool")
-            except Exception as e:
-                logger.warning("Keyword tool registration failed: %s", e)
+            except (
+                ImportError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                OSError,
+                ConnectionError,
+                TimeoutError,
+            ) as exc:
+                log_jsonl(
+                    {
+                        "keyword_tool.registration_failed": True,
+                        "keyword_tool.error_type": type(exc).__name__,
+                    }
+                )
+                logger.warning("Keyword tool registration failed: %s", exc)
 
         logger.info("Created %d tools for agent", len(tools))
         return tools

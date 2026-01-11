@@ -1,8 +1,8 @@
 ---
 ADR: 044
 Title: Keyword Search Tool via Sparse-only Qdrant Query (No New BM25 Dependency)
-Status: Proposed
-Version: 1.0
+Status: Implemented
+Version: 1.1
 Date: 2026-01-09
 Supersedes:
 Superseded-by:
@@ -77,3 +77,4 @@ The tool remains **disabled by default** behind `settings.retrieval.enable_keywo
 ## Changelog
 
 - 1.0 (2026-01-09): Proposed for v1 release hardening.
+- 1.1 (2026-01-11): Implemented sparse-only Qdrant keyword tool and unit tests.
