@@ -144,7 +144,7 @@ jobs:
           python_ver_re="${EXPECTED_PYTHON_VERSION//./[.]}"
           rg -n "^FROM[[:space:]]+python:${python_ver_re}([[:space:]]|$|@|-)" Dockerfile || { echo "Dockerfile must use python:${EXPECTED_PYTHON_VERSION} base image"; exit 1; }
 
-          python -m pip install --disable-pip-version-check --no-cache-dir dockerfile
+          python -m pip install --disable-pip-version-check --no-cache-dir dockerfile==3.4.0
 
           python - <<'PY'
           import re
