@@ -177,6 +177,7 @@ Manual Installation Steps (if needed):
 line-length = 88
 target-version = "py311"
 extend-exclude = ["opensrc"]
+preview = true
 
 [tool.ruff.lint]
 select = [
@@ -232,19 +233,33 @@ extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
     "RUF005",  # list concatenation shortcuts allowed in tests
     "RUF017",  # performance anti-patterns acceptable in tests
     "N802",    # test AST visitors use conventional names
+    "B903",  # lightweight helper classes in tests
     "ANN001", "ANN002", "ANN003",  # pilot annotations off in tests
     "ANN201", "ANN202", "ANN204",
     "D100", "D103",  # don't require docstrings in tests
     "PLC0415",  # import-outside-toplevel in tests
+    "PLC1901",  # empty string checks are fine in tests
+    "PLC2701",  # private imports ok for test coverage
+    "PLW0108",  # inline lambdas ok in monkeypatches
     "PLW0603",  # global-statement in test fixtures
+    "RUF029",  # async helpers without awaits are ok in tests
+    "S404",  # subprocess usage in tests (e2e helpers)
 ]
 "scripts/**/*.py" = [
     "PLC0415",  # import-outside-toplevel in scripts
+    "S404",  # subprocess usage in scripts
 ]
 "scripts/check_coverage.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/run_quality_gates.py" = ["RUF013"]
 "docs/**/*.py" = [
     "RUF001", "RUF002", "RUF003",  # unicode in examples/docstrings
+]
+"src/pages/04_settings.py" = [
+    "PLR0914",  # settings page is intentionally wide to keep UI cohesive
+]
+"tools/eval/run_beir.py" = [
+    "PLC2701",  # private import is intentional for eval script
+    "PLR0914",  # CLI entrypoint is intentionally wide
 ]
 
 [tool.ruff.lint.isort]
