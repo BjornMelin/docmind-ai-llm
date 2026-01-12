@@ -362,7 +362,6 @@ omit = [
     "src/containers.py",
     "src/core/*",
     "src/dspy_integration.py",
-    "src/main.py",
     "src/prompting/*",
     "src/retrieval/*",
     "src/utils/security.py",

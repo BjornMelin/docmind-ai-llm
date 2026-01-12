@@ -23,7 +23,7 @@ Remove the dead/legacy Python entrypoint (`src/main.py`) so that the only suppor
 ## Transition
 
 - Approver: `ai-arch`
-- Draft → Final when `src/main.py` removal is merged, README/scripts updated, and quality gates are green.
+- Status: Final (merged removal of `src/main.py`; config + tests updated)
 
 ## Technical design
 
@@ -54,10 +54,4 @@ Verification steps:
 
 ## RTM updates (docs/specs/traceability.md)
 
-Add a planned row:
-
-- NFR-MAINT-003: “Remove legacy entrypoints”
-  - Code: `src/main.py` (deleted), `pyproject.toml` (updated)
-  - Tests: N/A
-  - Verification: inspection + quality gates
-  - Status: Planned → Implemented (after approval + tests)
+- NFR-MAINT-003 status is marked as `Implemented`.

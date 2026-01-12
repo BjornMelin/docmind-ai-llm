@@ -22,15 +22,12 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
 
-if TYPE_CHECKING:  # pragma: no cover - typing only
+try:  # optional across qdrant-client versions
     from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
-else:
-    try:  # optional across qdrant-client versions
-        from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
-    except ImportError:  # pragma: no cover - older clients
+except (ImportError, AttributeError):  # pragma: no cover - older clients / shape drift
 
-        class ResourceExhaustedResponse(Exception):  # noqa: N818
-            """Fallback when qdrant-client lacks ResourceExhaustedResponse."""
+    class ResourceExhaustedResponse(Exception):  # type: ignore[no-redef]  # noqa: N818
+        """Fallback for missing qdrant-client rate-limit exception."""
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -188,7 +185,7 @@ class KeywordSparseRetriever:
     def _query_points_with_retry(self, sparse_vec: Any) -> QdrantQueryResponse:
         """Query Qdrant with rate-limit aware retries (best-effort)."""
         retries = max(0, int(self.params.rate_limit_retries))
-        last_exc: ResourceExhaustedResponse | None = None
+        last_exc: Exception | None = None
         for attempt in range(retries + 1):
             try:
                 return self._get_client().query_points(
@@ -208,7 +205,7 @@ class KeywordSparseRetriever:
             raise last_exc
         raise RuntimeError("Qdrant rate limit retry exhausted without exception")
 
-    def _rate_limit_delay(self, exc: ResourceExhaustedResponse, attempt: int) -> float:
+    def _rate_limit_delay(self, exc: Exception, attempt: int) -> float:
         retry_after = getattr(exc, "retry_after", None)
         if retry_after is None:
             try:

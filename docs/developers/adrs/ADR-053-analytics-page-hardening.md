@@ -1,9 +1,9 @@
 ---
 ADR: 053
 Title: Analytics Page Hardening (DuckDB Lifecycle + Telemetry Parsing)
-Status: Proposed
-Version: 1.0
-Date: 2026-01-09
+Status: Implemented
+Version: 1.1
+Date: 2026-01-12
 Supersedes:
 Superseded-by:
 Related: ADR-032 (local analytics/metrics), ADR-013 (UI architecture), ADR-016 (Streamlit state)
@@ -18,7 +18,7 @@ Refactor the Streamlit Analytics page to use safe DuckDB connection lifecycle, r
 
 ## Context
 
-`src/pages/03_analytics.py` currently:
+Prior to this change, `src/pages/03_analytics.py`:
 
 - opens a DuckDB connection without closing it
 - uses `__import__("pandas")` dynamically
@@ -60,6 +60,7 @@ We will:
    - streams JSONL lines (no full-file `.read_text().splitlines()` for large files)
    - applies both `max_bytes` and `max_lines` caps (stop parsing and log a warning on cap)
 4. Use a canonical telemetry path shared with the emitter by exporting a public constant/getter from `src/utils/telemetry.py` (e.g., `TELEMETRY_JSONL_PATH`).
+5. Use a canonical analytics DuckDB path constant/getter from `src/utils/telemetry.py` (default `data/analytics/analytics.duckdb`).
 
 ## Security & Privacy
 
@@ -70,9 +71,10 @@ We will:
 ## Testing
 
 - Unit tests for telemetry parsing helper (valid JSON, invalid JSON, caps) and ensure DuckDB connections close on success and on exceptions.
-- Cap enforcement tests verify parsing stops at `max_lines`/`max_bytes` and emits a warning.
+- Cap enforcement tests verify parsing stops at `max_lines`/`max_bytes` and emits a warning (best-effort).
 - Smoke import test for Analytics page remains green and gracefully handles missing `analytics.duckdb`.
 
 ## Changelog
 
 - 1.0 (2026-01-09): Proposed for v1 correctness and resource safety.
+- 1.1 (2026-01-12): Implemented bounded parsing + deterministic DuckDB close + canonical paths.

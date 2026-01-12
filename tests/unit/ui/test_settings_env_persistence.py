@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from dotenv import dotenv_values
 
-from src.config.env_persistence import persist_env
+from src.config.env_persistence import EnvPersistError, persist_env
 
 
 def test_persist_env_round_trip(tmp_path, monkeypatch) -> None:
@@ -46,5 +46,5 @@ def test_persist_env_rejects_control_characters(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     env_path = tmp_path / ".env"
 
-    with pytest.raises(ValueError, match=r"control characters"):
+    with pytest.raises(EnvPersistError, match=r"control characters"):
         persist_env({"DOCMIND_MODEL": "line1\nline2"}, env_path=env_path)
