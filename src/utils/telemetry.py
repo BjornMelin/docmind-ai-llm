@@ -10,6 +10,7 @@ import dataclasses
 import json
 import os
 import random
+from collections import Counter
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
@@ -185,7 +186,7 @@ def parse_telemetry_jsonl_counts(
             truncated=False,
         )
 
-    router_counts: dict[str, int] = {}
+    router_counts: Counter[str] = Counter()
     stale = 0
     exports = 0
     bytes_read = 0
@@ -222,7 +223,7 @@ def parse_telemetry_jsonl_counts(
 
                 if evt.get("router_selected"):
                     route = str(evt.get("route") or "unknown")
-                    router_counts[route] = router_counts.get(route, 0) + 1
+                    router_counts[route] += 1
                 if evt.get("snapshot_stale_detected"):
                     stale += 1
                 if evt.get("export_performed"):
@@ -250,7 +251,7 @@ def parse_telemetry_jsonl_counts(
         )
 
     return TelemetryEventCounts(
-        router_selected_by_route=router_counts,
+        router_selected_by_route=dict(router_counts),
         snapshot_stale_detected=stale,
         export_performed=exports,
         lines_read=lines_read,
