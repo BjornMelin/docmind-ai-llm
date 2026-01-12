@@ -199,6 +199,7 @@ def parse_telemetry_jsonl_counts(
                 next_lines_read = lines_read + 1
                 next_bytes_read = bytes_read + len(raw_line)
                 if next_lines_read > max_lines or next_bytes_read > max_bytes:
+                    # Truncation stops before counting/processing the next line.
                     truncated = True
                     break
                 lines_read = next_lines_read
