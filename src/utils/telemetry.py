@@ -65,7 +65,7 @@ def _maybe_rotate(path: Path) -> None:
             path.rename(rotated)
     except OSError as exc:
         # Never fail the app due to rotation; log at debug level
-        logger.debug("telemetry rotation skipped: %s", exc)
+        logger.debug(f"telemetry rotation skipped: {exc}")
 
 
 def log_jsonl(event: dict[str, Any]) -> None:
@@ -131,10 +131,8 @@ def get_analytics_duckdb_path(
 
     reason = "outside data/" if not is_under_base else "invalid extension"
     logger.warning(
-        "analytics db path override ignored (%s): override=%s base=%s",
-        reason,
-        candidate,
-        resolved_base,
+        f"analytics db path override ignored ({reason}): "
+        f"override={candidate} base={resolved_base}"
     )
     return default_path
 
@@ -241,13 +239,9 @@ def parse_telemetry_jsonl_counts(
 
     if truncated:
         logger.info(
-            "telemetry parse cap hit: path=%s lines=%d bytes=%d "
-            "(max_lines=%d max_bytes=%d)",
-            p,
-            lines_read,
-            bytes_read,
-            max_lines,
-            max_bytes,
+            "telemetry parse cap hit: "
+            f"path={p} lines={lines_read} bytes={bytes_read} "
+            f"(max_lines={max_lines} max_bytes={max_bytes})"
         )
 
     return TelemetryEventCounts(
