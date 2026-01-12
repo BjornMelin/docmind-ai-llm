@@ -6,6 +6,7 @@ Writes events to logs/telemetry.jsonl to keep observability local-first.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import json
 import logging
 import os
@@ -18,6 +19,9 @@ from typing import Any
 TELEMETRY_JSONL_PATH = Path("./logs/telemetry.jsonl")
 # Public constant for consumers that need the canonical telemetry path.
 _TELEM_PATH = TELEMETRY_JSONL_PATH
+
+# Public constant for consumers that need the canonical local analytics DB path.
+ANALYTICS_DUCKDB_PATH = Path("data/analytics/analytics.duckdb")
 
 # Context-managed request id (optional). When set, it will be added to events.
 _REQUEST_ID: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -96,4 +100,159 @@ def log_jsonl(event: dict[str, Any]) -> None:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-__all__ = ["TELEMETRY_JSONL_PATH", "log_jsonl"]
+def get_telemetry_jsonl_path() -> Path:
+    """Return the canonical local telemetry JSONL path."""
+    return TELEMETRY_JSONL_PATH
+
+
+def get_analytics_duckdb_path(override: Path | None = None) -> Path:
+    """Return the local analytics DuckDB path (optionally overridden)."""
+    if override is None:
+        return ANALYTICS_DUCKDB_PATH
+
+    candidate = Path(override)
+    base_dir = Path("data").resolve()
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        return ANALYTICS_DUCKDB_PATH
+
+    if resolved == base_dir or base_dir in resolved.parents:
+        return resolved
+
+    logging.warning(
+        "analytics db path override outside data/ ignored: override=%s base=%s",
+        candidate,
+        base_dir,
+    )
+    return ANALYTICS_DUCKDB_PATH
+
+
+@dataclasses.dataclass(slots=True)
+class TelemetryEventCounts:
+    """Aggregated telemetry counters for safe display in the Analytics page."""
+
+    router_selected_by_route: dict[str, int]
+    snapshot_stale_detected: int
+    export_performed: int
+    lines_read: int
+    bytes_read: int
+    invalid_lines: int
+    truncated: bool
+
+
+def parse_telemetry_jsonl_counts(
+    path: Path | None = None,
+    *,
+    max_lines: int = 50_000,
+    max_bytes: int = 25 * 1024 * 1024,
+) -> TelemetryEventCounts:
+    """Parse local telemetry JSONL and return bounded aggregate counts.
+
+    This is intentionally streaming/bounded to avoid loading large telemetry logs
+    into memory. Invalid JSON lines are ignored.
+    """
+    if max_lines <= 0 or max_bytes <= 0:
+        return TelemetryEventCounts(
+            router_selected_by_route={},
+            snapshot_stale_detected=0,
+            export_performed=0,
+            lines_read=0,
+            bytes_read=0,
+            invalid_lines=0,
+            truncated=False,
+        )
+
+    p = get_telemetry_jsonl_path() if path is None else Path(path)
+    if not p.exists():
+        return TelemetryEventCounts(
+            router_selected_by_route={},
+            snapshot_stale_detected=0,
+            export_performed=0,
+            lines_read=0,
+            bytes_read=0,
+            invalid_lines=0,
+            truncated=False,
+        )
+
+    router_counts: dict[str, int] = {}
+    stale = 0
+    exports = 0
+    bytes_read = 0
+    lines_read = 0
+    invalid_lines = 0
+    truncated = False
+
+    try:
+        with p.open("rb") as f:
+            for raw_line in f:
+                lines_read += 1
+                bytes_read += len(raw_line)
+                if lines_read > max_lines or bytes_read > max_bytes:
+                    truncated = True
+                    break
+                try:
+                    line = raw_line.decode("utf-8").strip()
+                except UnicodeDecodeError:
+                    invalid_lines += 1
+                    continue
+                if not line:
+                    continue
+                try:
+                    evt = json.loads(line)
+                except json.JSONDecodeError:
+                    invalid_lines += 1
+                    continue
+                if not isinstance(evt, dict):
+                    invalid_lines += 1
+                    continue
+
+                if evt.get("router_selected"):
+                    route = str(evt.get("route") or "unknown")
+                    router_counts[route] = router_counts.get(route, 0) + 1
+                if evt.get("snapshot_stale_detected"):
+                    stale += 1
+                if evt.get("export_performed"):
+                    exports += 1
+    except OSError:
+        return TelemetryEventCounts(
+            router_selected_by_route={},
+            snapshot_stale_detected=0,
+            export_performed=0,
+            lines_read=0,
+            bytes_read=0,
+            invalid_lines=0,
+            truncated=False,
+        )
+
+    if truncated:
+        logging.warning(
+            "telemetry parse cap hit: path=%s lines=%d bytes=%d "
+            "(max_lines=%d max_bytes=%d)",
+            p,
+            lines_read,
+            bytes_read,
+            max_lines,
+            max_bytes,
+        )
+
+    return TelemetryEventCounts(
+        router_selected_by_route=router_counts,
+        snapshot_stale_detected=stale,
+        export_performed=exports,
+        lines_read=lines_read,
+        bytes_read=bytes_read,
+        invalid_lines=invalid_lines,
+        truncated=truncated,
+    )
+
+
+__all__ = [
+    "ANALYTICS_DUCKDB_PATH",
+    "TELEMETRY_JSONL_PATH",
+    "TelemetryEventCounts",
+    "get_analytics_duckdb_path",
+    "get_telemetry_jsonl_path",
+    "log_jsonl",
+    "parse_telemetry_jsonl_counts",
+]

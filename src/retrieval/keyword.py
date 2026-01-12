@@ -23,11 +23,9 @@ from loguru import logger
 from qdrant_client import QdrantClient
 
 try:  # optional across qdrant-client versions
-    from qdrant_client.http.api_client import ResourceExhaustedResponse
-except ImportError:  # pragma: no cover - older clients
-
-    class ResourceExhaustedResponse(Exception):  # noqa: N818
-        """Fallback when qdrant-client lacks ResourceExhaustedResponse."""
+    from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
+except Exception:  # pragma: no cover - older clients / shape drift
+    ResourceExhaustedResponse = Exception  # type: ignore[assignment]
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -185,7 +183,7 @@ class KeywordSparseRetriever:
     def _query_points_with_retry(self, sparse_vec: Any) -> QdrantQueryResponse:
         """Query Qdrant with rate-limit aware retries (best-effort)."""
         retries = max(0, int(self.params.rate_limit_retries))
-        last_exc: ResourceExhaustedResponse | None = None
+        last_exc: Exception | None = None
         for attempt in range(retries + 1):
             try:
                 return self._get_client().query_points(
@@ -205,7 +203,7 @@ class KeywordSparseRetriever:
             raise last_exc
         raise RuntimeError("Qdrant rate limit retry exhausted without exception")
 
-    def _rate_limit_delay(self, exc: ResourceExhaustedResponse, attempt: int) -> float:
+    def _rate_limit_delay(self, exc: Exception, attempt: int) -> float:
         retry_after = getattr(exc, "retry_after", None)
         if retry_after is None:
             try:

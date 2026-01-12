@@ -1,10 +1,10 @@
 ---
 spec: SPEC-034
 title: Analytics Page Hardening (DuckDB + Telemetry Parsing)
-version: 1.0.0
-date: 2026-01-09
+version: 1.1.0
+date: 2026-01-12
 owners: ["ai-arch"]
-status: Draft
+status: Final
 related_requirements:
   - FR-010: Streamlit multipage UI includes Analytics
   - NFR-OBS-001: Local observability is available without network
@@ -16,7 +16,8 @@ related_adrs: ["ADR-053", "ADR-032"]
 1. Close DuckDB connections deterministically in the Analytics page.
 2. Parse telemetry JSONL in a streaming, bounded way.
 3. Use canonical paths from settings/telemetry utilities.
-4. Keep the page importable without side effects.
+4. Gate the page at runtime behind `DOCMIND_ANALYTICS_ENABLED=true`.
+5. Keep the page importable without side effects.
 
 ## Non-goals
 
@@ -58,6 +59,10 @@ Recourse: when a cap is hit, stop reading additional lines/bytes, log a warning,
 
 Use the same path as the telemetry emitter by referencing a shared public constant or getter (e.g., `TELEMETRY_JSONL_PATH` or `get_telemetry_jsonl_path()` in `src/utils/telemetry.py`) from the Analytics page. Add a test that asserts the analytics helper reads from the same path.
 
+### Canonical analytics DuckDB path
+
+Use a single canonical default DuckDB path for the Analytics page (`data/analytics/analytics.duckdb`) exposed via `src/utils/telemetry.py` (`ANALYTICS_DUCKDB_PATH` / `get_analytics_duckdb_path()`).
+
 ## Observability
 
 No new telemetry; this is a consumer-only hardening.
@@ -69,14 +74,12 @@ No new telemetry; this is a consumer-only hardening.
 
 ## Testing Strategy
 
-- Unit tests for telemetry parsing helper (`tests/unit/utils/test_telemetry_parsing.py`):
+- Unit tests for telemetry parsing helper (`tests/unit/pages/test_analytics_telemetry_parsing.py`):
   - parse valid JSONL lines and aggregate counts
   - skip invalid JSON lines without raising
   - enforce `max_lines` and `max_bytes` caps
-- Integration tests for Analytics page (`tests/integration/test_pages_analytics.py`):
+- Unit tests for Analytics DB lifecycle (`tests/unit/pages/test_analytics_telemetry_parsing.py`):
   - DuckDB connection closes normally and on query exception
-  - Analytics page import has no side effects
-  - Telemetry helper uses the canonical telemetry path
 - Keep `tests/integration/test_pages_smoke.py` passing.
 
 ## RTM Updates
