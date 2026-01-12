@@ -42,4 +42,4 @@
 | NFR-PORT-003 | Docker/compose runnable + reproducible | SPEC-023 | 042 | Dockerfile; docker-compose.yml; docker-compose.prod.yml; .dockerignore | N/A | inspection/manual run | Implemented |
 | NFR-SEC-002 | Safe logging (metadata only; keyed fingerprints; no stub redactor) | SPEC-028 | 047 | src/utils/security.py; src/utils/log_safety.py | tests/unit/utils/security/test_security.py | test | Planned |
 | NFR-SEC-004 | No unsafe HTML/JS in Streamlit UI | SPEC-022 | 041 | src/ui/components/provider_badge.py | tests/unit/ui/test_provider_badge.py; tests/integration/test_settings_page.py | test+inspection | Implemented |
-| NFR-MAINT-003 | No placeholders; docs/specs/RTM match code | SPEC-021; SPEC-029 | 046,048 | docs/specs/_; docs/developers/_; scripts/\* | scripts/\* (health/drift checks) | quality gates | Planned |
+| NFR-MAINT-003 | No placeholders; docs/specs/RTM match code | SPEC-021; SPEC-029 | 046,048 | docs/specs/_; docs/developers/_; scripts/\*; pyproject.toml | scripts/\* (health/drift checks) | quality gates | Implemented |
