@@ -134,7 +134,7 @@ def get_analytics_duckdb_path(
     if is_under_base and has_valid_suffix:
         return resolved
 
-    reason = "outside data/" if not is_under_base else "invalid extension"
+    reason = f"outside {resolved_base}" if not is_under_base else "invalid extension"
     logger.warning(
         f"analytics db path override ignored ({reason}): "
         f"override={candidate} base={resolved_base}"
