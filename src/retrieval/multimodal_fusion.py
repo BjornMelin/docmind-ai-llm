@@ -1,6 +1,6 @@
 """Multimodal retrieval fusion (text + PDF page images).
 
-Final-release design:
+Design:
 - Text retrieval remains server-side hybrid via Qdrant Query API (RRF/DBSF).
 - Visual retrieval uses SigLIP text->image embedding against a dedicated Qdrant
   image collection (named vector: ``siglip``).
@@ -20,13 +20,14 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 
-from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
+from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 from qdrant_client import QdrantClient
 
 from src.config import settings
 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 from src.retrieval.rrf import rrf_merge
+from src.utils.qdrant_utils import nodes_from_query_result
 from src.utils.siglip_adapter import SiglipEmbedding
 from src.utils.storage import get_client_config
 from src.utils.telemetry import log_jsonl
@@ -111,34 +112,12 @@ class ImageSiglipRetriever:
             logger.debug("Image query_points failed: {}", exc)
             return []
 
-        points = (
-            getattr(result, "points", None) or getattr(result, "result", None) or []
+        nodes = nodes_from_query_result(
+            result,
+            top_k=int(self.params.top_k),
+            id_keys=("page_id",),
+            prefer_point_id=False,
         )
-        if not isinstance(points, list):
-            try:
-                points = list(points)
-            except TypeError:
-                points = []
-
-        # Stable ordering: score desc, id asc (avoid tie nondeterminism)
-        ordered = sorted(
-            points,
-            key=lambda p: (
-                -float(getattr(p, "score", 0.0)),
-                str(getattr(p, "id", "")),
-            ),
-        )
-
-        nodes: list[NodeWithScore] = []
-        for p in ordered[: int(self.params.top_k)]:
-            payload = getattr(p, "payload", {}) or {}
-            score = float(getattr(p, "score", 0.0))
-            text = payload.get("text") or ""
-            page_id = payload.get("page_id") or str(getattr(p, "id", ""))
-
-            node = TextNode(text=str(text), id_=str(page_id))
-            node.metadata.update({k: v for k, v in payload.items() if k != "text"})
-            nodes.append(NodeWithScore(node=node, score=score))
 
         return nodes
 
@@ -242,17 +221,15 @@ class MultimodalFusionRetriever:
                 latency_ms,
             )
         with contextlib.suppress(Exception):
-            log_jsonl(
-                {
-                    "retrieval.multimodal": True,
-                    "retrieval.text_count": len(text_nodes),
-                    "retrieval.image_count": len(image_nodes),
-                    "retrieval.fused_count": len(out),
-                    "retrieval.rrf_k": int(k_constant),
-                    "dedup.key": key_name,
-                    "retrieval.latency_ms": latency_ms,
-                }
-            )
+            log_jsonl({
+                "retrieval.multimodal": True,
+                "retrieval.text_count": len(text_nodes),
+                "retrieval.image_count": len(image_nodes),
+                "retrieval.fused_count": len(out),
+                "retrieval.rrf_k": int(k_constant),
+                "dedup.key": key_name,
+                "retrieval.latency_ms": latency_ms,
+            })
 
         return out
 

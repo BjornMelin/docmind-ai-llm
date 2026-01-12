@@ -19,11 +19,31 @@ def test_siglip_cleanup_on_error(tmp_path, monkeypatch):  # type: ignore[no-unty
     img_path = tmp_path / "tiny.png"
     img.save(img_path)
 
+    monkeypatch.setattr(
+        rmod,
+        "ArtifactStore",
+        type(
+            "_Store",
+            (),
+            {
+                "from_settings": staticmethod(
+                    lambda _settings: type(
+                        "_S", (), {"resolve_path": staticmethod(lambda _ref: img_path)}
+                    )()
+                )
+            },
+        ),
+        raising=False,
+    )
+
     # Nodes with image metadata
     class _Node:  # minimal shim for NodeWithScore.node
         def __init__(self, path: Path):
             self.node_id = str(path)
-            self.metadata = {"path": str(path)}
+            self.metadata = {
+                "image_artifact_id": "deadbeef",
+                "image_artifact_suffix": ".png",
+            }
 
     class _NWS:  # NodeWithScore shim
         def __init__(self, p: Path):

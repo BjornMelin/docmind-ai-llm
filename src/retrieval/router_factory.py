@@ -64,21 +64,6 @@ def _safe_get_postprocessors() -> Any | None:
         return None
 
 
-class _NoOpLLM:
-    """Minimal no-op LLM stub for router defaults."""
-
-    def __init__(self) -> None:
-        self.metadata = type("_MD", (), {"context_window": 2048, "num_output": 256})()
-
-    def predict(self, *_args: Any, **_kwargs: Any) -> str:
-        """Return an empty prediction string."""
-        return ""
-
-    def complete(self, *_args: Any, **_kwargs: Any) -> str:
-        """Return an empty completion string."""
-        return ""
-
-
 def _build_vector_tool(
     *,
     vector_index: Any,
@@ -160,7 +145,7 @@ def _maybe_add_multimodal_tool(
                 metadata=tool_metadata_cls(
                     name="multimodal_search",
                     description=(
-                        "Multimodal search (final-release): fuses text "
+                        "Multimodal search: fuses text "
                         "hybrid retrieval with visual PDF page-image "
                         "retrieval (SigLIP). Best for visually rich PDFs "
                         "(tables/charts/scans) and when user asks "
@@ -305,27 +290,20 @@ def _select_router(
     the_llm: Any,
 ) -> Any:
     """Instantiate a router query engine for the assembled tools."""
-    selector = adapter.get_pydantic_selector(the_llm)
-    if selector is None:
-        selector = adapter.LLMSingleSelector.from_defaults(llm=the_llm or _NoOpLLM())
-    try:
-        return adapter.RouterQueryEngine(
-            selector=selector,
-            query_engine_tools=tools,
-            verbose=False,
-            llm=the_llm or _NoOpLLM(),
-        )
-    except TypeError:
-        return adapter.RouterQueryEngine(
-            selector=selector,
-            query_engine_tools=tools,
-            verbose=False,
-        )
+    selector = adapter.get_pydantic_selector(
+        the_llm
+    ) or adapter.LLMSingleSelector.from_defaults(llm=the_llm)
+    return adapter.RouterQueryEngine(
+        selector=selector,
+        query_engine_tools=tools,
+        verbose=False,
+        llm=the_llm,
+    )
 
 
 def _warn_once(key: str, message: str, *, reason: str) -> None:
     """Emit a warning once, downgrade to debug on subsequent occurrences."""
-    if not _WARNING_FLAGS.get(key, False):
+    if not _WARNING_FLAGS.get(key):
         logger.warning("{} (reason={})", message, reason)
         _WARNING_FLAGS[key] = True
     else:

@@ -33,6 +33,7 @@ Attributes:
 
 from typing import Any
 
+from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
@@ -165,6 +166,7 @@ class ToolFactory:
             llm=llm,
             response_mode="compact",
             verbose=False,
+            engine_cls=RetrieverQueryEngine,
         )
         return cls.create_query_tool(
             query_engine,
@@ -245,7 +247,10 @@ class ToolFactory:
             use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
         )
         query_engine = build_retriever_query_engine(
-            retriever=retriever, post=post, llm=None
+            retriever=retriever,
+            post=post,
+            llm=None,
+            engine_cls=RetrieverQueryEngine,
         )
         return cls.create_query_tool(
             query_engine,
@@ -271,13 +276,16 @@ class ToolFactory:
             use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
         )
         query_engine = build_retriever_query_engine(
-            retriever=retriever, post=post, llm=None
+            retriever=retriever,
+            post=post,
+            llm=None,
+            engine_cls=RetrieverQueryEngine,
         )
         return cls.create_query_tool(
             query_engine,
             "multimodal_search",
             (
-                "Multimodal search (final-release): fuses text hybrid retrieval "
+                "Multimodal search: fuses text hybrid retrieval "
                 "with visual PDF page-image retrieval (SigLIP). Best for charts, "
                 "tables, and scanned documents."
             ),
@@ -407,12 +415,10 @@ class ToolFactory:
                 ConnectionError,
                 TimeoutError,
             ) as exc:
-                log_jsonl(
-                    {
-                        "keyword_tool.registration_failed": True,
-                        "keyword_tool.error_type": type(exc).__name__,
-                    }
-                )
+                log_jsonl({
+                    "keyword_tool.registration_failed": True,
+                    "keyword_tool.error_type": type(exc).__name__,
+                })
                 logger.warning("Keyword tool registration failed: %s", exc)
 
         logger.info("Created %d tools for agent", len(tools))

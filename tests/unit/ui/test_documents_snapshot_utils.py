@@ -195,27 +195,28 @@ class _GraphStore:
         p.mkdir(parents=True, exist_ok=True)
         (p / "ok").write_text("1", encoding="utf-8")
 
-    def get_rel_map(self, node_ids=None, depth=1, **_kwargs):
-        """Return a deterministic relation list for tests."""
+    class _Node:
+        def __init__(self, node_id: str) -> None:
+            self.id = node_id
+            self.name = node_id
+            self.properties = {"source_id": f"src-{node_id}"}
+            self.source_id = f"src-{node_id}"
+
+    class _Edge:
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+    def get(self, ids=None, properties=None):
+        del properties
+        return [self._Node(str(i)) for i in ids or []]
+
+    def get_rel_map(self, graph_nodes, depth=1, **_kwargs):
+        """Return a deterministic relation path for tests."""
         del depth
-        items = list(node_ids or [])
+        items = list(graph_nodes or [])
         if len(items) < 2:
             return []
-        return [
-            json.dumps({"subject": items[0], "object": items[1], "relation": "rel"})
-        ]
-
-    class _Frame:
-        def __init__(self, rows: list[str]) -> None:
-            self._rows = rows
-
-        def to_parquet(self, path: Path) -> None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"PAR1")
-
-    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs):
-        rows = self.get_rel_map(node_ids=node_ids, depth=depth)
-        return self._Frame(rows)
+        return [[items[0], self._Edge("rel"), items[1]]]
 
 
 class _PgIndex:

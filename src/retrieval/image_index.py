@@ -3,7 +3,7 @@
 Indexes PDF page images into a dedicated Qdrant collection using SigLIP
 cross-modal embeddings (text<->image).
 
-Final-release constraint: Qdrant payload must be **thin** and must not contain
+Constraint: Qdrant payload must be **thin** and must not contain
 base64 blobs or raw filesystem paths. We store content-addressed artifact
 references (sha256 + suffix) and resolve to local paths at runtime.
 """
@@ -24,6 +24,7 @@ from qdrant_client.http.models import Distance
 
 from src.persistence.artifacts import ArtifactRef
 from src.utils.images import open_image_encrypted
+from src.utils.qdrant_utils import get_collection_params
 
 _SIGLIP_VECTOR_NAME = "siglip"
 _DEFAULT_SIGLIP_DIM = 768
@@ -71,9 +72,7 @@ def ensure_siglip_image_collection(
 
     # Patch missing vector head if needed (idempotent).
     try:
-        info = client.get_collection(collection_name)
-        params = getattr(info, "config", info)
-        params = getattr(params, "params", params)
+        params = get_collection_params(client, collection_name)
         vec_cfg = getattr(params, "vectors", None) or getattr(
             params, "vectors_config", None
         )

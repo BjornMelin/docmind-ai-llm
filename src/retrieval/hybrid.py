@@ -14,17 +14,19 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
+from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client import models as qmodels
-from qdrant_client.http.exceptions import (
-    ResponseHandlingException,
-    UnexpectedResponse,
-)
 
 from src.config.integrations import get_settings_embed_model
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
+from src.utils.exceptions import IMPORT_EXCEPTIONS
+from src.utils.qdrant_exceptions import QDRANT_SCHEMA_EXCEPTIONS
+from src.utils.qdrant_utils import (
+    QDRANT_PAYLOAD_FIELDS,
+    build_text_nodes,
+)
 from src.utils.storage import ensure_hybrid_collection, get_client_config
 from src.utils.telemetry import log_jsonl
 
@@ -77,13 +79,7 @@ class ServerHybridRetriever:
         try:
             ensure_hybrid_collection(self._client, self.params.collection)
         except (
-            ResponseHandlingException,
-            UnexpectedResponse,
-            ConnectionError,
-            TimeoutError,
-            OSError,
-            ValueError,
-            AttributeError,
+            *QDRANT_SCHEMA_EXCEPTIONS,
         ) as exc:  # pragma: no cover - defensive best-effort
             logger.debug("Hybrid schema ensure skipped: %s", exc)
 
@@ -185,14 +181,7 @@ class ServerHybridRetriever:
             prefetch=prefetch,
             query=self._fusion(),
             limit=fused_fetch_k,
-            with_payload=[
-                "doc_id",
-                "page_id",
-                "chunk_id",
-                "text",
-                "modality",
-                "image_path",
-            ],
+            with_payload=list(QDRANT_PAYLOAD_FIELDS),
         )
 
     def _dedup_points(self, points: list[Any]) -> tuple[list[tuple[float, Any]], int]:
@@ -215,24 +204,13 @@ class ServerHybridRetriever:
         self, dedup_sorted: list[tuple[float, Any]]
     ) -> list[NodeWithScore]:
         """Convert deduplicated points into NodeWithScore items."""
-        nodes: list[NodeWithScore] = []
-        for score, p in dedup_sorted[: self.params.fused_top_k]:
-            payload = getattr(p, "payload", {}) or {}
-            text = payload.get("text") or ""
-            nid = (
-                str(p.id)
-                if getattr(p, "id", None) is not None
-                else str(
-                    payload.get("chunk_id")
-                    or payload.get("page_id")
-                    or payload.get("doc_id")
-                    or ""
-                )
-            )
-            node = TextNode(text=text, id_=nid)
-            node.metadata.update({k: v for k, v in payload.items() if k != "text"})
-            nodes.append(NodeWithScore(node=node, score=score))
-        return nodes
+        points = [p for _score, p in dedup_sorted[: self.params.fused_top_k]]
+        return build_text_nodes(
+            points,
+            top_k=int(self.params.fused_top_k),
+            id_keys=("chunk_id", "page_id", "doc_id"),
+            prefer_point_id=True,
+        )
 
     def _emit_telemetry(
         self,
@@ -255,33 +233,26 @@ class ServerHybridRetriever:
                 qdrant_timeout_s = int(
                     getattr(_settings.database, "qdrant_timeout", 60)
                 )
-            except (
-                ImportError,
-                AttributeError,
-                TypeError,
-                ValueError,
-            ):  # pragma: no cover - defensive
+            except IMPORT_EXCEPTIONS:  # pragma: no cover - defensive
                 rrf_k_val = 60
                 qdrant_timeout_s = 60
             dropped = max(0, input_count - unique_count)
-            log_jsonl(
-                {
-                    "retrieval.backend": "qdrant",
-                    "retrieval.fusion_mode": fusion_mode,
-                    "retrieval.rrf_k": rrf_k_val,
-                    "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
-                    "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
-                    "retrieval.fused_top_k": self.params.fused_top_k,
-                    "retrieval.return_count": len(nodes),
-                    "retrieval.latency_ms": latency_ms,
-                    "retrieval.sparse_fallback": sparse_vec is None,
-                    "retrieval.qdrant_timeout_s": qdrant_timeout_s,
-                    "dedup.key": key_name,
-                    "dedup.before": input_count,
-                    "dedup.after": unique_count,
-                    "dedup.dropped": dropped,
-                }
-            )
+            log_jsonl({
+                "retrieval.backend": "qdrant",
+                "retrieval.fusion_mode": fusion_mode,
+                "retrieval.rrf_k": rrf_k_val,
+                "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
+                "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
+                "retrieval.fused_top_k": self.params.fused_top_k,
+                "retrieval.return_count": len(nodes),
+                "retrieval.latency_ms": latency_ms,
+                "retrieval.sparse_fallback": sparse_vec is None,
+                "retrieval.qdrant_timeout_s": qdrant_timeout_s,
+                "dedup.key": key_name,
+                "dedup.before": input_count,
+                "dedup.after": unique_count,
+                "dedup.dropped": dropped,
+            })
         except (OSError, ValueError, RuntimeError) as exc:
             logger.debug("Telemetry emit skipped: %s", exc)
 
@@ -321,7 +292,7 @@ class ServerHybridRetriever:
         try:
             result = self._query_qdrant(prefetch, fused_fetch_k)
         # Network/remote path: treat common connectivity or query errors as empty result
-        except (ConnectionError, TimeoutError, ValueError) as exc:  # pragma: no cover
+        except (*QDRANT_SCHEMA_EXCEPTIONS,) as exc:  # pragma: no cover
             logger.warning("Qdrant hybrid query failed: %s", exc)
             # Dense-only fallback via vector index is not available here; return empty
             return []
