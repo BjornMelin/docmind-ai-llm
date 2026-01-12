@@ -476,173 +476,174 @@ class CoverageAnalyzer:
             return {"status": "error", "message": str(e)}
 
 
-def main() -> int:
-    """Main entry point for coverage threshold checking."""
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Check coverage thresholds for DocMind AI",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser.add_argument(
         "--threshold",
         type=float,
         default=DEFAULT_LINE_THRESHOLD,
         help="Minimum line coverage threshold percentage",
     )
-
     parser.add_argument(
         "--branch-threshold",
         type=float,
         default=DEFAULT_BRANCH_THRESHOLD,
         help="Minimum branch coverage threshold percentage",
     )
-
     parser.add_argument(
         "--file-threshold",
         type=float,
         default=70.0,
         help="Minimum coverage threshold for individual files",
     )
-
     parser.add_argument(
         "--collect",
         action="store_true",
         help="Run coverage collection before checking thresholds",
     )
-
     parser.add_argument(
         "--report", action="store_true", help="Generate detailed coverage report"
     )
-
     parser.add_argument(
         "--html", action="store_true", help="Generate HTML coverage report"
     )
-
     parser.add_argument(
         "--new-code-only",
         action="store_true",
         help="Check coverage for new/modified code only",
     )
-
     parser.add_argument(
         "--diff-from", default="main", help="Base branch for new code comparison"
     )
-
     parser.add_argument(
         "--fail-under",
         action="store_true",
         help="Exit with error code if coverage below threshold",
     )
-
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging"
     )
+    return parser
 
-    args = parser.parse_args()
 
-    # Setup logging
-    log_level = logging.DEBUG if args.verbose else logging.INFO
+def _configure_logging(verbose: bool) -> None:
+    log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=log_level, format="%(asctime)s - %(levelname)s - %(message)s"
     )
+
+
+def _handle_new_code_coverage(
+    analyzer: CoverageAnalyzer, args: argparse.Namespace
+) -> int:
+    new_code_result = analyzer.check_new_code_coverage(args.diff_from)
+    status = new_code_result["status"]
+    if status == "error":
+        print(f"❌ Error checking new code coverage: {new_code_result['message']}")
+        return 1
+    if status == "no_changes":
+        print(f"ℹ️  {new_code_result['message']}")
+        return 0
+
+    meets_threshold = new_code_result["meets_threshold"]
+    percent = new_code_result["overall_percent"]
+    threshold = new_code_result["threshold"]
+    status_icon = "✅" if meets_threshold else "❌"
+    print(
+        f"{status_icon} New code coverage: {percent:.1f}% "
+        f"(threshold: {threshold}%)"
+    )
+    if meets_threshold or not args.fail_under:
+        return 0
+    return 1
+
+
+def _handle_overall_coverage(
+    analyzer: CoverageAnalyzer, args: argparse.Namespace
+) -> int:
+    overall_result = analyzer.check_overall_coverage()
+    if overall_result["status"] == "error":
+        print(f"❌ {overall_result['message']}")
+        return 2
+
+    line_coverage = overall_result["line_coverage"]
+    meets_threshold = overall_result["overall_pass"]
+    status_icon = "✅" if meets_threshold else "❌"
+    print(
+        f"{status_icon} Overall line coverage: "
+        f"{line_coverage['percent']:.1f}% "
+        f"(threshold: {line_coverage['threshold']}%)"
+    )
+
+    branch_coverage = overall_result["branch_coverage"]
+    if branch_coverage["total"] > 0:
+        branch_icon = "✅" if branch_coverage["meets_threshold"] else "❌"
+        print(
+            f"{branch_icon} Branch coverage: "
+            f"{branch_coverage['percent']:.1f}% "
+            f"(threshold: {branch_coverage['threshold']}%)"
+        )
+
+    if meets_threshold or not args.fail_under:
+        return 0
+    return 1
+
+
+def _render_reports(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> None:
+    if args.report:
+        report = analyzer.generate_coverage_report(detailed=True)
+        print("\n" + report)
+    if args.html:
+        if COVERAGE_HTML_DIR.exists():
+            print(f"📊 HTML coverage report: {COVERAGE_HTML_DIR}/index.html")
+        else:
+            print("HTML coverage report not found. Run --collect to generate.")
+
+
+def _report_failures_and_warnings(analyzer: CoverageAnalyzer) -> int:
+    exit_code = 0
+    if analyzer.failures:
+        print("\n❌ FAILURES:")
+        for failure in analyzer.failures:
+            print(f"  • {failure}")
+        exit_code = 1
+    if analyzer.warnings:
+        print("\n⚠️  WARNINGS:")
+        for warning in analyzer.warnings:
+            print(f"  • {warning}")
+    return exit_code
+
+
+def _run_coverage_checks(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> int:
+    if args.collect and not analyzer.run_coverage_collection():
+        print("❌ Coverage collection failed")
+        return 2
+    if not analyzer.load_coverage_data():
+        print("❌ Failed to load coverage data")
+        return 2
+    if args.new_code_only:
+        return _handle_new_code_coverage(analyzer, args)
+    return _handle_overall_coverage(analyzer, args)
+
+
+def main() -> int:
+    """Main entry point for coverage threshold checking."""
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+    _configure_logging(args.verbose)
 
     analyzer = CoverageAnalyzer(
         line_threshold=args.threshold, branch_threshold=args.branch_threshold
     )
 
     exit_code = 0
-
     try:
-        # Collect coverage if requested
-        if args.collect and not analyzer.run_coverage_collection():
-            print("❌ Coverage collection failed")
-            return 2
-
-        # Load coverage data
-        if not analyzer.load_coverage_data():
-            print("❌ Failed to load coverage data")
-            return 2
-
-        # Check coverage thresholds
-        if args.new_code_only:
-            # Check new code coverage only
-            new_code_result = analyzer.check_new_code_coverage(args.diff_from)
-
-            if new_code_result["status"] == "error":
-                print(
-                    f"❌ Error checking new code coverage: {new_code_result['message']}"
-                )
-                exit_code = 1
-            elif new_code_result["status"] == "no_changes":
-                print(f"ℹ️  {new_code_result['message']}")
-            else:
-                meets_threshold = new_code_result["meets_threshold"]
-                percent = new_code_result["overall_percent"]
-                threshold = new_code_result["threshold"]
-
-                status_icon = "✅" if meets_threshold else "❌"
-                print(
-                    f"{status_icon} New code coverage: {percent:.1f}% "
-                    f"(threshold: {threshold}%)"
-                )
-
-                if not meets_threshold and args.fail_under:
-                    exit_code = 1
-        else:
-            # Check overall coverage
-            overall_result = analyzer.check_overall_coverage()
-
-            if overall_result["status"] == "error":
-                print(f"❌ {overall_result['message']}")
-                exit_code = 2
-            else:
-                line_coverage = overall_result["line_coverage"]
-                meets_threshold = overall_result["overall_pass"]
-
-                status_icon = "✅" if meets_threshold else "❌"
-                print(
-                    f"{status_icon} Overall line coverage: "
-                    f"{line_coverage['percent']:.1f}% "
-                    f"(threshold: {line_coverage['threshold']}%)"
-                )
-
-                # Branch coverage output
-                if overall_result["branch_coverage"]["total"] > 0:
-                    branch_coverage = overall_result["branch_coverage"]
-                    branch_icon = "✅" if branch_coverage["meets_threshold"] else "❌"
-                    print(
-                        f"{branch_icon} Branch coverage: "
-                        f"{branch_coverage['percent']:.1f}% "
-                        f"(threshold: {branch_coverage['threshold']}%)"
-                    )
-
-                if not meets_threshold and args.fail_under:
-                    exit_code = 1
-
-        # Generate detailed report if requested
-        if args.report:
-            report = analyzer.generate_coverage_report(detailed=True)
-            print("\n" + report)
-
-        # Generate HTML report if requested
-        if args.html:
-            if COVERAGE_HTML_DIR.exists():
-                print(f"📊 HTML coverage report: {COVERAGE_HTML_DIR}/index.html")
-            else:
-                print("HTML coverage report not found. Run --collect to generate.")
-
-        # Print any failures or warnings
-        if analyzer.failures:
-            print("\n❌ FAILURES:")
-            for failure in analyzer.failures:
-                print(f"  • {failure}")
-            exit_code = 1
-
-        if analyzer.warnings:
-            print("\n⚠️  WARNINGS:")
-            for warning in analyzer.warnings:
-                print(f"  • {warning}")
-
+        exit_code = _run_coverage_checks(analyzer, args)
+        _render_reports(analyzer, args)
+        exit_code = max(exit_code, _report_failures_and_warnings(analyzer))
     except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
         logger.exception("Unexpected error during coverage checking")
         print(f"❌ Unexpected error: {e}")

@@ -78,7 +78,7 @@ CRITICAL_METRICS = [
 
 
 class PerformanceMonitor:
-    """Comprehensive performance monitoring and regression detection."""
+    """Performance monitoring and regression detection."""
 
     def __init__(self, config: dict[str, Any] | None = None):
         """Initialize performance monitor.
@@ -172,6 +172,14 @@ class PerformanceMonitor:
 
     # --- Internal helpers (extracted for clarity) ---
     def _build_pytest_cmd(self, test_args: list[str]) -> list[str]:
+        """Build the subprocess command used to invoke pytest.
+
+        Args:
+            test_args: Extra CLI args appended to the pytest invocation.
+
+        Returns:
+            The argv list suitable for subprocess.run().
+        """
         return [
             "uv",
             "run",
@@ -185,6 +193,7 @@ class PerformanceMonitor:
         ]
 
     def _maybe_reset_gpu_peak(self) -> None:
+        """Reset CUDA peak memory stats if a CUDA-capable torch is available."""
         if (
             torch is not None
             and hasattr(torch.cuda, "is_available")
@@ -194,6 +203,14 @@ class PerformanceMonitor:
                 torch.cuda.reset_peak_memory_stats()
 
     def _read_cpu_peak_mb(self) -> float | None:
+        """Read a best-effort estimate of peak process memory usage (MB).
+
+        Prefers resource.getrusage() when available; falls back to psutil RSS.
+        Note: ru_maxrss units differ across platforms (bytes on macOS, KiB on Linux).
+
+        Returns:
+            Peak memory usage in MB, or None if unavailable.
+        """
         with contextlib.suppress(Exception):
             if resource is not None:
                 ru = resource.getrusage(resource.RUSAGE_SELF)
@@ -210,6 +227,12 @@ class PerformanceMonitor:
         return None
 
     def _read_gpu_peak_mb(self) -> float | None:
+        """Read CUDA peak allocated memory for device 0 (MB) when available.
+
+        Returns:
+            Peak allocated VRAM in MB, or None if torch/CUDA is unavailable or the
+            query fails.
+        """
         try:
             if (
                 torch is not None
@@ -647,149 +670,215 @@ class PerformanceMonitor:
             self.warnings.append(f"Failed to save performance data: {e}")
 
 
-def main() -> int:
-    """Main entry point for performance monitoring."""
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Construct the CLI argument parser for the performance monitor.
+
+    Returns:
+        Configured ArgumentParser instance.
+    """
     parser = argparse.ArgumentParser(
         description="Monitor performance and detect regressions",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser.add_argument(
         "--run-tests",
         action="store_true",
         help="Run test suite and measure performance",
     )
-
     parser.add_argument(
         "--collection-only",
         action="store_true",
         help="Measure test collection time only",
     )
-
     parser.add_argument(
         "--baseline", action="store_true", help="Record current performance as baseline"
     )
-
     parser.add_argument(
         "--check-regressions",
         action="store_true",
         help="Check for performance regressions",
     )
-
     parser.add_argument(
         "--report", action="store_true", help="Generate performance report"
     )
-
     parser.add_argument(
         "--threshold", type=float, default=20.0, help="Regression threshold percentage"
     )
-
     parser.add_argument(
         "--days", type=int, default=30, help="Number of days for trend analysis"
     )
-
     parser.add_argument(
         "--timeout", type=int, default=600, help="Test suite timeout in seconds"
     )
-
     parser.add_argument(
         "--save", action="store_true", help="Save performance data to file"
     )
-
     parser.add_argument(
         "--test-args", nargs="*", help="Additional arguments for pytest"
     )
-
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging"
     )
+    return parser
 
-    args = parser.parse_args()
 
-    # Setup logging
-    log_level = logging.DEBUG if args.verbose else logging.INFO
+def _configure_logging(verbose: bool) -> None:
+    """Configure root logging for CLI usage.
+
+    Args:
+        verbose: When True, set DEBUG level; otherwise INFO.
+    """
+    log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=log_level, format="%(asctime)s - %(levelname)s - %(message)s"
     )
 
-    # Initialize monitor
+
+def _init_monitor(args: argparse.Namespace) -> PerformanceMonitor:
+    """Initialize a PerformanceMonitor from parsed CLI args.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        An initialized PerformanceMonitor instance.
+    """
     config = {
         "test_suite_timeout": args.timeout,
         "regression_threshold": args.threshold,
     }
-    monitor = PerformanceMonitor(config)
+    return PerformanceMonitor(config)
+
+
+def _handle_collection(monitor: PerformanceMonitor) -> None:
+    """Measure and report pytest collection performance.
+
+    Args:
+        monitor: Performance monitor instance to update and use for reporting.
+    """
+    collection_data = monitor.measure_test_collection_time()
+    monitor.results.update(collection_data)
+    if (
+        collection_data.get("collection_time", 0)
+        > monitor.config["test_collection_timeout"]
+    ):
+        print(
+            "⚠️  Test collection time exceeds target: "
+            f"{collection_data['collection_time']:.2f}s"
+        )
+        return
+    print(
+        f"✅ Test collection: {collection_data['collection_time']:.2f}s "
+        f"({collection_data.get('test_count', 0)} tests)"
+    )
+
+
+def _handle_test_run(monitor: PerformanceMonitor, test_args: list[str] | None) -> int:
+    """Run the test suite and update monitor results.
+
+    Args:
+        monitor: Performance monitor instance to update.
+        test_args: Optional pytest args to pass through.
+
+    Returns:
+        Process-style exit code: 0 for success, 2 for execution error/timeout.
+    """
+    performance_data = monitor.run_test_suite_performance(test_args)
+    monitor.results.update(performance_data)
+    if performance_data.get("status") in ["timeout", "error"]:
+        print(f"❌ Test suite execution failed: {performance_data}")
+        return 2
+    duration = performance_data.get("total_duration", 0)
+    test_count = performance_data.get("test_count", 0)
+    print(f"✅ Test suite: {duration:.2f}s ({test_count} tests)")
+    return 0
+
+
+def _handle_baseline(monitor: PerformanceMonitor) -> None:
+    """Record current monitor results as a regression baseline when available."""
+    if monitor.results:
+        monitor.record_performance_baseline(monitor.results)
+        print("📊 Performance baseline recorded")
+
+
+def _handle_regressions(monitor: PerformanceMonitor) -> int:
+    """Check current results against baselines and print a summary.
+
+    Args:
+        monitor: Performance monitor instance containing current results.
+
+    Returns:
+        Exit code: 0 if no regressions, 1 if regressions detected.
+    """
+    regression_results = monitor.check_performance_regressions(monitor.results)
+    if regression_results.get("regressions_detected"):
+        print("❌ Performance regressions detected!")
+        return 1
+    print("✅ No performance regressions detected")
+    return 0
+
+
+def _handle_report(monitor: PerformanceMonitor, days: int) -> None:
+    """Generate and print a human-readable performance report.
+
+    Args:
+        monitor: Performance monitor instance with accumulated results.
+        days: Number of days to include for trend analysis.
+    """
+    report = monitor.generate_performance_report(days)
+    print(report)
+
+
+def _handle_save(monitor: PerformanceMonitor) -> None:
+    """Persist current results to a JSON report file when available."""
+    if monitor.results:
+        monitor.save_performance_data(monitor.results)
+
+
+def _print_warnings_and_failures(monitor: PerformanceMonitor) -> int:
+    """Print accumulated warnings/failures and compute an exit code.
+
+    Args:
+        monitor: Performance monitor instance with warnings/failures populated.
+
+    Returns:
+        1 when failures exist; otherwise 0.
+    """
+    exit_code = 0
+    if monitor.warnings:
+        print("\n⚠️  WARNINGS:")
+        for warning in monitor.warnings:
+            print(f"  • {warning}")
+    if monitor.failures:
+        print("\n❌ FAILURES:")
+        for failure in monitor.failures:
+            print(f"  • {failure}")
+        exit_code = 1
+    return exit_code
+
+
+def main() -> int:
+    """Main entry point for performance monitoring."""
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+    _configure_logging(args.verbose)
+    monitor = _init_monitor(args)
 
     exit_code = 0
-
     try:
-        # Run test collection measurement
         if args.collection_only or args.run_tests:
-            collection_data = monitor.measure_test_collection_time()
-            monitor.results.update(collection_data)
-
-            if (
-                collection_data.get("collection_time", 0)
-                > monitor.config["test_collection_timeout"]
-            ):
-                print(
-                    f"⚠️  Test collection time exceeds target: "
-                    f"{collection_data['collection_time']:.2f}s"
-                )
-            else:
-                print(
-                    f"✅ Test collection: {collection_data['collection_time']:.2f}s "
-                    f"({collection_data.get('test_count', 0)} tests)"
-                )
-
-        # Run full test suite
+            _handle_collection(monitor)
         if args.run_tests:
-            performance_data = monitor.run_test_suite_performance(args.test_args)
-            monitor.results.update(performance_data)
-
-            if performance_data.get("status") in ["timeout", "error"]:
-                print(f"❌ Test suite execution failed: {performance_data}")
-                exit_code = 2
-            else:
-                duration = performance_data.get("total_duration", 0)
-                test_count = performance_data.get("test_count", 0)
-                print(f"✅ Test suite: {duration:.2f}s ({test_count} tests)")
-
-        # Record baseline
-        if args.baseline and monitor.results:
-            monitor.record_performance_baseline(monitor.results)
-            print("📊 Performance baseline recorded")
-
-        # Check regressions
+            exit_code = max(exit_code, _handle_test_run(monitor, args.test_args))
+        if args.baseline:
+            _handle_baseline(monitor)
         if args.check_regressions:
-            regression_results = monitor.check_performance_regressions(monitor.results)
-
-            if regression_results.get("regressions_detected"):
-                print("❌ Performance regressions detected!")
-                exit_code = 1
-            else:
-                print("✅ No performance regressions detected")
-
-        # Generate and display report
+            exit_code = max(exit_code, _handle_regressions(monitor))
         if args.report:
-            report = monitor.generate_performance_report(args.days)
-            print(report)
-
-        # Save performance data
-        if args.save and monitor.results:
-            monitor.save_performance_data(monitor.results)
-
-        # Print warnings and failures
-        if monitor.warnings:
-            print("\n⚠️  WARNINGS:")
-            for warning in monitor.warnings:
-                print(f"  • {warning}")
-
-        if monitor.failures:
-            print("\n❌ FAILURES:")
-            for failure in monitor.failures:
-                print(f"  • {failure}")
-            exit_code = 1
-
+            _handle_report(monitor, args.days)
+        if args.save:
+            _handle_save(monitor)
+        exit_code = max(exit_code, _print_warnings_and_failures(monitor))
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during performance monitoring")
         print(f"❌ Unexpected error: {e}")

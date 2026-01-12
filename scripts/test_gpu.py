@@ -25,9 +25,20 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import TypedDict, cast
 
 
-def get_gpu_info() -> dict | None:
+class GPUInfo(TypedDict):
+    """Structured GPU information returned by `nvidia-smi` queries."""
+
+    name: str
+    memory_total: int
+    memory_free: int
+    driver_version: str
+    cuda_version: str | None
+
+
+def get_gpu_info() -> GPUInfo | None:
     """Get detailed GPU information."""
     try:
         result = subprocess.run(
@@ -46,13 +57,18 @@ def get_gpu_info() -> dict | None:
             return None
 
         gpu_data = result.stdout.strip().split(", ")
-        return {
-            "name": gpu_data[0],
-            "memory_total": int(gpu_data[1]),
-            "memory_free": int(gpu_data[2]),
-            "driver_version": gpu_data[3],
-            "cuda_version": gpu_data[4] if gpu_data[4] != "[Not Supported]" else None,
-        }
+        return cast(
+            GPUInfo,
+            {
+                "name": gpu_data[0],
+                "memory_total": int(gpu_data[1]),
+                "memory_free": int(gpu_data[2]),
+                "driver_version": gpu_data[3],
+                "cuda_version": gpu_data[4]
+                if gpu_data[4] != "[Not Supported]"
+                else None,
+            },
+        )
     except (subprocess.TimeoutExpired, FileNotFoundError, IndexError, ValueError):
         return None
 
@@ -164,8 +180,7 @@ def monitor_gpu_memory() -> dict:
     return {"used": 0, "total": 0, "free": 0, "utilization": 0}
 
 
-def main():
-    """Main GPU validation runner."""
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="DocMind AI GPU Test Runner")
     parser.add_argument(
         "--quick", action="store_true", help="Quick GPU health check only"
@@ -179,33 +194,25 @@ def main():
     parser.add_argument(
         "--compatibility", action="store_true", help="Hardware compatibility check only"
     )
+    return parser
 
-    args = parser.parse_args()
 
-    project_root = Path(__file__).parent.parent
-
+def _print_header() -> None:
     print("🎯 DocMind AI GPU Validation Suite")
     print("=" * 60)
     print("Target: GPU hardware and performance validation")
     print("Scope: GPU-specific tests and benchmarks")
 
-    # Change to project root
-    os.chdir(project_root)
 
-    exit_codes = []
-    test_results = {}
-
-    # Step 1: Hardware detection
+def _require_gpu_info() -> GPUInfo:
     print("\n🔍 Step 1: GPU Hardware Detection")
     gpu_info = get_gpu_info()
-
     if not gpu_info:
         print("❌ No GPU detected or nvidia-smi not available")
         print(
             "💡 Make sure NVIDIA drivers are installed and GPU is properly configured"
         )
         sys.exit(1)
-
     print(f"✅ GPU detected: {gpu_info['name']}")
     print(
         f"   Memory: {gpu_info['memory_total']}MB total, "
@@ -214,211 +221,205 @@ def main():
     print(f"   Driver: {gpu_info['driver_version']}")
     if gpu_info["cuda_version"]:
         print(f"   CUDA: {gpu_info['cuda_version']}")
-
-    test_results["hardware"] = True
-
-    # Check memory requirements
-    if gpu_info["memory_total"] < 12000:  # 12GB minimum
+    if gpu_info["memory_total"] < 12000:
         print("⚠️  Warning: GPU has less than 12GB VRAM")
         print("   System tests may fail or run with reduced performance")
+    return gpu_info
 
-    # Step 2: CUDA compatibility
+
+def _check_cuda_compatibility(
+    gpu_info: GPUInfo, compatibility_only: bool, test_results: dict
+) -> bool:
     print("\n🔧 Step 2: CUDA Compatibility Check")
     cuda_available = check_cuda_availability()
+    test_results["hardware"] = True
     test_results["cuda"] = cuda_available
-
     if not cuda_available:
         print("❌ CUDA not available - GPU tests will fail")
-        if not args.compatibility:
+        if not compatibility_only:
             sys.exit(1)
+    if not compatibility_only:
+        return cuda_available
 
-    # If only compatibility check requested, exit here
-    if args.compatibility:
-        print("\n📋 Hardware Compatibility Summary:")
-        print(
-            f"   GPU: {'✅' if test_results['hardware'] else '❌'} "
-            f"{gpu_info['name'] if gpu_info else 'Not detected'}"
-        )
-        cuda_status = "✅" if test_results["cuda"] else "❌"
-        print(f"   CUDA: {cuda_status} Available")
-        vram_status = "✅" if gpu_info and gpu_info["memory_total"] >= 12000 else "⚠️"
-        vram_amount = gpu_info["memory_total"] if gpu_info else 0
-        print(f"   VRAM: {vram_status} {vram_amount}MB")
+    print("\n📋 Hardware Compatibility Summary:")
+    print(f"   GPU: {'✅' if test_results['hardware'] else '❌'} {gpu_info['name']}")
+    cuda_status = "✅" if test_results["cuda"] else "❌"
+    print(f"   CUDA: {cuda_status} Available")
+    vram_status = "✅" if gpu_info["memory_total"] >= 12000 else "⚠️"
+    print(f"   VRAM: {vram_status} {gpu_info['memory_total']}MB")
+    if test_results["hardware"] and test_results["cuda"]:
+        print("\n✅ GPU is compatible with DocMind AI")
+        sys.exit(0)
+    print("\n❌ GPU compatibility issues detected")
+    sys.exit(1)
 
-        if test_results["hardware"] and test_results["cuda"]:
-            print("\n✅ GPU is compatible with DocMind AI")
-            sys.exit(0)
-        else:
-            print("\n❌ GPU compatibility issues detected")
-            sys.exit(1)
 
-    # Step 3: Quick health check
-    if args.quick:
-        print("\n⚡ Step 3: Quick GPU Health Check")
+def _run_quick_check(
+    exit_codes: list[int], test_results: dict[str, bool]
+) -> dict[str, float]:
+    print("\n⚡ Step 3: Quick GPU Health Check")
+    initial_memory = monitor_gpu_memory()
+    print(
+        f"Initial VRAM usage: {initial_memory['used']}MB "
+        f"({initial_memory['utilization']:.1f}%)"
+    )
+    cmd = ["uv", "run", "python", "scripts/run_tests.py", "--smoke"]
+    exit_code, _ = run_command(cmd, "GPU Smoke Test", timeout=300)
+    exit_codes.append(exit_code)
+    test_results["smoke"] = exit_code == 0
+    final_memory = monitor_gpu_memory()
+    print(
+        f"Final VRAM usage: {final_memory['used']}MB "
+        f"({final_memory['utilization']:.1f}%)"
+    )
+    memory_increase = final_memory["used"] - initial_memory["used"]
+    if memory_increase > 1000:
+        print(f"⚠️  High memory usage increase: {memory_increase}MB")
+    return final_memory
 
-        # Monitor initial memory
-        initial_memory = monitor_gpu_memory()
-        print(
-            f"Initial VRAM usage: {initial_memory['used']}MB "
-            f"({initial_memory['utilization']:.1f}%)"
-        )
 
-        # Run smoke test
-        cmd = ["uv", "run", "python", "scripts/run_tests.py", "--smoke"]
-        exit_code, _ = run_command(cmd, "GPU Smoke Test", timeout=300)
-        exit_codes.append(exit_code)
-        test_results["smoke"] = exit_code == 0
+def _run_gpu_tests(
+    exit_codes: list[int], test_results: dict[str, bool]
+) -> dict[str, float]:
+    print("\n🎯 Step 3: GPU-Required Tests")
+    initial_memory = monitor_gpu_memory()
+    print(
+        f"Initial VRAM: {initial_memory['used']}MB used, "
+        f"{initial_memory['free']}MB free"
+    )
+    cmd = ["uv", "run", "python", "scripts/run_tests.py", "--gpu"]
+    exit_code, _ = run_command(cmd, "GPU Tests", timeout=1800)
+    exit_codes.append(exit_code)
+    test_results["gpu_tests"] = exit_code == 0
+    final_memory = monitor_gpu_memory()
+    print(f"Final VRAM: {final_memory['used']}MB used, {final_memory['free']}MB free")
+    print("\n🧠 Step 4: Performance Validation")
+    cmd = ["uv", "run", "python", "scripts/run_tests.py", "--performance"]
+    exit_code, _ = run_command(cmd, "Performance Tests", timeout=2400)
+    exit_codes.append(exit_code)
+    test_results["performance"] = exit_code == 0
+    post_system_memory = monitor_gpu_memory()
+    print(
+        f"Post-performance VRAM: {post_system_memory['used']}MB used, "
+        f"{post_system_memory['free']}MB free"
+    )
+    return final_memory
 
-        # Check memory after test
-        final_memory = monitor_gpu_memory()
-        print(
-            f"Final VRAM usage: {final_memory['used']}MB "
-            f"({final_memory['utilization']:.1f}%)"
-        )
 
-        memory_increase = final_memory["used"] - initial_memory["used"]
-        if memory_increase > 1000:  # More than 1GB increase
-            print(f"⚠️  High memory usage increase: {memory_increase}MB")
+def _run_benchmarks(
+    project_root: Path, exit_codes: list[int], test_results: dict[str, bool]
+) -> None:
+    print("\n📊 Step 5: Performance Benchmarks")
+    cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
+    exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200)
+    exit_codes.append(exit_code)
+    test_results["benchmark"] = exit_code == 0
+    vllm_script = project_root / "scripts" / "vllm_performance_validation.py"
+    if not vllm_script.exists():
+        return
+    cmd = ["uv", "run", "python", "scripts/vllm_performance_validation.py"]
+    exit_code, _ = run_command(cmd, "vLLM Performance", timeout=1200)
+    exit_codes.append(exit_code)
+    test_results["vllm"] = exit_code == 0
 
-    else:
-        # Step 3: GPU-required tests
-        print("\n🎯 Step 3: GPU-Required Tests")
 
-        # Monitor memory before tests
-        initial_memory = monitor_gpu_memory()
-        print(
-            f"Initial VRAM: {initial_memory['used']}MB used, "
-            f"{initial_memory['free']}MB free"
-        )
+def _run_memory_leak_check(test_results: dict[str, bool]) -> None:
+    print("\n🔍 Step 6: Memory Leak Detection")
+    memory_samples: list[int] = []
+    for i in range(5):
+        print(f"   Sample {i + 1}/5...")
+        memory = monitor_gpu_memory()
+        memory_samples.append(memory["used"])
+        time.sleep(10)
+    if len(memory_samples) < 3:
+        return
+    trend = memory_samples[-1] - memory_samples[0]
+    if trend > 500:
+        print(f"⚠️  Potential memory leak detected: {trend}MB increase")
+        test_results["memory_leak"] = False
+        return
+    print(f"✅ Memory usage stable: {trend}MB change")
+    test_results["memory_leak"] = True
 
-        cmd = ["uv", "run", "python", "scripts/run_tests.py", "--gpu"]
-        exit_code, _ = run_command(cmd, "GPU Tests", timeout=1800)
-        exit_codes.append(exit_code)
-        test_results["gpu_tests"] = exit_code == 0
 
-        # Monitor memory after tests
-        final_memory = monitor_gpu_memory()
-        print(
-            f"Final VRAM: {final_memory['used']}MB used, {final_memory['free']}MB free"
-        )
-
-        # Step 4: Performance validation (replacing system tests)
-        print("\n🧠 Step 4: Performance Validation")
-
-        cmd = ["uv", "run", "python", "scripts/run_tests.py", "--performance"]
-        exit_code, _ = run_command(cmd, "Performance Tests", timeout=2400)
-        exit_codes.append(exit_code)
-        test_results["performance"] = exit_code == 0
-
-        # Monitor memory usage after performance tests
-        post_system_memory = monitor_gpu_memory()
-        print(
-            f"Post-performance VRAM: {post_system_memory['used']}MB used, "
-            f"{post_system_memory['free']}MB free"
-        )
-
-    # Step 5: Performance benchmarks (if requested)
-    if args.benchmark:
-        print("\n📊 Step 5: Performance Benchmarks")
-
-        # Run performance validation script
-        cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
-        exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200)
-        exit_codes.append(exit_code)
-        test_results["benchmark"] = exit_code == 0
-
-        # Run vLLM performance validation if available
-        vllm_script = project_root / "scripts" / "vllm_performance_validation.py"
-        if vllm_script.exists():
-            cmd = ["uv", "run", "python", "scripts/vllm_performance_validation.py"]
-            exit_code, _ = run_command(cmd, "vLLM Performance", timeout=1200)
-            exit_codes.append(exit_code)
-            test_results["vllm"] = exit_code == 0
-
-    # Step 6: Memory leak detection (if requested)
-    if args.memory_check:
-        print("\n🔍 Step 6: Memory Leak Detection")
-
-        memory_samples = []
-
-        # Take multiple memory samples during test execution
-        for i in range(5):
-            print(f"   Sample {i + 1}/5...")
-            memory = monitor_gpu_memory()
-            memory_samples.append(memory["used"])
-            time.sleep(10)
-
-        # Analyze memory trend
-        if len(memory_samples) >= 3:
-            trend = memory_samples[-1] - memory_samples[0]
-            if trend > 500:  # More than 500MB increase
-                print(f"⚠️  Potential memory leak detected: {trend}MB increase")
-                test_results["memory_leak"] = False
-            else:
-                print(f"✅ Memory usage stable: {trend}MB change")
-                test_results["memory_leak"] = True
-
-    # Final GPU validation summary
-    total_failures = sum(1 for code in exit_codes if code != 0)
-
+def _print_summary(
+    gpu_info: GPUInfo,
+    test_results: dict[str, bool],
+    total_failures: int,
+    final_memory: dict[str, float] | None,
+) -> None:
     print("\n" + "=" * 80)
     print("📋 GPU VALIDATION SUMMARY")
     print("=" * 80)
-
-    # Show hardware info
     print("\n🖥️  Hardware Information:")
     print(f"   GPU: {gpu_info['name']}")
     print(f"   VRAM: {gpu_info['memory_total']}MB total")
     print(f"   Driver: {gpu_info['driver_version']}")
     print(f"   CUDA: {gpu_info['cuda_version'] or 'Not available'}")
-
-    # Show test results
     print("\n📊 Test Results:")
     for test_name, result in test_results.items():
-        if isinstance(result, bool):
-            status = "✅" if result else "❌"
-            print(f"   {status} {test_name.replace('_', ' ').title()}")
-
-    # Final assessment
-    if total_failures == 0 and all(
-        isinstance(r, bool) and r for r in test_results.values()
-    ):
+        status = "✅" if result else "❌"
+        print(f"   {status} {test_name.replace('_', ' ').title()}")
+    if total_failures == 0 and all(test_results.values()):
         print("\n🎉 All GPU tests passed!")
         print("✅ GPU is fully functional for DocMind AI")
-
-        # Performance recommendations
-        print("\n💡 Performance Notes:")
-        utilization = (
-            final_memory.get("utilization", 0) if "final_memory" in locals() else 0
-        )
-        if utilization > 90:
-            print(
-                f"   ⚠️  High VRAM utilization ({utilization:.1f}%) - "
-                "consider model optimization"
-            )
-        elif utilization > 70:
-            print(f"   ✅ Good VRAM utilization ({utilization:.1f}%)")
-        else:
-            print(
-                f"   💡 Low VRAM utilization ({utilization:.1f}%) - GPU underutilized"
-            )
-
+        _print_performance_notes(final_memory)
         sys.exit(0)
+    print("\n❌ GPU validation issues detected")
+    if total_failures > 0:
+        print(f"   {total_failures} test suite(s) failed")
+    print("\n💡 Recommendations:")
+    if not test_results.get("cuda", True):
+        print("   🔧 Install/update CUDA drivers")
+    if not test_results.get("gpu_tests", True):
+        print("   🎯 Check GPU-specific test failures")
+    if not test_results.get("system", True):
+        print("   🧠 Investigate system test issues with real models")
+    sys.exit(1)
+
+
+def _print_performance_notes(final_memory: dict[str, float] | None) -> None:
+    print("\n💡 Performance Notes:")
+    utilization = final_memory.get("utilization", 0) if final_memory else 0
+    if utilization > 90:
+        print(
+            f"   ⚠️  High VRAM utilization ({utilization:.1f}%) - "
+            "consider model optimization"
+        )
+    elif utilization > 70:
+        print(f"   ✅ Good VRAM utilization ({utilization:.1f}%)")
     else:
-        print("\n❌ GPU validation issues detected")
-        if total_failures > 0:
-            print(f"   {total_failures} test suite(s) failed")
+        print(f"   💡 Low VRAM utilization ({utilization:.1f}%) - GPU underutilized")
 
-        # Show specific recommendations
-        print("\n💡 Recommendations:")
-        if not test_results.get("cuda", True):
-            print("   🔧 Install/update CUDA drivers")
-        if not test_results.get("gpu_tests", True):
-            print("   🎯 Check GPU-specific test failures")
-        if not test_results.get("system", True):
-            print("   🧠 Investigate system test issues with real models")
 
-        sys.exit(1)
+def main() -> None:
+    """Main GPU validation runner."""
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+
+    project_root = Path(__file__).parent.parent
+    _print_header()
+    os.chdir(project_root)
+
+    exit_codes: list[int] = []
+    test_results: dict[str, bool] = {}
+
+    gpu_info = _require_gpu_info()
+    _check_cuda_compatibility(gpu_info, args.compatibility, test_results)
+
+    final_memory: dict[str, float] | None
+    if args.quick:
+        final_memory = _run_quick_check(exit_codes, test_results)
+    else:
+        final_memory = _run_gpu_tests(exit_codes, test_results)
+
+    if args.benchmark:
+        _run_benchmarks(project_root, exit_codes, test_results)
+    if args.memory_check:
+        _run_memory_leak_check(test_results)
+
+    total_failures = sum(1 for code in exit_codes if code != 0)
+    _print_summary(gpu_info, test_results, total_failures, final_memory)
 
 
 if __name__ == "__main__":

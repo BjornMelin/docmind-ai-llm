@@ -179,7 +179,30 @@ target-version = "py311"
 extend-exclude = ["opensrc"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D", "RUF", "PLE", "PLC", "PLW"]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "N",
+    "S",
+    "B",
+    "A",
+    "C4",
+    "PT",
+    "SIM",
+    "TID",
+    "D",
+    "RUF",
+    "PLE",
+    "PLC",
+    "PLW",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0914",
+    "PLR0915",
+]
 # Stricter linting with pylint-equivalent rules; keep a short, explicit ignore set.
 ignore = [
     # Docstring style conflicts
@@ -195,7 +218,7 @@ ignore = [
     "PLW1514",  # unspecified-encoding (handled by project defaults)
     "PLW0603",  # global-statement (acceptable in limited cases)
     "PLW2901",  # loop variable overwritten (common pattern for line stripping)
-    # Note: PLR (refactoring) rules not selected - they're too strict for this project
+    # Note: PLR is opt-in via explicit PLR091x design rules only.
 ]
 # Ensure unused or mistyped noqa comments are flagged and pilot ANN rules.
 extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
@@ -236,6 +259,8 @@ max-args = 10
 max-bool-expr = 5
 max-branches = 15
 max-locals = 20
+max-nested-blocks = 5
+max-positional-args = 10
 max-public-methods = 30
 max-returns = 6
 max-statements = 50

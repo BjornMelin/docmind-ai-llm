@@ -674,136 +674,130 @@ class TestHealthMonitor:
             self.warnings.append(f"Failed to save health data: {e}")
 
 
-def main() -> int:
-    """Main entry point for test health monitoring."""
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Monitor test suite health and detect issues",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser.add_argument(
         "--analyze", action="store_true", help="Run comprehensive health analysis"
     )
-
     parser.add_argument(
         "--flakiness", action="store_true", help="Run flakiness analysis only"
     )
-
     parser.add_argument(
         "--patterns", action="store_true", help="Run pattern analysis only"
     )
-
     parser.add_argument(
         "--stability", action="store_true", help="Check test stability only"
     )
-
     parser.add_argument(
         "--runs", type=int, default=5, help="Number of runs for flakiness analysis"
     )
-
     parser.add_argument(
         "--test-pattern", help="Pattern to filter tests for flakiness analysis"
     )
-
     parser.add_argument(
         "--test-dirs",
         nargs="+",
         default=["tests/"],
         help="Directories to analyze for patterns",
     )
-
     parser.add_argument(
         "--days", type=int, default=7, help="Days to look back for stability analysis"
     )
-
     parser.add_argument("--report", action="store_true", help="Generate health report")
-
     parser.add_argument("--save", action="store_true", help="Save health data to file")
-
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging"
     )
+    return parser
 
-    args = parser.parse_args()
 
-    # Setup logging
-    log_level = logging.DEBUG if args.verbose else logging.INFO
+def _configure_logging(verbose: bool) -> None:
+    log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=log_level, format="%(asctime)s - %(levelname)s - %(message)s"
     )
+
+
+def _run_flakiness(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
+    print("🔍 Running flakiness analysis...")
+    flakiness_data = monitor.run_flakiness_analysis(args.runs, args.test_pattern)
+    monitor.health_data["flakiness"] = flakiness_data
+    flaky_count = len(flakiness_data.get("flaky_tests", []))
+    if flaky_count > 0:
+        print(f"⚠️  Found {flaky_count} flaky tests")
+        return 1
+    print("✅ No flaky tests detected")
+    return 0
+
+
+def _run_patterns(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
+    print("🔍 Running pattern analysis...")
+    pattern_data = monitor.analyze_test_patterns(args.test_dirs)
+    monitor.health_data["patterns"] = pattern_data
+    high_violations = sum(
+        info["count"]
+        for info in pattern_data.get("pattern_summary", {}).values()
+        if info.get("severity") == "high"
+    )
+    if high_violations > 0:
+        print(f"⚠️  Found {high_violations} high-severity pattern violations")
+        return 1
+    total_violations = pattern_data.get("total_violations", 0)
+    print(f"✅ Pattern analysis complete ({total_violations} total violations)")
+    return 0
+
+
+def _run_stability(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
+    print("🔍 Checking test stability...")
+    stability_data = monitor.check_test_stability(args.days)
+    monitor.health_data["stability"] = stability_data
+    if not stability_data.get("execution_successful"):
+        print("❌ Test suite execution failed")
+        return 1
+    pass_rate = stability_data.get("pass_rate", 0)
+    print(f"✅ Test stability check complete ({pass_rate:.1%} pass rate)")
+    return 0
+
+
+def _print_warnings_and_failures(monitor: TestHealthMonitor) -> int:
+    exit_code = 0
+    if monitor.warnings:
+        print("\n⚠️  WARNINGS:")
+        for warning in monitor.warnings:
+            print(f"  • {warning}")
+    if monitor.failures:
+        print("\n❌ FAILURES:")
+        for failure in monitor.failures:
+            print(f"  • {failure}")
+        exit_code = 1
+    return exit_code
+
+
+def main() -> int:
+    """Main entry point for test health monitoring."""
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+    _configure_logging(args.verbose)
 
     monitor = TestHealthMonitor()
     exit_code = 0
 
     try:
-        # Run analyses
         if args.analyze or args.flakiness:
-            print("🔍 Running flakiness analysis...")
-            flakiness_data = monitor.run_flakiness_analysis(
-                args.runs, args.test_pattern
-            )
-            monitor.health_data["flakiness"] = flakiness_data
-
-            flaky_count = len(flakiness_data.get("flaky_tests", []))
-            if flaky_count > 0:
-                print(f"⚠️  Found {flaky_count} flaky tests")
-                exit_code = 1
-            else:
-                print("✅ No flaky tests detected")
-
+            exit_code = max(exit_code, _run_flakiness(monitor, args))
         if args.analyze or args.patterns:
-            print("🔍 Running pattern analysis...")
-            pattern_data = monitor.analyze_test_patterns(args.test_dirs)
-            monitor.health_data["patterns"] = pattern_data
-
-            high_violations = sum(
-                info["count"]
-                for info in pattern_data.get("pattern_summary", {}).values()
-                if info.get("severity") == "high"
-            )
-            if high_violations > 0:
-                print(f"⚠️  Found {high_violations} high-severity pattern violations")
-                exit_code = 1
-            else:
-                total_violations = pattern_data.get("total_violations", 0)
-                print(
-                    f"✅ Pattern analysis complete "
-                    f"({total_violations} total violations)"
-                )
-
+            exit_code = max(exit_code, _run_patterns(monitor, args))
         if args.analyze or args.stability:
-            print("🔍 Checking test stability...")
-            stability_data = monitor.check_test_stability(args.days)
-            monitor.health_data["stability"] = stability_data
-
-            if not stability_data.get("execution_successful"):
-                print("❌ Test suite execution failed")
-                exit_code = 1
-            else:
-                pass_rate = stability_data.get("pass_rate", 0)
-                print(f"✅ Test stability check complete ({pass_rate:.1%} pass rate)")
-
-        # Generate report
+            exit_code = max(exit_code, _run_stability(monitor, args))
         if args.report or args.analyze:
             report = monitor.generate_health_report()
             print("\n" + report)
-
-        # Save health data
         if args.save and monitor.health_data:
             monitor.save_health_data(monitor.health_data)
-
-        # Print warnings and failures
-        if monitor.warnings:
-            print("\n⚠️  WARNINGS:")
-            for warning in monitor.warnings:
-                print(f"  • {warning}")
-
-        if monitor.failures:
-            print("\n❌ FAILURES:")
-            for failure in monitor.failures:
-                print(f"  • {failure}")
-            exit_code = 1
-
+        exit_code = max(exit_code, _print_warnings_and_failures(monitor))
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during health monitoring")
         print(f"❌ Unexpected error: {e}")

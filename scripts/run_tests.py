@@ -613,8 +613,7 @@ else:
         print("   Re-run specific tests: uv run pytest tests/test_<name>.py -v")
 
 
-def main():  # pylint: disable=too-many-branches,too-many-statements
-    """Main entry point for tiered test runner."""
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="DocMind AI Tiered Test Runner",
         epilog="""Three-Tier Testing Strategy:
@@ -630,8 +629,6 @@ Examples:
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-
-    # Three-tier testing strategy arguments
     parser.add_argument(
         "--unit",
         action="store_true",
@@ -642,8 +639,6 @@ Examples:
         action="store_true",
         help="Run integration tests only (Tier 2 - lightweight models)",
     )
-
-    # Additional test categories
     parser.add_argument(
         "--fast",
         action="store_true",
@@ -667,8 +662,6 @@ Examples:
         action="store_true",
         help="Run basic smoke tests (quick system health check)",
     )
-
-    # Utility arguments
     parser.add_argument(
         "--coverage", action="store_true", help="Generate detailed coverage report"
     )
@@ -680,105 +673,114 @@ Examples:
         action="store_true",
         help="Validate that all modules can be imported",
     )
-
-    # Accept optional positional test paths/patterns for direct pytest invocation
     parser.add_argument(
         "paths",
         nargs="*",
         help="Optional test paths or patterns to pass directly to pytest.",
     )
+    return parser
 
+
+def _print_default_tiers() -> None:
+    print("\nRunning Default Tiered Test Strategy")
+    print("\nTiers:")
+    print("   --unit: Fast tests with mocks (development)")
+    print("   --integration: Lightweight models (PR validation)")
+    print("   --gpu: Manual GPU smoke tests (staging/release)")
+    print("   --fast: Unit + Integration only")
+    print("   --extras: Optional-dependency tests (requires llama_index extras)")
+
+
+def _run_direct_paths(runner: TestRunner, args: argparse.Namespace) -> None:
+    cmd = ["uv", "run", "pytest", *args.paths, "-v", "--tb=short"]
+    if args.coverage:
+        cmd += ["--cov=src", "--cov-report=term-missing"]
+    else:
+        cmd += ["--no-cov"]
+    runner.run_command(cmd, "Direct pytest (paths)")
+
+
+def _run_selected_tests(runner: TestRunner, args: argparse.Namespace) -> None:
+    if args.paths:
+        _run_direct_paths(runner, args)
+        return
+    if args.validate_imports:
+        runner.validate_imports()
+    elif args.smoke:
+        runner.run_smoke_tests()
+    elif args.unit:
+        runner.run_unit_tests()
+    elif args.integration:
+        runner.run_integration_tests()
+    elif args.extras:
+        runner.run_extras_tests()
+    elif args.fast:
+        runner.run_fast_tests()
+    elif args.performance:
+        runner.run_performance_tests()
+    elif args.gpu:
+        runner.run_gpu_tests()
+    elif args.coverage:
+        runner.run_all_tests()
+    else:
+        _print_default_tiers()
+        runner.validate_imports()
+        runner.run_tiered_tests()
+
+
+def _should_generate_coverage(args: argparse.Namespace) -> bool:
+    if args.coverage:
+        return True
+    if args.paths:
+        return False
+    return not any(
+        [
+            args.fast,
+            args.unit,
+            args.integration,
+            args.extras,
+            args.performance,
+            args.gpu,
+            args.smoke,
+            args.validate_imports,
+        ]
+    )
+
+
+def _finalize_run(runner: TestRunner) -> None:
+    runner.print_summary()
+    failed_runs = sum(1 for r in runner.results if r.exit_code != 0)
+    if failed_runs > 0:
+        print(f"\n{failed_runs} test run(s) failed")
+        sys.exit(1)
+    print("\nAll test runs completed successfully")
+
+
+def main() -> None:
+    """Main entry point for tiered test runner."""
+    parser = _build_arg_parser()
     args = parser.parse_args()
 
-    project_root = Path(__file__).parent.parent  # Go up to project root from scripts/
+    project_root = Path(__file__).parent.parent
     runner = TestRunner(project_root)
 
     print("DocMind AI Test Suite")
     print("=" * 50)
 
-    # Clean artifacts if requested
     if args.clean:
         runner.clean_artifacts()
 
     try:
-        # If explicit test paths were supplied, run them directly via pytest
-        if args.paths:
-            cmd = ["uv", "run", "pytest", *args.paths, "-v", "--tb=short"]
-            if args.coverage:
-                cmd += ["--cov=src", "--cov-report=term-missing"]
-            else:
-                # Avoid project-wide coverage thresholds when running ad-hoc paths
-                cmd += ["--no-cov"]
-            runner.run_command(cmd, "Direct pytest (paths)")
-        # Run specific test categories based on tiered strategy
-        elif args.validate_imports:
-            runner.validate_imports()
-        elif args.smoke:
-            runner.run_smoke_tests()
-        elif args.unit:
-            runner.run_unit_tests()
-        elif args.integration:
-            runner.run_integration_tests()
-        elif args.extras:
-            runner.run_extras_tests()
-        elif args.fast:
-            runner.run_fast_tests()
-        elif args.performance:
-            runner.run_performance_tests()
-        elif args.gpu:
-            runner.run_gpu_tests()
-        elif args.coverage:
-            # Full test suite with coverage over src/
-            runner.run_all_tests()
-        else:
-            # Default: Run tiered test strategy (unit → integration → system)
-            print("\nRunning Default Tiered Test Strategy")
-            print("\nTiers:")
-            print("   --unit: Fast tests with mocks (development)")
-            print("   --integration: Lightweight models (PR validation)")
-            print("   --gpu: Manual GPU smoke tests (staging/release)")
-            print("   --fast: Unit + Integration only")
-            print(
-                "   --extras: Optional-dependency tests (requires llama_index extras)"
-            )
-
-            runner.validate_imports()
-            runner.run_tiered_tests()
-
-        # Generate coverage report if requested or if running comprehensive tests
-        if args.coverage or (
-            not args.paths
-            and not any(
-                [
-                    args.fast,
-                    args.unit,
-                    args.integration,
-                    args.extras,
-                    args.performance,
-                    args.gpu,
-                    args.smoke,
-                    args.validate_imports,
-                ]
-            )
-        ):
+        _run_selected_tests(runner, args)
+        if _should_generate_coverage(args):
             runner.generate_coverage_report()
-
     except KeyboardInterrupt:
         print("\n⚠️  Test execution interrupted by user")
     except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"\nUnexpected error: {e}")
         sys.exit(1)
 
-    # Print summary
-    runner.print_summary()
-
-    # Exit with appropriate code
-    failed_runs = sum(1 for r in runner.results if r.exit_code != 0)
-    if failed_runs > 0:
-        print(f"\n{failed_runs} test run(s) failed")
-        sys.exit(1)
-    else:
-        print("\nAll test runs completed successfully")
+    _finalize_run(runner)
 
 
 if __name__ == "__main__":

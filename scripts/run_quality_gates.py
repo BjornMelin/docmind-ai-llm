@@ -397,119 +397,119 @@ class QualityGateRunner:
         return recommendations
 
 
-def main() -> int:
-    """Main entry point for quality gates runner."""
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run DocMind AI quality gates",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
-    # Quality gate selection
     parser.add_argument(
         "--all",
         "--comprehensive",
         action="store_true",
         help="Run all quality gates (coverage, performance, health)",
     )
-
     parser.add_argument(
         "--quick", action="store_true", help="Run quick quality gates (coverage only)"
     )
-
     parser.add_argument(
         "--ci", action="store_true", help="Run CI quality gates (coverage, performance)"
     )
-
-    # Individual gates
     parser.add_argument(
         "--coverage", action="store_true", help="Run coverage threshold validation"
     )
-
     parser.add_argument(
         "--performance",
         action="store_true",
         help="Run performance regression detection",
     )
-
     parser.add_argument(
         "--health", action="store_true", help="Run test suite health monitoring"
     )
-
     parser.add_argument(
         "--pre-commit", action="store_true", help="Run pre-commit hooks"
     )
-
-    # Configuration
     parser.add_argument(
         "--report", action="store_true", help="Generate detailed report"
     )
-
     parser.add_argument(
         "--continue-on-failure",
         action="store_true",
         help="Continue running gates even if one fails",
     )
-
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose logging"
     )
+    return parser
 
-    args = parser.parse_args()
 
-    # Initialize runner
-    runner = QualityGateRunner(verbose=args.verbose)
+def _select_gates(args: argparse.Namespace) -> list[str]:
+    gates: list[str] = []
+    if args.all:
+        gates.extend(QUALITY_SUITES["comprehensive"])
+    elif args.quick:
+        gates.extend(QUALITY_SUITES["quick"])
+    elif args.ci:
+        gates.extend(QUALITY_SUITES["ci"])
+    else:
+        if args.coverage:
+            gates.append("coverage")
+        if args.performance:
+            gates.append("performance")
+        if args.health:
+            gates.append("health")
+    if not gates and not args.pre_commit:
+        gates.extend(QUALITY_SUITES["quick"])
+    return gates
+
+
+def _run_gates(
+    runner: QualityGateRunner, gates: list[str], continue_on_failure: bool
+) -> bool:
     overall_success = True
+    for gate_name in gates:
+        success = runner.run_quality_gate(gate_name)
+        if success:
+            continue
+        overall_success = False
+        if not continue_on_failure:
+            break
+    return overall_success
+
+
+def _run_pre_commit(runner: QualityGateRunner, enabled: bool) -> bool:
+    if not enabled:
+        return True
+    return runner.run_pre_commit_hooks()
+
+
+def _print_report(runner: QualityGateRunner) -> None:
+    report = runner.generate_report()
+    print("\n" + report)
+
+
+def _print_final_status(runner: QualityGateRunner, overall_success: bool) -> None:
+    if overall_success:
+        print("\n🎉 All quality gates PASSED!")
+        return
+    print(f"\n💥 Quality gates FAILED ({len(runner.failures)} issues)")
+    for failure in runner.failures:
+        print(f"  • {failure}")
+
+
+def main() -> int:
+    """Main entry point for quality gates runner."""
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+    runner = QualityGateRunner(verbose=args.verbose)
 
     try:
-        # Determine which gates to run
-        gates_to_run = []
-
-        if args.all:
-            gates_to_run.extend(QUALITY_SUITES["comprehensive"])
-        elif args.quick:
-            gates_to_run.extend(QUALITY_SUITES["quick"])
-        elif args.ci:
-            gates_to_run.extend(QUALITY_SUITES["ci"])
-        else:
-            # Individual gate selection
-            if args.coverage:
-                gates_to_run.append("coverage")
-            if args.performance:
-                gates_to_run.append("performance")
-            if args.health:
-                gates_to_run.append("health")
-
-        # Default to quick if nothing specified
-        if not gates_to_run and not args.pre_commit:
-            gates_to_run.extend(QUALITY_SUITES["quick"])
-
-        # Run quality gates
-        for gate_name in gates_to_run:
-            success = runner.run_quality_gate(gate_name)
-            if not success:
-                overall_success = False
-                if not args.continue_on_failure:
-                    break
-
-        # Run pre-commit if requested
-        if args.pre_commit:
-            success = runner.run_pre_commit_hooks()
-            if not success:
-                overall_success = False
-
-        # Generate and display report
+        gates = _select_gates(args)
+        overall_success = _run_gates(runner, gates, args.continue_on_failure)
+        if not _run_pre_commit(runner, args.pre_commit):
+            overall_success = False
         if args.report or not overall_success:
-            report = runner.generate_report()
-            print("\n" + report)
-
-        # Final status
-        if overall_success:
-            print("\n🎉 All quality gates PASSED!")
-        else:
-            print(f"\n💥 Quality gates FAILED ({len(runner.failures)} issues)")
-            for failure in runner.failures:
-                print(f"  • {failure}")
-
+            _print_report(runner)
+        _print_final_status(runner, overall_success)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during quality gate execution")
         print(f"\n💥 Unexpected error: {e}")
