@@ -30,7 +30,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-from opentelemetry.trace import Span
+from opentelemetry.trace import Span, StatusCode
+from opentelemetry.trace.status import Status
 
 from src.config.settings import DocMindSettings, ObservabilityConfig
 
@@ -95,14 +96,16 @@ def router_build_span(
 ) -> Generator[Span, None, None]:
     """Yield a span describing router construction."""
     tracer = trace.get_tracer(__name__)
-    span = tracer.start_span("router_factory.build_router_engine")
-    span.set_attribute("router.adapter_name", adapter_name)
-    span.set_attribute("router.kg_requested", bool(kg_requested))
-    span.set_attribute("router.hybrid_requested", bool(hybrid_requested))
-    try:
-        yield span
-    finally:
-        span.end()
+    with tracer.start_as_current_span("router_factory.build_router_engine") as span:
+        span.set_attribute("router.adapter_name", adapter_name)
+        span.set_attribute("router.kg_requested", bool(kg_requested))
+        span.set_attribute("router.hybrid_requested", bool(hybrid_requested))
+        try:
+            yield span
+        except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+            raise
 
 
 def record_router_selection(
@@ -146,6 +149,9 @@ def setup_tracing(app_settings: DocMindSettings) -> None:
     """
     obs = app_settings.observability
     if not obs.enabled:
+        return
+
+    if float(obs.sampling_ratio) <= 0.0:
         return
 
     if _get_trace_provider() is not None:
@@ -284,15 +290,17 @@ def graph_export_span(
 ) -> Generator[Span, None, None]:
     """Yield a span to instrument GraphRAG export operations."""
     tracer = trace.get_tracer(__name__)
-    span = tracer.start_span(f"graph_export.{fmt}")
-    span.set_attribute("graph.export.adapter_name", adapter_name)
-    span.set_attribute("graph.export.format", fmt)
-    span.set_attribute("graph.export.depth", int(depth))
-    span.set_attribute("graph.export.seed_count", int(seed_count))
-    try:
-        yield span
-    finally:
-        span.end()
+    with tracer.start_as_current_span(f"graph_export.{fmt}") as span:
+        span.set_attribute("graph.export.adapter_name", adapter_name)
+        span.set_attribute("graph.export.format", fmt)
+        span.set_attribute("graph.export.depth", int(depth))
+        span.set_attribute("graph.export.seed_count", int(seed_count))
+        try:
+            yield span
+        except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+            raise
 
 
 def record_graph_export_event(
@@ -302,10 +310,15 @@ def record_graph_export_event(
     bytes_written: int,
 ) -> None:
     """Attach an export completion event to the span."""
+    raw = os.fspath(path)
+    try:
+        filename = os.path.basename(raw)
+    except Exception:
+        filename = ""
     span.add_event(
         "export_performed",
         {
-            "path": os.fspath(path),
+            "file.name": filename,
             "size.bytes": int(bytes_written),
         },
     )
@@ -351,7 +364,7 @@ def _build_resource(app_settings: DocMindSettings) -> Resource:
 
 def _create_span_exporter(obs: ObservabilityConfig) -> Any:
     """Instantiate an OTLP span exporter based on configured protocol."""
-    kwargs = _build_otlp_kwargs(obs)
+    kwargs = _build_otlp_kwargs(obs, signal="traces")
     if obs.protocol == "grpc":
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter as GrpcSpanExporter,
@@ -368,7 +381,7 @@ def _create_span_exporter(obs: ObservabilityConfig) -> Any:
 
 def _create_metric_exporter(obs: ObservabilityConfig) -> Any:
     """Instantiate an OTLP metric exporter based on configured protocol."""
-    kwargs = _build_otlp_kwargs(obs)
+    kwargs = _build_otlp_kwargs(obs, signal="metrics")
     if obs.protocol == "grpc":
         from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
             OTLPMetricExporter as GrpcMetricExporter,
@@ -383,15 +396,38 @@ def _create_metric_exporter(obs: ObservabilityConfig) -> Any:
     return HttpMetricExporter(**kwargs)
 
 
-def _build_otlp_kwargs(obs: ObservabilityConfig) -> dict[str, Any]:
+def _build_otlp_kwargs(obs: ObservabilityConfig, *, signal: str) -> dict[str, Any]:
     """Return keyword arguments shared by metric and span exporters."""
     headers = _format_headers(obs.headers)
     kwargs: dict[str, Any] = {}
     if obs.endpoint:
-        kwargs["endpoint"] = obs.endpoint
+        endpoint = obs.endpoint
+        if obs.protocol == "http/protobuf":
+            endpoint = _normalize_http_endpoint(endpoint, signal=signal)
+        kwargs["endpoint"] = endpoint
     if headers:
         kwargs["headers"] = headers
     return kwargs
+
+
+def _normalize_http_endpoint(endpoint: str, *, signal: str) -> str:
+    """Normalize OTLP HTTP exporter endpoints to include /v1/<signal> suffix.
+
+    The OTLP HTTP exporters treat an explicit `endpoint=` argument as
+    fully-qualified; they do not automatically append /v1/traces or /v1/metrics.
+    """
+    value = str(endpoint).strip()
+    if not value:
+        return value
+    value = value.rstrip("/")
+    for suffix in ("traces", "metrics", "logs"):
+        if value.endswith(f"/v1/{suffix}"):
+            return value[: -len(suffix)] + signal
+    if "/v1/" in value:
+        return value
+    if value.endswith("/v1"):
+        return f"{value}/{signal}"
+    return f"{value}/v1/{signal}"
 
 
 def _format_headers(headers: Mapping[str, Any]) -> dict[str, str]:

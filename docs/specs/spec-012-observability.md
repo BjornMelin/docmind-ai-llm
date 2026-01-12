@@ -63,9 +63,13 @@ When `settings.observability.enabled` is `False`, DocMind does not install SDK p
 DocMind uses a _single_ `observability.endpoint` value for both traces and metrics exporters.
 
 - For `protocol="grpc"` this is typically fine (one host:port for both signals).
-- For `protocol="http/protobuf"`, traces and metrics normally use different paths (`/v1/traces` vs `/v1/metrics`). Because the OpenTelemetry Python HTTP exporters only auto-append these paths **when the endpoint argument is not provided**, the recommended configuration is:
-  - leave `DOCMIND_OBSERVABILITY__ENDPOINT` unset (`None`), and set `OTEL_EXPORTER_OTLP_ENDPOINT` (base) or signal-specific endpoints via the environment, OR
-  - use `protocol="grpc"` for a single shared endpoint.
+- For `protocol="http/protobuf"`, traces and metrics normally use different paths (`/v1/traces` vs `/v1/metrics`). The OpenTelemetry Python HTTP exporters only auto-append these paths **when the endpoint argument is not provided**; however DocMind normalizes a configured `observability.endpoint` to the correct per-signal `/v1/<signal>` endpoint when the protocol is HTTP.
+
+Practical outcomes:
+
+- Setting `DOCMIND_OBSERVABILITY__ENDPOINT=http://localhost:4318` works for both traces and metrics.
+- If `DOCMIND_OBSERVABILITY__ENDPOINT` already includes a `/v1/...` suffix, DocMind rewrites it per exporter (`/v1/traces` for traces, `/v1/metrics` for metrics).
+- You can still leave `DOCMIND_OBSERVABILITY__ENDPOINT` unset and rely on standard OTEL env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, signal-specific endpoints, etc.).
 
 ## Implementation
 
@@ -89,15 +93,15 @@ Implementation notes:
 
 Spans are present in these code paths (no-op unless tracing is enabled):
 
-| Component                                              | Span name                                                                                              | Attributes / events                                                                                                                                          |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Ingestion (`src/processing/ingestion_pipeline.py`)     | `ingest_documents`                                                                                     | `docmind.document_count`                                                                                                                                     |
-| Snapshot (`src/persistence/snapshot.py`)               | `snapshot.write_manifest` / `snapshot.finalize` / `snapshot.persist_vector` / `snapshot.persist_graph` | (no attributes currently)                                                                                                                                    |
-| Router build (`src/retrieval/router_factory.py`)       | `router_factory.build_router_engine`                                                                   | attrs: `router.adapter_name`, `router.kg_requested`, `router.hybrid_requested`, `router.kg_enabled`; event: `router_selected` (`tool.count`, `tool.names`)   |
-| Router tool (`src/agents/tools/router_tool.py`)        | `router_tool.query`                                                                                    | attrs: `router.query.length`, `router.engine.available`, `router.selected_strategy`, `router.success`, `router.latency_ms`, …                                |
-| Coordinator (`src/agents/coordinator.py`)              | `coordinator.process_query`                                                                            | attrs: `coordinator.thread_id`, `query.length`, `coordinator.workflow_timeout`, `coordinator.fallback`                                                       |
-| Chat UI (`src/pages/01_chat.py`)                       | `chat.staleness_check`                                                                                 | attrs: `snapshot.id`, `snapshot.is_stale`                                                                                                                    |
-| Graph export helper (`src/telemetry/opentelemetry.py`) | `graph_export.<fmt>`                                                                                   | attrs: `graph.export.adapter_name`, `graph.export.format`, `graph.export.depth`, `graph.export.seed_count`; event: `export_performed` (`path`, `size.bytes`) |
+| Component                                              | Span name                                                                                              | Attributes / events                                                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ingestion (`src/processing/ingestion_pipeline.py`)     | `ingest_documents`                                                                                     | `docmind.document_count`                                                                                                                                          |
+| Snapshot (`src/persistence/snapshot.py`)               | `snapshot.write_manifest` / `snapshot.finalize` / `snapshot.persist_vector` / `snapshot.persist_graph` | (no attributes currently)                                                                                                                                         |
+| Router build (`src/retrieval/router_factory.py`)       | `router_factory.build_router_engine`                                                                   | attrs: `router.adapter_name`, `router.kg_requested`, `router.hybrid_requested`, `router.kg_enabled`; event: `router_selected` (`tool.count`, `tool.names`)        |
+| Router tool (`src/agents/tools/router_tool.py`)        | `router_tool.query`                                                                                    | attrs: `router.query.length`, `router.engine.available`, `router.selected_strategy`, `router.success`, `router.latency_ms`, …                                     |
+| Coordinator (`src/agents/coordinator.py`)              | `coordinator.process_query`                                                                            | attrs: `coordinator.thread_id`, `query.length`, `coordinator.workflow_timeout`, `coordinator.fallback`                                                            |
+| Chat UI (`src/pages/01_chat.py`)                       | `chat.staleness_check`                                                                                 | attrs: `snapshot.id`, `snapshot.is_stale`                                                                                                                         |
+| Graph export helper (`src/telemetry/opentelemetry.py`) | `graph_export.<fmt>`                                                                                   | attrs: `graph.export.adapter_name`, `graph.export.format`, `graph.export.depth`, `graph.export.seed_count`; event: `export_performed` (`file.name`, `size.bytes`) |
 
 Metrics recorded via the shared `MeterProvider`:
 
@@ -135,7 +139,7 @@ Canonical event keys used by requirements/tests:
 - Snapshot staleness event:
   - `snapshot_stale_detected: true`, plus `snapshot_id`, `reason`
 - Export event:
-  - `export_performed: true`, plus `export_type`, `seed_count`, `dest_path`, `context`, and `duration_ms` when available (optional: `dest_relpath`, `size_bytes`, `capped`).
+  - `export_performed: true`, plus `export_type`, `seed_count`, `dest_basename`, `context`, and `duration_ms` when available (optional: `size_bytes`, `capped`).
 
 ## Acceptance Criteria
 

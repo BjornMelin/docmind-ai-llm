@@ -43,6 +43,9 @@ def test_observability_headers_formatted() -> None:
         endpoint="http://collector:4318",
         headers={"x-auth": "token"},
     )
-    kwargs = otel._build_otlp_kwargs(obs)
+    kwargs = otel._build_otlp_kwargs(obs, signal="traces")
     assert kwargs["headers"] == {"x-auth": "token"}
-    assert kwargs["endpoint"] == "http://collector:4318"
+    assert kwargs["endpoint"] == "http://collector:4318/v1/traces"
+
+    kwargs_metrics = otel._build_otlp_kwargs(obs, signal="metrics")
+    assert kwargs_metrics["endpoint"] == "http://collector:4318/v1/metrics"

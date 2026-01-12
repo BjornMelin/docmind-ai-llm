@@ -50,7 +50,7 @@ def test_rotation_and_write(monkeypatch, tmp_path):
     assert rec["k"] == 3
 
 
-def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path, caplog):
+def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path):
     from src.utils import telemetry as t
 
     class _Stat:
@@ -77,7 +77,12 @@ def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path, caplog):
     monkeypatch.setenv("DOCMIND_TELEMETRY_ROTATE_BYTES", "1")
     monkeypatch.setenv("DOCMIND_TELEMETRY_SAMPLE", "1.0")
 
-    caplog.set_level("DEBUG")
+    calls: list[str] = []
+
+    def _dbg(msg: str) -> None:
+        calls.append(str(msg))
+
+    monkeypatch.setattr(t.logger, "debug", _dbg, raising=False)
     t.log_jsonl({"k": 4})
     # Should not raise; debug log emitted about rotation skip
-    assert any("telemetry rotation skipped" in m.message for m in caplog.records)
+    assert any("telemetry rotation skipped" in msg for msg in calls)
