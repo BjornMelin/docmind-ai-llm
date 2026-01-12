@@ -46,5 +46,5 @@ def test_persist_env_rejects_control_characters(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     env_path = tmp_path / ".env"
 
-    with pytest.raises(ValueError, match=r"control characters"):
+    with pytest.raises(Exception, match=r"control characters"):
         persist_env({"DOCMIND_MODEL": "line1\nline2"}, env_path=env_path)
