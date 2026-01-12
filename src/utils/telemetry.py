@@ -115,7 +115,13 @@ def get_analytics_duckdb_path(
     *,
     base_dir: Path | None = None,
 ) -> Path:
-    """Return the local analytics DuckDB path (optionally overridden)."""
+    """Return the local analytics DuckDB path (optionally overridden).
+
+    The default path is ``<base_dir>/analytics/analytics.duckdb``. Overrides
+    must point to a file with a ``.duckdb`` or ``.db`` suffix and live in a
+    subdirectory of the resolved base directory; overrides located directly at
+    the base root are ignored and fall back to the default path.
+    """
     resolved_base = (
         base_dir or settings.data_dir or _ANALYTICS_DUCKDB_PATH.parent.parent
     ).resolve()
