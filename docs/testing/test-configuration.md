@@ -643,9 +643,9 @@ print(f'Context size: {settings.vllm.context_window}')
 "
 
 # Run specific test tier
-uv run python -m pytest tests/unit/ -v -m unit
-uv run python -m pytest tests/integration/ -v -m integration  
-uv run python -m pytest tests/system/ -v -m "system and requires_gpu"
+uv run python -m pytest tests/unit/ -v
+uv run python -m pytest tests/integration/ -v
+DOCMIND_RUN_SYSTEM=1 uv run python -m pytest tests/system/ -v
 ```
 
 ## Summary

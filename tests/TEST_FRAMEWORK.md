@@ -12,7 +12,7 @@ This test framework implements ML testing best practices with a tiered strategy 
 - **Dependencies**: None (CPU-only)
 - **Components**: `MockEmbedding`, `MockLLM` from LlamaIndex
 - **Purpose**: Test business logic, algorithms, validation
-- **Run with**: `pytest -m unit`
+- **Run with**: `uv run pytest -q tests/unit`
 
 ```python
 @pytest.mark.unit
@@ -29,7 +29,7 @@ def test_embedding_logic(mock_settings):
 - **Dependencies**: Lightweight models (all-MiniLM-L6-v2: 80MB)
 - **Components**: Real model integration, mocked external services
 - **Purpose**: Test component interaction, data flow
-- **Run with**: `pytest -m integration`
+- **Run with**: `uv run pytest -q tests/integration`
 
 ```python
 @pytest.mark.integration
@@ -150,10 +150,10 @@ def gpu_smoke_config() -> dict:
 
 ```bash
 # Fast unit tests only (CI/local development)
-pytest -m unit
+uv run pytest -q tests/unit
 
 # Integration tests with lightweight models  
-pytest -m integration
+uv run pytest -q tests/integration
 
 # Optional GPU tests (manual execution)
 pytest -m "requires_gpu" --timeout=600

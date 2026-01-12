@@ -4,26 +4,26 @@ This module provides comprehensive E2E tests that validate complete user workflo
 through the DocMind AI application, including multi-agent coordination, document
 processing, and user interface integration. These tests focus on realistic user
 scenarios and complete workflow validation.
-
-MOCK CLEANUP COMPLETE:
-- ELIMINATED sys.modules anti-pattern (was 3, now 0)
-- Converted to proper pytest fixtures with monkeypatch
-- Removed module-level setup function
-    - Implemented boundary-only mocking strategy
 """
 
 import sys
-import types as types_
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Mark all tests in this module as E2E
-pytestmark = pytest.mark.e2e
-
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from tests.e2e.helpers import (
+    assert_documents_have_required_metadata,
+    build_isolated_modules,
+    configure_hardware_mocks,
+    install_agent_stubs,
+    install_heavy_dependencies,
+    install_llama_index_core,
+    install_mock_ollama,
+    install_mock_torch,
+    patch_async_workflow_dependencies,
+    patch_document_loader,
+    patch_hardware_validation,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -33,21 +33,13 @@ def setup_comprehensive_dependencies(monkeypatch):
     Uses monkeypatch instead of sys.modules anti-pattern.
     Only mocks external dependencies at boundaries.
     """
-    # Mock torch with complete attributes for spacy/thinc compatibility
-    mock_torch = MagicMock()
-    mock_torch.__version__ = "2.7.1+cu126"
-    mock_torch.__spec__ = MagicMock()
-    mock_torch.__spec__.name = "torch"
-    mock_torch.cuda.is_available.return_value = True
-    mock_torch.cuda.device_count.return_value = 1
-    mock_torch.cuda.get_device_properties.return_value = MagicMock(
-        name="RTX 4090", total_memory=17179869184
+    install_mock_torch(
+        monkeypatch,
+        include_cuda_props=True,
+        include_tensor=True,
+        include_nn=True,
+        include_device=True,
     )
-    # Additional torch attributes
-    mock_torch.tensor = MagicMock()
-    mock_torch.nn = MagicMock()
-    mock_torch.device = MagicMock()
-    monkeypatch.setitem(sys.modules, "torch", mock_torch)
 
     # Mock heavy external dependencies
     heavy_dependencies = [
@@ -64,131 +56,17 @@ def setup_comprehensive_dependencies(monkeypatch):
         "qdrant_client",
     ]
 
-    for module in heavy_dependencies:
-        if module not in sys.modules:
-            monkeypatch.setitem(sys.modules, module, MagicMock())
+    install_heavy_dependencies(monkeypatch, heavy_dependencies)
 
     # Mock LlamaIndex core retrievers package
 
-    li_core = types_.ModuleType("llama_index.core")
-    li_core.__path__ = []
-
-    class _DummySettings:
-        llm = None
-        embed_model = None
-        context_window = 4096
-        num_output = 512
-
-    li_core.Settings = _DummySettings
-
-    class _DummyDocument:
-        def __init__(self, text: str = "", metadata: dict | None = None, **_):
-            self.text = text
-            self.metadata = metadata or {}
-
-    li_core.Document = _DummyDocument
-
-    class _DummyPGI:
-        pass
-
-    li_core.PropertyGraphIndex = _DummyPGI
-
-    class _DummyVSI:
-        pass
-
-    li_core.VectorStoreIndex = _DummyVSI
-    li_retrievers = types_.ModuleType("llama_index.core.retrievers")
-
-    class _DummyBaseRetriever:
-        pass
-
-    li_retrievers.BaseRetriever = _DummyBaseRetriever
-    monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
-    monkeypatch.setitem(sys.modules, "llama_index.core.retrievers", li_retrievers)
+    install_llama_index_core(monkeypatch)
 
     # Mock Ollama service client specifically (boundary mocking)
-    mock_ollama = MagicMock()
-    mock_ollama.list.return_value = {
-        "models": [{"name": "qwen3-4b-instruct-2507:latest"}]
-    }
-    mock_ollama.pull.return_value = {"status": "success"}
-    mock_ollama.chat.return_value = {"message": {"content": "Test response"}}
-    monkeypatch.setitem(sys.modules, "ollama", mock_ollama)
+    install_mock_ollama(monkeypatch)
 
     # Provide lightweight stubs for src.agents to avoid heavy imports
-
-    agents_coord = types_.ModuleType("src.agents.coordinator")
-
-    class _MC:
-        """Lightweight stub coordinator used for isolation in tests."""
-
-        def __init__(self, *_, **__):
-            """Construct the stub without heavy initialization."""
-
-        def process_query(self, *_a, **_kw):
-            """Return a static response namespace to mimic real behavior."""
-            from types import SimpleNamespace
-
-            return SimpleNamespace(content="stub")
-
-    agents_coord.MultiAgentCoordinator = _MC
-    agents_factory = types_.ModuleType("src.agents.tool_factory")
-
-    class _TF:
-        """Stubbed ToolFactory with no-op tool creation."""
-
-        @staticmethod
-        def create_basic_tools(_):
-            """Return an empty tool list for router wiring tests."""
-            return []
-
-    agents_factory.ToolFactory = _TF
-    monkeypatch.setitem(sys.modules, "src.agents.coordinator", agents_coord)
-    monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
-
-
-def _build_isolated_modules() -> dict[str, types_.ModuleType]:
-    """Build isolated module stubs for workflow testing."""
-    src_pkg = types_.ModuleType("src")
-    agents_pkg = types_.ModuleType("src.agents")
-    utils_pkg = types_.ModuleType("src.utils")
-    coord_mod = types_.ModuleType("src.agents.coordinator")
-
-    class _MC:
-        """Isolated coordinator stub for the E2E workflow test."""
-
-        def __init__(self, *_, **__):
-            """Construct the stub without heavy initialization."""
-
-        def process_query(self, *_a, **_kw):
-            """Return a static response namespace to mimic real behavior."""
-            from types import SimpleNamespace
-
-            return SimpleNamespace(content="stub")
-
-    coord_mod.MultiAgentCoordinator = _MC
-    tf_mod = types_.ModuleType("src.agents.tool_factory")
-
-    class _TF:
-        """Stubbed ToolFactory with no-op tool creation."""
-
-        @staticmethod
-        def create_basic_tools(_):
-            """Return an empty tool list for router wiring tests."""
-            return []
-
-    tf_mod.ToolFactory = _TF
-    src_pkg.agents = agents_pkg
-    src_pkg.utils = utils_pkg
-    return {
-        "src": src_pkg,
-        "src.agents": agents_pkg,
-        "src.utils": utils_pkg,
-        "src.utils.core": types_.ModuleType("src.utils.core"),
-        "src.utils.document": types_.ModuleType("src.utils.document"),
-        "src.agents.coordinator": coord_mod,
-        "src.agents.tool_factory": tf_mod,
-    }
+    install_agent_stubs(monkeypatch)
 
 
 def _make_mock_documents() -> list:
@@ -226,12 +104,7 @@ def _configure_core_mocks(
     mock_ollama_pull,
 ) -> None:
     """Configure core mock return values for workflow test."""
-    mock_detect.return_value = {
-        "gpu_name": "RTX 4090",
-        "vram_total_gb": 24,
-        "cuda_available": True,
-    }
-    mock_validate.return_value = True
+    configure_hardware_mocks(mock_detect, mock_validate)
     mock_load_docs.return_value = _make_mock_documents()
 
     mock_coordinator = MagicMock()
@@ -303,23 +176,18 @@ def _exercise_workflow(mock_detect, mock_load_docs):
 @pytest.mark.asyncio
 async def test_complete_application_workflow():
     """End-to-end application workflow covering major components."""
-    module_map = _build_isolated_modules()
+    module_map = build_isolated_modules()
     with (
         patch.dict(
             sys.modules,
             module_map,
             clear=False,
         ),
-        patch("src.utils.core.detect_hardware", create=True) as mock_detect,
-        patch(
-            "src.utils.core.validate_startup_configuration", create=True
-        ) as mock_validate,
+        patch_hardware_validation() as (mock_detect, mock_validate),
         patch(
             "src.agents.coordinator.MultiAgentCoordinator", create=True
         ) as mock_coordinator_class,
-        patch(
-            "src.utils.document.load_documents_unstructured", create=True
-        ) as mock_load_docs,
+        patch_document_loader() as mock_load_docs,
         patch("ollama.list") as mock_ollama_list,
         patch("ollama.pull") as mock_ollama_pull,
     ):
@@ -449,9 +317,7 @@ def test_multi_agent_system_integration():
 @pytest.mark.asyncio
 async def test_document_processing_pipeline():
     """Test the complete document processing pipeline post-ADR-009."""
-    with patch(
-        "src.utils.document.load_documents_unstructured", create=True
-    ) as mock_load_docs:
+    with patch_document_loader() as mock_load_docs:
         # Mock successful document loading
         from llama_index.core import Document
 
@@ -488,13 +354,7 @@ async def test_document_processing_pipeline():
             assert all(doc.metadata.get("source") == "doc1.pdf" for doc in documents)
 
             # Test that documents have proper structure
-            for _i, doc in enumerate(documents):
-                assert doc.text is not None
-                assert len(doc.text) > 0
-                assert doc.metadata is not None
-                assert "source" in doc.metadata
-                assert "page" in doc.metadata
-                assert "chunk_id" in doc.metadata
+            assert_documents_have_required_metadata(documents)
 
             # Test analysis output schema
             analysis = AnalysisOutput(
@@ -536,13 +396,9 @@ async def test_async_workflow_components():
     """Test async workflow components and operations."""
     try:
         # Mock async operations
-        with (
-            patch(
-                "src.utils.document.load_documents_unstructured", create=True
-            ) as mock_load,
-            patch(
-                "src.agents.coordinator.MultiAgentCoordinator", create=True
-            ) as mock_coordinator_class,
+        with patch_async_workflow_dependencies() as (
+            mock_load,
+            mock_coordinator_class,
         ):
             # Setup async mocks
             async_coordinator = AsyncMock()
@@ -666,24 +522,14 @@ def test_legacy_component_cleanup_validation():
 async def test_end_to_end_integration_with_mocks():
     """Integration test that validates complete E2E workflow with proper mocking."""
     with (
-        patch("src.utils.core.detect_hardware", create=True) as mock_detect,
-        patch(
-            "src.utils.core.validate_startup_configuration", create=True
-        ) as mock_validate,
+        patch_hardware_validation() as (mock_detect, mock_validate),
         patch(
             "src.agents.coordinator.MultiAgentCoordinator", create=True
         ) as mock_coordinator,
-        patch(
-            "src.utils.document.load_documents_unstructured", create=True
-        ) as mock_load,
+        patch_document_loader() as mock_load,
     ):
         # Setup comprehensive mocks
-        mock_detect.return_value = {
-            "gpu_name": "RTX 4090",
-            "vram_total_gb": 24,
-            "cuda_available": True,
-        }
-        mock_validate.return_value = True
+        configure_hardware_mocks(mock_detect, mock_validate)
 
         from llama_index.core import Document
 

@@ -37,7 +37,7 @@ This repository organizes unit tests by domain to mirror the `src/` folder. Subd
 
 ## Running tests
 
-- Unit with coverage: `uv run pytest tests/unit -m unit --cov=src -q`
+- Unit with coverage: `uv run pytest -q tests/unit --cov=src`
 - Integration (offline) lives in `tests/integration` (separate job in CI).
 
 ## Pytest settings

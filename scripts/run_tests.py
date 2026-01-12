@@ -245,8 +245,6 @@ class TestRunner:
             "--cov-fail-under=0",
             "--cov-report=term-missing",
             "--durations=10",
-            "-m",
-            "unit",
         ]
         # Run unit tests serially in CI for stability across environments
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
@@ -264,8 +262,6 @@ class TestRunner:
             "--cov-fail-under=0",
             "--cov-report=term-missing",
             "--durations=10",
-            "-m",
-            "integration",
         ]
         return self.run_command(
             command, "Integration Tests (Tier 2 - Lightweight models)"
@@ -357,8 +353,6 @@ class TestRunner:
             "--cov-report=term-missing",
             "--cov-branch",
             "--durations=20",
-            "-m",
-            "unit or integration",
             "--maxfail=5",
         ]
         ci_env = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
@@ -396,8 +390,6 @@ class TestRunner:
             "--cov=src",
             "--cov-report=term-missing",
             "--durations=10",
-            "-m",
-            "unit or integration",
         ]
         return self.run_command(command, "Fast Tests (Unit + Integration)")
 
@@ -738,18 +730,16 @@ def _should_generate_coverage(args: argparse.Namespace) -> bool:
         return True
     if args.paths:
         return False
-    return not any(
-        [
-            args.fast,
-            args.unit,
-            args.integration,
-            args.extras,
-            args.performance,
-            args.gpu,
-            args.smoke,
-            args.validate_imports,
-        ]
-    )
+    return not any([
+        args.fast,
+        args.unit,
+        args.integration,
+        args.extras,
+        args.performance,
+        args.gpu,
+        args.smoke,
+        args.validate_imports,
+    ])
 
 
 def _finalize_run(runner: TestRunner) -> None:

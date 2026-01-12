@@ -26,6 +26,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.e2e.helpers import (
+    install_agent_stubs,
+    install_dependency_injector,
+    install_heavy_dependencies,
+    install_llama_index_core,
+    install_mock_ollama,
+    install_mock_torch,
+    patch_async_workflow_dependencies,
+)
+
 # Mark all tests in this module as E2E
 pytestmark = pytest.mark.e2e
 
@@ -38,27 +48,17 @@ src_path = project_root / "src"
 sys.path.insert(0, str(src_path))
 
 
-def _mock_torch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock torch with CUDA attributes used by the app."""
-    mock_torch = MagicMock()
-    mock_torch.__version__ = "2.7.1+cu126"
-    mock_torch.__spec__ = MagicMock()
-    mock_torch.__spec__.name = "torch"
-    mock_torch.cuda.is_available.return_value = True
-    mock_torch.cuda.device_count.return_value = 1
-    mock_torch.cuda.get_device_properties.return_value = MagicMock(
-        name="RTX 4090",
-        total_memory=17179869184,  # 16GB VRAM
-    )
-    monkeypatch.setitem(sys.modules, "torch", mock_torch)
-
-
 def _mock_heavy_ml(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock heavy ML modules that should not import in tests."""
-    monkeypatch.setitem(sys.modules, "llama_index.llms.llama_cpp", MagicMock())
-    monkeypatch.setitem(sys.modules, "llama_cpp", MagicMock())
-    monkeypatch.setitem(sys.modules, "sentence_transformers", MagicMock())
-    monkeypatch.setitem(sys.modules, "transformers", MagicMock())
+    install_heavy_dependencies(
+        monkeypatch,
+        [
+            "llama_index.llms.llama_cpp",
+            "llama_cpp",
+            "sentence_transformers",
+            "transformers",
+        ],
+    )
 
 
 def _mock_spacy(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,126 +78,6 @@ def _mock_flag_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_flag = MagicMock()
     mock_flag.BGEM3FlagModel = MagicMock()
     monkeypatch.setitem(sys.modules, "FlagEmbedding", mock_flag)
-
-
-def _mock_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock ollama client boundary calls."""
-    mock_ollama = MagicMock()
-    mock_ollama.list.return_value = {
-        "models": [{"name": "qwen3-4b-instruct-2507:latest"}]
-    }
-    mock_ollama.pull.return_value = {"status": "success"}
-    mock_ollama.chat.return_value = {"message": {"content": "Test response"}}
-    monkeypatch.setitem(sys.modules, "ollama", mock_ollama)
-
-
-def _mock_dependency_injector(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock dependency_injector for import resolution."""
-    mock_dependency_injector = MagicMock()
-    mock_dependency_injector.wiring = MagicMock()
-    mock_dependency_injector.wiring.Provide = MagicMock()
-    mock_dependency_injector.wiring.inject = MagicMock()
-    mock_dependency_injector.containers = MagicMock()
-    mock_dependency_injector.providers = MagicMock()
-    monkeypatch.setitem(sys.modules, "dependency_injector", mock_dependency_injector)
-    monkeypatch.setitem(
-        sys.modules,
-        "dependency_injector.containers",
-        mock_dependency_injector.containers,
-    )
-    monkeypatch.setitem(
-        sys.modules, "dependency_injector.providers", mock_dependency_injector.providers
-    )
-    monkeypatch.setitem(
-        sys.modules, "dependency_injector.wiring", mock_dependency_injector.wiring
-    )
-
-
-def _mock_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock minimal LlamaIndex core objects used by the app."""
-    import types as _types
-
-    li_core = _types.ModuleType("llama_index.core")
-    li_core.__path__ = []  # mark as package
-
-    class _DummySettings:
-        llm = None
-        embed_model = None
-        context_window = 4096
-        num_output = 512
-
-    li_core.Settings = _DummySettings
-
-    class _DummyDocument:
-        def __init__(self, text: str = "", metadata: dict | None = None, **_):
-            self.text = text
-            self.metadata = metadata or {}
-
-    li_core.Document = _DummyDocument
-
-    class _DummyStorageContext:
-        """Minimal storage context shim used in tests."""
-
-        def __init__(self, *, vector_store=None, image_store=None):
-            """Initialize with optional vector and image stores."""
-            self.vector_store = vector_store
-            self.image_store = image_store
-
-        @classmethod
-        def from_defaults(cls, *, vector_store=None, image_store=None):
-            """Construct a new instance using provided stores."""
-            return cls(vector_store=vector_store, image_store=image_store)
-
-    li_core.StorageContext = _DummyStorageContext
-
-    class _DummyPGI:  # PropertyGraphIndex placeholder
-        """Placeholder for PropertyGraphIndex import compatibility in tests."""
-
-        pass
-
-    li_core.PropertyGraphIndex = _DummyPGI
-
-    li_llms = _types.ModuleType("llama_index.core.llms")
-
-    class _ChatMessage:
-        """Chat message shim exposing role and content fields."""
-
-        def __init__(self, role: str, content: str):
-            """Create a chat message with a role and content."""
-            self.role = role
-            self.content = content
-
-    li_llms.ChatMessage = _ChatMessage
-
-    li_indices = _types.ModuleType("llama_index.core.indices")
-
-    class _DummyMMIndex:
-        """Minimal multi-modal index shim with factory constructor."""
-
-        @classmethod
-        def from_documents(cls, *_args, **_kwargs):
-            """Return a trivial index instance for tests."""
-            return cls()
-
-    li_indices.MultiModalVectorStoreIndex = _DummyMMIndex
-
-    class _DummyVSI:
-        pass
-
-    li_core.VectorStoreIndex = _DummyVSI
-    li_retrievers = _types.ModuleType("llama_index.core.retrievers")
-
-    class _DummyBaseRetriever:  # placeholder class
-        pass
-
-    li_retrievers.BaseRetriever = _DummyBaseRetriever
-
-    monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
-    monkeypatch.setitem(sys.modules, "llama_index.core.llms", li_llms)
-    monkeypatch.setitem(sys.modules, "llama_index.core.indices", li_indices)
-    monkeypatch.setitem(sys.modules, "llama_index.core.retrievers", li_retrievers)
-    monkeypatch.setitem(sys.modules, "llama_index.core.memory", MagicMock())
-    monkeypatch.setitem(sys.modules, "llama_index.core.vector_stores", MagicMock())
 
 
 def _mock_streamlit_extras(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -310,13 +190,13 @@ def setup_external_dependencies(monkeypatch):
     Uses monkeypatch instead of sys.modules anti-pattern.
     Only mocks external dependencies at boundaries.
     """
-    _mock_torch(monkeypatch)
+    install_mock_torch(monkeypatch, include_cuda_props=True)
     _mock_heavy_ml(monkeypatch)
     _mock_spacy(monkeypatch)
     _mock_flag_embedding(monkeypatch)
-    _mock_ollama(monkeypatch)
-    _mock_dependency_injector(monkeypatch)
-    _mock_llama_index_core(monkeypatch)
+    install_mock_ollama(monkeypatch)
+    install_dependency_injector(monkeypatch)
+    install_llama_index_core(monkeypatch)
     monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", MagicMock())
     monkeypatch.setitem(sys.modules, "llama_index.llms.openai", MagicMock())
     _mock_streamlit_extras(monkeypatch)
@@ -336,55 +216,31 @@ def fixture_app_test(tmp_path, monkeypatch):
         AppTest: Streamlit app test instance with proper settings.
     """
     # Use real DocMindSettings (no side-effect integrations) with temp paths
-    from src.config.settings import DocMindSettings as TestDocMindSettings
+    from src.config.settings import (
+        DatabaseConfig,
+        MonitoringConfig,
+    )
+    from src.config.settings import (
+        DocMindSettings as TestDocMindSettings,
+    )
 
     _ = TestDocMindSettings(
         # Override paths to use temp directory
         data_dir=tmp_path / "data",
         cache_dir=tmp_path / "cache",
         log_file=tmp_path / "logs" / "test.log",
-        sqlite_db_path=tmp_path / "db" / "test.db",
+        database=DatabaseConfig(sqlite_db_path=tmp_path / "db" / "test.db"),
         # Test-specific configurations
         debug=True,
         log_level="DEBUG",
         enable_gpu_acceleration=False,  # CPU-only for E2E tests
-        enable_performance_logging=False,
+        monitoring=MonitoringConfig(enable_performance_logging=False),
     )
 
     # No replacement of src.utils; rely on real modules and patch per-test where needed
 
     # Stub out agents modules to avoid heavy imports & pydantic issues
-    from types import ModuleType
-
-    agents_coord = ModuleType("src.agents.coordinator")
-
-    class _MC:
-        """Stub multi-agent coordinator for tests."""
-
-        def __init__(self, *_, **__):
-            """Construct the stub without heavy initialization."""
-            pass
-
-        def process_query(self, *_a, **_kw):
-            """Return a stub response namespace."""
-            from types import SimpleNamespace
-
-            return SimpleNamespace(content="stub")
-
-    agents_coord.MultiAgentCoordinator = _MC
-    agents_factory = ModuleType("src.agents.tool_factory")
-
-    class _TF:
-        """Stubbed ToolFactory with no-op tool creation."""
-
-        @staticmethod
-        def create_basic_tools(_):
-            """Return an empty tool list for router wiring tests."""
-            return []
-
-    agents_factory.ToolFactory = _TF
-    monkeypatch.setitem(sys.modules, "src.agents.coordinator", agents_coord)
-    monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
+    install_agent_stubs(monkeypatch)
 
     # Ensure submodule attribute is present for patch traversal
     from contextlib import suppress
@@ -594,12 +450,7 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
             "ollama.list",
             return_value={"models": [{"name": "qwen3-4b-instruct-2507:latest"}]},
         ) as mock_ollama_list,
-        patch(
-            "src.agents.coordinator.MultiAgentCoordinator", create=True
-        ) as mock_coordinator_class,
-        patch(
-            "src.utils.document.load_documents_unstructured", create=True
-        ) as mock_load_docs,
+        patch_async_workflow_dependencies() as (mock_load_docs, mock_coordinator_class),
         patch(
             "src.utils.core.validate_startup_configuration",
             return_value=True,
