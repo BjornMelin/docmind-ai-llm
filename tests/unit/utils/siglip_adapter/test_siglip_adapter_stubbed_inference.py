@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 pytestmark = pytest.mark.unit
 
 
-def test_siglip_embedding_text_and_image_with_stubbed_model(tmp_path: Path) -> None:
+def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
     try:
         import torch  # type: ignore
     except Exception:  # pragma: no cover

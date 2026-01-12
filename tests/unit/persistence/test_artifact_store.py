@@ -67,3 +67,16 @@ def test_prune_deletes_oldest_until_under_budget(tmp_path: Path) -> None:
     # Oldest should be deleted first.
     assert not p_a.exists()
     assert p_b.exists()
+
+
+def test_prune_respects_min_age_seconds(tmp_path: Path) -> None:
+    root = tmp_path / "artifacts"
+    store = ArtifactStore(root=root)
+
+    src = tmp_path / "recent.webp"
+    src.write_bytes(b"x" * 100)
+    ref = store.put_file(src)
+
+    deleted = store.prune(max_total_bytes=10, min_age_seconds=3600)
+    assert deleted == 0
+    assert store.exists(ref)

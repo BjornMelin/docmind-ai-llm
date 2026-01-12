@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from src.config.settings import DocMindSettings
 from src.persistence.chat_db import (
     create_session,
     ensure_session_registry,
@@ -22,7 +23,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_open_chat_db_anchors_relative_paths_under_data_dir(tmp_path: Path) -> None:
-    cfg = SimpleNamespace(data_dir=tmp_path)
+    cfg = cast("DocMindSettings", type("_Cfg", (), {"data_dir": tmp_path})())
     conn = open_chat_db(Path("data/chat.db"), cfg=cfg)  # legacy default shape
     try:
         assert Path(conn.execute("PRAGMA database_list;").fetchone()[2]).exists()
@@ -35,7 +36,7 @@ def test_open_chat_db_anchors_relative_paths_under_data_dir(tmp_path: Path) -> N
 
 
 def test_session_crud_and_purge(tmp_path: Path) -> None:
-    cfg = SimpleNamespace(data_dir=tmp_path)
+    cfg = cast("DocMindSettings", type("_Cfg", (), {"data_dir": tmp_path})())
     conn = open_chat_db(Path("chat.db"), cfg=cfg)
     try:
         ensure_session_registry(conn)
@@ -51,7 +52,10 @@ def test_session_crud_and_purge(tmp_path: Path) -> None:
 
         soft_delete_session(conn, thread_id=created.thread_id)
         assert list_sessions(conn) == []
-        assert list_sessions(conn, include_deleted=True)
+        deleted_sessions = list_sessions(conn, include_deleted=True)
+        assert len(deleted_sessions) == 1
+        assert deleted_sessions[0].thread_id == created.thread_id
+        assert deleted_sessions[0].deleted_at_ms is not None
 
         # Create minimal LangGraph tables expected by purge_session.
         conn.execute("CREATE TABLE IF NOT EXISTS writes (thread_id TEXT);")

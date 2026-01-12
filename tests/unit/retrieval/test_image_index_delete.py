@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
 from src.retrieval.image_index import (
     count_page_images_for_doc_id,
     delete_page_images_for_doc_id,
 )
+
+pytestmark = pytest.mark.unit
 
 
 @dataclass

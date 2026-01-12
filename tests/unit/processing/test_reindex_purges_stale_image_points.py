@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_index_page_images_purges_existing_doc_points(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     data_dir = tmp_path / "data"
     cache_dir = tmp_path / "cache"

@@ -20,39 +20,39 @@ from src.processing.ingestion_pipeline import ingest_documents_sync
 class DummyEmbedding(BaseEmbedding):
     """Deterministic embedding for pipeline construction in tests."""
 
-    def _get_text_embedding(self, text: str):  # type: ignore[override]
+    def _get_text_embedding(self, text: str) -> list[float]:  # type: ignore[override]
         digest = hashlib.sha256(text.encode("utf-8")).digest()
         value = int.from_bytes(digest[:8], "big") / 2**64
         return [float(value)]
 
-    async def _aget_text_embedding(self, text: str):  # type: ignore[override]
+    async def _aget_text_embedding(self, text: str) -> list[float]:  # type: ignore[override]
         return self._get_text_embedding(text)
 
-    def _get_query_embedding(self, query: str):  # type: ignore[override]
+    def _get_query_embedding(self, query: str) -> list[float]:  # type: ignore[override]
         return self._get_text_embedding(query)
 
-    async def _aget_query_embedding(self, query: str):  # type: ignore[override]
+    async def _aget_query_embedding(self, query: str) -> list[float]:  # type: ignore[override]
         return self._get_text_embedding(query)
 
-    def _get_text_embeddings(self, texts):  # type: ignore[override]
+    def _get_text_embeddings(self, texts: list[str]) -> list[list[float]]:  # type: ignore[override]
         return [self._get_text_embedding(t) for t in texts]
 
-    async def _aget_text_embeddings(self, texts):  # type: ignore[override]
+    async def _aget_text_embeddings(self, texts: list[str]) -> list[list[float]]:  # type: ignore[override]
         return [self._get_text_embedding(t) for t in texts]
 
 
 def _skip_if_no_pymupdf() -> None:
     try:
         import fitz  # noqa: F401
-    except Exception:
+    except ImportError:
         pytest.skip("PyMuPDF not available")
 
 
 def _make_pdf(path: Path) -> None:
     import fitz  # type: ignore
 
-    doc = fitz.open()
-    page = doc.new_page(width=200, height=100)
+    doc = fitz.open()  # type: ignore[no-untyped-call]
+    page = doc.new_page(width=200, height=100)  # type: ignore[attr-defined]
     page.insert_text((20, 50), "Hello multimodal")
     doc.save(str(path))
     doc.close()
