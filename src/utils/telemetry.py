@@ -239,7 +239,7 @@ def parse_telemetry_jsonl_counts(
         )
 
     if truncated:
-        logger.warning(
+        logger.info(
             "telemetry parse cap hit: path=%s lines=%d bytes=%d "
             "(max_lines=%d max_bytes=%d)",
             p,
