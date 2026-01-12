@@ -635,16 +635,14 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
             )
         duration_ms = (time.perf_counter() - start) * 1000.0
         st.success(f"Exported {extension.upper()} to {out}")
-        _log_export_event(
-            {
-                "export_performed": True,
-                "export_type": f"graph_{extension}",
-                "seed_count": len(seeds),
-                "capped": len(seeds) >= cap,
-                "dest_path": str(out),
-                "context": "manual",
-            }
-        )
+        _log_export_event({
+            "export_performed": True,
+            "export_type": f"graph_{extension}",
+            "seed_count": len(seeds),
+            "capped": len(seeds) >= cap,
+            "dest_path": str(out),
+            "context": "manual",
+        })
         size_bytes = out.stat().st_size if out.exists() else None
         record_graph_export_metric(
             f"graph_{extension}",
@@ -679,8 +677,8 @@ def _log_export_event(payload: dict[str, Any]) -> None:
     event = {**payload, "timestamp": datetime.now(UTC).isoformat()}
     dest_path = event.get("dest_path")
     if dest_path:
-        # Final-release: never persist filesystem paths (absolute or relative) in
-        # telemetry. Keep only a safe filename for operator diagnostics.
+        # Never persist filesystem paths (absolute or relative) in telemetry.
+        # Keep only a safe filename for operator diagnostics.
         with contextlib.suppress(Exception):
             event["dest_basename"] = Path(str(dest_path)).name
         event.pop("dest_path", None)

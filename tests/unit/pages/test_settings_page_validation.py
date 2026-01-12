@@ -49,12 +49,10 @@ def test_validate_candidate_formats_nested_error_locations(
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
 
-    validated, errors = page._validate_candidate(
-        {
-            "llm_backend": "ollama",
-            "security": {"allow_remote_endpoints": "nope"},
-        }
-    )
+    validated, errors = page._validate_candidate({
+        "llm_backend": "ollama",
+        "security": {"allow_remote_endpoints": "nope"},
+    })
 
     assert validated is None
     assert errors

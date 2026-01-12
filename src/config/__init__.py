@@ -5,7 +5,7 @@ implementing Task 2.2.2: LlamaIndex Settings Integration Pattern.
 
 Key Features:
 - Single source of truth via unified settings object
-- Automatic LlamaIndex Settings integration on import
+- Explicit LlamaIndex integration entrypoints (no import-time side effects)
 - Environment variable support for all configuration
 - Simplified import patterns across codebase
 
@@ -17,13 +17,16 @@ Usage:
     from src.config import setup_llamaindex, initialize_integrations
 """
 
-from .integrations import initialize_integrations, setup_llamaindex
-from .settings import settings
+from __future__ import annotations
 
-# IMPORTANT:
-# Do NOT auto-initialize LlamaIndex on import. Tests and CLI may import
-# src.config for settings without bringing in heavy integration side effects.
-# Call initialize_integrations()/setup_llamaindex() explicitly where needed.
+# IMPORTANT: import order matters.
+#
+# - Import and bind the settings instance first so `from src.config import settings`
+#   always resolves to the settings object (not the `src.config.settings` module).
+# - Then import integration entrypoints without triggering initialization.
+# ruff: noqa: I001
+from .settings import settings
+from .integrations import initialize_integrations, setup_llamaindex
 
 __all__ = [
     "initialize_integrations",

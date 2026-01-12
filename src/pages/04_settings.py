@@ -100,9 +100,9 @@ def _resolve_allowed_gguf_bases() -> list[Path]:
     except Exception:  # pragma: no cover - defensive
         extra_bases = None
     if isinstance(extra_bases, (list, tuple)):
-        allowed_bases.extend(
-            [Path(str(base)) for base in extra_bases if str(base).strip()]
-        )
+        allowed_bases.extend([
+            Path(str(base)) for base in extra_bases if str(base).strip()
+        ])
 
     base_dirs: list[Path] = []
     for base in allowed_bases:
@@ -261,42 +261,36 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         ValueError,
     ) as exc:  # pragma: no cover - defensive UI feedback
         st.error(f"Runtime apply failed: {exc.__class__.__name__}")
-        log_jsonl(
-            {
-                "settings.apply": True,
-                "success": False,
-                "backend": validated.llm_backend,
-                "model": model_label,
-                "reason": exc.__class__.__name__,
-                "error": str(exc),
-            }
-        )
+        log_jsonl({
+            "settings.apply": True,
+            "success": False,
+            "backend": validated.llm_backend,
+            "model": model_label,
+            "reason": exc.__class__.__name__,
+            "error": str(exc),
+        })
         return
 
     from llama_index.core import Settings as LISettings  # local import (tests patch)
 
     if getattr(LISettings, "llm", None) is None:
         st.error("Runtime apply failed: Settings.llm is not bound.")
-        log_jsonl(
-            {
-                "settings.apply": True,
-                "success": False,
-                "backend": validated.llm_backend,
-                "model": model_label,
-                "reason": "llm_unbound",
-            }
-        )
+        log_jsonl({
+            "settings.apply": True,
+            "success": False,
+            "backend": validated.llm_backend,
+            "model": model_label,
+            "reason": "llm_unbound",
+        })
         return
 
     st.success("Runtime applied. Settings.llm bound.")
-    log_jsonl(
-        {
-            "settings.apply": True,
-            "success": True,
-            "backend": validated.llm_backend,
-            "model": model_label,
-        }
-    )
+    log_jsonl({
+        "settings.apply": True,
+        "success": True,
+        "backend": validated.llm_backend,
+        "model": model_label,
+    })
 
 
 def main() -> None:
@@ -557,7 +551,7 @@ def _build_candidate_settings(
         "lmstudio_base_url": str(values.get("lmstudio_url", "")).strip(),
         "llamacpp_base_url": str(values.get("llamacpp_url", "")).strip() or None,
         "llm_request_timeout_seconds": int(values.get("timeout_s", 0)),
-        "enable_gpu_acceleration": bool(values.get("use_gpu", False)),
+        "enable_gpu_acceleration": bool(values.get("use_gpu")),
         "vllm": {
             "llamacpp_model_path": (
                 str(resolved_gguf_path)
@@ -566,7 +560,7 @@ def _build_candidate_settings(
             )
         },
         "security": {
-            "allow_remote_endpoints": bool(values.get("allow_remote", False)),
+            "allow_remote_endpoints": bool(values.get("allow_remote")),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
             "trust_remote_code": bool(settings.security.trust_remote_code),
         },

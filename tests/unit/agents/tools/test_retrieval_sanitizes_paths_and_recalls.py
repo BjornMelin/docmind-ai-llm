@@ -18,17 +18,15 @@ pytestmark = pytest.mark.unit
 
 def test_parse_tool_result_strips_runtime_paths_from_metadata() -> None:
     node = TextNode(text="x", id_="n1")
-    node.metadata.update(
-        {
-            "doc_id": "doc-1",
-            "modality": "pdf_page_image",
-            "image_artifact_id": "sha256",
-            "image_artifact_suffix": ".webp",
-            "image_path": "/abs/path.webp",
-            "thumbnail_path": "/abs/thumb.webp",
-            "source_path": "/abs/source.pdf",
-        }
-    )
+    node.metadata.update({
+        "doc_id": "doc-1",
+        "modality": "pdf_page_image",
+        "image_artifact_id": "sha256",
+        "image_artifact_suffix": ".webp",
+        "image_path": "/abs/path.webp",
+        "thumbnail_path": "/abs/thumb.webp",
+        "source_path": "/abs/source.pdf",
+    })
     resp = SimpleNamespace(source_nodes=[NodeWithScore(node=node, score=1.0)])
     docs = retrieval_tool._parse_tool_result(resp)
     assert docs

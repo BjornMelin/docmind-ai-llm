@@ -322,16 +322,14 @@ class QualityGateRunner:
         passed_gates = sum(1 for result in self.results.values() if result["passed"])
         failed_gates = total_gates - passed_gates
 
-        report_lines.extend(
-            [
-                "SUMMARY:",
-                f"  Total Gates:     {total_gates}",
-                f"  Passed:          {passed_gates} ✅",
-                f"  Failed:          {failed_gates} ❌",
-                f"  Overall Status:  {'PASS' if failed_gates == 0 else 'FAIL'}",
-                "",
-            ]
-        )
+        report_lines.extend([
+            "SUMMARY:",
+            f"  Total Gates:     {total_gates}",
+            f"  Passed:          {passed_gates} ✅",
+            f"  Failed:          {failed_gates} ❌",
+            f"  Overall Status:  {'PASS' if failed_gates == 0 else 'FAIL'}",
+            "",
+        ])
 
         # Individual results
         if self.results:
@@ -346,24 +344,20 @@ class QualityGateRunner:
 
         # Failures
         if self.failures:
-            report_lines.extend(
-                [
-                    "FAILURES:",
-                    *[f"  • {failure}" for failure in self.failures],
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "FAILURES:",
+                *[f"  • {failure}" for failure in self.failures],
+                "",
+            ])
 
         # Recommendations
         recommendations = self._generate_recommendations()
         if recommendations:
-            report_lines.extend(
-                [
-                    "RECOMMENDATIONS:",
-                    *[f"  💡 {rec}" for rec in recommendations],
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "RECOMMENDATIONS:",
+                *[f"  💡 {rec}" for rec in recommendations],
+                "",
+            ])
 
         report_lines.append("=" * 70)
         return "\n".join(report_lines)

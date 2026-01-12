@@ -90,7 +90,7 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
 
     resume = st.session_state.get("chat_resume_checkpoint_id")
     resume_id = str(resume) if resume else None
-    if resume_id == "":
+    if not resume_id:
         resume_id = None
     return ChatSelection(
         thread_id=str(st.session_state.get("chat_thread_id") or active.thread_id),

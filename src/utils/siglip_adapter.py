@@ -47,8 +47,8 @@ class SiglipEmbedding:
     def _choose_device(self) -> str:
         """Select device via core helper; fall back to CPU when torch import fails.
 
-        This avoids test-only branches; we simply attempt an import to determine
-        if the runtime has torch available and then defer to select_device.
+        Attempt a torch import to detect runtime availability, then delegate to
+        the shared select_device() helper when present.
         """
         try:
             import torch  # type: ignore
@@ -73,7 +73,7 @@ class SiglipEmbedding:
                 return "cpu"
 
     def _load_siglip_transformers(self) -> None:
-        """Direct transformers-based SigLIP loading as a compatibility path."""
+        """Direct transformers-based SigLIP loading fallback."""
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
         model: Any = SiglipModel.from_pretrained(self.model_id)

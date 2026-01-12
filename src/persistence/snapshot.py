@@ -280,13 +280,11 @@ def _garbage_collect(paths: SnapshotPaths) -> None:
     config = settings.snapshots
     keep = max(1, int(config.retention_count))
     grace = max(0, int(config.gc_grace_seconds))
-    versions = sorted(
-        [
-            p
-            for p in paths.base_dir.iterdir()
-            if p.is_dir() and not p.name.startswith("_tmp-")
-        ]
-    )
+    versions = sorted([
+        p
+        for p in paths.base_dir.iterdir()
+        if p.is_dir() and not p.name.startswith("_tmp-")
+    ])
     if len(versions) <= keep:
         return
     cutoff = datetime.now(UTC) - timedelta(seconds=grace)
@@ -584,13 +582,11 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
         logger.debug("CURRENT pointer verified for %s", current_target)
         return
 
-    versions = sorted(
-        [
-            p
-            for p in paths.base_dir.iterdir()
-            if p.is_dir() and not p.name.startswith("_tmp-")
-        ]
-    )
+    versions = sorted([
+        p
+        for p in paths.base_dir.iterdir()
+        if p.is_dir() and not p.name.startswith("_tmp-")
+    ])
     if not versions:
         with suppress(FileNotFoundError):
             paths.current_file.unlink()

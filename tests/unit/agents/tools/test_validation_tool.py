@@ -22,25 +22,21 @@ class TestValidateResponse:
             "Machine learning is a subset of artificial intelligence that focuses on "
             "algorithms that can learn from data without being explicitly programmed."
         )
-        sources = json.dumps(
-            [
-                {
-                    "content": (
-                        "Machine learning is a method of data analysis that "
-                        "automates analytical model building using algorithms "
-                        "that iteratively learn from data"
-                    ),
-                    "score": 0.9,
-                }
-            ]
-        )
-        result_json = validate_response.invoke(
+        sources = json.dumps([
             {
-                "query": query,
-                "response": response,
-                "sources": sources,
+                "content": (
+                    "Machine learning is a method of data analysis that "
+                    "automates analytical model building using algorithms "
+                    "that iteratively learn from data"
+                ),
+                "score": 0.9,
             }
-        )
+        ])
+        result_json = validate_response.invoke({
+            "query": query,
+            "response": response,
+            "sources": sources,
+        })
         result = json.loads(result_json)
 
         assert isinstance(result, dict)
@@ -58,26 +54,22 @@ class TestValidateResponse:
         query = "Explain neural networks in detail"
         response = "Neural networks are good."
         sources = json.dumps([{"content": "detailed neural network info"}])
-        result_json = validate_response.invoke(
-            {
-                "query": query,
-                "response": response,
-                "sources": sources,
-            }
-        )
+        result_json = validate_response.invoke({
+            "query": query,
+            "response": response,
+            "sources": sources,
+        })
         result = json.loads(result_json)
         assert any(issue["type"] == "incomplete_response" for issue in result["issues"])
         assert result["confidence"] < 1.0
 
     def test_validate_response_no_sources(self):
         """Test validation behavior when no sources are provided with the response."""
-        result_json = validate_response.invoke(
-            {
-                "query": "test query",
-                "response": "test response",
-                "sources": "[]",
-            }
-        )
+        result_json = validate_response.invoke({
+            "query": "test query",
+            "response": "test response",
+            "sources": "[]",
+        })
         result = json.loads(result_json)
         assert any(issue["type"] == "no_sources" for issue in result["issues"])
         assert result["confidence"] < 1.0
@@ -86,23 +78,19 @@ class TestValidateResponse:
         """Test detection of responses that lack proper source attribution."""
         query = "What is AI?"
         response = "Artificial intelligence is about computers thinking like humans."
-        sources = json.dumps(
-            [
-                {
-                    "content": (
-                        "Machine learning algorithms use statistical techniques to "
-                        "learn patterns from data"
-                    )
-                }
-            ]
-        )
-        result_json = validate_response.invoke(
+        sources = json.dumps([
             {
-                "query": query,
-                "response": response,
-                "sources": sources,
+                "content": (
+                    "Machine learning algorithms use statistical techniques to "
+                    "learn patterns from data"
+                )
             }
-        )
+        ])
+        result_json = validate_response.invoke({
+            "query": query,
+            "response": response,
+            "sources": sources,
+        })
         result = json.loads(result_json)
         assert any(
             issue["type"] in ("missing_source", "no_sources")
@@ -113,22 +101,18 @@ class TestValidateResponse:
     def test_validate_response_hallucination_indicator(self):
         """Test detection of potential hallucinations using indicator phrases."""
         result = json.loads(
-            validate_response.invoke(
-                {
-                    "query": "q",
-                    "response": "According to my knowledge this is true",
-                    "sources": json.dumps(
-                        [
-                            {
-                                "content": (
-                                    "some content referencing knowledge systems "
-                                    "human intelligence"
-                                )
-                            }
-                        ]
-                    ),
-                }
-            )
+            validate_response.invoke({
+                "query": "q",
+                "response": "According to my knowledge this is true",
+                "sources": json.dumps([
+                    {
+                        "content": (
+                            "some content referencing knowledge systems "
+                            "human intelligence"
+                        )
+                    }
+                ]),
+            })
         )
         assert any(
             issue["type"] == "potential_hallucination" for issue in result["issues"]
@@ -138,28 +122,20 @@ class TestValidateResponse:
     def test_validate_response_relevance_and_actions(self):
         """Test confidence scoring and action suggestions based on response quality."""
         high_conf = json.loads(
-            validate_response.invoke(
-                {
-                    "query": "What is AI?",
-                    "response": (
-                        "Artificial intelligence uses systems human intelligence"
-                    ),
-                    "sources": json.dumps(
-                        [
-                            {
-                                "content": (
-                                    "Artificial intelligence systems human intelligence"
-                                )
-                            }
-                        ]
-                    ),
-                }
-            )
+            validate_response.invoke({
+                "query": "What is AI?",
+                "response": ("Artificial intelligence uses systems human intelligence"),
+                "sources": json.dumps([
+                    {"content": ("Artificial intelligence systems human intelligence")}
+                ]),
+            })
         )
         low_conf = json.loads(
-            validate_response.invoke(
-                {"query": "What is AI?", "response": "I don't know.", "sources": "[]"}
-            )
+            validate_response.invoke({
+                "query": "What is AI?",
+                "response": "I don't know.",
+                "sources": "[]",
+            })
         )
         assert high_conf["suggested_action"] in ["accept", "refine"]
         assert low_conf["suggested_action"] == "regenerate"
@@ -170,13 +146,11 @@ class TestValidateResponse:
             "src.agents.tools.validation.time.perf_counter",
             side_effect=RuntimeError("Timer error"),
         ):
-            result_json = validate_response.invoke(
-                {
-                    "query": "query",
-                    "response": "response",
-                    "sources": "[]",
-                }
-            )
+            result_json = validate_response.invoke({
+                "query": "query",
+                "response": "response",
+                "sources": "[]",
+            })
             result = json.loads(result_json)
             assert not result["valid"]
         assert result["confidence"] == 0.0

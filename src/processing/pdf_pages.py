@@ -222,15 +222,15 @@ def pdf_pages_to_image_documents(
     if output_dir:
         out_dir = Path(output_dir)
     else:
-        # Final-release: prefer a stable cache location under settings.cache_dir
-        # rather than a temp directory that could leak in logs/persistence.
+        # Prefer a stable cache location under settings.cache_dir rather than a
+        # temp directory that could leak in logs/persistence.
         out_dir = settings.cache_dir / "page_images" / pdf_path.stem
     out_dir.mkdir(parents=True, exist_ok=True)
     entries = _render_pdf_pages(pdf_path, out_dir, dpi, encrypt=encrypt)
     docs: list[ImageDocument] = []
     failed_pages: list[tuple[int, str]] = []
-    # Final-release: store rendered images as content-addressed artifacts and
-    # reference the jailed artifact paths in ImageDocument nodes.
+    # Store rendered images as content-addressed artifacts and reference jailed
+    # artifact paths in ImageDocument nodes.
     store = ArtifactStore.from_settings(settings)
 
     for i, path, _rect, phash, page_text in entries:
@@ -264,25 +264,21 @@ def pdf_pages_to_image_documents(
         meta: dict[str, Any] = {
             "page": i,
             "modality": "pdf_page_image",
-            # Final-release: avoid persisting raw filesystem paths in metadata.
+            # Avoid persisting raw filesystem paths in metadata.
             "source": pdf_path.name,
             "source_filename": pdf_path.name,
             "phash": phash,
             "page_text": page_text,
         }
         if str(path).endswith(".enc"):
-            meta.update(
-                {
-                    "encrypted": True,
-                    "kid": get_image_kid(),
-                }
-            )
-        meta.update(
-            {
-                "image_artifact_id": ref.sha256,
-                "image_artifact_suffix": ref.suffix,
-            }
-        )
+            meta.update({
+                "encrypted": True,
+                "kid": get_image_kid(),
+            })
+        meta.update({
+            "image_artifact_id": ref.sha256,
+            "image_artifact_suffix": ref.suffix,
+        })
         docs.append(ImageDocument(image_path=str(resolved_path), metadata=meta))
 
     if failed_pages:

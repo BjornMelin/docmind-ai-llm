@@ -104,7 +104,7 @@ def ingest_files(
     exports: list[dict[str, Any]] = []
     for artifact in result.exports:
         dumped = artifact.model_dump()
-        # Final-release: do not emit raw filesystem paths into Streamlit state.
+        # Do not emit raw filesystem paths into Streamlit state.
         dumped.pop("path", None)
         exports.append(dumped)
 

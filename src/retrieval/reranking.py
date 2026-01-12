@@ -213,8 +213,8 @@ def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
     for nn in ns:
         meta = getattr(nn.node, "metadata", {}) or {}
         p = ""
-        # Final-release: resolve local paths from stable artifact refs rather than
-        # accepting raw filesystem paths from node metadata.
+        # Resolve local paths from stable artifact refs rather than accepting raw
+        # filesystem paths from node metadata.
         img_id = meta.get("image_artifact_id")
         img_sfx = meta.get("image_artifact_suffix")
         if not img_id:
@@ -246,8 +246,8 @@ def _load_images_for_siglip(
     for pth in paths:
         if pth:
             try:
-                with open_image_encrypted(pth) as _im:
-                    imgs.append(_im.convert("RGB").copy() if _im is not None else None)
+                with open_image_encrypted(pth) as im:
+                    imgs.append(im.convert("RGB").copy() if im is not None else None)
             except (OSError, ValueError, RuntimeError, TypeError, ImportError):
                 imgs.append(None)
         else:
@@ -455,14 +455,12 @@ class MultimodalReranker(BaseNodePostprocessor):
         """Run a rerank stage with timeout telemetry."""
         started = _now_ms()
         res = _run_with_timeout(fn, timeout_ms)
-        log_jsonl(
-            {
-                "rerank.stage": name,
-                "rerank.topk": int(settings.retrieval.reranking_top_k),
-                "rerank.latency_ms": int(_now_ms() - started),
-                "rerank.timeout": res is None,
-            }
-        )
+        log_jsonl({
+            "rerank.stage": name,
+            "rerank.topk": int(settings.retrieval.reranking_top_k),
+            "rerank.latency_ms": int(_now_ms() - started),
+            "rerank.timeout": res is None,
+        })
         return res
 
     def _run_text_stage(
@@ -495,14 +493,12 @@ class MultimodalReranker(BaseNodePostprocessor):
                 query_bundle.query_str, visual_nodes, _siglip_timeout_ms()
             )
             lists.append(sr)
-            log_jsonl(
-                {
-                    "rerank.stage": "visual",
-                    "rerank.topk": int(settings.retrieval.reranking_top_k),
-                    "rerank.latency_ms": int(_now_ms() - v_start),
-                    "rerank.timeout": False,
-                }
-            )
+            log_jsonl({
+                "rerank.stage": "visual",
+                "rerank.topk": int(settings.retrieval.reranking_top_k),
+                "rerank.latency_ms": int(_now_ms() - v_start),
+                "rerank.timeout": False,
+            })
         except (RuntimeError, ValueError, OSError, TypeError, ImportError) as exc:
             logger.warning("SigLIP rerank error: {} — continue without", exc)
 
@@ -533,17 +529,15 @@ class MultimodalReranker(BaseNodePostprocessor):
 
         if _now_ms() - v_start > (_siglip_timeout_ms() + _colpali_timeout_ms()):
             logger.warning("Visual rerank timeout; fail-open")
-            log_jsonl(
-                {
-                    "rerank.stage": "visual",
-                    "rerank.topk": int(settings.retrieval.reranking_top_k),
-                    "rerank.latency_ms": int(_now_ms() - v_start),
-                    "rerank.timeout": True,
-                    "rerank.executor": getattr(
-                        settings.retrieval, "rerank_executor", "thread"
-                    ),
-                }
-            )
+            log_jsonl({
+                "rerank.stage": "visual",
+                "rerank.topk": int(settings.retrieval.reranking_top_k),
+                "rerank.latency_ms": int(_now_ms() - v_start),
+                "rerank.timeout": True,
+                "rerank.executor": getattr(
+                    settings.retrieval, "rerank_executor", "thread"
+                ),
+            })
             return lists, True
         return lists, False
 
@@ -599,31 +593,29 @@ class MultimodalReranker(BaseNodePostprocessor):
                 scores = []
             score_mean = float(sum(scores) / len(scores)) if scores else 0.0
             score_max = float(max(scores)) if scores else 0.0
-            log_jsonl(
-                {
-                    "rerank.stage": "final",
-                    "rerank.topk": int(configured_k),
-                    "rerank.latency_ms": 0,
-                    "rerank.timeout": False,
-                    "rerank.delta_mrr_at_10": delta_mrr,
-                    "rerank.path": path,
-                    "rerank.total_timeout_budget_ms": int(
-                        getattr(settings.retrieval, "total_rerank_budget_ms", 0)
-                        or (
-                            _text_timeout_ms()
-                            + _siglip_timeout_ms()
-                            + _colpali_timeout_ms()
-                        )
-                    ),
-                    "rerank.executor": getattr(
-                        settings.retrieval, "rerank_executor", "thread"
-                    ),
-                    "rerank.input_count": len(nodes),
-                    "rerank.output_count": len(out),
-                    "rerank.score.mean": score_mean,
-                    "rerank.score.max": score_max,
-                }
-            )
+            log_jsonl({
+                "rerank.stage": "final",
+                "rerank.topk": int(configured_k),
+                "rerank.latency_ms": 0,
+                "rerank.timeout": False,
+                "rerank.delta_mrr_at_10": delta_mrr,
+                "rerank.path": path,
+                "rerank.total_timeout_budget_ms": int(
+                    getattr(settings.retrieval, "total_rerank_budget_ms", 0)
+                    or (
+                        _text_timeout_ms()
+                        + _siglip_timeout_ms()
+                        + _colpali_timeout_ms()
+                    )
+                ),
+                "rerank.executor": getattr(
+                    settings.retrieval, "rerank_executor", "thread"
+                ),
+                "rerank.input_count": len(nodes),
+                "rerank.output_count": len(out),
+                "rerank.score.mean": score_mean,
+                "rerank.score.max": score_max,
+            })
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("Final rerank metrics error: {} — skipping telemetry", exc)
 

@@ -165,14 +165,12 @@ def main() -> None:
     df = _load_dataset(args.dataset_csv, args.sample_count)
     answers = _build_answers(df, args.ragas_mode)
     ctxs = _build_contexts(df)
-    data = pd.DataFrame(
-        {
-            "question": df["question"],
-            "answer": answers,
-            "contexts": ctxs,
-            "ground_truth": df["ground_truth"],
-        }
-    )
+    data = pd.DataFrame({
+        "question": df["question"],
+        "answer": answers,
+        "contexts": ctxs,
+        "ground_truth": df["ground_truth"],
+    })
 
     _ensure_ragas_loaded()
 

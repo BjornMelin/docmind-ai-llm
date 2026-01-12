@@ -78,7 +78,7 @@ def route_query(
 
 
 def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
-    # NOTE: Final-release persistence stores LangChain message objects in state
+    # NOTE: Persistence stores LangChain message objects in state
     # (via LangGraph checkpointer). We avoid LlamaIndex ChatMemoryBuffer here to
     # keep state fully serializable.
     if not isinstance(state, dict):

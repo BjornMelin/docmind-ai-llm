@@ -20,9 +20,10 @@ class TestPlanQuery:
 
     def test_plan_query_simple(self):
         """Simple complexity passes query through without decomposition."""
-        result_json = plan_query.invoke(
-            {"query": "What is AI?", "complexity": "simple"}
-        )
+        result_json = plan_query.invoke({
+            "query": "What is AI?",
+            "complexity": "simple",
+        })
         result = json.loads(result_json)
 
         assert isinstance(result, dict)
@@ -35,9 +36,10 @@ class TestPlanQuery:
 
     def test_plan_query_comparison(self):
         """Comparison queries produce parallel tasks and entity coverage."""
-        result_json = plan_query.invoke(
-            {"query": "Compare AI vs ML performance", "complexity": "complex"}
-        )
+        result_json = plan_query.invoke({
+            "query": "Compare AI vs ML performance",
+            "complexity": "complex",
+        })
         result = json.loads(result_json)
 
         assert len(result["sub_tasks"]) >= 3
@@ -48,12 +50,10 @@ class TestPlanQuery:
 
     def test_plan_query_analysis(self):
         """Analysis queries include components/background subtasks."""
-        result_json = plan_query.invoke(
-            {
-                "query": "Analyze the performance of neural networks",
-                "complexity": "complex",
-            }
-        )
+        result_json = plan_query.invoke({
+            "query": "Analyze the performance of neural networks",
+            "complexity": "complex",
+        })
         result = json.loads(result_json)
 
         assert len(result["sub_tasks"]) >= 3
@@ -62,12 +62,10 @@ class TestPlanQuery:
 
     def test_plan_query_process_explanation(self):
         """Process/how-to queries include steps/definition subtasks."""
-        result_json = plan_query.invoke(
-            {
-                "query": "How does gradient descent work?",
-                "complexity": "complex",
-            }
-        )
+        result_json = plan_query.invoke({
+            "query": "How does gradient descent work?",
+            "complexity": "complex",
+        })
         result = json.loads(result_json)
 
         assert len(result["sub_tasks"]) >= 3
@@ -76,12 +74,10 @@ class TestPlanQuery:
 
     def test_plan_query_list_enumeration(self):
         """Enumeration queries include list/categorize subtasks."""
-        result_json = plan_query.invoke(
-            {
-                "query": "List the types of machine learning algorithms",
-                "complexity": "complex",
-            }
-        )
+        result_json = plan_query.invoke({
+            "query": "List the types of machine learning algorithms",
+            "complexity": "complex",
+        })
         result = json.loads(result_json)
 
         assert len(result["sub_tasks"]) >= 2
@@ -90,12 +86,10 @@ class TestPlanQuery:
 
     def test_plan_query_default_decomposition(self):
         """Default path provides generic multi-step decomposition."""
-        result_json = plan_query.invoke(
-            {
-                "query": "Complex query with multiple aspects and various components",
-                "complexity": "complex",
-            }
-        )
+        result_json = plan_query.invoke({
+            "query": "Complex query with multiple aspects and various components",
+            "complexity": "complex",
+        })
         result = json.loads(result_json)
 
         assert len(result["sub_tasks"]) >= 1
@@ -108,12 +102,10 @@ class TestPlanQuery:
             "src.agents.tools.planning.time.perf_counter",
             side_effect=RuntimeError("Timer error"),
         ):
-            result_json = plan_query.invoke(
-                {
-                    "query": "test query",
-                    "complexity": "complex",
-                }
-            )
+            result_json = plan_query.invoke({
+                "query": "test query",
+                "complexity": "complex",
+            })
             result = json.loads(result_json)
             assert "error" in result
             assert result["sub_tasks"] == ["test query"]

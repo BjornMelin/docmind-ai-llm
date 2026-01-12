@@ -1,4 +1,4 @@
-"""DocMind processing package (final-release).
+"""DocMind processing package.
 
 Public entrypoints for the library-first ingestion pipeline and PDF page-image
 rendering helpers.

@@ -177,8 +177,8 @@ def _extract_indexes(state: dict | None, runtime: ToolRuntime | None):
     return tools_data.get("vector"), tools_data.get("kg"), tools_data.get("retriever")
 
 
-## Fast-path via ToolFactory.create_tools_from_indexes was removed for clarity
-## and testability. Use explicit tools for each strategy instead.
+# Fast-path via ToolFactory.create_tools_from_indexes was removed for clarity
+# and testability. Use explicit tools for each strategy instead.
 
 
 def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
@@ -376,12 +376,12 @@ def _recall_recent_sources(state: dict[str, Any] | None) -> list[dict[str, Any]]
 
 
 def _sanitize_document_dict(doc: dict[str, Any]) -> dict[str, Any]:
-    """Sanitize a persisted/recalled document dict for final-release invariants."""
+    """Sanitize a persisted/recalled document dict for persistence invariants."""
 
     def _sanitize_metadata(meta: Any) -> dict[str, Any]:
         if not isinstance(meta, dict):
             return {}
-        # Never persist raw paths or blobs in agent-visible sources (final-release).
+        # Never persist raw paths or blobs in agent-visible sources.
         drop = {
             "image_base64",
             "thumbnail_base64",
@@ -457,9 +457,9 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
                     text = str(get_content()) if callable(get_content) else str(node)
             except Exception:
                 text = str(node)
-            meta = _sanitize_document_dict(
-                {"metadata": getattr(node, "metadata", {}) or {}}
-            ).get("metadata", {})
+            meta = _sanitize_document_dict({
+                "metadata": getattr(node, "metadata", {}) or {}
+            }).get("metadata", {})
             docs.append({"content": text, "metadata": meta, "score": score})
         if docs:
             return docs
@@ -468,9 +468,9 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
         return [
             {
                 "content": result.response,
-                "metadata": _sanitize_document_dict(
-                    {"metadata": getattr(result, "metadata", {})}
-                ).get("metadata", {}),
+                "metadata": _sanitize_document_dict({
+                    "metadata": getattr(result, "metadata", {})
+                }).get("metadata", {}),
                 "score": 1.0,
             }
         ]
@@ -479,15 +479,13 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
         documents: list[dict[str, Any]] = []
         for item in result:
             if isinstance(item, Document):
-                documents.append(
-                    {
-                        "content": item.text,
-                        "metadata": _sanitize_document_dict(
-                            {"metadata": item.metadata}
-                        ).get("metadata", {}),
-                        "score": getattr(item, "score", 1.0),
-                    }
-                )
+                documents.append({
+                    "content": item.text,
+                    "metadata": _sanitize_document_dict({
+                        "metadata": item.metadata
+                    }).get("metadata", {}),
+                    "score": getattr(item, "score", 1.0),
+                })
             elif isinstance(item, dict):
                 documents.append(_sanitize_document_dict(item))
         return documents

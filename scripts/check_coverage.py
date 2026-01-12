@@ -255,92 +255,75 @@ class CoverageAnalyzer:
             status = (
                 "✓ PASS" if overall["branch_coverage"]["meets_threshold"] else "✗ FAIL"
             )
-            report_lines.extend(
-                [
-                    (
-                        f"  Branch Coverage: "
-                        f"{overall['branch_coverage']['percent']:.1f}% "
-                        f"({overall['branch_coverage']['covered']}/"
-                        f"{overall['branch_coverage']['total']} branches)"
-                    ),
-                    f"  Threshold:       {overall['branch_coverage']['threshold']}%",
-                    f"  Status:          {status}",
-                    "",
-                ]
-            )
+            report_lines.extend([
+                (
+                    f"  Branch Coverage: "
+                    f"{overall['branch_coverage']['percent']:.1f}% "
+                    f"({overall['branch_coverage']['covered']}/"
+                    f"{overall['branch_coverage']['total']} branches)"
+                ),
+                f"  Threshold:       {overall['branch_coverage']['threshold']}%",
+                f"  Status:          {status}",
+                "",
+            ])
 
         # Overall status
-        report_lines.extend(
-            [
-                f"OVERALL STATUS: {'✓ PASS' if overall['overall_pass'] else '✗ FAIL'}",
-                "",
-            ]
-        )
+        report_lines.extend([
+            f"OVERALL STATUS: {'✓ PASS' if overall['overall_pass'] else '✗ FAIL'}",
+            "",
+        ])
 
         # File analysis summary
-        report_lines.extend(
-            [
-                "FILE ANALYSIS:",
-                f"  Total Files:     {file_analysis['total_files']}",
-                f"  Low Coverage:    {file_analysis['files_below_threshold']} files",
-                f"  Uncovered Files: {len(file_analysis['uncovered_files'])} files",
-                "",
-            ]
-        )
+        report_lines.extend([
+            "FILE ANALYSIS:",
+            f"  Total Files:     {file_analysis['total_files']}",
+            f"  Low Coverage:    {file_analysis['files_below_threshold']} files",
+            f"  Uncovered Files: {len(file_analysis['uncovered_files'])} files",
+            "",
+        ])
 
         # Failures
         if self.failures:
-            report_lines.extend(
-                [
-                    "FAILURES:",
-                    *[f"  ✗ {failure}" for failure in self.failures],
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "FAILURES:",
+                *[f"  ✗ {failure}" for failure in self.failures],
+                "",
+            ])
 
         # Warnings
         if self.warnings:
-            report_lines.extend(
-                [
-                    "WARNINGS:",
-                    *[f"  ! {warning}" for warning in self.warnings],
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "WARNINGS:",
+                *[f"  ! {warning}" for warning in self.warnings],
+                "",
+            ])
 
         # Detailed file analysis
         if detailed:
             if file_analysis["low_coverage_files"]:
-                report_lines.extend(
-                    [
-                        "LOW COVERAGE FILES:",
-                        *(
-                            f"  {file_info['filename']}: "
-                            f"{file_info['percent_covered']:.1f}% "
-                            f"({file_info['covered_lines']}/"
-                            f"{file_info['total_lines']})"
-                            for file_info in file_analysis["low_coverage_files"][
-                                :10
-                            ]  # Top 10
-                        ),
-                        "",
-                    ]
-                )
+                report_lines.extend([
+                    "LOW COVERAGE FILES:",
+                    *(
+                        f"  {file_info['filename']}: "
+                        f"{file_info['percent_covered']:.1f}% "
+                        f"({file_info['covered_lines']}/"
+                        f"{file_info['total_lines']})"
+                        for file_info in file_analysis["low_coverage_files"][
+                            :10
+                        ]  # Top 10
+                    ),
+                    "",
+                ])
 
             if file_analysis["uncovered_files"]:
-                report_lines.extend(
-                    [
-                        "COMPLETELY UNCOVERED FILES:",
-                        *(
-                            f"  {file_info['filename']}: 0% "
-                            f"(0/{file_info['total_lines']})"
-                            for file_info in file_analysis["uncovered_files"][
-                                :10
-                            ]  # Top 10
-                        ),
-                        "",
-                    ]
-                )
+                report_lines.extend([
+                    "COMPLETELY UNCOVERED FILES:",
+                    *(
+                        f"  {file_info['filename']}: 0% (0/{file_info['total_lines']})"
+                        for file_info in file_analysis["uncovered_files"][:10]  # Top 10
+                    ),
+                    "",
+                ])
 
         report_lines.append("=" * 60)
         return "\n".join(report_lines)

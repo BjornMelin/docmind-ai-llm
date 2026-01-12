@@ -130,7 +130,7 @@ async def main():
     print("Example completed successfully!")
 
 
-async def document_search_example():
+def document_search_example():
     """Example of advanced document search capabilities."""
     print("\nDocument Search Example")
     print("-" * 30)

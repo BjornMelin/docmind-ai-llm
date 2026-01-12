@@ -364,16 +364,14 @@ def export_graph_parquet(
                     _relation_label(maybe_edge) if maybe_edge is not None else "related"
                 )
                 sources = list({*(_source_ids(head) + _source_ids(tail))})
-                rows.append(
-                    {
-                        "subject": _node_identifier(head),
-                        "relation": relation,
-                        "object": _node_identifier(tail),
-                        "depth": path_depth,
-                        "path_id": path_idx,
-                        "source_ids": sources,
-                    }
-                )
+                rows.append({
+                    "subject": _node_identifier(head),
+                    "relation": relation,
+                    "object": _node_identifier(tail),
+                    "depth": path_depth,
+                    "path_id": path_idx,
+                    "source_ids": sources,
+                })
         except TypeError:  # pragma: no cover - defensive
             continue
 

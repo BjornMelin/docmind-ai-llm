@@ -48,14 +48,12 @@ class TestRetrieveDocuments:
             mock_tool.call.return_value = [{"content": "test doc", "score": 0.9}]
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
-            result_json = retrieve_documents.invoke(
-                {
-                    "query": "test query",
-                    "strategy": "vector",
-                    "use_dspy": True,
-                    "state": mock_state,
-                }
-            )
+            result_json = retrieve_documents.invoke({
+                "query": "test query",
+                "strategy": "vector",
+                "use_dspy": True,
+                "state": mock_state,
+            })
             result = json.loads(result_json)
 
         assert result["query_original"] == "test query"
@@ -84,13 +82,11 @@ class TestRetrieveDocuments:
             mock_tool.call.return_value = [{"content": "test doc"}]
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
-            result_json = retrieve_documents.invoke(
-                {
-                    "query": "AI",
-                    "use_dspy": True,
-                    "state": mock_state,
-                }
-            )
+            result_json = retrieve_documents.invoke({
+                "query": "AI",
+                "use_dspy": True,
+                "state": mock_state,
+            })
             result = json.loads(result_json)
 
         assert result["query_optimized"].lower().startswith("find documents about")
@@ -110,14 +106,12 @@ class TestRetrieveDocuments:
             mock_tool.call.return_value = duplicate_docs
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
-            result_json = retrieve_documents.invoke(
-                {
-                    "query": "test query",
-                    "strategy": "vector",
-                    "state": mock_state,
-                    "use_dspy": False,
-                }
-            )
+            result_json = retrieve_documents.invoke({
+                "query": "test query",
+                "strategy": "vector",
+                "state": mock_state,
+                "use_dspy": False,
+            })
             result = json.loads(result_json)
 
         assert len(result["documents"]) == 2
@@ -157,13 +151,11 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke(
-                    {
-                        "query": "q",
-                        "strategy": "vector",
-                        "state": mock_state,
-                    }
-                )
+                retrieve_documents.invoke({
+                    "query": "q",
+                    "strategy": "vector",
+                    "state": mock_state,
+                })
             )
 
         assert len(data["documents"]) == 1
@@ -183,13 +175,11 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke(
-                    {
-                        "query": "q",
-                        "strategy": "vector",
-                        "state": mock_state,
-                    }
-                )
+                retrieve_documents.invoke({
+                    "query": "q",
+                    "strategy": "vector",
+                    "state": mock_state,
+                })
             )
 
         assert len(data["documents"]) == 1
@@ -212,13 +202,11 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke(
-                    {
-                        "query": "q",
-                        "strategy": "vector",
-                        "state": mock_state,
-                    }
-                )
+                retrieve_documents.invoke({
+                    "query": "q",
+                    "strategy": "vector",
+                    "state": mock_state,
+                })
             )
 
         assert len(data["documents"]) == 2
@@ -253,13 +241,11 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke(
-                    {
-                        "query": "q",
-                        "strategy": "vector",
-                        "state": mock_state,
-                    }
-                )
+                retrieve_documents.invoke({
+                    "query": "q",
+                    "strategy": "vector",
+                    "state": mock_state,
+                })
             )
 
         assert len(data["documents"]) == 2
@@ -281,13 +267,11 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke(
-                    {
-                        "query": "q",
-                        "strategy": "vector",
-                        "state": mock_state,
-                    }
-                )
+                retrieve_documents.invoke({
+                    "query": "q",
+                    "strategy": "vector",
+                    "state": mock_state,
+                })
             )
 
         assert len(data["documents"]) == 1

@@ -14,4 +14,4 @@ from loguru import logger
 def log_event(event: str, **kwargs: Any) -> None:
     """Log a structured telemetry event (non-failing)."""
     with suppress(Exception):
-        logger.bind(event=event).info("telemetry: {event}", **kwargs)
+        logger.bind(event=event).info("telemetry: {}", event, **kwargs)

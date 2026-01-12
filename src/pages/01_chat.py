@@ -348,13 +348,11 @@ def _render_staleness_badge() -> None:
                 with st.sidebar:
                     st.caption("Snapshot stale: content or config changed.")
                 with contextlib.suppress(Exception):
-                    log_jsonl(
-                        {
-                            "snapshot_stale_detected": True,
-                            "snapshot_id": latest.name,
-                            "reason": "digest_mismatch",
-                        }
-                    )
+                    log_jsonl({
+                        "snapshot_stale_detected": True,
+                        "snapshot_id": latest.name,
+                        "reason": "digest_mismatch",
+                    })
             else:
                 st.caption(f"Snapshot up-to-date: {latest.name}")
     except Exception as exc:

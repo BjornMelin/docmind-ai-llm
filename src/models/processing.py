@@ -8,14 +8,14 @@ this module.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class ProcessingStrategy(str, Enum):
+class ProcessingStrategy(StrEnum):
     """Enumerate OCR processing strategies for the ingestion pipeline."""
 
     FAST = "fast"

@@ -831,16 +831,14 @@ class TestStorageStats:
             last_indexed_at=0.0,
         )
 
-        assert all(
-            [
-                stats.total_documents == 0,
-                stats.total_vectors == 0,
-                stats.sqlite_size_mb == 0.0,
-                stats.qdrant_size_mb == 0.0,
-                stats.avg_processing_time == 0.0,
-                stats.last_indexed_at == 0.0,
-            ]
-        )
+        assert all([
+            stats.total_documents == 0,
+            stats.total_vectors == 0,
+            stats.sqlite_size_mb == 0.0,
+            stats.qdrant_size_mb == 0.0,
+            stats.avg_processing_time == 0.0,
+            stats.last_indexed_at == 0.0,
+        ])
 
     @pytest.mark.unit
     def test_storage_stats_negative_values(self):

@@ -28,7 +28,7 @@ def test_image_embedder_auto_backbone_cuda_indexed(monkeypatch):
     )
     monkeypatch.setattr(
         "src.utils.core.has_cuda_vram",
-        lambda _min, device_index=0: (device_index == 2),
+        lambda _min, device_index=0: device_index == 2,
         raising=False,
     )
 

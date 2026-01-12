@@ -626,15 +626,13 @@ class TestBatchProcessingPerformance:
             end_time = time.time()
             processing_time = end_time - start_time
 
-            performance_results.append(
-                {
-                    "batch_size": batch_size,
-                    "processing_time": processing_time,
-                    "items_per_second": batch_size / processing_time
-                    if processing_time > 0
-                    else float("inf"),
-                }
-            )
+            performance_results.append({
+                "batch_size": batch_size,
+                "processing_time": processing_time,
+                "items_per_second": batch_size / processing_time
+                if processing_time > 0
+                else float("inf"),
+            })
 
             # Validate results
             assert len(embeddings) == batch_size, (

@@ -137,14 +137,12 @@ class PerformanceMonitor:
             cpu_peak_mb = self._read_cpu_peak_mb()
             gpu_peak_mb = self._read_gpu_peak_mb()
 
-            performance_data.update(
-                {
-                    "total_duration": duration,
-                    "exit_code": result.returncode,
-                    "timestamp": datetime.now().isoformat(),
-                    "command": " ".join(cmd),
-                }
-            )
+            performance_data.update({
+                "total_duration": duration,
+                "exit_code": result.returncode,
+                "timestamp": datetime.now().isoformat(),
+                "command": " ".join(cmd),
+            })
             if cpu_peak_mb is not None:
                 performance_data["memory_usage_peak"] = cpu_peak_mb
             if gpu_peak_mb is not None:
@@ -340,12 +338,10 @@ class PerformanceMonitor:
                     if len(parts) >= 3 and parts[0].endswith("s"):
                         duration = float(parts[0][:-1])  # Remove 's' suffix
                         test_name = " ".join(parts[2:])
-                        data["slowest_tests"].append(
-                            {
-                                "test": test_name,
-                                "duration": duration,
-                            }
-                        )
+                        data["slowest_tests"].append({
+                            "test": test_name,
+                            "duration": duration,
+                        })
                 except (ValueError, IndexError):
                     continue
             if "=" in line and in_slowest_section:
@@ -534,39 +530,33 @@ class PerformanceMonitor:
 
         # Test suite performance summary
         if self.results:
-            report_lines.extend(
-                [
-                    "TEST SUITE PERFORMANCE:",
-                    f"  Total Duration:      "
-                    f"{self.results.get('total_duration', 0):.2f}s",
-                    f"  Collection Time:     "
-                    f"{self.results.get('collection_time', 0):.2f}s",
-                    f"  Tests Collected:     {self.results.get('test_count', 0)}",
-                    f"  Tests Passed:        {self.results.get('passed_count', 0)}",
-                    f"  Tests Failed:        {self.results.get('failed_count', 0)}",
-                    f"  Tests Skipped:       {self.results.get('skipped_count', 0)}",
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "TEST SUITE PERFORMANCE:",
+                f"  Total Duration:      {self.results.get('total_duration', 0):.2f}s",
+                f"  Collection Time:     {self.results.get('collection_time', 0):.2f}s",
+                f"  Tests Collected:     {self.results.get('test_count', 0)}",
+                f"  Tests Passed:        {self.results.get('passed_count', 0)}",
+                f"  Tests Failed:        {self.results.get('failed_count', 0)}",
+                f"  Tests Skipped:       {self.results.get('skipped_count', 0)}",
+                "",
+            ])
 
             # Slowest tests
             slowest_tests = self.results.get("slowest_tests", [])
             if slowest_tests:
-                report_lines.extend(
-                    [
-                        "SLOWEST TESTS (Top 5):",
-                        *(
-                            (
-                                "  "
-                                + test["test"][:60]
-                                + ("..." if len(test["test"]) > 60 else "")
-                                + f": {test['duration']:.2f}s"
-                            )
-                            for test in slowest_tests[:5]
-                        ),
-                        "",
-                    ]
-                )
+                report_lines.extend([
+                    "SLOWEST TESTS (Top 5):",
+                    *(
+                        (
+                            "  "
+                            + test["test"][:60]
+                            + ("..." if len(test["test"]) > 60 else "")
+                            + f": {test['duration']:.2f}s"
+                        )
+                        for test in slowest_tests[:5]
+                    ),
+                    "",
+                ])
 
         # Performance trends (if regression tracker available)
         if self.regression_tracker:
@@ -590,31 +580,25 @@ class PerformanceMonitor:
                 report_lines.append("")
 
             except (KeyError, ValueError, TypeError) as e:
-                report_lines.extend(
-                    [
-                        f"  Error analyzing trends: {e}",
-                        "",
-                    ]
-                )
+                report_lines.extend([
+                    f"  Error analyzing trends: {e}",
+                    "",
+                ])
 
         # Failures and warnings
         if self.failures:
-            report_lines.extend(
-                [
-                    "PERFORMANCE ISSUES:",
-                    *[f"  ❌ {failure}" for failure in self.failures],
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "PERFORMANCE ISSUES:",
+                *[f"  ❌ {failure}" for failure in self.failures],
+                "",
+            ])
 
         if self.warnings:
-            report_lines.extend(
-                [
-                    "PERFORMANCE WARNINGS:",
-                    *[f"  ⚠️  {warning}" for warning in self.warnings],
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "PERFORMANCE WARNINGS:",
+                *[f"  ⚠️  {warning}" for warning in self.warnings],
+                "",
+            ])
 
         # Recommendations
         recommendations = []
@@ -634,13 +618,11 @@ class PerformanceMonitor:
             recommendations.append("Address test failures to improve suite reliability")
 
         if recommendations:
-            report_lines.extend(
-                [
-                    "RECOMMENDATIONS:",
-                    *[f"  💡 {rec}" for rec in recommendations],
-                    "",
-                ]
-            )
+            report_lines.extend([
+                "RECOMMENDATIONS:",
+                *[f"  💡 {rec}" for rec in recommendations],
+                "",
+            ])
 
         report_lines.append("=" * 70)
         return "\n".join(report_lines)

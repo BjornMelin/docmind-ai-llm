@@ -37,9 +37,10 @@ class TestRouterTool:
     def test_router_tool_happy_path_with_strategy(self):
         """Captures selected_strategy when selector metadata is present."""
         engine = _FakeRouter(selected="hybrid_search")
-        result_json = router_tool.invoke(
-            {"query": "hello", "state": {"tools_data": {"router_engine": engine}}}
-        )
+        result_json = router_tool.invoke({
+            "query": "hello",
+            "state": {"tools_data": {"router_engine": engine}},
+        })
         result = json.loads(result_json)
 
         assert result.get("response_text", "").startswith("ok:")
@@ -56,9 +57,10 @@ class TestRouterTool:
     def test_router_tool_no_metadata(self):
         """Still returns response_text and timing when no selector metadata."""
         engine = _FakeRouter(selected=None)
-        result_json = router_tool.invoke(
-            {"query": "q", "state": {"tools_data": {"router_engine": engine}}}
-        )
+        result_json = router_tool.invoke({
+            "query": "q",
+            "state": {"tools_data": {"router_engine": engine}},
+        })
         result = json.loads(result_json)
         assert result.get("response_text", "").startswith("ok:")
         # selected_strategy may be absent; ensure no crash
@@ -68,9 +70,10 @@ class TestRouterTool:
         """When selector metadata is absent, strategy fields are omitted."""
         engine = _FakeRouter(selected=None)
         out = json.loads(
-            router_tool.invoke(
-                {"query": "ping", "state": {"tools_data": {"router_engine": engine}}}
-            )
+            router_tool.invoke({
+                "query": "ping",
+                "state": {"tools_data": {"router_engine": engine}},
+            })
         )
         assert "selected_strategy" not in out
         assert "multimodal_used" not in out
@@ -86,11 +89,9 @@ class TestRouterTool:
                 """Simulate failing engine call."""
                 raise RuntimeError("boom")
 
-        result_json = router_tool.invoke(
-            {
-                "query": "hello",
-                "state": {"tools_data": {"router_engine": _FailRouter()}},
-            }
-        )
+        result_json = router_tool.invoke({
+            "query": "hello",
+            "state": {"tools_data": {"router_engine": _FailRouter()}},
+        })
         result = json.loads(result_json)
         assert "error" in result

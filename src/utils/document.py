@@ -1,4 +1,4 @@
-"""Document helper utilities (final-release).
+"""Document helper utilities.
 
 This module provides lightweight, import-safe convenience wrappers for loading
 documents using LlamaIndex (Unstructured when available) while enforcing

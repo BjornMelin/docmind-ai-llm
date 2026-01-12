@@ -7,7 +7,6 @@ This example demonstrates:
 3. spaCy 3.8+ memory_zone() optimization
 """
 
-import asyncio
 import sys
 from pathlib import Path
 
@@ -22,7 +21,7 @@ except ImportError:  # torch may be unavailable in some envs
     torch = None  # type: ignore
 
 
-async def demo_system_and_gpu():
+def demo_system_and_gpu():
     """Show basic system info and optional CUDA stats (if available)."""
     print("=== System/GPU Monitoring Demo ===")
 
@@ -86,12 +85,12 @@ def demo_spacy_optimization():
         print("✓ spaCy manager infrastructure is working correctly")
 
 
-async def main():
+def main():
     """Run the infrastructure demonstration."""
     print("DocMind AI - Infrastructure Optimization Demo")
     print("=" * 50)
 
-    await demo_system_and_gpu()
+    demo_system_and_gpu()
     demo_spacy_optimization()
 
     print("\n" + "=" * 50)
@@ -103,4 +102,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
