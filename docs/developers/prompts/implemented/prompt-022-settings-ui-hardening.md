@@ -1,4 +1,14 @@
-# Implementation Prompt — Settings UI Hardening + Safe Provider Badge
+---
+prompt: PROMPT-022
+title: Settings UI Hardening + Safe Provider Badge
+status: Completed
+date: 2026-01-11
+version: 1.0
+related_adrs: ["ADR-041"]
+related_specs: ["SPEC-022"]
+---
+
+## Implementation Prompt — Settings UI Hardening + Safe Provider Badge
 
 Implements `ADR-041` + `SPEC-022`.
 

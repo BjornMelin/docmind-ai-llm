@@ -1,4 +1,14 @@
-# Implementation Prompt — Remove Legacy `src/main.py` Entrypoint
+---
+prompt: PROMPT-027
+title: Remove Legacy `src/main.py` Entrypoint
+status: Completed
+date: 2026-01-11
+version: 1.0
+related_adrs: ["ADR-046"]
+related_specs: ["SPEC-027"]
+---
+
+## Implementation Prompt — Remove Legacy `src/main.py` Entrypoint
 
 Implements `ADR-046` + `SPEC-027`.
 

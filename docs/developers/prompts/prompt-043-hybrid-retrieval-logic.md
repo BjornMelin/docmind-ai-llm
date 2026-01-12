@@ -40,4 +40,3 @@ Implement and/or verify:
 
 - “What does that chart show?” queries return image sources when images are indexed.
 - Sources contain `image_artifact_id/suffix` and/or thumbnail refs (no base64, no absolute paths).
-

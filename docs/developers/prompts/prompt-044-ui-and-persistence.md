@@ -46,4 +46,3 @@
 - Chat page loads without external services (fail-open).
 - Sessions are durable across reruns (SQLite WAL).
 - Images render without persisting blobs.
-

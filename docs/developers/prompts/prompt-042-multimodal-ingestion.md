@@ -45,4 +45,3 @@ Implement and/or verify:
 - Ingestion returns successfully even when SigLIP/Qdrant is unavailable (fail-open).
 - Qdrant payload contains artifact ids/suffixes and page metadata only.
 - UI can render thumbnails by resolving `ArtifactRef`.
-

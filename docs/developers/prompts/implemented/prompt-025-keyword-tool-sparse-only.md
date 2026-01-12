@@ -1,4 +1,14 @@
-# Implementation Prompt — Keyword Tool (Sparse-only Qdrant)
+---
+prompt: PROMPT-025
+title: Keyword Tool (Sparse-only Qdrant)
+status: Completed
+date: 2026-01-11
+version: 1.0
+related_adrs: ["ADR-044"]
+related_specs: ["SPEC-025"]
+---
+
+## Implementation Prompt — Keyword Tool (Sparse-only Qdrant)
 
 Implements `ADR-044` + `SPEC-025`.
 
