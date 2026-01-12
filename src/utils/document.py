@@ -11,6 +11,7 @@ DocMind's path hygiene rules:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -38,7 +39,7 @@ def _sanitize_doc_metadata(
 
 
 async def load_documents_unstructured(
-    file_paths: Sequence[str | Path], settings_obj: Any | None = None
+    file_paths: Sequence[str | Path],
 ) -> list[Any]:
     """Load documents using UnstructuredReader when installed (async-friendly).
 
@@ -80,7 +81,7 @@ async def load_documents_unstructured(
                     docs.append(item)
                 continue
             except Exception as exc:
-                logger.debug("UnstructuredReader failed for %s: %s", path.name, exc)
+                logger.debug(f"UnstructuredReader failed for {path.name}: {exc}")
 
         try:
             text = await asyncio.to_thread(
@@ -100,7 +101,6 @@ async def load_documents_unstructured(
 
 async def load_documents_from_directory(
     directory_path: str | Path,
-    settings_obj: Any | None = None,
     recursive: bool = True,
     supported_extensions: set[str] | None = None,
 ) -> list[Any]:
@@ -111,7 +111,7 @@ async def load_documents_from_directory(
     exts = {e.lower() for e in (supported_extensions or {".pdf", ".txt", ".md"})}
     glob = "**/*" if recursive else "*"
     paths = [p for p in root.glob(glob) if p.is_file() and p.suffix.lower() in exts]
-    return await load_documents_unstructured(paths, settings_obj=settings_obj)
+    return await load_documents_unstructured(paths)
 
 
 async def load_documents(file_paths: list[str | Path]) -> list[Any]:
@@ -163,8 +163,7 @@ def _resolve_ingestion_cache_dir(cache_dir: Path | None = None) -> Path:
 def clear_document_cache(*, cache_dir: Path | None = None) -> None:
     """Best-effort cache cleanup for local ingestion caches."""
     cache_path = _resolve_ingestion_cache_dir(cache_dir)
-    with logger.catch(reraise=False):
-        shutil.rmtree(cache_path, ignore_errors=True)
+    shutil.rmtree(cache_path, ignore_errors=True)
 
 
 def get_cache_stats(*, cache_dir: Path | None = None) -> dict[str, Any]:
@@ -173,10 +172,14 @@ def get_cache_stats(*, cache_dir: Path | None = None) -> dict[str, Any]:
     if not cache_path.exists():
         return {"exists": False, "files": 0, "bytes": 0}
     files = [p for p in cache_path.glob("**/*") if p.is_file()]
+    total_bytes = 0
+    for p in files:
+        with contextlib.suppress(OSError):
+            total_bytes += p.stat().st_size
     return {
         "exists": True,
         "files": len(files),
-        "bytes": sum(p.stat().st_size for p in files),
+        "bytes": total_bytes,
     }
 
 

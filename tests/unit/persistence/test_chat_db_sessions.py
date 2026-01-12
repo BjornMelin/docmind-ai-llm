@@ -65,11 +65,17 @@ def test_session_crud_and_purge(tmp_path: Path) -> None:
         conn.execute(
             "INSERT INTO docmind_store_vec (ns2) VALUES (?);", (created.thread_id,)
         )
+        conn.execute(
+            "INSERT INTO docmind_store_items (ns2) VALUES (?);", (created.thread_id,)
+        )
         conn.commit()
 
         purge_session(conn, thread_id=created.thread_id)
         assert list_sessions(conn, include_deleted=True) == []
         assert conn.execute("SELECT COUNT(*) FROM writes").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM docmind_store_vec").fetchone()[0] == 0
+        assert (
+            conn.execute("SELECT COUNT(*) FROM docmind_store_items").fetchone()[0] == 0
+        )
     finally:
         conn.close()

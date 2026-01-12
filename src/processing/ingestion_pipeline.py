@@ -412,7 +412,8 @@ def _build_page_image_records(
             skipped += 1
             continue
 
-        # Update export metadata with stable references (safe for persistence).
+        # NOTE: This mutates export.metadata in-place so downstream consumers of
+        # `exports` see stable artifact references.
         export.metadata.update(
             {
                 "image_artifact_id": img_ref.sha256,
@@ -581,7 +582,8 @@ async def ingest_documents(
 
     Returns:
         IngestionResult: Structured ingestion output including nodes, manifest
-        summary, exports, metadata, and execution timing.
+        summary, exports (enriched in-place with artifact reference fields),
+        metadata, and execution timing.
     """
     resolved_embedding = _resolve_embedding(embedding)
     if resolved_embedding is None:

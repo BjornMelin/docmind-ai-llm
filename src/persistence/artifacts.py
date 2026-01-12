@@ -11,10 +11,12 @@ Final-release constraints:
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from loguru import logger
 
@@ -103,7 +105,13 @@ class ArtifactStore:
         if dest.exists():
             return ref
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dest)
+        tmp = dest.parent / f".{ref.sha256}.{uuid4().hex}.tmp"
+        shutil.copyfile(src, tmp)
+        try:
+            tmp.rename(dest)
+        except FileExistsError:
+            with contextlib.suppress(Exception):
+                tmp.unlink()
         return ref
 
     def delete(self, ref: ArtifactRef) -> None:

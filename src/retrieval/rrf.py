@@ -14,7 +14,12 @@ def rrf_merge(lists: list[list[NodeWithScore]], k_constant: int) -> list[NodeWit
 
     Returns:
         list[NodeWithScore]: Fused list sorted by RRF scores.
+
+    Raises:
+        ValueError: If k_constant is negative.
     """
+    if k_constant < 0:
+        raise ValueError("k_constant must be non-negative")
     scores: dict[str, tuple[float, NodeWithScore]] = {}
     for ranked in lists:
         for rank, nws in enumerate(ranked, start=1):

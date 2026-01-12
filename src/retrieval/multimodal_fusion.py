@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import time
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
@@ -179,8 +180,24 @@ class MultimodalFusionRetriever:
         with ThreadPoolExecutor(max_workers=2) as executor:
             text_future = executor.submit(self._text.retrieve, qtext)
             image_future = executor.submit(self._image.retrieve, qtext)
-            text_nodes = text_future.result()
-            image_nodes = image_future.result()
+            text_timeout_s = (
+                float(getattr(settings.retrieval, "text_timeout_ms", 5000)) / 1000.0
+            )
+            image_timeout_s = (
+                float(getattr(settings.retrieval, "image_timeout_ms", 5000)) / 1000.0
+            )
+            try:
+                text_nodes = text_future.result(timeout=text_timeout_s)
+            except FuturesTimeoutError:
+                text_future.cancel()
+                logger.warning("Text retrieval timed out")
+                text_nodes = []
+            try:
+                image_nodes = image_future.result(timeout=image_timeout_s)
+            except FuturesTimeoutError:
+                image_future.cancel()
+                logger.warning("Image retrieval timed out")
+                image_nodes = []
 
         k_constant = int(getattr(settings.retrieval, "rrf_k", 60))
         fused = rrf_merge([text_nodes, image_nodes], k_constant=k_constant)

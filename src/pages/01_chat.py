@@ -8,6 +8,7 @@ writing the response in small chunks to the UI for better perceived latency.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import uuid
 from collections.abc import Iterable
@@ -66,12 +67,13 @@ def _get_checkpointer() -> SqliteSaver:
     conn = open_chat_db(settings.chat.sqlite_path, cfg=settings)
     saver = SqliteSaver(conn)
     saver.setup()
+    atexit.register(_close_checkpointer, saver, conn)
     return saver
 
 
 @st.cache_resource(show_spinner=False)
 def _get_memory_store() -> DocMindSqliteStore:
-    return DocMindSqliteStore(
+    store = DocMindSqliteStore(
         settings.chat.sqlite_path,
         index={
             "dims": int(settings.embedding.dimension),
@@ -81,6 +83,8 @@ def _get_memory_store() -> DocMindSqliteStore:
         filter_fetch_cap=int(settings.chat.memory_store_filter_fetch_cap),
         cfg=settings,
     )
+    atexit.register(_close_memory_store, store)
+    return store
 
 
 @st.cache_resource(show_spinner=False)
@@ -88,6 +92,20 @@ def _get_coordinator() -> MultiAgentCoordinator:
     return MultiAgentCoordinator(
         checkpointer=_get_checkpointer(), store=_get_memory_store()
     )
+
+
+def _close_checkpointer(saver: SqliteSaver, conn: Any) -> None:
+    with contextlib.suppress(Exception):
+        close = getattr(saver, "close", None)
+        if callable(close):
+            close()
+    with contextlib.suppress(Exception):
+        conn.close()
+
+
+def _close_memory_store(store: DocMindSqliteStore) -> None:
+    with contextlib.suppress(Exception):
+        store.close()
 
 
 def _chunked_stream(text: str, chunk_size: int = 48) -> Iterable[str]:
@@ -201,7 +219,13 @@ def main() -> None:  # pragma: no cover - Streamlit page
             thread_id=selection.thread_id, user_id=selection.user_id
         )
         messages = state.get("messages", []) if isinstance(state, dict) else []
-    except Exception:
+    except Exception as exc:
+        logger.debug(
+            "Failed to load chat history for thread_id={} user_id={}: {}",
+            selection.thread_id,
+            selection.user_id,
+            exc,
+        )
         messages = []
 
     for msg in messages:
@@ -275,6 +299,10 @@ def _render_sources_fragment() -> None:
         return
 
     store = ArtifactStore.from_settings(settings)
+    try:
+        from src.utils.images import open_image_encrypted
+    except Exception:
+        open_image_encrypted = None
     thread_id = str(st.session_state.get("active_thread_id") or "default")
     max_show = min(50, len(sources))
     default_show = min(10, max_show)
@@ -310,10 +338,11 @@ def _render_sources_fragment() -> None:
                     try:
                         img_path = store.resolve_path(ref)
                         if str(img_path).endswith(".enc"):
-                            from src.utils.images import open_image_encrypted
-
-                            with open_image_encrypted(str(img_path)) as im:
-                                st.image(im, use_container_width=True)
+                            if open_image_encrypted is not None:
+                                with open_image_encrypted(str(img_path)) as im:
+                                    st.image(im, use_container_width=True)
+                            else:
+                                st.caption("Encryption support unavailable.")
                         else:
                             st.image(str(img_path), use_container_width=True)
                     except Exception:
@@ -453,6 +482,11 @@ def _render_visual_search_sidebar() -> None:
                 st.caption("No matches.")
                 return
 
+            try:
+                from src.utils.images import open_image_encrypted
+            except Exception:
+                open_image_encrypted = None
+
             st.caption(f"Matches: {len(pts)}")
             for p in pts[: int(top_k)]:
                 payload = getattr(p, "payload", {}) or {}
@@ -475,10 +509,11 @@ def _render_visual_search_sidebar() -> None:
                 try:
                     img_path = store.resolve_path(ref)
                     if str(img_path).endswith(".enc"):
-                        from src.utils.images import open_image_encrypted
-
-                        with open_image_encrypted(str(img_path)) as im:
-                            st.image(im, use_container_width=True)
+                        if open_image_encrypted is not None:
+                            with open_image_encrypted(str(img_path)) as im:
+                                st.image(im, use_container_width=True)
+                        else:
+                            st.caption("Encryption support unavailable.")
                     else:
                         st.image(str(img_path), use_container_width=True)
                 except Exception:
@@ -554,6 +589,10 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
     try:
         from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
 
+        old_retriever = st.session_state.get("hybrid_retriever")
+        if old_retriever is not None:
+            with contextlib.suppress(Exception):
+                old_retriever.close()
         st.session_state["hybrid_retriever"] = MultimodalFusionRetriever()
     except Exception:  # pragma: no cover - fail open in UI
         st.session_state.pop("hybrid_retriever", None)

@@ -159,6 +159,10 @@ def _render_image_exports(exports: list[dict[str, Any]]) -> None:
         return
 
     store = ArtifactStore.from_settings(settings)
+    try:
+        from src.utils.images import open_image_encrypted
+    except Exception:
+        open_image_encrypted = None
 
     def _doc_id(meta: dict[str, Any]) -> str:
         return str(meta.get("doc_id") or meta.get("document_id") or "-")
@@ -224,8 +228,10 @@ def _render_image_exports(exports: list[dict[str, Any]]) -> None:
                     try:
                         img_path = store.resolve_path(ref)
                         if str(img_path).endswith(".enc"):
-                            from src.utils.images import open_image_encrypted
-
+                            if open_image_encrypted is None:
+                                raise RuntimeError(
+                                    "Encrypted image support unavailable."
+                                )
                             with open_image_encrypted(str(img_path)) as im:
                                 st.image(
                                     im, caption=f"p{page_no}", use_container_width=True
@@ -307,12 +313,14 @@ def _render_maintenance_controls() -> None:
 
 
 @st.cache_data(show_spinner=False)
-def _sha256_for_file(path_str: str, mtime_ns: int, size: int) -> str:
+def _sha256_for_file(path_str: str, _mtime_ns: int, _size: int) -> str:
     """Compute file sha256 with cache invalidated by stat tuple."""
-    del mtime_ns, size
     p = Path(path_str)
-    data = p.read_bytes()
-    return hashlib.sha256(data).hexdigest()
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _doc_id_for_upload(path: Path) -> str:
@@ -351,7 +359,7 @@ def _handle_reindex_page_images(
         try:
             doc_id = _doc_id_for_upload(p)
         except Exception as exc:
-            logger.debug("sha256 compute skipped for %s: %s", p, exc)
+            logger.debug("sha256 compute skipped for {}: {}", p, exc)
             continue
         inputs.append(
             IngestionInput(
@@ -407,6 +415,18 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
 
         client = QdrantClient(**get_client_config())
         try:
+            artifacts_to_consider: list[ArtifactRef] = (
+                list(
+                    collect_artifact_refs_for_doc_id(
+                        client,
+                        settings.database.qdrant_image_collection,
+                        doc_id=doc_id,
+                    )
+                )
+                if purge_artifacts
+                else []
+            )
+
             deleted_image_points = delete_page_images_for_doc_id(
                 client,
                 settings.database.qdrant_image_collection,
@@ -434,26 +454,15 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
                     count_filter=text_filter,
                     exact=True,
                 )
-                deleted_text_points = int(getattr(before, "count", 0) or 0)
+                text_count = int(getattr(before, "count", 0) or 0)
                 client.delete(
                     collection_name=settings.database.qdrant_collection,
-                    points_selector=text_filter,
+                    points_selector=qmodels.FilterSelector(filter=text_filter),
                     wait=True,
                 )
+                deleted_text_points = text_count
             except Exception:
                 deleted_text_points = 0
-
-            artifacts_to_consider: list[ArtifactRef] = (
-                list(
-                    collect_artifact_refs_for_doc_id(
-                        client,
-                        settings.database.qdrant_image_collection,
-                        doc_id=doc_id,
-                    )
-                )
-                if purge_artifacts
-                else []
-            )
 
             if purge_artifacts and artifacts_to_consider:
                 store = ArtifactStore.from_settings(settings)

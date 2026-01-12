@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.config.settings import DocMindSettings, settings
+from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
 
 CHAT_SESSION_TABLE = "chat_session"
@@ -40,22 +41,11 @@ class ChatSession:
 
 
 def _validate_chat_db_path(path: Path, cfg: DocMindSettings = settings) -> Path:
-    # Interpret relative paths as anchored to cfg.data_dir by default, but keep
-    # compatibility with legacy "data/..." defaults when data_dir already is "data".
-    if path.is_absolute():
-        resolved = path.expanduser().resolve()
-    else:
-        base = cfg.data_dir
-        if path.parts and path.parts[0] == cfg.data_dir.name:
-            base = cfg.data_dir.parent
-        resolved = (base / path).expanduser().resolve()
-    data_dir = cfg.data_dir.resolve()
-    if not resolved.is_relative_to(data_dir):
-        raise ValueError(
-            "Chat DB path must live under settings.data_dir "
-            f"(got {resolved}, data_dir={data_dir})"
-        )
-    return resolved
+    return resolve_path_under_data_dir(
+        path=path,
+        data_dir=cfg.data_dir,
+        label="Chat DB path",
+    )
 
 
 def open_chat_db(path: Path, *, cfg: DocMindSettings = settings) -> sqlite3.Connection:
@@ -133,39 +123,22 @@ def list_sessions(
     limit: int = 200,
 ) -> list[ChatSession]:
     """Return chat sessions ordered by most recently updated."""
-    if include_deleted:
-        cur = conn.execute(
-            """
-            SELECT
-                thread_id,
-                title,
-                created_at_ms,
-                updated_at_ms,
-                last_checkpoint_id,
-                deleted_at_ms
-            FROM chat_session
-            ORDER BY updated_at_ms DESC
-            LIMIT ?;
-            """,
-            (int(limit),),
-        )
-    else:
-        cur = conn.execute(
-            """
-            SELECT
-                thread_id,
-                title,
-                created_at_ms,
-                updated_at_ms,
-                last_checkpoint_id,
-                deleted_at_ms
-            FROM chat_session
-            WHERE deleted_at_ms IS NULL
-            ORDER BY updated_at_ms DESC
-            LIMIT ?;
-            """,
-            (int(limit),),
-        )
+    cur = conn.execute(
+        """
+        SELECT
+            thread_id,
+            title,
+            created_at_ms,
+            updated_at_ms,
+            last_checkpoint_id,
+            deleted_at_ms
+        FROM chat_session
+        WHERE (? = 1 OR deleted_at_ms IS NULL)
+        ORDER BY updated_at_ms DESC
+        LIMIT ?;
+        """,
+        (1 if include_deleted else 0, int(limit)),
+    )
     rows = cur.fetchall()
     return [
         ChatSession(
@@ -264,31 +237,31 @@ def soft_delete_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
 def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
     """Hard delete a session's persisted data (checkpoints + writes + memories)."""
     tid = str(thread_id)
-    with conn:
-        # LangGraph SqliteSaver tables (best-effort; may not exist yet)
-        langgraph_deletes = (
-            "DELETE FROM writes WHERE thread_id=?;",
-            "DELETE FROM checkpoints WHERE thread_id=?;",
-        )
-        for stmt in langgraph_deletes:
-            with contextlib.suppress(sqlite3.OperationalError):
-                conn.execute(stmt, (tid,))
+    # LangGraph SqliteSaver tables (best-effort; may not exist yet)
+    langgraph_deletes = (
+        "DELETE FROM writes WHERE thread_id=?;",
+        "DELETE FROM checkpoints WHERE thread_id=?;",
+    )
+    for stmt in langgraph_deletes:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(stmt, (tid,))
 
-        # DocMind memory store tables (best-effort; may not exist yet)
-        try:
-            conn.execute(
-                "DELETE FROM docmind_store_vec WHERE ns2=?;",
-                (tid,),
-            )
-            conn.execute(
-                "DELETE FROM docmind_store_items WHERE ns2=?;",
-                (tid,),
-            )
-        except sqlite3.OperationalError:
-            # Tables not created yet.
-            pass
-
+    # DocMind memory store tables (best-effort; may not exist yet)
+    try:
         conn.execute(
-            "DELETE FROM chat_session WHERE thread_id=?;",
+            "DELETE FROM docmind_store_vec WHERE ns2=?;",
             (tid,),
         )
+        conn.execute(
+            "DELETE FROM docmind_store_items WHERE ns2=?;",
+            (tid,),
+        )
+    except sqlite3.OperationalError:
+        # Tables not created yet.
+        pass
+
+    conn.execute(
+        "DELETE FROM chat_session WHERE thread_id=?;",
+        (tid,),
+    )
+    conn.commit()

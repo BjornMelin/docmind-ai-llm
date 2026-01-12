@@ -256,7 +256,7 @@ def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
                     store = ArtifactStore.from_settings(settings)
                 ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx or ""))
                 p = str(store.resolve_path(ref))
-            except Exception:
+            except (ValueError, FileNotFoundError, OSError, AttributeError):
                 p = ""
         out.append(str(p) if p else "")
     return out

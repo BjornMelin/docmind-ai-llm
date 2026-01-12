@@ -84,9 +84,6 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
     if not isinstance(state, dict):
         return []
 
-    # Reserved flags (no-op in final-release; tests may inject for future use).
-    # context_recovery_enabled, reset_context_on_error
-
     messages = state.get("messages", [])
     if not isinstance(messages, list):
         return []
@@ -96,7 +93,16 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
         if isinstance(msg, HumanMessage):
             content = getattr(msg, "content", None)
             if content:
-                previous.append(str(content))
+                if isinstance(content, str):
+                    previous.append(content)
+                elif isinstance(content, list):
+                    text_parts = [
+                        block.get("text", "")
+                        for block in content
+                        if isinstance(block, dict) and block.get("type") == "text"
+                    ]
+                    if text_parts:
+                        previous.append(" ".join(text_parts))
 
     return previous[-RECENT_CHAT_HISTORY_LIMIT:]
 

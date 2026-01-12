@@ -22,7 +22,7 @@ _ROUTER_TRACER = trace.get_tracer("docmind.tools.router")
 def router_tool(
     query: str,
     state: Annotated[dict | None, InjectedState] = None,
-    runtime: ToolRuntime = None,  # type: ignore[assignment]
+    runtime: ToolRuntime | None = None,
 ) -> str:
     """Route a query through a prebuilt RouterQueryEngine and return JSON."""
     start = time.perf_counter()

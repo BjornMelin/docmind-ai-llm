@@ -65,10 +65,9 @@ def rebuild_snapshot(
             and graph_store is not None
             and storage_context is not None
         )
+        graphrag_cfg = getattr(settings_obj, "graphrag_cfg", None)
         export_cap = int(
-            getattr(
-                getattr(settings_obj, "graphrag_cfg", object()), "export_seed_cap", 32
-            )
+            getattr(graphrag_cfg, "export_seed_cap", 32) if graphrag_cfg else 32
         )
         seeds: list[str] = []
         if can_export_graph:
@@ -202,7 +201,12 @@ def rebuild_snapshot(
                 embed_model = getattr(Settings, "embed_model", None)
         if embed_model is None:
             # Fallback to private attribute as a last resort; prefer explicit args.
-            embed_model = getattr(vector_index, "_embed_model", None)
+            if hasattr(vector_index, "_embed_model"):
+                embed_model = getattr(vector_index, "_embed_model", None)
+            else:
+                logger.debug(
+                    "Embed model fallback unavailable: vector_index has no _embed_model"
+                )
         if embed_model is not None:
             embed_model_name = getattr(embed_model, "model_name", "unknown")
         versions.setdefault("embed_model", embed_model_name)

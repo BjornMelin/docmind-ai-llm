@@ -71,6 +71,7 @@ def ensure_thumbnail(
 
     Thumbnails are stored alongside the original by default (or under ``thumb_dir``)
     and are encrypted when ``encrypt`` is true or the source image is encrypted.
+    Plaintext deletion after encryption follows DOCMIND_IMG_DELETE_PLAINTEXT.
     """
     try:
         from PIL.Image import Resampling  # type: ignore
@@ -114,6 +115,7 @@ def ensure_thumbnail(
         try:
             from src.utils.security import encrypt_file
 
+            # encrypt_file decides whether to delete plaintext (env-driven).
             enc_path = encrypt_file(str(thumb_plain))
             return Path(enc_path)
         except (OSError, RuntimeError, ValueError, ImportError):

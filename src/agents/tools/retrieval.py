@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import time
 from typing import Annotated, Any
 
@@ -341,8 +342,6 @@ def _deduplicate_documents(documents: list[dict]) -> list[dict]:
 
 
 def _looks_contextual(query: str) -> bool:
-    import re
-
     pattern = (
         r"\b(this|that|they|them|above|previous|chart|figure|diagram|table|"
         r"image|photo)\b"

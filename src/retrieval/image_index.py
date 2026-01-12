@@ -136,13 +136,25 @@ def index_page_images_siglip(
             to_embed.append(r)
 
     if to_payload_only:
-        for pid, payload in to_payload_only:
-            with contextlib.suppress(Exception):
+        chunk_size = 200
+        for i in range(0, len(to_payload_only), chunk_size):
+            batch = to_payload_only[i : i + chunk_size]
+            points = [pid for pid, _ in batch]
+            payloads = [payload for _, payload in batch]
+            try:
                 client.set_payload(
                     collection_name=collection_name,
-                    points=[pid],
-                    payload=payload,
+                    points=points,
+                    payload=payloads,
                 )
+            except Exception:
+                for pid, payload in batch:
+                    with contextlib.suppress(Exception):
+                        client.set_payload(
+                            collection_name=collection_name,
+                            points=[pid],
+                            payload=payload,
+                        )
 
     indexed = 0
     for i in range(0, len(to_embed), max(1, int(batch_size))):

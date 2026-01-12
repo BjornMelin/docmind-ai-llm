@@ -110,13 +110,19 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
                 st.query_params["chat"] = created.thread_id
             st.rerun()
 
-        if cols[1].button("Delete", use_container_width=True):
+        confirm_delete = st.checkbox(
+            "Confirm delete (recoverable)", key="delete_confirm"
+        )
+        if cols[1].button(
+            "Delete", use_container_width=True, disabled=not confirm_delete
+        ):
             soft_delete_session(conn, thread_id=active.thread_id)
             remaining = list_sessions(conn)
             if remaining:
                 st.session_state["chat_thread_id"] = remaining[0].thread_id
             else:
                 st.session_state.pop("chat_thread_id", None)
+            st.session_state.pop("delete_confirm", None)
             st.rerun()
 
         new_title = st.text_input("Rename", value=active.title)

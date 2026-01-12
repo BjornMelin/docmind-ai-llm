@@ -30,6 +30,7 @@ from typing import Any
 from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
+from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
 
 try:  # pragma: no cover - optional native dependency
@@ -62,6 +63,8 @@ VEC_TABLE = "docmind_store_vec"
 # Namespace representation
 _NS_DELIM = "\x1f"
 _MAX_NS_DEPTH = 8
+# Oversample to compensate for vec0 offset limitations.
+VEC0_OVERSAMPLE = 256
 
 
 def _ms_to_dt(ms: int) -> datetime:
@@ -184,19 +187,11 @@ class DocMindSqliteStore(BaseStore):
             filter_fetch_cap: Max rows fetched when filtering in Python.
             cfg: DocMind settings used for data_dir validation.
         """
-        if path.is_absolute():
-            self._path = path.expanduser().resolve()
-        else:
-            base = cfg.data_dir
-            if path.parts and path.parts[0] == cfg.data_dir.name:
-                base = cfg.data_dir.parent
-            self._path = (base / path).expanduser().resolve()
-        data_dir = cfg.data_dir.resolve()
-        if not self._path.is_relative_to(data_dir):
-            raise ValueError(
-                "Memory store must live under settings.data_dir "
-                f"(got {self._path}, data_dir={data_dir})"
-            )
+        self._path = resolve_path_under_data_dir(
+            path=path,
+            data_dir=cfg.data_dir,
+            label="Memory store",
+        )
         self._path.parent.mkdir(parents=True, exist_ok=True)
         conn: sqlite3.Connection | None = None
         try:
@@ -537,6 +532,8 @@ class DocMindSqliteStore(BaseStore):
         # Non-semantic search: return most recently updated items.
         if op.filter:
             # Apply filters in Python to avoid dynamic SQL construction.
+            # NOTE: _filter_fetch_cap (default 5000) bounds this work; raise the
+            # cap or use DB-side filtering for heavy workloads.
             fetch_limit = min(
                 self._filter_fetch_cap,
                 requested_limit + requested_offset + 512,
@@ -713,7 +710,7 @@ class DocMindSqliteStore(BaseStore):
         requested_offset = int(op.offset)
 
         # vec0 supports offset poorly; oversample and slice client-side.
-        k = max(1, requested_limit + requested_offset + 256)
+        k = max(1, requested_limit + requested_offset + VEC0_OVERSAMPLE)
 
         ns_params = self._vec_namespace_prefix_params(prefix_parts)
 

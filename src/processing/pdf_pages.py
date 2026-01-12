@@ -238,7 +238,7 @@ def pdf_pages_to_image_documents(
         except (OSError, ValueError):
             logger.exception(
                 "ArtifactStore.put_file failed for PDF page image "
-                "(page=%s, path=%s, phash=%s)",
+                "(page={}, path={}, phash={})",
                 i,
                 path,
                 phash,
@@ -250,7 +250,7 @@ def pdf_pages_to_image_documents(
         except (OSError, ValueError):
             logger.exception(
                 "ArtifactStore.resolve_path failed for PDF page image "
-                "(page=%s, path=%s, phash=%s, ref=%s)",
+                "(page={}, path={}, phash={}, ref={})",
                 i,
                 path,
                 phash,

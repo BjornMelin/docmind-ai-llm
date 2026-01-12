@@ -153,12 +153,11 @@ def build_router_engine(
             retrieval_cfg = getattr(cfg, "retrieval", cfg)
             enable_mm = bool(getattr(retrieval_cfg, "enable_image_retrieval", True))
         except Exception:  # pragma: no cover - defensive
-            enable_mm = True
+            enable_mm = False
 
         if enable_mm:
             try:
                 from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
-                from src.retrieval.reranking import get_postprocessors as _get_pp
 
                 mm_retriever = MultimodalFusionRetriever()
                 mm_post = _get_pp(

@@ -54,6 +54,11 @@ def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
     assert q.shape == (4,)
     assert float(np.linalg.norm(q)) == pytest.approx(1.0, rel=1e-4)
 
+    text_batch = emb.get_text_embeddings(["hello", "world"], batch_size=1)
+    assert text_batch.shape == (2, 4)
+    for row in text_batch:
+        assert float(np.linalg.norm(row)) == pytest.approx(1.0, rel=1e-4)
+
     img = Image.new("RGB", (32, 32), color=(255, 0, 0))
     v = emb.get_image_embedding(img)
     assert v.shape == (4,)

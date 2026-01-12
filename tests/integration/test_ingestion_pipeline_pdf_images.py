@@ -7,8 +7,10 @@ Qdrant instance or model downloads.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from llama_index.core.base.embeddings.base import BaseEmbedding
@@ -20,10 +22,11 @@ from src.processing.ingestion_pipeline import ingest_documents_sync
 class DummyEmbedding(BaseEmbedding):
     """Deterministic embedding for pipeline construction in tests."""
 
+    EMBEDDING_DIM: ClassVar[int] = 768
+
     def _get_text_embedding(self, text: str) -> list[float]:
         digest = hashlib.sha256(text.encode("utf-8")).digest()
-        value = int.from_bytes(digest[:8], "big") / 2**64
-        return [float(value)]
+        return [float(b) / 255.0 for b in digest * (self.EMBEDDING_DIM // len(digest))]
 
     async def _aget_text_embedding(self, text: str) -> list[float]:
         return self._get_text_embedding(text)
@@ -108,7 +111,7 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
 
     captured: dict[str, object] = {"records": None}
 
-    def _fake_index(*_a, records, **_k):  # type: ignore[no-untyped-def]
+    def _fake_index(*_a: object, records: Sequence[object], **_k: object) -> int:
         captured["records"] = list(records)
         return len(records)
 
@@ -116,7 +119,7 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
         pass
 
     class _DummyClient:  # pragma: no cover - avoid network
-        def __init__(self, **_cfg):
+        def __init__(self, **_cfg: object) -> None:
             self._cfg = _cfg
 
         def close(self) -> None:
