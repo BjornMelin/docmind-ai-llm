@@ -38,7 +38,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing aid only
 else:
     RouterQueryEngineType = Any
 
-_WARNING_FLAGS: dict[str, bool] = {"hybrid": False, "graph": False}
+_WARNING_FLAGS: dict[str, bool] = {"hybrid": False, "graph": False, "multimodal": False}
 
 
 def _warn_once(key: str, message: str, *, reason: str) -> None:
@@ -188,7 +188,9 @@ def build_router_engine(
                 )
             except (ValueError, TypeError, AttributeError, ImportError) as exc:
                 _warn_once(
-                    "hybrid", "Multimodal tool construction skipped", reason=str(exc)
+                    "multimodal",
+                    "Multimodal tool construction skipped",
+                    reason=str(exc),
                 )
 
         # Optional hybrid tool

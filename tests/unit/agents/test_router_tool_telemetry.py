@@ -42,7 +42,7 @@ def test_router_tool_emits_traversal_depth_on_kg_route(monkeypatch):
 
     monkeypatch.setattr(rt_mod, "log_jsonl", _capture)
 
-    state = {"tools_data": {"router_engine": _FakeRouterKG()}}
+    state = {"router_engine": _FakeRouterKG()}
     result_json = router_tool.invoke({"query": "hello", "state": state})
     result = json.loads(result_json)
 

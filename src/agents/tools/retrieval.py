@@ -341,25 +341,13 @@ def _deduplicate_documents(documents: list[dict]) -> list[dict]:
 
 
 def _looks_contextual(query: str) -> bool:
-    q = str(query).lower()
-    return any(
-        t in q
-        for t in (
-            "this",
-            "that",
-            "it",
-            "they",
-            "them",
-            "above",
-            "previous",
-            "chart",
-            "figure",
-            "diagram",
-            "table",
-            "image",
-            "photo",
-        )
+    import re
+
+    pattern = (
+        r"\b(this|that|it|they|them|above|previous|chart|figure|diagram|table|"
+        r"image|photo)\b"
     )
+    return re.search(pattern, str(query), flags=re.IGNORECASE) is not None
 
 
 def _recall_recent_sources(state: dict[str, Any] | None) -> list[dict[str, Any]]:

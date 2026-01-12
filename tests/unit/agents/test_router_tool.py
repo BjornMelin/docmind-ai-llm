@@ -37,7 +37,7 @@ class TestRouterTool:
     def test_router_tool_happy_path_with_strategy(self):
         """Captures selected_strategy when selector metadata is present."""
         engine = _FakeRouter(selected="hybrid_search")
-        state = {"tools_data": {"router_engine": engine}}
+        state = {"router_engine": engine}
 
         result_json = router_tool.invoke({"query": "hello", "state": state})
         result = json.loads(result_json)
@@ -56,7 +56,7 @@ class TestRouterTool:
     def test_router_tool_no_metadata(self):
         """Still returns response_text and timing when no selector metadata."""
         engine = _FakeRouter(selected=None)
-        state = {"tools_data": {"router_engine": engine}}
+        state = {"router_engine": engine}
         result_json = router_tool.invoke({"query": "q", "state": state})
         result = json.loads(result_json)
         assert result.get("response_text", "").startswith("ok:")
@@ -66,7 +66,7 @@ class TestRouterTool:
     def test_router_tool_omits_strategy_fields_without_metadata(self):
         """When selector metadata is absent, strategy fields are omitted."""
         engine = _FakeRouter(selected=None)
-        state = {"tools_data": {"router_engine": engine}}
+        state = {"router_engine": engine}
         out = json.loads(router_tool.invoke({"query": "ping", "state": state}))
         assert "selected_strategy" not in out
         assert "multimodal_used" not in out
@@ -82,7 +82,7 @@ class TestRouterTool:
                 """Simulate failing engine call."""
                 raise RuntimeError("boom")
 
-        state = {"tools_data": {"router_engine": _FailRouter()}}
+        state = {"router_engine": _FailRouter()}
         result_json = router_tool.invoke({"query": "hello", "state": state})
         result = json.loads(result_json)
         assert "error" in result

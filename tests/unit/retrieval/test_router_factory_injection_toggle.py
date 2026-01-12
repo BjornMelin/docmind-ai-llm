@@ -67,8 +67,9 @@ def test_router_factory_injects_postprocessors_toggle(
     vec = _FakeVector()
     pg = _FakePG()
     router = rf.build_router_engine(vec, pg_index=pg, settings=cfg, enable_hybrid=False)
-    assert len(get_router_tool_names(router)) == 3
-    assert vec.kwargs.get("node_postprocessors") == ["pp"]
+    tool_names = set(get_router_tool_names(router))
+    assert tool_names == {"semantic_search", "multimodal_search", "knowledge_graph"}
+    assert (vec.kwargs or {}).get("node_postprocessors") == ["pp"]
     assert captured_graph.get("node_postprocessors") == ["pp"]
 
     cfg.retrieval.use_reranking = False
@@ -77,6 +78,7 @@ def test_router_factory_injects_postprocessors_toggle(
     router2 = rf.build_router_engine(
         vec2, pg_index=_FakePG(), settings=cfg, enable_hybrid=False
     )
-    assert len(get_router_tool_names(router2)) == 3
-    assert vec2.kwargs.get("node_postprocessors") is None
+    tool_names2 = set(get_router_tool_names(router2))
+    assert tool_names2 == {"semantic_search", "multimodal_search", "knowledge_graph"}
+    assert (vec2.kwargs or {}).get("node_postprocessors") is None
     assert captured_graph.get("node_postprocessors") is None

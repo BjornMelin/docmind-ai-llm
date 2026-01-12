@@ -8,9 +8,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from llama_index.core.schema import NodeWithScore, TextNode
 
 from src.agents.tools import retrieval as retrieval_tool
+
+pytestmark = pytest.mark.unit
 
 
 def test_parse_tool_result_strips_runtime_paths_from_metadata() -> None:
@@ -58,4 +61,7 @@ def test_contextual_recall_returns_last_sources_when_present() -> None:
     recalled = retrieval_tool._recall_recent_sources(state)
     assert recalled
     assert recalled[0]["metadata"]["image_artifact_id"] == "a"
+
+
+def test_looks_contextual_matches_simple_pronoun_question() -> None:
     assert retrieval_tool._looks_contextual("What does that chart show?") is True

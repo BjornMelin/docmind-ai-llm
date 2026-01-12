@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from contextlib import suppress
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState, ToolRuntime
@@ -30,15 +30,12 @@ def router_tool(
         span.set_attribute("router.query.length", len(query))
         try:
             st = state if isinstance(state, dict) else {}
-            tools_data = cast(dict, st.get("tools_data", {})) if st else {}
             runtime_ctx = runtime.context if runtime is not None else None
             router_engine = None
             if isinstance(runtime_ctx, dict):
                 router_engine = runtime_ctx.get("router_engine")
             if router_engine is None:
-                router_engine = st.get("router_engine") or tools_data.get(
-                    "router_engine"
-                )
+                router_engine = st.get("router_engine")
             span.set_attribute("router.engine.available", router_engine is not None)
             if router_engine is None:
                 span.set_attribute("router.success", False)
