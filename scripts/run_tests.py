@@ -614,6 +614,7 @@ else:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for the tiered test runner."""
     parser = argparse.ArgumentParser(
         description="DocMind AI Tiered Test Runner",
         epilog="""Three-Tier Testing Strategy:
@@ -682,6 +683,7 @@ Examples:
 
 
 def _print_default_tiers() -> None:
+    """Print guidance for the default tiered test strategy."""
     print("\nRunning Default Tiered Test Strategy")
     print("\nTiers:")
     print("   --unit: Fast tests with mocks (development)")
@@ -692,6 +694,7 @@ def _print_default_tiers() -> None:
 
 
 def _run_direct_paths(runner: TestRunner, args: argparse.Namespace) -> None:
+    """Run pytest directly for the provided paths."""
     cmd = ["uv", "run", "pytest", *args.paths, "-v", "--tb=short"]
     if args.coverage:
         cmd += ["--cov=src", "--cov-report=term-missing"]
@@ -701,6 +704,7 @@ def _run_direct_paths(runner: TestRunner, args: argparse.Namespace) -> None:
 
 
 def _run_selected_tests(runner: TestRunner, args: argparse.Namespace) -> None:
+    """Dispatch to the appropriate test execution flow."""
     if args.paths:
         _run_direct_paths(runner, args)
         return
@@ -729,6 +733,7 @@ def _run_selected_tests(runner: TestRunner, args: argparse.Namespace) -> None:
 
 
 def _should_generate_coverage(args: argparse.Namespace) -> bool:
+    """Return True when a coverage report should be generated."""
     if args.coverage:
         return True
     if args.paths:
@@ -748,6 +753,7 @@ def _should_generate_coverage(args: argparse.Namespace) -> bool:
 
 
 def _finalize_run(runner: TestRunner) -> None:
+    """Print summary and exit with a failure code if any runs failed."""
     runner.print_summary()
     failed_runs = sum(1 for r in runner.results if r.exit_code != 0)
     if failed_runs > 0:

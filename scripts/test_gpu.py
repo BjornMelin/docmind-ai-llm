@@ -181,6 +181,7 @@ def monitor_gpu_memory() -> dict:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for GPU validation."""
     parser = argparse.ArgumentParser(description="DocMind AI GPU Test Runner")
     parser.add_argument(
         "--quick", action="store_true", help="Quick GPU health check only"
@@ -198,6 +199,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _print_header() -> None:
+    """Print the GPU validation suite header."""
     print("🎯 DocMind AI GPU Validation Suite")
     print("=" * 60)
     print("Target: GPU hardware and performance validation")
@@ -205,6 +207,7 @@ def _print_header() -> None:
 
 
 def _require_gpu_info() -> GPUInfo:
+    """Detect GPU hardware and return metadata or exit."""
     print("\n🔍 Step 1: GPU Hardware Detection")
     gpu_info = get_gpu_info()
     if not gpu_info:
@@ -230,6 +233,7 @@ def _require_gpu_info() -> GPUInfo:
 def _check_cuda_compatibility(
     gpu_info: GPUInfo, compatibility_only: bool, test_results: dict
 ) -> bool:
+    """Check CUDA availability and optionally exit after compatibility summary."""
     print("\n🔧 Step 2: CUDA Compatibility Check")
     cuda_available = check_cuda_availability()
     test_results["hardware"] = True
@@ -257,6 +261,7 @@ def _check_cuda_compatibility(
 def _run_quick_check(
     exit_codes: list[int], test_results: dict[str, bool]
 ) -> dict[str, float]:
+    """Run the quick smoke test path and return final memory stats."""
     print("\n⚡ Step 3: Quick GPU Health Check")
     initial_memory = monitor_gpu_memory()
     print(
@@ -281,6 +286,7 @@ def _run_quick_check(
 def _run_gpu_tests(
     exit_codes: list[int], test_results: dict[str, bool]
 ) -> dict[str, float]:
+    """Run GPU-required tests and performance validation."""
     print("\n🎯 Step 3: GPU-Required Tests")
     initial_memory = monitor_gpu_memory()
     print(
@@ -309,6 +315,7 @@ def _run_gpu_tests(
 def _run_benchmarks(
     project_root: Path, exit_codes: list[int], test_results: dict[str, bool]
 ) -> None:
+    """Run optional performance benchmark steps."""
     print("\n📊 Step 5: Performance Benchmarks")
     cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
     exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200)
@@ -324,6 +331,7 @@ def _run_benchmarks(
 
 
 def _run_memory_leak_check(test_results: dict[str, bool]) -> None:
+    """Sample memory usage to detect potential leaks."""
     print("\n🔍 Step 6: Memory Leak Detection")
     memory_samples: list[int] = []
     for i in range(5):
@@ -348,6 +356,7 @@ def _print_summary(
     total_failures: int,
     final_memory: dict[str, float] | None,
 ) -> None:
+    """Print a final validation summary and exit with status."""
     print("\n" + "=" * 80)
     print("📋 GPU VALIDATION SUMMARY")
     print("=" * 80)
@@ -379,6 +388,7 @@ def _print_summary(
 
 
 def _print_performance_notes(final_memory: dict[str, float] | None) -> None:
+    """Emit performance guidance based on VRAM utilization."""
     print("\n💡 Performance Notes:")
     utilization = final_memory.get("utilization", 0) if final_memory else 0
     if utilization > 90:

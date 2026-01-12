@@ -59,10 +59,8 @@ def ensure_collection(client: QdrantClient, name: str) -> None:
         )
 
 
-def main() -> None:
-    """Run evaluation for a BEIR dataset and log metrics to CSV."""
-    # Determinism first
-    set_determinism()
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for BEIR evaluation."""
     ap = argparse.ArgumentParser(description="DocMind IR eval on BEIR")
     ap.add_argument(
         "--data_dir", required=True, help="BEIR dataset folder (e.g., scifact)"
@@ -76,53 +74,56 @@ def main() -> None:
         default=0,
         help="If >0, limit number of queries deterministically",
     )
-    args = ap.parse_args()
+    return ap
 
+
+def _validate_args(args: argparse.Namespace) -> None:
+    """Validate CLI arguments for evaluation."""
     if args.k <= 0:
         raise ValueError("--k must be > 0")
     if args.sample_count < 0:
         raise ValueError("--sample_count must be >= 0")
 
-    # Import BEIR on-demand if not available at module import time.
+
+def _ensure_beir_loaded() -> None:
+    """Ensure BEIR modules are available, importing on demand."""
     global GenericDataLoader, EvaluateRetrieval
-    if GenericDataLoader is None or EvaluateRetrieval is None:  # pragma: no cover
-        try:
-            from beir.datasets.data_loader import (
-                GenericDataLoader as _GenericDataLoader,  # type: ignore
-            )
-            from beir.retrieval.evaluation import (
-                EvaluateRetrieval as _EvaluateRetrieval,  # type: ignore
-            )
+    if GenericDataLoader is not None and EvaluateRetrieval is not None:
+        return
+    try:  # pragma: no cover
+        from beir.datasets.data_loader import (
+            GenericDataLoader as _GenericDataLoader,  # type: ignore
+        )
+        from beir.retrieval.evaluation import (
+            EvaluateRetrieval as _EvaluateRetrieval,  # type: ignore
+        )
 
-            GenericDataLoader = _GenericDataLoader  # type: ignore[assignment]
-            EvaluateRetrieval = _EvaluateRetrieval  # type: ignore[assignment]
-        except Exception as exc:  # pragma: no cover
-            raise ImportError(
-                "beir is required for IR evaluation; install optional eval extras"
-            ) from exc
+        GenericDataLoader = _GenericDataLoader  # type: ignore[assignment]
+        EvaluateRetrieval = _EvaluateRetrieval  # type: ignore[assignment]
+    except Exception as exc:  # pragma: no cover
+        raise ImportError(
+            "beir is required for IR evaluation; install optional eval extras"
+        ) from exc
 
-    _corpus, queries, qrels = GenericDataLoader(args.data_dir).load(split="test")
 
-    # Ensure collection exists
-    client = QdrantClient(
-        url=settings.database.qdrant_url,
-        timeout=settings.database.qdrant_timeout,
-        prefer_grpc=True,
-    )
-    ensure_collection(client, args.collection)
+def _build_retriever(collection: str) -> ServerHybridRetriever:
+    """Create a hybrid retriever for evaluation."""
+    return ServerHybridRetriever(_HybridParams(collection=collection))
 
-    # NOTE: Indexing of BEIR corpus into Qdrant is expected to be done separately.
-    retr = ServerHybridRetriever(_HybridParams(collection=args.collection))
 
-    # Optionally limit number of queries for deterministic CI runs
+def _run_retrieval(
+    retriever: ServerHybridRetriever,
+    queries: dict[str, str],
+    sample_count: int,
+) -> tuple[list[tuple[str, str]], dict[str, dict[str, float]], dict[str, list[Any]]]:
+    """Run retrieval for queries and return results and nodes."""
     qitems = list(queries.items())
-    if args.sample_count > 0:
-        qitems = qitems[: args.sample_count]
-
+    if sample_count > 0:
+        qitems = qitems[:sample_count]
     results: dict[str, dict[str, float]] = {}
     per_query_nodes: dict[str, list[Any]] = {}
     for qid, qtext in qitems:
-        nodes = retr.retrieve(qtext)
+        nodes = retriever.retrieve(qtext)
         per_query_nodes[qid] = nodes
         doc_scores: dict[str, float] = {}
         for nws in nodes:
@@ -130,6 +131,28 @@ def main() -> None:
             if did:
                 doc_scores[str(did)] = float(nws.score)
         results[qid] = doc_scores
+    return qitems, results, per_query_nodes
+
+
+def main() -> None:
+    """Run evaluation for a BEIR dataset and log metrics to CSV."""
+    set_determinism()
+    ap = _build_parser()
+    args = ap.parse_args()
+    _validate_args(args)
+    _ensure_beir_loaded()
+
+    _corpus, queries, qrels = GenericDataLoader(args.data_dir).load(split="test")
+
+    client = QdrantClient(
+        url=settings.database.qdrant_url,
+        timeout=settings.database.qdrant_timeout,
+        prefer_grpc=True,
+    )
+    ensure_collection(client, args.collection)
+
+    retr = _build_retriever(args.collection)
+    qitems, results, per_query_nodes = _run_retrieval(retr, queries, args.sample_count)
 
     # Restrict evaluation to the same query subset when --sample_count is used
     evaluator = EvaluateRetrieval()

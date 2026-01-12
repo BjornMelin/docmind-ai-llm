@@ -41,6 +41,288 @@ else:
 _WARNING_FLAGS: dict[str, bool] = {"hybrid": False, "graph": False, "multimodal": False}
 
 
+def _coerce_top_k(value: Any) -> int | None:
+    """Coerce a value to int when possible."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(str(value))
+        except (TypeError, ValueError):
+            return None
+
+
+def _safe_get_postprocessors() -> Any | None:
+    """Safely import reranking postprocessor factory."""
+    try:
+        from src.retrieval.reranking import get_postprocessors
+
+        return get_postprocessors
+    except ImportError:
+        return None
+
+
+class _NoOpLLM:
+    """Minimal no-op LLM stub for router defaults."""
+
+    def __init__(self) -> None:
+        self.metadata = type("_MD", (), {"context_window": 2048, "num_output": 256})()
+
+    def predict(self, *_args: Any, **_kwargs: Any) -> str:
+        """Return an empty prediction string."""
+        return ""
+
+    def complete(self, *_args: Any, **_kwargs: Any) -> str:
+        """Return an empty completion string."""
+        return ""
+
+
+def _build_vector_tool(
+    *,
+    vector_index: Any,
+    cfg: Any,
+    get_pp: Any | None,
+    use_rerank_flag: bool,
+    normalized_top_k: int | None,
+    query_engine_tool_cls: Any,
+    tool_metadata_cls: Any,
+) -> Any:
+    """Build the mandatory semantic vector search tool."""
+    try:
+        vector_post = (
+            get_pp("vector", use_reranking=use_rerank_flag, top_n=normalized_top_k)
+            if get_pp is not None
+            else None
+        )
+        vector_engine = build_vector_query_engine(
+            vector_index,
+            vector_post,
+            similarity_top_k=int(getattr(cfg.retrieval, "top_k", 10)),
+        )
+    except (TypeError, AttributeError, ValueError):
+        vector_engine = vector_index.as_query_engine()
+
+    return query_engine_tool_cls(
+        query_engine=vector_engine,
+        metadata=tool_metadata_cls(
+            name="semantic_search",
+            description=(
+                "Semantic vector search over the document corpus. Best for general "
+                "questions and content lookup."
+            ),
+        ),
+    )
+
+
+def _maybe_add_multimodal_tool(
+    *,
+    tools: list[Any],
+    cfg: Any,
+    get_pp: Any | None,
+    use_rerank_flag: bool,
+    normalized_top_k: int | None,
+    retriever_query_engine_cls: Any,
+    query_engine_tool_cls: Any,
+    tool_metadata_cls: Any,
+    the_llm: Any,
+) -> None:
+    """Add multimodal search tool when enabled and available."""
+    try:
+        retrieval_cfg = getattr(cfg, "retrieval", cfg)
+        enable_mm = bool(getattr(retrieval_cfg, "enable_image_retrieval", False))
+    except Exception:  # pragma: no cover - defensive
+        enable_mm = False
+
+    if not enable_mm:
+        return
+    try:
+        from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
+
+        mm_retriever = MultimodalFusionRetriever()
+        mm_post = (
+            get_pp("hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k)
+            if get_pp is not None
+            else None
+        )
+        mm_engine = build_retriever_query_engine(
+            mm_retriever,
+            mm_post,
+            llm=the_llm,
+            response_mode="compact",
+            verbose=False,
+            engine_cls=retriever_query_engine_cls,
+        )
+        tools.append(
+            query_engine_tool_cls(
+                query_engine=mm_engine,
+                metadata=tool_metadata_cls(
+                    name="multimodal_search",
+                    description=(
+                        "Multimodal search (final-release): fuses text "
+                        "hybrid retrieval with visual PDF page-image "
+                        "retrieval (SigLIP). Best for visually rich PDFs "
+                        "(tables/charts/scans) and when user asks "
+                        '"what does that chart show?".'
+                    ),
+                ),
+            )
+        )
+    except (ValueError, TypeError, AttributeError, ImportError) as exc:
+        _warn_once(
+            "multimodal",
+            "Multimodal tool construction skipped",
+            reason=str(exc),
+        )
+
+
+def _maybe_add_hybrid_tool(
+    *,
+    tools: list[Any],
+    cfg: Any,
+    get_pp: Any | None,
+    use_rerank_flag: bool,
+    normalized_top_k: int | None,
+    retriever_query_engine_cls: Any,
+    query_engine_tool_cls: Any,
+    tool_metadata_cls: Any,
+    the_llm: Any,
+) -> None:
+    """Add hybrid search tool when enabled."""
+    try:
+        from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+
+        params = _HybridParams(
+            collection=cfg.database.qdrant_collection,
+            fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
+            prefetch_sparse=int(getattr(cfg.retrieval, "prefetch_sparse_limit", 400)),
+            prefetch_dense=int(getattr(cfg.retrieval, "prefetch_dense_limit", 200)),
+            fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
+            dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
+        )
+        retriever = ServerHybridRetriever(params)
+        hybrid_post = (
+            get_pp("hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k)
+            if get_pp is not None
+            else None
+        )
+        hybrid_engine = build_retriever_query_engine(
+            retriever,
+            hybrid_post,
+            llm=the_llm,
+            response_mode="compact",
+            verbose=False,
+            engine_cls=retriever_query_engine_cls,
+        )
+        tools.append(
+            query_engine_tool_cls(
+                query_engine=hybrid_engine,
+                metadata=tool_metadata_cls(
+                    name="hybrid_search",
+                    description=(
+                        "Hybrid search via Qdrant Query API (dense+sparse fusion)"
+                    ),
+                ),
+            )
+        )
+    except (ValueError, TypeError, AttributeError, ImportError) as exc:
+        _warn_once("hybrid", "Hybrid tool construction skipped", reason=str(exc))
+
+
+def _maybe_add_graph_tool(
+    *,
+    tools: list[Any],
+    cfg: Any,
+    pg_index: Any | None,
+    get_pp: Any | None,
+    use_rerank_flag: bool,
+    normalized_top_k: int | None,
+    query_engine_tool_cls: Any,
+    tool_metadata_cls: Any,
+    the_llm: Any,
+) -> None:
+    """Add GraphRAG tool when enabled and available."""
+    if (
+        pg_index is None
+        or getattr(pg_index, "property_graph_store", None) is None
+        or not (
+            bool(cfg.is_graphrag_enabled())
+            if hasattr(cfg, "is_graphrag_enabled")
+            else bool(getattr(cfg, "enable_graphrag", True))
+        )
+    ):
+        return
+    try:
+        graph_depth = int(
+            getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
+        )
+        graph_top_k = int(getattr(cfg.retrieval, "top_k", 10))
+        graph_post = (
+            get_pp("kg", use_reranking=use_rerank_flag, top_n=normalized_top_k)
+            if get_pp is not None
+            else None
+        )
+        try:
+            artifacts = build_graph_query_engine(
+                pg_index,
+                llm=the_llm,
+                include_text=True,
+                path_depth=graph_depth,
+                similarity_top_k=graph_top_k,
+                node_postprocessors=graph_post,
+            )
+        except TypeError:
+            artifacts = build_graph_query_engine(
+                pg_index,
+                llm=the_llm,
+                include_text=True,
+                path_depth=graph_depth,
+                similarity_top_k=graph_top_k,
+                node_postprocessors=None,
+            )
+        tools.append(
+            query_engine_tool_cls(
+                query_engine=artifacts.query_engine,
+                metadata=tool_metadata_cls(
+                    name="knowledge_graph",
+                    description=(
+                        "Knowledge graph traversal for relationship-centric queries"
+                    ),
+                ),
+            )
+        )
+    except MissingGraphAdapterError as exc:
+        _warn_once("graph", GRAPH_DEPENDENCY_HINT, reason=str(exc))
+    except (ValueError, TypeError, AttributeError, ImportError) as exc:
+        logger.debug("Graph tool construction skipped: %s", exc)
+
+
+def _select_router(
+    *,
+    adapter: LlamaIndexAdapterProtocol,
+    tools: list[Any],
+    the_llm: Any,
+) -> Any:
+    """Instantiate a router query engine for the assembled tools."""
+    selector = adapter.get_pydantic_selector(the_llm)
+    if selector is None:
+        selector = adapter.LLMSingleSelector.from_defaults(llm=the_llm or _NoOpLLM())
+    try:
+        return adapter.RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+            llm=the_llm or _NoOpLLM(),
+        )
+    except TypeError:
+        return adapter.RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+        )
+
+
 def _warn_once(key: str, message: str, *, reason: str) -> None:
     """Emit a warning once, downgrade to debug on subsequent occurrences."""
     if not _WARNING_FLAGS.get(key, False):
@@ -75,26 +357,12 @@ def build_router_engine(
     cfg = settings or default_settings
     adapter = _resolve_adapter(adapter)
 
-    def _coerce_top_k(value: Any) -> int | None:
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            try:
-                return int(str(value))
-            except (TypeError, ValueError):
-                return None
-
     raw_top_k = getattr(getattr(cfg, "retrieval", cfg), "reranking_top_k", None)
     normalized_top_k = _coerce_top_k(raw_top_k)
 
-    router_query_engine_cls = adapter.RouterQueryEngine
     retriever_query_engine_cls = adapter.RetrieverQueryEngine
     query_engine_tool_cls = adapter.QueryEngineTool
     tool_metadata_cls = adapter.ToolMetadata
-    llm_single_selector_cls = adapter.LLMSingleSelector
-    get_pydantic_selector = adapter.get_pydantic_selector
 
     try:
         use_rerank_flag = bool(getattr(cfg.retrieval, "use_reranking", True))
@@ -102,42 +370,18 @@ def build_router_engine(
         use_rerank_flag = True
 
     the_llm = llm if llm is not None else None
-
-    def _safe_get_pp() -> Any | None:
-        try:
-            from src.retrieval.reranking import get_postprocessors
-
-            return get_postprocessors
-        except ImportError:
-            return None
-
-    # Vector tool (always on)
-    get_pp = _safe_get_pp()
-    try:
-        vector_post = (
-            get_pp("vector", use_reranking=use_rerank_flag, top_n=normalized_top_k)
-            if get_pp is not None
-            else None
+    get_pp = _safe_get_postprocessors()
+    tools: list[Any] = [
+        _build_vector_tool(
+            vector_index=vector_index,
+            cfg=cfg,
+            get_pp=get_pp,
+            use_rerank_flag=use_rerank_flag,
+            normalized_top_k=normalized_top_k,
+            query_engine_tool_cls=query_engine_tool_cls,
+            tool_metadata_cls=tool_metadata_cls,
         )
-        vector_engine = build_vector_query_engine(
-            vector_index,
-            vector_post,
-            similarity_top_k=int(getattr(cfg.retrieval, "top_k", 10)),
-        )
-    except (TypeError, AttributeError, ValueError):
-        vector_engine = vector_index.as_query_engine()
-
-    vector_tool = query_engine_tool_cls(
-        query_engine=vector_engine,
-        metadata=tool_metadata_cls(
-            name="semantic_search",
-            description=(
-                "Semantic vector search over the document corpus. Best for general "
-                "questions and content lookup."
-            ),
-        ),
-    )
-    tools: list[Any] = [vector_tool]
+    ]
 
     hybrid_requested = (
         bool(enable_hybrid)
@@ -157,203 +401,44 @@ def build_router_engine(
         kg_requested=kg_requested,
         hybrid_requested=hybrid_requested,
     ) as span:
-        # Optional multimodal tool: fuse text hybrid + image retrieval (SigLIP).
-        try:
-            retrieval_cfg = getattr(cfg, "retrieval", cfg)
-            enable_mm = bool(getattr(retrieval_cfg, "enable_image_retrieval", False))
-        except Exception:  # pragma: no cover - defensive
-            enable_mm = False
+        _maybe_add_multimodal_tool(
+            tools=tools,
+            cfg=cfg,
+            get_pp=get_pp,
+            use_rerank_flag=use_rerank_flag,
+            normalized_top_k=normalized_top_k,
+            retriever_query_engine_cls=retriever_query_engine_cls,
+            query_engine_tool_cls=query_engine_tool_cls,
+            tool_metadata_cls=tool_metadata_cls,
+            the_llm=the_llm,
+        )
 
-        if enable_mm:
-            try:
-                from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
-
-                mm_retriever = MultimodalFusionRetriever()
-                mm_post = (
-                    get_pp(
-                        "hybrid",
-                        use_reranking=use_rerank_flag,
-                        top_n=normalized_top_k,
-                    )
-                    if get_pp is not None
-                    else None
-                )
-                mm_engine = build_retriever_query_engine(
-                    mm_retriever,
-                    mm_post,
-                    llm=the_llm,
-                    response_mode="compact",
-                    verbose=False,
-                    engine_cls=retriever_query_engine_cls,
-                )
-                tools.append(
-                    query_engine_tool_cls(
-                        query_engine=mm_engine,
-                        metadata=tool_metadata_cls(
-                            name="multimodal_search",
-                            description=(
-                                "Multimodal search (final-release): fuses text "
-                                "hybrid retrieval with visual PDF page-image "
-                                "retrieval (SigLIP). Best for visually rich PDFs "
-                                "(tables/charts/scans) and when user asks "
-                                '"what does that chart show?".'
-                            ),
-                        ),
-                    )
-                )
-            except (ValueError, TypeError, AttributeError, ImportError) as exc:
-                _warn_once(
-                    "multimodal",
-                    "Multimodal tool construction skipped",
-                    reason=str(exc),
-                )
-
-        # Optional hybrid tool
         if hybrid_requested:
-            try:
-                from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
-
-                params = _HybridParams(
-                    collection=cfg.database.qdrant_collection,
-                    fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
-                    prefetch_sparse=int(
-                        getattr(cfg.retrieval, "prefetch_sparse_limit", 400)
-                    ),
-                    prefetch_dense=int(
-                        getattr(cfg.retrieval, "prefetch_dense_limit", 200)
-                    ),
-                    fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
-                    dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
-                )
-                retriever = ServerHybridRetriever(params)
-                hybrid_post = (
-                    get_pp(
-                        "hybrid",
-                        use_reranking=use_rerank_flag,
-                        top_n=normalized_top_k,
-                    )
-                    if get_pp is not None
-                    else None
-                )
-                hybrid_engine = build_retriever_query_engine(
-                    retriever,
-                    hybrid_post,
-                    llm=the_llm,
-                    response_mode="compact",
-                    verbose=False,
-                    engine_cls=retriever_query_engine_cls,
-                )
-                tools.append(
-                    query_engine_tool_cls(
-                        query_engine=hybrid_engine,
-                        metadata=tool_metadata_cls(
-                            name="hybrid_search",
-                            description=(
-                                "Hybrid search via Qdrant Query API "
-                                "(dense+sparse fusion)"
-                            ),
-                        ),
-                    )
-                )
-            except (ValueError, TypeError, AttributeError, ImportError) as exc:
-                _warn_once(
-                    "hybrid", "Hybrid tool construction skipped", reason=str(exc)
-                )
-
-        # Optional GraphRAG tool
-        if (
-            pg_index is not None
-            and getattr(pg_index, "property_graph_store", None) is not None
-            and (
-                bool(cfg.is_graphrag_enabled())
-                if hasattr(cfg, "is_graphrag_enabled")
-                else bool(getattr(cfg, "enable_graphrag", True))
+            _maybe_add_hybrid_tool(
+                tools=tools,
+                cfg=cfg,
+                get_pp=get_pp,
+                use_rerank_flag=use_rerank_flag,
+                normalized_top_k=normalized_top_k,
+                retriever_query_engine_cls=retriever_query_engine_cls,
+                query_engine_tool_cls=query_engine_tool_cls,
+                tool_metadata_cls=tool_metadata_cls,
+                the_llm=the_llm,
             )
-        ):
-            try:
-                graph_depth = int(
-                    getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
-                )
-                graph_top_k = int(getattr(cfg.retrieval, "top_k", 10))
 
-                graph_post = (
-                    get_pp(
-                        "kg",
-                        use_reranking=use_rerank_flag,
-                        top_n=normalized_top_k,
-                    )
-                    if get_pp is not None
-                    else None
-                )
+        _maybe_add_graph_tool(
+            tools=tools,
+            cfg=cfg,
+            pg_index=pg_index,
+            get_pp=get_pp,
+            use_rerank_flag=use_rerank_flag,
+            normalized_top_k=normalized_top_k,
+            query_engine_tool_cls=query_engine_tool_cls,
+            tool_metadata_cls=tool_metadata_cls,
+            the_llm=the_llm,
+        )
 
-                try:
-                    artifacts = build_graph_query_engine(
-                        pg_index,
-                        llm=the_llm,
-                        include_text=True,
-                        path_depth=graph_depth,
-                        similarity_top_k=graph_top_k,
-                        node_postprocessors=graph_post,
-                    )
-                except TypeError:
-                    artifacts = build_graph_query_engine(
-                        pg_index,
-                        llm=the_llm,
-                        include_text=True,
-                        path_depth=graph_depth,
-                        similarity_top_k=graph_top_k,
-                        node_postprocessors=None,
-                    )
-                tools.append(
-                    query_engine_tool_cls(
-                        query_engine=artifacts.query_engine,
-                        metadata=tool_metadata_cls(
-                            name="knowledge_graph",
-                            description=(
-                                "Knowledge graph traversal for "
-                                "relationship-centric queries"
-                            ),
-                        ),
-                    )
-                )
-            except MissingGraphAdapterError as exc:
-                _warn_once("graph", GRAPH_DEPENDENCY_HINT, reason=str(exc))
-            except (ValueError, TypeError, AttributeError, ImportError) as exc:
-                logger.debug("Graph tool construction skipped: %s", exc)
-
-        class _NoOpLLM:
-            """Minimal no-op LLM stub for router defaults."""
-
-            def __init__(self) -> None:
-                self.metadata = type(
-                    "_MD", (), {"context_window": 2048, "num_output": 256}
-                )()
-
-            def predict(self, *_args: Any, **_kwargs: Any) -> str:
-                """Return an empty prediction string."""
-                return ""
-
-            def complete(self, *_args: Any, **_kwargs: Any) -> str:
-                """Return an empty completion string."""
-                return ""
-
-        selector = get_pydantic_selector(the_llm)
-        if selector is None:
-            selector = llm_single_selector_cls.from_defaults(llm=the_llm or _NoOpLLM())
-
-        try:
-            router = router_query_engine_cls(
-                selector=selector,
-                query_engine_tools=tools,
-                verbose=False,
-                llm=the_llm or _NoOpLLM(),
-            )
-        except TypeError:
-            router = router_query_engine_cls(
-                selector=selector,
-                query_engine_tools=tools,
-                verbose=False,
-            )
+        router = _select_router(adapter=adapter, tools=tools, the_llm=the_llm)
 
         tool_names: list[str] = []
         for tool in tools:

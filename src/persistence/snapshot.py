@@ -609,6 +609,20 @@ def _hash_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _entries_valid(snapshot_dir: Path, entries: list[dict[str, Any]]) -> bool:
+    """Validate manifest entries against on-disk files and hashes."""
+    for entry in entries:
+        rel = entry.get("path")
+        if not rel:
+            return False
+        target = snapshot_dir / Path(rel)
+        if not target.exists():
+            return False
+        if _hash_file(target) != entry.get("sha256"):
+            return False
+    return True
+
+
 def verify_snapshot(snapshot_dir: Path) -> bool:
     """Verify manifest hashes and payload integrity for a snapshot directory."""
     manifest_path = _manifest_path(snapshot_dir)
@@ -628,15 +642,8 @@ def verify_snapshot(snapshot_dir: Path) -> bool:
     if expected is None:
         return False
 
-    for entry in entries:
-        rel = entry.get("path")
-        if not rel:
-            return False
-        target = snapshot_dir / Path(rel)
-        if not target.exists():
-            return False
-        if _hash_file(target) != entry.get("sha256"):
-            return False
+    if not _entries_valid(snapshot_dir, entries):
+        return False
 
     aggregate = sha256()
     for entry in entries:

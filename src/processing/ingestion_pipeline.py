@@ -4,7 +4,7 @@ This module assembles an :class:`~llama_index.core.ingestion.IngestionPipeline`
 using canonical DocMind configuration objects and returns normalized
 :class:`~src.models.processing.IngestionResult` payloads. It replaces the legacy
 custom DocumentProcessor while leaning entirely on maintained LlamaIndex and
-Unstructured integrations (KISS/library-first).
+Unstructured integrations.
 """
 
 from __future__ import annotations
@@ -31,11 +31,6 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     UnstructuredReader = None  # type: ignore
 
-if TYPE_CHECKING:  # pragma: no cover
-    from llama_index.readers.file import UnstructuredReader as ReaderType
-else:
-    ReaderType = Any
-
 from src.config import settings as app_settings
 from src.config import setup_llamaindex
 from src.config.integrations import get_settings_embed_model
@@ -52,8 +47,10 @@ from src.processing.pdf_pages import save_pdf_page_images
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
+    from llama_index.readers.file import UnstructuredReader as ReaderType
 else:
     BaseEmbedding = Any
+    ReaderType = Any
 
 _TRACER = trace.get_tracer("docmind.ingestion")
 
@@ -129,7 +126,7 @@ def build_ingestion_pipeline(
         extractor = TitleExtractor(show_progress=False)
         transformations.append(extractor)
     except (ImportError, ValueError, RuntimeError) as exc:  # pragma: no cover
-        logger.debug("TitleExtractor unavailable: %s", exc)
+        logger.debug("TitleExtractor unavailable: {}", exc)
 
     if embedding is not None:
         transformations.append(embedding)
@@ -168,7 +165,7 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
         ImportError,
     ) as exc:  # pragma: no cover - defensive
         logger.warning(
-            "Embedding auto-setup failed; continuing without embedding: %s", exc
+            "Embedding auto-setup failed; continuing without embedding: {}", exc
         )
         return get_settings_embed_model()
 
@@ -206,10 +203,10 @@ def _document_from_input(
             ValueError,
             RuntimeError,
         ) as exc:  # pragma: no cover
-            logger.debug("UnstructuredReader failed: %s", exc)
+            logger.debug("UnstructuredReader failed: {}", exc)
             safe_name = Path(item.source_path).name if item.source_path else "<bytes>"
             logger.info(
-                "Falling back to plain-text read for %s (doc_id=%s) due to "
+                "Falling back to plain-text read for {} (doc_id={}) due to "
                 "UnstructuredReader failure",
                 safe_name,
                 item.document_id,
@@ -376,7 +373,7 @@ def _store_image_artifact(
         thumb_ref = store.put_file(Path(thumb_local))
         thumb_path = store.resolve_path(thumb_ref)
     except Exception as exc:
-        logger.debug("Thumbnail generation failed: %s", exc)
+        logger.debug("Thumbnail generation failed: {}", exc)
         thumb_ref = None
         thumb_path = None
     return img_ref, img_path, thumb_ref, thumb_path
@@ -408,7 +405,7 @@ def _build_page_image_records(
                 store, export, settings
             )
         except (OSError, ValueError) as exc:
-            logger.debug("ArtifactStore put failed: %s", exc)
+            logger.debug("ArtifactStore put failed: {}", exc)
             skipped += 1
             continue
 
@@ -443,7 +440,7 @@ def _build_page_image_records(
                 )
             )
         except Exception as exc:  # pragma: no cover
-            logger.debug("PageImageRecord build failed: %s", exc)
+            logger.debug("PageImageRecord build failed: {}", exc)
             skipped += 1
     return records, skipped
 
@@ -557,8 +554,8 @@ def _index_page_images(
             **orchestration,
         }
     except Exception as exc:  # pragma: no cover - fail open
-        logger.info("Image indexing skipped: %s", type(exc).__name__)
-        logger.debug("Image indexing error: %s", exc)
+        logger.info("Image indexing skipped: {}", type(exc).__name__)
+        logger.debug("Image indexing error: {}", exc)
         return {
             "image_index.enabled": True,
             "image_index.indexed": 0,

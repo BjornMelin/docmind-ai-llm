@@ -81,70 +81,12 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
 
     with st.sidebar:
         st.subheader("Sessions")
-        labels = {s.thread_id: s.title for s in sessions}
-        options = [str(s.thread_id) for s in sessions]
-
-        def _format_thread_id(tid: object) -> str:
-            tid_str = str(tid)
-            return str(labels.get(tid_str) or tid_str)
-
-        sel = st.selectbox(
-            "Session",
-            options,
-            format_func=_format_thread_id,
-            index=options.index(active.thread_id) if active.thread_id in options else 0,
-        )
-        if sel != active.thread_id:
-            st.session_state["chat_thread_id"] = sel
-            touch_session(conn, thread_id=sel)
-            with contextlib.suppress(Exception):
-                st.query_params["chat"] = sel
-            with st.spinner("Switching session…"):
-                st.rerun()
-
-        cols = st.columns(2)
-        if cols[0].button("New", use_container_width=True):
-            created = create_session(title="New chat", conn=conn)
-            st.session_state["chat_thread_id"] = created.thread_id
-            with contextlib.suppress(Exception):
-                st.query_params["chat"] = created.thread_id
-            st.rerun()
-
-        confirm_delete = st.checkbox(
-            "Confirm delete (recoverable)", key="delete_confirm"
-        )
-        if cols[1].button(
-            "Delete", use_container_width=True, disabled=not confirm_delete
-        ):
-            soft_delete_session(conn, thread_id=active.thread_id)
-            remaining = list_sessions(conn)
-            if remaining:
-                st.session_state["chat_thread_id"] = remaining[0].thread_id
-            else:
-                st.session_state.pop("chat_thread_id", None)
-            st.session_state.pop("delete_confirm", None)
-            st.rerun()
-
-        new_title = st.text_input("Rename", value=active.title)
-        if new_title and new_title != active.title and st.button("Save name"):
-            rename_session(conn, thread_id=active.thread_id, title=new_title)
-            st.rerun()
-
+        _render_session_selector(active, sessions, conn)
+        _render_new_delete_controls(conn, active)
+        _handle_rename(conn, active)
         st.divider()
         st.caption("Danger zone")
-        confirm_purge = st.checkbox(
-            "I understand this is irreversible", key="purge_confirm"
-        )
-        if st.button(
-            "Purge session (hard delete)",
-            type="primary",
-            disabled=not confirm_purge,
-        ):
-            purge_session(conn, thread_id=active.thread_id)
-            st.session_state.pop("chat_thread_id", None)
-            st.session_state.pop("chat_resume_checkpoint_id", None)
-            st.session_state.pop("purge_confirm", None)
-            st.rerun()
+        _handle_purge(conn, active)
 
     resume = st.session_state.get("chat_resume_checkpoint_id")
     resume_id = str(resume) if resume else None
@@ -155,6 +97,82 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
         user_id=user_id,
         resume_checkpoint_id=resume_id,
     )
+
+
+def _render_session_selector(
+    active: ChatSession,
+    sessions: list[ChatSession],
+    conn: sqlite3.Connection,
+) -> str:
+    """Render the session selector and handle selection changes."""
+    labels = {s.thread_id: s.title for s in sessions}
+    options = [str(s.thread_id) for s in sessions]
+
+    def _format_thread_id(tid: object) -> str:
+        tid_str = str(tid)
+        return str(labels.get(tid_str) or tid_str)
+
+    sel = st.selectbox(
+        "Session",
+        options,
+        format_func=_format_thread_id,
+        index=options.index(active.thread_id) if active.thread_id in options else 0,
+    )
+    if sel != active.thread_id:
+        st.session_state["chat_thread_id"] = sel
+        touch_session(conn, thread_id=sel)
+        with contextlib.suppress(Exception):
+            st.query_params["chat"] = sel
+        with st.spinner("Switching session…"):
+            st.rerun()
+    return sel
+
+
+def _render_new_delete_controls(conn: sqlite3.Connection, active: ChatSession) -> None:
+    """Render new and soft-delete session controls on one row."""
+    cols = st.columns(2)
+    if cols[0].button("New", use_container_width=True):
+        created = create_session(title="New chat", conn=conn)
+        st.session_state["chat_thread_id"] = created.thread_id
+        with contextlib.suppress(Exception):
+            st.query_params["chat"] = created.thread_id
+        st.rerun()
+
+    confirm_delete = st.checkbox("Confirm delete (recoverable)", key="delete_confirm")
+    if cols[1].button("Delete", use_container_width=True, disabled=not confirm_delete):
+        soft_delete_session(conn, thread_id=active.thread_id)
+        remaining = list_sessions(conn)
+        if remaining:
+            st.session_state["chat_thread_id"] = remaining[0].thread_id
+        else:
+            st.session_state.pop("chat_thread_id", None)
+        st.session_state.pop("delete_confirm", None)
+        st.rerun()
+
+
+def _handle_rename(conn: sqlite3.Connection, active: ChatSession) -> None:
+    """Render the rename control for the active session."""
+    new_title = st.text_input("Rename", value=active.title)
+    if new_title and new_title != active.title and st.button("Save name"):
+        rename_session(conn, thread_id=active.thread_id, title=new_title)
+        st.rerun()
+
+
+def _handle_purge(conn: sqlite3.Connection, active: ChatSession) -> None:
+    """Render the irreversible purge control."""
+    confirm_purge = st.checkbox(
+        "I understand this is irreversible", key="purge_confirm"
+    )
+    if st.button(
+        "Purge session (hard delete)",
+        type="primary",
+        disabled=not confirm_purge,
+    ):
+        purge_session(conn, thread_id=active.thread_id)
+        st.session_state.pop("chat_thread_id", None)
+        st.session_state.pop("chat_resume_checkpoint_id", None)
+        st.session_state.pop("purge_confirm", None)
+        st.rerun()
 
 
 def render_time_travel_sidebar(*, checkpoints: list[dict[str, object]]) -> None:

@@ -477,6 +477,7 @@ class CoverageAnalyzer:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for coverage checks."""
     parser = argparse.ArgumentParser(
         description="Check coverage thresholds for DocMind AI",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -530,6 +531,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _configure_logging(verbose: bool) -> None:
+    """Configure logging verbosity for the CLI."""
     log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=log_level, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -539,6 +541,7 @@ def _configure_logging(verbose: bool) -> None:
 def _handle_new_code_coverage(
     analyzer: CoverageAnalyzer, args: argparse.Namespace
 ) -> int:
+    """Evaluate and report new-code coverage results."""
     new_code_result = analyzer.check_new_code_coverage(args.diff_from)
     status = new_code_result["status"]
     if status == "error":
@@ -552,10 +555,7 @@ def _handle_new_code_coverage(
     percent = new_code_result["overall_percent"]
     threshold = new_code_result["threshold"]
     status_icon = "✅" if meets_threshold else "❌"
-    print(
-        f"{status_icon} New code coverage: {percent:.1f}% "
-        f"(threshold: {threshold}%)"
-    )
+    print(f"{status_icon} New code coverage: {percent:.1f}% (threshold: {threshold}%)")
     if meets_threshold or not args.fail_under:
         return 0
     return 1
@@ -564,6 +564,7 @@ def _handle_new_code_coverage(
 def _handle_overall_coverage(
     analyzer: CoverageAnalyzer, args: argparse.Namespace
 ) -> int:
+    """Evaluate and report overall coverage results."""
     overall_result = analyzer.check_overall_coverage()
     if overall_result["status"] == "error":
         print(f"❌ {overall_result['message']}")
@@ -593,6 +594,7 @@ def _handle_overall_coverage(
 
 
 def _render_reports(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> None:
+    """Emit optional text/HTML coverage reports."""
     if args.report:
         report = analyzer.generate_coverage_report(detailed=True)
         print("\n" + report)
@@ -604,6 +606,7 @@ def _render_reports(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> Non
 
 
 def _report_failures_and_warnings(analyzer: CoverageAnalyzer) -> int:
+    """Print failures and warnings, returning an exit code."""
     exit_code = 0
     if analyzer.failures:
         print("\n❌ FAILURES:")
@@ -618,6 +621,7 @@ def _report_failures_and_warnings(analyzer: CoverageAnalyzer) -> int:
 
 
 def _run_coverage_checks(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> int:
+    """Run coverage collection and checks based on CLI args."""
     if args.collect and not analyzer.run_coverage_collection():
         print("❌ Coverage collection failed")
         return 2

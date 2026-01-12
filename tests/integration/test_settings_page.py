@@ -146,16 +146,9 @@ def test_settings_allow_remote_allows_remote_urls(settings_app_test: AppTest) ->
     assert not list(app.error)
 
 
-def test_settings_toggle_providers_and_apply(
-    settings_app_test: AppTest, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Toggle each provider and Apply runtime, asserting LLM kind per provider.
+def _install_llm_stubs(monkeypatch: pytest.MonkeyPatch):
+    """Install stub LLM classes and return the factory builder."""
 
-    Stubs provider adapters to deterministic classes with a 'kind' attribute
-    so we can assert which path the factory used.
-    """
-
-    # Stub OpenAILike / Ollama / LlamaCPP
     class _OLike:
         def __init__(self, *_, **__):
             self.kind = "openai_like"
@@ -181,13 +174,11 @@ def test_settings_toggle_providers_and_apply(
     monkeypatch.setitem(_sys.modules, "llama_index.llms.ollama", ollama_mod)
     monkeypatch.setitem(_sys.modules, "llama_index.llms.llama_cpp", llama_cpp_mod)
 
-    # Stub factory to avoid import complexity; return deterministic kind per backend
     def _mk_llm(settings) -> object:  # type: ignore[override]
         mapping = {
             "ollama": _Ollama,
             "vllm": _OLike,
             "lmstudio": _OLike,
-            # Prefer positive condition for readability
             "llamacpp": _OLike
             if getattr(settings, "llamacpp_base_url", None)
             else _LCpp,
@@ -196,16 +187,20 @@ def test_settings_toggle_providers_and_apply(
         return cls()
 
     monkeypatch.setattr("src.config.llm_factory.build_llm", _mk_llm, raising=False)
-    # Make integrations lightweight: no-op env, direct LISettings.llm set
+    return _mk_llm
+
+
+def _configure_integrations(monkeypatch: pytest.MonkeyPatch, mk_llm) -> None:
+    """Make integrations lightweight with deterministic LLM binding."""
     from llama_index.core import Settings as LISettings
 
     def _setup_llamaindex(
         *, force_llm: bool = False, force_embed: bool = False
     ) -> None:
         del force_llm, force_embed
-        from src.config.settings import settings as _settings  # local import
+        from src.config.settings import settings as _settings
 
-        LISettings.llm = _mk_llm(_settings)
+        LISettings.llm = mk_llm(_settings)
 
     monkeypatch.setattr(
         "src.config.integrations.setup_llamaindex", _setup_llamaindex, raising=False
@@ -214,104 +209,147 @@ def test_settings_toggle_providers_and_apply(
         "src.config.integrations.setup_vllm_env", lambda: None, raising=False
     )
 
-    # Stub heavy embedding class to avoid model loads during Apply runtime
+
+def _stub_heavy_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub heavy embedding dependencies used during Apply runtime."""
+
     class _DummyEmbed:
         def __init__(self, *_, **__):
             self.kind = "embed_dummy"
 
     monkeypatch.setattr(
-        # Patch hybrid retriever class to avoid heavy deps during Apply runtime
         "src.retrieval.hybrid.ServerHybridRetriever",
         _DummyEmbed,
         raising=False,
     )
 
-    # Ensure a local GGUF path exists for llama.cpp local mode validation.
-    # This creates a minimal stub file (not a valid GGUF model); the test only
-    # relies on the file's presence/path, not on actually loading the model.
+
+def _ensure_gguf_file() -> Path:
+    """Create a stub GGUF file for llama.cpp local validation."""
     gguf_path = Path("model.gguf")
     gguf_path.write_text("dummy", encoding="utf-8")
+    return gguf_path
 
-    app = settings_app_test.run()
-    assert not app.exception
 
-    # Allow the temp cwd as an additional base dir for GGUF validation.
-    app.session_state["docmind_allowed_gguf_base_dirs"] = [str(Path.cwd())]
-
-    # Find provider selectbox
+def _find_provider_select(app: AppTest):
+    """Return the provider selectbox widget."""
     providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
     assert providers, "Provider selectbox not found"
-    provider_sel = providers[0]
+    return providers[0]
 
-    # Helpers
-    def _click_apply() -> None:
-        btns = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
-        assert btns, "Apply runtime button not found"
-        btns[0].click().run()
-        # Fallback: if global LISettings.llm not set by UI click, set via integrator
-        from llama_index.core import Settings as LISettings  # local import
 
-        from src.config.integrations import initialize_integrations as _init
+def _set_text(app: AppTest, label: str, value: str) -> None:
+    """Set a text input by label if present."""
+    fields = [w for w in app.text_input if label in str(w)]
+    if fields:
+        fields[0].set_value(value).run()
 
-        if getattr(LISettings, "llm", None) is None:
-            _init(force_llm=True, force_embed=False)
 
-    def _set_text(label: str, value: str) -> None:
-        fields = [w for w in app.text_input if label in str(w)]
-        if fields:
-            fields[0].set_value(value).run()
+def _click_apply(app: AppTest) -> None:
+    """Click Apply runtime and ensure LISettings.llm is bound."""
+    btns = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
+    assert btns, "Apply runtime button not found"
+    btns[0].click().run()
+    from llama_index.core import Settings as LISettings
 
-    # 1) Ollama
-    provider_sel.select("ollama").run()
-    _set_text("Ollama base URL", "http://localhost:11434")
-    _set_text("Model (id or GGUF path)", "test-ollama")
-    _click_apply()
-    from src.config.settings import settings as _settings  # lazy import here
+    from src.config.integrations import initialize_integrations as _init
 
-    assert _settings.llm_backend == "ollama"
+    if getattr(LISettings, "llm", None) is None:
+        _init(force_llm=True, force_embed=False)
 
-    # 2) vLLM (re-run page to refresh widget state)
+
+def _apply_provider(
+    settings_app_test: AppTest,
+    *,
+    provider: str,
+    inputs: dict[str, str],
+    allow_gguf_base: bool = False,
+) -> None:
+    """Select a provider, set inputs, and apply runtime."""
     app = settings_app_test.run()
-    providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
-    provider_sel = providers[0]
-    provider_sel.select("vllm").run()
-    _set_text("vLLM base URL", "http://localhost:8000")
-    _set_text("Model (id or GGUF path)", "test-vllm")
-    _click_apply()
-    assert _settings.llm_backend == "vllm"
+    assert not app.exception
+    if allow_gguf_base:
+        app.session_state["docmind_allowed_gguf_base_dirs"] = [str(Path.cwd())]
+    provider_sel = _find_provider_select(app)
+    provider_sel.select(provider).run()
+    for label, value in inputs.items():
+        _set_text(app, label, value)
+    _click_apply(app)
 
-    # 3) LM Studio (refresh page)
-    app = settings_app_test.run()
-    providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
-    provider_sel = providers[0]
-    provider_sel.select("lmstudio").run()
-    _set_text("LM Studio base URL", "http://localhost:1234/v1")
-    _set_text("Model (id or GGUF path)", "test-lms")
-    _click_apply()
-    assert _settings.llm_backend == "lmstudio"
 
-    # 4) llama.cpp server path → OpenAILike (refresh page)
-    app = settings_app_test.run()
-    providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
-    provider_sel = providers[0]
-    provider_sel.select("llamacpp").run()
-    _set_text("llama.cpp server URL (optional)", "http://localhost:8080/v1")
-    _set_text("Model (id or GGUF path)", "ignored-for-server")
-    _click_apply()
-    assert _settings.llm_backend == "llamacpp"
-
-    # 5) llama.cpp local path → LlamaCPP (refresh page)
-    app = settings_app_test.run()
-    providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
-    provider_sel = providers[0]
-    provider_sel.select("llamacpp").run()
-    _set_text("llama.cpp server URL (optional)", "")
-    _set_text("GGUF model path (LlamaCPP local)", str(gguf_path))
-    _click_apply()
-    assert _settings.llm_backend == "llamacpp"
-
-    # Restore global settings to defaults to avoid cross-test pollution
+def _reset_settings_defaults() -> None:
+    """Reset global settings to defaults to avoid cross-test pollution."""
     import importlib
 
     settings_mod = importlib.import_module("src.config.settings")
     settings_mod.settings = settings_mod.DocMindSettings()  # type: ignore[attr-defined]
+
+
+def test_settings_toggle_providers_and_apply(
+    settings_app_test: AppTest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Toggle each provider and Apply runtime, asserting LLM kind per provider.
+
+    Stubs provider adapters to deterministic classes with a 'kind' attribute
+    so we can assert which path the factory used.
+    """
+    mk_llm = _install_llm_stubs(monkeypatch)
+    _configure_integrations(monkeypatch, mk_llm)
+    _stub_heavy_embeddings(monkeypatch)
+    gguf_path = _ensure_gguf_file()
+
+    _apply_provider(
+        settings_app_test,
+        provider="ollama",
+        inputs={
+            "Ollama base URL": "http://localhost:11434",
+            "Model (id or GGUF path)": "test-ollama",
+        },
+        allow_gguf_base=True,
+    )
+    from src.config.settings import settings as _settings
+
+    assert _settings.llm_backend == "ollama"
+
+    _apply_provider(
+        settings_app_test,
+        provider="vllm",
+        inputs={
+            "vLLM base URL": "http://localhost:8000",
+            "Model (id or GGUF path)": "test-vllm",
+        },
+    )
+    assert _settings.llm_backend == "vllm"
+
+    _apply_provider(
+        settings_app_test,
+        provider="lmstudio",
+        inputs={
+            "LM Studio base URL": "http://localhost:1234/v1",
+            "Model (id or GGUF path)": "test-lms",
+        },
+    )
+    assert _settings.llm_backend == "lmstudio"
+
+    _apply_provider(
+        settings_app_test,
+        provider="llamacpp",
+        inputs={
+            "llama.cpp server URL (optional)": "http://localhost:8080/v1",
+            "Model (id or GGUF path)": "ignored-for-server",
+        },
+    )
+    assert _settings.llm_backend == "llamacpp"
+
+    _apply_provider(
+        settings_app_test,
+        provider="llamacpp",
+        inputs={
+            "llama.cpp server URL (optional)": "",
+            "GGUF model path (LlamaCPP local)": str(gguf_path),
+        },
+        allow_gguf_base=True,
+    )
+    assert _settings.llm_backend == "llamacpp"
+
+    _reset_settings_defaults()

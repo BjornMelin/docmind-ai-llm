@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PurePath
+from typing import Any
 
 import streamlit as st
 from pydantic import ValidationError
@@ -69,16 +70,8 @@ def _validate_candidate(
 _GGUF_PATH_PATTERN = re.compile(r"^[A-Za-z0-9._ \-~/\\\\:]+$")
 
 
-def resolve_valid_gguf_path(path_text: str) -> Path | None:
-    """Resolve and validate a GGUF model path.
-
-    Security: resolve once and enforce that the resolved path lives within one
-    of the allowed base directories (default: the current user home directory).
-
-    WARNING: This function is best-effort pre-validation only. Callers MUST
-    treat any subsequent file operations as untrusted and handle failures
-    defensively (including TOCTOU races, permission errors, and IO errors).
-    """
+def _clean_gguf_path_text(path_text: str) -> str | None:
+    """Validate and normalize raw GGUF path input."""
     clean = (path_text or "").strip()
     if not clean:
         return None
@@ -90,7 +83,11 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
         or _GGUF_PATH_PATTERN.fullmatch(clean) is None
     ):
         return None
+    return clean
 
+
+def _resolve_allowed_gguf_bases() -> list[Path]:
+    """Resolve allowed base directories for GGUF paths."""
     home_dir = Path.home()
     try:
         home_dir_resolved = home_dir.expanduser().resolve(strict=False)
@@ -114,21 +111,24 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
         except (OSError, RuntimeError, ValueError):
             continue
         base_dirs.append(base_dir)
+    return base_dirs
 
-    if not base_dirs:
-        return None
 
+def _build_gguf_candidates(
+    clean: str, base_dirs: list[Path], home_dir_resolved: Path
+) -> list[tuple[Path, Path]]:
+    """Construct candidate GGUF paths under allowed bases."""
     raw_text = clean
     base_override: Path | None = None
     if clean.startswith("~/"):
         raw_text = clean[2:]
         if not raw_text:
-            return None
+            return []
         base_override = home_dir_resolved
 
     raw = PurePath(raw_text)
     if any(part == ".." for part in raw.parts):
-        return None
+        return []
 
     candidates: list[tuple[Path, Path]] = []
     if raw.is_absolute() and base_override is None:
@@ -136,39 +136,72 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
             if raw.is_relative_to(base_dir):
                 candidates.append((base_dir, Path(raw)))
                 break
-        if not candidates:
-            return None
-    else:
-        for base_dir in base_dirs:
-            if base_override is not None and base_dir != base_override:
-                continue
-            candidates.append((base_dir, base_dir / raw))
+        return candidates
 
+    for base_dir in base_dirs:
+        if base_override is not None and base_dir != base_override:
+            continue
+        candidates.append((base_dir, base_dir / raw))
+    return candidates
+
+
+def _is_valid_gguf_candidate(base_dir: Path, candidate: Path) -> Path | None:
+    """Return a resolved GGUF path if candidate passes safety checks."""
+    stop_at = base_dir
+    symlink_found = False
+    reached_base = False
+    for part in (candidate, *candidate.parents):
+        if part.is_symlink():
+            symlink_found = True
+            break
+        if part == stop_at:
+            reached_base = True
+            break
+    if symlink_found or not reached_base:
+        return None
+
+    try:
+        resolved = candidate.resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    try:
+        resolved.relative_to(base_dir)
+    except ValueError:
+        return None
+    if resolved.is_file() and resolved.suffix.lower() == ".gguf":
+        return resolved
+    return None
+
+
+def resolve_valid_gguf_path(path_text: str) -> Path | None:
+    """Resolve and validate a GGUF model path.
+
+    Security: resolve once and enforce that the resolved path lives within one
+    of the allowed base directories (default: the current user home directory).
+
+    WARNING: This function is best-effort pre-validation only. Callers MUST
+    treat any subsequent file operations as untrusted and handle failures
+    defensively (including TOCTOU races, permission errors, and IO errors).
+    """
+    clean = _clean_gguf_path_text(path_text)
+    if clean is None:
+        return None
+
+    base_dirs = _resolve_allowed_gguf_bases()
+    if not base_dirs:
+        return None
+
+    home_dir = Path.home()
+    try:
+        home_dir_resolved = home_dir.expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        home_dir_resolved = home_dir
+
+    candidates = _build_gguf_candidates(clean, base_dirs, home_dir_resolved)
     for base_dir, candidate in candidates:
-        stop_at = base_dir
-        symlink_found = False
-        reached_base = False
-        for part in (candidate, *candidate.parents):
-            if part.is_symlink():
-                symlink_found = True
-                break
-            if part == stop_at:
-                reached_base = True
-                break
-        if symlink_found or not reached_base:
-            continue
-
-        try:
-            resolved = candidate.resolve(strict=False)
-        except (OSError, RuntimeError, ValueError):
-            continue
-        try:
-            resolved.relative_to(base_dir)
-        except ValueError:
-            continue
-        if resolved.is_file() and resolved.suffix.lower() == ".gguf":
+        resolved = _is_valid_gguf_candidate(base_dir, candidate)
+        if resolved is not None:
             return resolved
-
     return None
 
 
@@ -272,39 +305,87 @@ def main() -> None:
 
     # Show badge
     provider_badge(settings)
+    provider = _render_provider_section()
+    model, context_window, timeout_s, use_gpu = _render_model_section()
+    ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls()
+    gguf_path = _render_gguf_path()
+    allow_remote = _render_security_section()
+    rrf_k, t_text, t_siglip, t_colpali, t_total = _render_retrieval_section()
+    _render_graphrag_section()
 
+    ui_errors, resolved_gguf_path = _validate_gguf_inputs(
+        provider, llamacpp_url, gguf_path
+    )
+    values = {
+        "provider": provider,
+        "model": model,
+        "context_window": context_window,
+        "ollama_url": ollama_url,
+        "vllm_url": vllm_url,
+        "lmstudio_url": lmstudio_url,
+        "llamacpp_url": llamacpp_url,
+        "timeout_s": timeout_s,
+        "use_gpu": use_gpu,
+        "allow_remote": allow_remote,
+        "rrf_k": rrf_k,
+        "t_text": t_text,
+        "t_siglip": t_siglip,
+        "t_colpali": t_colpali,
+        "t_total": t_total,
+    }
+    candidate = _build_candidate_settings(values, resolved_gguf_path)
+    validated, validation_errors = _validate_candidate(candidate)
+    _render_resolved_base_url(validated)
+    _render_validation(ui_errors, validation_errors)
+    _render_actions(validated, ui_errors)
+    _render_cache_controls()
+
+
+def _render_provider_section() -> str:
+    """Render provider selector and return selection."""
     st.subheader("Provider")
-    provider = st.selectbox(
+    return st.selectbox(
         "LLM Provider",
         options=["ollama", "vllm", "lmstudio", "llamacpp"],
         index=(["ollama", "vllm", "lmstudio", "llamacpp"].index(settings.llm_backend)),
         help="Select the active LLM backend",
     )
 
+
+def _render_model_section() -> tuple[str, int, int, bool]:
+    """Render model/context inputs and return values."""
     st.subheader("Model & Context")
     model = st.text_input(
         "Model (id or GGUF path)",
         value=(settings.model or settings.vllm.model),
         help=("Model identifier (Ollama/vLLM/LM Studio) or GGUF path (LlamaCPP)"),
     )
-    context_window = st.number_input(
-        "Context window",
-        min_value=1024,
-        max_value=200_000,
-        value=int(settings.context_window or settings.vllm.context_window),
-        step=1024,
+    context_window = int(
+        st.number_input(
+            "Context window",
+            min_value=1024,
+            max_value=200_000,
+            value=int(settings.context_window or settings.vllm.context_window),
+            step=1024,
+        )
     )
-    timeout_s = st.number_input(
-        "Request timeout (seconds)",
-        min_value=5,
-        max_value=600,
-        value=int(settings.llm_request_timeout_seconds),
+    timeout_s = int(
+        st.number_input(
+            "Request timeout (seconds)",
+            min_value=5,
+            max_value=600,
+            value=int(settings.llm_request_timeout_seconds),
+        )
     )
     use_gpu = st.checkbox(
         "Enable GPU acceleration",
         value=bool(settings.enable_gpu_acceleration),
     )
+    return model, context_window, timeout_s, use_gpu
 
+
+def _render_provider_urls() -> tuple[str, str, str, str]:
+    """Render provider URL inputs and return values."""
     st.subheader("Provider URLs")
     col1, col2 = st.columns(2)
     with col1:
@@ -328,12 +409,19 @@ def main() -> None:
             value=(settings.llamacpp_base_url or ""),
             placeholder="http://localhost:8080/v1",
         )
+    return ollama_url, vllm_url, lmstudio_url, llamacpp_url
 
-    gguf_path = st.text_input(
+
+def _render_gguf_path() -> str:
+    """Render GGUF path input and return value."""
+    return st.text_input(
         "GGUF model path (LlamaCPP local)",
         value=str(settings.vllm.llamacpp_model_path),
     )
 
+
+def _render_security_section() -> bool:
+    """Render security controls and return allow-remote setting."""
     st.subheader("Security")
     allow_remote = st.checkbox(
         "Allow remote endpoints",
@@ -351,8 +439,11 @@ def main() -> None:
         value=str(len(settings.security.endpoint_allowlist)),
         disabled=True,
     )
+    return allow_remote
 
-    # Retrieval settings (expose minimal toggles; no IO on import)
+
+def _render_retrieval_section() -> tuple[int, int, int, int, int]:
+    """Render retrieval policy inputs and return values."""
     st.subheader("Retrieval (Policy)")
     st.caption("Server-side hybrid and fusion are managed by environment policy")
     st.text_input(
@@ -365,52 +456,61 @@ def main() -> None:
         value=str(getattr(settings.retrieval, "fusion_mode", "rrf")),
         disabled=True,
     )
-    # Reranking remains displayed as read-only policy
     use_rerank = bool(getattr(settings.retrieval, "use_reranking", True))
     st.text_input("Reranking enabled", value=str(use_rerank), disabled=True)
-    rrf_k = st.number_input(
-        "RRF k-constant",
-        min_value=1,
-        max_value=256,
-        value=int(getattr(settings.retrieval, "rrf_k", 60)),
+    rrf_k = int(
+        st.number_input(
+            "RRF k-constant",
+            min_value=1,
+            max_value=256,
+            value=int(getattr(settings.retrieval, "rrf_k", 60)),
+        )
     )
     col1t, col2t, col3t, col4t = st.columns(4)
     with col1t:
-        t_text = st.number_input(
-            "Text rerank timeout (ms)",
-            min_value=50,
-            max_value=5000,
-            value=int(getattr(settings.retrieval, "text_rerank_timeout_ms", 250)),
+        t_text = int(
+            st.number_input(
+                "Text rerank timeout (ms)",
+                min_value=50,
+                max_value=5000,
+                value=int(getattr(settings.retrieval, "text_rerank_timeout_ms", 250)),
+            )
         )
     with col2t:
-        t_siglip = st.number_input(
-            "SigLIP timeout (ms)",
-            min_value=25,
-            max_value=5000,
-            value=int(getattr(settings.retrieval, "siglip_timeout_ms", 150)),
+        t_siglip = int(
+            st.number_input(
+                "SigLIP timeout (ms)",
+                min_value=25,
+                max_value=5000,
+                value=int(getattr(settings.retrieval, "siglip_timeout_ms", 150)),
+            )
         )
     with col3t:
-        t_colpali = st.number_input(
-            "ColPali timeout (ms)",
-            min_value=25,
-            max_value=10000,
-            value=int(getattr(settings.retrieval, "colpali_timeout_ms", 400)),
+        t_colpali = int(
+            st.number_input(
+                "ColPali timeout (ms)",
+                min_value=25,
+                max_value=10000,
+                value=int(getattr(settings.retrieval, "colpali_timeout_ms", 400)),
+            )
         )
     with col4t:
-        t_total = st.number_input(
-            "Total rerank budget (ms)",
-            min_value=100,
-            max_value=20000,
-            value=int(getattr(settings.retrieval, "total_rerank_budget_ms", 800)),
+        t_total = int(
+            st.number_input(
+                "Total rerank budget (ms)",
+                min_value=100,
+                max_value=20000,
+                value=int(getattr(settings.retrieval, "total_rerank_budget_ms", 800)),
+            )
         )
+    return rrf_k, t_text, t_siglip, t_colpali, t_total
 
+
+def _render_graphrag_section() -> None:
+    """Render GraphRAG status section."""
     st.subheader("GraphRAG")
     supports, adapter_name, hint = get_default_adapter_health()
-    st.text_input(
-        "Adapter",
-        value=adapter_name,
-        disabled=True,
-    )
+    st.text_input("Adapter", value=adapter_name, disabled=True)
     st.text_input(
         "GraphRAG status",
         value="enabled" if supports else "disabled",
@@ -419,39 +519,45 @@ def main() -> None:
     if not supports:
         st.info(hint)
 
-    ui_errors: list[str] = []
 
+def _validate_gguf_inputs(
+    provider: str, llamacpp_url: str, gguf_path: str
+) -> tuple[list[str], Path | None]:
+    """Validate GGUF path inputs for llama.cpp settings."""
+    ui_errors: list[str] = []
     clean_llamacpp_url = (llamacpp_url or "").strip()
     clean_gguf_path = (gguf_path or "").strip()
-
     is_llamacpp = provider == "llamacpp"
     resolved_gguf_path = resolve_valid_gguf_path(clean_gguf_path)
     gguf_missing_for_local = not clean_llamacpp_url and not clean_gguf_path
-
     if is_llamacpp and (resolved_gguf_path is None) and (not gguf_missing_for_local):
         ui_errors.append(
             "Invalid GGUF model path. File must exist, have a .gguf extension, "
             "and be under the allowed base directories."
         )
-
     if is_llamacpp and gguf_missing_for_local:
         ui_errors.append(
             "Provide either a llama.cpp base URL or a local GGUF model path."
         )
+    return ui_errors, resolved_gguf_path
 
-    # NOTE: The settings UI intentionally validates only the values it edits.
-    # Missing sections are populated from DocMindSettings defaults, so this form
-    # does not act as a full-validator for unrelated config blocks.
-    candidate = {
+
+def _build_candidate_settings(
+    values: dict[str, Any], resolved_gguf_path: Path | None
+) -> dict[str, Any]:
+    """Build a settings payload for validation."""
+    provider = str(values.get("provider", ""))
+    is_llamacpp = provider == "llamacpp"
+    return {
         "llm_backend": provider,
-        "model": model.strip() or None,
-        "context_window": int(context_window),
-        "ollama_base_url": ollama_url.strip(),
-        "vllm_base_url": vllm_url.strip() or None,
-        "lmstudio_base_url": lmstudio_url.strip(),
-        "llamacpp_base_url": clean_llamacpp_url or None,
-        "llm_request_timeout_seconds": int(timeout_s),
-        "enable_gpu_acceleration": bool(use_gpu),
+        "model": str(values.get("model", "")).strip() or None,
+        "context_window": int(values.get("context_window", 0)),
+        "ollama_base_url": str(values.get("ollama_url", "")).strip(),
+        "vllm_base_url": str(values.get("vllm_url", "")).strip() or None,
+        "lmstudio_base_url": str(values.get("lmstudio_url", "")).strip(),
+        "llamacpp_base_url": str(values.get("llamacpp_url", "")).strip() or None,
+        "llm_request_timeout_seconds": int(values.get("timeout_s", 0)),
+        "enable_gpu_acceleration": bool(values.get("use_gpu", False)),
         "vllm": {
             "llamacpp_model_path": (
                 str(resolved_gguf_path)
@@ -460,38 +566,42 @@ def main() -> None:
             )
         },
         "security": {
-            "allow_remote_endpoints": bool(allow_remote),
+            "allow_remote_endpoints": bool(values.get("allow_remote", False)),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
             "trust_remote_code": bool(settings.security.trust_remote_code),
         },
         "retrieval": {
-            "rrf_k": int(rrf_k),
-            "text_rerank_timeout_ms": int(t_text),
-            "siglip_timeout_ms": int(t_siglip),
-            "colpali_timeout_ms": int(t_colpali),
-            "total_rerank_budget_ms": int(t_total),
+            "rrf_k": int(values.get("rrf_k", 0)),
+            "text_rerank_timeout_ms": int(values.get("t_text", 0)),
+            "siglip_timeout_ms": int(values.get("t_siglip", 0)),
+            "colpali_timeout_ms": int(values.get("t_colpali", 0)),
+            "total_rerank_budget_ms": int(values.get("t_total", 0)),
         },
     }
-    validated, validation_errors = _validate_candidate(candidate)
 
+
+def _render_resolved_base_url(validated: DocMindSettings | None) -> None:
+    """Render the normalized backend base URL."""
     resolved_base_url = (
         str(getattr(validated, "backend_base_url_normalized", ""))
         if validated is not None
         else str(getattr(settings, "backend_base_url_normalized", ""))
     )
     st.caption("Resolved backend base URL (normalized)")
-    st.text_input(
-        "Resolved base URL",
-        value=resolved_base_url,
-        disabled=True,
-    )
+    st.text_input("Resolved base URL", value=resolved_base_url, disabled=True)
 
-    if ui_errors or validation_errors:
-        st.subheader("Validation")
-        for msg in ui_errors + validation_errors:
-            st.error(msg)
 
-    # Actions
+def _render_validation(ui_errors: list[str], validation_errors: list[str]) -> None:
+    """Render validation errors in the UI."""
+    if not ui_errors and not validation_errors:
+        return
+    st.subheader("Validation")
+    for msg in ui_errors + validation_errors:
+        st.error(msg)
+
+
+def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> None:
+    """Render apply/save actions based on validation status."""
     actions_disabled = validated is None or bool(ui_errors)
     col_a, col_b = st.columns(2)
     with col_a:
@@ -510,56 +620,60 @@ def main() -> None:
             if validated is None:  # pragma: no cover - defensive
                 st.error("Cannot save: invalid settings.")
             else:
-                context_window_value = (
-                    validated.context_window
-                    if validated.context_window is not None
-                    else validated.vllm.context_window
-                )
-                env_map = {
-                    "DOCMIND_LLM_BACKEND": validated.llm_backend,
-                    "DOCMIND_MODEL": (validated.model or ""),
-                    "DOCMIND_CONTEXT_WINDOW": str(int(context_window_value)),
-                    "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(
-                        int(validated.llm_request_timeout_seconds)
-                    ),
-                    "DOCMIND_ENABLE_GPU_ACCELERATION": (
-                        "true" if validated.enable_gpu_acceleration else "false"
-                    ),
-                    "DOCMIND_OLLAMA_BASE_URL": validated.ollama_base_url,
-                    "DOCMIND_VLLM_BASE_URL": (validated.vllm_base_url or ""),
-                    "DOCMIND_LMSTUDIO_BASE_URL": validated.lmstudio_base_url,
-                    "DOCMIND_LLAMACPP_BASE_URL": (validated.llamacpp_base_url or ""),
-                    # nested path override
-                    "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": str(
-                        validated.vllm.llamacpp_model_path
-                    ),
-                    "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
-                        "true" if validated.security.allow_remote_endpoints else "false"
-                    ),
-                    # Retrieval policy is configured via env; read-only here
-                    "DOCMIND_RETRIEVAL__RRF_K": str(int(validated.retrieval.rrf_k)),
-                    "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(
-                        int(validated.retrieval.text_rerank_timeout_ms)
-                    ),
-                    "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(
-                        int(validated.retrieval.siglip_timeout_ms)
-                    ),
-                    "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(
-                        int(validated.retrieval.colpali_timeout_ms)
-                    ),
-                    "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(
-                        int(validated.retrieval.total_rerank_budget_ms)
-                    ),
-                }
-                try:
-                    persist_env(env_map)
-                except (ValueError, OSError, RuntimeError) as exc:
-                    key = getattr(exc, "key", "")
-                    suffix = f" (key={key})" if key else ""
-                    st.error(f"Failed to write .env{suffix}: {exc}")
-                else:
-                    st.success("Saved to .env")
+                _persist_env_from_validated(validated)
 
+
+def _persist_env_from_validated(validated: DocMindSettings) -> None:
+    """Persist validated settings to the .env file."""
+    context_window_value = (
+        validated.context_window
+        if validated.context_window is not None
+        else validated.vllm.context_window
+    )
+    env_map = {
+        "DOCMIND_LLM_BACKEND": validated.llm_backend,
+        "DOCMIND_MODEL": (validated.model or ""),
+        "DOCMIND_CONTEXT_WINDOW": str(int(context_window_value)),
+        "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(
+            int(validated.llm_request_timeout_seconds)
+        ),
+        "DOCMIND_ENABLE_GPU_ACCELERATION": (
+            "true" if validated.enable_gpu_acceleration else "false"
+        ),
+        "DOCMIND_OLLAMA_BASE_URL": validated.ollama_base_url,
+        "DOCMIND_VLLM_BASE_URL": (validated.vllm_base_url or ""),
+        "DOCMIND_LMSTUDIO_BASE_URL": validated.lmstudio_base_url,
+        "DOCMIND_LLAMACPP_BASE_URL": (validated.llamacpp_base_url or ""),
+        "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": str(validated.vllm.llamacpp_model_path),
+        "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
+            "true" if validated.security.allow_remote_endpoints else "false"
+        ),
+        "DOCMIND_RETRIEVAL__RRF_K": str(int(validated.retrieval.rrf_k)),
+        "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(
+            int(validated.retrieval.text_rerank_timeout_ms)
+        ),
+        "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(
+            int(validated.retrieval.siglip_timeout_ms)
+        ),
+        "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(
+            int(validated.retrieval.colpali_timeout_ms)
+        ),
+        "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(
+            int(validated.retrieval.total_rerank_budget_ms)
+        ),
+    }
+    try:
+        persist_env(env_map)
+    except (ValueError, OSError, RuntimeError) as exc:
+        key = getattr(exc, "key", "")
+        suffix = f" (key={key})" if key else ""
+        st.error(f"Failed to write .env{suffix}: {exc}")
+    else:
+        st.success("Saved to .env")
+
+
+def _render_cache_controls() -> None:
+    """Render cache maintenance controls."""
     st.subheader("Cache Utilities")
     st.caption(
         "Bump the global cache version and clear Streamlit caches. "

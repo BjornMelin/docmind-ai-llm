@@ -41,6 +41,7 @@ from langgraph_supervisor.handoff import create_forward_message_tool
 from llama_index.core.utils import get_tokenizer
 from loguru import logger
 from opentelemetry import metrics, trace
+from opentelemetry.trace import Span
 
 # Registry utilities
 # Note: tool imports are performed lazily inside _setup_agent_graph to avoid
@@ -535,6 +536,168 @@ class MultiAgentCoordinator:
             _COORDINATOR_LATENCY.record(float(latency_s), attributes=attributes)
             _COORDINATOR_COUNTER.add(1, attributes=attributes)
 
+    def _start_span(
+        self, exit_stack: contextlib.ExitStack, thread_id: str, query_length: int
+    ) -> Span:
+        """Start an OpenTelemetry span for query processing with attributes.
+
+        Args:
+            exit_stack: Context manager stack for span lifecycle.
+            thread_id: Unique thread identifier for tracing.
+            query_length: Character length of the input query.
+
+        Returns:
+            Active span for the coordinator operation.
+        """
+        span = exit_stack.enter_context(
+            _COORDINATOR_TRACER.start_as_current_span("coordinator.process_query")
+        )
+        span.set_attribute("coordinator.thread_id", thread_id)
+        span.set_attribute("query.length", query_length)
+        return span
+
+    def _build_initial_state(
+        self,
+        query: str,
+        start_time: float,
+        tools_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build the initial state dict for the agent workflow.
+
+        Args:
+            query: User query string.
+            start_time: Process start timestamp for timing.
+            tools_data: Tool configuration data for agents.
+
+        Returns:
+            Initial MultiAgentState as a dict.
+        """
+        return MultiAgentState(
+            messages=[HumanMessage(content=query)],
+            tools_data=tools_data,
+            total_start_time=start_time,
+            output_mode="last_message",
+            parallel_execution_active=True,
+        ).model_dump()
+
+    def _handle_timeout_response(
+        self, query: str, context: Any | None, start_time: float
+    ) -> tuple[AgentResponse, bool]:
+        """Handle workflow timeout by falling back to basic RAG or error response.
+
+        Args:
+            query: Original user query.
+            context: Optional context (unused in fallback).
+            start_time: Query processing start time.
+
+        Returns:
+            Tuple of (AgentResponse, used_fallback_flag).
+        """
+        if self.enable_fallback:
+            response = self._fallback_basic_rag(query, context, start_time)
+            try:
+                response.metadata["reason"] = "timeout"
+                response.metadata["fallback_source"] = "basic_rag"
+                if isinstance(response.optimization_metrics, dict):
+                    response.optimization_metrics["timeout"] = True
+                else:
+                    response.optimization_metrics = {"timeout": True}
+            except (KeyError, TypeError, AttributeError) as exc:
+                logger.debug("Failed to annotate fallback metadata: %s", exc)
+            return response, True
+        processing_time = time.perf_counter() - start_time
+        response = AgentResponse(
+            content=("The multi-agent system timed out while processing your request."),
+            sources=[],
+            metadata={"fallback_used": True, "reason": "timeout"},
+            validation_score=0.0,
+            processing_time=processing_time,
+            optimization_metrics={"timeout": True},
+        )
+        return response, False
+
+    def _handle_workflow_result(
+        self,
+        result: dict[str, Any] | None,
+        query: str,
+        context: Any | None,
+        start_time: float,
+        coordination_time: float,
+    ) -> tuple[AgentResponse, bool, bool]:
+        """Process the final workflow result or handle timeout fallback.
+
+        Args:
+            result: Workflow output state dict, or None on timeout.
+            query: Original user query.
+            context: Optional context for fallback.
+            start_time: Query processing start time.
+            coordination_time: Time spent coordinating agents.
+
+        Returns:
+            Tuple of (AgentResponse, workflow_timed_out, used_fallback).
+        """
+        workflow_timed_out = bool(isinstance(result, dict) and result.get("timed_out"))
+        if not workflow_timed_out:
+            response = self._extract_response(
+                result or {}, query, start_time, coordination_time
+            )
+            return response, False, False
+
+        logger.warning("Coordinator detected timeout; invoking fallback policy")
+        response, used_fallback = self._handle_timeout_response(
+            query, context, start_time
+        )
+        self._record_query_metrics(time.perf_counter() - start_time, False)
+        return response, True, used_fallback
+
+    def _update_metrics_after_response(
+        self,
+        workflow_timed_out: bool,
+        used_fallback: bool,
+        processing_time: float,
+        coordination_time: float,
+    ) -> None:
+        """Update internal performance metrics after processing a response.
+
+        Args:
+            workflow_timed_out: Whether the workflow exceeded timeout.
+            used_fallback: Whether fallback was used.
+            processing_time: Total query processing time.
+            coordination_time: Time spent coordinating agents.
+        """
+        if workflow_timed_out:
+            if used_fallback:
+                self.fallback_queries += 1
+        else:
+            self.successful_queries += 1
+        self._update_performance_metrics(processing_time, coordination_time)
+
+    def _annotate_span(
+        self,
+        span: Span,
+        workflow_timed_out: bool,
+        used_fallback: bool,
+        processing_time: float,
+    ) -> None:
+        """Annotate the OpenTelemetry span with query processing outcomes.
+
+        Args:
+            span: Active span to annotate.
+            workflow_timed_out: Whether the workflow timed out.
+            used_fallback: Whether fallback was invoked.
+            processing_time: Total processing time in seconds.
+        """
+        span.set_attribute("coordinator.workflow_timeout", bool(workflow_timed_out))
+        span.set_attribute(
+            "coordinator.fallback", bool(workflow_timed_out and used_fallback)
+        )
+        span.set_attribute(
+            "coordinator.success", not workflow_timed_out or used_fallback
+        )
+        span.set_attribute(
+            "coordinator.processing_time_ms", round(processing_time * 1000.0, 3)
+        )
+
     def process_query(
         self,
         query: str,
@@ -574,11 +737,7 @@ class MultiAgentCoordinator:
             )
 
         exit_stack = contextlib.ExitStack()
-        span = exit_stack.enter_context(
-            _COORDINATOR_TRACER.start_as_current_span("coordinator.process_query")
-        )
-        span.set_attribute("coordinator.thread_id", thread_id)
-        span.set_attribute("query.length", len(query))
+        span = self._start_span(exit_stack, thread_id, len(query))
 
         try:
             tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
@@ -586,13 +745,7 @@ class MultiAgentCoordinator:
             )
 
             # Initialize state with execution parameters
-            initial_state = MultiAgentState(
-                messages=[HumanMessage(content=query)],
-                tools_data=tools_data,
-                total_start_time=start_time,
-                output_mode="last_message",
-                parallel_execution_active=True,
-            ).model_dump()
+            initial_state = self._build_initial_state(query, start_time, tools_data)
 
             # Run multi-agent workflow with performance tracking
             coordination_start = time.perf_counter()
@@ -605,57 +758,15 @@ class MultiAgentCoordinator:
             )
             coordination_time = time.perf_counter() - coordination_start
 
-            # Handle timeout signaled by workflow
-            workflow_timed_out = bool(
-                isinstance(result, dict) and result.get("timed_out")
+            response, workflow_timed_out, used_fallback = self._handle_workflow_result(
+                result, query, context, start_time, coordination_time
             )
-            used_fallback = False
-            if workflow_timed_out:
-                logger.warning("Coordinator detected timeout; invoking fallback policy")
-                if self.enable_fallback:
-                    response = self._fallback_basic_rag(query, context, start_time)
-                    used_fallback = True
-                    # annotate fallback
-                    try:
-                        response.metadata["reason"] = "timeout"
-                        response.metadata["fallback_source"] = "basic_rag"
-                        # Add timeout indicator to optimization metrics consistently
-                        if isinstance(response.optimization_metrics, dict):
-                            response.optimization_metrics["timeout"] = True
-                        else:
-                            response.optimization_metrics = {"timeout": True}
-                    except (KeyError, TypeError, AttributeError) as exc:
-                        logger.debug("Failed to annotate fallback metadata: %s", exc)
-                else:
-                    processing_time = time.perf_counter() - start_time
-                    response = AgentResponse(
-                        content=(
-                            "The multi-agent system timed out while "
-                            "processing your request."
-                        ),
-                        sources=[],
-                        metadata={"fallback_used": True, "reason": "timeout"},
-                        validation_score=0.0,
-                        processing_time=processing_time,
-                        optimization_metrics={"timeout": True},
-                    )
-
-                # Best-effort analytics logging for timeout path
-                self._record_query_metrics(time.perf_counter() - start_time, False)
-            else:
-                # Extract response from final state
-                response = self._extract_response(
-                    result, query, start_time, coordination_time
-                )
 
             # Update performance metrics
             processing_time = time.perf_counter() - start_time
-            if workflow_timed_out:
-                if used_fallback:
-                    self.fallback_queries += 1
-            else:
-                self.successful_queries += 1
-            self._update_performance_metrics(processing_time, coordination_time)
+            self._update_metrics_after_response(
+                workflow_timed_out, used_fallback, processing_time, coordination_time
+            )
 
             # Best-effort analytics logging (never impact user flow)
             if not workflow_timed_out:
@@ -668,15 +779,8 @@ class MultiAgentCoordinator:
                     coordination_time,
                 )
 
-            span.set_attribute("coordinator.workflow_timeout", bool(workflow_timed_out))
-            span.set_attribute(
-                "coordinator.fallback", bool(workflow_timed_out and used_fallback)
-            )
-            span.set_attribute(
-                "coordinator.success", not workflow_timed_out or used_fallback
-            )
-            span.set_attribute(
-                "coordinator.processing_time_ms", round(processing_time * 1000.0, 3)
+            self._annotate_span(
+                span, workflow_timed_out, used_fallback, processing_time
             )
             exit_stack.close()
 
@@ -918,7 +1022,12 @@ class MultiAgentCoordinator:
     def _update_performance_metrics(
         self, processing_time: float, coordination_time: float
     ) -> None:
-        """Update performance tracking metrics."""
+        """Update running averages for processing and coordination times.
+
+        Args:
+            processing_time: Total query processing time in seconds.
+            coordination_time: Agent coordination overhead in seconds.
+        """
         # Update running averages
         if self.total_queries > 0:
             self.avg_processing_time = (

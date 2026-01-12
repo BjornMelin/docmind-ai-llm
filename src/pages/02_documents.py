@@ -37,6 +37,18 @@ def main() -> None:  # pragma: no cover - Streamlit page
 
     _render_latest_snapshot_summary()
 
+    files, use_graphrag, encrypt_images, submitted = _render_ingest_form()
+    if submitted:
+        _handle_ingest_submission(files, use_graphrag, encrypt_images)
+
+    _render_maintenance_controls()
+
+    # Snapshot utilities and manual exports are driven by session_state indices.
+    _render_export_controls()
+
+
+def _render_ingest_form() -> tuple[list[Any] | None, bool, bool, bool]:
+    """Render the ingestion form and return submitted values."""
     with st.form("ingest_form", clear_on_submit=False):
         files = st.file_uploader("Add files", type=None, accept_multiple_files=True)
         col_opts = st.columns(2)
@@ -62,189 +74,211 @@ def main() -> None:  # pragma: no cover - Streamlit page
                 "- Rebuild a snapshot anytime; for new content, re-ingest first."
             )
         submitted = st.form_submit_button("Ingest")
+    return files, use_graphrag, encrypt_images, submitted
 
-    if submitted:
-        if not files:
-            st.warning("No files selected.")
-        else:
-            with st.status("Ingesting…", expanded=True) as status:
-                try:
-                    result = ingest_files(
-                        files,
-                        enable_graphrag=use_graphrag,
-                        encrypt_images=encrypt_images,
-                    )
-                    count = int(result.get("count", 0))
-                    st.write(f"Ingested {count} documents.")
-                    _render_image_exports(result.get("exports") or [])
 
-                    vector_index = result.get("vector_index")
-                    pg_index = result.get("pg_index") if use_graphrag else None
+def _handle_ingest_submission(
+    files: list[Any] | None, use_graphrag: bool, encrypt_images: bool
+) -> None:
+    """Handle ingestion submission and rebuild snapshot."""
+    if not files:
+        st.warning("No files selected.")
+        return
+    with st.status("Ingesting…", expanded=True) as status:
+        try:
+            result = ingest_files(
+                files,
+                enable_graphrag=use_graphrag,
+                encrypt_images=encrypt_images,
+            )
+            _render_ingest_results(result, use_graphrag)
+            _handle_snapshot_rebuild(
+                result.get("vector_index"),
+                result.get("pg_index") if use_graphrag else None,
+            )
+            status.update(label="Done", state="complete")
+            st.toast("Ingestion complete", icon="✅")
+        except SnapshotLockTimeout:
+            status.update(label="Locked", state="error")
+            st.warning(
+                "Snapshot rebuild already in progress. Please wait "
+                "and try again shortly."
+            )
+        except Exception as exc:  # pragma: no cover - UX best effort
+            status.update(label="Failed", state="error")
+            st.error(f"Ingestion failed: {exc}")
 
-                    if vector_index is None:
-                        vector_index = _create_vector_index_fallback()
 
-                    if vector_index is not None:
-                        st.session_state["vector_index"] = vector_index
-                        # Best-effort: provide a multimodal retriever for Chat/agents.
-                        try:
-                            from src.retrieval.multimodal_fusion import (
-                                MultimodalFusionRetriever,
-                            )
+def _render_ingest_results(result: dict[str, Any], use_graphrag: bool) -> None:
+    """Render ingestion results and hydrate session state indices."""
+    count = int(result.get("count", 0))
+    st.write(f"Ingested {count} documents.")
+    _render_image_exports(result.get("exports") or [])
 
-                            st.session_state["hybrid_retriever"] = (
-                                MultimodalFusionRetriever()
-                            )
-                        except Exception:  # pragma: no cover - UI best-effort
-                            logger.debug(
-                                "Multimodal retriever init failed", exc_info=True
-                            )
-                            st.session_state.pop("hybrid_retriever", None)
-                    if pg_index is not None:
-                        st.session_state["graphrag_index"] = pg_index
-                    elif not use_graphrag:
-                        st.session_state.pop("graphrag_index", None)
+    vector_index = result.get("vector_index")
+    pg_index = result.get("pg_index") if use_graphrag else None
+    if vector_index is None:
+        vector_index = _create_vector_index_fallback()
 
-                    router = None
-                    if vector_index is not None:
-                        router = build_router_engine(vector_index, pg_index, settings)
-                        st.session_state["router_engine"] = router
+    if vector_index is not None:
+        st.session_state["vector_index"] = vector_index
+        _set_multimodal_retriever()
+    if pg_index is not None:
+        st.session_state["graphrag_index"] = pg_index
+    elif not use_graphrag:
+        st.session_state.pop("graphrag_index", None)
 
-                    if router is not None:
-                        st.info("Router engine is ready for Chat.")
-                    if pg_index is not None:
-                        st.info("GraphRAG index is available.")
+    router = None
+    if vector_index is not None:
+        router = build_router_engine(vector_index, pg_index, settings)
+        st.session_state["router_engine"] = router
+    if router is not None:
+        st.info("Router engine is ready for Chat.")
+    if pg_index is not None:
+        st.info("GraphRAG index is available.")
 
-                    try:
-                        final = rebuild_snapshot(vector_index, pg_index, settings)
-                        manifest = load_manifest(final)
-                        _render_manifest_details(manifest, final)
-                        st.session_state["latest_manifest"] = manifest
-                        st.success(f"Snapshot created: {final.name}")
-                    except SnapshotLockTimeout:
-                        st.warning(
-                            "Snapshot rebuild already in progress. Please wait "
-                            "and try again shortly."
-                        )
-                    except Exception as exc:  # pragma: no cover - UX best effort
-                        st.warning(f"Snapshot failed: {exc}")
 
-                    status.update(label="Done", state="complete")
-                    st.toast("Ingestion complete", icon="✅")
-                except SnapshotLockTimeout:
-                    status.update(label="Locked", state="error")
-                    st.warning(
-                        "Snapshot rebuild already in progress. Please wait "
-                        "and try again shortly."
-                    )
-                except Exception as exc:  # pragma: no cover - UX best effort
-                    status.update(label="Failed", state="error")
-                    st.error(f"Ingestion failed: {exc}")
+def _set_multimodal_retriever() -> None:
+    """Initialize a multimodal retriever for downstream tools if available."""
+    try:
+        from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
 
-    _render_maintenance_controls()
+        st.session_state["hybrid_retriever"] = MultimodalFusionRetriever()
+    except Exception:  # pragma: no cover - UI best-effort
+        logger.debug("Multimodal retriever init failed", exc_info=True)
+        st.session_state.pop("hybrid_retriever", None)
 
-    # Snapshot utilities and manual exports are driven by session_state indices.
-    _render_export_controls()
+
+def _handle_snapshot_rebuild(vector_index: Any, pg_index: Any | None) -> None:
+    """Rebuild snapshot and render status feedback."""
+    try:
+        final = rebuild_snapshot(vector_index, pg_index, settings)
+        manifest = load_manifest(final)
+        _render_manifest_details(manifest, final)
+        st.session_state["latest_manifest"] = manifest
+        st.success(f"Snapshot created: {final.name}")
+    except SnapshotLockTimeout:
+        st.warning(
+            "Snapshot rebuild already in progress. Please wait and try again shortly."
+        )
+    except Exception as exc:  # pragma: no cover - UX best effort
+        st.warning(f"Snapshot failed: {exc}")
 
 
 def _render_image_exports(exports: list[dict[str, Any]]) -> None:
     """Render a lightweight preview of PDF page-image exports."""
-    images = []
+    images = _filter_image_exports(exports)
+    if not images:
+        return
+    by_doc = _group_exports_by_doc(images)
+    with st.expander("Page images (preview)", expanded=False):
+        st.caption(
+            "Previews are loaded from local artifacts (no base64 stored in Qdrant)."
+        )
+        preview_limit = _preview_limit(by_doc)
+        for doc_id, items in sorted(by_doc.items(), key=lambda t: t[0]):
+            st.subheader(f"Document: {doc_id}")
+            ordered = sorted(items, key=lambda x: _page_no(x.get("metadata") or {}))
+            _render_export_images(ordered, preview_limit)
+
+
+def _filter_image_exports(exports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filter export entries down to image artifacts."""
+    images: list[dict[str, Any]] = []
     for e in exports:
         if not isinstance(e, dict):
             continue
         ct = str(e.get("content_type") or "")
         if ct.startswith("image/"):
             images.append(e)
-    if not images:
-        return
+    return images
 
-    store = ArtifactStore.from_settings(settings)
+
+def _doc_id(meta: dict[str, Any]) -> str:
+    """Extract a display document id from export metadata."""
+    return str(meta.get("doc_id") or meta.get("document_id") or "-")
+
+
+def _page_no(meta: dict[str, Any]) -> int:
+    """Parse the page number from export metadata."""
+    raw = meta.get("page_no") or meta.get("page") or meta.get("page_number")
     try:
-        from src.utils.images import open_image_encrypted
-    except Exception:
-        open_image_encrypted = None
+        return int(raw) if raw is not None else 0
+    except (TypeError, ValueError):
+        return 0
 
-    def _doc_id(meta: dict[str, Any]) -> str:
-        return str(meta.get("doc_id") or meta.get("document_id") or "-")
 
-    def _page_no(meta: dict[str, Any]) -> int:
-        raw = meta.get("page_no") or meta.get("page") or meta.get("page_number")
-        try:
-            return int(raw) if raw is not None else 0
-        except (TypeError, ValueError):
-            return 0
-
+def _group_exports_by_doc(
+    images: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Group image exports by document id."""
     by_doc: dict[str, list[dict[str, Any]]] = {}
     for e in images:
         meta = e.get("metadata")
         meta = meta if isinstance(meta, dict) else {}
         by_doc.setdefault(_doc_id(meta), []).append(e)
+    return by_doc
 
-    with st.expander("Page images (preview)", expanded=False):
-        st.caption(
-            "Previews are loaded from local artifacts (no base64 stored in Qdrant)."
+
+def _preview_limit(by_doc: dict[str, list[dict[str, Any]]]) -> int:
+    """Render slider for preview limit and return selected value."""
+    max_preview = min(128, max((len(items) for items in by_doc.values()), default=0))
+    if not max_preview:
+        return 32
+    return int(
+        st.slider(
+            "Preview per document",
+            min_value=1,
+            max_value=max_preview,
+            value=min(32, max_preview),
+            key="doc_preview_limit",
         )
-        max_preview = min(
-            128,
-            max((len(items) for items in by_doc.values()), default=0),
-        )
-        if max_preview:
-            preview_limit = st.slider(
-                "Preview per document",
-                min_value=1,
-                max_value=max_preview,
-                value=min(32, max_preview),
-                key="doc_preview_limit",
-            )
-        else:
-            preview_limit = 32
-        for doc_id, items in sorted(by_doc.items(), key=lambda t: t[0]):
-            st.subheader(f"Document: {doc_id}")
-            ordered = sorted(
-                items,
-                key=lambda x: _page_no(x.get("metadata") or {}),
-            )
-            cols = st.columns(4)
-            for i, e in enumerate(ordered[: int(preview_limit)]):
-                meta = e.get("metadata")
-                meta = meta if isinstance(meta, dict) else {}
-                page_no = _page_no(meta)
-                thumb_id = meta.get("thumbnail_artifact_id")
-                thumb_sfx = meta.get("thumbnail_artifact_suffix") or ""
-                img_id = meta.get("image_artifact_id")
-                img_sfx = meta.get("image_artifact_suffix") or ""
+    )
 
-                ref = None
-                if thumb_id:
-                    ref = ArtifactRef(sha256=str(thumb_id), suffix=str(thumb_sfx))
-                elif img_id:
-                    ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx))
 
-                col = cols[i % 4]
-                with col:
-                    if ref is None:
-                        st.caption(f"p{page_no or '?'} (no artifact ref)")
-                        continue
-                    try:
-                        img_path = store.resolve_path(ref)
-                        if str(img_path).endswith(".enc"):
-                            if open_image_encrypted is None:
-                                raise RuntimeError(
-                                    "Encrypted image support unavailable."
-                                )
-                            with open_image_encrypted(str(img_path)) as im:
-                                st.image(
-                                    im, caption=f"p{page_no}", use_container_width=True
-                                )
-                        else:
-                            st.image(
-                                str(img_path),
-                                caption=f"p{page_no}",
-                                use_container_width=True,
-                            )
-                    except Exception:
-                        st.caption(f"p{page_no or '?'} (missing)")
+def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> None:
+    """Render page image thumbnails for a document."""
+    store = ArtifactStore.from_settings(settings)
+    try:
+        from src.utils.images import open_image_encrypted
+    except Exception:
+        open_image_encrypted = None
+    cols = st.columns(4)
+    for i, e in enumerate(items[: int(preview_limit)]):
+        meta = e.get("metadata")
+        meta = meta if isinstance(meta, dict) else {}
+        page_no = _page_no(meta)
+        thumb_id = meta.get("thumbnail_artifact_id")
+        thumb_sfx = meta.get("thumbnail_artifact_suffix") or ""
+        img_id = meta.get("image_artifact_id")
+        img_sfx = meta.get("image_artifact_suffix") or ""
+
+        ref = None
+        if thumb_id:
+            ref = ArtifactRef(sha256=str(thumb_id), suffix=str(thumb_sfx))
+        elif img_id:
+            ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx))
+
+        col = cols[i % 4]
+        with col:
+            if ref is None:
+                st.caption(f"p{page_no or '?'} (no artifact ref)")
+                continue
+            try:
+                img_path = store.resolve_path(ref)
+                if str(img_path).endswith(".enc"):
+                    if open_image_encrypted is None:
+                        raise RuntimeError("Encrypted image support unavailable.")
+                    with open_image_encrypted(str(img_path)) as im:
+                        st.image(im, caption=f"p{page_no}", use_container_width=True)
+                else:
+                    st.image(
+                        str(img_path),
+                        caption=f"p{page_no}",
+                        use_container_width=True,
+                    )
+            except Exception:
+                st.caption(f"p{page_no or '?'} (missing)")
 
 
 def _render_maintenance_controls() -> None:

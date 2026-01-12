@@ -22,7 +22,7 @@ import contextlib
 import json
 import sqlite3
 import threading
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -94,49 +94,89 @@ def _get_by_dotted_path(obj: Any, dotted_path: str) -> Any:
     return cur
 
 
+def _cmp_gt(a: Any, b: Any) -> bool:
+    """Return True if a > b with type safety."""
+    try:
+        return a is not None and a > b
+    except TypeError:
+        return False
+
+
+def _cmp_gte(a: Any, b: Any) -> bool:
+    """Return True if a >= b with type safety."""
+    try:
+        return a is not None and a >= b
+    except TypeError:
+        return False
+
+
+def _cmp_lt(a: Any, b: Any) -> bool:
+    """Return True if a < b with type safety."""
+    try:
+        return a is not None and a < b
+    except TypeError:
+        return False
+
+
+def _cmp_lte(a: Any, b: Any) -> bool:
+    """Return True if a <= b with type safety."""
+    try:
+        return a is not None and a <= b
+    except TypeError:
+        return False
+
+
+_FILTER_OPS: dict[str, Callable[[Any, Any], bool]] = {
+    "$eq": lambda a, b: a == b,
+    "$ne": lambda a, b: a != b,
+    "$gt": _cmp_gt,
+    "$gte": _cmp_gte,
+    "$lt": _cmp_lt,
+    "$lte": _cmp_lte,
+}
+
+
 def _matches_filter_clause(extracted: Any, clause_value: Any) -> bool:
+    """Evaluate a filter clause against extracted values."""
     if isinstance(extracted, list):
         return any(_matches_filter_clause(v, clause_value) for v in extracted)
 
     if isinstance(clause_value, dict):
         for op, v in clause_value.items():
-            if op == "$eq":
-                if extracted != v:
-                    return False
-            elif op == "$ne":
-                if extracted == v:
-                    return False
-            elif op == "$gt":
-                try:
-                    if extracted is None or extracted <= v:
-                        return False
-                except TypeError:
-                    return False
-            elif op == "$gte":
-                try:
-                    if extracted is None or extracted < v:
-                        return False
-                except TypeError:
-                    return False
-            elif op == "$lt":
-                try:
-                    if extracted is None or extracted >= v:
-                        return False
-                except TypeError:
-                    return False
-            elif op == "$lte":
-                try:
-                    if extracted is None or extracted > v:
-                        return False
-                except TypeError:
-                    return False
-            else:
+            handler = _FILTER_OPS.get(op)
+            if handler is None:
                 raise ValueError(f"Unsupported filter operator: {op!r}")
+            if not handler(extracted, v):
+                return False
         return True
 
     if clause_value is None:
         return extracted is None
     return extracted == clause_value
+
+
+def _match_namespace(ns: tuple[str, ...], cond: MatchCondition) -> bool:
+    """Check namespace against a match condition."""
+    path = cond.path
+    result = False
+    if cond.match_type == "prefix" and len(path) <= len(ns):
+        result = True
+        for i, p in enumerate(path):
+            if p == "*":
+                continue
+            if ns[i] != p:
+                result = False
+                break
+    elif cond.match_type == "suffix" and len(path) <= len(ns):
+        start = len(ns) - len(path)
+        result = True
+        for i, p in enumerate(path):
+            if p == "*":
+                continue
+            if ns[start + i] != p:
+                result = False
+                break
+    return result
 
 
 def _matches_filter(value: dict[str, Any], filt: dict[str, Any] | None) -> bool:
@@ -597,33 +637,10 @@ class DocMindSqliteStore(BaseStore):
                 else [ns[: op.max_depth] for ns in namespaces]
             )
 
-        def matches(ns: tuple[str, ...], cond: MatchCondition) -> bool:
-            path = cond.path
-            if cond.match_type == "prefix":
-                if len(path) > len(ns):
-                    return False
-                for i, p in enumerate(path):
-                    if p == "*":
-                        continue
-                    if ns[i] != p:
-                        return False
-                return True
-            if cond.match_type == "suffix":
-                if len(path) > len(ns):
-                    return False
-                start = len(ns) - len(path)
-                for i, p in enumerate(path):
-                    if p == "*":
-                        continue
-                    if ns[start + i] != p:
-                        return False
-                return True
-            return False
-
         filtered = [
             ns
             for ns in namespaces
-            if all(matches(ns, cond) for cond in (op.match_conditions or ()))
+            if all(_match_namespace(ns, cond) for cond in (op.match_conditions or ()))
         ]
         if op.max_depth is not None:
             filtered = [ns[: op.max_depth] for ns in filtered]

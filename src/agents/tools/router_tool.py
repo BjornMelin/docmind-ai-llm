@@ -18,6 +18,90 @@ from src.utils.telemetry import log_jsonl
 _ROUTER_TRACER = trace.get_tracer("docmind.tools.router")
 
 
+def _get_attr_or_key(obj: Any, key: str) -> Any | None:
+    """Return attribute or dict key from an object."""
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def _get_router_engine(obj: Any) -> Any | None:
+    """Extract a router_engine attribute from an object."""
+    return _get_attr_or_key(obj, "router_engine")
+
+
+def _resolve_router_engine(
+    state: dict | None, runtime_ctx: Any | None, runtime_cfg: Any | None
+) -> Any | None:
+    """Resolve the router engine from state or runtime context/config."""
+    if isinstance(state, dict):
+        tools_data = state.get("tools_data")
+        router_engine = _get_router_engine(tools_data)
+        if router_engine is not None:
+            return router_engine
+    router_engine = _get_router_engine(runtime_ctx)
+    if router_engine is not None:
+        return router_engine
+    configurable = _get_attr_or_key(runtime_cfg, "configurable")
+    runtime_cfg_ctx = _get_attr_or_key(configurable, "runtime")
+    return _get_router_engine(runtime_cfg_ctx)
+
+
+def _extract_response_text(resp: Any) -> str:
+    """Extract response text from a router engine response."""
+    return str(
+        getattr(resp, "response", None)
+        or getattr(resp, "text", None)
+        or getattr(resp, "message", None)
+        or resp
+    )
+
+
+def _extract_selected_strategy(resp: Any) -> str | None:
+    """Extract the selector strategy name from response metadata."""
+    try:
+        metadata = getattr(resp, "metadata", None)
+        if isinstance(metadata, dict):
+            return metadata.get("selector_result")
+    except Exception:
+        return None
+    return None
+
+
+def _build_payload(response_text: str, timing_ms: float, selected: str | None) -> dict:
+    """Build the JSON payload returned from the router tool."""
+    payload: dict[str, Any] = {
+        "response_text": response_text,
+        "timing_ms": round(timing_ms, 2),
+    }
+    if selected:
+        payload["selected_strategy"] = selected
+        payload["multimodal_used"] = selected == "multimodal_search"
+        payload["hybrid_used"] = selected == "hybrid_search"
+    return payload
+
+
+def _log_router_event(selected_strategy: str | None, payload: dict[str, Any]) -> None:
+    """Emit structured logging and JSONL telemetry for routing."""
+    with suppress(Exception):  # pragma: no cover - logging resilience
+        logger.info(
+            "router_tool completed: strategy=%s, timing_ms=%.2f",
+            selected_strategy,
+            payload["timing_ms"],
+        )
+        evt = {
+            "router_selected": True,
+            "route": selected_strategy or "unknown",
+            "timing_ms": payload["timing_ms"],
+        }
+        if selected_strategy == "knowledge_graph":
+            with suppress(Exception):
+                evt["traversal_depth"] = settings.graphrag_cfg.default_path_depth
+        log_jsonl(evt)
+
+
 @tool
 def router_tool(
     query: str,
@@ -31,29 +115,7 @@ def router_tool(
         try:
             runtime_ctx = runtime.context if runtime is not None else None
             runtime_cfg = runtime.config if runtime is not None else None
-
-            def _get_attr_or_key(obj: Any, key: str) -> Any | None:
-                if obj is None:
-                    return None
-                if isinstance(obj, dict):
-                    return obj.get(key)
-                return getattr(obj, key, None)
-
-            def _get_router_engine(obj: Any) -> Any | None:
-                return _get_attr_or_key(obj, "router_engine")
-
-            router_engine = None
-            if isinstance(state, dict):
-                tools_data = state.get("tools_data")
-                router_engine = _get_router_engine(tools_data)
-
-            if router_engine is None:
-                router_engine = _get_router_engine(runtime_ctx)
-
-            if router_engine is None:
-                configurable = _get_attr_or_key(runtime_cfg, "configurable")
-                runtime_cfg_ctx = _get_attr_or_key(configurable, "runtime")
-                router_engine = _get_router_engine(runtime_cfg_ctx)
+            router_engine = _resolve_router_engine(state, runtime_ctx, runtime_cfg)
 
             span.set_attribute("router.engine.available", router_engine is not None)
             if router_engine is None:
@@ -74,33 +136,11 @@ def router_tool(
                 logger.error("router_tool query failed: {}", exc)
                 return json.dumps({"error": str(exc)})
 
-            response_text = (
-                getattr(resp, "response", None)
-                or getattr(resp, "text", None)
-                or getattr(resp, "message", None)
-                or str(resp)
-            )
-
-            selected_strategy = None
-            try:
-                metadata = getattr(resp, "metadata", None)
-                if isinstance(metadata, dict):
-                    selected_strategy = metadata.get("selector_result")
-            except Exception:
-                selected_strategy = None
+            response_text = _extract_response_text(resp)
+            selected_strategy = _extract_selected_strategy(resp)
 
             timing_ms = (time.perf_counter() - start) * 1000.0
-            multimodal_used = selected_strategy == "multimodal_search"
-            hybrid_used = selected_strategy == "hybrid_search"
-
-            payload: dict[str, Any] = {
-                "response_text": str(response_text),
-                "timing_ms": round(timing_ms, 2),
-            }
-            if selected_strategy:
-                payload["selected_strategy"] = selected_strategy
-                payload["multimodal_used"] = multimodal_used
-                payload["hybrid_used"] = hybrid_used
+            payload = _build_payload(response_text, timing_ms, selected_strategy)
 
             span.set_attribute(
                 "router.selected_strategy", selected_strategy or "unknown"
@@ -108,23 +148,7 @@ def router_tool(
             span.set_attribute("router.success", True)
             span.set_attribute("router.latency_ms", payload["timing_ms"])
 
-            with suppress(Exception):  # pragma: no cover - logging resilience
-                logger.info(
-                    "router_tool completed: strategy=%s, timing_ms=%.2f",
-                    selected_strategy,
-                    payload["timing_ms"],
-                )
-                evt = {
-                    "router_selected": True,
-                    "route": selected_strategy or "unknown",
-                    "timing_ms": payload["timing_ms"],
-                }
-                if selected_strategy == "knowledge_graph":
-                    with suppress(Exception):
-                        evt["traversal_depth"] = (
-                            settings.graphrag_cfg.default_path_depth
-                        )
-                log_jsonl(evt)
+            _log_router_event(selected_strategy, payload)
 
             return json.dumps(payload)
 

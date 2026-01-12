@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import sqlite3
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
@@ -45,6 +46,7 @@ from src.persistence.snapshot_utils import (
 from src.retrieval.router_factory import build_router_engine
 from src.telemetry.opentelemetry import configure_observability
 from src.ui.chat_sessions import (
+    ChatSelection,
     get_chat_db_conn,
     render_session_sidebar,
     render_time_travel_sidebar,
@@ -162,119 +164,11 @@ def main() -> None:  # pragma: no cover - Streamlit page
     )
     _render_memory_sidebar(selection.user_id, selection.thread_id)
     _render_visual_search_sidebar()
-
-    # Autoload router from latest snapshot per policy
-    try:
-        _load_latest_snapshot_into_session()
-    except Exception as exc:
-        st.caption(f"Autoload skipped: {exc}")
-    # Fallback: best-effort hydration from latest snapshot if not set
-    if "router_engine" not in st.session_state:
-        try:
-            snap = latest_snapshot_dir()
-            if snap is not None:
-                _hydrate_router_from_snapshot(snap)
-        except Exception as exc:
-            logger.debug("Hydration from snapshot failed: %s", exc)
-    # Last-resort: ensure a router object exists for downstream tooling/tests
-    if "router_engine" not in st.session_state:
-        st.session_state["router_engine"] = None
-
-    # Staleness badge: compare current hashes to latest snapshot manifest
-    try:
-        storage_dir = settings.data_dir / "storage"
-        if storage_dir.exists():
-            latest = latest_snapshot_dir(storage_dir)
-            if latest is not None:
-                with _TRACER.start_as_current_span("chat.staleness_check") as span:
-                    span.set_attribute("snapshot.id", latest.name)
-                    manifest_data = load_manifest(latest)
-                    if manifest_data:
-                        uploads_dir = settings.data_dir / "uploads"
-                        corpus_paths = _collect_corpus_paths(uploads_dir)
-                        cfg = _current_config_dict()
-                        is_stale = compute_staleness(manifest_data, corpus_paths, cfg)
-                        span.set_attribute("snapshot.is_stale", bool(is_stale))
-                        if is_stale:
-                            st.warning(STALE_TOOLTIP)
-                            with st.sidebar:
-                                st.caption("Snapshot stale: content or config changed.")
-                            with contextlib.suppress(Exception):
-                                log_jsonl(
-                                    {
-                                        "snapshot_stale_detected": True,
-                                        "snapshot_id": latest.name,
-                                        "reason": "digest_mismatch",
-                                    }
-                                )
-                        else:
-                            st.caption(f"Snapshot up-to-date: {latest.name}")
-    except Exception as exc:
-        # Do not interrupt chat if staleness check fails
-        st.caption(f"Staleness check skipped: {exc}")
-
-    # Load persisted chat history (LangGraph checkpointer)
-    try:
-        state = coord.get_state_values(
-            thread_id=selection.thread_id, user_id=selection.user_id
-        )
-        messages = state.get("messages", []) if isinstance(state, dict) else []
-    except Exception as exc:
-        logger.debug(
-            "Failed to load chat history for thread_id={} user_id={}: {}",
-            selection.thread_id,
-            selection.user_id,
-            exc,
-        )
-        messages = []
-
-    for msg in messages:
-        role = None
-        if isinstance(msg, HumanMessage):
-            role = "user"
-        elif isinstance(msg, AIMessage):
-            role = "assistant"
-        if role is None:
-            continue
-        with st.chat_message(role):
-            content = getattr(msg, "content", "")
-            st.markdown(str(content))
-
-    prompt = st.chat_input("Ask something…")
-    if prompt:
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Coordinator usage (no streaming API exposed): best-effort streaming fallback
-        overrides = _get_settings_override()
-        resp = coord.process_query(
-            query=prompt,
-            context=None,
-            settings_override=overrides,
-            thread_id=selection.thread_id,
-            user_id=selection.user_id,
-            checkpoint_id=selection.resume_checkpoint_id,
-        )
-        st.session_state.pop("chat_resume_checkpoint_id", None)
-        answer = getattr(resp, "content", str(resp))
-        sources = getattr(resp, "sources", []) if resp is not None else []
-
-        with st.chat_message("assistant"):
-            st.write_stream(_chunked_stream(answer))
-            if isinstance(sources, list) and sources:
-                _set_last_sources_for_render(sources, thread_id=selection.thread_id)
-                _render_sources_fragment()
-        # Update session registry with latest checkpoint head (best-effort)
-        with contextlib.suppress(Exception):
-            cps = coord.list_checkpoints(
-                thread_id=selection.thread_id, user_id=selection.user_id, limit=1
-            )
-            last = cps[0].get("checkpoint_id") if cps else None
-            touch_session(
-                conn,
-                thread_id=selection.thread_id,
-                last_checkpoint_id=str(last) if last else None,
-            )
+    _ensure_router_engine()
+    _render_staleness_badge()
+    messages = _load_chat_messages(coord, selection)
+    _render_chat_history(messages)
+    _handle_chat_prompt(coord, selection, conn)
 
 
 # ---- Page helpers ----
@@ -413,8 +307,134 @@ def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
                 st.rerun()
 
 
-def _render_visual_search_sidebar() -> None:
-    """Render a lightweight query-by-image UI (SigLIP → Qdrant image collection)."""
+def _ensure_router_engine() -> None:
+    """Ensure a router engine is available in session state."""
+    try:
+        _load_latest_snapshot_into_session()
+    except Exception as exc:
+        st.caption(f"Autoload skipped: {exc}")
+    if "router_engine" not in st.session_state:
+        try:
+            snap = latest_snapshot_dir()
+            if snap is not None:
+                _hydrate_router_from_snapshot(snap)
+        except Exception as exc:
+            logger.debug("Hydration from snapshot failed: %s", exc)
+    if "router_engine" not in st.session_state:
+        st.session_state["router_engine"] = None
+
+
+def _render_staleness_badge() -> None:
+    """Render snapshot staleness status in the UI."""
+    try:
+        storage_dir = settings.data_dir / "storage"
+        if not storage_dir.exists():
+            return
+        latest = latest_snapshot_dir(storage_dir)
+        if latest is None:
+            return
+        with _TRACER.start_as_current_span("chat.staleness_check") as span:
+            span.set_attribute("snapshot.id", latest.name)
+            manifest_data = load_manifest(latest)
+            if not manifest_data:
+                return
+            uploads_dir = settings.data_dir / "uploads"
+            corpus_paths = _collect_corpus_paths(uploads_dir)
+            cfg = _current_config_dict()
+            is_stale = compute_staleness(manifest_data, corpus_paths, cfg)
+            span.set_attribute("snapshot.is_stale", bool(is_stale))
+            if is_stale:
+                st.warning(STALE_TOOLTIP)
+                with st.sidebar:
+                    st.caption("Snapshot stale: content or config changed.")
+                with contextlib.suppress(Exception):
+                    log_jsonl(
+                        {
+                            "snapshot_stale_detected": True,
+                            "snapshot_id": latest.name,
+                            "reason": "digest_mismatch",
+                        }
+                    )
+            else:
+                st.caption(f"Snapshot up-to-date: {latest.name}")
+    except Exception as exc:
+        st.caption(f"Staleness check skipped: {exc}")
+
+
+def _load_chat_messages(coord: Any, selection: ChatSelection) -> list[Any]:
+    """Load persisted chat messages from the coordinator."""
+    try:
+        state = coord.get_state_values(
+            thread_id=selection.thread_id, user_id=selection.user_id
+        )
+        return state.get("messages", []) if isinstance(state, dict) else []
+    except Exception as exc:
+        logger.debug(
+            "Failed to load chat history for thread_id={} user_id={}: {}",
+            selection.thread_id,
+            selection.user_id,
+            exc,
+        )
+        return []
+
+
+def _render_chat_history(messages: list[Any]) -> None:
+    """Render historical chat messages."""
+    for msg in messages:
+        role = None
+        if isinstance(msg, HumanMessage):
+            role = "user"
+        elif isinstance(msg, AIMessage):
+            role = "assistant"
+        if role is None:
+            continue
+        with st.chat_message(role):
+            content = getattr(msg, "content", "")
+            st.markdown(str(content))
+
+
+def _handle_chat_prompt(
+    coord: Any, selection: ChatSelection, conn: sqlite3.Connection
+) -> None:
+    """Handle user input and render assistant response."""
+    prompt = st.chat_input("Ask something…")
+    if not prompt:
+        return
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    overrides = _get_settings_override()
+    resp = coord.process_query(
+        query=prompt,
+        context=None,
+        settings_override=overrides,
+        thread_id=selection.thread_id,
+        user_id=selection.user_id,
+        checkpoint_id=selection.resume_checkpoint_id,
+    )
+    st.session_state.pop("chat_resume_checkpoint_id", None)
+    answer = getattr(resp, "content", str(resp))
+    sources = getattr(resp, "sources", []) if resp is not None else []
+
+    with st.chat_message("assistant"):
+        st.write_stream(_chunked_stream(answer))
+        if isinstance(sources, list) and sources:
+            _set_last_sources_for_render(sources, thread_id=selection.thread_id)
+            _render_sources_fragment()
+    with contextlib.suppress(Exception):
+        cps = coord.list_checkpoints(
+            thread_id=selection.thread_id, user_id=selection.user_id, limit=1
+        )
+        last = cps[0].get("checkpoint_id") if cps else None
+        touch_session(
+            conn,
+            thread_id=selection.thread_id,
+            last_checkpoint_id=str(last) if last else None,
+        )
+
+
+def _visual_search_inputs() -> tuple[Any | None, int, bool]:
+    """Collect visual search inputs from the sidebar UI."""
     with st.sidebar:
         st.subheader("Visual search")
         up = st.file_uploader(
@@ -425,105 +445,116 @@ def _render_visual_search_sidebar() -> None:
         )
         if up is None:
             st.caption("Upload an image to search visually indexed PDF pages.")
-            return
-
+            return None, 0, False
         cols = st.columns(2)
         top_k = cols[0].number_input("Top K", min_value=1, max_value=30, value=8)
         run = cols[1].button("Search", use_container_width=True)
-        if not run:
-            return
+        return up, int(top_k), bool(run)
+
+
+def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
+    """Execute a SigLIP-powered visual search against Qdrant."""
+    try:
+        from PIL import Image  # type: ignore
+    except Exception:
+        st.warning("Pillow is required for visual search.")
+        return []
+
+    from qdrant_client import QdrantClient
+
+    from src.utils.siglip_adapter import SiglipEmbedding
+    from src.utils.storage import get_client_config
+
+    embedder = SiglipEmbedding()
+    img = Image.open(upload)  # type: ignore[arg-type]
+    vec = embedder.get_image_embedding(img)
+    client = QdrantClient(**get_client_config())
+    try:
+        result = client.query_points(
+            collection_name=settings.database.qdrant_image_collection,
+            query=vec.tolist(),
+            using="siglip",
+            limit=int(top_k),
+            with_payload=[
+                "doc_id",
+                "page_id",
+                "page_no",
+                "modality",
+                "image_artifact_id",
+                "image_artifact_suffix",
+                "thumbnail_artifact_id",
+                "thumbnail_artifact_suffix",
+                "phash",
+            ],
+        )
+    finally:
+        with contextlib.suppress(Exception):
+            client.close()
+
+    pts = getattr(result, "points", None) or getattr(result, "result", None) or []
+    if not isinstance(pts, list):
+        try:
+            pts = list(pts)
+        except TypeError:
+            pts = []
+    return pts
+
+
+def _render_visual_results(points: list[Any], top_k: int) -> None:
+    """Render visual search results in the sidebar."""
+    if not points:
+        st.caption("No matches.")
+        return
+
+    try:
+        from src.utils.images import open_image_encrypted
+    except Exception:
+        open_image_encrypted = None
+
+    store = ArtifactStore.from_settings(settings)
+    st.caption(f"Matches: {len(points)}")
+    for p in points[: int(top_k)]:
+        payload = getattr(p, "payload", {}) or {}
+        doc_id = payload.get("doc_id") or "-"
+        page_no = payload.get("page_no") or "-"
+        st.caption(f"doc={doc_id} page={page_no}")
+
+        thumb_id = payload.get("thumbnail_artifact_id")
+        thumb_sfx = payload.get("thumbnail_artifact_suffix") or ""
+        img_id = payload.get("image_artifact_id")
+        img_sfx = payload.get("image_artifact_suffix") or ""
+        ref = None
+        if thumb_id:
+            ref = ArtifactRef(sha256=str(thumb_id), suffix=str(thumb_sfx))
+        elif img_id:
+            ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx))
+        if ref is None:
+            continue
 
         try:
-            from PIL import Image  # type: ignore
+            img_path = store.resolve_path(ref)
+            if str(img_path).endswith(".enc"):
+                if open_image_encrypted is not None:
+                    with open_image_encrypted(str(img_path)) as im:
+                        st.image(im, use_container_width=True)
+                else:
+                    st.caption("Encryption support unavailable.")
+            else:
+                st.image(str(img_path), use_container_width=True)
         except Exception:
-            st.warning("Pillow is required for visual search.")
-            return
+            st.caption("Image artifact unavailable (reindex to restore).")
 
-        try:
-            from qdrant_client import QdrantClient
 
-            from src.utils.siglip_adapter import SiglipEmbedding
-            from src.utils.storage import get_client_config
-
-            store = ArtifactStore.from_settings(settings)
-            embedder = SiglipEmbedding()
-            img = Image.open(up)  # type: ignore[arg-type]
-            vec = embedder.get_image_embedding(img)
-
-            client = QdrantClient(**get_client_config())
-            try:
-                result = client.query_points(
-                    collection_name=settings.database.qdrant_image_collection,
-                    query=vec.tolist(),
-                    using="siglip",
-                    limit=int(top_k),
-                    with_payload=[
-                        "doc_id",
-                        "page_id",
-                        "page_no",
-                        "modality",
-                        "image_artifact_id",
-                        "image_artifact_suffix",
-                        "thumbnail_artifact_id",
-                        "thumbnail_artifact_suffix",
-                        "phash",
-                    ],
-                )
-            finally:
-                with contextlib.suppress(Exception):
-                    client.close()
-
-            pts = (
-                getattr(result, "points", None) or getattr(result, "result", None) or []
-            )
-            if not isinstance(pts, list):
-                try:
-                    pts = list(pts)
-                except TypeError:
-                    pts = []
-
-            if not pts:
-                st.caption("No matches.")
-                return
-
-            try:
-                from src.utils.images import open_image_encrypted
-            except Exception:
-                open_image_encrypted = None
-
-            st.caption(f"Matches: {len(pts)}")
-            for p in pts[: int(top_k)]:
-                payload = getattr(p, "payload", {}) or {}
-                doc_id = payload.get("doc_id") or "-"
-                page_no = payload.get("page_no") or "-"
-                st.caption(f"doc={doc_id} page={page_no}")
-
-                thumb_id = payload.get("thumbnail_artifact_id")
-                thumb_sfx = payload.get("thumbnail_artifact_suffix") or ""
-                img_id = payload.get("image_artifact_id")
-                img_sfx = payload.get("image_artifact_suffix") or ""
-                ref = None
-                if thumb_id:
-                    ref = ArtifactRef(sha256=str(thumb_id), suffix=str(thumb_sfx))
-                elif img_id:
-                    ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx))
-                if ref is None:
-                    continue
-
-                try:
-                    img_path = store.resolve_path(ref)
-                    if str(img_path).endswith(".enc"):
-                        if open_image_encrypted is not None:
-                            with open_image_encrypted(str(img_path)) as im:
-                                st.image(im, use_container_width=True)
-                        else:
-                            st.caption("Encryption support unavailable.")
-                    else:
-                        st.image(str(img_path), use_container_width=True)
-                except Exception:
-                    st.caption("Image artifact unavailable (reindex to restore).")
-        except Exception as exc:  # pragma: no cover - UI best-effort
-            st.caption(f"Visual search unavailable: {type(exc).__name__}")
+def _render_visual_search_sidebar() -> None:
+    """Render a lightweight query-by-image UI (SigLIP → Qdrant image collection)."""
+    upload, top_k, run = _visual_search_inputs()
+    if not upload or not run:
+        return
+    try:
+        points = _query_visual_search(upload, top_k)
+        _render_visual_results(points, top_k)
+    except Exception as exc:  # pragma: no cover - UI best-effort
+        st.caption(f"Visual search unavailable: {type(exc).__name__}")
 
 
 def _load_latest_snapshot_into_session() -> None:

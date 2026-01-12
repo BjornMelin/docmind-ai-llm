@@ -140,32 +140,12 @@ class ServerHybridRetriever:
             return qmodels.FusionQuery(fusion=qmodels.Fusion.DBSF)
         return qmodels.FusionQuery(fusion=qmodels.Fusion.RRF)
 
-    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
-        """Execute server-side hybrid retrieval.
-
-        Computes dense and sparse queries, prefetches candidates, fuses scores
-        on the server, performs deterministic de-duplication, and returns
-        ``NodeWithScore`` results ordered by score (descending) and id (stable).
-
-        Args:
-            query: Query text or ``QueryBundle``.
-
-        Returns:
-            A list of ``NodeWithScore`` instances up to ``fused_top_k``.
-
-        Notes:
-            On network or query errors, the retriever fails open and returns an
-            empty list rather than raising, to avoid breaking calling pipelines.
-        """
-        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
-
-        t0 = time.time()
-        dense_vec = self._embed_dense(qtext)
-        sparse_vec = self._encode_sparse(qtext)
-
+    def _build_prefetch(
+        self, dense_vec: Any, sparse_vec: Any | None
+    ) -> list[qmodels.Prefetch]:
+        """Build prefetch queries for dense and optional sparse vectors."""
         prefetch: list[qmodels.Prefetch] = []
         if sparse_vec is not None:
-            # Ensure typed SparseVector (some encoders return dict)
             if isinstance(sparse_vec, dict):
                 try:
                     idxs, vals = (
@@ -184,12 +164,9 @@ class ServerHybridRetriever:
                 )
             )
 
-        # Support ndarray or python list (monkeypatched in tests)
         d_query: Any = (
             dense_vec.tolist() if hasattr(dense_vec, "tolist") else list(dense_vec)
         )
-        # Use raw list for dense query input to maximize compatibility
-
         prefetch.append(
             qmodels.Prefetch(
                 query=d_query,  # type: ignore[arg-type]
@@ -197,41 +174,31 @@ class ServerHybridRetriever:
                 limit=self.params.prefetch_dense,
             )
         )
+        return prefetch
 
-        # Optional owner filter via env/telemetry could be added here
-        # Headroom for server-side limit to mitigate post-fusion dedup underfill
-        fused_fetch_k = max(
-            self.params.prefetch_dense,
-            self.params.prefetch_sparse,
-            self.params.fused_top_k,
+    def _query_qdrant(
+        self, prefetch: list[qmodels.Prefetch], fused_fetch_k: int
+    ) -> Any:
+        """Execute the fused Qdrant query."""
+        return self._client.query_points(
+            collection_name=self.params.collection,
+            prefetch=prefetch,
+            query=self._fusion(),
+            limit=fused_fetch_k,
+            with_payload=[
+                "doc_id",
+                "page_id",
+                "chunk_id",
+                "text",
+                "modality",
+                "image_path",
+            ],
         )
 
-        try:
-            result = self._client.query_points(
-                collection_name=self.params.collection,
-                prefetch=prefetch,
-                query=self._fusion(),
-                limit=fused_fetch_k,
-                with_payload=[
-                    "doc_id",
-                    "page_id",
-                    "chunk_id",
-                    "text",
-                    "modality",
-                    "image_path",
-                ],
-            )
-        # Network/remote path: treat common connectivity or query errors as empty result
-        except (ConnectionError, TimeoutError, ValueError) as exc:  # pragma: no cover
-            logger.warning("Qdrant hybrid query failed: %s", exc)
-            # Dense-only fallback via vector index is not available here; return empty
-            return []
-
-        # Deterministic dedup by key
+    def _dedup_points(self, points: list[Any]) -> tuple[list[tuple[float, Any]], int]:
+        """Deduplicate points by key and return sorted list plus count."""
         key_name = (self.params.dedup_key or "page_id").strip()
         best: dict[str, tuple[float, Any]] = {}
-        points = getattr(result, "points", []) or getattr(result, "result", [])
-        input_count = len(points)
         for p in points:
             payload = getattr(p, "payload", {}) or {}
             score = float(getattr(p, "score", 0.0))
@@ -239,12 +206,15 @@ class ServerHybridRetriever:
             cur = best.get(key)
             if cur is None or score > cur[0]:
                 best[key] = (score, p)
-
-        # Stable ordering: score desc, id asc
         dedup_sorted = sorted(
             best.values(), key=lambda x: (-x[0], str(getattr(x[1], "id", "")))
         )
-        unique_count = len(dedup_sorted)
+        return dedup_sorted, len(best)
+
+    def _build_nodes(
+        self, dedup_sorted: list[tuple[float, Any]]
+    ) -> list[NodeWithScore]:
+        """Convert deduplicated points into NodeWithScore items."""
         nodes: list[NodeWithScore] = []
         for score, p in dedup_sorted[: self.params.fused_top_k]:
             payload = getattr(p, "payload", {}) or {}
@@ -262,12 +232,22 @@ class ServerHybridRetriever:
             node = TextNode(text=text, id_=nid)
             node.metadata.update({k: v for k, v in payload.items() if k != "text"})
             nodes.append(NodeWithScore(node=node, score=score))
+        return nodes
 
-        # Telemetry (PII-safe; no query text)
+    def _emit_telemetry(
+        self,
+        *,
+        t0: float,
+        nodes: list[NodeWithScore],
+        sparse_vec: Any | None,
+        key_name: str,
+        input_count: int,
+        unique_count: int,
+    ) -> None:
+        """Emit retrieval telemetry in a PII-safe form."""
         try:
             latency_ms = int((time.time() - t0) * 1000)
             fusion_mode = (self.params.fusion_mode or "rrf").lower()
-            # Pull rrf_k from settings if available
             try:
                 from src.config import settings as _settings  # local import
 
@@ -304,6 +284,64 @@ class ServerHybridRetriever:
             )
         except (OSError, ValueError, RuntimeError) as exc:
             logger.debug("Telemetry emit skipped: %s", exc)
+
+    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+        """Execute server-side hybrid retrieval.
+
+        Computes dense and sparse queries, prefetches candidates, fuses scores
+        on the server, performs deterministic de-duplication, and returns
+        ``NodeWithScore`` results ordered by score (descending) and id (stable).
+
+        Args:
+            query: Query text or ``QueryBundle``.
+
+        Returns:
+            A list of ``NodeWithScore`` instances up to ``fused_top_k``.
+
+        Notes:
+            On network or query errors, the retriever fails open and returns an
+            empty list rather than raising, to avoid breaking calling pipelines.
+        """
+        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+
+        t0 = time.time()
+        dense_vec = self._embed_dense(qtext)
+        sparse_vec = self._encode_sparse(qtext)
+
+        prefetch = self._build_prefetch(dense_vec, sparse_vec)
+
+        # Optional owner filter via env/telemetry could be added here
+        # Headroom for server-side limit to mitigate post-fusion dedup underfill
+        fused_fetch_k = max(
+            self.params.prefetch_dense,
+            self.params.prefetch_sparse,
+            self.params.fused_top_k,
+        )
+
+        try:
+            result = self._query_qdrant(prefetch, fused_fetch_k)
+        # Network/remote path: treat common connectivity or query errors as empty result
+        except (ConnectionError, TimeoutError, ValueError) as exc:  # pragma: no cover
+            logger.warning("Qdrant hybrid query failed: %s", exc)
+            # Dense-only fallback via vector index is not available here; return empty
+            return []
+
+        # Deterministic dedup by key
+        key_name = (self.params.dedup_key or "page_id").strip()
+        points = getattr(result, "points", []) or getattr(result, "result", [])
+        input_count = len(points)
+        dedup_sorted, unique_count = self._dedup_points(points)
+        nodes = self._build_nodes(dedup_sorted)
+
+        # Telemetry (PII-safe; no query text)
+        self._emit_telemetry(
+            t0=t0,
+            nodes=nodes,
+            sparse_vec=sparse_vec,
+            key_name=key_name,
+            input_count=input_count,
+            unique_count=unique_count,
+        )
 
         return nodes
 

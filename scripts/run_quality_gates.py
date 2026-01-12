@@ -398,6 +398,7 @@ class QualityGateRunner:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for quality gates."""
     parser = argparse.ArgumentParser(
         description="Run DocMind AI quality gates",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -443,6 +444,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _select_gates(args: argparse.Namespace) -> list[str]:
+    """Resolve which quality gates to run based on CLI args."""
     gates: list[str] = []
     if args.all:
         gates.extend(QUALITY_SUITES["comprehensive"])
@@ -465,6 +467,7 @@ def _select_gates(args: argparse.Namespace) -> list[str]:
 def _run_gates(
     runner: QualityGateRunner, gates: list[str], continue_on_failure: bool
 ) -> bool:
+    """Run selected gates and return overall success."""
     overall_success = True
     for gate_name in gates:
         success = runner.run_quality_gate(gate_name)
@@ -477,17 +480,20 @@ def _run_gates(
 
 
 def _run_pre_commit(runner: QualityGateRunner, enabled: bool) -> bool:
+    """Run pre-commit hooks when enabled."""
     if not enabled:
         return True
     return runner.run_pre_commit_hooks()
 
 
 def _print_report(runner: QualityGateRunner) -> None:
+    """Print the aggregate quality gate report."""
     report = runner.generate_report()
     print("\n" + report)
 
 
 def _print_final_status(runner: QualityGateRunner, overall_success: bool) -> None:
+    """Print the final summary banner for quality gates."""
     if overall_success:
         print("\n🎉 All quality gates PASSED!")
         return

@@ -147,14 +147,12 @@ def setup_comprehensive_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
 
 
-@pytest.mark.asyncio
-async def test_complete_application_workflow():
-    """End-to-end application workflow covering major components."""
-    # Prepare isolated 'src' hierarchy to avoid importing heavy modules
-    _src_pkg = types_.ModuleType("src")
-    _agents_pkg = types_.ModuleType("src.agents")
-    _utils_pkg = types_.ModuleType("src.utils")
-    _coord_mod = types_.ModuleType("src.agents.coordinator")
+def _build_isolated_modules() -> dict[str, types_.ModuleType]:
+    """Build isolated module stubs for workflow testing."""
+    src_pkg = types_.ModuleType("src")
+    agents_pkg = types_.ModuleType("src.agents")
+    utils_pkg = types_.ModuleType("src.utils")
+    coord_mod = types_.ModuleType("src.agents.coordinator")
 
     class _MC:
         """Isolated coordinator stub for the E2E workflow test."""
@@ -168,8 +166,8 @@ async def test_complete_application_workflow():
 
             return SimpleNamespace(content="stub")
 
-    _coord_mod.MultiAgentCoordinator = _MC
-    _tf_mod = types_.ModuleType("src.agents.tool_factory")
+    coord_mod.MultiAgentCoordinator = _MC
+    tf_mod = types_.ModuleType("src.agents.tool_factory")
 
     class _TF:
         """Stubbed ToolFactory with no-op tool creation."""
@@ -179,22 +177,137 @@ async def test_complete_application_workflow():
             """Return an empty tool list for router wiring tests."""
             return []
 
-    _tf_mod.ToolFactory = _TF
-    _src_pkg.agents = _agents_pkg
-    _src_pkg.utils = _utils_pkg
-    # Isolate modules in sys.modules
+    tf_mod.ToolFactory = _TF
+    src_pkg.agents = agents_pkg
+    src_pkg.utils = utils_pkg
+    return {
+        "src": src_pkg,
+        "src.agents": agents_pkg,
+        "src.utils": utils_pkg,
+        "src.utils.core": types_.ModuleType("src.utils.core"),
+        "src.utils.document": types_.ModuleType("src.utils.document"),
+        "src.agents.coordinator": coord_mod,
+        "src.agents.tool_factory": tf_mod,
+    }
+
+
+def _make_mock_documents() -> list:
+    """Return mock document list for testing ingestion flow."""
+
+    class Doc:
+        def __init__(self, text, metadata=None):
+            self.text = text
+            self.metadata = metadata or {}
+
+    return [
+        Doc(
+            text=(
+                "DocMind AI provides comprehensive document analysis using "
+                "multi-agent coordination."
+            ),
+            metadata={"source": "test_document.pdf", "page": 1},
+        ),
+        Doc(
+            text=(
+                "The system supports various document formats and provides "
+                "intelligent insights."
+            ),
+            metadata={"source": "test_document.pdf", "page": 2},
+        ),
+    ]
+
+
+def _configure_core_mocks(
+    mock_detect,
+    mock_validate,
+    mock_load_docs,
+    mock_coordinator_class,
+    mock_ollama_list,
+    mock_ollama_pull,
+) -> None:
+    """Configure core mock return values for workflow test."""
+    mock_detect.return_value = {
+        "gpu_name": "RTX 4090",
+        "vram_total_gb": 24,
+        "cuda_available": True,
+    }
+    mock_validate.return_value = True
+    mock_load_docs.return_value = _make_mock_documents()
+
+    mock_coordinator = MagicMock()
+    mock_response = MagicMock()
+    mock_response.content = (
+        "Comprehensive analysis completed using multi-agent coordination. "
+        "Key insights: Document processing capabilities, AI-powered analysis "
+        "features, and system architecture overview."
+    )
+    mock_coordinator.process_query.return_value = mock_response
+    mock_coordinator_class.return_value = mock_coordinator
+
+    mock_ollama_list.return_value = {
+        "models": [{"name": "qwen3-4b-instruct-2507:latest"}]
+    }
+    mock_ollama_pull.return_value = {"status": "success"}
+
+
+def _exercise_workflow(mock_detect, mock_load_docs):
+    """Run the lightweight workflow assertions and return artifacts."""
+    from types import SimpleNamespace
+
+    docmind_settings = SimpleNamespace
+    analysis_object = SimpleNamespace
+    predefined_prompts = {"summarization": "Summarize the docs"}
+
+    def validate_startup_configuration(_settings=None):
+        return True
+
+    def detect_hardware():
+        return mock_detect.return_value
+
+    print("✅ Minimal environment stubbed for workflow test")
+
+    settings = docmind_settings(
+        vllm=SimpleNamespace(model="mock", context_window=8192),
+        ollama_base_url="http://localhost:11434",
+    )
+    validate_startup_configuration(settings)
+    hardware_info = detect_hardware()
+    documents = mock_load_docs(["test.pdf"])
+
+    mock_index = MagicMock()
+    from src.agents.tool_factory import ToolFactory
+
+    tools = ToolFactory.create_basic_tools({"vector": mock_index})
+
+    from src.agents.coordinator import MultiAgentCoordinator
+
+    coordinator = MultiAgentCoordinator()
+    result = coordinator.process_query("Analyze this document comprehensively")
+    analysis_output = analysis_object(
+        summary="Test analysis summary",
+        key_insights=["Insight 1", "Insight 2"],
+        action_items=["Action 1"],
+        open_questions=["Question 1"],
+    )
+    return (
+        settings,
+        hardware_info,
+        documents,
+        tools,
+        result,
+        analysis_output,
+        predefined_prompts,
+    )
+
+
+@pytest.mark.asyncio
+async def test_complete_application_workflow():
+    """End-to-end application workflow covering major components."""
+    module_map = _build_isolated_modules()
     with (
         patch.dict(
             sys.modules,
-            {
-                "src": _src_pkg,
-                "src.agents": _agents_pkg,
-                "src.utils": _utils_pkg,
-                "src.utils.core": types_.ModuleType("src.utils.core"),
-                "src.utils.document": types_.ModuleType("src.utils.document"),
-                "src.agents.coordinator": _coord_mod,
-                "src.agents.tool_factory": _tf_mod,
-            },
+            module_map,
             clear=False,
         ),
         patch("src.utils.core.detect_hardware", create=True) as mock_detect,
@@ -210,119 +323,34 @@ async def test_complete_application_workflow():
         patch("ollama.list") as mock_ollama_list,
         patch("ollama.pull") as mock_ollama_pull,
     ):
-        # Setup mocks for complete workflow
-        mock_detect.return_value = {
-            "gpu_name": "RTX 4090",
-            "vram_total_gb": 24,
-            "cuda_available": True,
-        }
-        mock_validate.return_value = True
-
-        # Mock document loading
-        class Doc:
-            def __init__(self, text, metadata=None):
-                self.text = text
-                self.metadata = metadata or {}
-
-        mock_documents = [
-            Doc(
-                text=(
-                    "DocMind AI provides comprehensive document analysis using "
-                    "multi-agent coordination."
-                ),
-                metadata={"source": "test_document.pdf", "page": 1},
-            ),
-            Doc(
-                text=(
-                    "The system supports various document formats and provides "
-                    "intelligent insights."
-                ),
-                metadata={"source": "test_document.pdf", "page": 2},
-            ),
-        ]
-        mock_load_docs.return_value = mock_documents
-
-        # Mock multi-agent coordinator
-        mock_coordinator = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = (
-            "Comprehensive analysis completed using multi-agent coordination. "
-            "Key insights: Document processing capabilities, AI-powered analysis "
-            "features, and system architecture overview."
+        _configure_core_mocks(
+            mock_detect,
+            mock_validate,
+            mock_load_docs,
+            mock_coordinator_class,
+            mock_ollama_list,
+            mock_ollama_pull,
         )
-        mock_coordinator.process_query.return_value = mock_response
-        mock_coordinator_class.return_value = mock_coordinator
+        (
+            settings,
+            hardware_info,
+            documents,
+            tools,
+            result,
+            analysis_output,
+            predefined_prompts,
+        ) = _exercise_workflow(mock_detect, mock_load_docs)
 
-        # Mock Ollama
-        mock_ollama_list.return_value = {
-            "models": [{"name": "qwen3-4b-instruct-2507:latest"}]
-        }
-        mock_ollama_pull.return_value = {"status": "success"}
-
-        # Minimal environment validation without importing heavy modules
-        from types import SimpleNamespace
-
-        docmind_settings = SimpleNamespace  # sentinel for structure-only checks
-        analysis_object = SimpleNamespace
-        predefined_prompts = {"summarization": "Summarize the docs"}
-
-        def validate_startup_configuration(_settings=None):
-            return True
-
-        def detect_hardware():
-            return mock_detect.return_value
-
-        print("✅ Minimal environment stubbed for workflow test")
-
-        # Test configuration system
-        settings = docmind_settings(
-            vllm=SimpleNamespace(model="mock", context_window=8192),
-            ollama_base_url="http://localhost:11434",
-        )
         assert settings is not None
-
-        # Test startup validation
-        validate_startup_configuration(settings)
-
-        # Test hardware detection
-        hardware_info = detect_hardware()
         assert isinstance(hardware_info, dict)
-
-        # Test document processing workflow using patched function
-        documents = mock_load_docs(["test.pdf"])
         assert len(documents) == 2
         assert documents[0].text.startswith("DocMind AI provides")
-
-        # Test tool factory
-        # Use stubbed ToolFactory from fixture
-        mock_index = MagicMock()
-        from src.agents.tool_factory import ToolFactory  # uses stub from fixture
-
-        tools = ToolFactory.create_basic_tools({"vector": mock_index})
         assert isinstance(tools, list)
-
-        # Test multi-agent coordination
-        from src.agents.coordinator import (
-            MultiAgentCoordinator,
-        )  # uses stub from fixture
-
-        coordinator = MultiAgentCoordinator()
-        result = coordinator.process_query("Analyze this document comprehensively")
         assert result is not None
         assert hasattr(result, "content")
         assert "multi-agent coordination" in result.content
-
-        # Test response schema validation
-        analysis_output = analysis_object(
-            summary="Test analysis summary",
-            key_insights=["Insight 1", "Insight 2"],
-            action_items=["Action 1"],
-            open_questions=["Question 1"],
-        )
         assert analysis_output.summary == "Test analysis summary"
         assert len(analysis_output.key_insights) == 2
-
-        # Test prompts system
         assert isinstance(predefined_prompts, dict)
         assert len(predefined_prompts) > 0
 

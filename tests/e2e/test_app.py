@@ -38,14 +38,8 @@ src_path = project_root / "src"
 sys.path.insert(0, str(src_path))
 
 
-@pytest.fixture(autouse=True)
-def setup_external_dependencies(monkeypatch):
-    """Setup external dependencies with proper pytest fixtures.
-
-    Uses monkeypatch instead of sys.modules anti-pattern.
-    Only mocks external dependencies at boundaries.
-    """
-    # Mock torch with complete attributes for spacy/thinc compatibility
+def _mock_torch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock torch with CUDA attributes used by the app."""
     mock_torch = MagicMock()
     mock_torch.__version__ = "2.7.1+cu126"
     mock_torch.__spec__ = MagicMock()
@@ -58,13 +52,17 @@ def setup_external_dependencies(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "torch", mock_torch)
 
-    # Mock heavy ML dependencies
+
+def _mock_heavy_ml(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock heavy ML modules that should not import in tests."""
     monkeypatch.setitem(sys.modules, "llama_index.llms.llama_cpp", MagicMock())
     monkeypatch.setitem(sys.modules, "llama_cpp", MagicMock())
     monkeypatch.setitem(sys.modules, "sentence_transformers", MagicMock())
     monkeypatch.setitem(sys.modules, "transformers", MagicMock())
 
-    # Mock spaCy with proper structure
+
+def _mock_spacy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock spaCy and thinc to avoid heavy imports."""
     mock_spacy = MagicMock()
     mock_spacy.cli.download = MagicMock()
     mock_spacy.load = MagicMock()
@@ -74,12 +72,16 @@ def setup_external_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "spacy.util", mock_spacy.util)
     monkeypatch.setitem(sys.modules, "thinc", MagicMock())
 
-    # Mock FlagEmbedding to prevent heavy imports
+
+def _mock_flag_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock FlagEmbedding to prevent heavy imports."""
     mock_flag = MagicMock()
     mock_flag.BGEM3FlagModel = MagicMock()
     monkeypatch.setitem(sys.modules, "FlagEmbedding", mock_flag)
 
-    # Mock external service clients (boundary mocking)
+
+def _mock_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock ollama client boundary calls."""
     mock_ollama = MagicMock()
     mock_ollama.list.return_value = {
         "models": [{"name": "qwen3-4b-instruct-2507:latest"}]
@@ -88,7 +90,9 @@ def setup_external_dependencies(monkeypatch):
     mock_ollama.chat.return_value = {"message": {"content": "Test response"}}
     monkeypatch.setitem(sys.modules, "ollama", mock_ollama)
 
-    # Mock dependency injection - needed for import resolution
+
+def _mock_dependency_injector(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock dependency_injector for import resolution."""
     mock_dependency_injector = MagicMock()
     mock_dependency_injector.wiring = MagicMock()
     mock_dependency_injector.wiring.Provide = MagicMock()
@@ -108,13 +112,14 @@ def setup_external_dependencies(monkeypatch):
         sys.modules, "dependency_injector.wiring", mock_dependency_injector.wiring
     )
 
-    # Mock LlamaIndex core components (as pseudo-packages)
+
+def _mock_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock minimal LlamaIndex core objects used by the app."""
     import types as _types
 
     li_core = _types.ModuleType("llama_index.core")
     li_core.__path__ = []  # mark as package
 
-    # Provide a dummy Settings object with assignable attributes
     class _DummySettings:
         llm = None
         embed_model = None
@@ -130,7 +135,6 @@ def setup_external_dependencies(monkeypatch):
 
     li_core.Document = _DummyDocument
 
-    # Provide minimal StorageContext shim used by app/index creation
     class _DummyStorageContext:
         """Minimal storage context shim used in tests."""
 
@@ -152,7 +156,7 @@ def setup_external_dependencies(monkeypatch):
         pass
 
     li_core.PropertyGraphIndex = _DummyPGI
-    # Provide llms.ChatMessage and indices.MultiModalVectorStoreIndex shims
+
     li_llms = _types.ModuleType("llama_index.core.llms")
 
     class _ChatMessage:
@@ -177,9 +181,6 @@ def setup_external_dependencies(monkeypatch):
 
     li_indices.MultiModalVectorStoreIndex = _DummyMMIndex
 
-    monkeypatch.setitem(sys.modules, "llama_index.core.llms", li_llms)
-    monkeypatch.setitem(sys.modules, "llama_index.core.indices", li_indices)
-
     class _DummyVSI:
         pass
 
@@ -190,19 +191,26 @@ def setup_external_dependencies(monkeypatch):
         pass
 
     li_retrievers.BaseRetriever = _DummyBaseRetriever
+
     monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
+    monkeypatch.setitem(sys.modules, "llama_index.core.llms", li_llms)
+    monkeypatch.setitem(sys.modules, "llama_index.core.indices", li_indices)
     monkeypatch.setitem(sys.modules, "llama_index.core.retrievers", li_retrievers)
     monkeypatch.setitem(sys.modules, "llama_index.core.memory", MagicMock())
     monkeypatch.setitem(sys.modules, "llama_index.core.vector_stores", MagicMock())
-    monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", MagicMock())
-    monkeypatch.setitem(sys.modules, "llama_index.llms.openai", MagicMock())
 
-    # Mock Streamlit extensions
+
+def _mock_streamlit_extras(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock Streamlit extras packages used in the UI."""
     monkeypatch.setitem(sys.modules, "streamlit_extras", MagicMock())
     monkeypatch.setitem(sys.modules, "streamlit_extras.colored_header", MagicMock())
     monkeypatch.setitem(sys.modules, "streamlit_extras.add_vertical_space", MagicMock())
 
-    # Mock Qdrant client with proper structure
+
+def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock qdrant_client modules and HTTP models."""
+    from types import ModuleType
+
     mock_qdrant = MagicMock()
     mock_qdrant.conversions = MagicMock()
     mock_qdrant.conversions.common_types = MagicMock()
@@ -219,11 +227,10 @@ def setup_external_dependencies(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "qdrant_client.http", mock_qdrant.http)
     monkeypatch.setitem(sys.modules, "qdrant_client.models", mock_qdrant.models)
-    from types import ModuleType
 
     http_models_pkg = ModuleType("qdrant_client.http.models")
 
-    class _FieldCondition:  # dummies for import compatibility
+    class _FieldCondition:
         def __init__(self, *_, **__):
             pass
 
@@ -235,18 +242,15 @@ def setup_external_dependencies(monkeypatch):
         def __init__(self, *_, **__):
             pass
 
-    http_models_pkg.FieldCondition = _FieldCondition
-    http_models_pkg.Filter = _Filter
-    http_models_pkg.MatchValue = _MatchValue
-
     class _MatchAny:
         def __init__(self, *_, **__):
             pass
 
+    http_models_pkg.FieldCondition = _FieldCondition
+    http_models_pkg.Filter = _Filter
+    http_models_pkg.MatchValue = _MatchValue
     http_models_pkg.MatchAny = _MatchAny
     monkeypatch.setitem(sys.modules, "qdrant_client.http.models", http_models_pkg)
-    # Provide local.qdrant_local.QdrantLocal
-    from types import ModuleType
 
     qdrant_local_pkg = ModuleType("qdrant_client.local")
     qdrant_local_mod = ModuleType("qdrant_client.local.qdrant_local")
@@ -261,7 +265,9 @@ def setup_external_dependencies(monkeypatch):
         sys.modules, "qdrant_client.local.qdrant_local", qdrant_local_mod
     )
 
-    # Mock Unstructured document processing + chunking modules
+
+def _mock_unstructured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock Unstructured partition and chunking modules."""
     from types import ModuleType
 
     unstructured_pkg = ModuleType("unstructured")
@@ -289,10 +295,34 @@ def setup_external_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "unstructured.chunking.title", title_pkg)
     monkeypatch.setitem(sys.modules, "unstructured.chunking.basic", basic_pkg)
 
-    # Mock internal containers - factory-based in new architecture
+
+def _mock_internal_containers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock internal DI container module."""
     mock_containers = MagicMock()
     mock_containers.get_multi_agent_coordinator = MagicMock()
     monkeypatch.setitem(sys.modules, "src.containers", mock_containers)
+
+
+@pytest.fixture(autouse=True)
+def setup_external_dependencies(monkeypatch):
+    """Setup external dependencies with proper pytest fixtures.
+
+    Uses monkeypatch instead of sys.modules anti-pattern.
+    Only mocks external dependencies at boundaries.
+    """
+    _mock_torch(monkeypatch)
+    _mock_heavy_ml(monkeypatch)
+    _mock_spacy(monkeypatch)
+    _mock_flag_embedding(monkeypatch)
+    _mock_ollama(monkeypatch)
+    _mock_dependency_injector(monkeypatch)
+    _mock_llama_index_core(monkeypatch)
+    monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", MagicMock())
+    monkeypatch.setitem(sys.modules, "llama_index.llms.openai", MagicMock())
+    _mock_streamlit_extras(monkeypatch)
+    _mock_qdrant_client(monkeypatch)
+    _mock_unstructured(monkeypatch)
+    _mock_internal_containers(monkeypatch)
 
 
 @pytest.fixture(name="app_test")

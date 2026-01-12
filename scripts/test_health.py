@@ -675,6 +675,7 @@ class TestHealthMonitor:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for test health checks."""
     parser = argparse.ArgumentParser(
         description="Monitor test suite health and detect issues",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -715,6 +716,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _configure_logging(verbose: bool) -> None:
+    """Configure logging verbosity for the CLI."""
     log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=log_level, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -722,6 +724,7 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def _run_flakiness(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
+    """Run flakiness analysis and return exit code."""
     print("🔍 Running flakiness analysis...")
     flakiness_data = monitor.run_flakiness_analysis(args.runs, args.test_pattern)
     monitor.health_data["flakiness"] = flakiness_data
@@ -734,6 +737,7 @@ def _run_flakiness(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
 
 
 def _run_patterns(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
+    """Run test pattern analysis and return exit code."""
     print("🔍 Running pattern analysis...")
     pattern_data = monitor.analyze_test_patterns(args.test_dirs)
     monitor.health_data["patterns"] = pattern_data
@@ -751,6 +755,7 @@ def _run_patterns(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
 
 
 def _run_stability(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
+    """Run stability checks and return exit code."""
     print("🔍 Checking test stability...")
     stability_data = monitor.check_test_stability(args.days)
     monitor.health_data["stability"] = stability_data
@@ -763,6 +768,7 @@ def _run_stability(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
 
 
 def _print_warnings_and_failures(monitor: TestHealthMonitor) -> int:
+    """Print warnings/failures and return an exit code."""
     exit_code = 0
     if monitor.warnings:
         print("\n⚠️  WARNINGS:")
