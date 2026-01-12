@@ -136,12 +136,6 @@ def index_page_images_siglip(
             to_embed.append(r)
 
     if to_payload_only:
-        with contextlib.suppress(Exception):
-            client.set_payload(
-                collection_name=collection_name,
-                points=[pid for pid, _p in to_payload_only],
-                payload={},
-            )
         for pid, payload in to_payload_only:
             with contextlib.suppress(Exception):
                 client.set_payload(

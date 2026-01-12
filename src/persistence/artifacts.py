@@ -11,13 +11,14 @@ Final-release constraints:
 
 from __future__ import annotations
 
-import hashlib
 import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
+
+from src.utils.hashing import sha256_file
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,11 +34,7 @@ class ArtifactRef:
 
 
 def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    return sha256_file(path)
 
 
 def _suffix_for_artifact(path: Path) -> str:
@@ -153,7 +150,7 @@ class ArtifactStore:
             except OSError:
                 continue
         if deleted:
-            logger.info("ArtifactStore GC deleted %d file(s)", deleted)
+            logger.info("ArtifactStore GC deleted {} file(s)", deleted)
         return deleted
 
 

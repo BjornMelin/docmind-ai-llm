@@ -24,6 +24,7 @@ from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 
 from src.config import settings
+from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.telemetry import log_jsonl
 
@@ -227,7 +228,6 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
 def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
     """Extract possible image paths from node metadata and attributes."""
     out: list[str] = []
-    from src.persistence.artifacts import ArtifactRef, ArtifactStore
 
     store: ArtifactStore | None = None
     for nn in ns:

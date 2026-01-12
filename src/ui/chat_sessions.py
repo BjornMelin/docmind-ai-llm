@@ -112,10 +112,11 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
 
         if cols[1].button("Delete", use_container_width=True):
             soft_delete_session(conn, thread_id=active.thread_id)
-            # pick another
             remaining = list_sessions(conn)
             if remaining:
                 st.session_state["chat_thread_id"] = remaining[0].thread_id
+            else:
+                st.session_state.pop("chat_thread_id", None)
             st.rerun()
 
         new_title = st.text_input("Rename", value=active.title)

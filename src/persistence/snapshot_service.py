@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.persistence.snapshot import SnapshotManager
 from src.persistence.snapshot_utils import current_config_dict
@@ -129,10 +131,13 @@ def rebuild_snapshot(
             )
 
         if can_export_graph:
-            from src.retrieval.graph_config import export_graph_jsonl
+            from src.retrieval.graph_config import (
+                export_graph_jsonl,
+                export_graph_parquet,
+            )
 
-            with contextlib.suppress(Exception):
-                jsonl_path = _timestamped_export_path(graph_dir, "jsonl")
+            jsonl_path = _timestamped_export_path(graph_dir, "jsonl")
+            try:
                 start_json = time.perf_counter()
                 export_graph_jsonl(
                     property_graph_index=pg_index,
@@ -144,11 +149,19 @@ def rebuild_snapshot(
                     "jsonl",
                     duration_ms=(time.perf_counter() - start_json) * 1000.0,
                 )
+            except Exception as exc:
+                logger.warning("Graph JSONL export failed (snapshot): {}", exc)
+                log_export_event(
+                    {
+                        "export_performed": False,
+                        "export_type": "graph_jsonl",
+                        "context": "snapshot",
+                        "error": str(exc),
+                    }
+                )
 
-            with contextlib.suppress(Exception):
-                from src.retrieval.graph_config import export_graph_parquet
-
-                parquet_path = _timestamped_export_path(graph_dir, "parquet")
+            parquet_path = _timestamped_export_path(graph_dir, "parquet")
+            try:
                 start_parquet = time.perf_counter()
                 export_graph_parquet(
                     property_graph_index=pg_index,
@@ -159,6 +172,16 @@ def rebuild_snapshot(
                     parquet_path,
                     "parquet",
                     duration_ms=(time.perf_counter() - start_parquet) * 1000.0,
+                )
+            except Exception as exc:
+                logger.warning("Graph Parquet export failed (snapshot): {}", exc)
+                log_export_event(
+                    {
+                        "export_performed": False,
+                        "export_type": "graph_parquet",
+                        "context": "snapshot",
+                        "error": str(exc),
+                    }
                 )
 
         uploads_dir = settings_obj.data_dir / "uploads"

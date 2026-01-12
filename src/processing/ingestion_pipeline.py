@@ -490,15 +490,17 @@ def _index_page_images(
             except Exception:
                 purged_points = int(purged_points)
         embedder = SiglipEmbedding()
-        indexed = index_page_images_siglip(
-            client,
-            collection_name=app_settings.database.qdrant_image_collection,
-            records=records,
-            embedder=embedder,
-            batch_size=int(getattr(cfg, "image_index_batch_size", 8)),
-        )
-        with contextlib.suppress(Exception):
-            client.close()
+        try:
+            indexed = index_page_images_siglip(
+                client,
+                collection_name=app_settings.database.qdrant_image_collection,
+                records=records,
+                embedder=embedder,
+                batch_size=int(getattr(cfg, "image_index_batch_size", 8)),
+            )
+        finally:
+            with contextlib.suppress(Exception):
+                client.close()
         pruned = 0
         try:
             artifacts_cfg = getattr(app_settings, "artifacts", None)

@@ -1050,6 +1050,7 @@ settings = DocMindSettings()
 __all__ = [
     "AgentConfig",
     "AnalysisConfig",
+    "ArtifactsConfig",
     "CacheConfig",
     "ChatConfig",
     "DatabaseConfig",

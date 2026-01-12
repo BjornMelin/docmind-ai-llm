@@ -38,7 +38,7 @@ def route_query(
         word_count = len(query.split())
 
         # Determine base complexity and strategy
-        complexity, strategy, needs_planning, confidence = _determine_complexity(
+        complexity, strategy, _needs_planning, confidence = _determine_complexity(
             query_lower, word_count
         )
 
@@ -62,7 +62,7 @@ def route_query(
         decision = {
             "strategy": strategy,
             "complexity": complexity,
-            "needs_planning": needs_planning,
+            "needs_planning": _needs_planning,
             "confidence": confidence,
             "processing_time_ms": round(processing_time * 1000, 2),
             "word_count": word_count,
@@ -84,10 +84,8 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
     if not isinstance(state, dict):
         return []
 
-    # Flags kept for backward compatibility with tests that inject them.
-    _ = bool(state.get("context_recovery_enabled")) or bool(
-        state.get("reset_context_on_error")
-    )
+    # Reserved flags (no-op in final-release; tests may inject for future use).
+    # context_recovery_enabled, reset_context_on_error
 
     messages = state.get("messages", [])
     if not isinstance(messages, list):

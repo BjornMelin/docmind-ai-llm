@@ -214,9 +214,10 @@ class MultimodalFusionRetriever:
         dedup_sorted = sorted(best.values(), key=lambda x: (-x[0], x[1].node.node_id))
         out = [nws for _score, nws in dedup_sorted[: self._fused_top_k]]
 
+        latency_ms = int((time.time() - t0) * 1000)
+
         # PII-safe telemetry-like metadata (no query text).
         with contextlib.suppress(Exception):
-            latency_ms = int((time.time() - t0) * 1000)
             logger.debug(
                 "MultimodalFusionRetriever done (text=%d, image=%d, out=%d, ms=%d)",
                 len(text_nodes),
@@ -225,7 +226,6 @@ class MultimodalFusionRetriever:
                 latency_ms,
             )
         with contextlib.suppress(Exception):
-            latency_ms = int((time.time() - t0) * 1000)
             log_jsonl(
                 {
                     "retrieval.multimodal": True,

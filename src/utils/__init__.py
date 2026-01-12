@@ -1,11 +1,11 @@
 """Utilities package for DocMind AI.
 
-This package contains small, library-first helpers used across the app.
-Core multimodal functionality is implemented via the canonical components:
+This package provides small, reusable helpers used across the app, grouped into:
 
-- `src/models/embeddings.py` (BGE-M3 + SigLIP)
-- `src/retrieval/reranking.py` (SigLIP visual rerank; optional ColPali)
-- `src/utils/images.py` + `src/utils/vision_siglip.py` (image I/O + SigLIP loader)
+- `core`: async timers, startup validation, resource helpers
+- `document`: document loading, cache management, spaCy bootstrapping
+- `monitoring`: logging and performance monitoring utilities
+- `storage`: Qdrant/vector store helpers and safe GPU contexts
 """
 
 # Core utilities

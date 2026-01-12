@@ -10,7 +10,6 @@ DocMind's path hygiene rules:
 
 from __future__ import annotations
 
-import hashlib
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -18,13 +17,11 @@ from typing import Any
 
 from loguru import logger
 
+from src.utils.hashing import sha256_file
+
 
 def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    return sha256_file(path)
 
 
 def _sanitize_doc_metadata(
@@ -151,29 +148,28 @@ def get_document_info(file_path: str | Path) -> dict[str, Any]:
     }
 
 
+def _resolve_ingestion_cache_dir(cache_dir: Path | None = None) -> Path:
+    if cache_dir is not None:
+        return Path(cache_dir)
+    try:
+        from src.config.settings import settings as _settings
+
+        return _settings.cache_dir / "ingestion"
+    except Exception:  # pragma: no cover
+        return Path("./cache/ingestion")
+
+
 def clear_document_cache(*, cache_dir: Path | None = None) -> None:
     """Best-effort cache cleanup for local ingestion caches."""
-    if cache_dir is None:
-        try:
-            from src.config.settings import settings as _settings
-
-            cache_dir = _settings.cache_dir / "ingestion"
-        except Exception:  # pragma: no cover
-            cache_dir = Path("./cache/ingestion")
+    cache_path = _resolve_ingestion_cache_dir(cache_dir)
     with logger.catch(reraise=False):
-        shutil.rmtree(Path(cache_dir), ignore_errors=True)
+        shutil.rmtree(cache_path, ignore_errors=True)
 
 
 def get_cache_stats(*, cache_dir: Path | None = None) -> dict[str, Any]:
     """Return basic cache directory stats (best-effort)."""
-    if cache_dir is None:
-        try:
-            from src.config.settings import settings as _settings
-
-            cache_dir = _settings.cache_dir / "ingestion"
-        except Exception:  # pragma: no cover
-            cache_dir = Path("./cache/ingestion")
-    cache_dir = Path(cache_dir)
+    cache_path = _resolve_ingestion_cache_dir(cache_dir)
+    cache_dir = cache_path
     if not cache_dir.exists():
         return {"exists": False, "files": 0, "bytes": 0}
     files = [p for p in cache_dir.glob("**/*") if p.is_file()]

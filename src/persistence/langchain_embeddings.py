@@ -26,6 +26,8 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
 
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of documents into float vectors."""
+        if not texts:
+            return []
         from llama_index.core import Settings as LISettings
 
         model = LISettings.embed_model

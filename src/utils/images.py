@@ -79,10 +79,8 @@ def ensure_thumbnail(
     thumb_root.mkdir(parents=True, exist_ok=True)
 
     # Determine underlying extension and encryption state.
+    base_stem = Path(src.name[:-4] if src.name.endswith(".enc") else src.name).stem
     is_enc = src.name.endswith(".enc")
-    raw_name = src.name[:-4] if is_enc else src.name  # strip .enc
-    raw_path = Path(raw_name)
-    base_stem = raw_path.stem  # strips .webp/.jpg
 
     thumb_plain = thumb_root / f"{base_stem}__thumb.webp"
     thumb_target = (
@@ -103,14 +101,7 @@ def ensure_thumbnail(
         # Best-effort; fall through to recreate.
         pass
 
-    try:
-        pass  # type: ignore
-    except Exception as exc:  # pragma: no cover - optional dep
-        raise ImportError("Pillow is required for image operations") from exc
-
     with open_image_encrypted(str(src)) as im:
-        if im is None:  # pragma: no cover - defensive
-            raise RuntimeError(f"Failed to open image: {src}")
         img = im.convert("RGB")
         img.thumbnail((int(max_side), int(max_side)), Resampling.LANCZOS)
         thumb_plain.parent.mkdir(parents=True, exist_ok=True)

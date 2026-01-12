@@ -15,6 +15,7 @@ from typing import Any, cast
 import fitz  # PyMuPDF
 import numpy as np
 from llama_index.core.schema import ImageDocument
+from loguru import logger
 from PIL import Image  # type: ignore
 from PIL.Image import Resampling  # type: ignore
 
@@ -152,11 +153,21 @@ def _render_pdf_pages(
             existing = next((p for p in candidates if p.exists()), None)
             img_path = existing or base.with_suffix(".webp")
 
-            # Refresh if missing or source PDF is newer
+            # Refresh if missing, source PDF is newer, or encryption flag changed.
+            # Otherwise we can incorrectly reuse plaintext when encryption is enabled
+            # (or vice versa), breaking expectations and downstream consumers.
+            wants_encrypt = (
+                getattr(settings.processing, "encrypt_page_images", False)
+                if encrypt is None
+                else bool(encrypt)
+            )
             needs_render = True
             if existing is not None:
+                existing_is_enc = img_path.name.endswith(".enc")
                 try:
-                    needs_render = img_path.stat().st_mtime < pdf_mtime
+                    needs_render = (img_path.stat().st_mtime < pdf_mtime) or (
+                        existing_is_enc != wants_encrypt
+                    )
                 except OSError:
                     needs_render = True
 
@@ -226,9 +237,17 @@ def pdf_pages_to_image_documents(
         try:
             ref = store.put_file(Path(path))
             resolved_path = store.resolve_path(ref)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
             # Final-release invariant: never return ImageDocuments that reference
             # non-jailed raw filesystem paths.
+            logger.warning(
+                "Skipped PDF page image artifact storage "
+                "(page={}, path={}, phash={}): {}",
+                i,
+                path,
+                phash,
+                type(exc).__name__,
+            )
             continue
         meta: dict[str, Any] = {
             "page": i,

@@ -391,7 +391,6 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
 
     doc_id = _doc_id_for_upload(resolved)
 
-    artifacts_to_consider = set()
     deleted_image_points = 0
     deleted_text_points = 0
 
@@ -407,66 +406,75 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
         from src.utils.storage import get_client_config
 
         client = QdrantClient(**get_client_config())
-        artifacts_to_consider = collect_artifact_refs_for_doc_id(
-            client,
-            settings.database.qdrant_image_collection,
-            doc_id=doc_id,
-        )
-        deleted_image_points = delete_page_images_for_doc_id(
-            client,
-            settings.database.qdrant_image_collection,
-            doc_id=doc_id,
-        )
-
-        # Best-effort: delete text points for this doc id (key varies by indexer).
-        text_filter = qmodels.Filter(
-            should=[
-                qmodels.FieldCondition(
-                    key="doc_id", match=qmodels.MatchValue(value=str(doc_id))
-                ),
-                qmodels.FieldCondition(
-                    key="document_id", match=qmodels.MatchValue(value=str(doc_id))
-                ),
-                qmodels.FieldCondition(
-                    key="ref_doc_id", match=qmodels.MatchValue(value=str(doc_id))
-                ),
-            ]
-        )
         try:
-            before = client.count(
-                collection_name=settings.database.qdrant_collection,
-                count_filter=text_filter,
-                exact=True,
+            deleted_image_points = delete_page_images_for_doc_id(
+                client,
+                settings.database.qdrant_image_collection,
+                doc_id=doc_id,
             )
-            deleted_text_points = int(getattr(before, "count", 0) or 0)
-            client.delete(
-                collection_name=settings.database.qdrant_collection,
-                points_selector=text_filter,
-                wait=True,
-            )
-        except Exception:
-            deleted_text_points = 0
 
-        if purge_artifacts and artifacts_to_consider:
-            store = ArtifactStore.from_settings(settings)
-            removed = 0
-            for ref in artifacts_to_consider:
-                # Safety: only delete if not referenced anywhere in the image
-                # collection. This does not check chat persistence; old chats may
-                # lose images if artifacts are purged.
-                ref_count = count_artifact_references_in_image_collection(
-                    client,
-                    settings.database.qdrant_image_collection,
-                    artifact_id=ref.sha256,
+            # Best-effort: delete text points for this doc id (key varies by indexer).
+            text_filter = qmodels.Filter(
+                should=[
+                    qmodels.FieldCondition(
+                        key="doc_id", match=qmodels.MatchValue(value=str(doc_id))
+                    ),
+                    qmodels.FieldCondition(
+                        key="document_id",
+                        match=qmodels.MatchValue(value=str(doc_id)),
+                    ),
+                    qmodels.FieldCondition(
+                        key="ref_doc_id", match=qmodels.MatchValue(value=str(doc_id))
+                    ),
+                ]
+            )
+            try:
+                before = client.count(
+                    collection_name=settings.database.qdrant_collection,
+                    count_filter=text_filter,
+                    exact=True,
                 )
-                if ref_count == 0:
-                    with contextlib.suppress(Exception):
-                        store.delete(ref)
-                        removed += 1
-            st.caption(f"Deleted local artifacts: {removed}")
+                deleted_text_points = int(getattr(before, "count", 0) or 0)
+                client.delete(
+                    collection_name=settings.database.qdrant_collection,
+                    points_selector=text_filter,
+                    wait=True,
+                )
+            except Exception:
+                deleted_text_points = 0
 
-        with contextlib.suppress(Exception):
-            client.close()
+            artifacts_to_consider: list[ArtifactRef] = (
+                list(
+                    collect_artifact_refs_for_doc_id(
+                        client,
+                        settings.database.qdrant_image_collection,
+                        doc_id=doc_id,
+                    )
+                )
+                if purge_artifacts
+                else []
+            )
+
+            if purge_artifacts and artifacts_to_consider:
+                store = ArtifactStore.from_settings(settings)
+                removed = 0
+                for ref in artifacts_to_consider:
+                    # Safety: only delete if not referenced anywhere in the image
+                    # collection. This does not check chat persistence; old chats may
+                    # lose images if artifacts are purged.
+                    ref_count = count_artifact_references_in_image_collection(
+                        client,
+                        settings.database.qdrant_image_collection,
+                        artifact_id=ref.sha256,
+                    )
+                    if ref_count == 0:
+                        with contextlib.suppress(Exception):
+                            store.delete(ref)
+                            removed += 1
+                st.caption(f"Deleted local artifacts: {removed}")
+        finally:
+            with contextlib.suppress(Exception):
+                client.close()
     except Exception as exc:
         st.caption(f"Qdrant cleanup skipped: {type(exc).__name__}")
 
