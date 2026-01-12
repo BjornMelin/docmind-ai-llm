@@ -58,7 +58,11 @@ def test_router_factory_injects_postprocessors_toggle(
     cfg = SimpleNamespace(
         enable_graphrag=True,
         retrieval=SimpleNamespace(
-            top_k=5, use_reranking=True, reranking_top_k=3, enable_server_hybrid=False
+            top_k=5,
+            use_reranking=True,
+            reranking_top_k=3,
+            enable_server_hybrid=False,
+            enable_image_retrieval=True,
         ),
         graphrag_cfg=SimpleNamespace(default_path_depth=1),
         database=SimpleNamespace(qdrant_collection="col"),

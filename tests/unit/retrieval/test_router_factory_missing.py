@@ -44,6 +44,7 @@ def test_router_engine_requires_llama(monkeypatch: pytest.MonkeyPatch) -> None:
             use_reranking=False,
             enable_server_hybrid=False,
             reranking_top_k=None,
+            enable_image_retrieval=True,
         ),
         database=SimpleNamespace(qdrant_collection="col"),
     )
@@ -81,6 +82,7 @@ def test_router_engine_warns_when_graph_disabled(
             use_reranking=False,
             enable_server_hybrid=False,
             reranking_top_k=None,
+            enable_image_retrieval=True,
         ),
         graphrag_cfg=SimpleNamespace(default_path_depth=1),
         database=SimpleNamespace(qdrant_collection="col"),
