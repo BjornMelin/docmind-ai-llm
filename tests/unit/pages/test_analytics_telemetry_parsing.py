@@ -15,6 +15,8 @@ from src.utils.telemetry import (
     parse_telemetry_jsonl_counts,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def _write_jsonl(path: Path, lines: list[str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -82,7 +84,13 @@ def test_parse_telemetry_jsonl_counts_uses_canonical_path_by_default(
 
 def test_get_analytics_duckdb_path_ignores_outside_data_dir(tmp_path: Path) -> None:
     override = tmp_path / "outside.duckdb"
-    assert get_analytics_duckdb_path(override) == ANALYTICS_DUCKDB_PATH
+    assert get_analytics_duckdb_path(override) == ANALYTICS_DUCKDB_PATH.resolve()
+
+
+def test_get_analytics_duckdb_path_uses_base_dir(tmp_path: Path) -> None:
+    base_dir = tmp_path / "data-root"
+    expected = base_dir / "analytics" / "analytics.duckdb"
+    assert get_analytics_duckdb_path(base_dir=base_dir) == expected.resolve()
 
 
 def test_load_query_metrics_closes_connection_on_success(

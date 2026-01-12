@@ -63,8 +63,10 @@ def main() -> None:  # pragma: no cover - Streamlit page
         st.info("Analytics disabled. Enable DOCMIND_ANALYTICS_ENABLED=true and retry.")
         st.stop()
 
-    db_path = get_analytics_duckdb_path(settings.analytics_db_path)
-    db_path = Path(db_path)
+    db_path = get_analytics_duckdb_path(
+        settings.analytics_db_path,
+        base_dir=settings.data_dir,
+    )
     if not db_path.exists():
         st.warning("No analytics DB yet.")
         st.stop()

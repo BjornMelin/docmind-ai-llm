@@ -8,13 +8,14 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import json
-import logging
 import os
 import random
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from loguru import logger
 
 TELEMETRY_JSONL_PATH = Path("./logs/telemetry.jsonl")
 # Public constant for consumers that need the canonical telemetry path.
@@ -63,7 +64,7 @@ def _maybe_rotate(path: Path) -> None:
             path.rename(rotated)
     except OSError as exc:
         # Never fail the app due to rotation; log at debug level
-        logging.debug("telemetry rotation skipped: %s", exc)
+        logger.debug("telemetry rotation skipped: %s", exc)
 
 
 def log_jsonl(event: dict[str, Any]) -> None:
@@ -105,27 +106,32 @@ def get_telemetry_jsonl_path() -> Path:
     return TELEMETRY_JSONL_PATH
 
 
-def get_analytics_duckdb_path(override: Path | None = None) -> Path:
+def get_analytics_duckdb_path(
+    override: Path | None = None,
+    *,
+    base_dir: Path | None = None,
+) -> Path:
     """Return the local analytics DuckDB path (optionally overridden)."""
+    resolved_base = (base_dir or Path("data")).resolve()
+    default_path = resolved_base / "analytics" / "analytics.duckdb"
     if override is None:
-        return ANALYTICS_DUCKDB_PATH
+        return default_path
 
     candidate = Path(override)
-    base_dir = Path("data").resolve()
     try:
         resolved = candidate.resolve()
     except OSError:
-        return ANALYTICS_DUCKDB_PATH
+        return default_path
 
-    if resolved == base_dir or base_dir in resolved.parents:
+    if resolved == resolved_base or resolved_base in resolved.parents:
         return resolved
 
-    logging.warning(
+    logger.warning(
         "analytics db path override outside data/ ignored: override=%s base=%s",
         candidate,
-        base_dir,
+        resolved_base,
     )
-    return ANALYTICS_DUCKDB_PATH
+    return default_path
 
 
 @dataclasses.dataclass(slots=True)
@@ -186,11 +192,13 @@ def parse_telemetry_jsonl_counts(
     try:
         with p.open("rb") as f:
             for raw_line in f:
-                lines_read += 1
-                bytes_read += len(raw_line)
-                if lines_read > max_lines or bytes_read > max_bytes:
+                next_lines_read = lines_read + 1
+                next_bytes_read = bytes_read + len(raw_line)
+                if next_lines_read > max_lines or next_bytes_read > max_bytes:
                     truncated = True
                     break
+                lines_read = next_lines_read
+                bytes_read = next_bytes_read
                 try:
                     line = raw_line.decode("utf-8").strip()
                 except UnicodeDecodeError:
@@ -226,7 +234,7 @@ def parse_telemetry_jsonl_counts(
         )
 
     if truncated:
-        logging.warning(
+        logger.warning(
             "telemetry parse cap hit: path=%s lines=%d bytes=%d "
             "(max_lines=%d max_bytes=%d)",
             p,
