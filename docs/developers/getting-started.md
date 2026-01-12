@@ -210,10 +210,10 @@ DocMind AI uses a **unified prefix pattern** with **nested configuration support
 # Test configuration loads correctly
 python -c "
 from src.config import settings
-	print(f'✅ App: {settings.app_name} v{settings.app_version}')
-	print(f'✅ Model: {settings.vllm.model}')
-	print(f'✅ Embedding: {settings.embedding.model_name}')
-	print(f'✅ Qdrant: {settings.database.qdrant_url}')
+print(f'✅ App: {settings.app_name} v{settings.app_version}')
+print(f'✅ Model: {settings.vllm.model}')
+print(f'✅ Embedding: {settings.embedding.model_name}')
+print(f'✅ Qdrant: {settings.database.qdrant_url}')
 "
 ```
 

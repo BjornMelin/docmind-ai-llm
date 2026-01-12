@@ -54,7 +54,7 @@ multimodal behavior and persistence invariants, see:
 - Fallback: plaintext `Path.read_text(...)` for UTF-8-ish inputs
 - Metadata hygiene:
   - drop path-like metadata keys (`source_path`, `file_path`, `path`)
-  - normalize `metadata["source"]` to a basename when it is path-like
+  - normalize `metadata["source"]` to a basename when it is path-like.
 
 ### Chunking and enrichment
 

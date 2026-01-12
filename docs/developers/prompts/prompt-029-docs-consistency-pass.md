@@ -135,7 +135,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 1. [ ] Verify the target docs exist and are not archived/deprecated before editing.
 2. [ ] Identify drift in canonical docs (exclude prompt templates + historical prompt snapshots): `rg -n "src/processing/document_processor.py|process_document\\(" docs/specs docs/developers -g '!docs/specs/prompts/**' -g '!docs/developers/prompts/**'`.
-   - Note: hits under `docs/specs/prompts/completed/` are expected historical artifacts; do not treat them as drift blockers.
+   - Note: historical prompts are excluded by the glob patterns above.
 3. [ ] Update `docs/specs/spec-002-ingestion-pipeline.md` to match the canonical ingestion pipeline + API.
 4. [ ] Update `docs/developers/developer-handbook.md` ingestion examples to the canonical API (SPEC-026).
 5. [ ] Update `docs/developers/system-architecture.md` to reflect actual modules.
