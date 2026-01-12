@@ -76,12 +76,14 @@ def _build_quality_scripts(project_root: Path) -> dict:
     """Build QUALITY_SCRIPTS dynamically using project thresholds/env."""
     line, branch = _read_thresholds_from_pyproject(project_root)
     cov_args = [
+        "--collect" if not (project_root / "coverage.json").exists() else None,
         "--threshold",
         str(line or 0.0),
         "--branch-threshold",
         str(branch or 0.0),
         "--fail-under",
     ]
+    cov_args = [a for a in cov_args if a is not None]
 
     return {
         "coverage": {
@@ -134,7 +136,7 @@ class QualityGateRunner:
         )
 
     def run_quality_gate(
-        self, gate_name: str, additional_args: list[str] = None
+        self, gate_name: str, additional_args: list[str] | None = None
     ) -> bool:
         """Run a single quality gate.
 
@@ -209,7 +211,7 @@ class QualityGateRunner:
             return False
 
     def run_quality_suite(
-        self, suite_name: str, additional_args: list[str] = None
+        self, suite_name: str, additional_args: list[str] | None = None
     ) -> bool:
         """Run a predefined quality gate suite.
 
