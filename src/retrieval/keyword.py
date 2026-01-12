@@ -25,7 +25,9 @@ from qdrant_client import QdrantClient
 try:  # optional across qdrant-client versions
     from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 except (ImportError, AttributeError):  # pragma: no cover - older clients / shape drift
-    ResourceExhaustedResponse = Exception  # type: ignore[assignment]
+
+    class ResourceExhaustedResponse(Exception):  # type: ignore[no-redef]  # noqa: N818
+        """Fallback for missing qdrant-client rate-limit exception."""
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only

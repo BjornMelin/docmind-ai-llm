@@ -123,7 +123,7 @@ def get_analytics_duckdb_path(
     except OSError:
         return default_path
 
-    if resolved == resolved_base or resolved_base in resolved.parents:
+    if resolved_base in resolved.parents and resolved.suffix in {".duckdb", ".db"}:
         return resolved
 
     logger.warning(
