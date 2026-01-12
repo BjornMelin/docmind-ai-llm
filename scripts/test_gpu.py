@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -189,8 +190,6 @@ def main():
     print("Scope: GPU-specific tests and benchmarks")
 
     # Change to project root
-    import os
-
     os.chdir(project_root)
 
     exit_codes = []

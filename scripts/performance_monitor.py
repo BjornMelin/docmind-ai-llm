@@ -467,7 +467,11 @@ class PerformanceMonitor:
                 results[metric] = regression_check
 
             # Generate comprehensive regression report
-            regression_report = self.regression_tracker.generate_regression_report()
+            regression_report = getattr(
+                self.regression_tracker,
+                "generate_regression_report",
+                lambda: {"status": "not_supported"},
+            )()
 
             return {
                 "status": "regressions_found"

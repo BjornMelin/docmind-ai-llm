@@ -12,6 +12,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
+from urllib.response import addinfourl
 
 
 class _TorchWheelIndexParser(HTMLParser):
@@ -53,7 +54,7 @@ def _resolve_torch_wheel_url(
             print(f"Using PyTorch CPU wheel: {filename}", flush=True)
             return f"https://download.pytorch.org{path}", filename, sha
         print("CPU wheel not found in index; falling back to PyPI.", flush=True)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         print(f"CPU wheel lookup failed ({exc}); falling back to PyPI.", flush=True)
 
     index_url = f"https://pypi.org/pypi/torch/{version}/json"
@@ -61,7 +62,7 @@ def _resolve_torch_wheel_url(
     try:
         with _open_https(index_url, timeout=60) as resp:
             data = json.load(resp)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         raise SystemExit(
             f"Failed to fetch or parse torch metadata from {index_url}: {exc}"
         ) from exc
@@ -109,14 +110,12 @@ def _ensure_https(url: str) -> None:
         raise SystemExit(f"Refusing non-HTTPS URL: {url}")
 
 
-def _open_https(url: str, timeout: int) -> urllib.request.addinfourl:
+def _open_https(url: str, timeout: int) -> addinfourl:
     _ensure_https(url)
     return urllib.request.urlopen(url, timeout=timeout)  # noqa: S310
 
 
-def _open_https_request(
-    req: urllib.request.Request, timeout: int
-) -> urllib.request.addinfourl:
+def _open_https_request(req: urllib.request.Request, timeout: int) -> addinfourl:
     _ensure_https(req.full_url)
     return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
 
@@ -200,7 +199,7 @@ def main() -> None:
             if attempt == 5:
                 raise
             time.sleep(min(2**attempt, 30))
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             print(
                 f"torch wheel download failed (attempt {attempt}): "
                 f"{type(exc).__name__}: {exc}",

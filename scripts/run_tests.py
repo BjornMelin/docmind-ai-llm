@@ -35,6 +35,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -203,7 +204,6 @@ class TestRunner:
         output = result.output
 
         # Look for test summary line like "5 passed, 2 failed, 1 skipped"
-        import re
 
         summary_pattern = (
             r"(\d+) passed(?:, (\d+) failed)?(?:, (\d+) skipped)?(?:, (\d+) error)?"
