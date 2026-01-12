@@ -10,6 +10,7 @@ DocMind's path hygiene rules:
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -45,7 +46,7 @@ async def load_documents_unstructured(
     call even when Unstructured is unavailable: it falls back to a plain-text
     read for UTF-8-ish inputs.
     """
-    # Async for API consistency; blocking IO is acceptable for this best-effort helper.
+    # Keep async for API consistency; offload blocking IO to threads.
     from llama_index.core import Document
 
     paths = [Path(p) for p in file_paths]
@@ -61,10 +62,11 @@ async def load_documents_unstructured(
     for path in paths:
         if not path.exists():
             continue
-        doc_id = f"doc-{sha256_file(path)[:16]}"
+        doc_id = f"doc-{(await asyncio.to_thread(sha256_file, path))[:16]}"
         if reader is not None:
             try:
-                loaded = reader.load_data(  # type: ignore[call-arg]
+                loaded = await asyncio.to_thread(
+                    reader.load_data,  # type: ignore[call-arg]
                     file=path,
                     unstructured_kwargs={"filename": str(path)},
                 )
@@ -81,7 +83,9 @@ async def load_documents_unstructured(
                 logger.debug("UnstructuredReader failed for %s: %s", path.name, exc)
 
         try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
+            text = await asyncio.to_thread(
+                path.read_text, encoding="utf-8", errors="ignore"
+            )
         except Exception:
             text = ""
         docs.append(

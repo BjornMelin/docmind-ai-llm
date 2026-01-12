@@ -417,7 +417,8 @@ def _render_visual_search_sidebar() -> None:
             img = Image.open(up)  # type: ignore[arg-type]
             vec = embedder.get_image_embedding(img)
 
-            with QdrantClient(**get_client_config()) as client:
+            client = QdrantClient(**get_client_config())
+            try:
                 result = client.query_points(
                     collection_name=settings.database.qdrant_image_collection,
                     query=vec.tolist(),
@@ -435,6 +436,9 @@ def _render_visual_search_sidebar() -> None:
                         "phash",
                     ],
                 )
+            finally:
+                with contextlib.suppress(Exception):
+                    client.close()
 
             pts = (
                 getattr(result, "points", None) or getattr(result, "result", None) or []

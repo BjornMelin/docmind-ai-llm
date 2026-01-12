@@ -405,7 +405,8 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
         )
         from src.utils.storage import get_client_config
 
-        with QdrantClient(**get_client_config()) as client:
+        client = QdrantClient(**get_client_config())
+        try:
             deleted_image_points = delete_page_images_for_doc_id(
                 client,
                 settings.database.qdrant_image_collection,
@@ -471,6 +472,9 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
                             store.delete(ref)
                             removed += 1
                 st.caption(f"Deleted local artifacts: {removed}")
+        finally:
+            with contextlib.suppress(Exception):
+                client.close()
     except Exception as exc:
         st.caption(f"Qdrant cleanup skipped: {type(exc).__name__}")
 
